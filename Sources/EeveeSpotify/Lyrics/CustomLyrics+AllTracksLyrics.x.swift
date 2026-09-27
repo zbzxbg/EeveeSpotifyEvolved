@@ -289,20 +289,41 @@ enum InlineLyricsHostLocator {
     private static func findHost(from root: UIViewController) -> HostMatch? {
         var queue: [UIViewController] = [root]
         var visited = 0
+        /// VC 自己的 root view —— 白名单外的兜底，**最后**才用。
+        var controllerFallback: HostMatch?
+
         while !queue.isEmpty && visited < 64 {
             let vc = queue.removeFirst()
             visited += 1
-            if viewControllerCandidates.contains(NSStringFromClass(type(of: vc))),
+
+            // ⚠️ 顺序很重要（2026-09-27，依用户反馈"AM 怎么经常挂在单行歌词上"改）：
+            // **先在子树里找白名单里的卡片歌词视图**，再考虑"VC 自己的 root view"。
+            //
+            // 以前是反的：VC 候选一命中就 early return，而 9.1.86 上
+            // `Lyrics_TextComponentImpl.LyricsViewControllerImplementation` 的 root view
+            // 正好是**封面下那一行单行歌词**（`Lyrics_TextComponentImpl.LyricsView` 366x120，
+            // 白名单里**刻意没有**它 —— 见 `inlineLyricsContentClassNames` 的说明）。
+            // 于是只要它在屏幕上，我们就再也看不到同一棵树里的卡片歌词视图
+            // （`Lyrics_TextElementImpl.LyricsTextView` 342x256）→ 层挂到单行歌词那一行上；
+            // 而挂上之后"已挂载"短路又会挡住随后才出现的真卡片 ——
+            // 这正是用户看到的"第一次进页面正常、切个歌回来就不行"。
+            if let match = viewHost(in: vc.view) { return match }
+
+            if controllerFallback == nil,
+               viewControllerCandidates.contains(NSStringFromClass(type(of: vc))),
                vc.view.window != nil,
                WordByWordHost.isVisibleOnScreen(vc.view) {
-                return HostMatch(controller: vc, contentView: vc.view)
+                // 只留作兜底：`attach` 那边还会用 `cardContainer(for:)` 复核挂载点，
+                // 复核不过（例如它压根不在卡片里）就会拒绝，交给看门狗下一轮再找。
+                controllerFallback = HostMatch(controller: vc, contentView: vc.view)
             }
-            if let match = viewHost(in: vc.view) { return match }
+
             queue.append(contentsOf: vc.children)
             if let presented = vc.presentedViewController { queue.append(presented) }
         }
-        // ⚠️ 2026-09-27：**不再返回离屏 fallback**（见 `viewHost` 的说明）。
-        return nil
+        // ⚠️ 2026-09-27：不再返回**离屏** fallback（见 `viewHost` 的说明）。
+        // 这里返回的兜底也过了可见性判据，且 `attach` 还会复核。
+        return controllerFallback
     }
 
     private static func viewHost(in root: UIView?) -> HostMatch? {

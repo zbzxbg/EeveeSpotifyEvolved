@@ -2280,12 +2280,18 @@ final class WordByWordHost {
         // ④ 既有白名单兜底：找不到卡片本体时退到通用容器，并且**取最外层**那一个
         //    （最接近整张卡片），而不是自下往上第一个命中的。同样要过高度上限 ——
         //    否则会把整页容器抓进来（那就是"预览变全屏"）。
+        //
+        //    ⚠️ 2026-09-27：光查"高度 ≤ 500"不够 —— 日志 18 里
+        //    `Lyrics_NPVContainerKit.LyricsContainerView 366x120`（与单行歌词视图**同尺寸**）
+        //    就这样被当成了卡片，我们的层挂到封面下那一行单行歌词上（用户反馈原话：
+        //    "这 am 怎么经常挂在单行歌词上，不是挂预览歌词上吗"）。
+        //    现在改走 `looksLikeCardContainer`：必须真的比歌词内容高出一个标题栏的量级。
         var outermost: UIView?
         var fallback: UIView? = view.superview
         var fallbackDepth = 0
         while let node = fallback, fallbackDepth < 12 {
             if Self.knownCardContainerClassNames.contains(NSStringFromClass(type(of: node))),
-               node.bounds.height <= Self.previewCardMaxHeight {
+               Self.looksLikeCardContainer(node, lyrics: view) {
                 outermost = node
             }
             fallback = node.superview
@@ -2300,6 +2306,31 @@ final class WordByWordHost {
         )
         dumpAncestorChain(from: view)
         return nil
+    }
+
+    /// 通用容器是否"**像卡片**"（④ 的判据）。
+    ///
+    /// 真卡片的实测特征：`Lyrics_CardElementImpl.CardView 374x320` ← 歌词 `342x256`，
+    /// 高 64pt（标题栏 + 留白）、宽 32pt（左右各 16pt）。
+    ///
+    /// ⚠️ 2026-09-27（日志 18 + 用户反馈"AM 经常挂在单行歌词上"）：
+    /// 这条以前只查 `height <= previewCardMaxHeight`，于是
+    /// `Lyrics_NPVContainerKit.LyricsContainerView 366x120`（与单行歌词视图**同尺寸**、
+    /// 根本没有标题栏）也被当成卡片 —— 层挂到了单行歌词那一行上，而且一旦挂上
+    /// （`isAttached` + 层存活），"已挂载"短路会挡住随后出现的真卡片，
+    /// 直到下一次切换才可能纠正。宁可判 nil（等真卡片），也不要挂错地方。
+    private static func looksLikeCardContainer(_ node: UIView, lyrics: UIView) -> Bool {
+        let extraHeight = node.bounds.height - lyrics.bounds.height
+        guard extraHeight >= previewMinCardExtraHeight,
+              extraHeight <= previewCardMaxExtraHeight,
+              node.bounds.height <= previewCardMaxHeight else {
+            return false
+        }
+        let extraWidth = node.bounds.width - lyrics.bounds.width
+        guard extraWidth >= -0.5, extraWidth <= previewCardMaxExtraWidth else {
+            return false
+        }
+        return true
     }
 
     /// 卡片相对歌词内容允许高出的范围：只比内容高一点（标题栏），不能是一个大容器。

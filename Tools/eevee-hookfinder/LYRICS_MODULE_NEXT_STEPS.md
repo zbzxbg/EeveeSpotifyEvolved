@@ -497,6 +497,49 @@ if let originalColors { $0.colors = originalColors }
 
 ---
 
+## 56. 「AM 挂在单行歌词上」+「第一次进页面正常、切歌回来不行」= **同一个宿主判据 bug**（2026-09-27，用户口述，无日志）
+
+**用户报**：① 现在似乎都是第一次进页面可以正常展示，切个歌回来就不行了；
+② 这 AM 怎么经常挂在单行歌词上，不是挂预览歌词上吗。
+
+### 56.1 一个机制解释两条症状（日志 18 里有现场）
+
+| 环节 | 事实 |
+|---|---|
+| 宿主查找 | `InlineLyricsHostLocator.findHost` **先判 VC 候选，命中就 return**；而 9.1.86 上 `Lyrics_TextComponentImpl.LyricsViewControllerImplementation` 的 root view 正是**封面下那一行单行歌词**（`Lyrics_TextComponentImpl.LyricsView` 366x120 —— `inlineLyricsContentClassNames` 里**刻意没有**它） |
+| 卡片容器判据 | `cardContainer(for:)` 第 ④ 条兜底只查 `height <= previewCardMaxHeight`，于是**与歌词同尺寸**的 `Lyrics_NPVContainerKit.LyricsContainerView 366x120` 被当成"卡片" |
+| 结果 | 层挂到单行歌词那一行上。日志 18 的 `ただ声一つ` 就是这次：05:21:31 `overlay attached (Apple Music path) host=Lyrics_NPVContainerKit.LyricsContainerView`（同尺寸） |
+| 连带 | 一旦挂上，`isAttached && overlayIsLive` 成立 → `attach` 的"已挂载"短路挡住随后出现的**真卡片**（`Lyrics_CardElementImpl.CardView`）→ 直到下一次切换才可能纠正 |
+
+⇒ 首次进页面时**卡片先到**（① 命中真卡片）→ 正常；切歌回来时**单行歌词先到**（VC 候选 + ④ 同尺寸容器）→ 挂错地方且锁死 → "切个歌回来就不行了"。
+
+### 56.2 改动两处
+
+| 位置 | 改动 |
+|---|---|
+| `CustomLyrics+AllTracksLyrics.x.swift` `findHost` | **顺序反转**：先在子树里找白名单里的卡片歌词视图（`viewHost(in: vc.view)`），VC 自己的 root view 只作为**最后兜底**（`controllerFallback`），不再 early return |
+| `LyricsWordByWord.x.swift` `cardContainer(for:)` ④ | 新增 `looksLikeCardContainer(_:lyrics:)`：通用容器必须**真的比歌词内容高出一个标题栏的量级**（`extraHeight ∈ [4, 140]`）、宽度只宽出内边距（`extraWidth ≤ 60`）、高度 ≤ 500 —— 同尺寸容器一律判 nil，宁可不挂、等真卡片 |
+
+### 56.3 预期的日志与行为
+
+- 单行歌词视图在屏幕上时：不再出现挂在它上面的 `overlay attached`；取而代之的是
+  `[PreviewShell] ⚠️ no card container found — caller falls back to the content view` +
+  `⚠️ preview host rejected — no card and foreign lyrics view (Lyrics_TextComponentImpl.LyricsView)`
+  或 `preview host off-screen (… alpha=…)`，**然后等真卡片**；
+- 真卡片出现后：`[WordByWord] inline host found: Lyrics_TextElementImpl.LyricsTextView …` +
+  `[PreviewShell] card container (card)=Lyrics_CardElementImpl.CardView 374x320 lyrics=342x256` +
+  `[AppleMusicLyrics] overlay attached … host=Lyrics_CardElementImpl.CardView`；
+- 判据：**同一首歌里 `overlay attached` 的 host 应当是 `Lyrics_CardElementImpl.CardView`**，
+  不再出现 `Lyrics_NPVContainerKit.LyricsContainerView`。
+
+### 56.4 未验证
+
+**没有编译验证**（本机无 Swift 工具链），也**没有真机验证**。
+静态检查：括号平衡（`CustomLyrics+AllTracksLyrics.x.swift` 57/57、91/91、20/20；
+`LyricsWordByWord.x.swift` 349/349、821/821、131/131）+ 新符号引用计数。
+
+---
+
 ## 55. 逐词层"挂不上"的主因：**AM 行模型过期死锁**（2026-09-27，日志 18）
 
 **用户报**：「日志 18，这还没好啊」。
