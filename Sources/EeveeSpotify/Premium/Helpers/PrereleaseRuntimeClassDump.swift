@@ -112,13 +112,19 @@ enum PrereleaseRuntimeClassDump {
     }
 
     /// 类名 —— 只走 `class_getName`（C 层），不碰 `NSStringFromClass` / 元类型。
+    ///
+    /// ⚠️ 本 SDK 上 `class_getName` 返回的是**非可选** `UnsafePointer<CChar>`，
+    /// 所以**不能**写成 `guard let raw = class_getName(cls)`（编译错误：
+    /// "initializer for conditional binding must have Optional type"）。
     private static func className(of cls: AnyClass?) -> String? {
-        guard let cls, let raw = class_getName(cls) else { return nil }
-        let name = String(cString: raw)
+        guard let cls else { return nil }
+        let name = String(cString: class_getName(cls))
         return name.isEmpty ? nil : name
     }
 
     /// 实例方法 + 类方法（属性 getter/setter 也在实例方法表里）。
+    ///
+    /// ⚠️ 同理：`sel_getName` 也返回**非可选** `UnsafePointer<CChar>`，不要加 `if let`。
     private static func methodNames(of cls: AnyClass?) -> [String] {
         guard let cls else { return [] }
         var names: [String] = []
@@ -127,9 +133,7 @@ enum PrereleaseRuntimeClassDump {
         if let list = class_copyMethodList(cls, &instanceCount) {
             for index in 0..<Int(instanceCount) {
                 let selector = method_getName(list[index])
-                if let raw = sel_getName(selector) {
-                    names.append(String(cString: raw))
-                }
+                names.append(String(cString: sel_getName(selector)))
             }
             free(list)
         }
@@ -140,9 +144,7 @@ enum PrereleaseRuntimeClassDump {
             if let metaList = class_copyMethodList(meta, &classCount) {
                 for index in 0..<Int(classCount) {
                     let selector = method_getName(metaList[index])
-                    if let raw = sel_getName(selector) {
-                        names.append("class " + String(cString: raw))
-                    }
+                    names.append("class " + String(cString: sel_getName(selector)))
                 }
                 free(metaList)
             }
