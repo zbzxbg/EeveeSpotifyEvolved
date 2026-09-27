@@ -497,6 +497,70 @@ if let originalColors { $0.colors = originalColors }
 
 ---
 
+## 54. 「有 yrc 却没有逐词」直接修：宿主定位 + 存活性判据 + 挂载点可见性（2026-09-27，日志 17）
+
+**用户报**：「rokudenashi 的 `ただ声一つ` / MIMI 的 `SECRET` 我记得有逐词歌词，怎么没有了」
+→「能直接修吗这东西」。
+
+### 54.1 日志 17 定性：**数据在，层没挂上**
+
+| 曲目 | yrc | 我们那层 |
+|---|---|---|
+| `SECRET (feat. KAFU)` - MIMI | 6733 chars → **34 行** | 04:25:58 `[AppleMusicLyrics] rebuilt` + `overlay attached`（先全屏宿主、后卡片）→ 其实出了逐词 |
+| `ただ声一つ` - Rokudenashi | 5684 chars → **33 行** | 04:26:13–04:26:30 **一轮都没挂上** |
+
+ただ声一つ 那 17 秒的循环（每 1~2s 一轮，日志末尾仍在循环）：
+
+```
+[PreviewShell] card container (card)=Lyrics_CardElementImpl.CardView 374x320 lyrics=342x256   ← 卡片找得到、尺寸正常
+[WordByWord] ⚠️ preview host off-screen (Lyrics_TextElementImpl.LyricsTextView) — will retry   ← 判的是"内容视图"
+[WordByWord] attach declined — preview host off-screen (likely a recycled cell view) …
+[WordByWord] attach skipped — already mounted on the same host at the same version (version 15) ← 说已经挂好了
+[WordByWord] stale attachment cleared — the layer is not in any window (wasFullscreen=true)      ← 又说层没了
+```
+
+四个成因，全在挂载这条路上（与歌词源/开关/数据无关；2 号日志的旧构建里 SECRET 同样空转）：
+
+1. **闸门判错了视图**：拒绝用的是**内容视图**可见性，而实际挂载点是**卡片容器**；
+2. **定位器把离屏 fallback 当宿主返回**（`viewHost` 的 `fallback`），attach 再拒 → 每 1.5s 白转一轮，还会污染 `lastPreviewContentView`；
+3. **"已挂载"短路没验证层还活着** → 与"残留自愈"同秒打架；
+4. **judge 行只在层跑起来之后才打** → "从没挂上"的歌反而看不到它，而拒绝文案写着"see the … line above"。
+
+### 54.2 本轮改动（两个文件，5 处）
+
+| 位置 | 改动 |
+|---|---|
+| `CustomLyrics+AllTracksLyrics.x.swift` `viewHost` | **不再返回离屏 fallback**：只有 `view.window != nil && isVisibleOnScreen(view)` 才算命中，否则返回 nil（这一轮什么都不做，看门狗 1.5s 后再来） |
+| 同上 `findHost` | VC 候选同样加可见性判据；去掉它的 `fallback` 变量 |
+| 同上 `lookup` | "没找到宿主"那句语义改成 `no on-screen candidate`（不再等于"候选类不存在"） |
+| `LyricsWordByWord.x.swift` 新增 `overlayIsLive` | 新旧两层的存活性判据收敛到**一处**（`detach()` 两层一起清 ⇒ "任一层活着就算活着"） |
+| 同上 `clearStaleAttachmentIfNeeded` | 改走 `overlayIsLive`（同一判据，不再各写一份） |
+| 同上 `attach` 的"已挂载"短路 | 加 `overlayIsLive` 条件 —— 层被系统/复用 cell 收走之后，不再永久挡住重挂 |
+| 同上 预览可见性闸门 | 判据从**内容视图**改成**实际挂载点**（`card ?? view`，与下面 `mountView` 同一算法） |
+| 同上 新增 `visibilityDiagnostics` | 拒绝行里带出**逐条件**实测值：`window=… hidden=… alpha=… frame=(x,y) WxH visible=P%` |
+| 同上 `guard usable` 拒绝路径 | 补 `logWordLevelJudgeOnce()`（该函数按版本去重，不会刷屏） |
+
+### 54.3 下份日志的判据
+
+```
+[WordByWord] ⚠️ preview host off-screen (…) — will retry | mount=Lyrics_CardElementImpl.CardView
+             window=414x896 hidden=false alpha=1.00 frame=(20,300) 374x320 visible=100%
+[WordByWord] attach skipped — already mounted …      ← 现在只会出现在"层真的还在窗口里"时
+[WordByWord] inline host not found (no on-screen candidate) — will retry
+[WordByWord] word-level judge: 33/33 line(s) carry word timing … | render mode=word   ← "没挂上"的歌也会有
+```
+
+### 54.4 未验证 / 已知取舍
+
+- **没有编译验证**（本机无 Swift 工具链），也**没有真机验证**。本机 `pwsh` 这轮可用，跑了两项静态检查：
+  括号平衡（两文件 braces/parens/brackets 全平衡）+ 引用零残留 grep。
+- 取舍一：闸门放宽到"挂载点可见" ⇒ 允许"卡片在屏上、内容视图是复用实例"时挂到卡片上 ——
+  这正是本轮想要的；若挂上去仍看不见，新的 diagnostics 会显示出来。
+- 取舍二：定位器不再兜底离屏 ⇒ 极端情况（页面在窗口里但可见性启发式全 false，如动画中 alpha=0）
+  会一直不挂 —— 效果与之前"挂了立刻被拒"相同，但少一层状态污染。
+
+---
+
 ## 53. 换歌竞态放宽 + 日志串行化 + **删除「补全歌词时间轴」**（2026-09-27）
 
 **用户决定**：「也改了吧。然后把 调试 里面的 补全歌词时间轴 的相关代码删了吧。应该没用了这东西。」

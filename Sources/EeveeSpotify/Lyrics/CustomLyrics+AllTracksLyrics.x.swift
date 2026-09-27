@@ -224,7 +224,10 @@ enum InlineLyricsHostLocator {
     private static func lookup(from root: UIViewController) {
         guard NgzhwmSettingsViewModel.isWordByWordLyricsEnabled else { return }
         guard let match = findHost(from: root) else {
-            logThrottled("[WordByWord] inline host not found (9.1.x candidates absent)")
+            // ⚠️ 2026-09-27 起这句话的语义是"**这一轮没有在屏幕上的候选**"，
+            // 不再等于"9.1.x 候选类不存在"：命中的若是复用/离屏实例，`viewHost`
+            // 现在直接返回 nil（理由见那里），宁可下一轮 1.5s 后再看。
+            logThrottled("[WordByWord] inline host not found (no on-screen candidate) — will retry")
             return
         }
 
@@ -286,26 +289,26 @@ enum InlineLyricsHostLocator {
     private static func findHost(from root: UIViewController) -> HostMatch? {
         var queue: [UIViewController] = [root]
         var visited = 0
-        var fallback: HostMatch?
         while !queue.isEmpty && visited < 64 {
             let vc = queue.removeFirst()
             visited += 1
-            if viewControllerCandidates.contains(NSStringFromClass(type(of: vc))) {
-                if vc.view.window != nil { return HostMatch(controller: vc, contentView: vc.view) }
-                if fallback == nil { fallback = HostMatch(controller: vc, contentView: vc.view) }
+            if viewControllerCandidates.contains(NSStringFromClass(type(of: vc))),
+               vc.view.window != nil,
+               WordByWordHost.isVisibleOnScreen(vc.view) {
+                return HostMatch(controller: vc, contentView: vc.view)
             }
             if let match = viewHost(in: vc.view) { return match }
             queue.append(contentsOf: vc.children)
             if let presented = vc.presentedViewController { queue.append(presented) }
         }
-        return fallback
+        // ⚠️ 2026-09-27：**不再返回离屏 fallback**（见 `viewHost` 的说明）。
+        return nil
     }
 
     private static func viewHost(in root: UIView?) -> HostMatch? {
         guard let root else { return nil }
         var queue: [UIView] = [root]
         var visited = 0
-        var fallback: HostMatch?
         while !queue.isEmpty && visited < 2000 {
             let view = queue.removeFirst()
             visited += 1
@@ -325,7 +328,6 @@ enum InlineLyricsHostLocator {
                         // `⚠️ preview host off-screen … attach declined`，包括本来有 yrc 的歌 ——
                         // 用户看到的就是"原本有逐字的歌没有逐字了"。
                         if view.window != nil, WordByWordHost.isVisibleOnScreen(view) { return match }
-                        if fallback == nil { fallback = match }
                         break
                     }
                     responder = current.next
@@ -333,7 +335,15 @@ enum InlineLyricsHostLocator {
             }
             queue.append(contentsOf: view.subviews)
         }
-        return fallback
+        // ⚠️ 2026-09-27：**没找到"在屏幕上"的候选就返回 nil**，不再拿离屏的那一份兜底。
+        //
+        // 离屏兜底的唯一效果是让 `attach` 立刻被拒（AM 预览分支的可见性闸门），
+        // 而 `attach` 在拒绝**之前**已经把 `lastPreviewController/lastPreviewContentView`
+        // 记成了这个离屏视图 —— 退出全屏时的 `reattachToInline()` 又拿它去挂，继续失败。
+        // 真机日志 17（`ただ声一つ`）：卡片容器明明在（`[PreviewShell] card container … 374x320`），
+        // 命中的却是复用的歌词视图，于是 17 秒里一轮都没挂上。
+        // 返回 nil 只是让这一轮什么都不做 —— 看门狗 1.5s 后再来，那才是自愈的正确姿势。
+        return nil
     }
 }
 

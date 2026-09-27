@@ -1548,6 +1548,28 @@ final class WordByWordHost {
         isAttached && attachedShowsProviderFooter
     }
 
+    /// 我们这层**真的在窗口里**吗。
+    ///
+    /// ⚠️ **两处必须共用这一个属性**：`clearStaleAttachmentIfNeeded()`（残留自愈）
+    /// 与 `attach()` 里那条"已经挂好了"的短路。拆成两份实现就会各说各话 ——
+    /// 真机日志 17 的 `ただ声一つ` 同一秒里既有
+    /// `attach skipped — already mounted on the same host at the same version (version 15)`
+    /// 又有 `stale attachment cleared — the layer is not in any window`，
+    /// 两边互相打架，17 秒里一轮都没挂上。
+    var overlayIsLive: Bool {
+        // 新旧两层都要看：`detach()` 是**两层一起清**（AM host + 旧 overlay），
+        // 所以这里也必须是"任一层还活着就算活着"，否则一方残留会让判据永远为假。
+        if #available(iOS 26.0, *),
+           let view = AppleMusicLyricsOverlayHost.shared.overlayView,
+           view.superview != nil, view.window != nil {
+            return true
+        }
+        if let overlay, overlay.superview != nil, overlay.window != nil {
+            return true
+        }
+        return false
+    }
+
     /// 挂载标记自愈：**标记说挂着、但那一层其实已经不在任何窗口里**时清掉它。
     ///
     /// 为什么必须有（真机症状）：全屏里点几下歌词行再退出，之后**预览一直退化成
@@ -1558,20 +1580,11 @@ final class WordByWordHost {
     /// 于是预览层再也挂不回来。
     ///
     /// 判据与 `inlineOverlayIsLive` **完全同源**（视图必须还在窗口里），
-    /// 所以不会误伤"真的全屏中"的情况。
+    /// 所以不会误伤"真的全屏中"的情况；实现走 `overlayIsLive`，别再抄一份。
     func clearStaleAttachmentIfNeeded() {
         guard isAttached else { return }
+        guard !overlayIsLive else { return }
 
-        let live: Bool
-        if #available(iOS 26.0, *), let view = AppleMusicLyricsOverlayHost.shared.overlayView {
-            live = view.superview != nil && view.window != nil
-        } else if let overlay {
-            live = overlay.superview != nil && overlay.window != nil
-        } else {
-            live = false
-        }
-
-        guard !live else { return }
         writeDebugLog(
             "[WordByWord] stale attachment cleared — the layer is not in any window"
                 + " (wasFullscreen=\(attachedShowsProviderFooter))"
@@ -1815,7 +1828,12 @@ final class WordByWordHost {
         // VC（每首歌/每次卡片重建都会 viewDidAppear，所以"再挂一次"是自然发生的），
         // 而那个类在 9.1.x 上已不存在，我们改用 NPV 宿主触发 —— NPV 只在进入页面时
         // 出现一次，切歌不会再来，于是必须靠这里显式判断版本。
-        if isAttached, hostView === view, renderedLyricsVersion == currentLyricsVersion {
+        // ⚠️ 2026-09-27：**加 `overlayIsLive`** —— 只有"标记说挂着"**且**"层真的还在窗口里"
+        // 才算已经挂好。否则一层被系统收走 / 被复用 cell 带走之后，这条短路会把重挂
+        // 永久挡掉：真机日志 17 里 `attach skipped … (version 15)` 与
+        // `stale attachment cleared — the layer is not in any window` 同秒共存。
+        if isAttached, hostView === view, renderedLyricsVersion == currentLyricsVersion,
+           overlayIsLive {
             // 这条是**成功**的提前返回（层已经挂对地方、渲染的就是当前这首），
             // 不是放弃。但它在日志里长得和"什么都没发生"一样，所以也记一笔 ——
             // 排查"切歌了但层没重建"时，这行能直接证明是它挡的。
@@ -1911,14 +1929,32 @@ final class WordByWordHost {
             // `legacy overlay attached — host=Lyrics_TextElementImpl.LyricsTextView 671x256`，
             // 而它在窗口里的位置是 `at(-293,887)`（屏幕外）。挂上去就是"歌词挂错地方"：
             // 我们那一层跑到别的界面上去了。看不见就不挂，交给看门狗下一轮再找。
-            if !showsProviderFooter, !Self.isVisibleOnScreen(view) {
+            //
+            // ⚠️ 2026-09-27：判据从"**内容视图**可见"改成"**实际挂载点**可见"
+            // （有卡片就是卡片本身，与下面 `mountView` 的算法完全一致）。
+            //
+            // 为什么必须改：自适应 cell 会复用出**离屏的歌词视图实例**，而卡片本身在屏幕上；
+            // 判内容视图等于把这首歌的逐词层永久拒掉。真机日志 17（`ただ声一つ`）同一秒里
+            // `[PreviewShell] card container (card)=Lyrics_CardElementImpl.CardView 374x320
+            // lyrics=342x256`（卡片找得到、尺寸正常）与
+            // `⚠️ preview host off-screen (Lyrics_TextElementImpl.LyricsTextView)` 并存 ——
+            // 而且拒绝之后再没成功过，17 秒里一轮都没挂上。
+            //
+            // 诊断行里带出**每个条件**的实测值（window / hidden / alpha / frame / 可见比例）：
+            // 判据一共六个条件，只写一句 off-screen 时根本分不出是哪一条不过。
+            let mountTarget = showsProviderFooter ? view : (card ?? view)
+            if !showsProviderFooter, !Self.isVisibleOnScreen(mountTarget) {
+                let mountClass = NSStringFromClass(type(of: mountTarget))
+                let diagnostics = Self.visibilityDiagnostics(mountTarget)
                 Self.logRejectionThrottled(
                     "[WordByWord] ⚠️ preview host off-screen (\(className)) — will retry"
+                        + " | mount=\(mountClass) \(diagnostics)"
                 )
                 exitReason = "preview host off-screen (likely a recycled cell view) (\(className))"
+                    + " [mount=\(mountClass) \(diagnostics)]"
                 return false
             }
-            var mountView = showsProviderFooter ? view : (card ?? view)
+            var mountView = mountTarget
             if !showsProviderFooter, Self.isPageSized(mountView) {
                 // 卡片判据把"整页"当成了卡片（`cardContainer` 的尺寸启发式在
                 // 宿主根视图上必然如此）。照挂就是"预览变全屏"：一块卡片背景
@@ -2013,6 +2049,15 @@ final class WordByWordHost {
         //   · 逐词 + 其它情况        → 本层逐字高亮（不变）
         //   · 只有逐行 / 无时间轴    → 我们一层都不挂（本 guard），全部交还原生
         guard usable else {
+            // ⚠️ 2026-09-27：这里**自己把判据打一行**。
+            //
+            // 以前那行只在我们的层跑起来之后（`setCurrentTime` 的版本变化处）才打，
+            // 于是"从没挂上"的歌 —— 也正是最需要这一行的歌 —— 反而看不到它，
+            // 而下面这句文案却写着"see the `[WordByWord] word-level judge` line above"。
+            // 真机日志 17 就是这样：`attach declined … see the … line above` 出现 4 次，
+            // 而整份日志里 judge 一行都没有。`logWordLevelJudgeOnce()` 自身按版本去重，
+            // 重复调用不会刷屏。
+            logWordLevelJudgeOnce()
             exitReason = "no word-level timing — handing the page back to Spotify's native"
                 + " renderer (line-level usable=\(lineLevelUsable));"
                 + " see the `[WordByWord] word-level judge` line above"
@@ -2417,6 +2462,36 @@ final class WordByWordHost {
         let visible = frame.intersection(window.bounds)
         guard !visible.isNull, !visible.isEmpty else { return false }
         return visible.width * visible.height >= frame.width * frame.height * 0.5
+    }
+
+    /// `isVisibleOnScreen` 的**逐条件实测值**，只为日志。
+    ///
+    /// 为什么需要：拒绝日志只有一句"off-screen"，而那个判据有六个条件
+    /// （window / 窗口尺寸 / hidden / alpha / 尺寸下限 / 中心点在窗口内 / 至少一半面积可见）。
+    /// 真机日志 17 的 `ただ声一つ`：卡片尺寸完全正常（374x320，歌词区 342x256）
+    /// 却仍被判 off-screen —— 不把每个条件打出来就只能猜是哪一条。
+    ///
+    /// 格式固定、可 grep：`window=WxH hidden=B alpha=N.NN frame=(x,y) WxH visible=P%`。
+    nonisolated static func visibilityDiagnostics(_ view: UIView) -> String {
+        let windowDesc = view.window.map {
+            "\(Int($0.bounds.width))x\(Int($0.bounds.height))"
+        } ?? "nil"
+
+        var frameDesc = "frame=<no window>"
+        if let window = view.window {
+            let frame = view.convert(view.bounds, to: window)
+            let area = frame.width * frame.height
+            let visible = frame.intersection(window.bounds)
+            let visibleArea = (visible.isNull || visible.isEmpty)
+                ? 0
+                : visible.width * visible.height
+            let percent = area > 0 ? Int(visibleArea / area * 100) : 0
+            frameDesc = "frame=(\(Int(frame.minX)),\(Int(frame.minY)))"
+                + " \(Int(frame.width))x\(Int(frame.height)) visible=\(percent)%"
+        }
+
+        return "window=\(windowDesc) hidden=\(view.isHidden)"
+            + " alpha=\(String(format: "%.2f", Double(view.alpha))) \(frameDesc)"
     }
 
     /// 判断尺寸用的参照（优先该视图自己所在的窗口，其次当前 key window）。
