@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | Latest public release | `v0.1.0` | 9.1.76 |
 | Current development version | `v1.0.0-beta.35` | 9.1.86 |
-| Development version last updated | `2026/09/27` | — |
+| Development version last updated | `2026/09/27` | N/A |
 
 > [!WARNING]
 > Development versions are not made publicly available to users.
