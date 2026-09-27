@@ -1,30 +1,31 @@
 import Foundation
 
-/// 给「没有行级时间轴」的歌词合成时间轴。
+/// 给**占位文案**合成行级时间轴（2026-09-27 起只服务这一条路）。
 ///
-/// ── 为什么需要（真机取证结论）──────────────────────────────────────────────
+/// ── 为什么还需要它（真机取证结论）────────────────────────────────────────────
 /// Spotify 9.1.x 把 NPV 歌词模块重写成了响应驱动的组件（`Lyrics_CardElementImpl.*` /
 /// `Lyrics_NPVElementsKitImpl.*`）。真机日志显示：
 ///
 ///   · 正常显示的歌：`line timing 54/54 -> line-level=Y | timeSynced=true`；
-///   · 显示不出歌词的歌：payload 是**无时间轴**的占位/纯文本
+///   · 显示不出歌词的歌：payload 是**无时间轴**的占位
 ///     （`[NetEase] No usable lyrics` → `serving our placeholder` →
 ///      `attach declined — not even line-level timing is available`）。
 ///
-/// 也就是说：**无时间轴的 payload 在这个版本上等于"不可用"**。
-/// Genius 这一类源给出的本来就是 `timeSynced: false` 的纯文本，
-/// 与占位文案同病 —— 这正是"开了 Genius 回退反而更严重"的机制。
+/// 也就是说：**无时间轴的占位在这个版本上有可能整个不显示**，而占位恰恰是"取不到词"
+/// 那条路上唯一交出去的东西。所以 `makeUnavailableLyrics` 给它补一层按曲目时长铺开的
+/// 行级时间轴（那里**写死**调用，不再有任何开关）。
 ///
-/// 本文件把"按曲目时长把每一行铺到时间轴上"这件事收敛到一处：
-/// 只要交给 Spotify 的 payload 恒带行级时间轴，"每首歌都有模块"这个目标
-/// 就不再受"源有没有时间轴"的影响。
+/// ⚠️ 2026-09-27：**真实歌词源那条合成已删除**。这里原本还负责给 Genius / PetitLyrics
+/// 这类纯文本源伪造时间轴，并挂着一个「补全歌词时间轴」调试开关 —— 开关、key、l10n 与
+/// `LyricsDto.toSpotifyLyricsData` 里那段代码一起删了。理由：真机 A/B 显示关掉之后
+/// 观感"差不多或略好"，而且给本来没有时间轴的源编一层假 offset 只会让整首都不准；
+/// 歌词模块出现与否由元素列表决定（§7.4），不需要靠伪造时间轴去骗渲染层。
 ///
 /// ── 边界（重要）──────────────────────────────────────────────────────────
-/// · 只改**注入给 Spotify 的那份 protobuf**，不改 `currentLyricsDto`。
-///   渲染层的判据（`hasUsableWordLevelData` / `hasUsableLineLevelData`）读的还是原始 dto，
-///   所以不会因为合成时间轴而突然挂上一层"假同步"的高亮或逐词层。
+/// · 只作用于**占位 payload**，不碰任何真实歌词源的数据（"源给了零星真实时间轴就别覆盖"
+///   那个判据也随真实源那条路一起删掉了）。
 /// · 合成是**近似**的：行会按字符权重被铺在曲目时长上，位置不保证准确。
-///   它换来的是"模块能出现"，不是"逐行对得准"。
+///   对一个只写着"未找到歌词"的占位来说，这个精度足够。
 enum SyntheticLyricTiming {
 
     /// 每行至少占用的时长，避免超短行被压成 0ms 导致相邻行 offset 相同。
@@ -40,20 +41,12 @@ enum SyntheticLyricTiming {
     ///
     /// 口径与 `hasUsableLineLevelData` 一致（同样 50% 阈值），
     /// 这样"我们认为可用"与"渲染层认为可用"不会打架。
+    /// （2026-09-27 起只剩占位这一条路会用；占位行永远没有真实 offset，
+    /// 这个判据的作用是"别把已经铺过时间轴的那份再铺一遍"。）
     static func alreadyHasLineTiming(_ lines: [LyricsLineDto]) -> Bool {
         guard !lines.isEmpty else { return false }
         let timed = lines.filter { ($0.offsetMs ?? 0) > 0 }.count
         return timed * 10 >= lines.count * 5
-    }
-
-    /// 是否**任何一行**已经有真实 offset。
-    ///
-    /// 与 `alreadyHasLineTiming` 的区别很重要：那一档是"够不够渲染层用"（50%），
-    /// 这一档是"**有没有真实时间数据**"。只要源真的给了时间轴（哪怕只有零星几行，
-    /// 例如坏掉的 LRC），我们就**不该用估算值去覆盖它** —— 那会把"部分准确"
-    /// 变成"全部不准确"，反而更差。只有一行都没有时，估算才是纯收益。
-    static func hasAnyLineTiming(_ lines: [LyricsLineDto]) -> Bool {
-        lines.contains { ($0.offsetMs ?? 0) > 0 }
     }
 
     /// 返回一份**每一行都有 offset** 的副本。

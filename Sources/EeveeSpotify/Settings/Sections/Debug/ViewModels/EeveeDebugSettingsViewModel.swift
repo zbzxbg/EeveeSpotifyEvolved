@@ -9,11 +9,15 @@ import Combine
 /// 「歌词」页里，和用户真正的偏好（罗马字、逐词歌词、NetEase 显示方式…）混在一起，
 /// 后果是：用户面对一堆"不该动"的东西，而"哪些是待清理的临时件"完全不可见。
 ///
-/// 目前有三个（全部沿用**原 key**，只是换了容器 ⇒ 设备上已设的值不会丢）：
+/// 目前有两个（全部沿用**原 key**，只是换了容器 ⇒ 设备上已设的值不会丢）：
 ///
-///   · 「补全歌词时间轴」`ngzhwm_syntheticLineTiming`
 ///   · 「给没有歌词卡片的歌曲补一张」`ngzhwm_injectLyricsCardElement`
 ///   · 「强制歌词入口开关」`ngzhwm_lyricsEntryPointFlag`
+///
+/// 已清理掉一个（2026-09-27）：「补全歌词时间轴」`ngzhwm_syntheticLineTiming` ——
+/// 真机 A/B 结论是"关掉之后差不多或略好"，而给纯文本源伪造时间轴本身不合语义，
+/// 于是开关、l10n 与那段合成代码一起删了（`LyricsDto.toSpotifyLyricsData`）。
+/// 最终理想形态是这一页**空着**。
 ///
 /// 另有一个还没定性的候选：`ngzhwm_disableNpvPrereleaseProvider`（假预热卡的止血开关）
 /// —— 它对应的代码这一轮已整体回退，所以**暂时不放进页面**，等重启那条线时再加。
@@ -21,24 +25,10 @@ import Combine
 /// ── 纪律 ───────────────────────────────────────────────────────────────────
 ///
 /// 这里的开关**要么在验证中、要么已判定该删**。验证完就"写死 + 删 key + 删 l10n"
-/// （`hideOfficialLyrics` 就是这么处理的），页面上不该留长期住户。
+/// （`hideOfficialLyrics`、`syntheticLineTiming` 都是这么处理的），页面上不该留长期住户。
 class EeveeDebugSettingsViewModel: ObservableObject {
 
-    /// 「给无时间轴的歌词补时间轴」。
-    ///
-    /// ⚠️ 初值必须走默认值 getter（`isSyntheticLineTimingEnabled`），不能用
-    /// `UserDefaults.bool(forKey:)` —— 后者在 key 还没写过时返回 false，
-    /// 会把一个"默认开"的开关显示成关。
-    @Published var syntheticLineTiming = NgzhwmSettingsViewModel.isSyntheticLineTimingEnabled {
-        didSet {
-            UserDefaults.standard.set(
-                syntheticLineTiming,
-                forKey: NgzhwmSettingsViewModel.syntheticLineTimingKey
-            )
-        }
-    }
-
-    /// 「给没有歌词卡片的曲目补一个卡片元素」。同上：初值必须走 getter（默认开）。
+    /// 「给没有歌词卡片的曲目补一个卡片元素」。初值必须走 getter（默认开）。
     @Published var injectLyricsCardElement = NgzhwmSettingsViewModel.isLyricsCardElementInjectionEnabled {
         didSet {
             UserDefaults.standard.set(
@@ -65,7 +55,6 @@ class EeveeDebugSettingsViewModel: ObservableObject {
     /// 值一变页面就会重绘（少了它会出现"改了开关但界面不刷新"）。
     var animationValues: [AnyHashable] {
         [
-            syntheticLineTiming,
             injectLyricsCardElement,
             lyricsEntryPointFlag,
         ]
@@ -77,10 +66,9 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         setupBindings()
     }
 
-    /// 见 `logBooleanSetting` 的说明。三个开关单独铺开写（而不是泛型循环），
+    /// 见 `logBooleanSetting` 的说明。两个开关单独铺开写（而不是泛型循环），
     /// 让"到底记了哪些"在代码里一眼可数。
     private func setupBindings() {
-        logBooleanSetting($syntheticLineTiming, "synthetic line timing")
         logBooleanSetting($injectLyricsCardElement, "inject lyrics card element")
         logBooleanSetting($lyricsEntryPointFlag, "lyrics entry point flag")
     }

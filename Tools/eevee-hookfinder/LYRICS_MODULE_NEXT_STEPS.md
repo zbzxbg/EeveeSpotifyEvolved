@@ -497,6 +497,127 @@ if let originalColors { $0.colors = originalColors }
 
 ---
 
+## 53. 换歌竞态放宽 + 日志串行化 + **删除「补全歌词时间轴」**（2026-09-27）
+
+**用户决定**：「也改了吧。然后把 调试 里面的 补全歌词时间轴 的相关代码删了吧。应该没用了这东西。」
+
+### 53.1 换歌竞态：等待上限 1.0s → 3.0s
+
+`getLyricsDataForCurrentTrack` 开头那段"等播放器元数据跟上"的循环（`maxWaitTime`）。
+证据仍是 §52 那次日志 16 的 `Club Racer`：换歌瞬间的 color-lyrics 请求，1 秒内播放器
+还停在上一首（同一时刻我们甚至用**上一首的标题**在搜网易云），于是 `trackMismatch` →
+那次响应被兜底成占位；客户端紧接着的第二次请求也照样失败。
+
+按 URI 反查曲目元数据**没有接口**（能拿到的只有播放器 / 正在播放页），所以只能多等。
+3s 覆盖"播放器元数据比歌词请求晚一拍"这个窗口；代价是这次响应最多被多留 3s
+（本来也会挂住到取词完成，钩子的预算是 18s）。
+
+**顺带修掉竞态路径的署名**：`getLyricsDataForCurrentTrack` 入口（打完 `Request for` 之后）
+把 `lastRequestedLyricsSourceDescription` **清空**。`trackMismatch` / `noCurrentTrack` 是
+**早退**路径 —— 发生在进 `requestSingleSource` **之前**，不清就会沿用上一首的源名
+（§52.1 表格第三行）。清空后占位退回裸的 `EeveeSpotify`，正好是
+`makeUnavailableLyrics` 里那条"还没问过任何源"的兜底分支。
+
+### 53.2 日志文件串行化（`Tweak.x.swift` 的 `appendLogFile`）
+
+`open → seekToEndOfFile → write → close` 本身不是原子操作，而歌词响应是**并发**处理的
+（同一首歌两个 color-lyrics 响应各一个后台队列）→ 两个线程 seek 到同一末尾，会**丢行**。
+§52 之前那次日志 16 里 `Corner Store` 第一次响应缺 `synthetic line timing applied`
+就是这种丢行（孪生响应与其余每一首都在，上下文完整）。
+
+改法：加一个 `logWriteQueue`（串行），把整段 I/O 放进 `logWriteQueue.sync { … }`。
+用 `sync` 而不是 `async`：崩溃取证时最后几行必须已经落盘。
+
+### 53.3 删除「补全歌词时间轴」（清单）
+
+| 位置 | 动作 |
+|---|---|
+| `NgzhwmSettingsViewModel` | 删 `syntheticLineTimingKey` 与 `isSyntheticLineTimingEnabled` |
+| `EeveeDebugSettingsViewModel` | 删 `@Published syntheticLineTiming`、`animationValues` 里的项、`logBooleanSetting($syntheticLineTiming, …)` |
+| `EeveeDebugSettingsView` | 删 `syntheticLineTimingSection()` 与调用（页面回到两个开关） |
+| `Tweak.x.swift` | `[INIT]` 行删 `synthetic line timing:` 那一栏（保留 card element inject / official lyrics hidden / disabled / genius fallback） |
+| `LyricsDto.toSpotifyLyricsData` | 删 `synthesizesTiming` 分支、`SyntheticLyricTiming.applying` 调用与 `synthetic line timing applied` 日志；**`durationMs` 参数一并删掉**（它只为合成而存在）→ 调用方 `makeLyrics(from:source:)` 的 `durationMs` 也删 |
+| `SyntheticLyricTiming` | 删 `hasAnyLineTiming`（唯一调用方没了）；文件保留，**只服务占位文案**，文档头已改写 |
+| `CustomLyrics.makeUnavailableLyrics` | 合成**写死**（不再看开关）——"未找到歌词"这一行能不能显示的前提 |
+| `en` / `zh-CN` l10n | 删 `ngzhwm_synthetic_line_timing`（另外 25 个 locale 本来就没有这个键） |
+| 各文件注释 | 同步更新"三个开关/搬走/已删"的说法 |
+
+**为什么保留占位那一条**：删掉的只是"给**真实歌词源**伪造时间轴"（Genius 的页面本来就没有
+行时间，估算 offset 只会让整首都不准）。占位文案不是某个源的时间轴，而是这个版本上
+"未找到歌词"能不能显示出来的前提。要连它一起删（= 占位也 `timeSynchronized=false`），
+说一声，那是另一处独立改动。
+
+### 53.4 下份日志会看到的差异
+
+- `[INIT]` 行**没有** `synthetic line timing:` 这一栏了；
+- `[Lyrics] synthetic line timing applied — …` **整场都不会再出现**（别当成"没跑"）；
+- Genius 出词的歌：payload 如实是 `timeSynchronized=false`（文本无时间轴）；
+- 换歌瞬间的占位：署名是裸 `EeveeSpotify`（不是上一首的源）；等待最多 3s。
+
+### 53.5 未验证
+
+**没有编译验证**（本机无 Swift 工具链；`pwsh` 执行器本轮仍整段挂 `0xC0000142`，
+括号平衡脚本跑不了），也**没有真机验证**。改动涉及删除 API 参数（两个函数签名）、
+删除设置项与 l10n，建议构建后重点确认：调试页只剩两个开关、歌词页正常、
+Genius 出词的歌仍能显示（只是不再有假时间轴）。
+
+---
+
+## 52. 占位署名跟着兜底走 + Genius 诊断行（2026-09-27，日志 16 的 `Runner`）
+
+**用户报**：「runner 抛出未找到歌词，但不回退 genius（歌词源 ne）」——核对日志 16：**回退跑了**
+（`NetEase failed → falling back to Genius → Search returned 1 hit(s) → No usable lyrics`），
+取词行为正确（两个源都没词）；错的是**卡面署名**：`歌词提供者：NetEase (EeveeSpotify)`。
+
+### 52.1 根因（代码级）
+
+`lastRequestedLyricsSourceDescription` **只在 `requestSingleSource` 入口写一次**（= 用户设的源）：
+
+| 路径 | 署名 |
+|---|---|
+| 兜底**成功** | `SourceLyricsResult(source: .genius)` → `makeLyrics(from:source:)` 署 **Genius** ✔ |
+| 兜底**也失败** | `try geniusLyricsRepository.getLyrics(…)` 直接把错抛出，**没人改那个全局** → 占位用入口值 → **NetEase** ❌ |
+| 换歌竞态（`trackMismatch` / `noCurrentTrack`，日志 16 的 Club Racer） | 在进 `requestSingleSource` **之前**就抛了 → 沿用的是**上一首**留下的值 ❌（**本轮未修**） |
+
+早期注释「只在入口写一次…与失败发生在哪个源必然同源」的前提是"单源模式只问一个源"；
+开了 Genius 回退之后这个前提不成立。§33 为多级回退补过同类署名，单源+兜底这条漏了。
+
+### 52.2 本轮改动（3 处）
+
+| 文件 | 改动 |
+|---|---|
+| `CustomLyrics.x.swift` `requestSingleSource` | `falling back to Genius` 之后、`try` 之前把 `lastRequestedLyricsSourceDescription` 改成 `.genius` → **成败都署"最后被问的那个源"** |
+| 同上 | 兜底失败补一行 `[Lyrics] Genius failed: <error>`（以前只有源内的 `[Genius] …`，`[Lyrics]` 这一级静默；与第一个源的 `failed: <error>` 对称） |
+| `GeniusLyricsRepository.swift` | ① 选中命中后**无条件**打 `[Genius] Chosen hit: id=… title="…" artist="…"`（失败路径以前什么都不留）；② `No usable lyrics` 那条补 `plain N char(s) / raw N line(s) / kept N / head=<前 120 字符，换行转义>`（`plainHeadForLog`） |
+
+**没做**（下一轮）：换歌竞态（`trackMismatch` 时立刻用请求里的 track id 再解析一次，或放宽 1s 等待）
++ 竞态路径的署名清空；`appendLogFile` 无锁（`Tweak.x.swift:15-31`）——它会让"某行不在 = 代码没跑"这种推断失效。
+
+### 52.3 新日志判据（下次读日志先看这几行）
+
+```
+[Genius] Chosen hit: id=… title="Runner" artist="…"        ← 那条命中到底是不是这首歌
+[Genius] No usable lyrics — plain 0 char(s), raw 1 line(s), kept 0, head=<empty>
+                                                          ← 空词 / 只有标注 / 匹配错歌，一眼分开
+[Lyrics] Genius failed: 未找到歌曲                          ← 最后是 Genius 没找到（以前静默）
+卡面：两源都失败 → `Genius (EeveeSpotify)`（不再是用户设的那个源）
+```
+
+### 52.4 顺带记录：用户实测「关掉补时间轴」
+
+用户关掉「补全歌词时间轴」后复跑：**感觉差不多、或略好一点，且更符合语义**（Genius 本来就没有时间轴）。
+与仓库自己的结论一致：§0 的"合成时间轴把卡片挤掉"**已作废**（见 §16 → §7.3/§7.4，卡片存在性由元素列表决定），
+所以"关掉没变化"是预期内的 —— **卡片问题不是 `timeSynchronized` 造成的**，剩下的仍是 §51.4 的换歌竞态
+与客户端首次渲染时机。关掉后注意：`synthetic line timing applied` 会整场消失（别当成没跑）；
+占位 payload 也失去合成时间轴（`CustomLyrics.x.swift:461`），若哪首连卡片都不出来，就是这一条。
+
+### 52.5 未验证
+
+**没有编译验证**（本机无 Swift 工具链；本轮 `pwsh` 执行器整段挂 `0xC0000142`，括号平衡脚本跑不了），
+也**没有真机验证**。改动仅限署名与日志，不动取词逻辑。
+
+---
+
 ## 51. 「Genius 回退时好时坏」定性：**三层原因，日志 11 是"开关关着"那一层**；四处改动（2026-09-27）
 
 **材料**：`C:\dsh\readlog` 全部 15 份日志（关键字统计 + 逐曲对照，没有逐份通读）+ `Sources/`。

@@ -186,6 +186,19 @@ class GeniusLyricsRepository: LyricsRepository {
         return artistMatched
     }
 
+    /// 日志用：把 `lyrics.plain` 的开头压成**一行**（换行转义），空串给 `<empty>`。
+    ///
+    /// 只用于 `No usable lyrics` 那条诊断 —— 要能一眼看出是"空词"、"只有标注"还是"别的歌"。
+    private func plainHeadForLog(_ plain: String, limit: Int = 120) -> String {
+        guard !plain.isEmpty else { return "<empty>" }
+
+        let head = String(plain.prefix(limit))
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\n", with: "\\n")
+
+        return plain.count > limit ? "\(head)…" : head
+    }
+
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         writeDebugLog("[Genius] Fetching lyrics for \"\(query.title)\" - \(query.primaryArtist)")
         let strippedTitle = query.title.strippedTrackTitle
@@ -210,6 +223,17 @@ class GeniusLyricsRepository: LyricsRepository {
         }
 
         let song = mostRelevantHitResult(hits: hits, strippedTitle: strippedTitle)
+
+        // 选中的是哪一条 —— **成功与否都打**。
+        //
+        // 以前只有成功路径的 `[Genius] Using "…" — N line(s)` 留下标题，失败路径什么都不留：
+        // 2026-09-27 日志 16 的 `Runner` 就卡在这儿（`Search returned 1 hit(s)` 之后直接
+        // `No usable lyrics`），看不出那条命中**是不是这首歌**、也看不出它的词页是不是空的。
+        writeDebugLog(
+            "[Genius] Chosen hit: id=\(song.id)"
+                + " title=\"\(song.title)\" artist=\"\(song.artistNames)\""
+        )
+
         let songInfo = try getSongInfo(song.id)
 
         let plainLines = songInfo.lyrics.plain.components(separatedBy: .newlines)
@@ -217,7 +241,16 @@ class GeniusLyricsRepository: LyricsRepository {
 
         // 不把上游「空歌词 → 纯音乐占位」的 bug 带过来：无有效歌词就抛查无此歌。
         guard !mappedLines.isEmpty else {
-            writeDebugLog("[Genius] No usable lyrics")
+            // 三种情况以前共用同一句 `No usable lyrics`，没法区分：
+            //   · `plain` 是空串（Genius 有页面但没填词）；
+            //   · 整页只有 `[Instrumental]` / `[Chorus]` 这类标注，被 mapLyricsLines 全过滤掉；
+            //   · 匹配到的压根是另一首同名歌。
+            // 原始字符数 / 原始行数 / 开头 120 字符一起打出来，一次复现就能定性。
+            writeDebugLog(
+                "[Genius] No usable lyrics — plain \(songInfo.lyrics.plain.count) char(s),"
+                    + " raw \(plainLines.count) line(s), kept \(mappedLines.count),"
+                    + " head=\(plainHeadForLog(songInfo.lyrics.plain))"
+            )
             throw LyricsError.noSuchSong
         }
 

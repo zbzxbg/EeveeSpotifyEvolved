@@ -150,16 +150,15 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
-    // 已移除三个 Section（2026-09-27）：`syntheticLineTimingSection()` /
-    // `injectLyricsCardElementSection()` / `lyricsEntryPointFlagSection()` ——
-    // 它们是**排查/验证型**开关，已整体挪到「调试」页（`EeveeDebugSettingsView`）。
-    // key 与 l10n 都没变，用户已设的值照旧生效。
+    // 已移除两个 Section（2026-09-27）：`injectLyricsCardElementSection()` /
+    // `lyricsEntryPointFlagSection()` —— 它们是**排查/验证型**开关，已整体挪到
+    // 「调试」页（`EeveeDebugSettingsView`）。key 与 l10n 都没变，用户已设的值照旧生效。
+    // 同批**删除**的 `syntheticLineTimingSection()`（「补全歌词时间轴」）是另一回事：
+    // 验证完毕、功能整体删掉，key 与 l10n 也一起删了，不再有任何入口。
 
     // 已移除一个 Section（2026-09-25）：`hideOfficialLyricsSection()` ——
     // 它的开关价值只在"验证修复有没有用"那一步，验证完就写死启用了。
     // 那个 l10n 键也一并删除（见 en/zh-CN 的 Localizable.strings）。
-    // 同批删掉的 `syntheticLineTimingSection()` 与 `injectLyricsCardElementSection()`
-    // 均已恢复，见上面两个方法。
 
     @ViewBuilder private func neteaseRomajiLocalSection() -> some View {
         Section(

@@ -133,7 +133,6 @@ ngzhwm_word_by_word_lyrics_description = "Musixmatch, PetitLyrics, SpicyLyrics, 
 ngzhwm_better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
 ngzhwm_better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum. Lyric translations are not shown when enabled.";
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
-ngzhwm_synthetic_line_timing = "Fill in Missing Lyric Timing";
 ngzhwm_inject_lyrics_card_element = "Add a Lyrics Card to Tracks Without One";
 ngzhwm_lyrics_entry_point_flag = "Force Lyrics Entry Point Flag";
 ngzhwm_multi_level_fallback = "Multi-level Fallback";

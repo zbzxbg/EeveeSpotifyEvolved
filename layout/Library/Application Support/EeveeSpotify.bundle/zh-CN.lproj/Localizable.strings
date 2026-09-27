@@ -126,7 +126,6 @@ ngzhwm_word_by_word_lyrics_description = "Musixmatch，PetitLyrics，SpicyLyrics
 ngzhwm_better_word_by_word_lyrics = "更好的逐词歌词";
 ngzhwm_better_word_by_word_lyrics_description = "像Apple Music那样，系统版本最低要求iOS26。选项开启后不会展示歌词翻译。";
 word_by_word_lyrics_provider = "逐词歌词提供者：%@";
-ngzhwm_synthetic_line_timing = "补全歌词时间轴";
 ngzhwm_inject_lyrics_card_element = "给没有歌词卡片的歌曲补一张";
 ngzhwm_lyrics_entry_point_flag = "强制歌词入口开关";
 ngzhwm_multi_level_fallback = "多级回退";

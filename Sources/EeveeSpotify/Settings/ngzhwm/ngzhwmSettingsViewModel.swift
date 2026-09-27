@@ -10,12 +10,15 @@ class NgzhwmSettingsViewModel: ObservableObject {
     static let betterWordByWordLyricsKey = "ngzhwm_betterWordByWordLyrics"
     // 已移除 `amllPreferredKey`（2026-09-25）：「AMLL 优先」整条链去掉，
     // AMLL 仍是来源选择器里的普通来源。
-    /// 「给无时间轴的歌词补时间轴」—— 见 `isSyntheticLineTimingEnabled`。
-    ///
-    /// ⚠️ 2026-09-26 **恢复为真开关**（曾一度写死启用）：需要它来验证
-    /// "不补时间轴时这份 payload 还能不能正常展示"。沿用旧 key 名，
-    /// 设备上残留的值会被重新读起来。
-    static let syntheticLineTimingKey = "ngzhwm_syntheticLineTiming"
+    // 已删除一个 key（2026-09-27）：`ngzhwm_syntheticLineTiming` —— 「补全歌词时间轴」。
+    //
+    // 为什么删：真机 A/B（用户关掉它跑了一整场）结论是"差不多、或略好一点"，而**给本来就
+    // 没有时间轴的源（Genius / Petit 纯文本）伪造一层时间轴本身就不合语义** ——
+    // 估算出来的 offset 只会让整首都不准。现在：
+    //   · **真实歌词源一律不再合成时间轴**（`LyricsDto.toSpotifyLyricsData` 里那段已删）；
+    //   · 只有**占位文案**仍然补（`makeUnavailableLyrics` 里写死）——
+    //     那是"未找到歌词"这一行能不能显示出来的前提，不是给某个源伪造时间轴。
+    // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     /// 「给没有歌词卡片的曲目补一个卡片元素」—— 见 `isLyricsCardElementInjectionEnabled`。
     ///
     /// ⚠️ 2026-09-26 **恢复为真开关**（曾一度写死启用）：2026-09-26 的真机日志（日志 3）
@@ -97,20 +100,6 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 与 `isLyricsBlurredBackdropEnabled` 同理，跟随「更好的逐词歌词」。
     static var isLyricsBackdropMaterialEnabled: Bool {
         isBetterWordByWordLyricsEnabled
-    }
-
-    /// 「给无时间轴的歌词补时间轴」：Genius 这类源给的是纯文本（`timeSynced: false`），
-    /// 在这个版本上会被渲染层判为"不可用"，表现就是**歌词模块不出现**。
-    ///
-    /// 开启后，注入给 Spotify 的那份 payload 会被铺上一层按曲目时长估算的行级时间轴，
-    /// 从而走"同步歌词"渲染路径。**只影响注入给 Spotify 的 protobuf**，
-    /// `currentLyricsDto` 与逐词 overlay 的判据都不变。
-    ///
-    /// ⚠️ 2026-09-26 **恢复为真开关**（此前一度写死 `true`）。默认 **ON** ——
-    /// 保持"Genius 这类纯文本源也能出歌词模块"的既有行为不变；
-    /// 关掉它用于验证"不补时间轴时这份 payload 还能不能正常展示"。
-    static var isSyntheticLineTimingEnabled: Bool {
-        bool(forKey: syntheticLineTimingKey, defaultValue: true)
     }
 
     /// 「给没有歌词卡片的曲目补一个卡片元素」。

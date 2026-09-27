@@ -116,10 +116,12 @@ extension EeveeLyricsSettingsViewModel {
         // 已移除：`$amllPreferred`（「AMLL 优先」整条链已删除）。
         // 「隐藏官方歌词」已写死启用（见 NgzhwmSettingsViewModel），设置页不再有开关，
         // 因此这里也没有可记录的绑定。
-        // 已搬走：`$syntheticLineTiming` / `$injectLyricsCardElement` / `$lyricsEntryPointFlag`
-        // （2026-09-27，排查型开关整体挪到「调试」页）。那三行 `[Settings] … -> ON/OFF`
+        // 已搬走：`$injectLyricsCardElement` / `$lyricsEntryPointFlag`
+        // （2026-09-27，排查型开关整体挪到「调试」页）。那两行 `[Settings] … -> ON/OFF`
         // 分组标记跟着绑定一起搬到了 `EeveeDebugSettingsViewModel.setupBindings()`，
         // 所以日志格式不变、只是由那个页面负责记录。
+        // 已删除：`$syntheticLineTiming`（2026-09-27）——「补全歌词时间轴」连同它的代码
+        // 一起删了（见 `EeveeDebugSettingsViewModel` 顶部说明），不再有任何绑定。
         logBooleanSetting($disableLyricsFeature, "disable lyrics feature")
         logBooleanSetting($removeMxmInterludeSymbol, "remove interlude symbol")
         logBooleanSetting($neteaseRomajiLocal, "NetEase romaji display mode")

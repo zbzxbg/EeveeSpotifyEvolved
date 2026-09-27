@@ -12,21 +12,37 @@ private let eeveeLogger = Logger(
     category: "debug"
 )
 
+/// 日志文件的**串行写队列**。
+///
+/// 为什么必须有：`appendLogFile` 是"open → seekToEndOfFile → write → close"，本身不是原子操作，
+/// 而歌词响应是**并发**处理的（同一首歌的两个 color-lyrics 响应各跑在一个后台队列上，
+/// 见 `HttpClientURLSessionHooks`）。两个线程同时 seek 到同一个末尾再各自写 → 有一行被覆盖。
+///
+/// 真机证据（2026-09-27 日志 16，`Corner Store`）：第一次响应的
+/// `synthetic line timing applied` **整行消失**，而它的孪生响应（1 秒后）和其余每一首都在，
+/// 且上下文行完整 —— 就是这种丢行。丢行会让"某行不在 = 代码没跑"这类推断直接失效。
+///
+/// 用 `sync` 而不是 `async`：崩溃取证时最后几行必须已经落盘（异步会把它们留在队列里）。
+private let logWriteQueue = DispatchQueue(label: "com.eeveespotify.debuglog.write")
+
 private func appendLogFile(_ message: String) {
-    let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
     let timestamp = Date().description
     let logMessage = "[\(timestamp)] \(message)\n"
 
-    if FileManager.default.fileExists(atPath: logPath) {
-        if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            fileHandle.seekToEndOfFile()
-            if let data = logMessage.data(using: .utf8) {
-                fileHandle.write(data)
+    logWriteQueue.sync {
+        let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
+
+        if FileManager.default.fileExists(atPath: logPath) {
+            if let fileHandle = FileHandle(forWritingAtPath: logPath) {
+                fileHandle.seekToEndOfFile()
+                if let data = logMessage.data(using: .utf8) {
+                    fileHandle.write(data)
+                }
+                fileHandle.closeFile()
             }
-            fileHandle.closeFile()
+        } else {
+            try? logMessage.write(toFile: logPath, atomically: true, encoding: .utf8)
         }
-    } else {
-        try? logMessage.write(toFile: logPath, atomically: true, encoding: .utf8)
     }
 }
 
@@ -367,12 +383,17 @@ struct EeveeSpotify: Tweak {
         writeDebugLog("[INIT] Hook target: \(EeveeSpotify.hookTarget)")
         writeDebugLog("[INIT] Patch type: \(UserDefaults.patchType)")
         writeDebugLog("[INIT] Lyrics source: \(UserDefaults.lyricsSource)")
-        // 两个真开关（合成行级时间轴 / 补卡片元素）+ 一个写死启用的修复（隐藏官方歌词）
+        // 一个真开关（补卡片元素）+ 一个写死启用的修复（隐藏官方歌词）
         // + 禁用歌词功能 + Genius 回退开关，一次打出来：
-        //   · 合成行级时间轴 / 补卡片元素 —— 2026-09-26 起恢复为读 UserDefaults 的真开关，
-        //     这里记的是**实际生效值**（默认都是 ON）；
+        //   · 补卡片元素 —— 2026-09-26 起是读 UserDefaults 的真开关（默认 ON），
+        //     这里记的是**实际生效值**；
         //   · 隐藏官方歌词 —— 2026-09-25 起写死在 `NgzhwmSettingsViewModel` 里；
         //   · 禁用歌词功能 —— 仍然是用户开关，值是它自己。
+        //
+        // ⚠️ 2026-09-27：`synthetic line timing` 一栏已删 —— 「补全歌词时间轴」那个开关
+        // 连同它给真实歌词源合成时间轴的代码一起删了（只剩占位文案写死补，见
+        // `makeUnavailableLyrics`）。所以这一栏不再有"两档"，A/B 分组看的是别的字段。
+        //
         // 这行同时是排障时的"这一轮跑的是哪一档"标记（A/B 就靠它分组）。
         //
         // ⚠️ 「补卡片元素」必须打出来：排查"预热卡时有时无"时，日志里其余线索全是
@@ -389,9 +410,7 @@ struct EeveeSpotify: Tweak {
         // 多级回退时那个开关在设置页不显示、也不参与决策，这里照打原值，读日志时
         // 与同一行的 `Lyrics source:` 合起来看。
         writeDebugLog(
-            "[INIT] synthetic line timing: "
-                + "\(NgzhwmSettingsViewModel.isSyntheticLineTimingEnabled ? "ON" : "OFF")"
-                + " | card element inject: "
+            "[INIT] card element inject: "
                 + "\(NgzhwmSettingsViewModel.isLyricsCardElementInjectionEnabled ? "ON" : "OFF")"
                 + " | official lyrics hidden: "
                 + "\(NgzhwmSettingsViewModel.isOfficialLyricsHidden ? "ON" : "OFF")"

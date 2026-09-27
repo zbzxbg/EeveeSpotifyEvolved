@@ -181,10 +181,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                 return Lyrics.with {
                     $0.data = dto.toSpotifyLyricsData(
                         source: source.description,
-                        useInstrumentalPlaceholder: source != .genius,
-                        // 无时间轴的源（Genius 等）靠它把行铺到曲目时长上，
-                        // 否则 9.1.x 会判为"不可用"→ 歌词模块不出现。
-                        durationMs: searchQuery.durationMs
+                        useInstrumentalPlaceholder: source != .genius
                     )
                 }
             } else if let error = requestError {
@@ -235,8 +232,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
         return makeLyrics(
             from: result.dto,
-            source: result.source,
-            durationMs: searchQuery.durationMs
+            source: result.source
         )
     }
     }
@@ -331,13 +327,32 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             }
 
             writeDebugLog("[Lyrics] \(source.description) failed — falling back to Genius")
-            // Genius 兜底源同样直接抛错，不再兜底为空歌词。
-            // ⚠️ 回传的 `source` 必须是 `.genius`：这份 dto 是 Genius 给的，
-            // 来源标签也得写 Genius（写用户设的那个源就是"注解显示 PetitLyrics"）。
-            return SourceLyricsResult(
-                dto: try geniusLyricsRepository.getLyrics(searchQuery, options: options),
-                source: .genius
-            )
+
+            // 兜底一跑，「这次问的是谁」就变成 Genius 了 —— 必须在这里把那个署名全局改掉。
+            //
+            // 为什么：它只在 `requestSingleSource` **入口**写过一次（= 用户设的源），成功路径
+            // 靠下面 `source: .genius` 纠正署名，**失败路径没人纠正** —— 于是"兜底也失败"时
+            // 占位 payload 写回用户设的那个源。真机 2026-09-27 日志 16 的 `Runner`：
+            // 网易云没词 → Genius 搜到 1 条但没可用行 → 卡面却写着
+            // `歌词提供者：NetEase (EeveeSpotify)`，用户由此以为"根本没回退"。
+            //
+            // 口径与成功路径一致：**最后被问的那个源**（多级回退那条约链先例见 §33）。
+            lastRequestedLyricsSourceDescription = LyricsSource.genius.description
+
+            do {
+                // ⚠️ 回传的 `source` 必须是 `.genius`：这份 dto 是 Genius 给的，
+                // 来源标签也得写 Genius（写用户设的那个源就是"注解显示 PetitLyrics"）。
+                return SourceLyricsResult(
+                    dto: try geniusLyricsRepository.getLyrics(searchQuery, options: options),
+                    source: .genius
+                )
+            } catch let geniusError {
+                // ⚠️ 兜底失败以前是**静默**抛出去的：源内日志只有 `[Genius] No usable lyrics`
+                // 这类，`[Lyrics]` 这一级一个字都不打 —— 读日志时分不清"最后是 Genius 没找到"
+                // 还是"这次压根没回退"。与第一个源的 `failed: <error>` 对称补一行。
+                writeDebugLog("[Lyrics] Genius failed: \(geniusError)")
+                throw geniusError
+            }
         }
     }
 
@@ -441,11 +456,11 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     ///   传 nil 时只有一行"未找到歌词"（历史上是三行：通知 + 空行 + 提示行；
     ///   提示行 `ngzhwm_lyrics_unavailable_hint` 已于 2026-09-25 连同中文本地化一起删除）。
     func makeUnavailableLyrics(originalColors: LyricsColors?, note: String?) -> Lyrics {
-        // 占位文案也要有行级时间轴。
+        // 占位文案要有行级时间轴。
         //
-        // 理由与 `toSpotifyLyricsData` 相同：这个版本把"无时间轴"判为不可用，
-        // 而占位恰恰是"取不到词"那条路上唯一交出去的东西 —— 没有时间轴就等于
-        // 连"未找到歌词"都显示不出来，用户看到的是**彻底没有歌词模块**。
+        // 这个版本把"无时间轴"判为不可用，而占位恰恰是"取不到词"那条路上唯一交出去的
+        // 东西 —— 没有时间轴就等于连"未找到歌词"都显示不出来，用户看到的是
+        // **彻底没有歌词模块**。（真实歌词源那条合成已于 2026-09-27 删除，占位这条保留。）
         // ⚠️ 2026-09-25：`ngzhwm_lyrics_unavailable_hint`（"可以在设置里换一个歌词来源…"）
         // 已随中文本地化一起删除 —— 占位现在只有"未找到歌词"一行（`note` 有值时追加一行）。
         // 只删文案、留代码的话，两个 locale 都拿不到这个 key，界面会直接把 key 名当文案显示。
@@ -458,12 +473,16 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             placeholderLines.append(LyricsLineDto(content: note))
         }
 
-        if NgzhwmSettingsViewModel.isSyntheticLineTimingEnabled {
-            placeholderLines = SyntheticLyricTiming.applying(
-                to: placeholderLines,
-                durationMs: currentTrackDurationMs
-            )
-        }
+        // ⚠️ 2026-09-27：这里**写死**补时间轴，不再看任何开关。
+        //
+        // 它是"未找到歌词"这一行能不能显示出来的前提（这个版本把无时间轴的 payload 判为
+        // 不可用，占位恰恰是取不到词那条路上唯一交出去的东西），**不是**"给某个源伪造
+        // 时间轴"—— 真实源那条合成已整体删除（见 `LyricsDto.toSpotifyLyricsData` 顶部）。
+        // 旧设置键 `ngzhwm_syntheticLineTiming` 连同它的调试页开关一起删了。
+        placeholderLines = SyntheticLyricTiming.applying(
+            to: placeholderLines,
+            durationMs: currentTrackDurationMs
+        )
 
         return Lyrics.with {
             $0.data = LyricsData.with {
@@ -578,12 +597,12 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     ///
     /// - Parameter source: **实际**产出这份 dto 的源（Genius 兜底时是 `.genius`，
     ///   不是用户设的那个）。来源标签与注入给 Spotify 的 `providedBy` 都用它。
-    /// - Parameter durationMs: 曲目时长，用于给无时间轴的源合成行级时间轴（见
-    ///   `SyntheticLyricTiming`）。为 nil 时按每行估时兜底。
+    ///
+    /// ⚠️ 2026-09-27：`durationMs` 参数已删 —— 它唯一的用途是给无时间轴的源合成时间轴，
+    /// 那条兜底整体删掉了（见 `LyricsDto.toSpotifyLyricsData` 顶部说明）。
     private func makeLyrics(
         from dto: LyricsDto,
-        source: LyricsSource,
-        durationMs: Int? = nil
+        source: LyricsSource
     ) -> Lyrics {
         lyricsState.isEmpty = dto.lines.isEmpty
         lyricsState.wasRomanized = dto.romanization == .romanized
@@ -595,8 +614,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         return Lyrics.with {
             $0.data = dto.toSpotifyLyricsData(
                 source: source.description,
-                useInstrumentalPlaceholder: source != .genius,
-                durationMs: durationMs
+                useInstrumentalPlaceholder: source != .genius
             )
         }
     }
@@ -651,6 +669,17 @@ func unavailableLyricsBytes(original: Lyrics?, note: String? = nil) -> Data? {
 
 func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics? = nil) throws -> Data {
     writeDebugLog("[Lyrics] Request for \(originalPath)")
+
+    // 署名先清空：这一次到底问过哪个源，要等 `requestSingleSource` 写回来。
+    //
+    // 为什么必须在这里清（而不是只靠 `loadCustomLyricsForCurrentTrack` 入口那次清）：
+    // `trackMismatch` / `noCurrentTrack` 这两条是**早退**路径 —— 它们发生在进
+    // `requestSingleSource` 之前，所以那个全局还留着**上一首**的值，占位就会署上一个
+    // 这次根本没被问过的源（真机 2026-09-27 日志 16：`Club Racer` 换歌瞬间那次占位）。
+    // 清空后占位退回裸的 `EeveeSpotify` —— 这正是 `makeUnavailableLyrics` 里那条
+    // "还没问过任何源"兜底分支存在的意义。
+    lastRequestedLyricsSourceDescription = ""
+
     guard !NgzhwmSettingsViewModel.isLyricsFeatureDisabled else {
         writeDebugLog("[Lyrics] Feature disabled — refusing")
         // 功能被关掉时同样要把逐词层清干净：否则它会继续盖着原生歌词显示旧内容。
@@ -660,9 +689,21 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
 
     // 非阻塞状态同步机制（来自版本1，两种回退模式下均保留生效）
     // 解决启动/切歌时 track 状态尚未更新导致的 noCurrentTrack 与 trackMismatch 问题。
+    //
+    // ⚠️ 2026-09-27：等待上限 1.0s → **3.0s**。
+    //
+    // 真机证据（2026-09-27 日志 16，`Club Racer`）：换歌瞬间来的那次 color-lyrics 请求，
+    // 1 秒内播放器还停在上一首 —— 同一时刻日志里我们甚至用**上一首的标题**在搜网易云
+    // （`Request for …0TixfN2rNvg1VL4gggylRH` 紧跟 `Chosen[0]: Scrapyard`），于是判
+    // `trackMismatch`，那次响应被兜底成占位；紧接着客户端的第二次请求也照样失败，
+    // 连页面元素清单都还是上一首。用户看到的就是"切歌后第一次预览歌词不对、重进才对"。
+    //
+    // 这里唯一能拿到的"这一首是谁"只有播放器 / 正在播放页（按 URI 反查元数据没有接口），
+    // 所以只能多等：3s 覆盖"播放器元数据比歌词请求晚一拍"这个窗口。
+    // 代价：这次响应最多被多留 3s（本来也会挂住到取词完成，18s 预算内）。
     var track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
     var trackIdentifier = track?.trackIdentifier ?? ""
-    let maxWaitTime: TimeInterval = 1.0
+    let maxWaitTime: TimeInterval = 3.0
     let startTime = Date()
 
     while Date().timeIntervalSince(startTime) < maxWaitTime {

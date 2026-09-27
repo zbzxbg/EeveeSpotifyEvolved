@@ -39,10 +39,13 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
     // 已移除「AMLL 优先」（2026-09-25，用户反馈没意义）：AMLL 仍然是来源选择器里的
     // 一个普通来源，但不再有"先试 AMLL、不合格再回退"的那条链。
 
-    // 已**搬走**三个开关（2026-09-27）：`syntheticLineTiming` / `injectLyricsCardElement` /
-    // `lyricsEntryPointFlag` —— 它们是排查/验证型开关，属性与绑定整体挪到
-    // `EeveeDebugSettingsViewModel`（「调试」页）。UserDefaults key 一字未改，
-    // 设备上已设的值照旧生效；`[Settings] ... -> ON/OFF` 那三行日志也随绑定一起搬过去了。
+    // 已**搬走**两个开关（2026-09-27）：`injectLyricsCardElement` / `lyricsEntryPointFlag`
+    // —— 它们是排查/验证型开关，属性与绑定整体挪到 `EeveeDebugSettingsViewModel`（「调试」页）。
+    // UserDefaults key 一字未改，设备上已设的值照旧生效；`[Settings] ... -> ON/OFF`
+    // 那两行日志也随绑定一起搬过去了。
+    // 同批**删除**（2026-09-27）：`syntheticLineTiming` ——「补全歌词时间轴」验证完毕
+    // （关掉后观感差不多或略好，且给纯文本源伪造时间轴不合语义），开关、key、l10n
+    // 与那段合成代码一起去掉；只剩占位文案写死补时间轴。
 
     // 已移除一个开关（2026-09-25）：`hideOfficialLyrics` —— 它对应的行为已经在
     // `NgzhwmSettingsViewModel` 里**写死启用**（见那个 getter 的说明），
@@ -122,9 +125,9 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             betterWordByWordLyrics,
             wordByWordLyrics,
             // ⚠️ `amllPreferred`（已删功能）、`hideOfficialLyrics`（已写死启用）、
-            // 以及搬去「调试」页的 `syntheticLineTiming` / `injectLyricsCardElement` /
-            // `lyricsEntryPointFlag` 都**不能**再列在这里 —— 属性本身没了，
-            // 列着就是编译错误。
+            // `syntheticLineTiming`（2026-09-27 已整体删除），以及搬去「调试」页的
+            // `injectLyricsCardElement` / `lyricsEntryPointFlag` 都**不能**再列在这里
+            // —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
             removeMxmInterludeSymbol,
             neteaseRomajiLocal,
