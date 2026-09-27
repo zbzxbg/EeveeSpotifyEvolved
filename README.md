@@ -31,7 +31,7 @@
 
 ##  Modifications
 
-- Added additional lyrics sources: **NetEase**, **AMLL**, and a **multi-level fallback provider** (`mxm-pl-lrclib-gen`).
+- Added additional lyrics sources: **NetEase**, **AMLL**, and a **multi-level fallback provider** (`Mxm-PL-LRC-Gen`).
 - Implemented **word-by-word lyrics**.
 - Added a **disable lyrics** option.
 - Added **separate romanization settings** for Chinese, Korean, and Japanese.
