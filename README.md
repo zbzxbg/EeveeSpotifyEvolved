@@ -29,13 +29,6 @@
 > [!WARNING]
 > Development versions are not made publicly available to users.
 
-##  Modifications
-
-- Added additional lyrics sources: **NetEase**, **AMLL**, and a **multi-level fallback provider** (`Mxm-PL-LRC-Gen`).
-- Implemented **word-by-word lyrics**.
-- Added a **disable lyrics** option.
-- Added **separate romanization settings** for Chinese, Korean, and Japanese.
-- Removed interlude symbols such as **♪**.
 
 ##  Verified Environment
 
