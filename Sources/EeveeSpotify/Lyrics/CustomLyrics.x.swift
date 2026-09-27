@@ -137,8 +137,16 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         for (index, source) in attempts.enumerated() {
             writeDebugLog("[Lyrics] Attempt \(index + 1)/\(attempts.count): \(source.description)")
             let isLastAttempt = index == attempts.count - 1
-            let requestTimeout: TimeInterval =
-                source == .musixmatch || source == .petit ? 5.0 : 3.0
+            // 每个源的等待上限。⚠️ Genius 从 3s 提到 5s（与 MxM/PL 齐平）：
+            // 它自己最少要打两个接口（`/search/song` → `/songs/{id}`，各自上限 10s），
+            // 3s 那一档经常是"超时被跳过"而不是"被评估"—— 2026-09-26 多级回退那场
+            // （`eeveespotify_debug.log`）里 `[Lyrics] Genius timed out after 3.0s`
+            // 出现两次，而同一场里 Genius 又有正常出词的例子
+            // （`[Genius] Using "Don't Hesitate" — 28 line(s)`）。
+            // 这是**按次随机**的失败源：同一首歌这次被砍、下次可能就答完了，
+            // 表现正是"多级回退的 Genius 一会好使一会不好使"。
+            // 代价：最坏情况这条路的总等待从 16s 变 18s（5+5+3+5），都是上限不是常态。
+            let requestTimeout: TimeInterval = source == .lrclib ? 3.0 : 5.0
 
             let semaphore = DispatchSemaphore(value: 0)
             var resultDto: LyricsDto?
@@ -248,7 +256,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
     /// 按用户设置请求单一来源。保持既有行为不变：
     /// - 该源的错误会写入 `lyricsState.fallbackError`（`recordFallbackError`）并弹 MxM 相关弹窗；
-    /// - 非 Genius 源失败且 `options.geniusFallback` 开启时，再用 Genius 重试一次。
+    /// - 非 Genius 源失败且 `options.geniusFallback` 开启时，再用 Genius 重试一次
+    ///   （三道门与每一道门自己的日志见 `catch` 里那一段）。
     ///
     /// - Parameter allowGeniusFallback: 为 false 时跳过 Genius 兜底。
     ///   ⚠️ 目前**没有调用方传 false** —— 原先唯一那个是已删除的「AMLL 优先」回退链。
@@ -288,7 +297,36 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             }
 
             // 注意顺序：Genius 失败不再兜底为空歌词（与既有行为一致）。
-            if !allowGeniusFallback || !options.geniusFallback {
+            //
+            // ── Genius 兜底的三道门 ─────────────────────────────────────────────
+            // 每一道没过都**必须留一行日志**：以前这里是一句静默 rethrow，于是
+            // "开关关着"和"回退跑了但 Genius 0 命中"在日志里长得一模一样
+            // （2026-09-26 日志 11：170 次请求、124 次网易云失败、0 次回退，就是被
+            // 这两件事的不可分读成了"Genius 回退时好时坏"）。
+            //
+            // 门 1：来源本来就是 Genius —— 回退到自己没有意义（设置页对 Genius /
+            //   多级回退来源也不显示那个开关）。以前这里会真的再打一次 Genius 请求：
+            //   2026-09-26 日志 2 里那句自相矛盾的
+            //   `[Lyrics] Genius failed — falling back to Genius` 就是这么来的。
+            if source == .genius {
+                writeDebugLog("[Lyrics] Genius failed — source is already Genius, no fallback")
+                throw error
+            }
+
+            // 门 2：调用方显式要求这条链不做兜底（目前没有调用方传 false，保留语义）。
+            if !allowGeniusFallback {
+                writeDebugLog(
+                    "[Lyrics] \(source.description) failed — Genius fallback suppressed by caller, no retry"
+                )
+                throw error
+            }
+
+            // 门 3：用户开关。默认 false —— 这个值一旦被重置，表现是"整整一场都不回退"，
+            //   而不是"偶尔失败"。读日志时先看这里，再看 Genius 那边 0 命中。
+            if !options.geniusFallback {
+                writeDebugLog(
+                    "[Lyrics] \(source.description) failed — Genius fallback is OFF, no retry"
+                )
                 throw error
             }
 

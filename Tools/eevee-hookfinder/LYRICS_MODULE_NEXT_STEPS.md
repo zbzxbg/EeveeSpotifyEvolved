@@ -1,6 +1,6 @@
 # 歌词模块：卡片由 payload 驱动；`timeSynchronized` 决定走哪个面
 
-**数据**：`C:\dsh\readlog\eeveespotify_debug{ 2 (2), 3 … 13}.log` + 两份 `.ips`（2026-09-24/25）
+**数据**：`C:\dsh\readlog\eeveespotify_debug.log`（无编号，最早那份）+ `eeveespotify_debug{ 2 … 15 }.log` + 两份 `.ips`（2026-09-24/25、09-26/27）
 
 ---
 
@@ -494,6 +494,98 @@ if let originalColors { $0.colors = originalColors }
 
 **若观感仍不对**，可调的只有一处：面板明度（`normalizationFactor` 那一步）。
 黑字更清楚 → 面板更亮；白字更清楚 → 面板更暗，但两者不可能同时最优 —— 这是取舍，不是 bug。
+
+---
+
+## 51. 「Genius 回退时好时坏」定性：**三层原因，日志 11 是"开关关着"那一层**；四处改动（2026-09-27）
+
+**材料**：`C:\dsh\readlog` 全部 15 份日志（关键字统计 + 逐曲对照，没有逐份通读）+ `Sources/`。
+
+### 51.1 日志 11：170 次请求、124 次网易云失败、**0 次回退**
+
+日志 11（`eeveespotify_debug 11.log`，2026-09-26 12:15–12:22 UTC，来源 NetEase）：
+
+| 计数 | 内容 |
+|---|---|
+| 170 | `[Lyrics] Single source: NetEase`（86 首，每首一般两次：页面 + 预览卡） |
+| 46 | `[Lyrics] provider: NetEase (EeveeSpotify)`（24 首，其中 6 首是"纯音乐 → 空歌词"） |
+| 124 | `[Lyrics] NetEase failed: 未找到歌曲` → `no custom lyrics…` → `serving our placeholder` |
+| **0** | `[Genius] …` / `failed — falling back to Genius` |
+
+同一首歌两次请求结果**永远一致**（62 首稳定失败、24 首稳定成功）⇒ 这一场内部没有任何随机性。
+唯一能解释"124 次失败一次都不回退"的是 `CustomLyrics.x.swift` 的
+`if !allowGeniusFallback || !options.geniusFallback { throw error }` —— 即那一场
+`lyricsOptions.geniusFallback == false`（默认值就是 false）。
+
+### 51.2 决定性 A/B：`Hyperspace`（`2Isyia63zjlKMvbHl09LpN`）
+
+| 时刻（UTC） | 日志 | 走的路 |
+|---|---|---|
+| 2026-09-26 12:20:56 | 11 | `NetEase failed: 未找到歌曲` → 占位 |
+| 2026-09-27 01:51:36 | 15 | `NetEase failed — falling back to Genius` → `[Genius] Search returned 1 hit(s)` → `Using "Hyperspace" — 28 line(s)` → `provider: Genius (EeveeSpotify)` → `synthetic line timing applied — 28 line(s), duration=132000ms, lastOffset=131333ms, source=Genius` |
+
+同一首歌、同一种网易云失败，13.5 小时后一个占位、一个出词 ⇒ 差的是**回退开关的状态**，不是回退逻辑。
+
+### 51.3 跨场次：那个开关确实在变
+
+| 日志 | 本地时间 | 来源 | 回退尝试 | Genius 搜索 0 命中 | 出词 |
+|---|---|---|---|---|---|
+| `eeveespotify_debug.log` | 9/26 08:39 | 多级回退 | 4 | 1 | 4（2 首） |
+| 2 | 9/26 09:39 | Genius | 3 | 2 | 12（6 首） |
+| 3 | 9/26 10:13 | PetitLyrics | 6 | 1 | 5（3 首） |
+| 4 | 9/26 10:47 | NetEase | 4 | 0 | 4（2 首） |
+| 5–10、12、13、14 | 9/26 12:15–23:35 | NetEase | **0** | 0 | 0 |
+| **11** | **9/26 20:15** | NetEase | **0** | 0 | 0 |
+| 15 | 9/27 09:51 | NetEase | 6 | 4 | 2（1 首） |
+
+### 51.4 "时好时坏"的三层原因（后两层与开关无关）
+
+- **A 跨场次：开关状态**（上表）。日志 11 是"整场关着"，不是"偶尔失败"。
+- **B 开关开着时：Genius 搜得到搜不到**。`GeniusLyricsRepository` 里 hits 为空就直接
+  `noSuchSong`。15 那场 3 首里只有 Hyperspace 命中（`Search returned 0 hit(s)` 两首：
+  Inferno Rise / IKAN、MONTAGEM NUAR / LXNGVX）。**跨全部日志没有任何一首歌出现过
+  "这次 0 命中、下次有命中"**的翻转 ⇒ 这一层是"这首歌 Genius 有没有"的确定性问题。
+- **C 多级回退那条链的 Genius 腿只有 3s**：它自己最少要打两个接口（各自上限 10s）。
+  9/26 08:39 那场里 `[Lyrics] Genius timed out after 3.0s` 出现**两次**，同一场里 Genius 又有
+  正常出词的例子 ⇒ 这是真正**按次随机**的一层（同一首歌这次被砍、下次可能就答完了）。
+
+### 51.5 日志 11 里那 12 条 `synthetic line timing applied` 不是 Genius
+
+它们全是 `source=NetEase`，来自 6 首**纯音乐**：网易云回 `Instrumental — returning empty lyrics`
+（`NeteaseLyricsRepository`），`LyricsDto.toSpotifyLyricsData` 给那 3 行占位文案
+（纯音乐 / 让音乐继续 / 空行）补 offset ——"补时间轴"确实发生了，补的不是 Genius 的词。
+真正"Genius 词 + 补时间轴"的例子只有 51.2 那一行。
+
+### 51.6 本轮改动（4 处，全部只加判据/日志，除了 3 个小行为修正）
+
+| 文件 | 改动 |
+|---|---|
+| `Tweak.x.swift` | `[INIT]` 行尾加 ` \| genius fallback: ON/OFF`（打**用户设置原值**）—— 就是 51.1 缺的那一行 |
+| `CustomLyrics.x.swift` `requestSingleSource` | 兜底三道门**各留一行日志**（关了 / 调用方禁 / 来源本就是 Genius）；`source == .genius` 不再"回退到自己"（日志 2 里 `Genius failed — falling back to Genius` 的来源） |
+| `CustomLyrics.x.swift` 多级回退 | Genius 腿 3s → 5s（与 MxM/PL 齐平）；最坏总等待 16s → 18s，都是上限不是常态 |
+| `GeniusLyricsRepository.swift` | ① 回传 HTTP 状态码 + 响应体前 300B：0 命中/解码失败/非 200 都会打出来（以前只有一句 `Search returned 0 hit(s)`，分不清"真没有"和"接口没答上来"）；② 第一枪 0 命中时用**只标题**再搜一次，且**必须命中歌手名**才采用（`猜错比没有更糟`，与 `AmllTtmlLyricsRepository` 同一口径）；③ `URL(string:)!` 改成显式抛错 + 留一行 |
+
+### 51.7 下一份日志怎么读（判据）
+
+```
+[INIT] … | genius fallback: ON            ← 先看这个
+[Lyrics] NetEase failed — Genius fallback is OFF, no retry     ← 关着
+[Lyrics] NetEase failed — falling back to Genius               ← 开着，真的回退了
+[Genius] /search/song HTTP 401/429 … body=…                    ← 接口问题（不是"没这首歌"）
+[Genius] Search returned 0 hit(s)                              ← 真没有
+[Genius] Title-only retry returned N hit(s)                    ← 第二枪（必须命中歌手才采用）
+[Genius] Using "…" — N line(s) → provider: Genius (EeveeSpotify) → synthetic line timing applied … source=Genius
+```
+
+### 51.8 未验证 / 未解决
+
+- **没有编译验证**（本机无 Swift 工具链；本轮 `pwsh` 执行器又整段挂 `0xC0000142`，
+  连括号平衡脚本都跑不了），也**没有真机验证**；
+- **"0 命中"到底是数据还是接口，仍未定**：本机无法复现该查询 —— 出口 TLS 连不上、
+  `api.genius.com` 裸请求 401（`requires an access_token`）、`genius.com` 403 人机校验。
+  这正是 51.6 第 ① 条要补的判据；
+- 用户侧仍待确认：9/26 12:15 之前关掉、9/27 早上又打开，是不是**手动**动的那两次。
+  若不是，就是 `lyricsOptions` 被静默重置（解码失败回落默认值），要顺着持久化那条链查。
 
 ---
 

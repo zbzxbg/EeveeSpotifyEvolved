@@ -19,10 +19,22 @@ class GeniusLyricsRepository: LyricsRepository {
         jsonDecoder.keyDecodingStrategy = .convertFromSnakeCase
     }
 
+    /// 一次请求的产物。
+    ///
+    /// 为什么要带着 `statusCode` / `bodyHead` 一起回传：`Search returned 0 hit(s)`
+    /// 这一句以前既可能是"Genius 真没这首歌"，也可能是"接口根本没答上来（401/429/5xx）
+    /// 或返回了别的形状"。2026-09-27 日志 15 的两首 0 命中（Inferno Rise、MONTAGEM NUAR）
+    /// 就没法判断是哪一种 —— 只有状态码能分开这两件事。
+    private struct GeniusHTTPResult {
+        let response: GeniusDataResponse?
+        let statusCode: Int
+        let bodyHead: String
+    }
+
     private func perform(
         _ path: String,
         query: [String:Any] = [:]
-    ) throws -> GeniusDataResponse? {
+    ) throws -> GeniusHTTPResult {
         var stringUrl = "\(apiUrl)\(path)"
 
         if !query.isEmpty {
@@ -30,15 +42,24 @@ class GeniusLyricsRepository: LyricsRepository {
             stringUrl += "?\(queryString)"
         }
 
-        let request = URLRequest(url: URL(string: stringUrl)!)
+        // 以前这里是 `URL(string:)!` —— 查询里带空格/特殊字符时崩在设备上，
+        // 日志里什么都没有。改成显式抛错，至少留一行。
+        guard let url = URL(string: stringUrl) else {
+            writeDebugLog("[Genius] Invalid URL for \(path): \(stringUrl)")
+            throw LyricsError.decodingError
+        }
+
+        let request = URLRequest(url: url)
 
         let semaphore = DispatchSemaphore(value: 0)
         var data: Data?
+        var httpResponse: HTTPURLResponse?
         var error: Error?
 
-        let task = session.dataTask(with: request) { response, _, err in
+        let task = session.dataTask(with: request) { body, response, err in
             error = err
-            data = response
+            data = body
+            httpResponse = response as? HTTPURLResponse
             semaphore.signal()
         }
 
@@ -48,26 +69,51 @@ class GeniusLyricsRepository: LyricsRepository {
         // loading forever (and, with candidate fallback, never yields lyrics).
         if semaphore.wait(timeout: .now() + 10) == .timedOut {
             task.cancel()
+            writeDebugLog("[Genius] \(path) timed out after 10s")
             throw LyricsError.unknownError
         }
 
         if let error = error {
+            writeDebugLog("[Genius] \(path) transport error: \(error)")
             throw error
+        }
+
+        let statusCode = httpResponse?.statusCode ?? 0
+        let bodyHead = data.flatMap {
+            String(data: $0.prefix(300), encoding: .utf8)
+        } ?? "<no body>"
+
+        // 非 200 一定要留痕（断言被限流 / 需要 token / 网关错误都长这样）。
+        if statusCode != 200 {
+            writeDebugLog(
+                "[Genius] \(path) HTTP \(statusCode) len=\(data?.count ?? 0) body=\(bodyHead)"
+            )
         }
 
         guard let data = data,
               let rootResponse = try? jsonDecoder.decode(GeniusRootResponse.self, from: data) else {
+            writeDebugLog(
+                "[Genius] \(path) decode failed — HTTP \(statusCode) len=\(data?.count ?? 0) body=\(bodyHead)"
+            )
             throw LyricsError.decodingError
         }
-        return rootResponse.response
+
+        return GeniusHTTPResult(
+            response: rootResponse.response,
+            statusCode: statusCode,
+            bodyHead: bodyHead
+        )
     }
 
     //
 
     private func searchSong(_ query: String) throws -> [GeniusHit] {
-        let data = try perform("/search/song", query: ["q": query])
+        let result = try perform("/search/song", query: ["q": query])
 
-        guard case .sections(let sectionsResponse) = data else {
+        guard case .sections(let sectionsResponse)? = result.response else {
+            writeDebugLog(
+                "[Genius] /search/song returned a non-sections shape — HTTP \(result.statusCode) body=\(result.bodyHead)"
+            )
             throw LyricsError.decodingError
         }
 
@@ -76,9 +122,12 @@ class GeniusLyricsRepository: LyricsRepository {
     }
 
     private func getSongInfo(_ songId: Int) throws -> GeniusSong {
-        let data = try perform("/songs/\(songId)", query: ["text_format": "plain"])
+        let result = try perform("/songs/\(songId)", query: ["text_format": "plain"])
 
-        guard case .song(let songResponse) = data else {
+        guard case .song(let songResponse)? = result.response else {
+            writeDebugLog(
+                "[Genius] /songs/\(songId) returned a non-song shape — HTTP \(result.statusCode) body=\(result.bodyHead)"
+            )
             throw LyricsError.decodingError
         }
 
@@ -102,15 +151,61 @@ class GeniusLyricsRepository: LyricsRepository {
         return matchingByTitle.first!
     }
 
+    /// 第一枪（`标题 + 歌手`）0 命中时的第二枪：只拿标题搜，但**必须有一条命中歌手名**
+    /// 才采用。
+    ///
+    /// 依据（2026-09-26 日志 3 / 2026-09-27 日志 15）：`标题 + 歌手`这种拼接查询在
+    /// Genius 上会整条 0 命中 —— `Notes of Color / Yono`、`Inferno Rise / IKAN`、
+    /// `MONTAGEM NUAR / LXNGVX` 都是这样，而 0 命中当前就等于"这首歌没词"（直接占位）。
+    /// 同一份日志里另有大量"标题+歌手一条就中"的例子，所以只在这一枪已经失败的分支上
+    /// 多打一次请求，不影响任何现在能出词的歌。
+    ///
+    /// 为什么要卡歌手：Genius 只按标题对齐会张冠李戴（同名歌太多），
+    /// 与仓库里其它源的口径一致 ——"猜错比没有更糟"
+    /// （见 `AmllTtmlLyricsRepository` 顶部注释）。
+    private func titleOnlyHits(
+        strippedTitle: String,
+        primaryArtist: String
+    ) throws -> [GeniusHit] {
+        guard !strippedTitle.isEmpty, !primaryArtist.isEmpty else { return [] }
+
+        let hits = try searchSong(strippedTitle)
+        writeDebugLog("[Genius] Title-only retry returned \(hits.count) hit(s)")
+
+        let artistMatched = hits.filter {
+            $0.result.artistNames.containsInsensitive(primaryArtist)
+        }
+
+        guard !artistMatched.isEmpty else {
+            writeDebugLog(
+                "[Genius] Title-only retry matched no artist — ignored (a wrong match is worse than nothing)"
+            )
+            return []
+        }
+
+        return artistMatched
+    }
+
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         writeDebugLog("[Genius] Fetching lyrics for \"\(query.title)\" - \(query.primaryArtist)")
         let strippedTitle = query.title.strippedTrackTitle
         let keyword = "\(strippedTitle) \(query.primaryArtist)"
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let hits = try searchSong(keyword)
+
+        // 第一枪：`标题 + 歌手`（既有行为，不动）。
+        var hits = try searchSong(keyword)
         writeDebugLog("[Genius] Search returned \(hits.count) hit(s)")
 
+        if hits.isEmpty {
+            // 第二枪：只拿标题再搜（必须命中歌手）。见 `titleOnlyHits` 的说明。
+            hits = try titleOnlyHits(
+                strippedTitle: strippedTitle,
+                primaryArtist: query.primaryArtist
+            )
+        }
+
         guard !hits.isEmpty else {
+            writeDebugLog("[Genius] No usable hits for either query — noSuchSong")
             throw LyricsError.noSuchSong
         }
 

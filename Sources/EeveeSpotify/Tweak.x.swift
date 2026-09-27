@@ -368,7 +368,7 @@ struct EeveeSpotify: Tweak {
         writeDebugLog("[INIT] Patch type: \(UserDefaults.patchType)")
         writeDebugLog("[INIT] Lyrics source: \(UserDefaults.lyricsSource)")
         // 两个真开关（合成行级时间轴 / 补卡片元素）+ 一个写死启用的修复（隐藏官方歌词）
-        // + 禁用歌词功能，一次打出来：
+        // + 禁用歌词功能 + Genius 回退开关，一次打出来：
         //   · 合成行级时间轴 / 补卡片元素 —— 2026-09-26 起恢复为读 UserDefaults 的真开关，
         //     这里记的是**实际生效值**（默认都是 ON）；
         //   · 隐藏官方歌词 —— 2026-09-25 起写死在 `NgzhwmSettingsViewModel` 里；
@@ -378,6 +378,16 @@ struct EeveeSpotify: Tweak {
         // ⚠️ 「补卡片元素」必须打出来：排查"预热卡时有时无"时，日志里其余线索全是
         // 间接的（没注入 ≠ 开关关着 —— 也可能是服务端本来就带那个元素，或客户端走了
         // 缓存、我们连响应都没看到）。没有这一行，状态只能靠猜。
+        //
+        // ⚠️ 「Genius 回退」同样必须打出来 —— 它是**跨场次在变**的那个状态：
+        // 2026-09-26 日志 4（10:47）开着，日志 5–14（12:15–23:35，含日志 11）整批关着，
+        // 次日日志 15（09:51）又开着。日志 11 里 170 次请求、124 次网易云失败，一次
+        // Genius 回退都没有 —— 当时只能靠"有没有 `falling back to Genius` 这一行"反推，
+        // 没法区分"开关关着"和"回退跑了但 0 命中"。补上这一行之后每份日志自证状态。
+        //
+        // ⚠️ 打的是**用户设置里的原值**（不是"本次是否真的会回退"）：来源选 Genius 或
+        // 多级回退时那个开关在设置页不显示、也不参与决策，这里照打原值，读日志时
+        // 与同一行的 `Lyrics source:` 合起来看。
         writeDebugLog(
             "[INIT] synthetic line timing: "
                 + "\(NgzhwmSettingsViewModel.isSyntheticLineTimingEnabled ? "ON" : "OFF")"
@@ -387,6 +397,8 @@ struct EeveeSpotify: Tweak {
                 + "\(NgzhwmSettingsViewModel.isOfficialLyricsHidden ? "ON" : "OFF")"
                 + " | lyrics feature disabled: "
                 + "\(NgzhwmSettingsViewModel.isLyricsFeatureDisabled ? "ON" : "OFF")"
+                + " | genius fallback: "
+                + "\(UserDefaults.lyricsOptions.geniusFallback ? "ON" : "OFF")"
         )
         writeDebugLog("[INIT] tweakInitTime: \(tweakInitTime)")
 
