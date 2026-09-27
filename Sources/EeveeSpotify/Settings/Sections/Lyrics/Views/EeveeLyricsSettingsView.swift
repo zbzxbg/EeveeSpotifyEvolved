@@ -39,10 +39,10 @@ struct EeveeLyricsSettingsView: View {
                 }
                 
                 hideOnErrorSection()
-                syntheticLineTimingSection()
-                injectLyricsCardElementSection()
-                lyricsEntryPointFlagSection()
-                disableNpvPrereleaseProviderSection()
+                // 「补时间轴」/「补卡片元素」/「强制歌词入口」三个**排查型**开关
+                // 已挪到「调试」页（见 `EeveeDebugSettingsViewModel`）：
+                // 它们验证完就该写死或删掉，放在用户偏好旁边只会让人面对一堆不该动的东西。
+                // ⚠️ 它们的 UserDefaults key 没有变，设备上已设的值原样保留。
                 // 「隐藏官方歌词」已写死启用（见 `NgzhwmSettingsViewModel` 里那个
                 // getter），不再有开关。
                 romanizationSection()
@@ -150,64 +150,10 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
-    /// 「给无时间轴的歌词补时间轴」。
-    ///
-    /// 故意**没有 footer**：这个开关的用途是排查"不补时间轴会怎样"，
-    /// 不需要一段解释文字（与页面上其它开关不同，它们都有 `_description`）。
-    @ViewBuilder private func syntheticLineTimingSection() -> some View {
-        Section {
-            Toggle(
-                "ngzhwm_synthetic_line_timing".localized,
-                isOn: $viewModel.syntheticLineTiming
-            )
-        }
-    }
-
-    /// 「给没有歌词卡片的曲目补一个卡片元素」。
-    ///
-    /// 同样**没有 footer**。它的用途是判定"404 曲目上那张「即将发布/预收藏」卡
-    /// 是不是这个元素渲出来的"：关掉 → 那张卡消失而歌词卡还在 = 确实是它。
-    @ViewBuilder private func injectLyricsCardElementSection() -> some View {
-        Section {
-            Toggle(
-                "ngzhwm_inject_lyrics_card_element".localized,
-                isOn: $viewModel.injectLyricsCardElement
-            )
-        }
-    }
-
-    /// 「把服务端那条 `lyrics_entry_point_enabled` 钉成 true」。
-    ///
-    /// 这张卡的排查顺序是：先排除「补卡片元素」（真机关掉，假卡依旧），再排除
-    /// HTTP 数据（九份日志零命中）。剩下唯一还能让客户端多渲一张卡的就这条 flag，
-    /// 所以给它一个开关：**关掉 → 假卡也消失 = 是它；假卡还在 = Spotify 自己的问题。**
-    @ViewBuilder private func lyricsEntryPointFlagSection() -> some View {
-        Section {
-            Toggle(
-                "ngzhwm_lyrics_entry_point_flag".localized,
-                isOn: $viewModel.lyricsEntryPointFlag
-            )
-        }
-    }
-
-    /// 「屏蔽正在播放页的预热卡（整个 provider）」。**默认开**。
-    ///
-    /// 同样**没有 footer**。它拦的是
-    /// `…NowPlayingViewProviderServiceImpl.registerScrollProviderIn:` ——
-    /// 这一族 provider 不注册 ⇒ 正在播放页那张「即将发布」卡不存在。
-    ///
-    /// 为什么默认开：这个 bug 是**偶发/竞态**（"可能这首歌有，可能那首歌有"），
-    /// 按歌复现不了 ⇒ 不该做成"要用户自己去撞、再去打开"的开关。
-    /// 代价明说：正在播放页的**任何**预热卡都会消失（专辑页 / 关注页不受影响）；
-    /// 想要真预热卡的人可以把这个开关关掉。
-    @ViewBuilder private func disableNpvPrereleaseProviderSection() -> some View {
-        Section {
-            Toggle(
-                "ngzhwm_disable_npv_prerelease_provider".localized,
-                isOn: $viewModel.disableNpvPrereleaseProvider
-            )
-        }
-    }
+    // 已移除三个 Section（2026-09-27）：`syntheticLineTimingSection()` /
+    // `injectLyricsCardElementSection()` / `lyricsEntryPointFlagSection()` ——
+    // 它们是**排查/验证型**开关，已整体挪到「调试」页（`EeveeDebugSettingsView`）。
+    // key 与 l10n 都没变，用户已设的值照旧生效。
 
     // 已移除一个 Section（2026-09-25）：`hideOfficialLyricsSection()` ——
     // 它的开关价值只在"验证修复有没有用"那一步，验证完就写死启用了。

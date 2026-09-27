@@ -435,24 +435,6 @@ struct EeveeSpotify: Tweak {
             writeDebugLog("[INIT] MISSING SPTPlayerTrack — has_lyrics 覆写必然无效")
         }
 
-        // 「正在播放页预热卡」两条：探针（只读）+ 那个开关的当前档位。
-        //
-        // 开关**不再**走 flag（日志 13 已否掉：
-        // `ios-prerelease-nowplayingviewprovider-impl.is_enabled` 钉成 false 也拦不住），
-        // 现在由 `PrereleaseNPVProviderRegistrationHook` 拦
-        // `…NowPlayingViewProviderServiceImpl.registerScrollProviderIn:`。
-        // 这行是 A/B 的分组标记，必须打。
-        writeDebugLog(
-            "[INIT] npv prerelease provider: "
-                + "\(NgzhwmSettingsViewModel.isNowPlayingPrereleaseProviderDisabled ? "BLOCK registration (switch ON)" : "untouched (switch off)")"
-        )
-        PrereleaseCardProbe.runStartupProbeOnce()
-        // 上面那个探针是"猜名字去 resolve"，对**私有嵌套类**取不到（日志 13/14 里
-        // `card: NOT resolvable`）。这一支改用 `objc_getClassList` 把**真实类名**捞出来，
-        // 连方法表一起打 —— 要变成"只挡假的"，就必须先知道"这一格是被谁填的"。
-        // 同样是**只读**：只枚举、只打日志。
-        PrereleaseRuntimeClassDump.runOnce()
-
         // For 9.1.x, activate premium patching and lyrics
         if EeveeSpotify.hookTarget == .v91 {
 

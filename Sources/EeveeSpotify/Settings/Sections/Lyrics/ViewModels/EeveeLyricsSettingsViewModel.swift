@@ -38,65 +38,11 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
     
     // 已移除「AMLL 优先」（2026-09-25，用户反馈没意义）：AMLL 仍然是来源选择器里的
     // 一个普通来源，但不再有"先试 AMLL、不合格再回退"的那条链。
-    
-    /// 「给无时间轴的歌词补时间轴」。
-    ///
-    /// ⚠️ 初值必须走默认值 getter（`isSyntheticLineTimingEnabled`），不能用
-    /// `UserDefaults.bool(forKey:)` —— 后者在 key 还没写过时返回 false，
-    /// 会把一个"默认开"的开关显示成关。
-    @Published var syntheticLineTiming = NgzhwmSettingsViewModel.isSyntheticLineTimingEnabled {
-        didSet {
-            UserDefaults.standard.set(
-                syntheticLineTiming,
-                forKey: NgzhwmSettingsViewModel.syntheticLineTimingKey
-            )
-        }
-    }
 
-    /// 「给没有歌词卡片的曲目补一个卡片元素」。
-    ///
-    /// ⚠️ 初值同样必须走默认值 getter（默认开），不能用 `UserDefaults.bool(forKey:)`。
-    @Published var injectLyricsCardElement = NgzhwmSettingsViewModel.isLyricsCardElementInjectionEnabled {
-        didSet {
-            UserDefaults.standard.set(
-                injectLyricsCardElement,
-                forKey: NgzhwmSettingsViewModel.injectLyricsCardElementKey
-            )
-        }
-    }
-
-    /// 「把服务端那条 `lyrics_entry_point_enabled` 钉成 true」。
-    ///
-    /// ⚠️ 初值同样必须走默认值 getter（默认开），不能用 `UserDefaults.bool(forKey:)`。
-    ///
-    /// 这是排查「日期过期的『即将发布』卡」用的第二个 A/B 开关（第一个是
-    /// `injectLyricsCardElement`，真机关掉后假卡依旧 → 已排除）。
-    @Published var lyricsEntryPointFlag = NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced {
-        didSet {
-            UserDefaults.standard.set(
-                lyricsEntryPointFlag,
-                forKey: NgzhwmSettingsViewModel.lyricsEntryPointFlagKey
-            )
-        }
-    }
-
-    /// 「屏蔽正在播放页的预热卡（整个 provider）」。
-    ///
-    /// ⚠️ 初值必须走默认值 getter（默认**关**：不动既有行为）。
-    ///
-    /// 为什么它排在 `lyricsEntryPointFlag` **后面**：前一个开关那次 A/B 是**空跑**
-    /// （customize 走 304 无 body，flag 那段代码整段没执行），所以"那条 flag 与本
-    /// bug 无关"的结论从未被真正验证过；而这一个开关打在**解密二进制里逐字找到的**
-    /// scope 上（`ios-prerelease-nowplayingviewprovider-impl.is_enabled`），
-    /// 且它管的是正在播放页**专用**的那一族 provider。
-    @Published var disableNpvPrereleaseProvider = NgzhwmSettingsViewModel.isNowPlayingPrereleaseProviderDisabled {
-        didSet {
-            UserDefaults.standard.set(
-                disableNpvPrereleaseProvider,
-                forKey: NgzhwmSettingsViewModel.nowPlayingPrereleaseProviderKey
-            )
-        }
-    }
+    // 已**搬走**三个开关（2026-09-27）：`syntheticLineTiming` / `injectLyricsCardElement` /
+    // `lyricsEntryPointFlag` —— 它们是排查/验证型开关，属性与绑定整体挪到
+    // `EeveeDebugSettingsViewModel`（「调试」页）。UserDefaults key 一字未改，
+    // 设备上已设的值照旧生效；`[Settings] ... -> ON/OFF` 那三行日志也随绑定一起搬过去了。
 
     // 已移除一个开关（2026-09-25）：`hideOfficialLyrics` —— 它对应的行为已经在
     // `NgzhwmSettingsViewModel` 里**写死启用**（见那个 getter 的说明），
@@ -175,12 +121,10 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             lyricsOptions,
             betterWordByWordLyrics,
             wordByWordLyrics,
-            syntheticLineTiming,
-            injectLyricsCardElement,
-            lyricsEntryPointFlag,
-            disableNpvPrereleaseProvider,
-            // ⚠️ `amllPreferred`（已删功能）与 `hideOfficialLyrics`（已写死启用）
-            // 都不能再列在这里 —— 属性本身没了，列着就是编译错误。
+            // ⚠️ `amllPreferred`（已删功能）、`hideOfficialLyrics`（已写死启用）、
+            // 以及搬去「调试」页的 `syntheticLineTiming` / `injectLyricsCardElement` /
+            // `lyricsEntryPointFlag` 都**不能**再列在这里 —— 属性本身没了，
+            // 列着就是编译错误。
             disableLyricsFeature,
             removeMxmInterludeSymbol,
             neteaseRomajiLocal,

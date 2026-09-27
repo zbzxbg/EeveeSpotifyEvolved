@@ -143,6 +143,25 @@ struct EeveeSettingsView: View {
                 )
             }
 
+            // 「调试」页：只装**排查/验证型**开关（补时间轴 / 补卡片元素 / 强制歌词入口）。
+            // 它们以前散在「歌词」页里，和用户真正的偏好混在一起 —— 见
+            // `EeveeDebugSettingsViewModel` 的说明。l10n 沿用既有的 `debug_title`。
+            //
+            // ⚠️ 这**不是**下面那个「Debug」区（日志记录 / 导出 / 清空）的替代品，
+            // 两者是并列的：这里是"排查开关"，那里是"日志工具"。
+            Button {
+                pushSettingsController(
+                    with: EeveeDebugSettingsView(),
+                    title: "debug_title".localized
+                )
+            } label: {
+                NavigationSectionView(
+                    color: Color(hex: "#8E8E93"),
+                    title: "debug_title".localized,
+                    imageSystemName: "wrench.and.screwdriver.fill"
+                )
+            }
+
             //
 
             // （已移除：Reincarnated 的「开发者手记」入口 EeveeDevNoteView ——

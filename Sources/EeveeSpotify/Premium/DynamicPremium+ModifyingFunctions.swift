@@ -436,21 +436,6 @@ private let propertyReplacements = [
 /// 上面那条 flag 的名字（开关判定用，避免再抄一遍字面量）。
 private let lyricsEntryPointFlagName = "lyrics_entry_point_enabled"
 
-/// **已否掉的那条路**（2026-09-26，日志 13 之后）：曾经以为
-/// `ios-prerelease-nowplayingviewprovider-impl.is_enabled` 是正在播放页预热 provider 的闸，
-/// 于是加了一条 `.setBool(false)`。真机结果是：用户把「屏蔽过期的『即将发布』卡」打开、
-/// 启动日志明写 `[INIT] npv prerelease provider: FORCED OFF`，**卡照样出现**
-/// （`Detour`，`[PrerelProbe] CARD SIGHTED … 即将发布 / 发布时间：2025年4月3日`）。
-///
-/// ⇒ 这条 flag **不是闸**，替换已删除（留着只会带来未知副作用）。两个名字常量保留，
-/// 只为让后来者一眼看到"这条试过、别再来回改"。
-///
-/// 真正生效的落点是 `PrereleaseNPVProviderRegistrationHook`：拦
-/// `…NowPlayingViewProviderServiceImpl.registerScrollProviderIn:`，
-/// 方法名来自日志 13 探针从 ObjC 方法表里读出的真实数据。
-private let npvPrereleaseFlagName = "is_enabled"
-private let npvPrereleaseFlagScope = "ios-prerelease-nowplayingviewprovider-impl"
-
 /// 「歌词入口 flag 已按开关跳过」只打一次 —— `modifyAssignedValues` 每次 customize
 /// 响应都会跑，重复打只会刷屏。
 private var entryPointFlagSkippedReported = false

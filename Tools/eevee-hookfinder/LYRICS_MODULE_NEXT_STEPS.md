@@ -497,6 +497,129 @@ if let originalColors { $0.colors = originalColors }
 
 ---
 
+## 50. 设置页整理：三个"排查型"开关搬进新的「调试」页（2026-09-27）
+
+**用户要求**：「现在不是有 实验 / 歌词 / 补丁 / 杂项这几个写着的吗，再加一个，名字叫 调试，
+点击进去就是那三个按钮。」（这三个 = 补时间轴 / 补卡片元素 / 强制歌词入口）
+
+### 50.1 为什么搬
+
+它们是**排查/验证型**开关，混在「歌词」页里和用户真正的偏好（罗马字、逐词歌词、
+NetEase 显示方式…）并列的后果是：用户面对一堆"不该动"的东西，而"哪些是待清理的临时件"
+完全不可见。这个项目已经有过一次同类教训：`hideOfficialLyrics` 验证完就"写死 + 删 key + 删 l10n"。
+
+各自的验证状态（决定它们该"留"还是该"删"）：
+
+| 开关 | 状态 |
+|---|---|
+| `ngzhwm_syntheticLineTiming` | 真机验过一轮（§33） |
+| `ngzhwm_injectLyricsCardElement` | **已验证有效**（§10），但仍被用来做取舍 |
+| `ngzhwm_lyricsEntryPointFlag` | **没有结论** —— 那次 A/B 是空跑（customize 304 无 body） |
+
+### 50.2 改动
+
+| 动作 | 对象 |
+|---|---|
+| **新增** | `Settings/Sections/Debug/ViewModels/EeveeDebugSettingsViewModel.swift`、`Settings/Sections/Debug/Views/EeveeDebugSettingsView.swift` |
+| **新增入口** | `EeveeSettingsView` 里加一行（放在「杂项」之后），标题用**既有的** `debug_title` 键（26 个语言都有，中文正是「调试」），图标 `wrench.and.screwdriver.fill`，颜色 `#8E8E93` |
+| **搬走** | `EeveeLyricsSettingsView` 删掉那三个 Section 与 body 里的挂载；`EeveeLyricsSettingsViewModel` 删掉三个 `@Published` 与它们在 `animationValues` 里的项；`…+setupBindings` 删掉三条 `logBooleanSetting` |
+
+**三条硬规矩（都遵守了）**：
+
+1. **UserDefaults key 一字未改**（还是 `ngzhwm_syntheticLineTiming` 等）⇒ 设备上已设的值原样保留；
+   ⚠️ 特别注意**没有**把它们塞进 `UserDefaults.experimentsOptions`（那是个 Codable struct），
+   否则用户的设置会全部丢回默认值；
+2. **l10n 一个键都没加**：三个开关沿用原键，页面标题沿用 `debug_title`；
+3. **启动日志标记没丢**：`Tweak.x.swift` 的 `[INIT] synthetic line timing: … | card element inject: …`
+   原样保留；而那三条 `[Settings] … -> ON/OFF` 变值日志**跟着绑定搬到了**
+   `EeveeDebugSettingsViewModel.setupBindings()`（格式不变）。
+
+### 50.3 与主页面那个「Debug」区的区别（容易混，写明）
+
+主设置页**本来就有一个 `debug_title` 区**（「启用日志记录 / 导出日志 / 清空日志」）。
+本次**没有动它** —— 两者并列、各管一摊：
+
+| | 位置 | 装什么 |
+|---|---|---|
+| 「Debug」**区** | 主设置页内联 | 日志工具（记录开关 / 导出 / 清空） |
+| 「调试」**页**（新） | 主设置页的一个入口 | 排查/验证型 A/B 开关 |
+
+### 50.4 后续（第 2 步，未做）
+
+- 给这三个开关**逐个定性**：确认"关掉会退化成什么"之后，写死 + 删 key + 删 l10n；
+  最终理想形态是这一页**空着**；
+- 假预热卡那条线如果重启，它的止血开关（`ngzhwm_disableNpvPrereleaseProvider`，
+  代码已随 §49 回退）可以放进这一页 —— 那正是这个页面存在的意义。
+
+⚠️ **未验证**：本机无 Swift 工具链，只做了"引用零残留 + 括号平衡"两项静态检查。
+
+---
+
+## 49. 终止决定：**假预热卡的代码全部回退**（2026-09-27）
+
+**用户决定**：「算了。把试图修复这个bug写的代码文件什么的全部回退吧。懒得搞了。」
+
+### 49.1 回退清单（`Sources/` 已回到本轮之前的状态）
+
+| 动作 | 对象 |
+|---|---|
+| **删除**（新增文件） | `Premium/Helpers/PrereleaseCardProbe.swift`、`Premium/Helpers/PrereleaseRuntimeClassDump.swift`、`Premium/Hooks/PrereleaseNPVProviderRegistrationHook.x.swift`（目录随之删除）、`Tools/eevee-hookfinder/_revert_traffic_probe.py` |
+| **删除**（本会话新增的 HTTP 层探针） | `SpotifyResponsePatcher` 里的 `probeTrafficHeaders` / `probeTrafficBody` / `scanForISODates` / `isISODatePrefix` / `isTrafficDumpEndpoint` 与全部 `_traffic*` 状态（共 182 行）；两个 hook（`HttpClientURLSessionHooks` / `DataLoaderServiceHooks`）里的对应调用点 |
+| **回退**（改回原样） | `Tweak.x.swift`（删掉 `[INIT] npv prerelease provider:` 与两支探针调用）、`Lyrics/CustomLyrics+AllTracksLyrics.x.swift`（删掉卡扫描起停）、`Premium/DynamicPremium+ModifyingFunctions.swift`（删掉 flag 名常量与注释）、`Settings/ngzhwm/ngzhwmSettingsViewModel.swift`（删掉 key 与 getter）、两份 Lyrics VM（`@Published` / 绑定 / `animationValues`）、`EeveeLyricsSettingsView`（删掉 section）、`en` / `zh-CN` Localizable.strings（删掉 `ngzhwm_disable_npv_prerelease_provider`） |
+
+**保留不动**：`printableContext(radius:)` 的默认参数（去掉参数属于无谓 churn，现有调用不受影响）；
+以及 §36–§37 那几支**更早的**探针（`probeNPVModule*` / `probePreReleaseNeedles` / `logElementManifest` 等）。
+
+### 49.1b 追加删除：`[ShellText]` 文字 dump 那一套（同一轮，用户"删了吧"）
+
+用户在看到 §49.1 的清单后确认：把"为这张卡写的"东西**一并删掉**。实际删的是：
+
+| 位置 | 删掉的内容 |
+|---|---|
+| `Lyrics/AppleMusic/AppleMusicLyricsPlaybackControl.swift` | **整段 174 行**：`dumpVisibleTexts()` / `startTextWatch()` / `stopTextWatch()` / `pollVisibleTextsOnce()` / `looksLikeDate(_:)` / `collectTexts(in:window:into:)` 与那两个 MARK 段 |
+| `Lyrics/LyricsWordByWord.x.swift` | 预览分支里的 `dumpVisibleTexts()` 快照（10 行），以及"交还原生之前"那一处快照（另一处 11 行） |
+| `Lyrics/CustomLyrics+AllTracksLyrics.x.swift` | `NPVScrollViewControllerHook` 里 `startTextWatch()` / `stopTextWatch()` 两处调用与注释 |
+
+⇒ 从此**不再有每秒遍历窗口视图树的轮询**，日志里也不会再出现 `[ShellText]` / `★ NEW DATES ★`。
+
+⚠️ **删除时踩到的坑（记一笔）**：脚本是"从锚点 A 删到锚点 B（不含 B）"，而当时选的 B 是
+`// MARK: - 播放状态投影` —— 它**上面那一行 `}` 就是 `enum WordByWordPlaybackControl` 的收尾**，
+结果被一起删掉，文件少一个右花括号（括号平衡检查 delta=1 才发现）。
+**教训：用脚本按锚点删代码时，锚点要选"删完之后仍然语义完整"的位置 ——
+最好把 B 选成一个自己就带收尾括号的行（例如 `}` + MARK 两行一起当锚点），删完立刻跑括号平衡检查。**
+
+**没有再往下删的两样，理由写在这里**：
+
+- `dumpControlCandidates()`（遍历 `UIControl`）与 `dumpPreviewActionCandidates()`（预览"展开/分享"
+  候选控件清单）：它们服务的是**歌词卡片**那两条线（"点小方框没反应"、
+  `expandToFullscreenLyrics` 找错控件），不是这张预热卡 —— 删了会削掉那两条线的排查手段；
+- 三个 HTTP 层探针（`probeNPVModule*` / `probePreReleaseNeedles` / `logElementManifest`）：
+  属于"廉价哨兵"，只在特定路径上打几行。要删随时说一声。
+
+### 49.2 遗留的结论（回退的是代码，不是认知）
+
+- **假卡是真实的 prerel 卡视图**（`…PrereleaseCardNowPlaying2UI7Private9MediaView`），
+  占的是**「探索艺人」那一格**；退出重进后那一格会被"探索 <艺人>"换回来；
+- **卡的内容 = 当前曲目自己的专辑**（封面、标题都对），但被判成"即将发布"，
+  日期还比真实发行日**差 1～7 天**；
+- **拦 `…NowPlayingViewProviderServiceImpl.registerScrollProviderIn:` 能让它彻底不出现**
+  （日志 14 的 entry #1 是干净对照）—— 这是"全灭"，代价是正在播放页的**任何**预热卡都没了；
+- 试过并**否掉**的路：剥元素 `12`、`ios-prerelease-nowplayingviewprovider-impl.is_enabled`、
+  网络层（十几份日志零命中）、补卡片元素（用户真机 A/B）；
+- **两次崩溃的教训**（§47 / §48）仍然有效，是这次最有价值的产出。
+
+### 49.3 如果以后要重启这件事
+
+建议从"最保守的那条"开始：**不碰 runtime、不碰注册**，只做一件事 ——
+在正在播放页那格元素**渲染前**判断"这份 prerel 数据的发行日是否已过"，
+是就不渲染。落点需要先确认（`PrereleaseDataLoaderServiceImpl` 的几个方法名已经从
+log 13/14 的探针里拿到过），但**先写纯透传探针确认签名，再动手**（§47 的教训）。
+
+**注意**：用户设备上 `UserDefaults` 里可能还留着 `ngzhwm_disableNpvPrereleaseProvider = true`
+这个键 —— 代码已不再读取它，留着无害（与 §31 那批废弃 key 同样处理）。
+
+---
+
 ## 48. 崩溃事故二：**`objc_copyClassList` 的元素当 Swift 类型用 ⇒ 启动即崩**（2026-09-27 01:42，`Spotify-2026-09-27-014242.ips`）
 
 **材料**：`C:\dsh\readlog\Spotify-2026-09-27-014242.ips`。用户口径："spotify 在打开时崩溃。"

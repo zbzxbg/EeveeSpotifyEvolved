@@ -28,12 +28,6 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// （关掉它之后那张过期的「即将发布」卡**依然出现**），于是剩下的、唯一还能影响
     /// 正在播放页卡片渲染的我们自家改动就是这条 flag。留开关就是为了判定它。
     static let lyricsEntryPointFlagKey = "ngzhwm_lyricsEntryPointFlag"
-    /// 「屏蔽正在播放页的预热卡」—— 见 `isNowPlayingPrereleaseProviderDisabled`。
-    ///
-    /// 2026-09-26 新增：解密二进制把"假卡"钉成了
-    /// `Prerelease.UI.PrereleaseCardNowPlaying` + 正在播放页专用的 prerel provider，
-    /// 于是终于有一个"既碰得到、又在正确的层"的落点。默认 OFF（不改既有行为）。
-    static let nowPlayingPrereleaseProviderKey = "ngzhwm_disableNpvPrereleaseProvider"
     // 已移除一个 key（2026-09-25）：`ngzhwm_hideOfficialLyrics` ——
     // 它对应的行为已在下面**写死启用**，不再读 UserDefaults。
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
@@ -153,24 +147,5 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// prerelease 记录渲出来的。
     static var isLyricsEntryPointFlagForced: Bool {
         bool(forKey: lyricsEntryPointFlagKey, defaultValue: true)
-    }
-
-    /// 「屏蔽正在播放页的预热卡（整个 provider）」—— 见 `isNowPlayingPrereleaseProviderDisabled`。
-    ///
-    /// 默认 **ON**（2026-09-26 由 OFF 改成 ON）：
-    ///
-    ///   · 这个 bug 是**偶发/竞态**（用户原话："可能这首歌有，可能那首歌有"），
-    ///     按歌复现不了 ⇒ 不该让用户自己去撞、也不该把"别再出现"做成一个要自己去打开的开关；
-    ///   · 实际落点是 `PrereleaseNPVProviderRegistrationHook`：拦
-    ///     `…NowPlayingViewProviderServiceImpl.registerScrollProviderIn:`，
-    ///     开关开着就**不注册**这一族 provider。之所以不用服务端 flag，
-    ///     是因为日志 13 已经证明 `ios-prerelease-nowplayingviewprovider-impl.is_enabled`
-    ///     **不是闸**（钉成 false 也照样出卡）。
-    ///
-    /// 代价明说：**正在播放页的任何预热卡都会消失**（包括"真的"那张）；
-    /// 专辑页 / 关注页 / 搜索页那些 prerel 表面不受影响 —— 它们的 provider 不走这条注册。
-    /// 设置页里仍留开关：想要真预热卡的人可以自己关掉。
-    static var isNowPlayingPrereleaseProviderDisabled: Bool {
-        bool(forKey: nowPlayingPrereleaseProviderKey, defaultValue: true)
     }
 }

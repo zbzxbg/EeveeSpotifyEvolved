@@ -116,14 +116,10 @@ extension EeveeLyricsSettingsViewModel {
         // 已移除：`$amllPreferred`（「AMLL 优先」整条链已删除）。
         // 「隐藏官方歌词」已写死启用（见 NgzhwmSettingsViewModel），设置页不再有开关，
         // 因此这里也没有可记录的绑定。
-        // 下面这两条都是 A/B 的分组标记：日志里能直接看出"这一场到底补没补时间轴、
-        // 有没有往 scroll 元素列表里补卡片元素"。
-        logBooleanSetting($syntheticLineTiming, "synthetic line timing")
-        logBooleanSetting($injectLyricsCardElement, "inject lyrics card element")
-        logBooleanSetting($lyricsEntryPointFlag, "lyrics entry point flag")
-        // 「屏蔽正在播放页预热卡」：这条是 A/B 的关键分组标记 —— 日志里必须能看出
-        // 这一场到底有没有把 NPV 那一族预热 provider 钉掉。
-        logBooleanSetting($disableNpvPrereleaseProvider, "disable NPV prerelease provider")
+        // 已搬走：`$syntheticLineTiming` / `$injectLyricsCardElement` / `$lyricsEntryPointFlag`
+        // （2026-09-27，排查型开关整体挪到「调试」页）。那三行 `[Settings] … -> ON/OFF`
+        // 分组标记跟着绑定一起搬到了 `EeveeDebugSettingsViewModel.setupBindings()`，
+        // 所以日志格式不变、只是由那个页面负责记录。
         logBooleanSetting($disableLyricsFeature, "disable lyrics feature")
         logBooleanSetting($removeMxmInterludeSymbol, "remove interlude symbol")
         logBooleanSetting($neteaseRomajiLocal, "NetEase romaji display mode")
