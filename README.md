@@ -36,7 +36,6 @@
 - Added a **disable lyrics** option.
 - Added **separate romanization settings** for Chinese, Korean, and Japanese.
 - Removed interlude symbols such as **♪**.
-- Various other modifications and improvements.
 
 ##  Verified Environment
 
