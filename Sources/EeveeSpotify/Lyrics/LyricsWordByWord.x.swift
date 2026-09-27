@@ -265,6 +265,55 @@ func hasUsableLineLevelData(_ dto: LyricsDto?) -> Bool {
     return timedLines * 10 >= lines.count * 5  // >= 50%
 }
 
+/// 「这一首为什么走逐字档 / 交还原生」—— 把判定的**账**拼成一行日志文本。
+///
+/// ⚠️ 起因：`hasUsableWordLevelData` 是个 50% 阈值判据，但结果只以 `level=word|line`
+/// 一个字母出现在 attached 那行里。**差多少条线**、行级是不是可用，日志里完全没有 ——
+/// 排查"这首歌怎么没有逐词层"时无从下手。
+///
+/// ⚠️ 2026-09-27：从 `LyricsWordByWordOverlayView` 的**私有方法**提成文件级函数。
+/// 理由：这一行有**两个**消费者，其中一个在别的类型里 ——
+///   · `LyricsWordByWordOverlayView.setCurrentTime`（层挂上之后，按版本去重）；
+///   · `WordByWordHost.attach` 被拒那条路（**挂不上**的时候，也正最需要这一行）。
+/// 私有方法跨类型调不到：真机编译直接报 `cannot find 'logWordLevelJudgeOnce' in scope`。
+/// 现在只有"拼文本"这一份实现，两个调用点各自决定要不要写、要不要去重。
+///
+/// 返回 nil 只表示"没有数据可记账"；目前的实现两种情况都会给出可读的一行。
+func wordLevelJudgeLine(dto: LyricsDto?, version: Int) -> String? {
+    guard let dto else {
+        return "[WordByWord] word-level judge: no dto (version \(version))"
+    }
+
+    let lines = dto.lines
+    guard !lines.isEmpty else {
+        return "[WordByWord] word-level judge: 0 lyric line (version \(version))"
+    }
+
+    let wordLines = lines.filter { ($0.words?.count ?? 0) >= 2 }.count
+    let timedLines = lines.filter { $0.offsetMs != nil }.count
+    let wordOK = hasUsableWordLevelData(dto)
+    let lineOK = hasUsableLineLevelData(dto)
+    // 阈值：wordLines * 10 >= lines.count * 5（即 >= 50%）；写成整数避免浮点。
+    let needWord = (lines.count * 5 + 9) / 10
+
+    // `LyricsRomanizationStatus` 没实现 `CustomStringConvertible`，直接 `\(enum)`
+    // 也能编，但打出来是 `romanized` 这种反射形式、跨 Swift 版本不稳定。
+    // 这里显式映射，日志格式稳定可 grep。
+    let romanizationLabel: String
+    switch dto.romanization {
+    case .romanized: romanizationLabel = "romanized"
+    case .canBeRomanized: romanizationLabel = "canBeRomanized"
+    case .original: romanizationLabel = "original"
+    }
+
+    return "[WordByWord] word-level judge: \(wordLines)/\(lines.count) line(s) carry word timing"
+        + " (need \(needWord) = 50%) -> word-level=\(wordOK ? "Y" : "N")"
+        + "; line timing \(timedLines)/\(lines.count) -> line-level=\(lineOK ? "Y" : "N")"
+        + " | timeSynced=\(dto.timeSynced)"
+        + " romanization=\(romanizationLabel)"
+        + " | render mode=\(wordOK ? "word" : "handback-to-native")"
+}
+
 /// 逐词歌词层的**纯色底色**（"只开逐词歌词、没开更好的逐词歌词"那条路用作背景）。
 ///
 /// 优先级与旧 overlay 原来的取色完全一致：
@@ -852,15 +901,14 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         )
     }
 
-    /// 「这一首为什么是逐字档 / 交还原生」—— 把判定的**账**打出来。
+    /// 「这一首为什么走逐字档 / 交还原生」的**按版本去重**调用点。
     ///
-    /// ⚠️ 起因：`hasUsableWordLevelData` 是个 50% 阈值判据，但结果只以
-    /// `level=word|line` 一个字母出现在 attached 那行里。**差多少条线**、
-    /// 行级是不是可用，日志里完全没有 —— 排查"这首歌怎么没有逐词层"时无从下手。
+    /// 文案由文件级的 `wordLevelJudgeLine(dto:version:)` 拼（见那个函数的说明）——
+    /// 提成文件级之后，`WordByWordHost.attach` 被拒那条路也能打同一行，
+    /// 而那正是"没挂上"时最需要的一行。
     ///
-    /// ⚠️ 2026-09-25 起没有逐词数据的歌**不会挂我们这层**，所以这一行也就只在
-    /// "挂了层"的歌上出现；"没挂"那边看 `attach` 拒绝日志里的
-    /// `no word-level timing … (line-level usable=…)`，两处口径一致。
+    /// ⚠️ 2026-09-25 起没有逐词数据的歌**不会挂我们这层**，所以这条去重路径只在
+    /// "挂了层"的歌上跑；"没挂"那边由 `attach` 的拒绝路径负责，两处口径一致。
     ///
     /// 每次换歌/换数据打一行（由 `setCurrentTime` 里版本变化处调用），
     /// 不是每帧：判定只随数据变。
@@ -868,40 +916,8 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         guard judgedLyricsVersion != currentLyricsVersion else { return }
         judgedLyricsVersion = currentLyricsVersion
 
-        guard let dto = currentLyricsDto else {
-            writeDebugLog("[WordByWord] word-level judge: no dto (version \(currentLyricsVersion))")
-            return
-        }
-        let lines = dto.lines
-        guard !lines.isEmpty else {
-            writeDebugLog("[WordByWord] word-level judge: 0 lyric line (version \(currentLyricsVersion))")
-            return
-        }
-        let wordLines = lines.filter { ($0.words?.count ?? 0) >= 2 }.count
-        let timedLines = lines.filter { $0.offsetMs != nil }.count
-        let wordOK = hasUsableWordLevelData(dto)
-        let lineOK = hasUsableLineLevelData(dto)
-        // 阈值：wordLines * 10 >= lines.count * 5（即 >= 50%）；写成整数避免浮点。
-        let needWord = (lines.count * 5 + 9) / 10
-
-        writeDebugLog(
-            "[WordByWord] word-level judge: \(wordLines)/\(lines.count) line(s) carry word timing"
-                + " (need \(needWord) = 50%) -> word-level=\(wordOK ? "Y" : "N")"
-                + "; line timing \(timedLines)/\(lines.count) -> line-level=\(lineOK ? "Y" : "N")"
-                + " | timeSynced=\(dto.timeSynced)"
-                + " romanization=\(romanizationLabel(dto.romanization))"
-                + " | render mode=\(wordOK ? "word" : "handback-to-native")"
-        )
-    }
-
-    /// `LyricsRomanizationStatus` 没实现 `CustomStringConvertible`，直接 `\(enum)`
-    /// 也能编，但打出来是 `romanized` 这种反射形式、跨 Swift 版本不稳定。
-    /// 这里显式映射，日志格式稳定可 grep。
-    private func romanizationLabel(_ status: LyricsRomanizationStatus) -> String {
-        switch status {
-        case .romanized: return "romanized"
-        case .canBeRomanized: return "canBeRomanized"
-        case .original: return "original"
+        if let line = wordLevelJudgeLine(dto: currentLyricsDto, version: currentLyricsVersion) {
+            writeDebugLog(line)
         }
     }
 
@@ -2055,9 +2071,18 @@ final class WordByWordHost {
             // 于是"从没挂上"的歌 —— 也正是最需要这一行的歌 —— 反而看不到它，
             // 而下面这句文案却写着"see the `[WordByWord] word-level judge` line above"。
             // 真机日志 17 就是这样：`attach declined … see the … line above` 出现 4 次，
-            // 而整份日志里 judge 一行都没有。`logWordLevelJudgeOnce()` 自身按版本去重，
-            // 重复调用不会刷屏。
-            logWordLevelJudgeOnce()
+            // 而整份日志里 judge 一行都没有。
+            //
+            // ⚠️ 必须用**文件级**的 `wordLevelJudgeLine`：这里是 `WordByWordHost`，
+            // overlay 里那个私有方法跨类型调不到（真机编译报
+            // `cannot find 'logWordLevelJudgeOnce' in scope`）。去重不重要 ——
+            // 这条路径只在"这首歌挂不上"时才会走到。
+            if let judgeLine = wordLevelJudgeLine(
+                dto: currentLyricsDto,
+                version: currentLyricsVersion
+            ) {
+                writeDebugLog(judgeLine)
+            }
             exitReason = "no word-level timing — handing the page back to Spotify's native"
                 + " renderer (line-level usable=\(lineLevelUsable));"
                 + " see the `[WordByWord] word-level judge` line above"

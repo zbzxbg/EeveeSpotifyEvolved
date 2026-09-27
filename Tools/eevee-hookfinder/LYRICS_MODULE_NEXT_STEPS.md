@@ -559,6 +559,28 @@ if let originalColors { $0.colors = originalColors }
 - 取舍二：定位器不再兜底离屏 ⇒ 极端情况（页面在窗口里但可见性启发式全 false，如动画中 alpha=0）
   会一直不挂 —— 效果与之前"挂了立刻被拒"相同，但少一层状态污染。
 
+### 54.5 首次构建报错与修正（同轮）
+
+真机编译报：
+
+```
+Sources/EeveeSpotify/Lyrics/LyricsWordByWord.x.swift:2060:13: error:
+cannot find 'logWordLevelJudgeOnce' in scope
+```
+
+原因：`logWordLevelJudgeOnce()` 是 `LyricsWordByWordOverlayView` 的**私有方法**，
+而 2060 那行在 `WordByWordHost.attach` 里 —— **跨类型调不到**。
+
+修法：把"拼这一行文本"提成**文件级函数** `wordLevelJudgeLine(dto:version:)`
+（与 `hasUsableWordLevelData` / `hasUsableLineLevelData` 同一层，见 `LyricsWordByWord.x.swift:282`），
+两个调用点各自决定要不要写、要不要去重：
+
+- overlay 里保留 `logWordLevelJudgeOnce()`，但瘦成"按版本去重 + 调文件级函数"的薄包装；
+- `attach` 被拒那条路直接 `writeDebugLog(wordLevelJudgeLine(…))` —— 这条路只在挂不上时走，不需要去重。
+
+同时删掉因此变成死代码的私有 `romanizationLabel(_:)`（映射逻辑挪进文件级函数内部）。
+**教训**：这个文件里"跨类型共有"的东西一律走文件级函数或 `static`，别用私有方法。
+
 ---
 
 ## 53. 换歌竞态放宽 + 日志串行化 + **删除「补全歌词时间轴」**（2026-09-27）
