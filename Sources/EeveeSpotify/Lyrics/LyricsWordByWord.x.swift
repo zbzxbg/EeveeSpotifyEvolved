@@ -2013,6 +2013,16 @@ final class WordByWordHost {
                 solidBackdrop: showsProviderFooter,
                 previewHeaderInset: headerInset
             )
+            // ⚠️ 2026-09-27：`update` **内部可能拒绝挂**（行模型属于别的曲目 / 没有行 /
+            // 宿主还没进窗口），那时它自己把 hosting view 摘掉、什么都不挂。
+            // 这里若照旧往下写 `isAttached = true`，就变成"标记说挂着、层其实不在"：
+            // 看门狗下一轮只能把它当残留清掉，于是出现日志 18 那种
+            // `overlay detached` / `stale attachment cleared` 每 1~2 秒刷一次的循环。
+            // 真实挂载与否以 hosting view 为准（`overlayView` 就是它）。
+            guard AppleMusicLyricsOverlayHost.shared.overlayView != nil else {
+                exitReason = "Apple Music host refused to mount (no overlay view after update)"
+                return false
+            }
             // 预览：把"展开 / 分享"的全部候选控件（标签 + frame）打一次日志。
             //
             // 为什么要这个：真机上出现过"点我们画的小方框没反应、点 `歌词` 两个字

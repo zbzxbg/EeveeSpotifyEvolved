@@ -348,9 +348,13 @@ final class AppleMusicLyricsOverlayHost {
         //
         // 这是"预览歌词显示上一首歌的逐词歌词"的直接修复：露出来的原生层
         // （Spotify 渲染我们注入的那份 payload）内容是正确的，比挂一份别人的行模型好。
-        // 新歌词到达后版本号会变，`update` 会重建模型并记下新的曲目 id，自然恢复。
+        //
+        // ⚠️ 2026-09-27 更正：以前这里只 `detach()` 就返回，靠注释里那句"新歌词到达后
+        // 版本号会变，`update` 会重建模型并记下新曲目 id，自然恢复"——**那句是错的**：
+        // 重建就在下面，而它被这个 guard 挡着，模型 id 永远不会更新（死锁）。
+        // 现在改走 `dropForeignLineModel`：作废模型 → 下一次 `update()` 必然重建。
         if hasForeignLineModel {
-            detach()
+            dropForeignLineModel(reason: "update skipped — the line model belongs to another track")
             return
         }
 
@@ -556,6 +560,32 @@ final class AppleMusicLyricsOverlayHost {
         return currentModelTrackId != live
     }
 
+    /// 判定"行模型属于别的曲目"之后**把模型整个作废**，而不是只摘掉视图。
+    ///
+    /// ⚠️ 2026-09-27（真机日志 18）修的是一个**死锁**：
+    /// `currentModelTrackId` 只在 `update()` 的重建路径里（`refreshShellMetadata`）写入，
+    /// 而 `update()` 在重建**之前**就被 `hasForeignLineModel` 挡回去 —— 于是模型一旦过期
+    /// 就再也刷不新：每次 `update()` 都静默 `detach()`，屏幕上一直没有我们这层，
+    /// 直到播放器报的曲目 id 恰好又变回旧值。
+    ///
+    /// 日志 18 实测：`ただ声一つ` 的逐词数据 05:21:18 就到了，05:21:31 才 `rebuilt` ——
+    /// 中间 13 秒全是 `overlay detached` / `stale attachment cleared` 在刷屏，
+    /// 而模型 id 一直停在上上首（`7dUKNjRi…`）。用户看到的就是"原本有逐字的歌没有逐字了"。
+    ///
+    /// 作废这四样之后 `hasForeignLineModel` 恒为 false（总有一侧为空），
+    /// 下一次 `update()` 必然重建模型并重挂 —— 自愈只差这一步。
+    private func dropForeignLineModel(reason: String) {
+        let live = liveTrackId()
+        writeDebugLog(
+            "[AppleMusicLyrics] \(reason) (model=\(currentModelTrackId.isEmpty ? "<none>" : currentModelTrackId)"
+                + " live=\(live.isEmpty ? "<none>" : live)) — dropping the line model"
+        )
+        detach()
+        currentLines = []
+        currentModelTrackId = ""
+        currentVersion = -1
+    }
+
     // MARK: 为什么不"接管"原生视图
 
     // 这里曾经有一整套代码：`stripHostBackground` / `restoreHostBackground`
@@ -582,8 +612,7 @@ final class AppleMusicLyricsOverlayHost {
         // 所以只靠"请求到达时清理"会漏。收掉之后露出来的原生层内容是正确的。
         // 新歌词到达时 `update()` 会重建模型并重新挂上，所以这不是永久降级。
         if hasForeignLineModel {
-            writeDebugLog("[AppleMusicLyrics] line model belongs to another track — detaching")
-            detach()
+            dropForeignLineModel(reason: "tick — the line model belongs to another track")
             return
         }
         // ⚠️ "每帧置于最前"这件事**只能在这里做**。

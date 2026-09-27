@@ -497,6 +497,77 @@ if let originalColors { $0.colors = originalColors }
 
 ---
 
+## 55. 逐词层"挂不上"的主因：**AM 行模型过期死锁**（2026-09-27，日志 18）
+
+**用户报**：「日志 18，这还没好啊」。
+
+### 55.1 上一轮加的诊断立刻给出两件事
+
+**(a) 那几次拒绝不是几何问题，是 `alpha=0.00`**：
+
+```
+[WordByWord] ⚠️ preview host off-screen (Lyrics_TextComponentImpl.LyricsView) — will retry
+   | mount=Lyrics_NPVContainerKit.LyricsContainerView window=414x896 hidden=false alpha=0.00 frame=(24,435) 366x120 visible=100%
+```
+
+在窗口里、几何 100% 可见、但**整条链 alpha=0**（Spotify 的卡片还没淡入 / 是被停放的容器）。
+真卡片 `Lyrics_CardElementImpl.CardView 374x320` 稍后出现时，挂载就成功了 —— 这条闸门判对了。
+
+**(b) 真正的主因是 13 秒空窗**：`ただ声一つ` 的逐词数据 05:21:18 就到了（`yrc 5684 chars → 33 行`），
+而 `[AppleMusicLyrics] rebuilt with 33 line(s)` 直到 **05:21:31** 才出现，中间全是
+`overlay detached` / `stale attachment cleared` 在刷屏。数据在、层挂不上。
+
+### 55.2 机制：`update()` 的 foreign 判据把**重建自己**挡住了（死锁）
+
+| 事实 | 出处 |
+|---|---|
+| `currentModelTrackId` **只有** `refreshShellMetadata()` 会写 | `AppleMusicLyricsOverlay.swift` |
+| 而它只在 `update()` 的**重建路径**里被调用 | 同上 `lyricsChanged` 分支 |
+| `update()` 的第一道 guard 是 `hasForeignLineModel` → 直接 `detach()` 返回 | 同上 `update()` 开头 |
+| `tick()` 每帧同样判 foreign → 也只 `detach()`，**不碰模型 id** | 同上 `tick()` |
+
+⇒ 模型一旦过期（上次重建是上一首），`update()` 每次都在这道 guard 上返回，
+**永远走不到重建**；只有播放器报告的曲目 id 恰好变回旧值才解锁。
+日志 18 里恰好发生了：05:21:31 解锁重建，而同一时刻的 scrollsita 清单还是 SECRET
+（`7dUKNjRi…`）、05:21:34 还打印了 `track changed (7dUKNjRi…)` —— 播放器确实在往回报旧 id。
+
+**用户看到的**：切歌后逐词层长时间不出现，或只闪现一下（日志 18 里 `ただ声一つ` 在 05:21:31 挂上、
+05:21:33 又被 `stale attachment cleared`，05:21:34 dto 被 `track changed` 清掉 → 之后全是 `no dto`）。
+
+### 55.3 本轮改动（3 处）
+
+| 位置 | 改动 |
+|---|---|
+| `AppleMusicLyricsOverlay.swift` 新增 `dropForeignLineModel(reason:)` | 判 foreign 时**作废整个模型**：`detach() + currentLines = [] + currentModelTrackId = "" + currentVersion = -1`，并打一行含 `model=… live=…` 的日志（**原来这里是完全静默的**） |
+| 同上 `update()` | foreign guard 改走 `dropForeignLineModel` → 下一次 `update()` 必然重建（解锁） |
+| 同上 `tick()` | 同款改法（原来只打一行 + `detach()`，模型依旧脏） |
+| `LyricsWordByWord.x.swift` `attach` | `update(...)` 之后校验 `AppleMusicLyricsOverlayHost.shared.overlayView != nil`；为 nil（host 内部拒绝挂）就**不记** `isAttached` —— 消掉"标记说挂着、层其实不在"的刷屏根源 |
+
+### 55.4 下份日志的判据
+
+```
+[AppleMusicLyrics] update skipped — the line model belongs to another track (model=X live=Y) — dropping the line model
+[AppleMusicLyrics] rebuilt with N line(s)      ← 应该**紧跟着**出现（同一秒或下一拍）
+[AppleMusicLyrics] overlay attached (Apple Music path) host=…
+```
+
+若"13 秒空窗"仍在（`rebuilt` 迟迟不来），说明还有第二个卡点 —— 把相邻的那几行发出来即可。
+
+### 55.5 未验证
+
+**没有编译验证**（本机无 Swift 工具链），也**没有真机验证**。
+静态检查：括号平衡（`AppleMusicLyricsOverlay.swift` 66/66、177/177、17/17；
+`LyricsWordByWord.x.swift` 346/346、819/819、131/131）+ 新符号引用计数（`dropForeignLineModel` 4 处：
+定义 + update/tick 两个调用 + 文档提及；`overlayView != nil` 1 处）。
+
+### 55.6 仍未动、但已知的一处
+
+日志 18 里那 4 次 `alpha=0.00` 拒绝发生在**通用容器**上（`Lyrics_NPVContainerKit.LyricsContainerView`），
+真卡片出现后就能挂 —— 属**正确**拒绝，本轮不动。若以后频繁出现"等卡片等太久"，
+再考虑对"通用容器 + alpha≈0"缩短重试间隔（1.5s → 0.3s 的短促重试）。
+
+---
+
 ## 54. 「有 yrc 却没有逐词」直接修：宿主定位 + 存活性判据 + 挂载点可见性（2026-09-27，日志 17）
 
 **用户报**：「rokudenashi 的 `ただ声一つ` / MIMI 的 `SECRET` 我记得有逐词歌词，怎么没有了」
