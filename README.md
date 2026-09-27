@@ -2,7 +2,9 @@
 
 This repository is independently maintained by me and is not affiliated with whoeevee or SideloadLabs.
 
-When tested using Spotify version 9.1.86, the preview lyrics module for each song displayed correctly provided that the lyrics source was not set to ‘multi-level fallback’ and Genius fallback was not enabled.
+After testing, this modded version can reliably display lyrics for every song on Spotify 9.1.86 (including when the Genius fallback is enabled).
+
+- Note: If there are unexpected issues on the Now Playing page (such as lyrics not showing, outdated song teaser cards appearing, etc.), simply exit the Now Playing page and re-enter it to resolve the issue.
 
 Versions under development are not made publicly available to users.
 
