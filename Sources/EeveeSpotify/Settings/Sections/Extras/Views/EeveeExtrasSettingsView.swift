@@ -59,6 +59,76 @@ struct EeveeExtrasSettingsView: View {
                 )
             }
 
+            Section(
+                header: Text("declutter_home_player_section".localized),
+                footer: Text("declutter_home_player_description".localized)
+            ) {
+                Toggle(
+                    "hide_home_header".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.hideHomeHeader },
+                        set: { UserDefaults.hideHomeHeader = $0 }
+                    )
+                )
+
+                Toggle(
+                    "hide_connect_button".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.hideConnectButton },
+                        set: { UserDefaults.hideConnectButton = $0 }
+                    )
+                )
+
+                Toggle(
+                    "hide_add_to_button".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.hideAddToButton },
+                        set: { UserDefaults.hideAddToButton = $0 }
+                    )
+                )
+            }
+
+            Section(
+                header: Text("gesture_section".localized),
+                footer: Text("gesture_description".localized)
+            ) {
+                Picker(
+                    "gesture_behavior".localized,
+                    selection: Binding<Int>(
+                        get: { UserDefaults.playerGestureBehavior },
+                        set: { UserDefaults.playerGestureBehavior = $0 }
+                    )
+                ) {
+                    Text("gesture_behavior_skip".localized).tag(0)
+                    Text("gesture_behavior_seek".localized).tag(1)
+                }
+                .pickerStyle(MenuPickerStyle())
+
+                Toggle(
+                    "gesture_on_now_playing".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.playerGestureNowPlaying },
+                        set: { UserDefaults.playerGestureNowPlaying = $0 }
+                    )
+                )
+
+                Toggle(
+                    "gesture_on_fullscreen_lyrics".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.playerGestureFullscreenLyrics },
+                        set: { UserDefaults.playerGestureFullscreenLyrics = $0 }
+                    )
+                )
+
+                Toggle(
+                    "gesture_on_mini_bar".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.playerGestureMiniBar },
+                        set: { UserDefaults.playerGestureMiniBar = $0 }
+                    )
+                )
+            }
+
             Section(footer: Text("extras_description".localized)) {
                 Button {
                     push(with: EeveePrivacySettingsView(), title: "privacy_title")

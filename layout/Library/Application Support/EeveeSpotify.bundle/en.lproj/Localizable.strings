@@ -360,3 +360,17 @@ hide_mini_player_bar = "Hide the mini player bar";
 hide_tab_bar_fade = "Hide the tab bar fade";
 hide_free_tier_bar = "Hide the free-tier bar";
 hide_singalong_line = "Hide the one-line lyrics under the cover";
+declutter_home_player_section = "Home and player";
+declutter_home_player_description = "Hides three more of Spotify's own chrome, each taken from this device's view-tree dumps. The connect button is shared between the mini bar and the player, so hiding it removes it from every transport row.";
+hide_home_header = "Hide the Home header";
+hide_connect_button = "Hide the connect button";
+hide_add_to_button = "Hide the add-to button";
+
+gesture_section = "Double-tap gestures";
+gesture_description = "Double-tap the left or right half of the player. The action comes from the picker above; which surfaces respond is up to you. Spotify's own taps and scrubbing are left alone, and the switches take effect immediately.";
+gesture_behavior = "Action";
+gesture_behavior_skip = "Previous / next track";
+gesture_behavior_seek = "Back / forward 15s";
+gesture_on_now_playing = "On the now playing page";
+gesture_on_fullscreen_lyrics = "On the full screen lyrics";
+gesture_on_mini_bar = "On the mini player bar";

@@ -368,6 +368,9 @@ struct EeveeSpotify: Tweak {
         // 清爽开关（迷你播放条 / 标签栏渐隐 / free-tier 提示条）。同上：总是装、实时读。
         activateDeclutterChrome()
 
+        // 播放器双击手势（三个面各自开关、行为可选）。动作复用既有的切歌/跳转原语。
+        activatePlayerGestures()
+
         // 调试用视图树转储：默认关，开关在「调试」页且打开即生效（那边会直接调
         // `applyEnabledState()`）；这里只是让重启后能自动续上。
         ViewTreeDumper.applyEnabledState()

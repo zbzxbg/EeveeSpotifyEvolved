@@ -22,6 +22,8 @@ import ObjectiveC.runtime
 struct HideMiniPlayerGroup: HookGroup {}
 struct HideTabBarFadeGroup: HookGroup {}
 struct HideFreeTierGroup: HookGroup {}
+struct HideHomeHeaderGroup: HookGroup {}
+struct HideTransportChromeGroup: HookGroup {}
 
 /// 关联对象的键。file-scope 的 `var` 地址稳定，这是本仓库既有的写法
 /// （见 `UpsellPopupBlocker.x.swift` 的 `upsellPopupAssociationKey`）。
@@ -65,6 +67,27 @@ enum DeclutterChrome {
     /// 默认**关**：用户说过那一行本身不是问题（他反馈的是"逐词歌词开、更好的逐词歌词关"
     /// 时逐行歌词挂错地方，已修在 `InlineLyricsHostLocator`）。这个开关只留作选择。
     static var hideSingalongLine: Bool { UserDefaults.hideSingalongLine }
+
+    // MARK: - 首页 / 播放器那一批（2026-09-30 真机树实证）
+
+    /// 首页顶部那条（问候语 + 筛选胶囊）。
+    ///
+    /// 证据：`HomeHeaderView@0,0,414,50`，只在**首页**的转储里出现（日志 7 的 #1–#7），
+    /// 运行期类名 `_TtC19Home_FunkisPageImplP33_297EC57FD07AE9FCEAA7B66079FC278C14HomeHeaderView`。
+    static var hideHomeHeader: Bool { UserDefaults.hideHomeHeader }
+
+    /// 设备 / 输出切换按钮（"连接"）。
+    ///
+    /// 证据：`ConnectButtonView@0,0,44,40,id=Components.ConnectButtonOutputSwitcher`，
+    /// **20/20 份转储全都有**（深度 14）—— 它在迷你播放条和播放器里共用，
+    /// 所以关掉是"所有传输条上都不显示"，不只是播放器页。
+    static var hideConnectButton: Bool { UserDefaults.hideConnectButton }
+
+    /// 播放器里的"加号"按钮。
+    ///
+    /// 证据：`UIButton@0,0,44,40,id=Components.UI.AddToButton`，与设备按钮**同级**
+    /// （同一深度 14）。它是普通 `UIButton`，按类名 hook 不到，所以从兄弟里按 id 找。
+    static var hideAddToButton: Bool { UserDefaults.hideAddToButton }
 
     private static var reported: Set<String> = []
 
@@ -158,7 +181,6 @@ class FreeTierBarHideHook: ClassHook<UIView> {
 }
 
 /// 封面下那行跟唱歌词。
-///
 /// ⚠️ 它是**通用类**（`Lyrics_TextComponentImpl.LyricsView`），别的地方也可能用同一类，
 /// 所以判据只认那个 id：`accessibilityIdentifier == "singalong-lyrics-view"`
 /// （真机树实测值）。命中不了就什么都不做 —— 宁可漏，不可误伤别处的歌词视图。
@@ -182,6 +204,57 @@ class SingalongLyricsLineHideHook: ClassHook<UIView> {
             reportKey: "singalongLine",
             reportMessage: "singalong single-line lyrics hidden (id=singalong-lyrics-view)"
         )
+    }
+}
+
+/// 首页顶部那条（问候语 + 筛选胶囊）。
+class HomeHeaderHideHook: ClassHook<UIView> {
+    typealias Group = HideHomeHeaderGroup
+    static let targetName =
+        "_TtC19Home_FunkisPageImplP33_297EC57FD07AE9FCEAA7B66079FC278C14HomeHeaderView"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+
+        DeclutterChrome.apply(
+            wantHidden: DeclutterChrome.hideHomeHeader,
+            to: self.target,
+            reportKey: "homeHeader",
+            reportMessage: "home header hidden (HomeHeaderView)"
+        )
+    }
+}
+
+/// 传输控件那一排：设备按钮（自己）+ 加号按钮（同级的普通 UIButton）。
+///
+/// 挂在 `ConnectButtonView` 上，因为它是这一批里唯一有"专属类名 + 稳定 id"的节点；
+/// 加号只能从它的兄弟里按 id 找（`Components.UI.AddToButton`）。
+class TransportChromeHideHook: ClassHook<UIView> {
+    typealias Group = HideTransportChromeGroup
+    static let targetName = "_TtC23Connect_EntryPointsImpl17ConnectButtonView"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+
+        DeclutterChrome.apply(
+            wantHidden: DeclutterChrome.hideConnectButton,
+            to: self.target,
+            reportKey: "connectButton",
+            reportMessage: "connect button hidden (Components.ConnectButtonOutputSwitcher)"
+        )
+
+        guard let siblings = self.target.superview?.subviews else { return }
+
+        for sibling in siblings where sibling !== self.target {
+            guard sibling.accessibilityIdentifier == "Components.UI.AddToButton" else { continue }
+
+            DeclutterChrome.apply(
+                wantHidden: DeclutterChrome.hideAddToButton,
+                to: sibling,
+                reportKey: "addToButton",
+                reportMessage: "add-to button hidden (Components.UI.AddToButton)"
+            )
+        }
     }
 }
 
@@ -212,11 +285,26 @@ func activateDeclutterChrome() {
         writeDebugLog("[Declutter] missing \(SingalongLyricsLineHideHook.targetName) — singalong hook inactive")
     }
 
+    if NSClassFromString(HomeHeaderHideHook.targetName) != nil {
+        HideHomeHeaderGroup().activate()
+    } else {
+        writeDebugLog("[Declutter] missing \(HomeHeaderHideHook.targetName) — home header hook inactive")
+    }
+
+    if NSClassFromString(TransportChromeHideHook.targetName) != nil {
+        HideTransportChromeGroup().activate()
+    } else {
+        writeDebugLog("[Declutter] missing \(TransportChromeHideHook.targetName) — transport hook inactive")
+    }
+
     writeDebugLog(
         "[Declutter] installed (miniPlayer="
             + "\(DeclutterChrome.hideMiniPlayerBar ? "ON" : "OFF")"
             + " tabBarFade=\(DeclutterChrome.hideTabBarFade ? "ON" : "OFF")"
             + " freeTier=\(DeclutterChrome.hideFreeTierBar ? "ON" : "OFF")"
-            + " singalongLine=\(DeclutterChrome.hideSingalongLine ? "ON" : "OFF"))"
+            + " singalongLine=\(DeclutterChrome.hideSingalongLine ? "ON" : "OFF")"
+            + " homeHeader=\(DeclutterChrome.hideHomeHeader ? "ON" : "OFF")"
+            + " connectButton=\(DeclutterChrome.hideConnectButton ? "ON" : "OFF")"
+            + " addToButton=\(DeclutterChrome.hideAddToButton ? "ON" : "OFF"))"
     )
 }

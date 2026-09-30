@@ -29,6 +29,13 @@ extension UserDefaults {
     private static let hideTabBarFadeKey = "hideTabBarFade"
     private static let hideFreeTierBarKey = "hideFreeTierBar"
     private static let hideSingalongLineKey = "hideSingalongLine"
+    private static let hideHomeHeaderKey = "hideHomeHeader"
+    private static let hideConnectButtonKey = "hideConnectButton"
+    private static let hideAddToButtonKey = "hideAddToButton"
+    private static let playerGestureNowPlayingKey = "playerGestureNowPlaying"
+    private static let playerGestureFullscreenLyricsKey = "playerGestureFullscreenLyrics"
+    private static let playerGestureMiniBarKey = "playerGestureMiniBar"
+    private static let playerGestureBehaviorKey = "playerGestureBehavior"
 
     static var musixmatchToken: String {
         get {
@@ -305,6 +312,86 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: hideSingalongLineKey)
+        }
+    }
+
+    /// 隐藏首页顶部那条（问候语 + 筛选胶囊）。默认关，实时读。
+    ///
+    /// 证据：真机树里只在**首页**出现（日志 7 的 #1–#7），`HomeHeaderView@0,0,414,50`。
+    static var hideHomeHeader: Bool {
+        get {
+            container.object(forKey: hideHomeHeaderKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hideHomeHeaderKey)
+        }
+    }
+
+    /// 隐藏设备 / 输出切换按钮（"连接"）。默认关，实时读。
+    ///
+    /// ⚠️ 它在迷你播放条和播放器里**共用**（20/20 份转储都有），所以关掉是
+    /// "所有传输条上都不显示"，不是只在播放器页。
+    static var hideConnectButton: Bool {
+        get {
+            container.object(forKey: hideConnectButtonKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hideConnectButtonKey)
+        }
+    }
+
+    /// 隐藏播放器里的"加号"按钮。默认关，实时读。
+    static var hideAddToButton: Bool {
+        get {
+            container.object(forKey: hideAddToButtonKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hideAddToButtonKey)
+        }
+    }
+
+    // MARK: - 播放器双击手势（Gestures）
+    /// 正在播放页（大封面那页）上的双击手势。**默认开**。
+    ///
+    /// 三个面里只有它默认开：它是"播放器"的主界面，也是 spoti.pw 加手势的那一面；
+    /// 另外两面（全屏歌词页 / 迷你条）由用户自己决定，免得和既有操作打架。
+    static var playerGestureNowPlaying: Bool {
+        get {
+            container.object(forKey: playerGestureNowPlayingKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: playerGestureNowPlayingKey)
+        }
+    }
+
+    /// 全屏歌词页上的双击手势。默认关。
+    static var playerGestureFullscreenLyrics: Bool {
+        get {
+            container.object(forKey: playerGestureFullscreenLyricsKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: playerGestureFullscreenLyricsKey)
+        }
+    }
+
+    /// 迷你播放条上的双击手势。默认关。
+    static var playerGestureMiniBar: Bool {
+        get {
+            container.object(forKey: playerGestureMiniBarKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: playerGestureMiniBarKey)
+        }
+    }
+
+    /// 双击的行为：`0` = 切歌（左半区上一首 / 右半区下一首，**默认**），
+    /// `1` = 前后跳 15 秒。存 `Int` 而不是枚举，方便以后加项而不动旧数据。
+    static var playerGestureBehavior: Int {
+        get {
+            container.object(forKey: playerGestureBehaviorKey) as? Int ?? 0
+        }
+        set {
+            container.set(newValue, forKey: playerGestureBehaviorKey)
         }
     }
 

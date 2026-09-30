@@ -351,6 +351,20 @@ hide_mini_player_bar = "隐藏迷你播放条";
 hide_tab_bar_fade = "隐藏标签栏渐隐";
 hide_free_tier_bar = "隐藏 free-tier 提示条";
 hide_singalong_line = "隐藏封面下的一行歌词";
+declutter_home_player_section = "首页与播放器";
+declutter_home_player_description = "再藏掉 Spotify 自己的三处东西，类名/标识都来自本机的视图树转储。设备按钮在迷你条和播放器里共用，所以关掉是每条传输条上都不显示。";
+hide_home_header = "隐藏首页顶部条";
+hide_connect_button = "隐藏设备按钮";
+hide_add_to_button = "隐藏加号按钮";
+
+gesture_section = "双击手势";
+gesture_description = "双击播放器的左半区或右半区。动作取上面那一项；在哪几个面生效由你决定。不会抢 Spotify 自己的点击与拖动，开关立即生效。";
+gesture_behavior = "动作";
+gesture_behavior_skip = "上一首 / 下一首";
+gesture_behavior_seek = "后退 / 前进 15 秒";
+gesture_on_now_playing = "正在播放页";
+gesture_on_fullscreen_lyrics = "全屏歌词页";
+gesture_on_mini_bar = "迷你播放条";
 
 flag_catalog_description = "这些名字与 scope 都来自本机自己的调试日志，没有一条是猜的。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
