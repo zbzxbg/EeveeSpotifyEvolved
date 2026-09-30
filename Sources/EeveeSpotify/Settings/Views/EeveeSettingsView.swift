@@ -143,45 +143,18 @@ struct EeveeSettingsView: View {
                 )
             }
 
-            // 隐私与上报：拦截 / 只观察 / 关键词 / 计数。
+            // 后加的一批（深色栏 / 隐私 / 触感 / Flag 覆盖）集中一页：根页只多一行，
+            // 功能各进自己的页 —— spoti.pw 的根页就是这个结构（分类在根、功能在子页）。
             Button {
                 pushSettingsController(
-                    with: EeveePrivacySettingsView(),
-                    title: "privacy_title".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: Color(hex: "#30B0C7"),
-                    title: "privacy_title".localized,
-                    imageSystemName: "hand.raised.fill"
-                )
-            }
-
-            // 触感：开关（重启生效）、强度、命中关键词、记录控件类名。
-            Button {
-                pushSettingsController(
-                    with: EeveeHapticsSettingsView(),
-                    title: "haptics_title".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: Color(hex: "#FF375F"),
-                    title: "haptics_title".localized,
-                    imageSystemName: "waveform"
-                )
-            }
-
-            // Flag 覆盖：自己写 name/scope，压过内置默认值。
-            Button {
-                pushSettingsController(
-                    with: EeveeFlagOverrideSettingsView(),
-                    title: "flag_override_title".localized
+                    with: EeveeExtrasSettingsView(navigationController: navigationController),
+                    title: "extras_title".localized
                 )
             } label: {
                 NavigationSectionView(
                     color: Color(hex: "#5E5CE6"),
-                    title: "flag_override_title".localized,
-                    imageSystemName: "slider.horizontal.3"
+                    title: "extras_title".localized,
+                    imageSystemName: "sparkles"
                 )
             }
 

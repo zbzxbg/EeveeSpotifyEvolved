@@ -340,5 +340,17 @@ dump_view_tree = "转储视图树";
 dump_view_tree_description = "把当前屏幕的视图结构每 2 秒写一行进调试日志（每次启动最多 20 行，且结构没变就不重复写）。只读：不改任何视图、不注册手势、不在运行期枚举类。打开即生效，并且需要先在「调试」里打开日志记录。用途是给还没写的界面 hook 收集类名。";
 
 /* MARK: 外观 */
-amoled = "AMOLED 纯黑";
-amoled_description = "把导航栏与标签栏画成纯黑，替换 Spotify 自己的模糊与渐变底色，并持续重新套用，Spotify 自己刷新也抹不掉。打开立即生效。";
+amoled = "深色栏底色（仿 Apple Music）";
+amoled_description = "仿 Apple Music 的深色栏：导航栏保持透明，封面与内容从标题下面透出来；当 Spotify 自己要画底色时，把原来那层灰色渐变遮罩换成深色材质。打开立即生效。它不会强行把栏变成不透明，所以不会破坏封面透出的效果。";
+
+extras_title = "扩展功能";
+extras_description = "在 EeveeSpotify 之上加的这一批功能，集中放一页，根页才不会再变长。思路来自 spoti.pw，代码是本项目自己写的。上面几个开关就在本页，其余各进自己的页。";
+
+declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自你设备的视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
+hide_mini_player_bar = "隐藏迷你播放条";
+hide_tab_bar_fade = "隐藏标签栏渐隐";
+hide_free_tier_bar = "隐藏 free-tier 提示条";
+
+flag_catalog_description = "这些名字与 scope 都来自本机自己的调试日志，没有一条是猜的。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
+flag_catalog_search_placeholder = "按名称或 scope 过滤";
+flag_catalog_empty_result = "没有匹配的 flag";

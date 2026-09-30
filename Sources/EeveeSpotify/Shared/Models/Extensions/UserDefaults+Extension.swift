@@ -25,6 +25,9 @@ extension UserDefaults {
     private static let hapticsLogControlsKey = "hapticsLogControls"
     private static let dumpViewTreeKey = "dumpViewTree"
     private static let amoledEnabledKey = "amoledEnabled"
+    private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
+    private static let hideTabBarFadeKey = "hideTabBarFade"
+    private static let hideFreeTierBarKey = "hideFreeTierBar"
 
     static var musixmatchToken: String {
         get {
@@ -247,15 +250,46 @@ extension UserDefaults {
 
     // MARK: - 外观（Appearance）
 
-    /// AMOLED 纯黑：导航栏 / 标签栏的渐变与模糊换成纯黑，默认关。
-    ///
-    /// 与触感不同，这个**实时读**（hook 总是装着，改视图前才判断），所以打开即生效。
+    /// 深色栏底色（仿 Apple Music）：导航栏保持透明，Spotify 自己画底色时换成深色材质。
+    /// 默认关。**实时读**（hook 总是装着，改视图前才判断），所以打开即生效。
     static var amoledEnabled: Bool {
         get {
             container.object(forKey: amoledEnabledKey) as? Bool ?? false
         }
         set {
             container.set(newValue, forKey: amoledEnabledKey)
+        }
+    }
+
+    // MARK: - 清爽（Declutter）
+
+    /// 隐藏标签栏上方的迷你播放条。默认关，实时读。
+    static var hideMiniPlayerBar: Bool {
+        get {
+            container.object(forKey: hideMiniPlayerBarKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hideMiniPlayerBarKey)
+        }
+    }
+
+    /// 隐藏标签栏上方那层渐隐（内容滚到标签栏下面时的遮罩）。默认关，实时读。
+    static var hideTabBarFade: Bool {
+        get {
+            container.object(forKey: hideTabBarFadeKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hideTabBarFadeKey)
+        }
+    }
+
+    /// 隐藏 free-tier 提示条。默认关，实时读。
+    static var hideFreeTierBar: Bool {
+        get {
+            container.object(forKey: hideFreeTierBarKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hideFreeTierBarKey)
         }
     }
 

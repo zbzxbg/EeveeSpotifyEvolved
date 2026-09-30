@@ -336,7 +336,9 @@ flag_override_mode_set = "Set value";
 flag_override_value_placeholder = "enum value, e.g. count";
 flag_override_value_required = "Needs a value";
 flag_catalog_section = "Known flags";
-flag_catalog_description = "These names and scopes come from this device's own debug log, so none of them is a guess. Tap a row to fill the form in: booleans become a ready-made override, enum flags fill the value field for you. Plain int flags are listed but not editable yet.";
+flag_catalog_description = "Names and scopes come from this device's own debug log, so none of them is a guess. Tap a row to pin that flag (booleans get turned off, enum flags keep the value Spotify sent); tap it again to unpin. Change the exact value on the previous page.";
+flag_catalog_search_placeholder = "Filter by name or scope";
+flag_catalog_empty_result = "No flag matches that filter";
 flag_group_lyrics = "Lyrics";
 flag_group_npv = "Now Playing cards";
 flag_group_home = "Home & sharing";
@@ -347,5 +349,13 @@ dump_view_tree = "Dump the view tree";
 dump_view_tree_description = "Writes the current screen's view structure to the debug log as one line per screen, every 2 seconds (20 lines max per launch, and only when the structure changes). Read-only: it never changes a view, never registers a gesture and never enumerates classes at runtime. It takes effect immediately, and log recording under Debug must be on. Use it to collect the class names for hooks that are not written yet.";
 
 /* MARK: Appearance */
-amoled = "AMOLED black";
-amoled_description = "Draws the navigation bar and the tab bar pure black instead of Spotify's blurred and gradient versions, and keeps re-applying it so Spotify's own updates cannot undo it. Takes effect immediately.";
+amoled = "Dark bar chrome (Apple Music style)";
+amoled_description = "Apple Music style dark chrome: the navigation bar stays transparent so artwork shows through under the title, and when Spotify draws its own bar background this swaps the grey gradient scrim for a dark material. Takes effect immediately. It never forces the bar opaque, so turning it on cannot break the artwork look.";
+
+extras_title = "Extras";
+extras_description = "Features added on top of EeveeSpotify, kept together here so the settings root stays short. The ideas follow spoti.pw; the code is this project's own. Each one has its own page, except the switches above.";
+
+declutter_description = "Hides Spotify's own non-content chrome by class name, taken from this device's view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
+hide_mini_player_bar = "Hide the mini player bar";
+hide_tab_bar_fade = "Hide the tab bar fade";
+hide_free_tier_bar = "Hide the free-tier bar";

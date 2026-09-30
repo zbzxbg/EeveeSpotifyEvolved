@@ -140,14 +140,22 @@ enum KnownFlagCatalog {
         groups.flatMap { $0.flags }
     }
 
-    /// 点一下目录行时预填的取值：能在本项目里改的给"关"（多数是卡片/入口），
-    /// 改不了的（int）返回 nil，让 UI 直接禁掉那一行。
+    /// 点一下目录行时写入的取值：
+    ///   · bool → "关"（这些条目绝大多数是卡片/入口开关）；
+    ///   · enum → **服务端下发的那个值**（日志里观察到的）。写回它本身是"钉住"，
+    ///     真正要改值的人去「Flag 覆盖」页把模式改成"写入指定值"再填；
+    ///   · int → nil（本项目现在只能改 bool 与 enum，UI 会把这一行禁掉）。
     static func prefilledOverride(for flag: KnownFlag) -> FlagOverride? {
         switch flag.type {
         case .bool:
             return FlagOverride(name: flag.name, scope: flag.scope, mode: .off)
         case .enumValue:
-            return FlagOverride(name: flag.name, scope: flag.scope, mode: .set, value: "")
+            return FlagOverride(
+                name: flag.name,
+                scope: flag.scope,
+                mode: .set,
+                value: flag.observedValue
+            )
         case .int:
             return nil
         }

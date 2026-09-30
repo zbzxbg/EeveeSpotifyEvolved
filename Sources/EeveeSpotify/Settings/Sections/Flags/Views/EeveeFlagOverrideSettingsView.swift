@@ -7,11 +7,11 @@ import UIKit
 /// `modifyAssignedValues` 追加在内置替换**之后**应用（见 `FlagOverride+Replacement.swift`），
 /// 所以用户的选择能压过仓库自己的默认值。
 ///
-/// 页面上半是"已知 flag"目录：那些名字与 scope 来自**用户自己设备** 9.1.86 的
-/// `[Flags]` 调试日志（见 `KnownFlagCatalog`），点一下即按建议填好，省得手打
-/// `ios-feature-socialrecommendationsassistedcurationplugins` 这种 scope ——
-/// 写错 scope 的后果是覆盖静默不命中。
+/// ⚠️ 这一页**只负责"编辑"**：已知 flag 的目录搬到了独立的「已知 flag」页（带过滤框）——
+/// 两件事挤在一页就是上一版"表格墙"的由来（用户反馈页面臃肿）。
 struct EeveeFlagOverrideSettingsView: View {
+
+    let navigationController: UINavigationController
 
     @State private var overrides = FlagOverrideStore.all
     @State private var newName = ""
@@ -23,6 +23,7 @@ struct EeveeFlagOverrideSettingsView: View {
         List {
             addSection
             activeSection
+            catalogLinkSection
 
             if !overrides.isEmpty {
                 Section {
@@ -33,8 +34,6 @@ struct EeveeFlagOverrideSettingsView: View {
                     .foregroundColor(.red)
                 }
             }
-
-            knownFlagSections
         }
         .listStyle(GroupedListStyle())
         .onAppear {
@@ -128,80 +127,30 @@ struct EeveeFlagOverrideSettingsView: View {
         }
     }
 
-    // MARK: - 已知 flag 目录
+    // MARK: - 目录入口
 
-    @ViewBuilder private var knownFlagSections: some View {
-        Section(
-            header: Text("flag_catalog_section".localized),
-            footer: Text("flag_catalog_description".localized)
-        ) {
-            EmptyView()
-        }
-
-        ForEach(KnownFlagCatalog.groups, id: \.titleKey) { group in
-            Section(header: Text(group.titleKey.localized)) {
-                ForEach(group.flags, id: \.self) { flag in
-                    knownFlagRow(flag)
-                }
+    private var catalogLinkSection: some View {
+        Section {
+            Button {
+                pushCatalog()
+            } label: {
+                NavigationSectionView(
+                    color: Color(hex: "#5E5CE6"),
+                    title: "flag_catalog_section".localized,
+                    imageSystemName: "list.bullet"
+                )
             }
         }
     }
 
-    private func knownFlagRow(_ flag: KnownFlag) -> some View {
-        Button {
-            applyKnownFlag(flag)
-        } label: {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(flag.name)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.primary)
+    private func pushCatalog() {
+        let viewController = EeveeSettingsViewController(
+            navigationController.view.frame,
+            settingsView: AnyView(EeveeFlagCatalogView()),
+            navigationTitle: "flag_catalog_section".localized
+        )
 
-                    Text(verbatim: "\(flag.scope) · \(flag.observedValue)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-
-                    if let noteKey = flag.noteKey {
-                        Text(noteKey.localized)
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                    }
-                }
-
-                Spacer()
-
-                if isOverridden(flag) {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.green)
-                } else if flag.type == .int {
-                    Text("flag_catalog_unsupported".localized)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .disabled(flag.type == .int)
-    }
-
-    private func isOverridden(_ flag: KnownFlag) -> Bool {
-        let id = KnownFlagCatalog.id(for: flag)
-        return overrides.contains { $0.id == id }
-    }
-
-    /// 点目录行：能改的直接落一条覆盖；enum 那种需要用户填值的，预填到上面的表单。
-    private func applyKnownFlag(_ flag: KnownFlag) {
-        guard let prefilled = KnownFlagCatalog.prefilledOverride(for: flag) else { return }
-
-        if prefilled.mode == .set {
-            newName = prefilled.name
-            newScope = prefilled.scope
-            newMode = .set
-            newValue = prefilled.value
-            return
-        }
-
-        FlagOverrideStore.upsert(prefilled)
-        overrides = FlagOverrideStore.all
+        navigationController.pushViewController(viewController, animated: true)
     }
 
     // MARK: - 写入

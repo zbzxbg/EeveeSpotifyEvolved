@@ -42,27 +42,64 @@ enum AmoledTheme {
     /// 省电理由也不成立 —— 靠肉眼验收既不可靠、又看不出"是没生效还是屏幕就这样"。
     /// 这两行日志（每个类各一条）才是真正的判据：`barBg=1 gradient=1 image=1 blur=1`
     /// 说明四个目标全改到了；全是 0 说明这一趟什么都没匹配到，那才是真问题。
+    /// 取值取向（用户拍板：**仿 Apple Music**）。
+    ///
+    ///   false（当前）= 仿 AM：顶部保持透明，封面/内容从标题下面透出来；Spotify 自己
+    ///     要画底色时，把那层灰色渐变遮罩藏掉、把它旁边的模糊换成**深色材质**。
+    ///   true = 不管 Spotify 画不画，导航栏/标签栏一律纯黑（会失去封面透出效果，
+    ///     但 LCD 上"黑得最实"）。
+    ///
+    /// 两种都在这里，只是为了让这个选择在代码里看得见 —— 改一个字就能切。
+    private static let alwaysOpaqueBlack = false
+
+    /// 一趟遍历里改动了几处 —— 让"到底改到没改到"变成**日志能回答的问题**。
+    ///
+    /// 为什么必须这样：iPhone 11 是 **LCD**，纯黑在 LCD 上只是深灰；靠肉眼验收既不可靠、
+    /// 也分不清"没生效"和"屏幕就这样"。这几行日志才是判据。
     private struct Hits {
-        var barBackground = 0
-        var image = 0
-        var gradient = 0
+        /// 藏掉了几个灰色渐变遮罩（`_UIBarBackground` 里的 `UIImageView`）。
+        var scrim = 0
+        /// 几个模糊层换成了深色材质。
         var blur = 0
+        /// 只在 `alwaysOpaqueBlack` 下用：给 bar 自己铺黑底的次数。
+        var bar = 0
+        /// 只在 `alwaysOpaqueBlack` 下用：涂黑 `_UIBarBackground` 的次数。
+        var barBackground = 0
+        /// 只在 `alwaysOpaqueBlack` 下用：隐藏 `*Gradient*` 的次数。
+        var gradient = 0
 
         var summary: String {
-            "barBg=\(barBackground) gradient=\(gradient) image=\(image) blur=\(blur)"
+            "scrim=\(scrim) blur=\(blur) bar=\(bar) barBg=\(barBackground) gradient=\(gradient)"
         }
     }
 
     private static var reportedClasses: Set<String> = []
 
-    /// 扫一遍并处理三类目标：
-    ///   · `_UIBarBackground` → 纯黑底 + 隐藏它的 `UIImageView` 渐变遮罩；
-    ///   · 类名含 `Gradient` → 隐藏（标签栏那层渐变）；
-    ///   · `UIVisualEffectView` → 去掉模糊（`effect = nil`）并清空底色。
+    /// 扫一遍 bar 的子树（加上贴顶的同级兄弟），做两件事（仿 Apple Music）：
+    ///   1. 藏掉 `_UIBarBackground` 里的灰色渐变遮罩 `UIImageView`；
+    ///   2. 把 `UIVisualEffectView` 的模糊换成深色材质。
+    ///
+    /// `alwaysOpaqueBlack = true` 时另加三件事：给 bar 自己铺黑底、涂黑
+    /// `_UIBarBackground`、隐藏 `*Gradient*` —— 代价是封面不再从标题下透出，
+    /// 见那个常量上的说明。
     static func strip(_ view: UIView) {
         guard isEnabled else { return }
 
         var hits = Hits()
+
+        // 只有 `alwaysOpaqueBlack` 才给 bar 自己铺底 —— 这是**唯一**会破坏"封面透出"
+        // 的一步，所以默认不做。
+        if alwaysOpaqueBlack, view.backgroundColor != .black {
+            view.backgroundColor = .black
+            hits.bar += 1
+
+            // `SPNavigationBar` 是 UINavigationBar 子类：`barTintColor` 会盖在
+            // `backgroundColor` 上，一起钉死。
+            if let bar = view as? UINavigationBar, bar.barTintColor != .black {
+                bar.barTintColor = .black
+            }
+        }
+
         apply(to: view, depth: 0, limit: subtreeDepth, hits: &hits)
 
         // 导航栏的模糊层与它**同级**（真机树：`10.UIVisualEffectView@0,0,414,92` 与
@@ -95,38 +132,56 @@ enum AmoledTheme {
 
         let name = String(describing: type(of: view))
 
-        if name.contains("_UIBarBackground") {
-            if view.backgroundColor != .black {
+        if alwaysOpaqueBlack {
+            // 标签栏的两种 bar 视图**自己就是底色**（真机：`TabBarView > TabBarCompactView`，
+            // 里面没有 `_UIBarBackground`），只涂外层不够 —— CompactView 会盖在上面。
+            if name.contains("TabBarView") || name.contains("TabBarCompactView"),
+               view.backgroundColor != .black {
+                view.backgroundColor = .black
+                hits.bar += 1
+            }
+
+            if name.contains("_UIBarBackground"), view.backgroundColor != .black {
                 view.backgroundColor = .black
                 hits.barBackground += 1
             }
 
+            if name.contains("Gradient"), !view.isHidden {
+                view.isHidden = true
+                hits.gradient += 1
+            }
+        }
+
+        // 仿 AM 第一步：藏掉那层灰色渐变遮罩。
+        //
+        // 真机证据：`SPNavigationBar > _UIBarBackground@0,-48,414,92 > UIImageView@0,0,414,92`
+        // —— 滚动时"浮出来那层灰"就是它。注意**只藏这个 image，不动 `_UIBarBackground`
+        // 自己的 backgroundColor**：动它就等于顶部也不透明，"封面从标题下透出"就没了
+        // （上一版正是这么把透明弄丢的）。
+        if name.contains("_UIBarBackground") {
             for child in view.subviews where child is UIImageView {
                 if !child.isHidden {
                     child.isHidden = true
-                    hits.image += 1
+                    hits.scrim += 1
                 }
             }
         }
 
-        if name.contains("Gradient"), !view.isHidden {
-            view.isHidden = true
-            hits.gradient += 1
-        }
-
+        // 仿 AM 第二步：模糊层换成**深色材质**。
+        //
+        // 上一版我是 `effect = nil`（等于把模糊整个撤掉），滚动时内容会直接糊在标题下面；
+        // Apple Music 那边是一层深色材质。是否显示由 Spotify 控制（真机树里那个
+        // `UIView@0,0,414,0,hidden,alpha=0.00` 就是它藏起来的状态），我们只换材质本身，
+        // 所以顶部依然透明。
         if let effectView = view as? UIVisualEffectView {
-            var changed = false
+            let currentStyle = (effectView.effect as? UIBlurEffect)?.style
 
-            if effectView.effect != nil {
-                effectView.effect = nil
-                changed = true
+            if currentStyle != .systemThinMaterialDark {
+                effectView.effect = UIBlurEffect(style: .systemThinMaterialDark)
+                hits.blur += 1
             }
             if effectView.backgroundColor != .clear {
                 effectView.backgroundColor = .clear
-                changed = true
-            }
-            if changed {
-                hits.blur += 1
             }
         }
 
@@ -139,15 +194,20 @@ enum AmoledTheme {
 
     private static var didScanForNavBar = false
 
-    /// 一次性兜底：`SPNavigationBar` **不在** Swift 类转储里，所以无法确定它是
+    /// 导航栏那条 hook 到底装上没有（由 `activateAmoledTheme` 按 `NSClassFromString`
+    /// 的结果写）。只有它为 false 时，`scanForNavBarOnce` 才有存在的意义。
+    static var navBarHookInstalled = false
+
+    /// 一次性兜底：`SPNavigationBar` **不在** Swift 类转储里，所以无法从转储确定它是
     /// ObjC 类还是"住在没被扫描的 image 里的 Swift 类"。前者 `NSClassFromString`
     /// 能找到、上面那条 hook 自然生效；后者找不到、hook 不会装 —— 那时从**活着的
     /// 视图树**里按短名找一次，找到就直接处理。
     ///
-    /// 只做一次，代价可忽略。读类名是安全的：本仓库两次启动崩溃都来自运行期
-    /// **类枚举**（`objc_getClassList` 那条路），不是走活视图树。
+    /// ⚠️ 只在**直接 hook 没装上**时才扫（`navBarHookInstalled`）。第三轮日志里
+    /// 这条和 `SPNavigationBar first layout` 同时出现，说明它当时是**冗余**跑的，
+    /// 那条日志也就没法再拿来判断"类到底解析到没有"——修掉这个歧义。
     static func scanForNavBarOnce(in window: UIWindow?) {
-        guard isEnabled, !didScanForNavBar else { return }
+        guard isEnabled, !navBarHookInstalled, !didScanForNavBar else { return }
         didScanForNavBar = true
 
         guard let root = window, let navBar = firstView(in: root, named: "SPNavigationBar") else {
@@ -156,7 +216,7 @@ enum AmoledTheme {
         }
 
         strip(navBar)
-        writeDebugLog("[AMOLED] navBar found by scan — stripped")
+        writeDebugLog("[AMOLED] navBar found by scan — stripped (direct hook was not installed)")
     }
 
     private static func firstView(in root: UIView, named name: String) -> UIView? {
@@ -211,6 +271,7 @@ func activateAmoledTheme() {
 
     if NSClassFromString(SPNavigationBarAmoledHook.targetName) != nil {
         AmoledNavBarGroup().activate()
+        AmoledTheme.navBarHookInstalled = true
     } else {
         writeDebugLog("[AMOLED] missing \(SPNavigationBarAmoledHook.targetName) — nav bar hook inactive")
     }

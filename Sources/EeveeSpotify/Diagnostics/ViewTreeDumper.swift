@@ -137,6 +137,11 @@ enum ViewTreeDumper {
         detail += "@\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))"
         if view.isHidden { detail += ",hidden" }
         if view.alpha < 1 { detail += ",alpha=\(String(format: "%.2f", view.alpha))" }
+        // 底色：第三轮的教训 —— "哪一层画了那层灰"光看类名看不出来，`bg=` 一看就知道
+        // （AMOLED 要涂的正是它；`TabBarView` 那条 `barBg=0` 就是靠这个才能继续追）。
+        if let background = view.backgroundColor, background != .clear {
+            detail += ",bg=\(hexColor(background))"
+        }
         if let identifier = view.accessibilityIdentifier, !identifier.isEmpty {
             detail += ",id=\(identifier)"
         }
@@ -146,5 +151,28 @@ enum ViewTreeDumper {
             collect(subview, depth: depth + 1, nodes: &nodes, skeleton: &skeleton)
             if nodes.count >= maxNodes { return }
         }
+    }
+
+    /// `#RRGGBB`。拿不到分量（图案色 / 动态色）就返回 `?`，不编造。
+    private static func hexColor(_ color: UIColor) -> String {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        if color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            return String(
+                format: "#%02X%02X%02X",
+                Int(red * 255), Int(green * 255), Int(blue * 255)
+            )
+        }
+
+        var white: CGFloat = 0
+        if color.getWhite(&white, alpha: &alpha) {
+            let value = Int(white * 255)
+            return String(format: "#%02X%02X%02X", value, value, value)
+        }
+
+        return "?"
     }
 }

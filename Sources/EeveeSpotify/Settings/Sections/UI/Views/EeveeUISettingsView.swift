@@ -6,19 +6,8 @@ struct EeveeUISettingsView: View {
 
     var body: some View {
         List {
-            // AMOLED：把导航栏 / 标签栏的渐变与模糊换成纯黑。
-            // 目标类名来自 2026-09-30 的真机视图树转储 + 9.1.86 符号转储，
-            // 见 `AmoledTheme.x.swift`。
-            Section(footer: Text("amoled_description".localized)) {
-                Toggle(
-                    "amoled".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.amoledEnabled },
-                        set: { UserDefaults.amoledEnabled = $0 }
-                    )
-                )
-            }
-
+            // （深色栏底色搬去了「扩展功能」页：这一页回到它本来的两节，
+            //   后加的东西不再往别人的页里塞。）
             if UserDefaults.lyricsSource.isReplacingLyrics {
                 Section(
                     header: Text("lyrics_background_color_section".localized),
