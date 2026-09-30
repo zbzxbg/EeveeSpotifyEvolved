@@ -50,7 +50,7 @@ user_token_placeholder = "Enter User Token or Paste Debug Info";
 // `ngzhwm_amll_preferred(_description)` removed: the "Prefer AMLL" feature is gone.
 
 genius_fallback = "Genius Fallback";
-genius_fallback_description = "This feature does not work well on this version. If %@ fails to load, lyrics are loaded from Genius. With this option enabled, the preview lyrics module may not be displayed for some songs.";
+genius_fallback_description = "If %@ fails to load, lyrics are loaded from Genius.";
 
 hide_lyrics_on_error = "Hide Lyrics Module";
 hide_lyrics_on_error_description = "Hide the lyrics module if lyrics fail to load.";
@@ -136,7 +136,7 @@ word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
 ngzhwm_inject_lyrics_card_element = "Add a Lyrics Card to Tracks Without One";
 ngzhwm_lyrics_entry_point_flag = "Force Lyrics Entry Point Flag";
 ngzhwm_multi_level_fallback = "Multi-level Fallback";
-ngzhwm_multi_level_fallback_description = "This feature does not work well on this version. Multi-level Fallback: lyrics are searched through multiple providers in this order: Musixmatch → PetitLyrics → LRCLIB → Genius. Musixmatch and PetitLyrics are given up to 5 seconds each, while LRCLIB and Genius are given up to 3 seconds each; if a provider has not returned lyrics within its time limit, the next provider is queried.";
+ngzhwm_multi_level_fallback_description = "Multi-level Fallback: lyrics are searched through multiple providers in this order: Musixmatch → PetitLyrics → LRCLIB → Genius. Musixmatch and PetitLyrics are given up to 5 seconds each, while LRCLIB and Genius are given up to 3 seconds each; if a provider has not returned lyrics within its time limit, the next provider is queried.";
 ngzhwm_netease_romaji_local = "Modify How NetEase Japanese Romaji Is Displayed";
 ngzhwm_netease_romaji_local_description = "For this option to take effect, \"Romanize Japanese Lyrics\" must be enabled. When this option is enabled, NetEase's Japanese romaji is handled by local Japanese romanization instead of being handed to NetEase. If NetEase returns word-by-word lyrics, this option has no effect.";
 ngzhwm_netease_hide_translation = "Hide NetEase Translation Button";

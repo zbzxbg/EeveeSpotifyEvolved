@@ -45,7 +45,7 @@ user_token_placeholder = "输入用户令牌或粘贴调试信息";
 // 已删除 ngzhwm_amll_preferred / ngzhwm_amll_preferred_description（「AMLL 优先」功能移除）
 
 genius_fallback = "Genius回退";
-genius_fallback_description = "该功能在此版本上体验不佳。如果 %@ 未正常加载，将使用 Genius 加载歌词。开启此选项后，部分歌曲的预览歌词模块会不展示。";
+genius_fallback_description = "如果 %@ 未正常加载，将使用 Genius 加载歌词。";
 
 hide_lyrics_on_error = "隐藏歌词模块";
 hide_lyrics_on_error_description = "如果歌词加载失败，则隐藏歌词模块。";
@@ -129,7 +129,7 @@ word_by_word_lyrics_provider = "逐词歌词提供者：%@";
 ngzhwm_inject_lyrics_card_element = "给没有歌词卡片的歌曲补一张";
 ngzhwm_lyrics_entry_point_flag = "强制歌词入口开关";
 ngzhwm_multi_level_fallback = "多级回退";
-ngzhwm_multi_level_fallback_description = "该功能在此版本上体验不佳。多级回退:歌词将按照Mxm-PL-LRC-Gen的方式多级回退查询(Mxm和PL最长等待5秒，LRCLIB和Genius最长等待3秒；如果某个来源在对应时间内仍未返回有效歌词，则查询下一个来源)。";
+ngzhwm_multi_level_fallback_description = "多级回退:歌词将按照Mxm-PL-LRC-Gen的方式多级回退查询(Mxm和PL最长等待5秒，LRCLIB和Genius最长等待3秒；如果某个来源在对应时间内仍未返回有效歌词，则查询下一个来源)。";
 ngzhwm_netease_romaji_local = "修改NetEase日语罗马字的展示方式";
 ngzhwm_netease_romaji_local_description = "选项生效需要开启\"日语歌词罗马化\"。选项开启后NetEase的日语罗马字会交给本地日语罗马化处理，而不是交给NetEase。如果NetEase返回逐词歌词，此选项将不起作用。";
 ngzhwm_netease_hide_translation = "不展示NetEase的翻译按钮";
