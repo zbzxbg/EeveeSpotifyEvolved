@@ -338,3 +338,7 @@ flag_note_canvas_lyrics = "把歌词画在 Canvas 视频上。";
 flag_catalog_unsupported = "暂不支持";
 dump_view_tree = "转储视图树";
 dump_view_tree_description = "把当前屏幕的视图结构每 2 秒写一行进调试日志（每次启动最多 20 行，且结构没变就不重复写）。只读：不改任何视图、不注册手势、不在运行期枚举类。打开即生效，并且需要先在「调试」里打开日志记录。用途是给还没写的界面 hook 收集类名。";
+
+/* MARK: 外观 */
+amoled = "AMOLED 纯黑";
+amoled_description = "把导航栏与标签栏画成纯黑，替换 Spotify 自己的模糊与渐变底色，并持续重新套用，Spotify 自己刷新也抹不掉。打开立即生效。";

@@ -345,3 +345,7 @@ flag_note_canvas_lyrics = "Draws lyrics over the Canvas video.";
 flag_catalog_unsupported = "not editable yet";
 dump_view_tree = "Dump the view tree";
 dump_view_tree_description = "Writes the current screen's view structure to the debug log as one line per screen, every 2 seconds (20 lines max per launch, and only when the structure changes). Read-only: it never changes a view, never registers a gesture and never enumerates classes at runtime. It takes effect immediately, and log recording under Debug must be on. Use it to collect the class names for hooks that are not written yet.";
+
+/* MARK: Appearance */
+amoled = "AMOLED black";
+amoled_description = "Draws the navigation bar and the tab bar pure black instead of Spotify's blurred and gradient versions, and keeps re-applying it so Spotify's own updates cannot undo it. Takes effect immediately.";

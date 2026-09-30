@@ -24,6 +24,7 @@ extension UserDefaults {
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
     private static let hapticsLogControlsKey = "hapticsLogControls"
     private static let dumpViewTreeKey = "dumpViewTree"
+    private static let amoledEnabledKey = "amoledEnabled"
 
     static var musixmatchToken: String {
         get {
@@ -241,6 +242,20 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: dumpViewTreeKey)
+        }
+    }
+
+    // MARK: - 外观（Appearance）
+
+    /// AMOLED 纯黑：导航栏 / 标签栏的渐变与模糊换成纯黑，默认关。
+    ///
+    /// 与触感不同，这个**实时读**（hook 总是装着，改视图前才判断），所以打开即生效。
+    static var amoledEnabled: Bool {
+        get {
+            container.object(forKey: amoledEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: amoledEnabledKey)
         }
     }
 

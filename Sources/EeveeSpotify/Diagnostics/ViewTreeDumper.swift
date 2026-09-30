@@ -75,11 +75,18 @@ enum ViewTreeDumper {
         lastSkeleton = skeletonText
         dumpsTaken += 1
 
-        // 一行一份树（` | ` 分隔）：日志是按行读的，不引入多行条目。
+        // **一行一个节点**，不是整棵树挤成一行。
+        //
+        // 为什么改：第一轮真机转储（09-30）每棵树都被压成一行，而日志工具/编辑器
+        // 按 2000 字符截断 —— 结果只能看到最上面 ~40 个节点，页面背景、播放器控件
+        // 这些真正要写 hook 的地方全被截掉了。拆行之后整棵树都能读到。
         writeDebugLog(
-            "[Tree] #\(dumpsTaken) vc=\(visibleControllerChain(window)) :: "
-                + nodes.joined(separator: " | ")
+            "[Tree] #\(dumpsTaken) begin vc=\(visibleControllerChain(window)) nodes=\(nodes.count)"
         )
+        for node in nodes {
+            writeDebugLog("[Tree] #\(dumpsTaken) \(node)")
+        }
+        writeDebugLog("[Tree] #\(dumpsTaken) end")
     }
 
     private static func keyWindow() -> UIWindow? {

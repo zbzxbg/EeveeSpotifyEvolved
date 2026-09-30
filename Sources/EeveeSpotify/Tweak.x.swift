@@ -362,6 +362,9 @@ struct EeveeSpotify: Tweak {
         // 里，只是兜底）。这条**总是装**，开关在运行期读 —— 打开就生效，不必重启。
         activateTelemetryRequestBlock()
 
+        // AMOLED 纯黑（导航栏 / 标签栏）。同样总是装、开关实时读。
+        activateAmoledTheme()
+
         // 调试用视图树转储：默认关，开关在「调试」页且打开即生效（那边会直接调
         // `applyEnabledState()`）；这里只是让重启后能自动续上。
         ViewTreeDumper.applyEnabledState()
