@@ -31,9 +31,10 @@ enum AmoledTheme {
 
     static var isEnabled: Bool { UserDefaults.amoledEnabled }
 
-    /// 一条视图链向下最多看几层。这些 bar 的结构很浅（3–4 层），6 层足够，
-    /// 也不会误伤到页面内容。
-    private static let maxDepth = 6
+    /// 从 bar 自身向下最多看几层。这些 bar 的结构很浅（真机树：`SPNavigationBar` →
+    /// `_UIBarBackground` → `UIImageView` 三层；`TabBarView` → `TabBarCompactView` →
+    /// `TabBarGradientView` 三层），6 层足够，也不会误伤到 bar 之外的东西。
+    private static let subtreeDepth = 6
 
     /// 扫一遍并处理三类目标：
     ///   · `_UIBarBackground` → 纯黑底 + 隐藏它的 `UIImageView` 渐变遮罩；
@@ -42,18 +43,25 @@ enum AmoledTheme {
     static func strip(_ view: UIView) {
         guard isEnabled else { return }
 
-        apply(to: view, depth: 0)
+        apply(to: view, depth: 0, limit: subtreeDepth)
 
-        // 导航栏的模糊层与它**同级**，不在它内部 —— 同级也扫一层。
-        if let siblings = view.superview?.subviews {
-            for sibling in siblings where sibling !== view {
-                apply(to: sibling, depth: 0)
-            }
+        // 导航栏的模糊层与它**同级**（真机树：`10.UIVisualEffectView@0,0,414,92` 与
+        // `10.SPNavigationBar` 同层），所以同级也要扫。
+        //
+        // ⚠️ 但同级的兄弟里还有**整页内容**（页面视图就是同级）。所以同级只往下看
+        // 2 层，并且只认"贴在顶部、矮条状"的兄弟 —— 否则会把页面里的模糊卡片、
+        // `*Gradient*` 视图一起当成 bar 处理掉（第二轮真机树抓出来的）。
+        guard let siblings = view.superview?.subviews else { return }
+
+        for sibling in siblings where sibling !== view {
+            let frame = sibling.frame
+            guard frame.minY <= 120, frame.height <= 160 else { continue }
+            apply(to: sibling, depth: 0, limit: 2)
         }
     }
 
-    private static func apply(to view: UIView, depth: Int) {
-        guard depth <= maxDepth else { return }
+    private static func apply(to view: UIView, depth: Int, limit: Int) {
+        guard depth <= limit else { return }
 
         let name = String(describing: type(of: view))
 
@@ -74,7 +82,7 @@ enum AmoledTheme {
         }
 
         for child in view.subviews {
-            apply(to: child, depth: depth + 1)
+            apply(to: child, depth: depth + 1, limit: limit)
         }
     }
 

@@ -22,8 +22,13 @@ import UIKit
 enum ViewTreeDumper {
 
     private static let interval: TimeInterval = 2.0
-    private static let maxDepth = 12
-    private static let maxNodes = 150
+    /// ⚠️ 深度上限给 24，不是 12。第二轮真机转储（09-30 12:48）暴露出来的：
+    /// Spotify 自己的 chrome 就吃掉 12 层（window → App-Main-Content-View →
+    /// barViewController container → UILayoutContainerView → UINavigationTransitionView
+    /// → UIViewControllerWrapperView → **12.UIView = 页面**），页面内容从第 13 层才开始。
+    /// 原来卡在 12，等于**每次都只转储外壳、永远看不到页面**。
+    private static let maxDepth = 24
+    private static let maxNodes = 250
     private static let maxDumps = 20
 
     private static var timer: Timer?
