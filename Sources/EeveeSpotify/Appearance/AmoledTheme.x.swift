@@ -1,6 +1,7 @@
 import Foundation
 import Orion
 import UIKit
+import ObjectiveC.runtime
 
 /// AMOLED 纯黑：把 Spotify 自己画的导航栏 / 标签栏底色换成纯黑。
 ///
@@ -174,10 +175,16 @@ enum AmoledTheme {
         // `UIView@0,0,414,0,hidden,alpha=0.00` 就是它藏起来的状态），我们只换材质本身，
         // 所以顶部依然透明。
         if let effectView = view as? UIVisualEffectView {
-            let currentStyle = (effectView.effect as? UIBlurEffect)?.style
-
-            if currentStyle != .systemThinMaterialDark {
+            // ⚠️ `UIBlurEffect` **没有**公开的 `style` 读取器（只有 `init(style:)`），
+            // 所以"回读比较"这条路本身不成立 —— 上一版就是在这里编译失败的
+            // （`value of type 'UIBlurEffect' has no member 'style'`）。
+            //
+            // 改成用关联对象记住"这一层已经换过了"：既避免每次 `layoutSubviews` 都重建
+            // effect（滚动时白白触发重配置），也不需要自己维护一张会随视图回收而失效的表。
+            // 键与写法照 `UpsellPopupBlocker.x.swift` 的既有做法。
+            if !isBlurRetargeted(effectView) {
                 effectView.effect = UIBlurEffect(style: .systemThinMaterialDark)
+                markBlurRetargeted(effectView)
                 hits.blur += 1
             }
             if effectView.backgroundColor != .clear {
@@ -277,4 +284,23 @@ func activateAmoledTheme() {
     }
 
     writeDebugLog("[AMOLED] installed (enabled=\(AmoledTheme.isEnabled ? "ON" : "OFF"))")
+}
+
+// MARK: - 关联对象：记录"这层模糊已经换成深色材质"
+
+/// file-scope 的 `var` 地址是稳定的，这是本仓库既有的关联对象键写法
+/// （见 `UpsellPopupBlocker.x.swift` 的 `upsellPopupAssociationKey`）。
+private var amoledBlurRetargetedKey: UInt8 = 0
+
+private func isBlurRetargeted(_ view: UIVisualEffectView) -> Bool {
+    (objc_getAssociatedObject(view, &amoledBlurRetargetedKey) as? NSNumber)?.boolValue == true
+}
+
+private func markBlurRetargeted(_ view: UIVisualEffectView) {
+    objc_setAssociatedObject(
+        view,
+        &amoledBlurRetargetedKey,
+        NSNumber(value: true),
+        .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+    )
 }
