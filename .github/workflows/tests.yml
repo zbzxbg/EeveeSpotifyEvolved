@@ -1,12 +1,17 @@
 name: Logic tests
 
-# 为什么单独一个 workflow：这台项目平时只在 macOS 上编译（Theos + Xcode），
-# 但有几个测试是**纯 Foundation** 的，能在 Linux 上跑。把它们放 CI 的意义是：
-# 维护者只有 Windows + iPhone（没有 Mac）时，逻辑回归仍然有人替我们跑 ——
-# 不需要设备、不需要工具链、几秒钟出结果。
+# 为什么单独一个 workflow：这个项目平时只在 macOS 上编译（Theos + Xcode），
+# 但有几个测试是**纯 Foundation** 的，不需要设备也不需要 Theos。放在 CI 的意义是：
+# 维护者只有 Windows + iPhone（没有 Mac）时，逻辑回归仍然有人替我们跑。
 #
 # 覆盖范围故意收窄：只跑"编译它自己 + 被测的那个文件"就能成立的那些测试。
 # 需要 UIKit / Orion / Theos 的测试不能进这里。
+#
+# ⚠️ runner 用 **macOS**，不是 ubuntu：
+#   一开始用 ubuntu-latest + swift-actions/setup-swift@v2 装 5.9，CI 直接 404 ——
+#   那个 action 去 swift.org 取 "swift-5.9-RELEASE-ubuntu-24.04"，而 5.9 当年没有
+#   24.04 的包（ubuntu-latest 已经滚到 24.04）。macOS runner 自带 Xcode 工具链，
+#   `swiftc` 本来就在，不用下载任何东西，也就没有版本/发行版错配这一整类问题。
 
 on:
   workflow_dispatch:
@@ -14,16 +19,10 @@ on:
 
 jobs:
   logic:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
-
-      # runner 镜像不一定自带 swiftc（历史上 Ubuntu runner 就没有），
-      # 显式装一次，版本用 5.9 以上即可 —— 这些测试只用到 Foundation。
-      - uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: '5.9'
 
       - name: Toolchain check
         run: swiftc --version
@@ -32,19 +31,19 @@ jobs:
         run: |
           swiftc Tests/TelemetryClassification/main.swift \
                  Sources/EeveeSpotify/Privacy/TelemetryEndpointRules.swift \
-                 -o /tmp/telemetry-tests
-          /tmp/telemetry-tests
+                 -o telemetry-tests
+          ./telemetry-tests
 
       - name: Flag override store
         run: |
           swiftc Tests/FlagOverrideStore/main.swift \
                  Sources/EeveeSpotify/Flags/FlagOverride.swift \
-                 -o /tmp/flag-override-tests
-          /tmp/flag-override-tests
+                 -o flag-override-tests
+          ./flag-override-tests
 
       - name: URL ad classification (existing)
         run: |
           swiftc Tests/URLAdClassification/main.swift \
                  Sources/EeveeSpotify/Shared/Models/Extensions/URL+Extension.swift \
-                 -o /tmp/url-ad-tests
-          /tmp/url-ad-tests
+                 -o url-ad-tests
+          ./url-ad-tests
