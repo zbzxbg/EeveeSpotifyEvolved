@@ -26,7 +26,8 @@ struct EeveeHapticsSettingsView: View {
                     HStack {
                         Text("haptics_strength".localized)
                         Spacer()
-                        Text("\(Int((strength * 100).rounded()))%")
+                        // `Text(verbatim:)`：带插值的字面量会被当成 LocalizedStringKey。
+                        Text(verbatim: "\(Int((strength * 100).rounded()))%")
                             .foregroundColor(.secondary)
                     }
 

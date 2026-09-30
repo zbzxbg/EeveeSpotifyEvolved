@@ -70,6 +70,42 @@ require(
     "OneTrust consent must NOT be blocked (it is a compliance flow, not telemetry)"
 )
 
+// MARK: - 宽泛功能词不得遮住内置上报表
+//
+// 这是复审抓到的 push-blocking 缺陷的回归测试：早期把 `lyrics` / `shuffle` 这类
+// 宽泛词和精确路径放在同一张白名单里，`shouldBlock` 会在白名单那一步就返回 false，
+// 一批真实上报端点因此永远拦不到 —— 开关看上去打开了，其实什么都没做。
+
+require(
+    TelemetryEndpointRules.shouldBlock(
+        url("https://spclient.wg.spotify.com/v1/log/shuffle-debug"),
+        extraKeywords: ""
+    ),
+    "'shuffle' in a log path must not shadow the telemetry table"
+)
+require(
+    TelemetryEndpointRules.shouldBlock(
+        url("https://spclient.wg.spotify.com/analytics/lyrics-views"),
+        extraKeywords: ""
+    ),
+    "'lyrics' in a reporting path must not shadow the telemetry table"
+)
+require(
+    TelemetryEndpointRules.isCoreFunctional(
+        url("https://spclient.wg.spotify.com/color-lyrics/v2/track/abc")
+    ),
+    "the precise allow-list must still protect the lyrics endpoint"
+)
+
+// …但宽泛功能词仍然拦得住"用户关键词把功能端点锁死"。
+require(
+    !TelemetryEndpointRules.shouldBlock(
+        url("https://spclient.wg.spotify.com/nowplaying/lyrics-preview"),
+        extraKeywords: "spclient.wg.spotify.com"
+    ),
+    "a user keyword must not be able to block a lyrics surface"
+)
+
 // MARK: - 功能端点：绝不拦（宁漏勿误）
 
 require(

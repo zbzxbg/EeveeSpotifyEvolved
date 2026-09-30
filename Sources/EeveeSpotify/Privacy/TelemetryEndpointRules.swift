@@ -16,23 +16,26 @@ import Foundation
 /// 这两件事的代价不对等，所以规则一律向"放行"倾斜。
 enum TelemetryEndpointRules {
 
-    /// 功能请求的片段（在 `host + path` 上匹配），命中即**放行**。
+    /// **精确**功能白名单：本仓库自己依赖的端点，命中即放行。
     ///
-    /// 这些不是猜的：`color-lyrics` / `bootstrap` / `customize` 等已经是本仓库
-    /// 既有链路里的关键词（见 `URL+Extension.swift` 与 `SpotifyResponsePatcher`），
+    /// 这些不是猜的：`color-lyrics` / `bootstrap` / `customize` 等已经是本仓库既有
+    /// 链路里的关键词（见 `URL+Extension.swift` 与 `SpotifyResponsePatcher`），
     /// 误拦会直接破坏歌词替换与 Premium 修补。
+    ///
+    /// ⚠️ 为什么分成两档（静态审查抓到的 push-blocking 缺陷）：`lyrics` / `shuffle`
+    /// 这类**宽泛**词如果也参与内置上报表的判定，`shouldBlock` 会在功能白名单这一步就
+    /// 返回 false，把一批真实上报端点挡在门外 —— 开关看着打开了，其实什么都没拦。
+    /// 所以这一档只放**精确**路径片段，它优先于上报表；宽泛词见下一档。
     ///
     /// 之所以连 host 一起看：`apresolve.spotify.com` 这类功能域名本身就在 host 上，
     /// 只看 path 会漏掉它。
-    static let functionalPathTokens: [String] = [
+    static let corePathTokens: [String] = [
         "color-lyrics",
-        "lyrics",
         "bootstrap",
         "customize",
         "getplanoverview",
         "getpremiumplanrow",
         "getyourpremiumbadge",
-        "shuffle",
         "select-ondemand-set",
         "apresolve",
         "signup/public",
@@ -42,10 +45,23 @@ enum TelemetryEndpointRules {
         "connect-state",
         "storage-resolve",
         "playlist/v2",
-        "track-playback",
         "search/v2",
         "album/v1",
         "artist/v1",
+        "track-playback",
+    ]
+
+    /// **宽泛**功能词：只用来管住**用户自定义关键词**，**不参与**内置上报表的判定。
+    ///
+    /// 手滑把 `spotify` / `auth` 写进关键词框，不该把播放、歌词、登录一起锁死 ——
+    /// 这一档就是那道保险。它排在上报表**之后**判定，所以不会遮住上报端点。
+    static let broadPathTokens: [String] = [
+        "lyrics",
+        "shuffle",
+        "login",
+        "auth",
+        "product-state",
+        "screenconfig",
     ]
 
     /// 明确的上报主机，**整机名匹配**（不做子域通配，免得把功能域名卷进来）。
@@ -78,19 +94,35 @@ enum TelemetryEndpointRules {
         "partner-userid/encrypted/branch",
     ]
 
-    /// 最外层判据：功能白名单 → 已知上报 → 用户自定义关键词。
+    /// 最外层判据，四段顺序写死：
+    ///   1. 精确功能白名单 → 放行（上报表与用户关键词都压不过它）；
+    ///   2. 内置上报表 → 拦；
+    ///   3. 宽泛功能白名单 → 放行（**只**保护功能端点不被用户关键词锁死，
+    ///      不参与第 2 步的判定，所以遮不住上报端点）；
+    ///   4. 用户自定义关键词 → 拦。
     static func shouldBlock(_ url: URL, extraKeywords: String) -> Bool {
-        if isFunctional(url) { return false }
+        if isCoreFunctional(url) { return false }
         if isTelemetry(url) { return true }
+        if isFunctional(url) { return false }
         return matchesUserKeywords(url, rawKeywords: extraKeywords)
     }
 
+    /// 精确功能白名单：内置上报表也压不过它。
+    static func isCoreFunctional(_ url: URL) -> Bool {
+        contains(url, any: corePathTokens)
+    }
+
+    /// 精确 + 宽泛：用于"用户关键词不得锁死功能"那道保险。
     static func isFunctional(_ url: URL) -> Bool {
+        isCoreFunctional(url) || contains(url, any: broadPathTokens)
+    }
+
+    private static func contains(_ url: URL, any tokens: [String]) -> Bool {
         let host = (url.host ?? "").lowercased()
         let path = url.path.lowercased()
         let haystack = "\(host)\(path)"
 
-        return functionalPathTokens.contains { haystack.contains($0) }
+        return tokens.contains { haystack.contains($0) }
     }
 
     static func isTelemetry(_ url: URL) -> Bool {

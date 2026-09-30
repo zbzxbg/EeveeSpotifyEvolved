@@ -7,38 +7,40 @@ import Foundation
 ///     —— 真正"不让它出网"的那一层，也是**唯一**计数、**唯一**打日志的地方；
 ///   · **响应侧**（`SpotifyResponsePatcher.shouldBlock`）—— 只做决策。
 ///     它被调用时 POST body 早已出网，"丢回复"不叫拦截；留着它是兜底：请求侧 hook
-///     没装、或者开关是在请求飞行途中被打开的，至少别让客户端再去处理那份回复。
+///     拿不到 URL（极少数 task）、或者开关是在请求飞行途中被打开的，至少别让客户端
+///     再去处理那份回复。
 ///
 /// 这一层之所以必须存在（静态审查抓出来的）：只有响应侧的实现会把设置页那句
-/// "拦截上报"变成一句空话。请求侧 `cancel()` 之后，上报请求不出网。
+/// "拦截上报"变成一句空话。
 enum TelemetryBlocker {
 
     private static let lock = NSLock()
 
-    /// 日志与计数的去重上限分开：日志是给人看的（200 条够了），计数不该在同一个
-    /// 上限上冻结 —— 否则"拦了多少"会永远停在 200，越用越不准。
+    /// 两份日志的去重集合**必须分开**（静态审查抓到的质量缺陷）：观察模式的
+    /// 工作流是"先开只观察、抄端点、再开拦截"，如果两份日志共用一个集合，
+    /// 一个已经以 `observed` 记过的端点就再也不会以 `cancelled` 出现，
+    /// 用户按日志核对时会以为拦截没生效。
     private static let logCap = 200
-    private static let countCap = 1000
+    private static var loggedObserved: Set<String> = []
+    private static var loggedCancelled: Set<String> = []
 
-    private static var blockedEndpoints: Set<String> = []
-    private static var loggedEndpoints: Set<String> = []
-    private static var blockedCount = 0
-
-    /// 本次启动里被**取消**的上报请求数（按 host+path 去重）。
+    /// 取消次数：**不去重、不封顶**。
     ///
-    /// 为什么去重：`resume` 会被同一条端点反复调用（每次上报一个新 task），
-    /// 而且 query 里带着曲目 id / 时间戳 —— 按 `absoluteString` 计会把一个端点
-    /// 算成几十个。去重后的数字才是"拦了几个端点"。
+    /// 设置页那行写的就是"已取消的上报请求"，计数与文案必须一致；早前把去重集合的
+    /// 上限同时当计数上限，结果是计数在 1000 处静默冻结。
+    private static var cancelledCount = 0
+
+    /// 本次启动以来被**取消**的上报请求次数。
     static var sessionBlockedCount: Int {
         lock.lock(); defer { lock.unlock() }
-        return blockedCount
+        return cancelledCount
     }
 
     static func resetCounters() {
         lock.lock()
-        blockedEndpoints.removeAll()
-        loggedEndpoints.removeAll()
-        blockedCount = 0
+        loggedObserved.removeAll()
+        loggedCancelled.removeAll()
+        cancelledCount = 0
         lock.unlock()
     }
 
@@ -59,7 +61,7 @@ enum TelemetryBlocker {
 
         guard UserDefaults.blockTelemetry, isTelemetry(url) else { return false }
 
-        recordBlockedOnce(url)
+        recordCancelled(url)
         return true
     }
 
@@ -70,23 +72,19 @@ enum TelemetryBlocker {
         )
     }
 
-    /// 去重键 = host + path（丢掉 query）。
+    /// 去重键 = host + path（丢掉 query）：query 里带曲目 id / 时间戳，
+    /// 用 `absoluteString` 会让同一个端点每首歌都算一条新记录。
     private static func endpointKey(_ url: URL) -> String {
         "\((url.host ?? "").lowercased())\(url.path.lowercased())"
     }
 
-    private static func recordBlockedOnce(_ url: URL) {
-        let key = endpointKey(url)
-
+    private static func recordCancelled(_ url: URL) {
         lock.lock()
-        var isNew = false
-        if blockedEndpoints.count < countCap, blockedEndpoints.insert(key).inserted {
-            blockedCount += 1
-            isNew = true
-        }
+        cancelledCount += 1
+
         var shouldLog = false
-        if isNew, loggedEndpoints.count < logCap {
-            shouldLog = loggedEndpoints.insert(key).inserted
+        if loggedCancelled.count < logCap {
+            shouldLog = loggedCancelled.insert(endpointKey(url)).inserted
         }
         lock.unlock()
 
@@ -95,12 +93,10 @@ enum TelemetryBlocker {
     }
 
     private static func logEndpointOnce(_ url: URL, tag: String) {
-        let key = endpointKey(url)
-
         lock.lock()
         var isNew = false
-        if loggedEndpoints.count < logCap {
-            isNew = loggedEndpoints.insert(key).inserted
+        if loggedObserved.count < logCap {
+            isNew = loggedObserved.insert(endpointKey(url)).inserted
         }
         lock.unlock()
 

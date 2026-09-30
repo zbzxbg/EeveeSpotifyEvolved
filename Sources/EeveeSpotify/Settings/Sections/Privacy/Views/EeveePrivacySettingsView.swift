@@ -53,7 +53,9 @@ struct EeveePrivacySettingsView: View {
                 HStack {
                     Text("telemetry_blocked_endpoints".localized)
                     Spacer()
-                    Text("\(blockedCount)")
+                    // `Text(verbatim:)`：带插值的字面量会被当成 LocalizedStringKey
+                    // 去 bundle 里找键，这里要的是纯数字。
+                    Text(verbatim: "\(blockedCount)")
                         .foregroundColor(.secondary)
                 }
 

@@ -23,6 +23,17 @@ struct EeveeFlagOverrideSettingsView: View {
         List {
             addSection
             activeSection
+
+            if !overrides.isEmpty {
+                Section {
+                    Button("flag_override_clear_all".localized) {
+                        FlagOverrideStore.removeAll()
+                        overrides = FlagOverrideStore.all
+                    }
+                    .foregroundColor(.red)
+                }
+            }
+
             knownFlagSections
         }
         .listStyle(GroupedListStyle())
@@ -89,7 +100,7 @@ struct EeveeFlagOverrideSettingsView: View {
                         .foregroundColor(.secondary)
 
                     if item.mode == .set, !item.value.isEmpty {
-                        Text("= \(item.value)")
+                        Text(verbatim: "= \(item.value)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -146,7 +157,7 @@ struct EeveeFlagOverrideSettingsView: View {
                         .font(.system(.caption, design: .monospaced))
                         .foregroundColor(.primary)
 
-                    Text("\(flag.scope) · \(flag.observedValue)")
+                    Text(verbatim: "\(flag.scope) · \(flag.observedValue)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
 
