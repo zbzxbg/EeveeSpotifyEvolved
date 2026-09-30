@@ -23,6 +23,7 @@ extension UserDefaults {
     private static let hapticsStrengthKey = "hapticsStrength"
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
     private static let hapticsLogControlsKey = "hapticsLogControls"
+    private static let dumpViewTreeKey = "dumpViewTree"
 
     static var musixmatchToken: String {
         get {
