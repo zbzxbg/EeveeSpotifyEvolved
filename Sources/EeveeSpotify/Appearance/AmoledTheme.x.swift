@@ -36,6 +36,25 @@ enum AmoledTheme {
     /// `TabBarGradientView` 三层），6 层足够，也不会误伤到 bar 之外的东西。
     private static let subtreeDepth = 6
 
+    /// 一趟遍历里改动了几处 —— 让"到底改到没改到"变成**日志能回答的问题**。
+    ///
+    /// 为什么必须这样：iPhone 11 是 **LCD**，纯黑在 LCD 上只是深灰，AMOLED 那套
+    /// 省电理由也不成立 —— 靠肉眼验收既不可靠、又看不出"是没生效还是屏幕就这样"。
+    /// 这两行日志（每个类各一条）才是真正的判据：`barBg=1 gradient=1 image=1 blur=1`
+    /// 说明四个目标全改到了；全是 0 说明这一趟什么都没匹配到，那才是真问题。
+    private struct Hits {
+        var barBackground = 0
+        var image = 0
+        var gradient = 0
+        var blur = 0
+
+        var summary: String {
+            "barBg=\(barBackground) gradient=\(gradient) image=\(image) blur=\(blur)"
+        }
+    }
+
+    private static var reportedClasses: Set<String> = []
+
     /// 扫一遍并处理三类目标：
     ///   · `_UIBarBackground` → 纯黑底 + 隐藏它的 `UIImageView` 渐变遮罩；
     ///   · 类名含 `Gradient` → 隐藏（标签栏那层渐变）；
@@ -43,7 +62,8 @@ enum AmoledTheme {
     static func strip(_ view: UIView) {
         guard isEnabled else { return }
 
-        apply(to: view, depth: 0, limit: subtreeDepth)
+        var hits = Hits()
+        apply(to: view, depth: 0, limit: subtreeDepth, hits: &hits)
 
         // 导航栏的模糊层与它**同级**（真机树：`10.UIVisualEffectView@0,0,414,92` 与
         // `10.SPNavigationBar` 同层），所以同级也要扫。
@@ -51,38 +71,67 @@ enum AmoledTheme {
         // ⚠️ 但同级的兄弟里还有**整页内容**（页面视图就是同级）。所以同级只往下看
         // 2 层，并且只认"贴在顶部、矮条状"的兄弟 —— 否则会把页面里的模糊卡片、
         // `*Gradient*` 视图一起当成 bar 处理掉（第二轮真机树抓出来的）。
-        guard let siblings = view.superview?.subviews else { return }
-
-        for sibling in siblings where sibling !== view {
-            let frame = sibling.frame
-            guard frame.minY <= 120, frame.height <= 160 else { continue }
-            apply(to: sibling, depth: 0, limit: 2)
+        if let siblings = view.superview?.subviews {
+            for sibling in siblings where sibling !== view {
+                let frame = sibling.frame
+                guard frame.minY <= 120, frame.height <= 160 else { continue }
+                apply(to: sibling, depth: 0, limit: 2, hits: &hits)
+            }
         }
+
+        reportOnce(hits, source: String(describing: type(of: view)))
     }
 
-    private static func apply(to view: UIView, depth: Int, limit: Int) {
+    /// 每个类只报第一趟：既证明 hook 真的跑到了，也说明那一趟改了几处。
+    private static func reportOnce(_ hits: Hits, source: String) {
+        guard !reportedClasses.contains(source) else { return }
+        reportedClasses.insert(source)
+
+        writeDebugLog("[AMOLED] \(source) first layout — \(hits.summary)")
+    }
+
+    private static func apply(to view: UIView, depth: Int, limit: Int, hits: inout Hits) {
         guard depth <= limit else { return }
 
         let name = String(describing: type(of: view))
 
         if name.contains("_UIBarBackground") {
-            if view.backgroundColor != .black { view.backgroundColor = .black }
+            if view.backgroundColor != .black {
+                view.backgroundColor = .black
+                hits.barBackground += 1
+            }
+
             for child in view.subviews where child is UIImageView {
-                if !child.isHidden { child.isHidden = true }
+                if !child.isHidden {
+                    child.isHidden = true
+                    hits.image += 1
+                }
             }
         }
 
         if name.contains("Gradient"), !view.isHidden {
             view.isHidden = true
+            hits.gradient += 1
         }
 
         if let effectView = view as? UIVisualEffectView {
-            if effectView.effect != nil { effectView.effect = nil }
-            if effectView.backgroundColor != .clear { effectView.backgroundColor = .clear }
+            var changed = false
+
+            if effectView.effect != nil {
+                effectView.effect = nil
+                changed = true
+            }
+            if effectView.backgroundColor != .clear {
+                effectView.backgroundColor = .clear
+                changed = true
+            }
+            if changed {
+                hits.blur += 1
+            }
         }
 
         for child in view.subviews {
-            apply(to: child, depth: depth + 1, limit: limit)
+            apply(to: child, depth: depth + 1, limit: limit, hits: &hits)
         }
     }
 
