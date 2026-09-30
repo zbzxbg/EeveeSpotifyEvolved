@@ -51,12 +51,28 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         }
     }
 
+    /// 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志。
+    ///
+    /// 这是给**还没写的界面 hook** 铺路的工具（AMOLED / 隐藏区块 / 播放器手势都卡在
+    /// "不知道屏幕上是什么类"）。三条纪律见 `ViewTreeDumper`：只读、有界、不做运行时
+    /// 类枚举 —— 最后一条是本仓库两次启动崩溃换来的。
+    ///
+    /// 与其它开关不同，这个**打开即生效**：`didSet` 直接调 `applyEnabledState()`，
+    /// 不必重启 Spotify（定时器是运行期起的，不是启动期装的 hook）。
+    @Published var dumpViewTree = UserDefaults.dumpViewTree {
+        didSet {
+            UserDefaults.dumpViewTree = dumpViewTree
+            ViewTreeDumper.applyEnabledState()
+        }
+    }
+
     /// 见 `EeveeLyricsSettingsViewModel.animationValues` 的用法：把开关本身列进去，
     /// 值一变页面就会重绘（少了它会出现"改了开关但界面不刷新"）。
     var animationValues: [AnyHashable] {
         [
             injectLyricsCardElement,
             lyricsEntryPointFlag,
+            dumpViewTree,
         ]
     }
 
@@ -71,6 +87,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
     private func setupBindings() {
         logBooleanSetting($injectLyricsCardElement, "inject lyrics card element")
         logBooleanSetting($lyricsEntryPointFlag, "lyrics entry point flag")
+        logBooleanSetting($dumpViewTree, "dump view tree")
     }
 
     /// 照抄 `EeveeLyricsSettingsViewModel+setupBindings` 的实现与理由：

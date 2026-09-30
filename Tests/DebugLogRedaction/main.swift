@@ -39,6 +39,21 @@ require(
     !DebugLogSanitizer.sanitize(#"{"userID":"AbC123xyz","service":"Spotify"}"#).contains("AbC123xyz"),
     "SponsorBlock userID (JSON form) must be redacted"
 )
+// ⚠️ 这三条是审查抓出来的：`"UUID"` 会从 SponsorBlock 的错误响应体里**回显**，
+// 而那条日志走的是 `eeveeSanitizedNSLog`（系统统一日志，清不掉）。
+require(
+    !DebugLogSanitizer.sanitize(#"{"UUID":"AbC123","success":false}"#).contains("AbC123"),
+    "JSON UUID must be redacted at the write entry point"
+)
+// `enablePassiveProductStateLog` 默认 true → `country=…` 默认就会进系统日志。
+let productState = DebugLogSanitizer.sanitize("[REVERT_WATCH][setOriginal] country=jp product=premium")
+require(!productState.contains("country=jp"), "country must be redacted, got: \(productState)")
+require(productState.contains("product=premium"), "region masking must not nuke the rest of the line")
+let regionQuery = DebugLogSanitizer.sanitize("?region=jp&locale=zh-Hans_JP")
+require(
+    !regionQuery.contains("region=jp") && !regionQuery.contains("zh-Hans_JP"),
+    "region/locale must be redacted, got: \(regionQuery)"
+)
 
 // ── ② 设备 / 账号标识 ───────────────────────────────────────────────────────
 
@@ -91,7 +106,7 @@ require(
 
 // ── ⑤ 幂等：同一行被处理两次的结果必须和一次一样 ────────────────────────────
 
-let composite = "Bearer abc.def sp_dc=xyz "
+let composite = "Bearer abc.def sp_dc=xyz country=jp "
     + "/devices/0123456789abcdef0123456789abcdef/x "
     + "spotify:user:someuser \"userID\":\"q1w2e3\""
 let once = DebugLogSanitizer.sanitize(composite)
@@ -122,6 +137,15 @@ let logSample = """
 [2026-09-30 09:53:53 +0000] [NPVModule] body path=/merch-npv-service/v1/merch/track/2Fkzxa6EiI43U6s8RkLjht 126B printable={"code":5,"message":"No artists with merch for track_id 2Fkzxa6EiI43U6s8RkLjht, album_id 00C345qa1C9et1uiN0yP1I"}
 [2026-09-30 09:53:56 +0000] [ScrollProbe] path=/scrollsita/v1/scroll/spotify:track:2Fkzxa6EiI43U6s8RkLjht body=584B hex512B=0a9d040a7c5a4f0a2673706f746966793a747261636b3a32466b7a786136456949343355367338526b4c6a6874
 [2026-09-30 09:53:57 +0000] [NPVModule] hex path=/spotify.liveeventdistribution.v1.EventCardInfoService/EventCardInfo 256B=0a4068747470733a2f2f692e7363646e2e636f2f696d6167652f61623637363138363030303036363065616634633937663433663163393037626533316233376631
+[2026-09-30 09:54:10 +0000] [Lyrics] Track "短夜の星" - shallm (id 2Fkzxa6EiI43U6s8RkLjht)
+[2026-09-30 09:54:11 +0000] [Shell] legacy metadata "短夜の星" — "shallm"
+[2026-09-30 09:54:12 +0000] [Musixmatch] macro.subtitles.get — response is not JSON / no message: {"message":"NoSuchSong","title":"短夜の星"}
+[2026-09-30 09:54:13 +0000] [NetEase] Non-200 status 404 for /api/song/lyric: {"code":404,"title":"短夜の星"}
+[2026-09-30 09:54:14 +0000] [SpicyLyrics] Malformed envelope for 2Fkzxa6EiI43U6s8RkLjht: {"error":"bad-envelope"}
+[2026-09-30 09:54:15 +0000] [SpicyLyrics] Received 1234 bytes for track 4GUHLhDe4dn3KVe8nazF9w
+[2026-09-30 09:54:16 +0000] [CASITA][HEX] deadbeefcafe0123456789abcdef00112233
+[2026-09-30 09:54:17 +0000] [AMLL] 400 Bad Request for 2Fkzxa6EiI43U6s8RkLjht: {"detail":"bad-request"}
+[2026-09-30 09:54:18 +0000] [Artwork] metadata keys: ["album_title", "image_large_url", "title"]
 """
 
 let shared = DebugLogSanitizer.redactForSharing(logSample)
@@ -153,6 +177,22 @@ require(
     "printable= dumps must not survive export"
 )
 require(shared.contains("126B printable=<redacted>"), "printable= must degrade to a marker")
+
+// ⚠️ 下面这五条是**审查抓出来的真实漏洞**（原实现整条穿过去，而文档却声称已覆盖）：
+// ① 每首歌必打的 `[Lyrics] Track "标题" - 艺人 (id <base62>)` 与 `[Shell] legacy metadata`
+require(!shared.contains("NoSuchSong"), "Musixmatch 'no message' body head must be dropped")
+require(!shared.contains(#""code":404"#), "NetEase Non-200 body head must be dropped")
+require(!shared.contains("bad-envelope"), "SpicyLyrics malformed envelope body must be dropped")
+require(!shared.contains("deadbeefcafe0123456789"), "CASITA hex dump must be dropped")
+require(!shared.contains("bad-request"), "AMLL body tail must be dropped by the generic `: {` rule")
+require(
+    shared.contains("[Artwork] metadata keys: [\"album_title\", \"image_large_url\", \"title\"]"),
+    "the metadata-key list must survive — the generic rule must not eat `: [`"
+)
+require(
+    shared.contains("(id <redacted>)"),
+    "bare base62 track ids in `(id …)` must be redacted (spotify trackIdentifier is base62)"
+)
 
 // 该留下的（否则日志没法读了）：
 require(

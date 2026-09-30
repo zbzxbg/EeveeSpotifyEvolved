@@ -19,8 +19,11 @@ import Foundation
 ///
 /// ── 判据（来自真机日志审计，含 19 号日志）──────────────────────────────────
 /// · **必隐**：Bearer/Authorization/Cookie 类凭证、设备唯一标识、账号标识；
-/// · **默认隐**：播放上下文/歌单、曲目与艺人、曲名、时区与地区；
-/// · **必须保留**：时间戳、接口 path、元素清单与 hex dump 这类排查判据本身。
+/// · **默认隐**：播放上下文/歌单、曲目与艺人、曲名、时区与地区（含 `country=`）；
+/// · **必须保留**：时间戳、接口 path、元素清单 —— 这些是排查判据本身。
+///   注意区分两层：**hex dump**（`hex512B=` / `[NPVModule] hex` / `[CASITA][HEX]`）
+///   在**本地**文件里原样保留，只在**导出那一份**被打成 `<hex-redacted>`
+///   （那些字节可解码还原成 `spotify:track:`，模式匹配看不见 —— 见规则 10）。
 ///   所以本文件里**没有**任何"把 query 里所有参数一锅端"的规则 —— 只处理已知的
 ///   用户内容参数，且 `[TokenCapture]` 那类整条 URL 由调用方改用 `logSafeURL(_:)`
 ///   （只留 scheme+host+path）在源头掐掉。
@@ -59,8 +62,11 @@ enum DebugLogSanitizer {
         ("(?i)(authorization\\s*[:=]\\s*)[^\\n]*", "$1<redacted>"),
 
         // 3. JSON 形式 `"key":"value"` —— SponsorBlock 的 `"userID":"…"` 走这条。
+        //    ⚠️ 这里**必须**含 `uuid`/`videoid`：`[SB][submit]` 的响应体在出错时会把
+        //    这两项回显，而那条日志走的是 `eeveeSanitizedNSLog`（系统统一日志，清不掉）——
+        //    导出层那条 7b 永远够不着它。
         (
-            "(?i)(\"(?:userid|user_id|authorization|cookie|access_token|refresh_token|id_token|deviceid|device_id)\"\\s*:\\s*\")([^\"]*)(\")",
+            "(?i)(\"(?:userid|user_id|authorization|cookie|access_token|refresh_token|id_token|deviceid|device_id|uuid|videoid)\"\\s*:\\s*\")([^\"]*)(\")",
             "$1<redacted>$3"
         ),
 
@@ -79,6 +85,13 @@ enum DebugLogSanitizer {
             "(?i)([?&](?:play_context_uri|contexturi|creatoruri|entityuri|entity_uri|signal|eagerload|timezone|locale|userid|usertoken|csrf_token|access_token)=)[^&\\s]*",
             "$1<redacted>"
         ),
+
+        // 6b. 地区/时区这一类的 `key=value`（`[REVERT_WATCH] … country=jp`、`region=jp`）。
+        //     为什么单独一条而不塞进上面那份"凭证名单"：它们不是凭证，但**确实是**
+        //     "默认该隐"那一档（见文件头三档判据）；混进凭证表会让那张表说谎。
+        //     ⚠️ `enablePassiveProductStateLog` 默认为 true，所以 `country=…` 是**默认就会
+        //     进系统统一日志**的，这条不能只放在导出层。
+        ("(?i)(\\b(?:country|region|locale|timezone)=)[^&\\s,;|]*", "$1<redacted>"),
     ]
 
     /// 预编译结果。`static let` 由 Swift 保证只初始化一次（`dispatch_once` 语义），
@@ -194,8 +207,28 @@ enum DebugLogSanitizer {
             ns.substring(with: match.range(at: 1)) + "\"<title>\""
         }
 
+        // 2c. ⚠️ 另外两条**每首歌都会打**的日志，引号前的引导词和第 2 步那批不一样，
+        //     必须单独列 —— 它们曾经**整条漏过**（审查抓出来的，见 §57.7）：
+        //       · `[Lyrics] Track "<标题>" - <艺人> (id <22 位 base62>)`（`CustomLyrics.x.swift`）
+        //       · `[Shell] legacy metadata "<标题>" — "<艺人>"`（`LyricsWordByWord.x.swift`，
+        //         分隔符是 **em dash**，所以第 3 步那条 `-` 的规则救不了它）
+        //     为什么不用"裸关键字 `track`"：那会误伤 `manifest track=spotify:track:…` 之类。
+        out = replacing(out, pattern: "(?i)(\\[Lyrics\\]\\s+Track\\s+)\"[^\"]*\"") { match, ns in
+            ns.substring(with: match.range(at: 1)) + "\"<title>\""
+        }
+        out = replacing(
+            out,
+            pattern: "(?i)(\\[Shell\\]\\s+legacy metadata\\s+)\"[^\"]*\"(\\s*[—–-]\\s*)\"[^\"]*\""
+        ) { match, ns in
+            ns.substring(with: match.range(at: 1))
+                + "\"<title>\""
+                + ns.substring(with: match.range(at: 2))
+                + "\"<artist>\""
+        }
+
         // 3. 艺人：**依赖第 2 步留下的 `<title>` 标记**，所以只会命中已经处理过的行，
-        //    不会误伤别处的 `- xxx`。
+        //    不会误伤别处的 `- xxx`。`[^\n(]*` 停在 `(` 前 —— `[Lyrics] Track` 那行
+        //    的 `(id …)` 正好在艺人后面，由第 4b 步处理。
         out = replacing(out, pattern: "(\"<title>\"\\s+-\\s+)[^\\n(]*") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<artist>"
         }
@@ -204,8 +237,10 @@ enum DebugLogSanitizer {
         out = replacing(out, pattern: "(?i)(chosen\\[\\d+\\]:\\s*)[^\\n]*?\\(id\\s*\\d+\\)") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<title> (id <redacted>)"
         }
-        // 4b. 其余 `(id 123)` 兜底。
-        out = replacing(out, pattern: "(?i)\\(id\\s*\\d+\\)") { _, _ in "(id <redacted>)" }
+        // 4b. 其余 `(id …)` 兜底。⚠️ 必须收 **base62**，不能只收数字：
+        //     `[Lyrics] Track … (id 2Fkzxa6EiI43U6s8RkLjht)` 里那个就是 Spotify 的
+        //     `trackIdentifier`（纯数字那条是 NetEase 的歌曲 id）。
+        out = replacing(out, pattern: "(?i)\\(id\\s*[A-Za-z0-9]+\\)") { _, _ in "(id <redacted>)" }
 
         // 5. `album_id 00C345qa1C9et1uiN0yP1I` / `track_id=2094728852`（两种写法都要覆盖：
         //    `[NPVModule]` 用空格，`[Musixmatch] macro matcher.track.get` 用等号）。
@@ -274,6 +309,39 @@ enum DebugLogSanitizer {
             ns.substring(with: match.range(at: 1)) + "<redacted>"
         }
 
+        // 9d. ⚠️ 还有几处"响应体片段"的**形态各不相同**（第 9a 步只认 4 个字面前缀、
+        //     第 9b 步只认 `body[:=]`），审查时发现下面这些会整条穿过去（见 §57.7）：
+        //       · `[Musixmatch] … response is not JSON / no message: <body>`
+        //       · `[NetEase] Non-200 [eapi ]status <code> for <path>: <body>`
+        //       · `[NetEase] Search response malformed for "<关键词>": <body>`
+        //       · `[SpicyLyrics] Malformed envelope for <id>: <body>`
+        //       · `[SpicyLyrics] No matching operationId 0 for <id>: <body>`
+        //     共同点是"标签 + 关键字 + `: 内容`"，所以按这个形状一次性覆盖。
+        out = replacing(
+            out,
+            pattern: "(?i)(\\[(?:Musixmatch|NetEase|SpicyLyrics)\\][^\\n]*?(?:no message|Non-200(?:\\s+\\w+)? status|Search response malformed|Malformed envelope|No matching operationId)[^\\n]*?:\\s*)[^\\n]*"
+        ) { match, ns in
+            ns.substring(with: match.range(at: 1)) + "<redacted>"
+        }
+
+        // 9f. 更一般的兜底：**`:` 后面直接跟着 `{` 或 `<` 的尾部就是原始服务端内容**
+        //     （JSON 响应体 / 非 UTF-8 占位 / XML）。这一条覆盖的是"第 9d 步没列到、
+        //     但形态一样"的那些（`[AMLL] 400 Bad Request for <id>: {…}`、
+        //     `[NetEase] Search response malformed …: {…}` 等）。
+        //     刻意**不含 `[`** —— 那一档最常见的其实是 `[Artwork] metadata keys: [...]`，
+        //     它只有 key 名、没有任何用户数据，是排查封面/背景时要看的判据。
+        out = replacing(out, pattern: "(?i)(:\\s*)(?=[{<])[^\\n]*") { match, ns in
+            ns.substring(with: match.range(at: 1)) + "<redacted>"
+        }
+        // 9e. `[SpicyLyrics]` / `[AMLL]` 的行里 `for <trackId>` 是**裸 id**（没有 URI、也不在
+        //     `/track/` 路径里），第 1/1b 步都抓不到；而且它出现在上面那些被清空的行**前半段**。
+        out = replacing(
+            out,
+            pattern: "(?i)(\\[(?:SpicyLyrics|AMLL)\\][^\\n]*?\\bfor\\s+(?:track\\s+)?)[A-Za-z0-9]{10,}"
+        ) { match, ns in
+            ns.substring(with: match.range(at: 1)) + "<id>"
+        }
+
         // 10. **hex dump**：`[ScrollProbe] … hex512B=<hex>` 里那些字节是可以**解码还原**的
         //     （`73706f746966793a747261636b3a` = `spotify:track:`），模式匹配看不见，
         //     所以只能整段打掉。两种形态：
@@ -284,6 +352,12 @@ enum DebugLogSanitizer {
             ns.substring(with: match.range(at: 1)) + "<hex-redacted>"
         }
         out = replacing(out, pattern: "(?i)(\\[NPVModule\\] hex [^\\n]*?=\\s*)[0-9a-f]{16,}") { match, ns in
+            ns.substring(with: match.range(at: 1)) + "<hex-redacted>"
+        }
+        // 10c. `[CASITA][HEX] <hex>`：同为可解码的响应体字节。那个探针默认关闭
+        //      （`CasitaResponseProbe.enabled = false`），但一旦打开就会进来，
+        //      而它走的是 NSLog（不进导出文件）→ 这里只对"导出那一份"有意义。
+        out = replacing(out, pattern: "(?i)(\\[CASITA\\]\\[HEX\\]\\s*)[0-9a-f]{16,}") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<hex-redacted>"
         }
 

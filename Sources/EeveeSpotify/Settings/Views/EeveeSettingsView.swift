@@ -143,6 +143,48 @@ struct EeveeSettingsView: View {
                 )
             }
 
+            // 隐私与上报：拦截 / 只观察 / 关键词 / 计数。
+            Button {
+                pushSettingsController(
+                    with: EeveePrivacySettingsView(),
+                    title: "privacy_title".localized
+                )
+            } label: {
+                NavigationSectionView(
+                    color: Color(hex: "#30B0C7"),
+                    title: "privacy_title".localized,
+                    imageSystemName: "hand.raised.fill"
+                )
+            }
+
+            // 触感：开关（重启生效）、强度、命中关键词、记录控件类名。
+            Button {
+                pushSettingsController(
+                    with: EeveeHapticsSettingsView(),
+                    title: "haptics_title".localized
+                )
+            } label: {
+                NavigationSectionView(
+                    color: Color(hex: "#FF375F"),
+                    title: "haptics_title".localized,
+                    imageSystemName: "waveform"
+                )
+            }
+
+            // Flag 覆盖：自己写 name/scope，压过内置默认值。
+            Button {
+                pushSettingsController(
+                    with: EeveeFlagOverrideSettingsView(),
+                    title: "flag_override_title".localized
+                )
+            } label: {
+                NavigationSectionView(
+                    color: Color(hex: "#5E5CE6"),
+                    title: "flag_override_title".localized,
+                    imageSystemName: "slider.horizontal.3"
+                )
+            }
+
             // 「调试」页：只装**排查/验证型**开关（补时间轴 / 补卡片元素 / 强制歌词入口）。
             // 它们以前散在「歌词」页里，和用户真正的偏好混在一起 —— 见
             // `EeveeDebugSettingsViewModel` 的说明。l10n 沿用既有的 `debug_title`。
@@ -193,10 +235,23 @@ struct EeveeSettingsView: View {
                     // 分享的是**可分享的那一份**：`redactSharedLog` 开着时是假名化后的副本，
                     // 原文件一个字都不动（排查要用的真实曲目还留在本地）。
                     // 凭证/设备标识那一层不在这里 —— 它在写入口就生效了，见 `DebugLogSanitizer`。
-                    let logURL = DebugLogSanitizer.sharedLogFile(
-                        from: logPath,
-                        redact: UserDefaults.redactSharedLog
-                    ) ?? URL(fileURLWithPath: logPath)
+                    //
+                    // ⚠️ 脱敏版生成失败时**绝不回退到原文件**：那正好是"用户以为已经脱敏、
+                    // 实际分享了明文"的场景。宁可导出失败并告诉他，也不能静默 fail-open。
+                    let logURL: URL
+                    if UserDefaults.redactSharedLog {
+                        guard let redacted = DebugLogSanitizer.sharedLogFile(from: logPath, redact: true) else {
+                            PopUpHelper.showPopUp(
+                                message: "redact_log_failed".localized,
+                                buttonText: "redact_log_failed_ok".localized
+                            )
+                            return
+                        }
+                        logURL = redacted
+                    } else {
+                        logURL = DebugLogSanitizer.sharedLogFile(from: logPath, redact: false)
+                            ?? URL(fileURLWithPath: logPath)
+                    }
                     let activityVC = UIActivityViewController(activityItems: [logURL], applicationActivities: nil)
                     if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                        let rootVC = scene.windows.first?.rootViewController {

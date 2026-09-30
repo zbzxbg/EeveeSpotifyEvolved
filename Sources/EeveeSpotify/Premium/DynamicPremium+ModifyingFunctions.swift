@@ -565,12 +565,21 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
     dumpLyricsFlags(values)
     dumpNPVFlags(values)
 
-    for replacement in propertyReplacements {
+    // 用户自定义覆盖追加在**内置替换之后**：数组顺序即应用顺序，所以设置页里
+    // 的 On/Off 能压过仓库自己的默认值（见 `FlagOverride+Replacement.swift`）。
+    //
+    // ⚠️ 下面那条「歌词入口」flag 的跳过开关**只作用于内置项**：用户自己在设置页
+    // 写了一条同名覆盖，那是他的明确意图，不该被我们的 A/B 开关吞掉。
+    let builtInReplacementCount = propertyReplacements.count
+    let replacements = propertyReplacements + FlagOverrideStore.activeReplacements
+
+    for (index, replacement) in replacements.enumerated() {
         // 「歌词入口」flag 是**唯一**还能影响正在播放页卡片渲染的我们自家改动
         // —— 另外两条路（补卡片元素 / HTTP 数据）都已被真机 A/B 与九份日志排除。
         // 关掉开关时整条替换跳过，并在启动时打一行，好让日志能区分
         // "我们没改" 与 "改了但没命中"。
-        if replacement.name == lyricsEntryPointFlagName,
+        if index < builtInReplacementCount,
+           replacement.name == lyricsEntryPointFlagName,
            !NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced {
             reportEntryPointFlagSkippedOnce()
             continue
@@ -607,6 +616,10 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
                 values[index].boolValue = BoolValue.with { $0.value = newValue }
             }
         }
+    }
+
+    if FlagOverrideStore.count > 0 {
+        writeDebugLog("[Flags] user overrides in effect: \(FlagOverrideStore.count)")
     }
 
     reportLyricsReplacementOutcome(values)

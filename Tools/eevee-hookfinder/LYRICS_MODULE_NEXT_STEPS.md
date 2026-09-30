@@ -527,7 +527,9 @@ Token 只有形状：`[TokenCapture] len=427 dots=0 prefix=<6 字符>`（片段�
 ### 57.2 三档判据（决定"哪些必须隐藏"）
 
 - **必隐**：Bearer/Authorization/Cookie 类凭证、设备唯一标识、账号标识；
-- **默认隐**：播放上下文/歌单、曲目与艺人、曲名、时区与地区；
+- **默认隐**：播放上下文/歌单、曲目与艺人、曲名、时区与地区
+  （`timezone=` / `locale=` / `region=` / **`country=`** —— 最后这条是通过
+  `enablePassiveProductStateLog`（默认 true）进的系统日志，所以它在**写入口**就被打掉）；
 - **必须保留**：时间戳、接口 path、元素清单与 hex dump —— 这些是排查判据本身，
   藏了这套日志工作流就没法运转（元素类型判读、切歌竞态、注入有没有命中全靠它们）。
 
@@ -540,7 +542,7 @@ Token 只有形状：`[TokenCapture] len=427 dots=0 prefix=<6 字符>`（片段�
 | ① | `HttpClientURLSessionHooks` / `DataLoaderServiceHooks` | `[TokenCapture]` 的 `prefix=前6字符` → `SpotifyTokenOrdinal`（`token#1`）；整条 URL → `logSafeURL`（只留 scheme+host+path）；`[HCUS]/[DL] Missing buffered body` 同样只留 path |
 | ① | `SponsorBlockReporter` / `EeveePremiumForce` / `CasitaResponseProbe` | **带用户数据的那几条** `NSLog` 改走 `eeveeSanitizedNSLog`（`[SB]` 的 payload/userID、`[REVERT_WATCH]` 的产品态、`[CASITA]` 的路径与 dump 路径）；`[SB]` 的 `userID`、`[REVERT_WATCH]` 的 `name=` 另作处理。其余 `NSLog` 只打类名/布尔（`[AdBlock]`/`[CleanShareLinks]`/`[TrueShuffle]`/`Upsell*`/`EeveeSettingsUniversal`…），已逐条核过，不改 |
 | ② 导出假名化 | `DebugLogSanitizer.redactForSharing` | `spotify:<kind>:<id>` 与**路径里的裸 id** → 同一 id 同一个假名（`t1`/`ar1`…，**每次导出重新编号**，所以只在这一次的文件内稳定）；曲名/艺人；NetEase id；封面 hash；`?q_track=`/`track_name=`/`?q=`；raw body head 与 `body:`/`printable=` 片段整段打掉；**hex dump 整段打掉** |
-| ② | `EeveeSettingsView` + l10n（en/zh-CN） | 新增「分享日志前脱敏」开关（**默认开**）；导出时写 `eeveespotify_debug_shared.log` 分享，**不动**原文件 |
+| ② | `EeveeSettingsView` + l10n（en/zh-CN） | 新增「分享日志前脱敏」开关（**默认开**）；导出时写 `eeveespotify_debug_shared.log` 分享，**不动**原文件。⚠️ 脱敏版生成失败时**不回退到原文件**，而是弹 `redact_log_failed` 并中止导出（见 §57.7 第 3 条） |
 | ② | `.github/ISSUE_TEMPLATE/bug_report.yml` | 贴日志那一段的说明改了：导出**默认已脱敏**（凭证/设备标识/听歌记录），让用户保持开关开启 —— 用户贴日志的入口就在这里，说明不改等于新行为没人知道 |
 | 测试 | `Tests/DebugLogRedaction/main.swift`（**新增**）+ `builddeb.yml` | 多组断言：凭证 / 设备 / URL / **判据必须原样保留**（`[Flags]`、`[INIT]`、`body=584B has5=false elements=[…]`）/ 幂等 / token 序号 / 假名化 / 假名一致性 / **hex dump 必须被打掉** |
 
@@ -565,8 +567,8 @@ Token 只有形状：`[TokenCapture] len=427 dots=0 prefix=<6 字符>`（片段�
 
 ### 57.5 已知局限（本轮**没**覆盖的）
 
-- **hex dump 已处理、但只是"整段打掉"**：`[ScrollProbe] … hex512B=<hex>` 与
-  `[NPVModule] hex … 256B=<hex>` 里的字节是**可解码还原**的
+- **hex dump 已处理、但只是"整段打掉"**：`[ScrollProbe] … hex512B=<hex>`、
+  `[NPVModule] hex … 256B=<hex>`、`[CASITA][HEX] <hex>` 里的字节是**可解码还原**的
   （`73706f746966793a747261636b3a` = `spotify:track:`），模式匹配看不见 ——
   分享版里它们退化成 `<hex-redacted>`，想要字节级对比就得拿**本地**那份；
 - **`body=NNNB` 必须留着**（`[Scrollsita] manifest track=… body=584B has5=false elements=[…]`）——
@@ -582,7 +584,7 @@ Token 只有形状：`[TokenCapture] len=427 dots=0 prefix=<6 字符>`（片段�
 - `CasitaResponseProbe` 打开时把整份响应体写到 tmp，那些 `.bin` **不经过脱敏**
   （默认 `enabled = false`，已在文件头写明）；
 - 脱敏规则是**模式匹配**，新加的日志形态不会自动被覆盖 —— 加新日志时先问一句
-  "这行里有没有用户内容"。
+  "这行里有没有用户内容"。§57.7 就是这条纪律的一次实例：**六条漏洞全是"漏了一种形态"**。
 
 ### 57.6 未验证
 
@@ -592,6 +594,28 @@ Token 只有形状：`[TokenCapture] len=427 dots=0 prefix=<6 字符>`（片段�
 补救：把这条链做成 CI 里的独立 `swiftc` 测试（`Tests/DebugLogRedaction`），
 push 后由 `builddeb.yml` 的 "Test ad and Premium banner filtering" 步骤编译并执行；
 **若 CI 报红，先看 `debug-log-redaction-tests` 那一行**。
+
+### 57.7 独立审查抓出来的六条漏洞（同一轮内已修）
+
+改动写完后另派了一个**只读**的独立审查者对着 diff 手工推演（本机无工具链，双方都只能读代码）。
+它抓到的问题如下 —— 全部已修、并**逐条在测试里留了断言**：
+
+| # | 漏洞 | 后果 | 修法 |
+|---|---|---|---|
+| 1 | 导出层第 2 步只认 `lyrics for / fetching / using / …` 这些引导词，而 `[Lyrics] Track "<标题>" - <艺人> (id <base62>)`（`CustomLyrics.x.swift:106`）和 `[Shell] legacy metadata "<标题>" — "<艺人>"`（`LyricsWordByWord.x.swift:878`，分隔符是 **em dash**）**每首歌都会打**却都不匹配 | **标题、艺人、曲目 id 全都在分享版里留着** —— 而这正是 §57.3 声称已覆盖的那一档 | 新增第 2c/2d 步专收这两条形态；第 4b 步从 `\d+` 放宽到 **base62**（Spotify 的 `trackIdentifier` 是 base62，不是数字） |
+| 2 | 第 9 步的注释说"原始响应体片段整段打掉"，实际只认 4 个字面前缀和 `body[:=]` | `[Musixmatch] … no message: <body>`、`[NetEase] Non-200 status …: <body>`、`[SpicyLyrics] Malformed envelope for <id>: <body>` 等整条穿过去 | 新增第 9d 步（按关键字列形态）+ 第 9f 步**通用兜底**：`:` 后紧跟 `{`/`<` 的尾部一律打掉（刻意**不含 `[`** —— `[Artwork] metadata keys: [...]` 只有 key 名、是排查判据） |
+| 3 | 导出按钮写成 `sharedLogFile(...) ?? URL(fileURLWithPath: logPath)` | **fail-open**：脱敏版生成失败时**静默分享原始日志** —— 正好是"用户以为已脱敏"的场景 | 改成 fail-closed：生成失败就弹 `redact_log_failed` 并中止导出，**绝不回退**到明文 |
+| 4 | `[SB][submit]` 的注释说"脱敏会处理服务端回显的 UUID/userID"，但写入口的 JSON 规则里**没有** `uuid`/`videoid` | 错误响应体里的 `"UUID":"…"` 会原样进**系统统一日志**（那份清不掉；导出层的 7b 永远够不着它） | 写入口 JSON 规则补 `uuid|videoid` |
+| 5 | 三档判据写着"时区与地区默认隐"，但 `country=` / `region=` **两层都没有规则**，而 `[REVERT_WATCH]` 的产品态日志默认就开着 | `country=jp` 长期留在系统日志与分享版里，等于判据表和实现不一致 | 写入口新增第 6b 步收 `country|region|locale|timezone=` |
+| 6 | 文件头注释把 "hex dump" 列进"**必须保留**"，而第 10 步在分享版里明确会改写它 | 将来有人看到"hex 没了"会误判 | 注释改成"**本地**文件保留、导出那一份打成 `<hex-redacted>`" |
+
+同轮顺带补的（审查列在"低"档，但都是真的）：`[SpicyLyrics]`/`[AMLL]` 行里 `for <裸 trackId>`
+没有 URI 或 `/track/` 路径前缀、第 1/1b 步都抓不到（新增 9e）；`[CASITA][HEX]` 不在两条 hex 规则
+的射程内（新增 10c）。
+
+**这次审查本身也留下一条纪律**：`§57.5` 里那句"新加的日志形态不会自动被覆盖"不是客套 ——
+六条漏洞里有五条都是"**形态对了、但漏了这一种写法**"。以后给脱敏加规则，要顺手在
+`Tests/DebugLogRedaction` 里放一条真实形态的夹具。
 
 ---
 

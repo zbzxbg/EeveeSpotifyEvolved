@@ -16,6 +16,13 @@ extension UserDefaults {
     private static let cleanShareLinksKey = "cleanShareLinks"
     private static let enableLogRecordingKey = "enableLogRecording"
     private static let redactSharedLogKey = "redactSharedLog"
+    private static let blockTelemetryKey = "blockTelemetry"
+    private static let telemetryObserveOnlyKey = "telemetryObserveOnly"
+    private static let telemetryExtraKeywordsKey = "telemetryExtraKeywords"
+    private static let hapticsEnabledKey = "hapticsEnabled"
+    private static let hapticsStrengthKey = "hapticsStrength"
+    private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
+    private static let hapticsLogControlsKey = "hapticsLogControls"
 
     static var musixmatchToken: String {
         get {
@@ -130,6 +137,109 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: redactSharedLogKey)
+        }
+    }
+
+    // MARK: - 上报拦截（Privacy）
+
+    /// 「拦截上报」总开关，**默认关**。
+    ///
+    /// 默认关的理由：它改的是网络行为，而"哪些端点算上报"没法离线证实（见
+    /// `TelemetryEndpointRules`）。先让用户自己开，并在设置页给一条
+    /// 「只观察不拦截」的路去确认真实端点。
+    static var blockTelemetry: Bool {
+        get {
+            container.object(forKey: blockTelemetryKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: blockTelemetryKey)
+        }
+    }
+
+    /// 「只观察不拦截」：把请求的 host+path 打进日志，但一条都不拦。默认关。
+    ///
+    /// 它是把"哪些是真的上报端点"从猜变成实测的唯一手段，本机没有真机流量可看。
+    static var telemetryObserveOnly: Bool {
+        get {
+            container.object(forKey: telemetryObserveOnlyKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: telemetryObserveOnlyKey)
+        }
+    }
+
+    /// 用户自加的上报主机 / 路径关键词（逗号、分号或空白分隔），默认空。
+    static var telemetryExtraKeywords: String {
+        get {
+            container.string(forKey: telemetryExtraKeywordsKey) ?? ""
+        }
+        set {
+            container.set(newValue, forKey: telemetryExtraKeywordsKey)
+        }
+    }
+
+    // MARK: - 播放器触感（Haptics）
+
+    /// 播放器控件触感，**默认关**。
+    ///
+    /// ⚠️ 这个开关在 `EeveeSpotify.init` 里被读一次（决定 hook 装不装），所以
+    /// **改动需要重启 Spotify** —— 和 `darkPopUps` 那些一样。强度不受此限制。
+    static var hapticsEnabled: Bool {
+        get {
+            container.object(forKey: hapticsEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hapticsEnabledKey)
+        }
+    }
+
+    /// 触感强度 0.2 – 1.0，默认 0.6。每次触发都重新读，**改动立即生效**。
+    static var hapticsStrength: Double {
+        get {
+            container.object(forKey: hapticsStrengthKey) as? Double ?? 0.6
+        }
+        set {
+            container.set(newValue, forKey: hapticsStrengthKey)
+        }
+    }
+
+    /// 认为"属于播放器界面"的控件类名关键词，逗号分隔。
+    ///
+    /// 默认值覆盖 Spotify 命名里最常见的几种写法，但**不保证 9.1.86 上就对**：
+    /// 对不上时不会有任何副作用（不震而已），用设置页的「记录被点控件的类名」
+    /// 抓真名再加进来。
+    static var hapticsSurfaceKeywords: String {
+        get {
+            container.string(forKey: hapticsSurfaceKeywordsKey)
+                ?? "player,nowplaying,now_playing,npv,transport,playback,scrubber,miniplayer"
+        }
+        set {
+            container.set(newValue, forKey: hapticsSurfaceKeywordsKey)
+        }
+    }
+
+    /// 记录被点控件的类名（用来找上面那串关键词），默认关。
+    static var hapticsLogControls: Bool {
+        get {
+            container.object(forKey: hapticsLogControlsKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hapticsLogControlsKey)
+        }
+    }
+
+    // MARK: - 视图树转储（Diagnostics）
+
+    /// 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志，默认关。
+    ///
+    /// 用途只有一个：给还没写的界面 hook（AMOLED / 隐藏区块 / 播放器手势）先拿到
+    /// 类名与层级。三条纪律见 `ViewTreeDumper` 的说明 —— 只读、有界、不做类枚举。
+    static var dumpViewTree: Bool {
+        get {
+            container.object(forKey: dumpViewTreeKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: dumpViewTreeKey)
         }
     }
 

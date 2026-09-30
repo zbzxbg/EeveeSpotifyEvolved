@@ -354,6 +354,18 @@ struct EeveeSpotify: Tweak {
 
         activateEeveeCrossfadeForce()
 
+        // 播放器控件触感：开关关着时连 hook 都不装（见 PlayerHaptics.x.swift），
+        // 所以不开触感的用户是零开销。开关在设置页读一次，改动需重启。
+        activatePlayerHaptics()
+
+        // 上报拦截的**请求侧** hook（响应侧那半在 `SpotifyResponsePatcher.shouldBlock`
+        // 里，只是兜底）。这条**总是装**，开关在运行期读 —— 打开就生效，不必重启。
+        activateTelemetryRequestBlock()
+
+        // 调试用视图树转储：默认关，开关在「调试」页且打开即生效（那边会直接调
+        // `applyEnabledState()`）；这里只是让重启后能自动续上。
+        ViewTreeDumper.applyEnabledState()
+
         // TESTING: extended ad blocker (NPV/lyrics ad, home brand-ads, in-stream).
         activateEeveeAdBlockerExtended()
 
@@ -436,6 +448,19 @@ struct EeveeSpotify: Tweak {
                 + "\(UserDefaults.lyricsOptions.geniusFallback ? "ON" : "OFF")"
         )
         writeDebugLog("[INIT] tweakInitTime: \(tweakInitTime)")
+
+        // 隐私 / 触感 / Flag 覆盖都是"默认关、用户自己开"的，所以启动时把**实际生效值**
+        // 打出来：排查时"没生效"和"没开"是两件完全不同的事，没有这一行只能靠猜。
+        writeDebugLog(
+            "[INIT] privacy: blockTelemetry="
+                + "\(UserDefaults.blockTelemetry ? "ON" : "OFF")"
+                + " observeOnly=\(UserDefaults.telemetryObserveOnly ? "ON" : "OFF")"
+                + " extraKeywords="
+                + "\(UserDefaults.telemetryExtraKeywords.isEmpty ? "(none)" : UserDefaults.telemetryExtraKeywords)"
+                + " | haptics=\(UserDefaults.hapticsEnabled ? "ON" : "OFF")"
+                + " strength=\(UserDefaults.hapticsStrength)"
+                + " | flag overrides=\(FlagOverrideStore.count)"
+        )
 
         // CarPlay crash fix (Issue #16) — safe-gated
         activateCarPlayCrashFix()

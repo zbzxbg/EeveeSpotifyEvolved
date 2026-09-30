@@ -20,6 +20,9 @@ struct EeveeDebugSettingsView: View {
 
             // 「强制歌词入口开关」：把服务端那条 `lyrics_entry_point_enabled` 钉成 true。
             lyricsEntryPointFlagSection()
+
+            // 「转储视图树」：给还没写的界面 hook 铺路（AMOLED / 隐藏区块 / 手势）。
+            dumpViewTreeSection()
         }
         .listStyle(GroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
@@ -41,6 +44,19 @@ struct EeveeDebugSettingsView: View {
             Toggle(
                 "ngzhwm_lyrics_entry_point_flag".localized,
                 isOn: $viewModel.lyricsEntryPointFlag
+            )
+        }
+    }
+
+    /// 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志。
+    ///
+    /// ⚠️ 这也是**临时工具**（本页的定位就是"验证完就删"）：类名拿到之后就去写真正的
+    /// hook，那时这一节连同 key 一起删。三条纪律见 `ViewTreeDumper` 的说明。
+    @ViewBuilder private func dumpViewTreeSection() -> some View {
+        Section(footer: Text("dump_view_tree_description".localized)) {
+            Toggle(
+                "dump_view_tree".localized,
+                isOn: $viewModel.dumpViewTree
             )
         }
     }

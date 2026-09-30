@@ -485,6 +485,13 @@ enum SpotifyResponsePatcher {
             return true
         }
 
+        // 上报 / 遥测（设置页「隐私与上报」，默认关）。判据与功能白名单都在
+        // `TelemetryEndpointRules`，这里只是唯一那处接入点 —— 两条传输层
+        // （`SPTDataLoaderService` 与 `HttpClientURLSession`）都会问到它。
+        //
+        // 刻意**不**放进下面那段 30s 宽限里：启动瞬间的上报正是要拦的东西。
+        if TelemetryBlocker.shouldBlock(url) { return true }
+
         // 30s grace: signup/public is part of fresh-login; blocking pre-30s
         // breaks first-launch.
         if elapsed > 30 {
