@@ -74,6 +74,11 @@ on:
           - artifacts
           - filebin
           - both
+      liquid_glass:
+        description: "去掉 Info.plist 的 UIDesignRequiresCompatibility，让 iOS 26 的新设计语言生效（Spotify 自己设了 true；去掉可能到处错位，默认关）"
+        default: false
+        required: false
+        type: boolean
 
 env:
   THEOS: ${{ github.workspace }}/theos
@@ -298,6 +303,20 @@ jobs:
           unzip -q "$(basename "$OUT_IPA")"
           touch Payload/Spotify.app Payload/Spotify.app/Frameworks   # zip 时间戳
           APP="Payload/Spotify.app"
+
+          # ★ 液态玻璃实验开关（默认关）。见 Tools/eevee-hookfinder/FLAGS_9186_DESIGN.md。
+          # Spotify 自己在 Info.plist 里写了 UIDesignRequiresCompatibility=true —— 那是在要求
+          # iOS 26 **用兼容模式跑它**，于是整个 App 不进新设计语言，任何 UCS flag 都不可能让它
+          # 变玻璃（2026-10-01 从解密 IPA 里读到的实际值）。spoti.pw 的 plist/ 覆盖干的就是这件事。
+          # 之所以做成开关：Spotify 主动选了兼容模式，去掉它可能到处错位 —— 出问题就重跑一次
+          # 不带这个开关的构建，不需要改代码。
+          if [ "${{ inputs.liquid_glass || 'false' }}" = "true" ]; then
+            plutil -remove UIDesignRequiresCompatibility "$APP/Info.plist" 2>/dev/null || true
+            echo "★ 已去掉 UIDesignRequiresCompatibility —— iOS 26 新设计语言生效"
+            plutil -p "$APP/Info.plist" | grep -i 'esign' || echo "(Info.plist 里已无 Design 键)"
+          else
+            echo "液态玻璃开关未开，保持 Spotify 自己的 UIDesignRequiresCompatibility=true"
+          fi
 
           echo "== 当前 LC_RPATH =="
           otool -l "$APP/Spotify" | grep -A2 LC_RPATH || echo "(没有 LC_RPATH)"

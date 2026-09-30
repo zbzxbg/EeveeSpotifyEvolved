@@ -561,9 +561,44 @@ private func reportLyricsReplacementOutcome(_ values: [AssignedValue]) {
     }
 }
 
+/// 用户自己加的那条覆盖（设置页 → Flag 覆盖）有没有**真的够到**服务端下发的配置。
+///
+/// 为什么单独打一行：`reportLyricsReplacementOutcome` 只覆盖 `isFlagOfInterest`
+/// （歌词 + NPV 两批），于是用户在设置页里写的**任意** flag 看不到命中数 ——
+/// "覆盖没生效"和"生效了但界面没变"在日志里长得一模一样。2026-10-01 试
+/// `ios-reprise-liquid-glass-override.mode` 时就卡在这里。
+///
+/// 读数：
+///   · `1 match(es)` → 服务端下发了，我们改到了它；
+///   · `0 match(es) (server did not send it…)` → 服务端根本没下发这一条，
+///     改的是我们自己追加的那个（`.forceEnum` 才有追加能力；`.setEnum` 时代这里是空枪）。
+///
+/// ⚠️ 在**改写之前**调用 —— 数的是"服务端给了几条"，不是"改完剩几条"。
+private var reportedUserOverrideOutcomes = Set<String>()
+
+private func reportUserOverrideOutcomes(_ values: [AssignedValue]) {
+    for override in FlagOverrideStore.all where override.isValid {
+        let scope = override.scope.isEmpty ? nil : override.scope
+
+        let hits = values.filter {
+            $0.propertyID.name == override.name
+                && (scope == nil || $0.propertyID.scope == scope)
+        }.count
+
+        let key = "\(scope ?? "*").\(override.name)"
+        guard reportedUserOverrideOutcomes.insert(key).inserted else { continue }
+
+        writeDebugLog(
+            "[Flags] override \(key) — \(hits) match(es)"
+                + (hits == 0 ? " (server did not send it; we append our own)" : "")
+        )
+    }
+}
+
 private func modifyAssignedValues(_ values: inout [AssignedValue]) {
     dumpLyricsFlags(values)
     dumpNPVFlags(values)
+    reportUserOverrideOutcomes(values)
 
     // 用户自定义覆盖追加在**内置替换之后**：数组顺序即应用顺序，所以设置页里
     // 的 On/Off 能压过仓库自己的默认值（见 `FlagOverride+Replacement.swift`）。
@@ -592,13 +627,30 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
             return nameMatches && scopeMatches
         })
 
-        if matchingIndices.isEmpty, case .forceBool(let newValue) = replacement.modification,
+        // 「没有就追加」的两种：`.forceBool`（设置页的 On/Off）与 `.forceEnum`（写入指定值）。
+        // name + scope 都要给全 —— 否则无从知道追加到哪个 scope 下。这正是设置页里那句
+        // "On 和 Off 需要一个 scope，才能加一条 Spotify 从没下发过的 flag" 的由来。
+        if matchingIndices.isEmpty,
            let name = replacement.name, let scope = replacement.scope {
-            values.append(AssignedValue.with {
-                $0.propertyID = AssignedIdentifier.with { $0.scope = scope; $0.name = name }
-                $0.boolValue = BoolValue.with { $0.value = newValue }
-            })
-            continue
+            switch replacement.modification {
+            case .forceBool(let newValue):
+                values.append(AssignedValue.with {
+                    $0.propertyID = AssignedIdentifier.with { $0.scope = scope; $0.name = name }
+                    $0.boolValue = BoolValue.with { $0.value = newValue }
+                })
+                continue
+
+            case .forceEnum(let newValue):
+                values.append(AssignedValue.with {
+                    $0.propertyID = AssignedIdentifier.with { $0.scope = scope; $0.name = name }
+                    $0.enumValue = EnumValue.with { $0.value = newValue }
+                })
+                continue
+
+            // 命中 0 条时仍然是静默 no-op（原有语义，不动）。
+            case .remove, .setBool, .setEnum:
+                break
+            }
         }
 
         for index in matchingIndices.sorted(by: >) {
@@ -614,6 +666,9 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
 
             case .forceBool(let newValue):
                 values[index].boolValue = BoolValue.with { $0.value = newValue }
+
+            case .forceEnum(let newValue):
+                values[index].enumValue = EnumValue.with { $0.value = newValue }
             }
         }
     }

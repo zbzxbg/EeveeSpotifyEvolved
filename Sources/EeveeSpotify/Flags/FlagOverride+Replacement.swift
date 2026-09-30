@@ -29,10 +29,14 @@ extension FlagOverride {
                 modification: .remove
             )
         case .set:
+            // ⚠️ `.forceEnum` 而不是 `.setEnum`（2026-10-01 改）：
+            // `.setEnum` 只改服务端**已经下发**的条目 —— 而"想试一条 Spotify 从没下发的
+            // flag"正是这个功能的用处（新设计那批 flag 就属于这种）。用 `.forceEnum` 后，
+            // 没命中就**追加**一条同 scope/name 的 enum 值，命中就覆盖。
             return EeveePropertyReplacement(
                 name: name,
                 scope: resolvedScope,
-                modification: .setEnum(value)
+                modification: .forceEnum(value)
             )
         }
     }

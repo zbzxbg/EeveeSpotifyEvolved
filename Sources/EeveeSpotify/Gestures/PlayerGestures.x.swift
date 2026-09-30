@@ -5,7 +5,7 @@ import ObjectiveC.runtime
 
 /// 播放器双击手势。
 ///
-/// 三个面**各自一个开关**（用户自己挑在哪儿生效），行为**一个选项**（切歌 / 前后跳 15 秒）。
+/// **两个面各自一个开关**（用户自己挑在哪儿生效），行为**一个选项**（切歌 / 前后跳 15 秒）。
 /// 所有动作都复用仓库里既有的原语，不另造一套播放控制：
 ///   · 切歌 → `WordByWordPlaybackControl.skipToPrevious()/skipToNext()`
 ///     （它已经处理了"statefulPlayer 选择器找不到就点原生按钮"两条路）
@@ -25,8 +25,11 @@ import ObjectiveC.runtime
 ///   正在播放页（大封面那页） `_TtC21NowPlaying_ScrollImpl23NPVScrollViewController`
 ///   全屏歌词页               `_TtC32Lyrics_FullscreenElementPageImpl31FullscreenElementViewController`
 ///                          + `_TtC34Lyrics_FullscreenSingalongPageImpl31FullscreenElementViewController`
-///   迷你播放条（标签栏上方）  `_TtC22NowPlaying_BarPageImplP33_…TouchPassthroughView`
-///     （不用 `NowPlayingBarTopStack`：它只有 8pt 高，做点击目标太小）
+///
+/// ⚠️ **迷你播放条那一面已删除**（2026-10-01，用户要求）。
+/// 原来挂的是 `_TtC22NowPlaying_BarPageImplP33_CCC0D2EEA6D4725EECD8965E8C38C86D20TouchPassthroughView`
+/// （414x64，标签栏正上方）。删的是**整个面**：hook、设置行、`playerGestureMiniBar` 键一起删，
+/// 不留一个按了没反应的设置项。
 ///
 /// ⚠️ 手势挂在**别人的视图**上，两条纪律：
 ///   1. `cancelsTouchesInView = false` —— 不抢 Spotify 自己的点击/滑动（进度条拖动照常）；
@@ -134,11 +137,10 @@ final class PlayerGestureTapHandler: NSObject {
     }
 }
 
-// MARK: - 三个面
+// MARK: - 两个面
 
 struct GestureNowPlayingGroup: HookGroup {}
 struct GestureFullscreenLyricsGroup: HookGroup {}
-struct GestureMiniBarGroup: HookGroup {}
 
 /// 正在播放页（大封面那页）。
 class NowPlayingGestureHook: ClassHook<UIViewController> {
@@ -187,23 +189,6 @@ class SingalongFullscreenLyricsGestureHook: ClassHook<UIViewController> {
     }
 }
 
-/// 迷你播放条（标签栏上方那条，414x64）。
-class MiniBarGestureHook: ClassHook<UIView> {
-    typealias Group = GestureMiniBarGroup
-    static let targetName =
-        "_TtC22NowPlaying_BarPageImplP33_CCC0D2EEA6D4725EECD8965E8C38C86D20TouchPassthroughView"
-
-    func layoutSubviews() {
-        orig.layoutSubviews()
-
-        PlayerGestures.apply(
-            wantEnabled: UserDefaults.playerGestureMiniBar,
-            to: self.target,
-            surface: "mini player bar"
-        )
-    }
-}
-
 func activatePlayerGestures() {
     // 和别处一样：类不在就不装，并打一行日志说明，不留给 Orion 报非致命错误。
     if NSClassFromString(NowPlayingGestureHook.targetName) != nil {
@@ -222,17 +207,10 @@ func activatePlayerGestures() {
         writeDebugLog("[Gestures] missing full screen lyrics classes — those hooks inactive")
     }
 
-    if NSClassFromString(MiniBarGestureHook.targetName) != nil {
-        GestureMiniBarGroup().activate()
-    } else {
-        writeDebugLog("[Gestures] missing \(MiniBarGestureHook.targetName) — mini bar hook inactive")
-    }
-
     writeDebugLog(
         "[Gestures] installed (nowPlaying="
             + "\(UserDefaults.playerGestureNowPlaying ? "ON" : "OFF")"
             + " fullscreenLyrics=\(UserDefaults.playerGestureFullscreenLyrics ? "ON" : "OFF")"
-            + " miniBar=\(UserDefaults.playerGestureMiniBar ? "ON" : "OFF")"
             + " behavior=\(PlayerGestures.behavior == .skip ? "skip" : "seek"))"
     )
 }

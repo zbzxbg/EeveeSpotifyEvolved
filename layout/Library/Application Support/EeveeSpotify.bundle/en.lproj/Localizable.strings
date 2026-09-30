@@ -357,7 +357,6 @@ extras_description = "Features added on top of EeveeSpotify, kept together here 
 
 declutter_description = "Hides Spotify's own non-content chrome by class name, taken from this device's view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
 hide_mini_player_bar = "Hide the mini player bar";
-hide_tab_bar_fade = "Hide the tab bar fade";
 hide_free_tier_bar = "Hide the free-tier bar";
 hide_singalong_line = "Hide the one-line lyrics under the cover";
 declutter_home_player_section = "Home and player";
@@ -373,4 +372,3 @@ gesture_behavior_skip = "Previous / next track";
 gesture_behavior_seek = "Back / forward 15s";
 gesture_on_now_playing = "On the now playing page";
 gesture_on_fullscreen_lyrics = "On the full screen lyrics";
-gesture_on_mini_bar = "On the mini player bar";

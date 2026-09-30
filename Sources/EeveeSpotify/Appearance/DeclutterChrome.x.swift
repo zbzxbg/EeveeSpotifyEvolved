@@ -26,7 +26,6 @@ import ObjectiveC.runtime
 ///   1. 目标类自己的 `layoutSubviews`（快路径，保持原样）；
 ///   2. `MainWindow` 的节流复查 + 开关被手动切换 + App 回到前台（兜底，见 `reconcile`）。
 struct HideMiniPlayerGroup: HookGroup {}
-struct HideTabBarFadeGroup: HookGroup {}
 struct HideFreeTierGroup: HookGroup {}
 struct HideHomeHeaderGroup: HookGroup {}
 struct HideTransportChromeGroup: HookGroup {}
@@ -55,7 +54,6 @@ private func clearHiddenByUs(_ view: UIView) {
 enum DeclutterChrome {
 
     static var hideMiniPlayerBar: Bool { UserDefaults.hideMiniPlayerBar }
-    static var hideTabBarFade: Bool { UserDefaults.hideTabBarFade }
     static var hideFreeTierBar: Bool { UserDefaults.hideFreeTierBar }
 
     /// 封面与歌名之间那一行"跟唱单行歌词"。
@@ -158,7 +156,6 @@ enum DeclutterChrome {
     /// 下一轮重扫即可。
     private struct ResolvedTargets {
         weak var miniBar: UIView?
-        weak var tabBarFade: UIView?
         weak var freeTierBar: UIView?
         weak var singalong: UIView?
         weak var homeHeader: UIView?
@@ -208,14 +205,6 @@ enum DeclutterChrome {
                 to: view,
                 reportKey: "miniPlayer",
                 reportMessage: "mini player bar hidden (TouchPassthroughView)"
-            )
-        }
-        if let view = targets.tabBarFade {
-            apply(
-                wantHidden: hideTabBarFade,
-                to: view,
-                reportKey: "tabBarFade",
-                reportMessage: "tab bar fade hidden (TabBarGradientView)"
             )
         }
         if let view = targets.freeTierBar {
@@ -269,7 +258,6 @@ enum DeclutterChrome {
     /// 是一场不必要的赌注；而 **hook 手里已经有实例了**，让它顺手登记一下最稳。
     enum Target {
         case miniBar
-        case tabBarFade
         case freeTierBar
         case singalong
         case homeHeader
@@ -278,7 +266,6 @@ enum DeclutterChrome {
     static func note(_ target: UIView, as kind: Target) {
         switch kind {
         case .miniBar: targets.miniBar = target
-        case .tabBarFade: targets.tabBarFade = target
         case .freeTierBar: targets.freeTierBar = target
         case .singalong: targets.singalong = target
         case .homeHeader: targets.homeHeader = target
@@ -385,25 +372,6 @@ class MiniPlayerBarHideHook: ClassHook<UIView> {
             to: self.target,
             reportKey: "miniPlayer",
             reportMessage: "mini player bar hidden (TouchPassthroughView)"
-        )
-    }
-}
-
-/// 标签栏上方那层渐隐（内容滚到标签栏下面时的遮罩）。
-class TabBarFadeHideHook: ClassHook<UIView> {
-    typealias Group = HideTabBarFadeGroup
-    static let targetName = "_TtC23NavigationUI_TabBarImpl18TabBarGradientView"
-
-    func layoutSubviews() {
-        orig.layoutSubviews()
-
-        DeclutterChrome.note(self.target, as: .tabBarFade)
-
-        DeclutterChrome.apply(
-            wantHidden: DeclutterChrome.hideTabBarFade,
-            to: self.target,
-            reportKey: "tabBarFade",
-            reportMessage: "tab bar fade hidden (TabBarGradientView)"
         )
     }
 }
@@ -537,12 +505,6 @@ func activateDeclutterChrome() {
         writeDebugLog("[Declutter] missing \(MiniPlayerBarHideHook.targetName) — mini player hook inactive")
     }
 
-    if NSClassFromString(TabBarFadeHideHook.targetName) != nil {
-        HideTabBarFadeGroup().activate()
-    } else {
-        writeDebugLog("[Declutter] missing \(TabBarFadeHideHook.targetName) — tab bar fade hook inactive")
-    }
-
     if NSClassFromString(FreeTierBarHideHook.targetName) != nil {
         HideFreeTierGroup().activate()
     } else {
@@ -579,7 +541,6 @@ func activateDeclutterChrome() {
     writeDebugLog(
         "[Declutter] installed (miniPlayer="
             + "\(DeclutterChrome.hideMiniPlayerBar ? "ON" : "OFF")"
-            + " tabBarFade=\(DeclutterChrome.hideTabBarFade ? "ON" : "OFF")"
             + " freeTier=\(DeclutterChrome.hideFreeTierBar ? "ON" : "OFF")"
             + " singalongLine=\(DeclutterChrome.hideSingalongLine ? "ON" : "OFF")"
             + " homeHeader=\(DeclutterChrome.hideHomeHeader ? "ON" : "OFF")"

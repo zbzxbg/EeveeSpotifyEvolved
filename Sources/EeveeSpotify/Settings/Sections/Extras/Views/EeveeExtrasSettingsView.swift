@@ -32,7 +32,6 @@ struct EeveeExtrasSettingsView: View {
         var amoled = UserDefaults.amoledEnabled
 
         var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
-        var hideTabBarFade = UserDefaults.hideTabBarFade
         var hideFreeTierBar = UserDefaults.hideFreeTierBar
         var hideSingalongLine = UserDefaults.hideSingalongLine
         var hideHomeHeader = UserDefaults.hideHomeHeader
@@ -42,7 +41,6 @@ struct EeveeExtrasSettingsView: View {
         var gestureBehavior = UserDefaults.playerGestureBehavior
         var gestureNowPlaying = UserDefaults.playerGestureNowPlaying
         var gestureFullscreenLyrics = UserDefaults.playerGestureFullscreenLyrics
-        var gestureMiniBar = UserDefaults.playerGestureMiniBar
     }
 
     var body: some View {
@@ -60,14 +58,6 @@ struct EeveeExtrasSettingsView: View {
                     isOn: declutterBinding(
                         \.hideMiniPlayerBar,
                         persist: { UserDefaults.hideMiniPlayerBar = $0 }
-                    )
-                )
-
-                Toggle(
-                    "hide_tab_bar_fade".localized,
-                    isOn: declutterBinding(
-                        \.hideTabBarFade,
-                        persist: { UserDefaults.hideTabBarFade = $0 }
                     )
                 )
 
@@ -146,14 +136,6 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.gestureFullscreenLyrics,
                         persist: { UserDefaults.playerGestureFullscreenLyrics = $0 }
-                    )
-                )
-
-                Toggle(
-                    "gesture_on_mini_bar".localized,
-                    isOn: shadowBinding(
-                        \.gestureMiniBar,
-                        persist: { UserDefaults.playerGestureMiniBar = $0 }
                     )
                 )
             }

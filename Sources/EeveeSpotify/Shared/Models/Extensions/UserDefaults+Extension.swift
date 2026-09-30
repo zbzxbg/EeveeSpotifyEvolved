@@ -26,7 +26,6 @@ extension UserDefaults {
     private static let dumpViewTreeKey = "dumpViewTree"
     private static let amoledEnabledKey = "amoledEnabled"
     private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
-    private static let hideTabBarFadeKey = "hideTabBarFade"
     private static let hideFreeTierBarKey = "hideFreeTierBar"
     private static let hideSingalongLineKey = "hideSingalongLine"
     private static let hideHomeHeaderKey = "hideHomeHeader"
@@ -34,7 +33,6 @@ extension UserDefaults {
     private static let hideAddToButtonKey = "hideAddToButton"
     private static let playerGestureNowPlayingKey = "playerGestureNowPlaying"
     private static let playerGestureFullscreenLyricsKey = "playerGestureFullscreenLyrics"
-    private static let playerGestureMiniBarKey = "playerGestureMiniBar"
     private static let playerGestureBehaviorKey = "playerGestureBehavior"
 
     static var musixmatchToken: String {
@@ -281,16 +279,6 @@ extension UserDefaults {
         }
     }
 
-    /// 隐藏标签栏上方那层渐隐（内容滚到标签栏下面时的遮罩）。默认关，实时读。
-    static var hideTabBarFade: Bool {
-        get {
-            container.object(forKey: hideTabBarFadeKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: hideTabBarFadeKey)
-        }
-    }
-
     /// 隐藏 free-tier 提示条。默认关，实时读。
     static var hideFreeTierBar: Bool {
         get {
@@ -353,8 +341,9 @@ extension UserDefaults {
     // MARK: - 播放器双击手势（Gestures）
     /// 正在播放页（大封面那页）上的双击手势。**默认开**。
     ///
-    /// 三个面里只有它默认开：它是"播放器"的主界面，也是 spoti.pw 加手势的那一面；
-    /// 另外两面（全屏歌词页 / 迷你条）由用户自己决定，免得和既有操作打架。
+    /// 两个面里只有它默认开：它是"播放器"的主界面，也是 spoti.pw 加手势的那一面；
+    /// 另一面（全屏歌词页）由用户自己决定，免得和既有操作打架。
+    /// （迷你播放条那一面 2026-10-01 已按用户要求整体删除。）
     static var playerGestureNowPlaying: Bool {
         get {
             container.object(forKey: playerGestureNowPlayingKey) as? Bool ?? true
@@ -371,16 +360,6 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: playerGestureFullscreenLyricsKey)
-        }
-    }
-
-    /// 迷你播放条上的双击手势。默认关。
-    static var playerGestureMiniBar: Bool {
-        get {
-            container.object(forKey: playerGestureMiniBarKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: playerGestureMiniBarKey)
         }
     }
 

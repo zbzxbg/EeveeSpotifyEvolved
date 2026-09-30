@@ -276,3 +276,51 @@ spoti.pw 文档里说它"强制的那批 flag"（玻璃导航栏 / 新播放器�
 → 完整短名单、对照表与试法见 **`Tools/eevee-hookfinder/FLAGS_9186_DESIGN.md`**。
 → 这条**插在"一屏玻璃样品"之前**：如果 `force_enabled` 真能把 Spotify 自己的玻璃打开，
 "重绘 10 个页面"就可能变成"在 Spotify 自己的新外观上做减法"。
+
+---
+
+# 9. 2026-10-01 第二批：验收通过的收尾 + 清理 + 打通 flag 通道
+
+## 9.1 一次性验收结果（用户实测，§8 那一批全部落地）
+
+| 项目 | 结果 |
+|---|---|
+| 隐藏加号按钮 / 迷你播放条 / 封面下一行歌词 / 设备按钮 | ✅ |
+| 双击手势（正在播放页 / 全屏歌词页）、15 秒手势 | ✅ |
+| **关掉开关当场恢复** | ✅ —— §8.3 那次修的核心 |
+| 触感 / Flag 覆盖 / 上报拦截 | ✅ |
+| 隐藏标签栏渐隐 | ⚠️ 生效（日志里有上报）但肉眼不可见 → **已删** |
+| 隐藏 free-tier 条 | ⚠️ 该账号上高度为 0，无法观察（**保留**） |
+
+→ `build 2` 的四个坏点（迷你条 / 加号 / 15 秒 / 选择器不刷新）全部修好并验证。
+
+## 9.2 删掉的两个开关（让"扩展功能"变短）
+
+- **迷你播放条的手势面**：`MiniBarGestureHook` / `GestureMiniBarGroup` / 设置行 /
+  `playerGestureMiniBar` 键 / en+zh-CN 文案，全删。现在「双击手势」只剩两项。
+- **隐藏标签栏渐隐**：`TabBarFadeHideHook` / `HideTabBarFadeGroup` / 复查里的 `tabBarFade` /
+  设置行 / `hideTabBarFade` 键 / 文案，全删。它藏的是 `TabBarGradientView`（黑→透明渐变），
+  深色主题上本来就看不出来 —— 不值得占一行。
+
+## 9.3 打通 flag 通道（为"液态玻璃"铺路）
+
+见 `FLAGS_9186_DESIGN.md` 末节。三处改动：
+
+1. `EeveePropertyModification.forceEnum`（新增）+ `FlagOverride` 的「写入指定值」改用它
+   → 服务端**没下发**的 flag 也能被覆盖（原来的 `.setEnum` 是空枪）。
+2. `[Flags] override <scope>.<name> — N match(es)` 一行（在改写**之前**数命中），
+   **所有**用户覆盖都打 → 从日志就能分清"没生效"和"生效了但界面没变"。
+3. **构建开关（默认关）**：CI 工作流新增 `liquid_glass` 布尔输入；本地脚本认
+   `ALLOW_LIQUID_GLASS=1` → 删掉 Spotify 自己写的 `UIDesignRequiresCompatibility=true`
+   （读 IPA 得到的事实：那是玻璃的**硬闸**）。
+
+## 9.4 下一批待办（按优先级）
+
+1. **玻璃基线实验**：跑一次**带** `liquid_glass` 的构建，**先不加任何 flag**，看基线
+   （变玻璃了？错位了？崩了？）。不崩再叠 `mode=force_enabled`。
+2. **屏蔽艺人**（C 档唯一的真功能）：复用 `SPTPlayerTrackHook` +
+   `WordByWordPlaybackControl.skipToNext()`（日志 8 已证明可用）。**待定**：名单怎么加
+   （建议：艺人页/正在播放页一键加入 + 设置页手动增删）。
+3. D 档小项（Updates 页 / Home 渐变 / Accent / Navbar labels）—— 用户已明确**等玻璃做完再说**。
+4. 若第 1 步确认 9.1.86 没带那套玻璃 → 回到"**一屏玻璃样品**"（挑正在播放页或歌单页，
+   日志 8 已把这两屏的类名/frame 抓全）。

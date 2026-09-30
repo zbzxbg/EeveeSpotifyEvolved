@@ -92,3 +92,32 @@ queue 与 Connect sheet / 重设计播放器头 / 睡眠定时器选项 sheet」
 如果 `force_enabled` 真的能把 Spotify 自己的玻璃外观打开，那"重绘整个 App"这件事就可能
 **从自绘变成配置** —— 我们只需要在这个基础上做减法，而不是重画 10 个页面。
 值得花一次重启去问清楚。
+
+---
+
+## 2026-10-01 实测结果与已做的改动
+
+**实测：没反应。** 原因查清了，是**两道闸**，不是 flag 名猜错：
+
+| 闸 | 事实（都查过） | 怎么解（已做） |
+|---|---|---|
+| **硬闸** | 解密 IPA 的 `Info.plist` 里 **`UIDesignRequiresCompatibility = True`** —— 这是 **Spotify 自己**写的，等于要求 iOS 26 用**兼容模式**跑它。整个 App 不进新设计语言，任何 flag 都不可能让它变玻璃。spoti.pw 的 `plist/` 覆盖干的就是这件事 | 打 IPA 时删掉这个键。已做成**构建开关**：CI 工作流新增 `liquid_glass` 布尔输入；本地脚本认 `ALLOW_LIQUID_GLASS=1`。**默认关** |
+| **软闸** | 设置页的「写入指定值」原来映射到 `.setEnum`，**只改服务端已下发的条目、不会新增**；设计类 flag 服务端基本不下发 → 空枪。而且命中数只对歌词/NPV 打，连"是不是空枪"都看不见 | 新增 `.forceEnum`（没有就追加）；「写入指定值」改用它；并新增一行 `[Flags] override <scope>.<name> — N match(es)`，**所有**用户覆盖都打 |
+
+### 怎么跑这个实验
+
+- **CI**：跑 `Build IPA — patched` 时把 **liquid_glass** 勾上 → 产出的 IPA 里那个键已被删掉。
+- **本地**：`ALLOW_LIQUID_GLASS=1 ./build-ipa-local.sh <vanilla.ipa>`。
+- 装完**先不碰任何 flag**，看基线（有没有变玻璃 / 有没有错位）；确认不崩，再叠 `mode=force_enabled`。
+- **回退**：重跑一次**不带**这个开关的构建即可，不用改代码。
+
+### 这次日志里该看什么
+
+```
+[Flags] override ios-reprise-liquid-glass-override.mode — 0 match(es) (server did not send it; we append our own)
+```
+
+- `0 match(es) …` = 服务端没下发，我们**追加**了自己的那条（这就是 `.forceEnum` 的意义）；
+- `1 match(es)` = 服务端下发了，我们改的就是它。
+
+两种情况下界面都没变，才说明"这版 9.1.86 里没有那套玻璃"，可以安心走自绘路线。

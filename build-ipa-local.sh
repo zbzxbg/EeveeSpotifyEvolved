@@ -84,11 +84,26 @@ cd "$OUT_DIR"
 for IPA in "$(basename "$OUT_IPA")" "$(basename "$PATCHED_IPA")"; do
     rm -rf Payload
     unzip -q "$IPA"
+    NEEDS_REZIP=0
+
     if [ -d "Payload/Spotify.app/Watch" ]; then
         rm -rf Payload/Spotify.app/Watch
-        zip -qry "$IPA" Payload
+        NEEDS_REZIP=1
         echo "已剔除 Watch.app: $IPA"
     fi
+
+    # ★ 液态玻璃实验开关（默认关）。见 Tools/eevee-hookfinder/FLAGS_9186_DESIGN.md。
+    # Spotify 自己在 Info.plist 里写了 UIDesignRequiresCompatibility=true —— 那是在要求
+    # iOS 26 用**兼容模式**跑它，于是整个 App 不进新设计语言，任何 UCS flag 都不可能让它变玻璃。
+    # spoti.pw 的 plist/ 覆盖干的就是这件事。做成开关是因为去掉它可能到处错位 ——
+    # 出问题就重跑一次不带 ALLOW_LIQUID_GLASS 的构建，不需要改代码。
+    if [ "${ALLOW_LIQUID_GLASS:-0}" = "1" ] && [ -f "Payload/Spotify.app/Info.plist" ]; then
+        plutil -remove UIDesignRequiresCompatibility Payload/Spotify.app/Info.plist 2>/dev/null || true
+        NEEDS_REZIP=1
+        echo "★ 已去掉 UIDesignRequiresCompatibility（ALLOW_LIQUID_GLASS=1）: $IPA"
+    fi
+
+    [ "$NEEDS_REZIP" = "1" ] && zip -qry "$IPA" Payload
     rm -rf Payload
 done
 cd - >/dev/null
