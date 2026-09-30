@@ -19,6 +19,12 @@ import ObjectiveC.runtime
 ///   · 开关打开 → 藏，并**用关联对象记住"这一层是我藏的"**；
 ///   · 开关关掉 → 只撤回**我们**藏的那一次，Spotify 自己藏的一律不碰。
 /// 第一版没有这条，结果是"关掉开关它也不回来"（用户以为坏了）—— 现在关掉即恢复。
+///
+/// ⚠️⚠️ 但"关掉即恢复"只在**下一次 layout 真的到来**时才成立。2026-10-01 的日志 8 证明
+/// 它并不可靠，见下面 `reconcile` 那一段的说明（迷你播放条没上报、加号按钮没生效，
+/// 用户那边的表现是"迷你条消失且无法恢复"）。所以每个开关现在**两个时机**都跑：
+///   1. 目标类自己的 `layoutSubviews`（快路径，保持原样）；
+///   2. `MainWindow` 的节流复查 + 开关被手动切换 + App 回到前台（兜底，见 `reconcile`）。
 struct HideMiniPlayerGroup: HookGroup {}
 struct HideTabBarFadeGroup: HookGroup {}
 struct HideFreeTierGroup: HookGroup {}
@@ -124,6 +130,240 @@ enum DeclutterChrome {
         clearHiddenByUs(view)
         writeDebugLog("[Declutter] \(reportKey) restored")
     }
+
+    // MARK: - 复查（reconcile）：把"藏 / 还原"接到一个一定会跑的节拍上
+
+    /// ⚠️ 为什么必须有它（2026-10-01 日志 8 的实证）
+    ///
+    /// 原来只有"目标类自己的 `layoutSubviews`"一个时机，两个后果：
+    ///
+    ///   · **迷你播放条**：启动时没在播放，Spotify 把 `TouchPassthroughView` 设成 `hidden`，
+    ///     我们的 `apply` 走 `guard !view.isHidden` 直接返回（不标记、不上报）。等 Spotify
+    ///     把它显示回来时不一定再有 layout 回合 —— 日志 8 的 #19/#20 里它已经显示，
+    ///     而整份日志**一行 `[Declutter]` 都没有**（日志 5 那次恰好启动时就在播放，才有）。
+    ///     用户那边的表现就是"迷你条消失且无法恢复"。
+    ///
+    ///   · **加号按钮**：它只能从 `ConnectButtonView` 的兄弟里找，而那颗按钮**已经被我们藏了**，
+    ///     被藏的视图不再收 layout 回合 → 那次扫描实际只跑过启动一次（日志 8 的 #4–#20
+    ///     里 `id=Components.UI.AddToButton` 全部可见，且从没上报）。
+    ///
+    /// 所以换成**常驻可见的宿主**（`MainWindow`，`_TtC30ContainerUI_RootUIInternalImpl10MainWindow`，
+    /// 每份真机转储里都在、每次布局都跑）做节流复查，另外两个时机也强制跑：
+    ///   · 开关被手动切换（设置页 → `reconcileNow()`，关掉要**当场**还回来）；
+    ///   · App 回到前台（`didBecomeActive`，正是"划出 Spotify 再回来"那一步）。
+    ///
+    /// 复查是幂等的：开关开着就确保藏起来，关着就只撤回**我们**藏过的那一次。
+
+    /// 解析结果的缓存。全窗口扫描不便宜，所以结果留着；视图被换掉时 `weak` 自动失效，
+    /// 下一轮重扫即可。
+    private struct ResolvedTargets {
+        weak var miniBar: UIView?
+        weak var tabBarFade: UIView?
+        weak var freeTierBar: UIView?
+        weak var singalong: UIView?
+        weak var homeHeader: UIView?
+        weak var connect: UIView?
+        weak var addTo: UIView?
+    }
+
+    private static var targets = ResolvedTargets()
+    private static var lastReconcileAt: CFAbsoluteTime = 0
+    private static var lastScanAt: CFAbsoluteTime = 0
+    /// 节流窗口。`MainWindow` 在滚动时几乎每帧都有 layout，0.3s 一次足够追上 Spotify 的
+    /// 显示逻辑，又不至于每帧走一遍窗口树。
+    private static let reconcileInterval: CFAbsoluteTime = 0.3
+    /// 找那两颗按 id 认的按钮比"重新施加一遍"贵，单独再节流一次。
+    private static let scanInterval: CFAbsoluteTime = 1.0
+    /// 扫描节点上限。正常一屏远小于它，纯粹防病态情况。
+    private static let maxScanNodes = 3000
+
+    /// 开关被手动切换 / App 回到前台时调用：**当场**落地，不等下一次 layout。
+    static func reconcileNow() {
+        lastReconcileAt = 0
+        lastScanAt = 0
+        reconcile(in: keyWindowRoot())
+    }
+
+    /// 把当前所有清爽开关重新施加一遍。幂等、只读查找、不改别的视图。
+    static func reconcile(in root: UIView?, force: Bool = false) {
+        guard let root else { return }
+
+        let now = CFAbsoluteTimeGetCurrent()
+
+        if !force {
+            guard now - lastReconcileAt >= reconcileInterval else { return }
+        }
+        lastReconcileAt = now
+
+        // 那两个按 id 认的按钮，只有对应开关开着时才需要找（默认都关着 → 默认零扫描）。
+        // 关掉开关时**不需要**重新找：`targets` 里还留着上一次的引用，够用来还原。
+        if (hideConnectButton || hideAddToButton), now - lastScanAt >= scanInterval {
+            lastScanAt = now
+            resolveIDTargets(in: root)
+        }
+
+        if let view = targets.miniBar {
+            apply(
+                wantHidden: hideMiniPlayerBar,
+                to: view,
+                reportKey: "miniPlayer",
+                reportMessage: "mini player bar hidden (TouchPassthroughView)"
+            )
+        }
+        if let view = targets.tabBarFade {
+            apply(
+                wantHidden: hideTabBarFade,
+                to: view,
+                reportKey: "tabBarFade",
+                reportMessage: "tab bar fade hidden (TabBarGradientView)"
+            )
+        }
+        if let view = targets.freeTierBar {
+            apply(
+                wantHidden: hideFreeTierBar,
+                to: view,
+                reportKey: "freeTier",
+                reportMessage: "free tier indicator bar hidden"
+            )
+        }
+        if let view = targets.singalong {
+            apply(
+                wantHidden: hideSingalongLine,
+                to: view,
+                reportKey: "singalongLine",
+                reportMessage: "singalong single-line lyrics hidden (id=singalong-lyrics-view)"
+            )
+        }
+        if let view = targets.homeHeader {
+            apply(
+                wantHidden: hideHomeHeader,
+                to: view,
+                reportKey: "homeHeader",
+                reportMessage: "home header hidden (HomeHeaderView)"
+            )
+        }
+        if let view = targets.connect {
+            apply(
+                wantHidden: hideConnectButton,
+                to: view,
+                reportKey: "connectButton",
+                reportMessage: "connect button hidden (Components.ConnectButtonOutputSwitcher)"
+            )
+        }
+        if let view = targets.addTo {
+            apply(
+                wantHidden: hideAddToButton,
+                to: view,
+                reportKey: "addToButton",
+                reportMessage: "add-to button hidden (Components.UI.AddToButton)"
+            )
+        }
+    }
+
+    // MARK: 目标登记
+
+    /// 五个"有专属类名"的目标：由各自的 hook 在 `layoutSubviews` 里登记自己。
+    ///
+    /// ⚠️ 为什么不在这里按类名去找：`NSStringFromClass` 对 Swift 类返回什么形式
+    /// （`_TtC…` 混淆名，还是别的写法）依 Swift 版本而异，拿它跟 `targetName` 比字符串
+    /// 是一场不必要的赌注；而 **hook 手里已经有实例了**，让它顺手登记一下最稳。
+    enum Target {
+        case miniBar
+        case tabBarFade
+        case freeTierBar
+        case singalong
+        case homeHeader
+    }
+
+    static func note(_ target: UIView, as kind: Target) {
+        switch kind {
+        case .miniBar: targets.miniBar = target
+        case .tabBarFade: targets.tabBarFade = target
+        case .freeTierBar: targets.freeTierBar = target
+        case .singalong: targets.singalong = target
+        case .homeHeader: targets.homeHeader = target
+        }
+    }
+
+    /// 只有设备按钮与加号按钮这里按**无障碍 id** 找（判据与原 hook 完全相同）。
+    ///
+    /// 这两个没有能单独 hook 的类名：加号是普通 `UIButton`，而"从 `ConnectButtonView` 的
+    /// 兄弟里扫"这条路会被"被藏掉就不再 layout"掐断 —— 这正是日志 8 里它没生效的原因。
+    private static func resolveIDTargets(in root: UIView) {
+        var connect: UIView?
+        var addTo: UIView?
+        var queue: [UIView] = [root]
+        var index = 0
+
+        while index < queue.count, index < maxScanNodes, connect == nil || addTo == nil {
+            let view = queue[index]
+            index += 1
+
+            if let identifier = view.accessibilityIdentifier {
+                if connect == nil, identifier == "Components.ConnectButtonOutputSwitcher" {
+                    connect = view
+                } else if addTo == nil, identifier == "Components.UI.AddToButton" {
+                    addTo = view
+                }
+            }
+
+            queue.append(contentsOf: view.subviews)
+        }
+
+        // 只更新这两个；另外五个由各自的 hook 登记，别在这里清掉。
+        targets.connect = connect
+        targets.addTo = addTo
+    }
+
+    private static func keyWindowRoot() -> UIView? {
+        let windows = UIApplication.shared.windows
+        return windows.first(where: { $0.isKeyWindow }) ?? windows.first
+    }
+
+    // MARK: - 复查的两个驱动（定时器 + 前台）
+
+    private static var lifecycleObserver: NSObjectProtocol?
+    private static var reconcileTimer: Timer?
+
+    static func installReconcileDrivers() {
+        startReconcileTimer()
+
+        guard lifecycleObserver == nil else { return }
+
+        // App 回到前台时强制复查一次。用户反馈的"划出 Spotify（不是杀掉）再回来，
+        // 迷你条就没了/回不来"正发生在这一步：视图可能被重建，或 Spotify 自己重排了一遍。
+        // 每次前台打一行日志，方便下一份日志直接确认这条路径跑过。
+        lifecycleObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            writeDebugLog("[Declutter] reconcile (app became active)")
+            DeclutterChrome.reconcileNow()
+        }
+    }
+
+    /// 兜底节拍器。
+    ///
+    /// ⚠️ 为什么不能只靠 `MainWindow` 的 `layoutSubviews`：UIKit 的布局只从"自己
+    /// `needsLayout`"的那些视图上往下跑，**深层子视图重新布局不一定会走到 window 自己**，
+    /// 所以那个节拍并不保证。这里补一个和 `ViewTreeDumper` 同款的定时器（`.common` 模式，
+    /// 滚动时也不会停；App 进后台被挂起时自然停摆），保证"Spotify 把 chrome 显示回来"
+    /// 这件事在 0.5s 内一定被复查到。
+    private static func startReconcileTimer() {
+        guard reconcileTimer == nil else { return }
+
+        let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
+            // **熄屏/后台不做任何事**（与 `ViewTreeDumper.dumpOnce` 同一条纪律）。
+            // Spotify 在后台放歌时进程不会挂起，这个 0.5s 的节拍没必要在用户看不见屏幕时空转。
+            // 手动调用的那两个入口（开关切换 / didBecomeActive）不受这条影响，照常当场落地。
+            guard UIApplication.shared.applicationState == .active else { return }
+            reconcile(in: keyWindowRoot())
+        }
+        timer.tolerance = 0.2
+        RunLoop.main.add(timer, forMode: .common)
+        reconcileTimer = timer
+    }
 }
 
 /// 迷你播放条（标签栏上方那条，用户照片里就是它）。藏的是它的 host：
@@ -135,6 +375,10 @@ class MiniPlayerBarHideHook: ClassHook<UIView> {
 
     func layoutSubviews() {
         orig.layoutSubviews()
+
+        // 顺手登记：之后这个实例就被复查（`DeclutterChrome.reconcile`）持续盯着，
+        // 即使它自己后来不再收到 layout 回合。
+        DeclutterChrome.note(self.target, as: .miniBar)
 
         DeclutterChrome.apply(
             wantHidden: DeclutterChrome.hideMiniPlayerBar,
@@ -153,6 +397,8 @@ class TabBarFadeHideHook: ClassHook<UIView> {
     func layoutSubviews() {
         orig.layoutSubviews()
 
+        DeclutterChrome.note(self.target, as: .tabBarFade)
+
         DeclutterChrome.apply(
             wantHidden: DeclutterChrome.hideTabBarFade,
             to: self.target,
@@ -170,6 +416,8 @@ class FreeTierBarHideHook: ClassHook<UIView> {
 
     func layoutSubviews() {
         orig.layoutSubviews()
+
+        DeclutterChrome.note(self.target, as: .freeTierBar)
 
         DeclutterChrome.apply(
             wantHidden: DeclutterChrome.hideFreeTierBar,
@@ -198,6 +446,8 @@ class SingalongLyricsLineHideHook: ClassHook<UIView> {
 
         guard self.target.accessibilityIdentifier == "singalong-lyrics-view" else { return }
 
+        DeclutterChrome.note(self.target, as: .singalong)
+
         DeclutterChrome.apply(
             wantHidden: DeclutterChrome.hideSingalongLine,
             to: self.target,
@@ -215,6 +465,8 @@ class HomeHeaderHideHook: ClassHook<UIView> {
 
     func layoutSubviews() {
         orig.layoutSubviews()
+
+        DeclutterChrome.note(self.target, as: .homeHeader)
 
         DeclutterChrome.apply(
             wantHidden: DeclutterChrome.hideHomeHeader,
@@ -258,8 +510,26 @@ class TransportChromeHideHook: ClassHook<UIView> {
     }
 }
 
+/// 复查的**宿主**。
+///
+/// 为什么是 `MainWindow`：真机树里它是 `0.MainWindow@0,0,414,896,id=spotify-main-window`，
+/// 运行期名 `_TtC30ContainerUI_RootUIInternalImpl10MainWindow`；它在**每一份**转储里都在，
+/// 而且每次布局都会走一遍 —— 拿它当节拍器，就不会再出现"目标被我们藏掉之后再没有 layout"
+/// 这种死结（日志 8 的迷你条与加号按钮就是这么坏的）。
+struct DeclutterReconcileGroup: HookGroup {}
+
+class DeclutterReconcileHook: ClassHook<UIView> {
+    typealias Group = DeclutterReconcileGroup
+    static let targetName = "_TtC30ContainerUI_RootUIInternalImpl10MainWindow"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        DeclutterChrome.reconcile(in: self.target)
+    }
+}
+
 func activateDeclutterChrome() {
-    // 三个 group 各自按"类在不在"决定装不装（本仓库既有做法）：目标类缺失时 Orion
+    // 每个 group 各自按"类在不在"决定装不装（本仓库既有做法）：目标类缺失时 Orion
     // 会报一条非致命错误，不如自己先判掉，日志也更干净。
     if NSClassFromString(MiniPlayerBarHideHook.targetName) != nil {
         HideMiniPlayerGroup().activate()
@@ -296,6 +566,15 @@ func activateDeclutterChrome() {
     } else {
         writeDebugLog("[Declutter] missing \(TransportChromeHideHook.targetName) — transport hook inactive")
     }
+
+    // 复查的两个驱动：0.5s 定时器（主节拍）+ App 回到前台（划出/回来那一刻）。
+    // 宿主 hook 缺失也不致命：那两个驱动还在，只是少一个免费节拍。
+    if NSClassFromString(DeclutterReconcileHook.targetName) != nil {
+        DeclutterReconcileGroup().activate()
+    } else {
+        writeDebugLog("[Declutter] missing \(DeclutterReconcileHook.targetName) — reconcile hook inactive")
+    }
+    DeclutterChrome.installReconcileDrivers()
 
     writeDebugLog(
         "[Declutter] installed (miniPlayer="

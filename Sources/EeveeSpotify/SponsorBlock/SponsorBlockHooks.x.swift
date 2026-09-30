@@ -1,6 +1,7 @@
 import Foundation
 import Orion
 import UIKit
+import ObjectiveC.runtime
 
 private var eeveeObserverRegistered = false
 private let eeveeObserver = EeveeSponsorBlockObserver()
@@ -31,7 +32,13 @@ class ProgressBarSliderHook: ClassHook<UIView> {
 
 class PlayerServiceObserverHook: ClassHook<NSObject> {
     typealias Group = SponsorBlockGroup
-    static let targetName = "SPTPlayerServiceImplementation"
+    /// ⚠️ ObjC 名 `SPTPlayerServiceImplementation` 在 9.1.86 上**不存在**：
+    /// `.spotify-ipa/objc-classnames.txt` 里没有它，日志 8 也直接报了
+    /// `[SB] activate: … class=<missing>` —— 于是这个 hook 从来没装上过，SB 永远拿不到
+    /// 播放状态（`lastPlayer` 一直是 nil，连累"双击前后跳 15 秒"也一起失效）。
+    /// 真名是 Swift 混淆名，来自 `dump-9.1.86.txt`：
+    ///   `_TtC17Player_CommonImpl30SPTPlayerServiceImplementation`
+    static let targetName = "_TtC17Player_CommonImpl30SPTPlayerServiceImplementation"
 
     func addPlayerObserver(_ observer: AnyObject) {
         orig.addPlayerObserver(observer)
@@ -47,8 +54,20 @@ struct SponsorBlockGroup: HookGroup {}
 
 func activateSponsorBlock() {
     let opts = UserDefaults.sponsorBlockOptions
-    let cls = NSClassFromString("SPTPlayerServiceImplementation")
-    writeDebugLog("[SB] activate: enabled=\(opts.enabled ? "Y" : "N") logOnly=\(opts.logOnly ? "Y" : "N") cats=\(opts.enabledCategoriesArray().joined(separator: ",")) server=\(opts.serverURL) class=\(cls == nil ? "<missing>" : "<found>")")
+    let cls = NSClassFromString(PlayerServiceObserverHook.targetName)
+
+    // 类找得到还不够：真正要 hook 的是 `addPlayerObserver:`。`dump-9.1.86.txt` 只给了类名、
+    // 没有方法表，所以这里用 runtime 探测一次并写进日志 —— 免得再猜错第二次。
+    let hasObserverSelector = cls.map {
+        class_getInstanceMethod($0, Selector("addPlayerObserver:")) != nil
+    } ?? false
+
+    writeDebugLog("[SB] activate: enabled=\(opts.enabled ? "Y" : "N") logOnly=\(opts.logOnly ? "Y" : "N") cats=\(opts.enabledCategoriesArray().joined(separator: ",")) server=\(opts.serverURL) class=\(cls == nil ? "<missing>" : "<found>") addPlayerObserver=\(hasObserverSelector ? "Y" : "N")")
+
+    if cls == nil || !hasObserverSelector {
+        writeDebugLog("[SB] player observer hook cannot install — SB will not see playback state")
+    }
+
     SponsorBlockGroup().activate()
     writeDebugLog("[SB] hook group activated")
 }

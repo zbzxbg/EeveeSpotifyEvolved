@@ -13,48 +13,77 @@ struct EeveeExtrasSettingsView: View {
 
     let navigationController: UINavigationController
 
+    /// 本页所有开关与选择的**影子值**。理由见 `Shadow`。
+    @State private var shadow = Shadow()
+
+    /// ⚠️ 为什么每个控件都要一个本地影子值（2026-10-01 用户报的 bug）
+    ///
+    /// 原来每个控件直接绑一个**读 UserDefaults 的临时 Binding**：
+    /// `Binding(get: { UserDefaults.xxx }, set: { UserDefaults.xxx = $0 })`。
+    /// 写 `UserDefaults` **不会**让 SwiftUI 失效重绘 ——
+    ///   · `Toggle` 自己会重绘，所以看不出问题；
+    ///   · `Picker` 的标签是**父视图求值**出来的，于是「双击手势 → 动作」选完仍显示旧值，
+    ///     要等页面被重建（重启 Spotify）才更新。用户报的正是这一条。
+    ///
+    /// 对照本仓库里没这个毛病的两页：`SponsorBlockSettingsView` 用 `@State options`、
+    /// Flag 覆盖页用 `@State newMode` —— 它们先改本地状态（触发重绘）再落盘。
+    /// 这里照同一套做法：`set` 里**先改影子值，再写 UserDefaults**。
+    private struct Shadow {
+        var amoled = UserDefaults.amoledEnabled
+
+        var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
+        var hideTabBarFade = UserDefaults.hideTabBarFade
+        var hideFreeTierBar = UserDefaults.hideFreeTierBar
+        var hideSingalongLine = UserDefaults.hideSingalongLine
+        var hideHomeHeader = UserDefaults.hideHomeHeader
+        var hideConnectButton = UserDefaults.hideConnectButton
+        var hideAddToButton = UserDefaults.hideAddToButton
+
+        var gestureBehavior = UserDefaults.playerGestureBehavior
+        var gestureNowPlaying = UserDefaults.playerGestureNowPlaying
+        var gestureFullscreenLyrics = UserDefaults.playerGestureFullscreenLyrics
+        var gestureMiniBar = UserDefaults.playerGestureMiniBar
+    }
+
     var body: some View {
         List {
             Section(footer: Text("amoled_description".localized)) {
                 Toggle(
                     "amoled".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.amoledEnabled },
-                        set: { UserDefaults.amoledEnabled = $0 }
-                    )
+                    isOn: shadowBinding(\.amoled, persist: { UserDefaults.amoledEnabled = $0 })
                 )
             }
 
             Section(footer: Text("declutter_description".localized)) {
                 Toggle(
                     "hide_mini_player_bar".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.hideMiniPlayerBar },
-                        set: { UserDefaults.hideMiniPlayerBar = $0 }
+                    isOn: declutterBinding(
+                        \.hideMiniPlayerBar,
+                        persist: { UserDefaults.hideMiniPlayerBar = $0 }
                     )
                 )
 
                 Toggle(
                     "hide_tab_bar_fade".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.hideTabBarFade },
-                        set: { UserDefaults.hideTabBarFade = $0 }
+                    isOn: declutterBinding(
+                        \.hideTabBarFade,
+                        persist: { UserDefaults.hideTabBarFade = $0 }
                     )
                 )
 
                 Toggle(
                     "hide_free_tier_bar".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.hideFreeTierBar },
-                        set: { UserDefaults.hideFreeTierBar = $0 }
+                    isOn: declutterBinding(
+                        \.hideFreeTierBar,
+                        persist: { UserDefaults.hideFreeTierBar = $0 }
                     )
                 )
 
                 Toggle(
                     "hide_singalong_line".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.hideSingalongLine },
-                        set: { UserDefaults.hideSingalongLine = $0 }
+                    isOn: declutterBinding(
+                        \.hideSingalongLine,
+                        persist: { UserDefaults.hideSingalongLine = $0 }
                     )
                 )
             }
@@ -65,25 +94,25 @@ struct EeveeExtrasSettingsView: View {
             ) {
                 Toggle(
                     "hide_home_header".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.hideHomeHeader },
-                        set: { UserDefaults.hideHomeHeader = $0 }
+                    isOn: declutterBinding(
+                        \.hideHomeHeader,
+                        persist: { UserDefaults.hideHomeHeader = $0 }
                     )
                 )
 
                 Toggle(
                     "hide_connect_button".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.hideConnectButton },
-                        set: { UserDefaults.hideConnectButton = $0 }
+                    isOn: declutterBinding(
+                        \.hideConnectButton,
+                        persist: { UserDefaults.hideConnectButton = $0 }
                     )
                 )
 
                 Toggle(
                     "hide_add_to_button".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.hideAddToButton },
-                        set: { UserDefaults.hideAddToButton = $0 }
+                    isOn: declutterBinding(
+                        \.hideAddToButton,
+                        persist: { UserDefaults.hideAddToButton = $0 }
                     )
                 )
             }
@@ -94,9 +123,9 @@ struct EeveeExtrasSettingsView: View {
             ) {
                 Picker(
                     "gesture_behavior".localized,
-                    selection: Binding<Int>(
-                        get: { UserDefaults.playerGestureBehavior },
-                        set: { UserDefaults.playerGestureBehavior = $0 }
+                    selection: shadowBinding(
+                        \.gestureBehavior,
+                        persist: { UserDefaults.playerGestureBehavior = $0 }
                     )
                 ) {
                     Text("gesture_behavior_skip".localized).tag(0)
@@ -106,25 +135,25 @@ struct EeveeExtrasSettingsView: View {
 
                 Toggle(
                     "gesture_on_now_playing".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.playerGestureNowPlaying },
-                        set: { UserDefaults.playerGestureNowPlaying = $0 }
+                    isOn: shadowBinding(
+                        \.gestureNowPlaying,
+                        persist: { UserDefaults.playerGestureNowPlaying = $0 }
                     )
                 )
 
                 Toggle(
                     "gesture_on_fullscreen_lyrics".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.playerGestureFullscreenLyrics },
-                        set: { UserDefaults.playerGestureFullscreenLyrics = $0 }
+                    isOn: shadowBinding(
+                        \.gestureFullscreenLyrics,
+                        persist: { UserDefaults.playerGestureFullscreenLyrics = $0 }
                     )
                 )
 
                 Toggle(
                     "gesture_on_mini_bar".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.playerGestureMiniBar },
-                        set: { UserDefaults.playerGestureMiniBar = $0 }
+                    isOn: shadowBinding(
+                        \.gestureMiniBar,
+                        persist: { UserDefaults.playerGestureMiniBar = $0 }
                     )
                 )
             }
@@ -167,6 +196,41 @@ struct EeveeExtrasSettingsView: View {
             }
         }
         .listStyle(GroupedListStyle())
+        // 每次进页重新同步一次：别处（Flag 页、重置、上一版遗留的存储）改了 UserDefaults 时
+        // 影子值不该停在旧值上。与 Flag 覆盖页的 `.onAppear` 同一套做法。
+        .onAppear { shadow = Shadow() }
+    }
+
+    // MARK: - 绑定
+
+    /// 影子值 + 落盘：`set` 里**先改影子值**（让 SwiftUI 失效重绘），再写 UserDefaults。
+    private func shadowBinding<Value>(
+        _ keyPath: WritableKeyPath<Shadow, Value>,
+        persist: @escaping (Value) -> Void
+    ) -> Binding<Value> {
+        Binding(
+            get: { shadow[keyPath: keyPath] },
+            set: { value in
+                shadow[keyPath: keyPath] = value
+                persist(value)
+            }
+        )
+    }
+
+    /// 清爽开关：在影子绑定的基础上多一步**当场复查**。
+    ///
+    /// 为什么需要：这些开关是运行期读的，撤销本来只在"目标视图下一次 layout"时生效 ——
+    /// 而被我们藏过的视图不一定再有 layout 回合，用户那边的表现就是"关掉开关它也不回来"。
+    /// `reconcileNow()` 会当场把当前窗口复查一遍（见 `DeclutterChrome`），
+    /// 所以关掉开关的瞬间那条 chrome 就回来了，不用等布局、也不用重启。
+    private func declutterBinding(
+        _ keyPath: WritableKeyPath<Shadow, Bool>,
+        persist: @escaping (Bool) -> Void
+    ) -> Binding<Bool> {
+        shadowBinding(keyPath) { value in
+            persist(value)
+            DeclutterChrome.reconcileNow()
+        }
     }
 
     /// 与根页 `EeveeSettingsView.pushSettingsController` 同一套做法：把 SwiftUI 页塞进

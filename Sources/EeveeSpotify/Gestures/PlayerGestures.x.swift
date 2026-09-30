@@ -9,8 +9,17 @@ import ObjectiveC.runtime
 /// 所有动作都复用仓库里既有的原语，不另造一套播放控制：
 ///   · 切歌 → `WordByWordPlaybackControl.skipToPrevious()/skipToNext()`
 ///     （它已经处理了"statefulPlayer 选择器找不到就点原生按钮"两条路）
-///   · 跳转 → `SponsorBlockSkipper.shared.currentPlayhead()` 取当前位置 +
-///     `seekTo(seconds:)` 落点
+///   · 跳转 → `WordByWordPositionResolver.shared.currentPositionSeconds()` 取当前位置 +
+///     `WordByWordSeeker.seek(toMs:)` 落点
+///
+/// ⚠️ 跳转**原来**用的是 `SponsorBlockSkipper.shared.currentPlayhead()` + `seekTo(seconds:)`，
+/// 2026-10-01 的日志 8 证明那条路走不通，用户反馈"十五秒手势不生效"：
+///   · 它依赖 SB 的播放器观察者，而观察者的目标类 `SPTPlayerServiceImplementation` 在 9.1.86 上
+///     **不存在**（日志 8：`[SB] activate: … class=<missing>`）→ `lastPlayer` 永远是 nil，
+///     `seekTo` 里 `guard let player = lastPlayer else { return }` **静默返回**；
+///   · 它还被 `options.enabled` 挡着（SB 默认关）。
+/// 换成上面那两条原语后，同一份日志已经给出反证：`[WordByWord] position source:
+/// statefulPlayer.position() -> Double` 与 `[WordByWord] seek to 0ms` 都真的跑通了。
 ///
 /// 面与运行期类名（全部来自真机转储与 `dump-9.1.86.txt`）：
 ///   正在播放页（大封面那页） `_TtC21NowPlaying_ScrollImpl23NPVScrollViewController`
@@ -105,8 +114,14 @@ final class PlayerGestureTapHandler: NSObject {
             }
 
         case .seek:
-            let current = SponsorBlockSkipper.shared.currentPlayhead().position
-            let target = isLeftHalf ? current - PlayerGestures.seekStep : current + PlayerGestures.seekStep
+            // 位置来自 `statefulPlayer.position()`（日志 8 已证明可用）；读不到就**不装**，
+            // 并打一行说明 —— 原来的写法会打出一行"看起来在跳"的日志然后什么都没发生。
+            guard let current = WordByWordPositionResolver.shared.currentPositionSeconds() else {
+                writeDebugLog("[Gestures] seek skipped — no position source (statefulPlayer.position() unresolved)")
+                return
+            }
+
+            let target = max(0, isLeftHalf ? current - PlayerGestures.seekStep : current + PlayerGestures.seekStep)
 
             writeDebugLog(
                 String(
@@ -114,7 +129,7 @@ final class PlayerGestureTapHandler: NSObject {
                     isLeftHalf ? "left" : "right", target, current
                 )
             )
-            SponsorBlockSkipper.shared.seekTo(seconds: target)
+            WordByWordSeeker.seek(toMs: Int(target * 1000))
         }
     }
 }
