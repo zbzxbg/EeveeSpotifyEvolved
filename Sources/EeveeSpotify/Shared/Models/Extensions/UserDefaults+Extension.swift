@@ -28,6 +28,7 @@ extension UserDefaults {
     private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
     private static let hideTabBarFadeKey = "hideTabBarFade"
     private static let hideFreeTierBarKey = "hideFreeTierBar"
+    private static let hideSingalongLineKey = "hideSingalongLine"
 
     static var musixmatchToken: String {
         get {
@@ -290,6 +291,20 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: hideFreeTierBarKey)
+        }
+    }
+
+    /// 隐藏封面与歌名之间那行跟唱单行歌词（`id=singalong-lyrics-view`）。
+    ///
+    /// **默认关**：用户明确说过那一行本身**不是**问题 —— 他反馈的是"逐词歌词开、更好的
+    /// 逐词歌词关"时逐行歌词挂错地方，那个已经修在 `InlineLyricsHostLocator` 里。
+    /// 这个开关只是留个选择，想要更干净的封面再打开。
+    static var hideSingalongLine: Bool {
+        get {
+            container.object(forKey: hideSingalongLineKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: hideSingalongLineKey)
         }
     }
 

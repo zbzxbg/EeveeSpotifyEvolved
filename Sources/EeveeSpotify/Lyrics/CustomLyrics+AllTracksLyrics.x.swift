@@ -280,6 +280,26 @@ enum InlineLyricsHostLocator {
         let contentView: UIView
     }
 
+    /// 这个视图是不是"封面下那一行跟唱歌词"。
+    ///
+    /// 为什么必须排除它（2026-09-30 用户反馈）：9.1.86 上
+    /// `Lyrics_TextComponentImpl.LyricsViewControllerImplementation` 的 root view
+    /// **正好就是**它（`Lyrics_TextComponentImpl.LyricsView`，366x120，待在封面容器里）。
+    /// 卡片还没建出来的那一拍，`findHost` 会退化成拿这个 root view 当宿主 →
+    /// 挂上去就是"逐行歌词跑到封面和歌手名中间那一行"。
+    ///
+    /// ⚠️ 这个类**刻意不在** `inlineLyricsContentClassNames` 里（那里注释写着
+    /// "它一旦被当成歌词内容使用，整层就跑到封面上去了"），所以排除它与既有设计一致。
+    ///
+    /// AM（「更好的逐词歌词」）那条路径里另有一道 `preview host rejected` 闸门挡住它；
+    /// 但**逐词歌词开、更好的逐词歌词关**时走的是旧的 overlay 路径，没有那道闸门 ——
+    /// 所以在源头（宿主查找这里）就把它排除，两条路径一起受益。
+    private static func isSingalongLineHost(_ view: UIView) -> Bool {
+        if view.accessibilityIdentifier == "singalong-lyrics-view" { return true }
+
+        return NSStringFromClass(type(of: view)) == "Lyrics_TextComponentImpl.LyricsView"
+    }
+
     /// 先找 VC 候选（含子 VC 与 present 链）；视图候选命中时返回**该视图本身**
     /// 作为挂载内容视图，而不是它上溯到的 VC 根视图。
     ///
@@ -312,6 +332,7 @@ enum InlineLyricsHostLocator {
             if controllerFallback == nil,
                viewControllerCandidates.contains(NSStringFromClass(type(of: vc))),
                vc.view.window != nil,
+               !isSingalongLineHost(vc.view),
                WordByWordHost.isVisibleOnScreen(vc.view) {
                 // 只留作兜底：`attach` 那边还会用 `cardContainer(for:)` 复核挂载点，
                 // 复核不过（例如它压根不在卡片里）就会拒绝，交给看门狗下一轮再找。

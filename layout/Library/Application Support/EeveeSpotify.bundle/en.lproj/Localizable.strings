@@ -359,3 +359,4 @@ declutter_description = "Hides Spotify's own non-content chrome by class name, t
 hide_mini_player_bar = "Hide the mini player bar";
 hide_tab_bar_fade = "Hide the tab bar fade";
 hide_free_tier_bar = "Hide the free-tier bar";
+hide_singalong_line = "Hide the one-line lyrics under the cover";

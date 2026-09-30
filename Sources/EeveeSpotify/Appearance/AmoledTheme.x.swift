@@ -251,6 +251,8 @@ class TabBarViewAmoledHook: ClassHook<UIView> {
     func layoutSubviews() {
         orig.layoutSubviews()
         AmoledTheme.strip(self.target)
+        // 标签栏自己没有任何底色（日志 6 实证），所以 AM 那层材质得我们插。
+        AmoledTheme.ensureTabBarMaterial(in: self.target)
         // 标签栏一定会布局，所以顺带在这里做导航栏的一次性兜底扫描。
         AmoledTheme.scanForNavBarOnce(in: self.target.window)
     }
@@ -303,4 +305,58 @@ private func markBlurRetargeted(_ view: UIVisualEffectView) {
         NSNumber(value: true),
         .OBJC_ASSOCIATION_RETAIN_NONATOMIC
     )
+}
+
+// MARK: - 标签栏：自己插一层 AM 式深色材质
+
+/// 标签栏材质层的关联对象键（存的是那个 `UIVisualEffectView` 本身）。
+private var amoledTabBarMaterialKey: UInt8 = 0
+
+extension AmoledTheme {
+
+    /// 给标签栏补一层 Apple Music 式的深色材质。
+    ///
+    /// 为什么是"插一层"而不是"改底色"：日志 6 的真机树证明标签栏那一整支**没有任何
+    /// 底色或材质** —— `TabBarContainer.overlayView`、`stackView`、`TabBarView`、
+    /// `TabBarCompactView` 的 `backgroundColor` 全是空，子树里也没有 `_UIBarBackground`
+    /// 或 `UIVisualEffectView`。Spotify 的"栏"观感完全来自它上方那层渐变遮罩
+    /// （`TabBarGradientView`，由「隐藏标签栏渐隐」开关管着）。所以要让标签栏有 AM 那种
+    /// 材质，只剩自己插一层这条路。
+    ///
+    /// 三条自我约束：
+    ///   · 插在**最底层**（index 0）且 `isUserInteractionEnabled = false` —— 不挡 tab 点击；
+    ///   · 尺寸跟随（`autoresizingMask`），被 `Encore` 重排挤走就放回最底；
+    ///   · 只在 `amoledEnabled` 打开时插；关掉开关不再管它（下次启动就不带了）。
+    static func ensureTabBarMaterial(in tabBar: UIView) {
+        guard isEnabled else { return }
+
+        if let material = objc_getAssociatedObject(tabBar, &amoledTabBarMaterialKey) as? UIView {
+            if material.superview !== tabBar {
+                tabBar.insertSubview(material, at: 0)
+                writeDebugLog("[AMOLED] tab bar material re-inserted (Encore moved it out)")
+            } else if tabBar.subviews.first !== material {
+                tabBar.insertSubview(material, at: 0)
+            }
+
+            if material.frame != tabBar.bounds {
+                material.frame = tabBar.bounds
+            }
+            return
+        }
+
+        let material = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
+        material.isUserInteractionEnabled = false
+        material.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        material.frame = tabBar.bounds
+        tabBar.insertSubview(material, at: 0)
+
+        objc_setAssociatedObject(
+            tabBar,
+            &amoledTabBarMaterialKey,
+            material,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+
+        writeDebugLog("[AMOLED] tab bar material inserted (systemThinMaterialDark)")
+    }
 }

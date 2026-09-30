@@ -1,0 +1,1790 @@
+
+# Tree #1  [eeveespotify_debug_shared 3.log]  vc=RootViewController>MusicAppPageHostingViewController  nodes=41/41
+------------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d1   SPTSnackbarAnimationView
+  d2   LayoutOnlyView
+  d4   ElementView<(), State, Event>
+  d5   AutoLayoutStackView
+  d7   ImageViewHolder
+  d7   Primary
+  d8   EncoreImageView
+  d8   StackView
+
+# Tree #2  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  ElementView<(), Any, Any>
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d14  AutoLayoutStackView
+  d14  ConnectButtonView
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  Slider
+  d15  ConnectStateView
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<Props, Props, Event>
+  d15  InformationCollectionView
+  d15  StateMicroInteractionView<AddToButtonState>
+  d15  TabBarItemElementView
+  d16  HomeHeaderView
+  d16  LottieAnimationView
+  d16  PlayButtonView
+  d17  CondensedButton
+  d17  MixedPlayButtonDecorationView
+  d18  AdaptiveFaceContainer
+  d18  BrushedMetalView
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  GlowRingView
+  d18  GreenRingView
+  d18  HoleView
+  d18  MarqueeLabel
+  d18  PillScrollView
+  d18  SpinnerView
+  d19  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d19  EncoreButton
+  d19  GradientView
+  d19  MarqueeLabelFadeMaskView
+  d19  TouchCancellingCollectionView
+  d20  ActiveUsersStackView
+  d20  CollectionViewCell
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  PillDrawerView
+  d21  AnimationTracker
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NoData>>
+  d21  PillView
+  d22  ElementView<HomeStructure, Any, Any>
+  d22  StrokeView
+  d24  ElementView<NewNotificationIndicatorProps, Any, Any>
+  d24  SupplementaryItemView
+
+# Tree #3  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d15  CreateMenuTabBarItemView
+  d15  ProgressDotsView
+  d15  TabBarItemElementView
+  d15  YourLibraryView
+  d16  MicroInteractionView
+  d16  YourLibraryContentView
+  d16  YourLibraryHeaderView
+  d17  LottieAnimationView
+  d17  QuickScrollView
+  d17  YourLibraryCollectionView
+  d17  YourLibraryHeaderContentFiltersView
+  d18  YourLibraryCollectionReusableViewSupplementaryElementContainer
+  d18  YourLibrarySwipeableCollectionViewCellContainer
+  d19  AutoLayoutStackView
+  d20  CollectionView
+  d20  ElementView<YourLibraryControlsRowElementProps, YourLibraryControlsRowElementProps, Event>
+  d21  AdaptiveFaceContainer
+  d21  EncoreButton
+  d22  CollectionViewCellComponentContainer<Model, Never, FilterChipView>
+  d22  LazyElementView<ActiveUsersStackElementProps>
+  d23  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d24  ActiveUsersStackView
+  d24  FilterChipView
+
+# Tree #4  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d15  FTPTouchCancellingCollectionView
+  d16  ElementCollectionViewCell
+  d17  ElementContentView<String, AddMoreSectionElement>
+  d17  ElementContentView<String, AnyElement<()>>
+  d17  ElementContentView<String, CSNestedChipsElement>
+  d17  ElementContentView<String, TrackRowDataElement>
+  d18  ElementView<(), Any, Any>
+  d18  ElementView<ItemListRowData, State, Event>
+  d18  ElementView<Props, Props, Event>
+  d19  ListRow
+  d20  NestedChipsView
+  d20  PassthroughView
+  d21  AutoLayoutStackView
+  d21  StackView
+  d22  Divider
+  d22  NestedChipView
+  d22  SlotObservingView
+  d23  ChipView
+  d23  ElementView<ItemListRowData, Any, Any>
+  d24  ImageView
+  d24  LazyElementView<Props>
+  d24  PillView
+
+# Tree #5  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  AutoLayoutStackView
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<Props, Props, Event>
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  HomeHeaderView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d18  AdaptiveFaceContainer
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  PillScrollView
+  d19  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d19  EncoreButton
+  d19  GradientView
+  d19  TouchCancellingCollectionView
+  d20  ActiveUsersStackView
+  d20  CollectionViewCell
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  PillDrawerView
+  d21  AnimationTracker
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NoData>>
+  d21  PillView
+  d22  ElementView<HomeStructure, Any, Any>
+  d22  StrokeView
+  d24  ElementView<NewNotificationIndicatorProps, Any, Any>
+  d24  SupplementaryItemView
+
+# Tree #6  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=234/234
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d1   SPTSnackbarAnimationView
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  ElementView<(), Any, Any>
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  AutoLayoutStackView
+  d14  ConnectButtonView
+  d14  ElementView<(Optional<()>, Optional<()>), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  Slider
+  d15  ConnectStateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  SliderBufferingAnimationView
+  d15  StateMicroInteractionView<AddToButtonState>
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  LottieAnimationView
+  d16  PlaceholderView
+  d16  PlayButtonView
+  d16  ProgressDotsView
+  d17  CondensedButton
+  d17  ElementView<StaticElementProps, (), Event>
+  d17  ElementView<StaticElementProps, Any, Any>
+  d17  MicroInteractionView
+  d17  MixedPlayButtonDecorationView
+  d18  BrushedMetalView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  GlowRingView
+  d18  GreenRingView
+  d18  HoleView
+  d18  MarqueeLabel
+  d18  SpinnerView
+  d18  Tertiary
+  d19  AdaptiveFaceContainer
+  d19  EncoreButton
+  d19  MarqueeLabelFadeMaskView
+  d20  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d21  ActiveUsersStackView
+
+# Tree #7  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  ElementView<(Optional<()>, Optional<()>), Any, Any>
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d17  CollectionViewCell
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<BrowseStructure, NeedsData>>
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<BrowseStructure, NoData>>
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d19  ElementView<BrowseStructure, Any, Any>
+  d19  ElementView<StaticElementProps, (), Event>
+  d19  ElementView<StaticElementProps, Any, Any>
+  d20  Control<Box>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  Tertiary
+  d21  AdaptiveFaceContainer
+  d21  Box
+  d21  EncoreButton
+  d22  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d23  ActiveUsersStackView
+  d23  AutoLayoutStackView
+  d24  ElementView<HeadingProps, Any, Any>
+
+# Tree #8  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d16  ElementView<Props, State, ()>
+  d16  TouchCancellingCollectionView
+  d17  CollectionViewCell
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<RecentsStructure, NeedsData>>
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<RecentsStructure, NoData>>
+  d18  MultilineSearchBarContainer
+  d19  AutoLayoutStackView
+  d19  ElementView<RecentsStructure, Any, Any>
+  d20  SwipeView<Event>
+  d21  ActionView
+  d21  Control<UIView>
+  d21  TextView
+  d22  Control<ChipView>
+  d23  ChipView
+
+# Tree #9  [eeveespotify_debug_shared 3.log]  vc=RootViewController>NowPlayingOverlayContainer  nodes=250/250
+-------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d15  FTPTouchCancellingCollectionView
+  d16  ElementCollectionViewCell
+  d17  ElementContentView<String, AddMoreSectionElement>
+  d17  ElementContentView<String, AnyElement<()>>
+  d17  ElementContentView<String, CSNestedChipsElement>
+  d17  ElementContentView<String, TrackRowDataElement>
+  d18  ElementView<(), Any, Any>
+  d18  ElementView<ItemListRowData, State, Event>
+  d18  ElementView<Props, Props, Event>
+  d19  ListRow
+  d20  NestedChipsView
+  d20  PassthroughView
+  d21  AutoLayoutStackView
+  d21  StackView
+  d22  Divider
+  d22  NestedChipView
+  d22  SlotObservingView
+  d23  ChipView
+  d23  ElementView<ItemListRowData, Any, Any>
+  d24  ImageView
+  d24  LazyElementView<Props>
+  d24  PillView
+
+# Tree #10  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=206/206
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d1   SPTSnackbarAnimationView
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  ElementView<(), Any, Any>
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  AutoLayoutStackView
+  d14  ConnectButtonView
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  Slider
+  d15  ConnectStateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  ProgressDotsView
+  d15  SliderBufferingAnimationView
+  d15  StateMicroInteractionView<AddToButtonState>
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  LottieAnimationView
+  d16  MicroInteractionView
+  d16  PlaceholderView
+  d16  PlayButtonView
+  d17  CondensedButton
+  d17  MixedPlayButtonDecorationView
+  d18  BrushedMetalView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  GlowRingView
+  d18  GreenRingView
+  d18  HoleView
+  d18  MarqueeLabel
+  d18  SpinnerView
+  d19  MarqueeLabelFadeMaskView
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+
+# Tree #11  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  AutoLayoutStackView
+  d14  ElementView<(), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  TemplateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PodcastTouchForwardingView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  HeaderContainer
+  d19  ElementView<URL, Any, Any>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  ImageHeaderView
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  CreativeWorkTemplateListView
+  d21  DeferredTabContainerView
+  d21  HeaderForegroundView
+  d22  AdaptiveTitle
+  d22  CollectionView
+  d22  GradientView
+  d22  HeaderNavigationBar
+  d22  OverflowStackView
+  d22  ShadowContainer
+  d23  CollectionViewCell
+  d23  ImageViewHolder
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NoData>>
+  d24  EncoreButton
+  d24  EncoreImageView
+  d24  HeaderToolbarActionBackgroundView
+
+# Tree #12  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  ElementView<(), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  TemplateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PodcastTouchForwardingView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  HeaderContainer
+  d19  ElementView<URL, Any, Any>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  ImageHeaderView
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  AutoLayoutStackView
+  d21  CreativeWorkTemplateListView
+  d21  DeferredTabContainerView
+  d21  HeaderForegroundView
+  d22  AdaptiveTitle
+  d22  CollectionView
+  d22  GradientView
+  d22  HeaderNavigationBar
+  d22  OverflowStackView
+  d22  ShadowContainer
+  d23  CollectionViewCell
+  d23  ImageViewHolder
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NoData>>
+  d24  EncoreButton
+  d24  EncoreImageView
+  d24  HeaderToolbarActionBackgroundView
+
+# Tree #13  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  ElementView<(), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  TemplateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PodcastTouchForwardingView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  HeaderContainer
+  d19  ElementView<URL, Any, Any>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  ImageHeaderView
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  AutoLayoutStackView
+  d21  CreativeWorkTemplateListView
+  d21  DeferredTabContainerView
+  d21  HeaderForegroundView
+  d22  AdaptiveTitle
+  d22  CollectionView
+  d22  GradientView
+  d22  HeaderNavigationBar
+  d22  OverflowStackView
+  d22  ShadowContainer
+  d23  CollectionViewCell
+  d23  ImageViewHolder
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NoData>>
+  d24  EncoreButton
+  d24  EncoreImageView
+  d24  HeaderToolbarActionBackgroundView
+
+# Tree #14  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  ElementView<(), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  TemplateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PodcastTouchForwardingView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  HeaderContainer
+  d19  ElementView<URL, Any, Any>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  ImageHeaderView
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  AutoLayoutStackView
+  d21  CreativeWorkTemplateListView
+  d21  DeferredTabContainerView
+  d21  HeaderForegroundView
+  d22  AdaptiveTitle
+  d22  CollectionView
+  d22  GradientView
+  d22  HeaderNavigationBar
+  d22  OverflowStackView
+  d22  ShadowContainer
+  d23  CollectionViewCell
+  d23  ImageViewHolder
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NoData>>
+  d24  EncoreButton
+  d24  EncoreImageView
+  d24  HeaderToolbarActionBackgroundView
+
+# Tree #15  [eeveespotify_debug_shared 3.log]  vc=RootViewController>NowPlayingOverlayContainer  nodes=250/250
+--------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  ElementView<(), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  TemplateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PodcastTouchForwardingView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  HeaderContainer
+  d19  ElementView<URL, Any, Any>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  ImageHeaderView
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  AutoLayoutStackView
+  d21  CreativeWorkTemplateListView
+  d21  DeferredTabContainerView
+  d21  HeaderForegroundView
+  d22  AdaptiveTitle
+  d22  CollectionView
+  d22  GradientView
+  d22  HeaderNavigationBar
+  d22  OverflowStackView
+  d22  ShadowContainer
+  d23  CollectionViewCell
+  d23  ImageViewHolder
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NoData>>
+  d24  EncoreButton
+  d24  EncoreImageView
+  d24  HeaderToolbarActionBackgroundView
+
+# Tree #16  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  SharedByChipElementContainer
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<(), Any, Any>
+  d15  TabBarItemElementView
+  d15  TemplateView
+  d16  CreativeWorkTemplateView
+  d17  ElementView<URL, Any, Any>
+  d17  HeaderNavigationBar
+  d17  HeaderView
+  d17  PodcastTouchForwardingView
+  d17  ProgressDotsView
+  d18  AutoLayoutStackView
+  d18  GradientView
+  d18  MicroInteractionView
+  d18  PlayButtonView
+  d19  CondensedButton
+  d19  HeaderContainer
+  d19  HeaderToolbarActionBackgroundView
+  d19  LottieAnimationView
+  d20  ElementView<Props, Any, Any>
+  d20  EncoreButton
+  d20  SpinnerView
+  d21  ImageHeaderView
+  d21  ScrollView
+  d22  CreativeWorkTemplateListView
+  d22  DeferredTabContainerView
+  d22  HeaderForegroundView
+  d23  AdaptiveTitle
+  d23  CollectionView
+  d23  OverflowStackView
+  d23  ShadowContainer
+  d24  CollectionViewCell
+  d24  ImageViewHolder
+
+# Tree #17  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  CreativeWorkTemplateView
+  d14  ElementView<(), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<URL, Any, Any>
+  d15  HeaderNavigationBar
+  d15  HeaderView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  AutoLayoutStackView
+  d16  GradientView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PlayButtonView
+  d16  PodcastTouchForwardingView
+  d17  CondensedButton
+  d17  HeaderToolbarActionBackgroundView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<Props, Any, Any>
+  d18  EncoreButton
+  d18  SpinnerView
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  CreativeWorkTemplateListView
+  d22  CollectionView
+  d23  CollectionViewCell
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<RetrievalListStructuredData, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<RetrievalListStructuredData, NoData>>
+
+# Tree #18  [eeveespotify_debug_shared 3.log]  vc=RootViewController>MusicAppPageHostingViewController  nodes=250/250
+---------------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  SPNavigationBar
+  d10  TabBarView
+  d11  TabBarCompactView
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  SettingsListCollectionView
+  d15  CollectionViewCell
+  d15  CreateMenuTabBarItemView
+  d15  TabBarItemElementView
+  d16  ElementContentView<ItemIdentifier, AnyElement<Props>>
+  d16  ElementContentView<ItemIdentifier, SimpleUIViewElement>
+  d17  ElementView<(), (), Never>
+  d17  ElementView<Props, Any, Any>
+  d18  ListRow
+  d19  PassthroughView
+  d20  ConfigurableUIEventObservingView
+  d21  ElementView<Props, State, Event>
+  d22  BoxInteractionListenerView
+  d23  Box
+  d24  Primary
+
+# Tree #19  [eeveespotify_debug_shared 3.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  SPNavigationBar
+  d10  TabBarView
+  d11  TabBarCompactView
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d15  CreateMenuTabBarItemView
+  d15  TabBarItemElementView
+  d15  UpdateCoalescingCollectionView
+  d16  ListCollectionViewCell
+  d16  ListCollectionViewHeaderFooter
+  d18  CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>>
+  d18  ListRowBackgroundContainerView
+
+# Tree #1  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<(), Any, Any>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  AutoLayoutStackView
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<Props, Props, Event>
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  HomeHeaderView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d18  AdaptiveFaceContainer
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  PillScrollView
+  d19  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d19  EncoreButton
+  d19  GradientView
+  d19  ProgressDotsView
+  d19  TouchCancellingCollectionView
+  d20  ActiveUsersStackView
+  d20  CollectionViewCell
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  MicroInteractionView
+  d20  PillDrawerView
+  d21  AnimationTracker
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NoData>>
+  d21  LottieAnimationView
+  d21  PillView
+  d22  ConnectStateView
+  d22  ElementView<HomeStructure, Any, Any>
+  d22  StrokeView
+  d24  ElementView<NewNotificationIndicatorProps, Any, Any>
+  d24  SupplementaryItemView
+
+# Tree #2  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<(), Any, Any>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  AutoLayoutStackView
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  ConnectStateView
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<Props, Props, Event>
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  HomeHeaderView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d18  AdaptiveFaceContainer
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  PillScrollView
+  d19  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d19  EncoreButton
+  d19  GradientView
+  d19  TouchCancellingCollectionView
+  d20  ActiveUsersStackView
+  d20  CollectionViewCell
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  PillDrawerView
+  d21  AnimationTracker
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NoData>>
+  d21  PillView
+  d22  ElementView<HomeStructure, Any, Any>
+  d22  StrokeView
+  d24  ElementView<NewNotificationIndicatorProps, Any, Any>
+  d24  SupplementaryItemView
+
+# Tree #3  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<Props, Props, Event>
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  HomeHeaderView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d18  AdaptiveFaceContainer
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  PillScrollView
+  d19  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d19  EncoreButton
+  d19  GradientView
+  d19  TouchCancellingCollectionView
+  d20  ActiveUsersStackView
+  d20  AutoLayoutStackView
+  d20  CollectionViewCell
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  PillDrawerView
+  d21  AnimationTracker
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NeedsData>>
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NoData>>
+  d21  PillView
+  d22  ElementView<HomeStructure, Any, Any>
+  d22  StrokeView
+  d24  ElementView<NewNotificationIndicatorProps, Any, Any>
+  d24  SupplementaryItemView
+
+# Tree #4  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  ProgressDotsView
+  d15  TabBarItemElementView
+  d15  YourLibraryView
+  d16  MicroInteractionView
+  d16  PlaceholderView
+  d16  YourLibraryContentView
+  d16  YourLibraryHeaderView
+  d17  LottieAnimationView
+  d17  QuickScrollView
+  d17  YourLibraryCollectionView
+  d17  YourLibraryHeaderContentFiltersView
+  d18  YourLibraryCollectionReusableViewSupplementaryElementContainer
+  d18  YourLibrarySwipeableCollectionViewCellContainer
+  d19  AutoLayoutStackView
+  d20  CollectionView
+  d20  ElementView<YourLibraryControlsRowElementProps, YourLibraryControlsRowElementProps, Event>
+  d21  AdaptiveFaceContainer
+  d21  EncoreButton
+  d22  CollectionViewCellComponentContainer<Model, Never, FilterChipView>
+  d22  LazyElementView<ActiveUsersStackElementProps>
+  d23  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d24  ActiveUsersStackView
+  d24  FilterChipView
+
+# Tree #5  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d16  YourLibraryView
+  d17  FTPTouchCancellingCollectionView
+  d17  ProgressDotsView
+  d17  YourLibraryContentView
+  d17  YourLibraryHeaderView
+  d18  ElementCollectionViewCell
+  d18  MicroInteractionView
+  d18  QuickScrollView
+  d18  YourLibraryCollectionView
+  d18  YourLibraryHeaderContentFiltersView
+  d19  ElementContentView<String, AddMoreSectionElement>
+  d19  ElementContentView<String, AnyElement<()>>
+  d19  ElementContentView<String, CSNestedChipsElement>
+  d19  ElementContentView<String, TrackRowDataElement>
+  d19  LottieAnimationView
+  d19  YourLibraryCollectionReusableViewSupplementaryElementContainer
+  d19  YourLibrarySwipeableCollectionViewCellContainer
+  d20  AutoLayoutStackView
+  d20  ElementView<(), Any, Any>
+  d20  ElementView<Props, Props, Event>
+  d21  CollectionView
+  d21  ElementView<YourLibraryControlsRowElementProps, YourLibraryControlsRowElementProps, Event>
+  d22  AdaptiveFaceContainer
+  d22  EncoreButton
+  d22  ListRow
+  d22  NestedChipsView
+  d23  CollectionViewCellComponentContainer<Model, Never, FilterChipView>
+  d23  LazyElementView<ActiveUsersStackElementProps>
+  d23  PassthroughView
+  d24  Divider
+  d24  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d24  StackView
+
+# Tree #6  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d15  FTPTouchCancellingCollectionView
+  d16  ElementCollectionViewCell
+  d17  ElementContentView<String, AddMoreSectionElement>
+  d17  ElementContentView<String, AnyElement<()>>
+  d17  ElementContentView<String, CSNestedChipsElement>
+  d17  ElementContentView<String, TrackRowDataElement>
+  d18  ElementView<(), Any, Any>
+  d18  ElementView<ItemListRowData, State, Event>
+  d18  ElementView<Props, Props, Event>
+  d19  ListRow
+  d20  NestedChipsView
+  d20  PassthroughView
+  d21  AutoLayoutStackView
+  d21  StackView
+  d22  Divider
+  d22  SlotObservingView
+  d23  ElementView<ItemListRowData, Any, Any>
+  d24  ImageView
+  d24  LazyElementView<Props>
+
+# Tree #7  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d15  YourLibraryView
+  d16  PlaceholderView
+  d16  YourLibraryContentView
+  d16  YourLibraryHeaderView
+  d17  QuickScrollView
+  d17  YourLibraryCollectionView
+  d17  YourLibraryHeaderContentFiltersView
+  d18  YourLibraryCollectionReusableViewSupplementaryElementContainer
+  d18  YourLibrarySwipeableCollectionViewCellContainer
+  d19  AutoLayoutStackView
+  d20  CollectionView
+  d20  ElementView<YourLibraryControlsRowElementProps, YourLibraryControlsRowElementProps, Event>
+  d21  AdaptiveFaceContainer
+  d21  EncoreButton
+  d22  CollectionViewCellComponentContainer<Model, Never, FilterChipView>
+  d22  LazyElementView<ActiveUsersStackElementProps>
+  d23  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d24  ActiveUsersStackView
+  d24  FilterChipView
+
+# Tree #8  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d15  FTPTouchCancellingCollectionView
+  d15  ProgressDotsView
+  d16  ElementCollectionViewCell
+  d16  MicroInteractionView
+  d17  ElementContentView<String, AnyElement<()>>
+  d17  ElementContentView<String, CurationActionsToolbarElement>
+  d17  ElementContentView<String, TrackRowDataElement>
+  d17  HeaderLayout
+  d17  LottieAnimationView
+  d18  ElementView<(), Any, Any>
+  d18  ElementView<ItemListRowData, State, Event>
+  d18  ElementView<Props, State, ()>
+  d19  HeaderForegroundView
+  d19  ListRow
+  d20  HeaderNavigationBar
+  d20  HeaderView
+  d20  PassthroughView
+  d21  ElementView<PLPlaylistEntityModel, Any, Any>
+  d21  GradientView
+  d21  ScrollView
+  d21  StackView
+  d22  Divider
+  d22  HeaderContentLayout
+  d22  HeaderToolbarActionBackgroundView
+  d22  SlotObservingView
+  d23  ElementView<ItemListRowData, Any, Any>
+  d23  Primary
+  d23  ShadowContainer
+  d24  AutoLayoutStackView
+  d24  ElementView<PLPlaylistEntityModel, State, Never>
+  d24  ImageView
+  d24  LazyElementView<Props>
+
+# Tree #9  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d15  FTPTouchCancellingCollectionView
+  d16  ElementCollectionViewCell
+  d17  ElementContentView<String, AnyElement<()>>
+  d17  ElementContentView<String, CurationActionsToolbarElement>
+  d17  ElementContentView<String, TrackRowDataElement>
+  d18  ElementView<(), Any, Any>
+  d18  ElementView<ItemListRowData, State, Event>
+  d18  ElementView<Props, State, ()>
+  d19  ListRow
+  d20  PassthroughView
+  d21  ScrollView
+  d21  StackView
+  d22  Divider
+  d22  SlotObservingView
+  d23  ElementView<ItemListRowData, Any, Any>
+  d24  AutoLayoutStackView
+  d24  ImageView
+  d24  LazyElementView<Props>
+
+# Tree #10  [eeveespotify_debug_shared 6.log]  vc=RootViewController>NowPlayingOverlayContainer  nodes=250/250
+--------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d1   SPTSnackbarAnimationView
+  d3   LayoutOnlyView
+  d5   ElementView<Props, Props, Never>
+  d5   PassthroughView
+  d8   ElementView<VideoElementProps, Any, Any>
+  d10  SupplementaryItemView
+  d11  ElementContentView<ItemIdentifier, SimpleUIViewElement>
+  d12  ElementView<(), (), Never>
+  d12  NPVGradientView
+  d16  PassThroughView
+  d17  AccessibleCollectionView
+  d17  ElementView<(), State, Event>
+  d17  ElementView<NSDirectionalEdgeInsets, Any, Any>
+  d18  CoverArtCellImpl
+  d18  ElementView<DataElementProps, Any, Any>
+  d18  VisualGesturesView
+  d19  ElementView<(), Any, Any>
+  d19  ElementView<CloseControlsElementProps, Any, Any>
+  d19  MixingBackgroundView
+  d19  SpeedIndicatorView
+  d20  AutoLayoutStackView
+  d20  ConnectButtonOutputSwitcherViewHolder
+  d20  ContentLayerOverlayView
+  d20  Control
+  d20  ElementView<ImageDataElementInput, Any, Any>
+  d20  ElementView<SkipAdButtonProps, Any, Any>
+  d20  ElementView<TrackInfoInput, Any, Any>
+  d20  EncoreButton
+  d20  MaskView
+  d20  Tertiary
+  d21  AnimatedView
+  d21  CoverArtTiltView
+  d21  GradientView
+  d21  ImageView
+  d21  Primary
+  d21  TrackInfoContainerView
+  d22  ImageViewProxy
+  d22  LyricsContainerView
+  d22  MarqueeLabel
+  d22  PlaceholderView
+  d22  PlayButtonView
+  d22  StackView
+  d22  StateMicroInteractionView<AddToButtonState>
+  d23  CondensedButton
+  d23  LottieAnimationView
+  d23  LyricsView
+  d23  MarqueeLabelFadeMaskView
+  d23  MixedPlayButtonDecorationView
+  d23  PassThroughStackView
+  d23  Slider
+  d24  BrushedMetalView
+  d24  GLUEGradientView
+  d24  GlowRingView
+  d24  GreenRingView
+  d24  HoleView
+  d24  SelfSizingTableView
+  d24  SliderBufferingAnimationView
+  d24  SpeedBadgeIconView
+  d24  SpinnerView
+
+# Tree #11  [eeveespotify_debug_shared 6.log]  vc=RootViewController>NowPlayingOverlayContainer  nodes=250/250
+--------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d1   SPTSnackbarAnimationView
+  d3   LayoutOnlyView
+  d5   ElementView<Props, Props, Never>
+  d10  CollectionViewCell
+  d10  SupplementaryItemView
+  d11  ElementContentView<ItemIdentifier, AnyBaseElement<NowPlayingScrollData, NoData>>
+  d11  ElementContentView<ItemIdentifier, SimpleUIViewElement>
+  d12  ElementView<(), (), Never>
+  d12  ElementView<NowPlayingScrollData, Any, Any>
+  d13  CardView
+  d15  CardHeaderView
+  d16  PassThroughView
+  d17  AccessibleCollectionView
+  d17  ElementView<(), State, Event>
+  d17  ElementView<NSDirectionalEdgeInsets, Any, Any>
+  d18  CoverArtCellImpl
+  d18  ElementView<DataElementProps, Any, Any>
+  d18  VisualGesturesView
+  d19  ElementView<(), Any, Any>
+  d19  ElementView<CloseControlsElementProps, Any, Any>
+  d19  MixingBackgroundView
+  d19  SpeedIndicatorView
+  d20  AutoLayoutStackView
+  d20  ConnectButtonOutputSwitcherViewHolder
+  d20  ContentLayerOverlayView
+  d20  Control
+  d20  ElementView<ImageDataElementInput, Any, Any>
+  d20  ElementView<SkipAdButtonProps, Any, Any>
+  d20  ElementView<TrackInfoInput, Any, Any>
+  d20  EncoreButton
+  d20  MaskView
+  d20  Tertiary
+  d21  AnimatedView
+  d21  CoverArtTiltView
+  d21  GradientView
+  d21  ImageView
+  d21  NPVGradientView
+  d21  Primary
+  d21  TrackInfoContainerView
+  d22  ImageViewProxy
+  d22  LyricsContainerView
+  d22  MarqueeLabel
+  d22  PlaceholderView
+  d22  PlayButtonView
+  d22  StackView
+  d22  StateMicroInteractionView<AddToButtonState>
+  d23  CondensedButton
+  d23  LottieAnimationView
+  d23  LyricsView
+  d23  MarqueeLabelFadeMaskView
+  d23  MixedPlayButtonDecorationView
+  d23  PassThroughStackView
+  d23  Slider
+  d24  BrushedMetalView
+  d24  GLUEGradientView
+  d24  GlowRingView
+  d24  GreenRingView
+  d24  HoleView
+  d24  SelfSizingTableView
+  d24  SliderBufferingAnimationView
+  d24  SpeedBadgeIconView
+  d24  SpinnerView
+
+# Tree #12  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=203/203
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d1   SPTSnackbarAnimationView
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  ElementView<(), Any, Any>
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  AutoLayoutStackView
+  d14  ConnectButtonView
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  Slider
+  d15  ConnectStateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  ProgressDotsView
+  d15  SliderBufferingAnimationView
+  d15  StateMicroInteractionView<AddToButtonState>
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  LottieAnimationView
+  d16  MicroInteractionView
+  d16  PlaceholderView
+  d16  PlayButtonView
+  d17  CondensedButton
+  d17  MixedPlayButtonDecorationView
+  d18  BrushedMetalView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  GlowRingView
+  d18  GreenRingView
+  d18  HoleView
+  d18  MarqueeLabel
+  d18  SpinnerView
+  d19  MarqueeLabelFadeMaskView
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+
+# Tree #13  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  ElementView<(), Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d14  TemplateView
+  d15  CreateMenuTabBarItemView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PodcastTouchForwardingView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  HeaderContainer
+  d19  ElementView<URL, Any, Any>
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  ImageHeaderView
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  AutoLayoutStackView
+  d21  CreativeWorkTemplateListView
+  d21  HeaderForegroundView
+  d22  AdaptiveTitle
+  d22  CollectionView
+  d22  GradientView
+  d22  HeaderNavigationBar
+  d22  OverflowStackView
+  d22  ShadowContainer
+  d23  CollectionViewCell
+  d23  ImageViewHolder
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NoData>>
+  d24  EncoreButton
+  d24  EncoreImageView
+  d24  HeaderToolbarActionBackgroundView
+
+# Tree #14  [eeveespotify_debug_shared 6.log]  vc=RootViewController>NowPlayingOverlayContainer  nodes=250/250
+--------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d1   SPTSnackbarAnimationView
+  d3   LayoutOnlyView
+  d5   ElementView<Props, Props, Never>
+  d10  CollectionViewCell
+  d10  SupplementaryItemView
+  d11  ElementContentView<ItemIdentifier, AnyBaseElement<NowPlayingScrollData, NoData>>
+  d11  ElementContentView<ItemIdentifier, SimpleUIViewElement>
+  d12  ElementView<(), (), Never>
+  d12  ElementView<NowPlayingScrollData, Any, Any>
+  d13  CardView
+  d15  CardHeaderView
+  d16  PassThroughView
+  d17  AccessibleCollectionView
+  d17  ElementView<(), State, Event>
+  d17  ElementView<NSDirectionalEdgeInsets, Any, Any>
+  d18  CoverArtCellImpl
+  d18  ElementView<DataElementProps, Any, Any>
+  d18  VisualGesturesView
+  d19  ElementView<(), Any, Any>
+  d19  ElementView<CloseControlsElementProps, Any, Any>
+  d19  MixingBackgroundView
+  d19  SpeedIndicatorView
+  d20  AutoLayoutStackView
+  d20  ConnectButtonOutputSwitcherViewHolder
+  d20  ContentLayerOverlayView
+  d20  Control
+  d20  ElementView<ImageDataElementInput, Any, Any>
+  d20  ElementView<SkipAdButtonProps, Any, Any>
+  d20  ElementView<TrackInfoInput, Any, Any>
+  d20  EncoreButton
+  d20  MaskView
+  d20  Tertiary
+  d21  AnimatedView
+  d21  CoverArtTiltView
+  d21  GradientView
+  d21  ImageView
+  d21  NPVGradientView
+  d21  Primary
+  d21  TrackInfoContainerView
+  d22  ImageViewProxy
+  d22  LyricsContainerView
+  d22  MarqueeLabel
+  d22  PlaceholderView
+  d22  PlayButtonView
+  d22  StackView
+  d22  StateMicroInteractionView<AddToButtonState>
+  d23  CondensedButton
+  d23  LottieAnimationView
+  d23  LyricsView
+  d23  MarqueeLabelFadeMaskView
+  d23  MixedPlayButtonDecorationView
+  d23  PassThroughStackView
+  d23  Slider
+  d24  BrushedMetalView
+  d24  GLUEGradientView
+  d24  GlowRingView
+  d24  GreenRingView
+  d24  HoleView
+  d24  SelfSizingTableView
+  d24  SliderBufferingAnimationView
+  d24  SpeedBadgeIconView
+  d24  SpinnerView
+
+# Tree #15  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d14  SharedByChipElementContainer
+  d15  ElementView<(), Any, Any>
+  d16  FTPTouchCancellingCollectionView
+  d16  VISREFTouchForwardingView
+  d17  ElementCollectionViewCell
+  d17  ProgressDotsView
+  d18  ElementContentView<String, AnyElement<()>>
+  d18  ElementContentView<String, CurationActionsToolbarElement>
+  d18  ElementContentView<String, TrackRowDataElement>
+  d18  HeaderLayout
+  d18  MicroInteractionView
+  d19  ElementView<ItemListRowData, State, Event>
+  d19  ElementView<Props, State, ()>
+  d20  HeaderForegroundView
+  d20  ListRow
+  d21  HeaderNavigationBar
+  d21  HeaderView
+  d21  PassthroughView
+  d22  ElementView<PLPlaylistEntityModel, Any, Any>
+  d22  GradientView
+  d22  ScrollView
+  d22  StackView
+  d23  Divider
+  d23  HeaderContentLayout
+  d23  HeaderToolbarActionBackgroundView
+  d23  SlotObservingView
+  d24  ElementView<ItemListRowData, Any, Any>
+  d24  PlayButtonView
+  d24  Primary
+  d24  ShadowContainer
+
+# Tree #16  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<(), Any, Any>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d13  SharedByChipElementContainer
+  d14  AutoLayoutStackView
+  d14  CreativeWorkTemplateView
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<URL, Any, Any>
+  d15  HeaderNavigationBar
+  d15  HeaderView
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  GradientView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d16  PlayButtonView
+  d16  PodcastTouchForwardingView
+  d17  CondensedButton
+  d17  HeaderToolbarActionBackgroundView
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  d18  ElementView<Props, Any, Any>
+  d18  EncoreButton
+  d18  SpinnerView
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  ScrollView
+  d21  CreativeWorkTemplateListView
+  d22  CollectionView
+  d22  ConnectStateView
+  d23  CollectionViewCell
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<FooterStructuredData, NoData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<RetrievalListStructuredData, NeedsData>>
+  d24  ElementContentView<ItemIdentifier, AnyBaseElement<RetrievalListStructuredData, NoData>>
+
+# Tree #17  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d17  CollectionViewCell
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<BrowseStructure, NeedsData>>
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<BrowseStructure, NoData>>
+  d19  ElementView<BrowseStructure, Any, Any>
+  d20  Control<Box>
+  d21  Box
+  d23  ImageView
+  d23  StackView
+  d24  ElementView<HeadingProps, Any, Any>
+  d24  PlaceholderView
+
+# Tree #18  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d17  CollectionViewCell
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<BrowseStructure, NeedsData>>
+  d19  ElementView<BrowseStructure, Any, Any>
+  d20  Control<Box>
+  d21  Box
+  d23  ImageView
+  d24  PlaceholderView
+
+# Tree #19  [eeveespotify_debug_shared 6.log]  vc=RootViewController  nodes=250/250
+-----------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   TouchForwardingView
+  d16  TouchCancellingCollectionView
+  d17  CollectionViewCell
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<RecentsStructure, NeedsData>>
+  d18  ElementContentView<ItemIdentifier, AnyBaseElement<RecentsStructure, NoData>>
+  d19  ElementView<RecentsStructure, Any, Any>
+  d20  SwipeView<Event>
+  d21  ActionView
+  d21  Control<UIView>
+  d22  AutoLayoutStackView
+
+# Tree #20  [eeveespotify_debug_shared 6.log]  vc=RootViewController>MusicAppPageHostingViewController  nodes=250/250
+---------------------------------------------------------------------------------------------------------------------
+  d0   MainWindow
+  d3   LayoutOnlyView
+  d5   LimitedExperienceIndicatorBar
+  d5   TouchForwardingView
+  d5   TouchPassthroughView
+  d9   StackView
+  d9   TabBarGradientView
+  d10  NowPlayingBarTopStack
+  d10  TabBarView
+  d11  TabBarCompactView
+  d12  InformationContainer
+  d13  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  d13  ElementView<ImageDataElementInput, Any, Any>
+  d14  ElementView<Props, TabBarItemState, Event>
+  d14  ImageViewProxy
+  d15  CreateMenuTabBarItemView
+  d15  ElementView<Props, Props, Event>
+  d15  ImageView
+  d15  InformationCollectionView
+  d15  TabBarItemElementView
+  d16  HomeHeaderView
+  d16  InformationCellV2
+  d16  PlaceholderView
+  d18  AdaptiveFaceContainer
+  d18  ElementView<BarTrackInfoElementProps, Any, Any>
+  d18  PillScrollView
+  d19  ElementView<ActiveUsersStackElementProps, Any, Any>
+  d19  EncoreButton
+  d19  GradientView
+  d19  TouchCancellingCollectionView
+  d20  ActiveUsersStackView
+  d20  AutoLayoutStackView
+  d20  CollectionViewCell
+  d20  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  d20  MarqueeLabel
+  d20  PillDrawerView
+  d21  AnimationTracker
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NeedsData>>
+  d21  ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NoData>>
+  d21  PillView
+  d22  ElementView<HomeStructure, Any, Any>
+  d22  StrokeView
+  d24  ElementView<NewNotificationIndicatorProps, Any, Any>
+  d24  SupplementaryItemView
+
+============================================================
+跨屏常驻类（出现在 >=2 份转储里 —— 适合做全局开关）：
+  39  MainWindow
+  39  LayoutOnlyView
+  36  StackView
+  35  TouchForwardingView
+  34  AutoLayoutStackView
+  29  ImageView
+  25  ElementView<(), Any, Any>
+  24  EncoreButton
+  24  TabBarGradientView
+  24  TabBarView
+  24  TabBarCompactView
+  24  ElementContentView<ItemIdentifier, IdentifiableElementBox<TabBarItemElement>>
+  24  ElementView<Props, TabBarItemState, Event>
+  24  TabBarItemElementView
+  24  CreateMenuTabBarItemView
+  24  LimitedExperienceIndicatorBar
+  24  TouchPassthroughView
+  24  PlaceholderView
+  23  CollectionViewCell
+  23  ElementView<ImageDataElementInput, Any, Any>
+  22  NowPlayingBarTopStack
+  22  ImageViewProxy
+  21  MarqueeLabel
+  20  GradientView
+  20  InformationContainer
+  19  InformationCollectionView
+  18  ElementView<BarPromotionalContentLabelElementProps, Any, Any>
+  17  InformationCellV2
+  17  ElementView<BarTrackInfoElementProps, Any, Any>
+  13  LottieAnimationView
+  13  CollectionView
+  12  AdaptiveFaceContainer
+  12  ElementView<ActiveUsersStackElementProps, Any, Any>
+  12  ScrollView
+  11  ActiveUsersStackView
+  11  PlayButtonView
+  11  HeaderNavigationBar
+  11  HeaderToolbarActionBackgroundView
+  10  ElementView<Props, Props, Event>
+  10  CondensedButton
+  10  SpinnerView
+  10  ProgressDotsView
+  10  MicroInteractionView
+  10  SharedByChipElementContainer
+  9   SupplementaryItemView
+  9   PassthroughView
+  9   ElementView<URL, Any, Any>
+  9   ShadowContainer
+  9   HeaderForegroundView
+  9   CreativeWorkTemplateListView
+  9   PodcastTouchForwardingView
+  8   ImageViewHolder
+  8   TouchCancellingCollectionView
+  8   PillView
+  8   ElementView<ConnectPromotionalLabelAlignment, Any, Any>
+  8   ListRow
+  7   SPTSnackbarAnimationView
+  7   EncoreImageView
+  7   Primary
+  7   ConnectStateView
+  7   MarqueeLabelFadeMaskView
+  7   MixedPlayButtonDecorationView
+  7   HoleView
+  7   GlowRingView
+  7   GreenRingView
+  7   BrushedMetalView
+  7   StateMicroInteractionView<AddToButtonState>
+  7   Slider
+  7   FTPTouchCancellingCollectionView
+  7   ElementCollectionViewCell
+  7   ElementContentView<String, AnyElement<()>>
+  7   Divider
+  7   ElementContentView<String, TrackRowDataElement>
+  7   TemplateView
+  7   HeaderContainer
+  7   ImageHeaderView
+  7   AdaptiveTitle
+  7   OverflowStackView
+  6   ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NoData>>
+  6   ElementView<HomeStructure, Any, Any>
+  6   HomeHeaderView
+  6   ElementView<NewNotificationIndicatorProps, Any, Any>
+  6   PillScrollView
+  6   PillDrawerView
+  6   AnimationTracker
+  6   StrokeView
+  6   ElementView<ItemListRowData, State, Event>
+  6   ElementView<ItemListRowData, Any, Any>
+  6   SlotObservingView
+  6   SliderBufferingAnimationView
+  6   ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NoData>>
+  6   ElementContentView<ItemIdentifier, AnyBaseElement<LCR_Structure, NeedsData>>
+  6   DeferredTabContainerView
+  5   LazyElementView<Props>
+  5   Tertiary
+  5   HeaderView
+  4   ElementView<(), State, Event>
+  4   ConnectButtonView
+  4   YourLibraryView
+  4   YourLibraryContentView
+  4   YourLibraryCollectionView
+  4   YourLibrarySwipeableCollectionViewCellContainer
+  4   YourLibraryCollectionReusableViewSupplementaryElementContainer
+  4   ElementView<YourLibraryControlsRowElementProps, YourLibraryControlsRowElementProps, Event>
+  4   QuickScrollView
+  4   YourLibraryHeaderView
+  4   LazyElementView<ActiveUsersStackElementProps>
+  4   YourLibraryHeaderContentFiltersView
+  4   CollectionViewCellComponentContainer<Model, Never, FilterChipView>
+  4   ElementContentView<String, CSNestedChipsElement>
+  4   NestedChipsView
+  4   ElementContentView<String, AddMoreSectionElement>
+  4   Box
+  4   ElementView<Props, State, ()>
+  4   ElementView<Props, Any, Any>
+  4   ElementContentView<ItemIdentifier, SimpleUIViewElement>
+  4   ElementView<(), (), Never>
+  3   FilterChipView
+  3   ChipView
+  3   ElementView<BrowseStructure, Any, Any>
+  3   ElementContentView<ItemIdentifier, AnyBaseElement<BrowseStructure, NeedsData>>
+  3   Control<Box>
+  3   CreativeWorkTemplateView
+  3   ElementContentView<String, CurationActionsToolbarElement>
+  3   ElementView<Props, Props, Never>
+  3   AccessibleCollectionView
+  3   CoverArtCellImpl
+  3   ContentLayerOverlayView
+  3   CoverArtTiltView
+  3   LyricsContainerView
+  3   LyricsView
+  3   SelfSizingTableView
+  3   GLUEGradientView
+  3   VisualGesturesView
+  3   SpeedIndicatorView
+  3   PassThroughView
+  3   ElementView<NSDirectionalEdgeInsets, Any, Any>
+  3   MixingBackgroundView
+  3   NPVGradientView
+  3   MaskView
+  3   ElementView<CloseControlsElementProps, Any, Any>
+  3   ElementView<TrackInfoInput, Any, Any>
+  3   TrackInfoContainerView
+  3   SpeedBadgeIconView
+  3   ElementView<SkipAdButtonProps, Any, Any>
+  3   ElementView<DataElementProps, Any, Any>
+  3   PassThroughStackView
+  3   AnimatedView
+  3   ConnectButtonOutputSwitcherViewHolder
+  3   Control
+  2   NestedChipView
+  2   ElementView<(Optional<()>, Optional<()>), Any, Any>
+  2   ElementView<StaticElementProps, Any, Any>
+  2   ElementView<StaticElementProps, (), Event>
+  2   ElementContentView<ItemIdentifier, AnyBaseElement<BrowseStructure, NoData>>
+  2   ElementView<HeadingProps, Any, Any>
+  2   ElementContentView<ItemIdentifier, AnyBaseElement<RecentsStructure, NoData>>
+  2   ElementView<RecentsStructure, Any, Any>
+  2   ElementContentView<ItemIdentifier, AnyBaseElement<RecentsStructure, NeedsData>>
+  2   SwipeView<Event>
+  2   ActionView
+  2   Control<UIView>
+  2   ElementContentView<ItemIdentifier, AnyBaseElement<RetrievalListStructuredData, NoData>>
+  2   ElementContentView<ItemIdentifier, AnyBaseElement<RetrievalListStructuredData, NeedsData>>
+  2   SPNavigationBar
+  2   ElementContentView<ItemIdentifier, AnyBaseElement<HomeStructure, NeedsData>>
+  2   HeaderLayout
+  2   HeaderContentLayout
+  2   ElementView<PLPlaylistEntityModel, Any, Any>
+  2   ElementContentView<ItemIdentifier, AnyBaseElement<NowPlayingScrollData, NoData>>
+  2   ElementView<NowPlayingScrollData, Any, Any>
+  2   CardView
+  2   CardHeaderView

@@ -49,6 +49,14 @@ struct EeveeExtrasSettingsView: View {
                         set: { UserDefaults.hideFreeTierBar = $0 }
                     )
                 )
+
+                Toggle(
+                    "hide_singalong_line".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.hideSingalongLine },
+                        set: { UserDefaults.hideSingalongLine = $0 }
+                    )
+                )
             }
 
             Section(footer: Text("extras_description".localized)) {

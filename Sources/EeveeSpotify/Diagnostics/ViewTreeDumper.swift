@@ -28,7 +28,9 @@ enum ViewTreeDumper {
     /// → UIViewControllerWrapperView → **12.UIView = 页面**），页面内容从第 13 层才开始。
     /// 原来卡在 12，等于**每次都只转储外壳、永远看不到页面**。
     private static let maxDepth = 24
-    private static let maxNodes = 250
+    /// 节点上限。广度优先之后这个数就是"能看到多少个节点"，400 足以铺满一整屏的
+    /// 宽度（第三轮的 250 被外壳吃掉，屏幕下半部分完全看不到）。
+    private static let maxNodes = 400
     private static let maxDumps = 20
 
     private static var timer: Timer?
@@ -71,7 +73,7 @@ enum ViewTreeDumper {
 
         var nodes: [String] = []
         var skeleton: [String] = []
-        collect(window, depth: 0, nodes: &nodes, skeleton: &skeleton)
+        collect(window, nodes: &nodes, skeleton: &skeleton)
         guard !nodes.isEmpty else { return }
 
         let skeletonText = skeleton.joined(separator: "/")
@@ -122,34 +124,49 @@ enum ViewTreeDumper {
     }
 
     private static func collect(
-        _ view: UIView,
-        depth: Int,
+        _ root: UIView,
         nodes: inout [String],
         skeleton: inout [String]
     ) {
-        guard nodes.count < maxNodes, depth <= maxDepth else { return }
+        // ⚠️ **广度优先**，不是深度优先。
+        //
+        // 原因：原来是深度优先 + 250 节点上限，结果配额全被"第一个分支"吃光 ——
+        // 外壳（window → App-Main-Content-View → barViewController → navbar/tabbar）
+        // 加页面开头就 250 个节点了，**屏幕下半部分的控件（进度条、播放键那一支）
+        // 一个都到不了**。第三轮清点 39 份转储时发现的：里面 PlayButton 一堆，
+        // 却没有任何 Slider / Scrubber / ProgressBar —— 不是没去过那屏，是没走到。
+        //
+        // 广度优先先铺满整屏的宽度，再逐层往下，所以"每一层有什么"都能看到。
+        var queue: [(view: UIView, depth: Int)] = [(root, 0)]
+        var index = 0
 
-        let className = String(describing: type(of: view))
-        skeleton.append(className)
+        while index < queue.count, nodes.count < maxNodes {
+            let (view, depth) = queue[index]
+            index += 1
 
-        let frame = view.frame
-        var detail = "\(depth).\(className)"
-        detail += "@\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))"
-        if view.isHidden { detail += ",hidden" }
-        if view.alpha < 1 { detail += ",alpha=\(String(format: "%.2f", view.alpha))" }
-        // 底色：第三轮的教训 —— "哪一层画了那层灰"光看类名看不出来，`bg=` 一看就知道
-        // （AMOLED 要涂的正是它；`TabBarView` 那条 `barBg=0` 就是靠这个才能继续追）。
-        if let background = view.backgroundColor, background != .clear {
-            detail += ",bg=\(hexColor(background))"
-        }
-        if let identifier = view.accessibilityIdentifier, !identifier.isEmpty {
-            detail += ",id=\(identifier)"
-        }
-        nodes.append(detail)
+            guard depth <= maxDepth else { continue }
 
-        for subview in view.subviews {
-            collect(subview, depth: depth + 1, nodes: &nodes, skeleton: &skeleton)
-            if nodes.count >= maxNodes { return }
+            let className = String(describing: type(of: view))
+            skeleton.append(className)
+
+            let frame = view.frame
+            var detail = "\(depth).\(className)"
+            detail += "@\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))"
+            if view.isHidden { detail += ",hidden" }
+            if view.alpha < 1 { detail += ",alpha=\(String(format: "%.2f", view.alpha))" }
+            // 底色：第三轮的教训 —— "哪一层画了那层灰"光看类名看不出来，`bg=` 一看就知道
+            // （AMOLED 要涂的正是它；`TabBarView` 那条 `barBg=0` 就是靠这个才能继续追）。
+            if let background = view.backgroundColor, background != .clear {
+                detail += ",bg=\(hexColor(background))"
+            }
+            if let identifier = view.accessibilityIdentifier, !identifier.isEmpty {
+                detail += ",id=\(identifier)"
+            }
+            nodes.append(detail)
+
+            for subview in view.subviews {
+                queue.append((subview, depth + 1))
+            }
         }
     }
 

@@ -350,6 +350,7 @@ declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，�
 hide_mini_player_bar = "隐藏迷你播放条";
 hide_tab_bar_fade = "隐藏标签栏渐隐";
 hide_free_tier_bar = "隐藏 free-tier 提示条";
+hide_singalong_line = "隐藏封面下的一行歌词";
 
 flag_catalog_description = "这些名字与 scope 都来自本机自己的调试日志，没有一条是猜的。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
