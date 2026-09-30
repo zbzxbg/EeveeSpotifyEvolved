@@ -101,8 +101,10 @@ body:
     attributes:
       label: Debug log
       description: |
-        Export the debug log from EeveeSpotify settings and paste it below.
-        Remove any tokens or account details if present.
+        Export the debug log from EeveeSpotify settings (Debug → Export Debug Log) and paste it below.
+        The export is redacted by default: credentials, device identifiers and your listening history
+        are removed. Leave "Redact Log Before Sharing" enabled — only turn it off for a log you keep
+        to yourself.
       render: text
 
   - type: textarea

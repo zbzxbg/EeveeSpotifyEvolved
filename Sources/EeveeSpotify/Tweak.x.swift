@@ -46,19 +46,35 @@ private func appendLogFile(_ message: String) {
     }
 }
 
+/// ⚠️ 2026-09-30：这里**必须**过 `DebugLogSanitizer.sanitize`。
+///
+/// 理由：这一行同时写文件**和** `os_log(privacy: .public)`，而系统统一日志是清不掉的
+/// （设置里的「清除调试日志」只清 App 容器里那份）。只在导出时脱敏的话，
+/// 系统日志里那份仍然是明文 —— 所以脱敏放在写入口，而不是导出按钮里。
 func writeDebugLog(_ message: String) {
     guard UserDefaults.enableLogRecording else { return }
 
-    eeveeLogger.debug("\(message, privacy: .public)")
-    appendLogFile(message)
+    let safe = DebugLogSanitizer.sanitize(message)
+    eeveeLogger.debug("\(safe, privacy: .public)")
+    appendLogFile(safe)
 }
 
 /// 错误级日志：统一日志走 .error 级（Console 可按 error 过滤），导出文件加 [ERROR] 前缀。
 func writeErrorLog(_ message: String) {
     guard UserDefaults.enableLogRecording else { return }
 
-    eeveeLogger.error("\(message, privacy: .public)")
-    appendLogFile("[ERROR] \(message)")
+    let safe = DebugLogSanitizer.sanitize(message)
+    eeveeLogger.error("\(safe, privacy: .public)")
+    appendLogFile("[ERROR] \(safe)")
+}
+
+/// `NSLog` 版日志：同样过一遍脱敏。
+///
+/// 为什么单独给一个函数：这批调用点**不受**「启用日志记录」开关控制（NSLog 直接进
+/// 系统统一日志），也**不进**导出文件。既然开关管不到它们，脱敏就更不能漏 ——
+/// 否则用户在设置里关掉日志记录、把文件删干净，系统日志里那份明文照样在。
+func eeveeSanitizedNSLog(_ message: String) {
+    NSLog("%@", DebugLogSanitizer.sanitize(message))
 }
 // Timestamp of tweak initialization — persists across Orion reinits within the same process
 // using an environment variable. This prevents the 30s auth window from resetting

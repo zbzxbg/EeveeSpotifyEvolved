@@ -100,7 +100,7 @@ private func rewritePremiumDict(_ dict: NSDictionary) -> NSDictionary {
     }
 
     if changed > 0 {
-        NSLog("[FORCE][PS.dict] rewrote %d keys (in=%lu out=%lu)", changed, dict.count, mutable.count)
+        eeveeSanitizedNSLog("[FORCE][PS.dict] rewrote \(changed) keys (in=\(dict.count) out=\(mutable.count))")
     }
     return mutable
 }
@@ -120,12 +120,20 @@ private let premiumWatchKeys: [String] = [
 private func passiveLogProductState(_ tag: String, _ dict: NSDictionary) {
     var pairs: [String] = []
     for k in premiumWatchKeys {
-        if let v = dict[k] { pairs.append("\(k)=\(v)") }
+        guard let v = dict[k] else { continue }
+
+        // ⚠️ 2026-09-30：`name` 是这一批里**唯一可能带账号信息**的一项，而它到底是
+        // "商品名"还是"账号显示名"从代码里定不死（真机日志也没定过性）—— 于是保留
+        // "这一项在不在"这个判据，值一律不打。其余项（type / product / country /
+        // 日期 / forced_logout…）都是排查自动登出要看的，原样保留。
+        pairs.append(k == "name" ? "name=<redacted>" : "\(k)=\(v)")
     }
     if !pairs.isEmpty {
-        NSLog("[REVERT_WATCH][%@] %@", tag, pairs.joined(separator: " "))
+        // 走 `eeveeSanitizedNSLog`：这条 NSLog 不受「启用日志记录」开关控制，
+        // 脱敏不能漏（见 `DebugLogSanitizer` 的说明）。
+        eeveeSanitizedNSLog("[REVERT_WATCH][\(tag)] \(pairs.joined(separator: " "))")
     } else if dict.count > 0 {
-        NSLog("[REVERT_WATCH][%@] keys=%lu (no premium-relevant)", tag, dict.count)
+        eeveeSanitizedNSLog("[REVERT_WATCH][\(tag)] keys=\(dict.count) (no premium-relevant)")
     }
 }
 

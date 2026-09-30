@@ -15,6 +15,7 @@ extension UserDefaults {
     private static let iconNamePrettifyKey = "iconNamePrettify"
     private static let cleanShareLinksKey = "cleanShareLinks"
     private static let enableLogRecordingKey = "enableLogRecording"
+    private static let redactSharedLogKey = "redactSharedLog"
 
     static var musixmatchToken: String {
         get {
@@ -110,6 +111,25 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: enableLogRecordingKey)
+        }
+    }
+
+    /// 「分享日志前脱敏」——导出时是否把听歌记录假名化（**默认 true**）。
+    ///
+    /// 默认 true 的理由：导出这个动作 99% 是为了把日志发给别人（issue / 群里），
+    /// 而日志主体就是"你听了哪些歌"。要自己留档的人可以关掉，关上之后导出的是
+    /// 原始文件（排查时需要真实曲目才好复现）。
+    ///
+    /// ⚠️ 这条只影响**导出**。凭证/设备标识那一层是 `DebugLogSanitizer.sanitize`，
+    /// 在**写入口**就生效、没有开关 —— 那种东西不该有任何"忘了打开脱敏"的机会。
+    static var redactSharedLog: Bool {
+        get {
+            container.object(forKey: redactSharedLogKey) == nil
+                ? true
+                : container.bool(forKey: redactSharedLogKey)
+        }
+        set {
+            container.set(newValue, forKey: redactSharedLogKey)
         }
     }
 

@@ -497,6 +497,104 @@ if let originalColors { $0.colors = originalColors }
 
 ---
 
+## 57. 日志脱敏：**写入口硬脱敏 + 导出时假名化**（2026-09-30）
+
+**用户要求**：先问"日志是不是会记录 cookie 之类的敏感信息"，看完 19 号日志
+（`C:\dsh\readlog\eeveespotify_debug 19.log`，477 行 / 80 秒会话）后列出 7 类敏感点，
+问"哪些需要隐藏"，最后"改吧"。
+
+### 57.1 先定性：**凭证没有泄露，泄露的是行为画像**
+
+对 19 号日志全文做过大小写不敏感检索：
+`set-cookie|cookie|authorization|bearer|sp_dc|sp_t|sp_key|csrf|access_token|refresh_token`
+→ **0 命中**。`[LyricsHeader]` 那 5 行的 headers 里也没有 `Set-Cookie`（只有
+Alt-Svc / Cache-Control / Content-Type / Date / Server / Via / mc-* 之类）。
+Token 只有形状：`[TokenCapture] len=427 dots=0 prefix=<6 字符>`（片段本身没有调试价值，这轮已改成轮换序号）。
+
+**真正被记下来的是**：
+
+| 类别 | 19 号日志里的实例 |
+|---|---|
+| 设备唯一标识 | `social-connect/v2/devices/<32 位 hex>/jam_status`（本文件**不留真实值** —— 那正是这轮要藏的东西） |
+| 地区/时区/语言 | `region=jp`、`timezone=Etc/GMT-9`、`locale=zh-Hans_JP` |
+| 听歌记录 | `"独白" - DUSTCELL`、`"短夜の星" - shallm`、`"Lyla" - esoragoto`、`"ただ声一つ" - Rokudenashi` + NetEase 歌曲 id |
+| 播放上下文 | `play_context_uri=spotify%3Aplaylist%3A<22 位 id>` |
+| 线下位置感 | 演唱会场地全名 + 场次日期（`Tokyo International Forum Hall A, Chiyoda City` …） |
+| 会话 UUID | `$82820b77-0791-97aa-fcf8-17f1823aacef` … |
+
+（`[Artwork] metadata keys` 只打 key 不打 value；无邮箱/用户名；本次会话没有 `[SB][submit]`。）
+
+### 57.2 三档判据（决定"哪些必须隐藏"）
+
+- **必隐**：Bearer/Authorization/Cookie 类凭证、设备唯一标识、账号标识；
+- **默认隐**：播放上下文/歌单、曲目与艺人、曲名、时区与地区；
+- **必须保留**：时间戳、接口 path、元素清单与 hex dump —— 这些是排查判据本身，
+  藏了这套日志工作流就没法运转（元素类型判读、切歌竞态、注入有没有命中全靠它们）。
+
+### 57.3 改动清单
+
+| 层 | 文件 | 动作 |
+|---|---|---|
+| ① 写入口硬脱敏 | `Shared/Helpers/DebugLogSanitizer.swift`（**新增**） | `sanitize(_:)`：Bearer / `key=value` / `Cookie:`·`Authorization:` 整行 / JSON `"userID":"…"` / `/devices/<id>` / `spotify:user:` / 已知用户内容 query 参数。**预编译 + 模板替换**（`writeDebugLog` 在热路径上，不能每行现编正则） |
+| ① | `Tweak.x.swift` | `writeDebugLog` / `writeErrorLog` 过 `sanitize`；**新增全局 `eeveeSanitizedNSLog`** |
+| ① | `HttpClientURLSessionHooks` / `DataLoaderServiceHooks` | `[TokenCapture]` 的 `prefix=前6字符` → `SpotifyTokenOrdinal`（`token#1`）；整条 URL → `logSafeURL`（只留 scheme+host+path）；`[HCUS]/[DL] Missing buffered body` 同样只留 path |
+| ① | `SponsorBlockReporter` / `EeveePremiumForce` / `CasitaResponseProbe` | **带用户数据的那几条** `NSLog` 改走 `eeveeSanitizedNSLog`（`[SB]` 的 payload/userID、`[REVERT_WATCH]` 的产品态、`[CASITA]` 的路径与 dump 路径）；`[SB]` 的 `userID`、`[REVERT_WATCH]` 的 `name=` 另作处理。其余 `NSLog` 只打类名/布尔（`[AdBlock]`/`[CleanShareLinks]`/`[TrueShuffle]`/`Upsell*`/`EeveeSettingsUniversal`…），已逐条核过，不改 |
+| ② 导出假名化 | `DebugLogSanitizer.redactForSharing` | `spotify:<kind>:<id>` 与**路径里的裸 id** → 同一 id 同一个假名（`t1`/`ar1`…，**每次导出重新编号**，所以只在这一次的文件内稳定）；曲名/艺人；NetEase id；封面 hash；`?q_track=`/`track_name=`/`?q=`；raw body head 与 `body:`/`printable=` 片段整段打掉；**hex dump 整段打掉** |
+| ② | `EeveeSettingsView` + l10n（en/zh-CN） | 新增「分享日志前脱敏」开关（**默认开**）；导出时写 `eeveespotify_debug_shared.log` 分享，**不动**原文件 |
+| ② | `.github/ISSUE_TEMPLATE/bug_report.yml` | 贴日志那一段的说明改了：导出**默认已脱敏**（凭证/设备标识/听歌记录），让用户保持开关开启 —— 用户贴日志的入口就在这里，说明不改等于新行为没人知道 |
+| 测试 | `Tests/DebugLogRedaction/main.swift`（**新增**）+ `builddeb.yml` | 多组断言：凭证 / 设备 / URL / **判据必须原样保留**（`[Flags]`、`[INIT]`、`body=584B has5=false elements=[…]`）/ 幂等 / token 序号 / 假名化 / 假名一致性 / **hex dump 必须被打掉** |
+
+### 57.4 三个设计决定（都是有代价的取舍）
+
+1. **脱敏放在写入口，不放在导出按钮里**：`writeDebugLog` 同时写文件和
+   `os_log(privacy: .public)`，而系统统一日志**清不掉**（「清除调试日志」只清 App 容器那份）。
+   只在导出时脱敏 = 系统日志里那份仍是明文。
+2. **`NSLog` 那批必须单独收**：它们**不受「启用日志记录」开关控制**，也不进导出文件 ——
+   用户在设置里关掉开关、把文件删干净，系统日志里那份照样在。
+3. **导出分两层而不是一层**：凭证/设备在写入口就没了（**无开关**，没有"忘了打开"的机会）；
+   曲目/曲名留在本地文件里，只在**分享那一份**上假名化 —— 排查需要真实曲目才能复现，
+   全删等于废掉这套日志工作流。假名只在**这一次导出的文件内**稳定，所以"manifest 那行和
+   injected 那行是不是同一首"仍然判得出来；跨文件/跨日志则不可关联（这正是要的）。
+
+**日志怎么读（变化点）**：
+
+```
+[TokenCapture] len=427 dots=0 token#1 from https://gae2-spclient.spotify.com/user-customization-service/v1/customize
+```
+即：token 片段没了，但"这一场里换过 token"仍然看得出来（`token#1` → `token#2`）；URL 只剩 path。
+
+### 57.5 已知局限（本轮**没**覆盖的）
+
+- **hex dump 已处理、但只是"整段打掉"**：`[ScrollProbe] … hex512B=<hex>` 与
+  `[NPVModule] hex … 256B=<hex>` 里的字节是**可解码还原**的
+  （`73706f746966793a747261636b3a` = `spotify:track:`），模式匹配看不见 ——
+  分享版里它们退化成 `<hex-redacted>`，想要字节级对比就得拿**本地**那份；
+- **`body=NNNB` 必须留着**（`[Scrollsita] manifest track=… body=584B has5=false elements=[…]`）——
+  它是字节数、不是响应体，而那一行是元素类型排查的唯一判据。所以"响应体片段"那条规则
+  带了负向先行断言 `(?!\d+B\b)`，测试里有一条专门盯它；
+- **服务端自由文本不在覆盖面内**：`[UpsellBlock] Blocked popup — title=… desc=…` 这类
+  是服务端下发的文案，模式匹配盖不住。目前它只用于弹窗拦截，若哪天带账号信息要单独处理；
+- `[ShellDump]`（`dumpControlCandidates`）遍历 key window 的**所有 UIControl** 打 a11y label ——
+  在歌单/搜索页那种界面上 label 可能就是用户内容。19 号日志里只出现播放器按钮那几行，本轮未处理；
+- `[PreRelease] ctx` 是服务端 flag 文本、本身不含用户数据，保持原样；`printable=` 已按
+  "原始响应体片段"整体打掉（里面有**裸的**艺人名/场馆/城市，如
+  `… | 2026-11-07T18:00:00+0900 | esoragoto`）。仍**未覆盖**的是散落在**其它自由文本**里的城市/场地名；
+- `CasitaResponseProbe` 打开时把整份响应体写到 tmp，那些 `.bin` **不经过脱敏**
+  （默认 `enabled = false`，已在文件头写明）；
+- 脱敏规则是**模式匹配**，新加的日志形态不会自动被覆盖 —— 加新日志时先问一句
+  "这行里有没有用户内容"。
+
+### 57.6 未验证
+
+⚠️ **本机没有编译验证**：无 Swift 工具链，且这一轮 `pwsh` 执行器整段挂 `0xC0000142`
+（与 §51.8 记的同一种：`InvalidOperation: Cannot create type`），连括号平衡脚本都跑不了。
+
+补救：把这条链做成 CI 里的独立 `swiftc` 测试（`Tests/DebugLogRedaction`），
+push 后由 `builddeb.yml` 的 "Test ad and Premium banner filtering" 步骤编译并执行；
+**若 CI 报红，先看 `debug-log-redaction-tests` 那一行**。
+
+---
+
 ## 56. 「AM 挂在单行歌词上」+「第一次进页面正常、切歌回来不行」= **同一个宿主判据 bug**（2026-09-27，用户口述，无日志）
 
 **用户报**：① 现在似乎都是第一次进页面可以正常展示，切个歌回来就不行了；

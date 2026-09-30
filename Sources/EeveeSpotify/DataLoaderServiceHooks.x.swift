@@ -39,10 +39,11 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
            auth.hasPrefix("Bearer ") {
             let token = String(auth.dropFirst(7))
             setSpotifyAccessToken(token)
-            // TEMP DEBUG: log token shape + source URL, never the token itself.
+            // 只记**形状**与来源，绝不记 token 本身。见 `HttpClientURLSessionHooks` 同处的说明：
+            // 2026-09-30 起 `prefix=前6字符` 换成轮换序号，URL 只留 scheme+host+path。
             let dotCount = token.filter { $0 == "." }.count
-            let shape = "len=\(token.count) dots=\(dotCount) prefix=\(token.prefix(6))"
-            writeDebugLog("[TokenCapture] \(shape) from \(task.currentRequest?.url?.absoluteString ?? "<no url>")")
+            let shape = "len=\(token.count) dots=\(dotCount) \(SpotifyTokenOrdinal.label(for: token))"
+            writeDebugLog("[TokenCapture] \(shape) from \(DebugLogSanitizer.logSafeURL(task.currentRequest?.url))")
         }
 
         guard let url = task.currentRequest?.url else {
@@ -81,7 +82,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 // Some Spotify builds complete "modified" tasks with 0 body bytes.
                 // Forwarding completion only can crash consumers that assume at least
                 // one didReceiveData callback before completion.
-                writeDebugLog("[DL] Missing buffered body for \(url.absoluteString) (taskId=\(task.taskIdentifier))")
+                writeDebugLog("[DL] Missing buffered body for \(DebugLogSanitizer.logSafeURL(url)) (taskId=\(task.taskIdentifier))")
                 orig.URLSession(session, dataTask: task, didReceiveData: Data())
                 // Always forward completion; otherwise Spotify may hang and get watchdog-killed.
                 orig.URLSession(session, task: task, didCompleteWithError: error)

@@ -190,7 +190,13 @@ struct EeveeSettingsView: View {
                         PopUpHelper.showPopUp(message: "no_debug_log_found".localized, buttonText: "no_debug_log_found_ok".localized)
                         return
                     }
-                    let logURL = URL(fileURLWithPath: logPath)
+                    // 分享的是**可分享的那一份**：`redactSharedLog` 开着时是假名化后的副本，
+                    // 原文件一个字都不动（排查要用的真实曲目还留在本地）。
+                    // 凭证/设备标识那一层不在这里 —— 它在写入口就生效了，见 `DebugLogSanitizer`。
+                    let logURL = DebugLogSanitizer.sharedLogFile(
+                        from: logPath,
+                        redact: UserDefaults.redactSharedLog
+                    ) ?? URL(fileURLWithPath: logPath)
                     let activityVC = UIActivityViewController(activityItems: [logURL], applicationActivities: nil)
                     if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                        let rootVC = scene.windows.first?.rootViewController {
@@ -229,6 +235,18 @@ struct EeveeSettingsView: View {
                 }
             }
             
+            // 「分享日志前脱敏」：只影响**导出**这一份 → 见 `DebugLogSanitizer.redactForSharing`。
+            // 单独一个 Section（不塞进上面那个），因为上面那个的 footer 讲的是"要不要记日志"。
+            Section(footer: Text("redact_shared_log_description".localized)) {
+                Toggle(
+                    "redact_shared_log".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.redactSharedLog },
+                        set: { UserDefaults.redactSharedLog = $0 }
+                    )
+                )
+            }
+
             Section(footer: Text("reset_data_description".localized)) {
                 Button {
                     confirmDestructive(

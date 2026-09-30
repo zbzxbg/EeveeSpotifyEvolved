@@ -19,10 +19,14 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
            auth.hasPrefix("Bearer ") {
             let token = String(auth.dropFirst(7))
             setSpotifyAccessToken(token)
-            // TEMP DEBUG: log token shape + source URL, never the token itself.
+            // 只记**形状**与来源，绝不记 token 本身。
+            // 2026-09-30 再加两道：① `prefix=前6字符` 换成轮换序号 —— token 的任何片段
+            // 都没有调试价值，"这一场里有没有换过 token"才是判据；
+            // ② 整条 URL 只留 scheme+host+path：query 里带着歌单/曲目/时区
+            // （19 号日志里 73 条 `[TokenCapture]` 每条都背着一整个 query）。
             let dotCount = token.filter { $0 == "." }.count
-            let shape = "len=\(token.count) dots=\(dotCount) prefix=\(token.prefix(6))"
-            writeDebugLog("[TokenCapture] \(shape) from \(task.currentRequest?.url?.absoluteString ?? "<no url>")")
+            let shape = "len=\(token.count) dots=\(dotCount) \(SpotifyTokenOrdinal.label(for: token))"
+            writeDebugLog("[TokenCapture] \(shape) from \(DebugLogSanitizer.logSafeURL(task.currentRequest?.url))")
         }
 
         guard let url = task.currentRequest?.url else {
@@ -60,7 +64,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 // Some Spotify builds complete "modified" tasks with 0 body bytes.
                 // We previously forwarded completion only, which can crash callers that
                 // assume at least one didReceiveData before completion.
-                writeDebugLog("[HCUS] Missing buffered body for \(url.absoluteString) (taskId=\(task.taskIdentifier))")
+                writeDebugLog("[HCUS] Missing buffered body for \(DebugLogSanitizer.logSafeURL(url)) (taskId=\(task.taskIdentifier))")
                 orig.URLSession(session, dataTask: task, didReceiveData: Data())
                 orig.URLSession(session, task: task, didCompleteWithError: error)
             }
