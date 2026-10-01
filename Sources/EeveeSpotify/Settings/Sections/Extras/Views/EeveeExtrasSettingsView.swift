@@ -47,6 +47,7 @@ struct EeveeExtrasSettingsView: View {
         var shellBackdrop = UserDefaults.nowPlayingShellBackdrop
         var shellHeader = UserDefaults.nowPlayingShellHeader
         var shellGlass = UserDefaults.nowPlayingShellGlass
+        var libraryLargeTitle = UserDefaults.libraryLargeTitle
     }
 
     var body: some View {
@@ -187,6 +188,20 @@ struct EeveeExtrasSettingsView: View {
                         }
                     }
                 }
+            }
+
+            // 音乐库：**改原生**的第一批（不是加壳）—— 大标题左对齐 + 收掉顶部渐隐灰纱。
+            Section(
+                header: Text("library_section".localized),
+                footer: Text("library_large_title_description".localized)
+            ) {
+                Toggle(
+                    "library_large_title".localized,
+                    isOn: shadowBinding(
+                        \.libraryLargeTitle,
+                        persist: { UserDefaults.libraryLargeTitle = $0 }
+                    )
+                )
             }
 
             // 旧版样品标题（名字 + 顶栏都由壳负责之后，它只剩"那个大标题"）。

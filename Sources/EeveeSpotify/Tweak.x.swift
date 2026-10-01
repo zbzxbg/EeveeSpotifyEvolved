@@ -386,6 +386,10 @@ struct EeveeSpotify: Tweak {
         // 只能有一条 hook，见 `NowPlayingShellHook` 的说明。
         activateNowPlayingShell()
 
+        // 音乐库：改**原生**视图的第一批（大标题左对齐 + 收掉顶部滚边渐隐）。
+        // 与听歌页那条"加壳"路线不同 —— 它改的是 Spotify 自己的视图，关掉即还原。
+        activateLibraryAppearance()
+
         // 清爽开关（迷你播放条 / 标签栏渐隐 / free-tier 提示条）。同上：总是装、实时读。
         activateDeclutterChrome()
 

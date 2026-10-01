@@ -41,6 +41,7 @@ extension UserDefaults {
     private static let nowPlayingShellBackdropKey = "nowPlayingShellBackdrop"
     private static let nowPlayingShellHeaderKey = "nowPlayingShellHeader"
     private static let nowPlayingShellGlassKey = "nowPlayingShellGlass"
+    private static let libraryLargeTitleKey = "libraryLargeTitle"
 
     static var musixmatchToken: String {
         get {
@@ -460,6 +461,22 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingShellGlassKey)
+        }
+    }
+
+    // MARK: - 音乐库（改原生）
+
+    /// 音乐库大标题 + 收掉顶部滚边渐隐。**默认开**。
+    ///
+    /// 这是"改原生"路线的第一个开关（区别于听歌页那条"加壳"路线）：
+    /// 它改的是 Spotify 自己的标题对齐与那层 `LiquidGlass.GradientView` 灰纱，
+    /// 关掉即把原值写回。
+    static var libraryLargeTitle: Bool {
+        get {
+            container.object(forKey: libraryLargeTitleKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: libraryLargeTitleKey)
         }
     }
 
