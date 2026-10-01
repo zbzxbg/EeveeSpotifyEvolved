@@ -332,3 +332,4 @@ Cancel = "Cancel";
 Done = "Done";
 Loading = "Loading";
 episode_header = "Episode %@";
+tab_bar_hide_labels = "隱藏標籤文字";

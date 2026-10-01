@@ -94,6 +94,12 @@ enum TabBarGlassPlate {
     /// `TabBarGradientView(0,-112 414x195)` 就画在栏顶以上 112pt 处。
     private static let maxOverhang: CGFloat = 8
 
+    /// 边缘高光：借 **MeloX** 的手法 —— 他们旧系统兜底那一支画的是
+    /// `Capsule().stroke(.white.opacity(0.32), lineWidth: 0.75)`。
+    /// 我们这条是深色玻璃，取比他们更淡一点，只负责把边缘"立"起来。
+    private static let edgeHighlightWidth: CGFloat = 0.75
+    private static let edgeHighlightAlpha: CGFloat = 0.22
+
     /// 上一次报出去的胶囊 frame（只在变化时打日志，不在布局回调里刷屏）。
     private static var lastReportedFrame: CGRect = .null
     private static var reportCount = 0
@@ -139,6 +145,10 @@ enum TabBarGlassPlate {
         //   这样量到的就是收紧后的真实位置，胶囊自然贴着它们走。
         //   ⚠️ 这一步**不带拖动位移**：带了就会把它量进内容带、之后被算第二次。
         if let stack { tightenRow(stack, in: bar, includeDrag: false) }
+
+        // ★ 再按开关处理"标签文字"（默认藏）。**必须在量内容带之前** ——
+        //   藏掉之后 `collectContent` 会自然跳过被隐藏的视图，胶囊就只剩图标那一圈（~40pt）。
+        applyLabelVisibility(in: stack)
 
         // ── 摆位：以"图标内容带"为心（不是整条栏；v3 就是死在这里）─────────────
         let band = contentBand(in: bar, stack: stack)
@@ -327,9 +337,25 @@ enum TabBarGlassPlate {
         let items = stack.subviews
         guard items.count == 4 else { return }
 
+        // ⚠️ 布局还没好就别算。首次那几帧 stack 宽度是 0，按它推算出来是"四颗全部 +41"；
+        // 而 `frame` 在 transform 非恒等时又是**未定义**的 —— 两个坑叠起来，就是照片 28 里
+        // "刚启动时『创建』偏了、划掉再进 / 点一下就正常"（v4.3 的真机现象，日志 24 的
+        // dump 里四颗整整齐齐 +41 就是证据）。这一轮什么都不做即可：
+        // `apply` 那边的有界重试会把我们叫回来。
+        guard stack.bounds.width > 100 else { return }
+
+        let count = CGFloat(items.count)
         let centerX = bar.bounds.midX
-        for item in items {
-            let layoutMidX = stack.convert(CGPoint(x: item.frame.midX, y: 0), to: bar).x
+
+        for (index, item) in items.enumerated() {
+            // ★ 用**等分布局推算**中心，而不是读 `item.frame.midX`：
+            //   Apple 对 `frame` 的说明是"transform 非恒等时该值未定义"，实测它会把我们
+            //   上一轮写进去的位移算进去 → 每轮又按"已经被挪过的位置"再收一次 →
+            //   收敛点整体偏移，**两端最明显**（第 4 颗「创建」偏得最多）。
+            //   这里只用 stack 的宽度与序号，**不依赖任何被 transform 影响过的值**。
+            let localMidX = stack.bounds.width * (CGFloat(index) + 0.5) / count
+            let layoutMidX = stack.convert(CGPoint(x: localMidX, y: 0), to: bar).x
+
             var dx = (centerX - layoutMidX) * tightenFactor
             var dy: CGFloat = 0
             if includeDrag {
@@ -341,6 +367,91 @@ enum TabBarGlassPlate {
                 : CGAffineTransform(translationX: dx, y: dy)
             if item.transform != wanted { item.transform = wanted }
         }
+    }
+
+    // MARK: - 标签文字（默认藏）
+
+    /// 藏掉四颗标签的文字（照片 21/23/25 里那条栏**没有文字**）。**默认开**。
+    ///
+    /// ── 为什么这件事值得做 ────────────────────────────────────────────────────
+    /// ① 观感：照片里那条栏只有图标，文字一去掉整条就"干净"了；
+    /// ② **顺手把"玻璃太扁"解掉**：内容带从"图标 + 文字 44pt"变成"只有图标 ~24pt"，
+    ///    胶囊自动收到 ~40pt —— 正好是照片里的比例，图标仍然居中。
+    ///
+    /// ⚠️ 会不会被 Spotify 的 binder 写回来？—— 每次栏布局我们都会再走一遍，并且**计数**；
+    /// 写回超过 `labelWriteBackLimit` 次就停手并打日志（宁可保持原生，也不跟它抢 —— 文档铁律）。
+    ///
+    /// 思路借自 **spoti.pw** 的「Hide labels」（`docs/tweaks.md`）；**只借思路，代码自己写**。
+    private static var labelMarkKey: UInt8 = 0
+    private static var labelWriteBacks = 0
+    private static let labelWriteBackLimit = 12
+    private static var didGiveUpLabels = false
+    private static var didLogLabelState = false
+
+    @MainActor
+    private static func applyLabelVisibility(in stack: UIView?) {
+        guard let stack else { return }
+
+        let shouldHide = UserDefaults.tabBarHideLabels
+        guard !(shouldHide && didGiveUpLabels) else { return }
+
+        var hid = 0
+        var restored = 0
+        var writeBacks = 0
+
+        for label in encoreLabels(in: stack) {
+            let isOurs = objc_getAssociatedObject(label, &labelMarkKey) != nil
+
+            if shouldHide {
+                guard !label.isHidden else { continue }
+                if isOurs {
+                    writeBacks += 1                       // 我们藏过，它又被显示回来了
+                } else {
+                    objc_setAssociatedObject(
+                        label, &labelMarkKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+                    )
+                }
+                label.isHidden = true
+                hid += 1
+            } else if isOurs, label.isHidden {
+                label.isHidden = false                    // 只还原**我们自己藏过的**
+                restored += 1
+            }
+        }
+
+        if writeBacks > 0 {
+            labelWriteBacks += writeBacks
+            if labelWriteBacks > labelWriteBackLimit, !didGiveUpLabels {
+                didGiveUpLabels = true
+                writeDebugLog(
+                    "[TabBarPlate] ⚠️ 标签文字被反复写回 \(labelWriteBacks) 次 — 不再与它抢（保持原生）"
+                )
+            }
+        }
+
+        guard !didLogLabelState, hid > 0 || restored > 0 else { return }
+        didLogLabelState = true
+        writeDebugLog(
+            "[TabBarPlate] 标签文字\(shouldHide ? "已隐藏" : "已恢复")（\(shouldHide ? hid : restored) 个）"
+        )
+    }
+
+    /// 收集四颗里的 `SPTEncoreLabel`（**只认类名，不做运行时类枚举** —— 那条路崩过两次）。
+    ///
+    /// ⚠️ 认的是外层 `SPTEncoreLabel`，不是它里面那个 `UILabel`（`Encore.Label-internal`）——
+    /// 藏外层就够了，里层跟着一起不可见。
+    @MainActor
+    private static func encoreLabels(in stack: UIView) -> [UIView] {
+        var found: [UIView] = []
+        collectEncoreLabels(in: stack, depth: 0, into: &found)
+        return found
+    }
+
+    @MainActor
+    private static func collectEncoreLabels(in node: UIView, depth: Int, into found: inout [UIView]) {
+        guard depth <= 8 else { return }
+        if NSStringFromClass(type(of: node)).contains("EncoreLabel") { found.append(node) }
+        for sub in node.subviews { collectEncoreLabels(in: sub, depth: depth + 1, into: &found) }
     }
 
     // MARK: - 找图标那一行 / 量它的内容带
@@ -507,6 +618,15 @@ enum TabBarGlassPlate {
             view.effect = UIBlurEffect(style: .systemUltraThinMaterialDark)
             writeDebugLog("[TabBarPlate] 系统没有 UIGlassEffect — 退回材质")
         }
+
+        // 一圈极淡的白色描边高光（照片 21/23/25 那条胶囊的边缘就是这么"立"起来的）。
+        // 借的是 MeloX 的写法 —— 他们旧系统兜底那一支画的是
+        // `Capsule().stroke(.white.opacity(0.32), lineWidth: 0.75)`。
+        // `UIGlassEffect` 自带边缘高光，但在深色内容上不够，补这一圈把"廉价感"压下去
+        // （文档 §3.5 早就预判了这条：形状对了但廉价 → 加淡描边高光，不改结构）。
+        view.layer.borderWidth = edgeHighlightWidth
+        view.layer.borderColor = UIColor.white.withAlphaComponent(edgeHighlightAlpha).cgColor
+
         return view
     }
 

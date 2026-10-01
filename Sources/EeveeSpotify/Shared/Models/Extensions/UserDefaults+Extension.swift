@@ -35,11 +35,9 @@ extension UserDefaults {
     private static let blockedArtistsEnabledKey = "blockedArtistsEnabled"
     private static let blockedArtistsKey = "blockedArtists"
     private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
-    private static let nowPlayingShellEnabledKey = "nowPlayingShellEnabled"
-    private static let nowPlayingShellHeaderKey = "nowPlayingShellHeader"
-    private static let nowPlayingShellGlassKey = "nowPlayingShellGlass"
     private static let libraryLargeTitleKey = "libraryLargeTitle"
     private static let tabBarGlassKey = "tabBarGlass"
+    private static let tabBarHideLabelsKey = "tabBarHideLabels"
 
     static var musixmatchToken: String {
         get {
@@ -387,51 +385,10 @@ extension UserDefaults {
         }
     }
 
-    // ⛔「听歌页外观（样品）」(musicStyleNowPlaying) 已于 2026-10-02 删除：
-    // 它只画"另一套顶部大标题"，与壳自己的顶栏标题重复（两个都开就会画两遍）。
-
-    // MARK: - 听歌页自绘壳（NowPlayingShell）
-
-    /// 听歌页壳总开关。**默认开** —— 这是整套"观感自绘"路线的主开关，
-    /// 关掉等于整页交还原生（背景、顶栏、让位全部撤销）。
-    static var nowPlayingShellEnabled: Bool {
-        get {
-            container.object(forKey: nowPlayingShellEnabledKey) as? Bool ?? true
-        }
-        set {
-            container.set(newValue, forKey: nowPlayingShellEnabledKey)
-        }
-    }
-
-    // ⛔「背景跟封面取色」(nowPlayingShellBackdrop) 已于 2026-10-02 删除：
-    // 它挂的那层用 `isBackdropOpaque = false`，而那一档在 `LyricsBackdropArtworkView` 里
-    // 是"整块背景（含封面层与暗化渐变）一起透明" → 视觉上等于没做。
-
-    /// 自绘顶栏（⌄ + 歌名 + 艺人），并让原生吸顶头让位。默认开。
-    ///
-    /// 关掉它 = 原生吸顶头拿回自己的底色与文字（`restore()`），我们不画顶栏。
-    static var nowPlayingShellHeader: Bool {
-        get {
-            container.object(forKey: nowPlayingShellHeaderKey) as? Bool ?? true
-        }
-        set {
-            container.set(newValue, forKey: nowPlayingShellHeaderKey)
-        }
-    }
-
-    /// 顶栏是否用真玻璃（探测到 `UIGlassEffect` 才生效，否则退材质）。
-    ///
-    /// **默认关**（照片 20 换来的）：界面是真玻璃的看家本领是折射，代价是把底下
-    /// 的内容整个糊掉 —— 盖在 121pt 高的顶栏上，连封面和按钮都成了残影。
-    /// 想试真玻璃观感时再打开；那时应当把它收窄到只有安全区那一条。
-    static var nowPlayingShellGlass: Bool {
-        get {
-            container.object(forKey: nowPlayingShellGlassKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: nowPlayingShellGlassKey)
-        }
-    }
+    // ⛔ 听歌页那套外观开关（`musicStyleNowPlaying` / `nowPlayingShellEnabled` /
+    // `nowPlayingShellHeader` / `nowPlayingShellGlass` / `nowPlayingShellBackdrop`）
+    // 已于 2026-10-02 **全部删除**：那几版 bug 太多，先放一边，
+    // 等导航栏这条线收干净再重做（细节见 `Tools/eevee-hookfinder/SESSION_2026-10-02_SUMMARY.md`）。
 
     // MARK: - 标签栏玻璃
 
@@ -451,6 +408,24 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: tabBarGlassKey)
+        }
+    }
+
+    // MARK: - 标签文字（默认藏）
+
+    /// 隐藏四颗标签的**文字**（照片 21/23/25 里那条栏是没有文字的）。**默认开**。
+    ///
+    /// 这一条同时把"玻璃太扁"顺手解掉：内容带从"图标 + 文字 44pt"变成"只有图标 ~24pt"，
+    /// 胶囊自然收到 ~40pt（正好是照片里的比例），图标仍然居中。
+    ///
+    /// 思路借自 **spoti.pw** 的「Hide labels」（见它的 `docs/tweaks.md`）——
+    /// **只借思路，代码自己写**（红线见会话文档 §10）。
+    static var tabBarHideLabels: Bool {
+        get {
+            container.object(forKey: tabBarHideLabelsKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: tabBarHideLabelsKey)
         }
     }
 

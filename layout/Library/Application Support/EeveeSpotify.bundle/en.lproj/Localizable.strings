@@ -402,3 +402,4 @@ library_large_title_description = "Changes Spotify's own library header: the tit
 now_playing_shell_description = "Draws the now playing page ourselves instead of layering into Spotify's views: the whole page takes the cover's colour, and the title and artist are ours, so Spotify's own fading header can no longer cover them. Spotify's controls (transport, slider, menu) stay where they are and keep working. Switching it off restores the page, including Spotify's own header.";
 music_style_nowplaying = "Cover-tinted background + big title";
 music_style_nowplaying_description = "The first sample of the Apple Music style: the page background takes the cover's own colour, and the song title and artist sit at the top. It only ADDS those two things and hides nothing of Spotify's own player, so switching it off restores the page exactly. It applies the next time the now playing page lays out — no restart.";
+tab_bar_hide_labels = "Hide tab labels";

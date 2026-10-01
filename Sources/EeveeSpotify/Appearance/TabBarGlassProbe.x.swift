@@ -64,6 +64,9 @@ enum TabBarGlassProbe {
     @MainActor
     static func dumpOnce(_ bar: UIView) {
         guard !didDump else { return }
+        // 「启用日志记录」关着的时候**连树都不走** —— 探针只为排障存在，不产生任何界面效果。
+        // （这也是"关掉日志 = 只剩功能、没有额外开销"的一部分。）
+        guard UserDefaults.enableLogRecording else { return }
         didDump = true
 
         writeDebugLog("[TabBarDump] ---- 标签栏内部结构 begin（bar \(Int(bar.bounds.width))x\(Int(bar.bounds.height))）----")

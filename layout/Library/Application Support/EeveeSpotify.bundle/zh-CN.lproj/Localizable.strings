@@ -397,3 +397,4 @@ music_style_nowplaying_description = "Apple Music 风格的第一个样品：整
 flag_catalog_description = "这些名字与 scope 都来自本机自己的调试日志，没有一条是猜的。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
 flag_catalog_empty_result = "没有匹配的 flag";
+tab_bar_hide_labels = "隐藏标签文字";

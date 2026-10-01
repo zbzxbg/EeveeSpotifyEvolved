@@ -39,11 +39,9 @@ struct EeveeExtrasSettingsView: View {
         var gestureNowPlaying = UserDefaults.playerGestureNowPlaying
         var gestureFullscreenLyrics = UserDefaults.playerGestureFullscreenLyrics
 
-        var shellEnabled = UserDefaults.nowPlayingShellEnabled
-        var shellHeader = UserDefaults.nowPlayingShellHeader
-        var shellGlass = UserDefaults.nowPlayingShellGlass
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
         var tabBarGlass = UserDefaults.tabBarGlass
+        var tabBarHideLabels = UserDefaults.tabBarHideLabels
     }
 
     var body: some View {
@@ -131,51 +129,9 @@ struct EeveeExtrasSettingsView: View {
                 )
             }
 
-            // 听歌页自绘壳。总开关下面那两条只在总开关打开时出现 ——
-            // 关着的时候它们本来也不生效，摆在那里只会让人以为"调了没用"。
-            Section(
-                header: Text("now_playing_shell_section".localized),
-                footer: Text("now_playing_shell_description".localized)
-            ) {
-                Toggle(
-                    "now_playing_shell".localized,
-                    isOn: shadowBinding(
-                        \.shellEnabled,
-                        persist: { UserDefaults.nowPlayingShellEnabled = $0 }
-                    )
-                )
-
-                // ⚠️ `shadow.shellEnabled` 而不是 `shellEnabled`：`Shadow` 是这个 View 的
-                // **嵌套私有结构**，实例在 `@State private var shadow` 里 ——
-                // 裸写属性名是取不到的（2026-10-01 CI 的 `cannot find 'shellEnabled' in scope`）。
-                if shadow.shellEnabled {
-                    // ⛔「背景跟封面取色」已于 2026-10-02 删除：
-                    // 它挂的那层（`isBackdropOpaque = false`）从头到尾是全透明的 —— 等于假开关。
-
-                    Toggle(
-                        "now_playing_shell_header".localized,
-                        isOn: shadowBinding(
-                            \.shellHeader,
-                            persist: { UserDefaults.nowPlayingShellHeader = $0 }
-                        )
-                    )
-
-                    // 真液态玻璃（iOS 26+ 才有）。**默认关**：它会把顶栏底下那一片糊掉
-                    // （真机照片 20 就是这么糊的），所以单独给一个开关，让用户自己权衡。
-                    if shadow.shellHeader, UserDefaults.nowPlayingShellGlass
-                        || NSClassFromString("UIGlassEffect") != nil {
-                        Section(footer: Text("now_playing_shell_glass_description".localized)) {
-                            Toggle(
-                                "now_playing_shell_glass".localized,
-                                isOn: shadowBinding(
-                                    \.shellGlass,
-                                    persist: { UserDefaults.nowPlayingShellGlass = $0 }
-                                )
-                            )
-                        }
-                    }
-                }
-            }
+            // ⛔ 听歌页那一整节（自绘壳 / 自绘顶栏 / 顶栏玻璃）已于 2026-10-02 **整节删除**：
+            // 那几版 bug 太多（糊底、两颗 ⌄、与原生吸顶头打架……），先放一边，
+            // 等导航栏这条线收干净再重做。
 
             // 底部标签栏玻璃：每颗标签后面垫一层真液态玻璃（iOS 26+）或材质。
             Section(
@@ -187,6 +143,16 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.tabBarGlass,
                         persist: { UserDefaults.tabBarGlass = $0 }
+                    )
+                )
+
+                // 照片 21/23/25 里那条栏是**没有文字**的；藏掉之后玻璃自然收到 ~40pt。
+                // 思路借自 spoti.pw 的「Hide labels」（只借思路，代码自己写）。
+                Toggle(
+                    "tab_bar_hide_labels".localized,
+                    isOn: shadowBinding(
+                        \.tabBarHideLabels,
+                        persist: { UserDefaults.tabBarHideLabels = $0 }
                     )
                 )
             }

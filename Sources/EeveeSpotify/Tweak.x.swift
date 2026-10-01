@@ -381,17 +381,10 @@ struct EeveeSpotify: Tweak {
         // 新设计语言下让我们自己给旧设计打的补丁让位（目前是标签栏那层渐隐遮罩）。
         activateNewDesignYield()
 
-        // 听歌页自绘壳：玻璃顶栏 + 让原生吸顶头让位（默认开）。
-        //
-        // ⚠️ 同一个 selector 只能有一条 hook，见 `NowPlayingShellHook` 的说明。
-        // （旧的"顶部大标题"与"满屏取色背景"两条已于 2026-10-02 删除：前者与壳的顶栏标题重复，
-        //   后者一直是"整块全透明"= 视觉上等于没做。）
-        activateNowPlayingShell()
-
-        // 吸顶头让位：让 Spotify 那道"滚动时渐显的底色"别盖在我们的玻璃顶栏上。
-        // 真类名 `NowPlaying_ViewImpl.StickyHeaderViewControllerImpl`（从解密 IPA 核出）。
-        // 与壳共用一个 HookGroup，所以上面那条一装它就有；这里只负责自报日志。
-        activateStickyHeaderYield()
+        // ⛔ 听歌页那套外观代码（自绘壳 / 玻璃顶栏 / 吸顶头让位 / 顶部大标题 / 满屏取色背景）
+        // 已于 2026-10-02 **整块删除** —— bug 太多（照片 19/20 的糊底、两颗 ⌄、顶栏与吸顶头
+        // 互相打架……），先放一边，等导航栏这条线收干净再重做。
+        // 删掉的是整个文件 `Appearance/NowPlayingShell.x.swift`（含 `StickyHeaderYieldHook`）。
 
         // 底部标签栏（主页/搜索/音乐库/创建）的真液态玻璃。
         // 真类名从解密 IPA 核出：`NavigationUI_TabBarImpl.TabBarItemElementView`
