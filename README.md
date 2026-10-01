@@ -7,7 +7,7 @@
 
 ## Features
 
-- **Core fix**: Fixes the missing lyrics module issue on Spotify 9.1.86 for some songs.
+- **Core fix**: Fixes the missing lyrics module issue on Spotify 9.1.88 for some songs.
 - **Word-by-word lyrics**: Karaoke-style word-by-word lyrics.
 - **More lyrics sources**: NetEase, AMLL, and a multi-level fallback provider (`Musixmatch → PetitLyrics → LRCLIB → Genius`).
 - **Per-language romanization**: Chinese, Korean, and Japanese can be configured separately. Upstream only has a single “Enable romanization” switch.
