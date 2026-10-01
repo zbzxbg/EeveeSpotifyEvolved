@@ -3,54 +3,66 @@ import Orion
 import UIKit
 import ObjectiveC.runtime
 
-/// 底部标签栏玻璃 —— 第 3 版：**一条玻璃胶囊**，不是四块。
+/// 底部标签栏玻璃 —— 第 4 版：**一条玻璃胶囊，锚在"图标那一行"上**。
 ///
-/// ── 前两版错在哪（真机实证，别再犯）─────────────────────────────────────────
-///   1. **第一版**：给每一颗标签各铺一块 `103×49` 的玻璃 → 既不融合、还盖住了
-///      Spotify 自己的选中滑块；用户反馈"更难看了"；
-///   2. **第二版**：同样每颗一块，只是内缩 10pt → 还是四块，方向没变。
-///   用户要的是**照片 21 那种一条通栏的胶囊玻璃筋**。
-///
-/// ── 为什么"每颗一块"注定不像（这次终于拿到的结构）────────────────────────────
-/// 真机 dump（日志 19）：
+/// ── v3 错在哪（日志 20 第一次拿到真 frame，坐实的）────────────────────────────
+/// 真机结构（`[TabBarDump]` 日志 20 ↔ `[Tree]` 两条来源逐字对上）：
 /// ```
-/// TabBarView(414x83, id=elements-tabs-view-identifier)
-/// └ TabBarCompactView(414x83) ★有渐变层                ← 这条栏的"底"
-///   └ UIStackView(id=tabs-container-view-identifier)   ← 四颗在这条 stack 里**并排成兄弟**
-///     ├ TabBarItemElementView(id=TabBar.Item.主页)  → Icon + Label
-///     ├ …搜索 / 音乐库
-///     └ CreateMenuTabBarItemView(id=TabBar.Item.创建) → 自带一个 corner=20 的圆底
+/// TabBarView(414x83 @ 窗口 (0,813)；窗口 414x896，底部安全区 34)   ← hook 挂这里
+/// └ TabBarCompactView(414x83) ★自带一层 CAGradientLayer            ← 这条栏的"底"
+///   ├ TabBarGradientView(0,-112 414x195)      ← 已被 NewDesignYield 藏掉
+///   └ UIStackView(0,0 414x49, id=tabs-container-view-identifier)   ← 四颗是这条 stack 里的兄弟
+///     └ …TabBarItemElementView(103x49)
+///        ├ Encore.IconView (40,5  24x24)
+///        └ Encore.Label    (41,33 22x15)
 /// ```
-/// 四颗是 **stack 里的兄弟视图**。MeloX 那种"靠近就融合"靠的是把它们包进**同一个
-/// 玻璃容器**（`GlassEffectContainer`）——那要求把 Spotify 的四颗视图搬进我们的容器，
-/// **会打断它们的布局与手势**，得不偿失。
+/// **v3 的错在锚点**：它按"整条栏"（83pt）居中 → 胶囊 `(8,6 398x71)`、中心 41.5；
+/// 而图标那一行的内容只占 `5..48`、中心 26.5 —— **中心差了 15pt**。
+/// 照片 22 上就是这三个现象：图标顶(5) 比胶囊顶(6) 还高 1pt；文字底(48) 下面挂了
+/// **29pt 空玻璃**；胶囊底(77) 离屏幕底只剩 6pt —— 整条"沉"在下面，浮不起来。
 ///
-/// 所以这一版改走"**一条**"这条路：
-///   · 在**栏这一层**（`TabBarCompatView` 之上、图标 stack 之下）铺**一条**玻璃胶囊；
-///   · 左右各留 `sideInset`、上下各留 `verticalInset`，圆角 = 胶囊；
-///   · Spotify 的图标、标签、选中滑块**全部不动**，浮在这条玻璃上；
-///   · 这就是照片 21 的形状。
+/// **v4 的规矩**：以"图标内容带"为心，上下各留 `verticalPadding` →
+/// `(8,0 398x53)`、r=26.5：上留 5、下留 5、底边离屏幕 30pt，而且**不越出栏**。
 ///
-/// ⚠️ 尺寸依据（都来自 dump，不是猜的）：
-///   · 栏 `414×83`  —— 日志 19 的 `TabBarView(414x83)`
-///   · 「创建」那颗自带圆底 `corner=20.0` —— 说明 Spotify 自己用的半径是 20
-///     （我们的胶囊半径更大没关系：胶囊 = 半高，那才是照片里那条的形状）
+/// ── 为什么"每颗一块"注定不像（v1/v2 的错，别再犯）───────────────────────────
+/// 四颗是**同一条 stack 里的兄弟视图** → "每颗一块玻璃"永远**不会融合**。
+/// MeloX 那种"靠近就融合"要求把它们搬进同一个玻璃容器（`UIGlassContainerEffect`），
+/// 那会打断 Spotify 自己的布局与手势 —— **不做**。
+/// 用户要的是照片 21 那种**一条通栏的胶囊玻璃筋**，图标浮在上面。
+///
+/// ── 层序（v4 改）────────────────────────────────────────────────────────────
+/// v3 插在 `TabBarView.subviews[0]` —— 正好在 `TabBarCompactView` **之下**，
+/// 而那层 CompactView 自带一条 `CAGradientLayer`，是画在我们玻璃**之上**的
+/// （`SESSION_2026-10-02_APPEARANCE.md` §3.5 预写的判断，真机 dump 坐实）。
+/// v4 插到**图标 stack 的正下方**：原生渐变在玻璃下面、图标在玻璃上面，两个条件同时成立。
+///
+/// ⚠️ 顺带记一笔：全树 dump（日志 20）里 `UIVisualEffectView` **只有我们这一块**
+/// → 标签栏**没有**系统玻璃，"自绘"这条路线是对的，不存在"让位"的对象。
 struct TabBarGlassGroup: HookGroup {}
 
 enum TabBarGlassPlate {
 
     static var isEnabled: Bool { UserDefaults.tabBarGlass }
 
-    /// 玻璃层挂在栏上的关联键。
+    /// 玻璃层挂在宿主上的关联键。
     private static var plateKey: UInt8 = 0
 
-    /// 左右留边。照片 21 里那条胶囊**不是**贴边的，两侧有明显留白。
-    /// 先取 8pt（Spotify 自己的图标容器也有 8pt 的边距惯例，见各屏 dump 里的 `@8,...`）。
-    private static let sideInset: CGFloat = 8
-    /// 上下留边。栏高 83，胶囊高度取 83 - 上下各 6 = 71（更接近照片里那种"厚胶囊"）。
-    private static let verticalInset: CGFloat = 6
+    /// 图标那一行的容器（真机 dump 里的 id，四颗标签是它的子视图）。
+    private static let tabsStackIdentifier = "tabs-container-view-identifier"
 
-    /// 给**栏**铺一条玻璃胶囊。幂等：已经铺过就只更新 frame。
+    /// 左右留边。照片 21 里那条胶囊**不是**贴边的，两侧有明显留白。
+    private static let sideInset: CGFloat = 8
+
+    /// 上下留边：胶囊高 = 图标内容带高 + 上下各这么多。
+    /// **这一项就是"胖瘦"旋钮**：5 → 53pt 高、完全落在栏内（当前取这档）；
+    /// 8 → 59pt 高，顶部会压出栏外 3pt，更像照片里那种"厚胶囊"。
+    private static let verticalPadding: CGFloat = 5
+
+    /// 上一次报出去的胶囊 frame（只在变化时打日志，不在布局回调里刷屏）。
+    private static var lastReportedFrame: CGRect = .null
+    private static var reportCount = 0
+
+    /// 给**栏**铺一条玻璃胶囊。幂等：位置没变就一个字节都不碰。
     @MainActor
     static func apply(to bar: UIView) {
         guard isEnabled else {
@@ -59,34 +71,46 @@ enum TabBarGlassPlate {
         }
         guard bar.bounds.width > 1, bar.bounds.height > 1 else { return }
 
+        // 图标那一行（`tabs-container-view-identifier`）：既决定尺寸，也决定层序。
+        let stack = findTabsStack(in: bar)
+
         let plate: UIVisualEffectView
         if let existing = objc_getAssociatedObject(bar, &plateKey) as? UIVisualEffectView {
             plate = existing
         } else {
             plate = makeGlassView()
-            // ★ 插到**索引 0**：图标 stack 是栏的子视图，插在最底下就不会盖住它们，
-            //   也不会吃到触摸。Spotify 自己的渐变层也在栏里，同样在它下面动不了。
-            bar.insertSubview(plate, at: 0)
             objc_setAssociatedObject(bar, &plateKey, plate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             writeDebugLog("[TabBarPlate] 玻璃胶囊已铺在 \(className(bar)) 上")
         }
+        layering(plate: plate, stack: stack, bar: bar)
 
+        // ── 摆位：以"图标内容带"为心（不是整条栏，v3 就是死在这里）─────────────
+        let band = contentBand(in: bar, stack: stack)
         let width = max(16, bar.bounds.width - sideInset * 2)
-        let height = max(16, bar.bounds.height - verticalInset * 2)
-        plate.frame = CGRect(
+        let height = min(bar.bounds.height, max(16, band.height + verticalPadding * 2))
+        let centeredY = band.midY - height / 2
+        // 夹回栏内：宁可贴边，也绝不越出栏去压上面的内容。
+        let y = min(max(0, centeredY), max(0, bar.bounds.height - height))
+        let target = CGRect(
             x: (bar.bounds.width - width) / 2,
-            y: (bar.bounds.height - height) / 2,
+            y: y,
             width: width,
             height: height
         )
-        // 胶囊：半径取半高。
-        plate.layer.cornerRadius = height / 2
-        plate.layer.cornerCurve = .continuous
-        plate.clipsToBounds = true
-        plate.isUserInteractionEnabled = false
-        // 不用 autoresizingMask：那会把留边吃掉；frame 由每次布局重算
-        // （hook 挂在栏自己的 `layoutSubviews`，只在它自己布局时跑）。
-        plate.autoresizingMask = []
+
+        // frame 是相对**父视图**的：v4 起玻璃住在 CompactView 里，坐标系与栏一致，
+        // 但仍然显式换算一次 —— 免得将来层序再变就摆错地方。
+        let frame = (plate.superview ?? bar).convert(target, from: bar)
+
+        if !plate.frame.equalTo(frame) {
+            plate.frame = frame
+        }
+        let radius = height / 2
+        if abs(plate.layer.cornerRadius - radius) > 0.01 {
+            plate.layer.cornerRadius = radius
+        }
+
+        report(frame: frame, band: band, bar: bar, host: plate.superview)
     }
 
     @MainActor
@@ -94,6 +118,130 @@ enum TabBarGlassPlate {
         guard let plate = objc_getAssociatedObject(bar, &plateKey) as? UIVisualEffectView else { return }
         plate.removeFromSuperview()
         objc_setAssociatedObject(bar, &plateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    // MARK: - 层序
+
+    /// 把玻璃放到**图标 stack 的正下方**：原生那层渐变在玻璃下面、图标在玻璃上面。
+    ///
+    /// 幂等：已经在正确位置就什么都不做（这是 `layoutSubviews` 里的铁律）。
+    /// 兜底：找不到 stack 时退回栏的索引 0 —— 那正是 v3 的行为，至少不是新的错误。
+    @MainActor
+    private static func layering(plate: UIVisualEffectView, stack: UIView?, bar: UIView) {
+        if let stack, let host = stack.superview {
+            let plateIndex = host.subviews.firstIndex { $0 === plate }
+            let stackIndex = host.subviews.firstIndex { $0 === stack }
+            if plate.superview !== host || (plateIndex ?? 0) > (stackIndex ?? 0) {
+                host.insertSubview(plate, belowSubview: stack)
+            }
+        } else if plate.superview !== bar {
+            bar.insertSubview(plate, at: 0)
+        }
+
+        // 下面四条只写自己身上，且值没变就不写（写值会安排布局，白写等于自找活干）。
+        if plate.isUserInteractionEnabled { plate.isUserInteractionEnabled = false }
+        if plate.autoresizingMask != [] { plate.autoresizingMask = [] }
+        if !plate.clipsToBounds { plate.clipsToBounds = true }
+        if plate.layer.cornerCurve != .continuous { plate.layer.cornerCurve = .continuous }
+    }
+
+    // MARK: - 找图标那一行 / 量它的内容带
+
+    /// 从栏里找 `tabs-container-view-identifier` 那条 stack（四颗标签的父视图）。
+    ///
+    /// 认 id 不认层级：真机 dump 里它就是这个名字，而层级将来可能变。
+    @MainActor
+    static func findTabsStack(in bar: UIView) -> UIView? {
+        var found: UIView?
+
+        func walk(_ node: UIView, _ depth: Int) {
+            guard found == nil, depth <= 6 else { return }
+            if node !== bar, node.accessibilityIdentifier == tabsStackIdentifier {
+                found = node
+                return
+            }
+            for sub in node.subviews { walk(sub, depth + 1) }
+        }
+
+        walk(bar, 0)
+        return found
+    }
+
+    /// 图标那一行**真正看得见的内容**的范围（栏坐标系）。
+    ///
+    /// 为什么不用 stack 自己的框：真机树里 stack 是 `0..49`，但里面的
+    /// `Encore.IconView` 在 `5..29`、`Encore.Label` 在 `33..48` —— 那 5pt 的顶部留白
+    /// 不该算进"图标那一行"，否则胶囊又会偏下去（v3 的错就是这么来的）。
+    ///
+    /// 兜底两档（都来自真机观察，不是猜的）：
+    ///   1. 找不到 stack → 认定图标带在栏顶、高 = 栏高 − 底部安全区（真机是 49）；
+    ///   2. 四颗都还没排（dump 里三颗的中间层当时就是 `0x0`）→ 用 stack 框内缩 4pt。
+    @MainActor
+    private static func contentBand(in bar: UIView, stack: UIView?) -> CGRect {
+        guard let stack else {
+            let bottom = bar.safeAreaInsets.bottom
+            return CGRect(
+                x: 0, y: 0,
+                width: bar.bounds.width,
+                height: max(16, bar.bounds.height - bottom)
+            )
+        }
+
+        var union: CGRect?
+        collectContent(stack, into: &union, in: bar, depth: 0)
+        if let union, union.height > 1 { return union }
+
+        return stack.convert(stack.bounds, to: bar).insetBy(dx: 0, dy: 4)
+    }
+
+    /// 收集"看得见的内容"的并集（坐标换算到 `space` 里）。返回"这一支有没有贡献内容"。
+    ///
+    /// 判据全部来自真机 dump：
+    ///   · `hidden`（那颗 `6x6` 的蓝色小点）与 `alpha=0.00`（「创建」那颗的白色圆底）**都不算内容**；
+    ///   · `Encore.Label` 底下还挂着一个 `0x0` 的 `UILabel` —— 所以"叶子"不能只看有没有子视图，
+    ///     要**子节点都没成形时才算自己**，否则那个 `22x15` 的 frame 会被 0x0 的孩子吃掉。
+    @MainActor
+    @discardableResult
+    private static func collectContent(
+        _ node: UIView,
+        into union: inout CGRect?,
+        in space: UIView,
+        depth: Int
+    ) -> Bool {
+        guard depth <= 8, !node.isHidden, node.alpha > 0.01 else { return false }
+
+        var contributed = false
+        for sub in node.subviews where !sub.isHidden && sub.alpha > 0.01 {
+            if collectContent(sub, into: &union, in: space, depth: depth + 1) {
+                contributed = true
+            }
+        }
+        if contributed { return true }
+
+        let rect = node.convert(node.bounds, to: space)
+        guard rect.width > 0.5, rect.height > 0.5 else { return false }
+        union = union.map { $0.union(rect) } ?? rect
+        return true
+    }
+
+    /// 报一次账：插在哪、摆在哪、内容带是多少。
+    /// 只在 frame 变化时报，且最多 6 条 —— 下次日志不用看图就能验这条改动。
+    @MainActor
+    private static func report(frame: CGRect, band: CGRect, bar: UIView, host: UIView?) {
+        guard !frame.equalTo(lastReportedFrame) else { return }
+        lastReportedFrame = frame
+        guard reportCount < 6 else { return }
+        reportCount += 1
+
+        writeDebugLog(String(
+            format: "[TabBarPlate] 胶囊 (%.0f,%.0f %.0fx%.0f) r=%.1f ← 图标内容带 (%.0f,%.0f %.0fx%.0f)"
+                + " [栏 %.0fx%.0f] 插在 %@ 里",
+            frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
+            frame.size.height / 2,
+            band.origin.x, band.origin.y, band.size.width, band.size.height,
+            bar.bounds.width, bar.bounds.height,
+            host.map { className($0) } ?? "—"
+        ))
     }
 
     /// 造玻璃视图。
@@ -127,7 +275,7 @@ enum TabBarGlassPlate {
 /// （IPA `_TtC23NavigationUI_TabBarImpl10TabBarView` ↔ 真机 dump
 ///  `#1 NavigationUI_TabBarImpl.TabBarView frame=(0,0 414x83) id=elements-tabs-view-identifier`）。
 ///
-/// ⚠️ 只碰**这一个目标**（栏自己）：不听歌页那版"遍历整窗 + 每帧清别人底色"，
+/// ⚠️ 只碰**这一个目标**（栏自己）：不像听歌页那版"遍历整窗 + 每帧清别人底色"，
 /// 所以不会影响滚动或别处。
 class TabBarPlateHook: ClassHook<UIView> {
     typealias Group = TabBarGlassGroup
@@ -150,6 +298,6 @@ func activateTabBarGlass() {
     TabBarGlassGroup().activate()
     writeDebugLog(
         "[TabBarPlate] installed (enabled=\(UserDefaults.tabBarGlass ? "ON" : "OFF"))"
-            + " — 一条玻璃胶囊，四颗标签浮在它上面"
+            + " — 一条玻璃胶囊，锚在图标那一行上，图标浮在它上面"
     )
 }
