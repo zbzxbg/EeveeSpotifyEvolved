@@ -5,6 +5,9 @@
 >
 > ⚠️ **2026-10-01 更新**：日志 8 已到位，§1 的验证状态与 §5 的待办**已被 §8 取代**。
 > 先读 §8 再看别的；§8 里有本轮改了什么、剩下的差什么、下一份日志要抓哪几步。
+>
+> ★ **入口文档**：同目录的 **`SESSION_2026-10-01.md`** —— 那一天做完的事、当前状态、
+> 硬约束、下一步排序、踩过的坑，全在里面。**新会话先读它**，本文件 §8–§10 当详细流水查。
 
 ---
 
@@ -533,3 +536,33 @@ Spotify 原生控件 —— 复用 `AppleMusicLyricsPlaybackControl.tapControl` 
 
 `SPTPlayerTrack.string(ifResponding:)`（`Lyrics/Models/Extensions/SPTPlayerTrack+Extension.swift`）
 —— 手写 protocol 声明 ≠ 实现，跨版本调私有方法前先探测。屏蔽艺人与新样品都用它。
+
+## 10.10 同一天第二次同类崩溃：`extractedColorHex()`（已修）
+
+用户开启「听歌页外观（样品）」后**点迷你条进听歌页就崩**。
+`C:\dsh\ipa\Spotify-2026-10-01-114504.ips`：又是
+`NSInvalidArgumentException · unrecognized selector sent to instance 0x13adbea60`，
+这次崩在 **CA 布局事务**里（`-[UIView(CALayerDelegate) layoutSublayersOfLayer:]` →
+EeveeSpotify.dylib ×5 → 转发崩溃），正好是 `viewDidLayoutSubviews` → `apply` 那一刻。
+
+元凶：样品里直接调了 `track.extractedColorHex()`。
+
+### ★★ 一条能提前抓住这两次崩溃的启发式（写进纪律）
+
+> **如果某个方法在仓库里只出现在 `hookTarget == .lastAvailableiOS14` 那一支，
+> 就假定它在 9.1.86（v91）上不存在。**
+
+两次崩溃都是这个形状：
+
+| 方法 | 仓库里的调用点 | 9.1.86 上的正确读法 |
+|---|---|---|
+| `artistTitle()` | `CustomLyrics.x.swift:99`、`LyricsWordByWord.x.swift:875`、`AppleMusicLyricsOverlay.swift:543`（都是同一个三目） | `artistName()` |
+| `extractedColorHex()` | `CustomLyrics.x.swift:376`、`LyricsWordByWord.x.swift:354`（都是同一个 switch） | `metadata()["extracted_color"]` |
+
+修法：`MusicStyleNowPlaying.coverColorHex(_:)` —— **先**用这版既有的
+`metadata()["extracted_color"]`（`metadata()` 被 `SPTPlayerTrackHook` 覆写过，一定在），
+**再**用 `string(ifResponding: "extractedColorHex")` 兜底。
+
+### 顺带（好消息）
+
+**屏蔽艺人已实测可用**（崩溃修复生效）。

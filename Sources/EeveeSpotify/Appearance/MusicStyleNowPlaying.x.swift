@@ -96,13 +96,12 @@ enum MusicStyleNowPlaying {
             layer.frame = root.bounds
         }
 
-        // 只在换歌时重算颜色（`extractedColorHex()` 是 Spotify 从封面里抽好的，日志 8 见过
-        // `FF62787D` 这种 8 位 ARGB —— 解析不出来就保持上一次的，不编造颜色）。
+        // 只在换歌时重算颜色（颜色取自这版**真正在用的**那条读法，见 `coverColorHex`）。
         let trackID = track?.trackIdentifier ?? ""
         guard trackID != lastTrackID || layer.colors == nil else { return }
         lastTrackID = trackID
 
-        guard let tint = tintColor(fromHex: track?.extractedColorHex()) else {
+        guard let tint = tintColor(fromHex: coverColorHex(track)) else {
             // 拿不到颜色（本地文件、还没抽好）→ 给一层中性的深色，保证页面不出现"半透明黑洞"。
             layer.colors = [UIColor(white: 0.10, alpha: 1).cgColor, UIColor(white: 0.04, alpha: 1).cgColor]
             layer.locations = [NSNumber(value: 0), NSNumber(value: 1)]
@@ -117,6 +116,28 @@ enum MusicStyleNowPlaying {
         // 显式 `NSNumber`：`locations` 是 `[NSNumber]?`，混合整/浮点字面量靠推断容易出岔子
         // （盲写没有编译器，这种地方一律写死类型）。
         layer.locations = [NSNumber(value: 0), NSNumber(value: 0.55), NSNumber(value: 1)]
+    }
+
+    /// 这一首的"封面底色"字符串。
+    ///
+    /// ⚠️ **不要直接调 `track.extractedColorHex()`**（2026-10-01 的第二次崩溃换来的）：
+    /// 那个方法在我们的**手写 protocol** 里声明着，但仓库里它**只在
+    /// `hookTarget == .lastAvailableiOS14` 那一支**被调用过
+    /// （`CustomLyrics.x.swift:376` 与 `LyricsWordByWord.x.swift:354` 是同一个 switch），
+    /// **9.1.x 走的是 `metadata()["extracted_color"]`** —— 说明这版上那个方法很可能不存在。
+    /// 我直接调它的结果就是又一个 `unrecognized selector`，崩在 CA 布局事务里
+    /// （点迷你条进听歌页那一刻，`layoutSublayersOfLayer` → 我们的帧 → 转发崩溃）。
+    ///
+    /// 所以这里：**先按这版的既有读法**取 `metadata()`（它是被 `SPTPlayerTrackHook` 覆写过的，
+    /// 一定在），再用探测式 getter 兜底。
+    private static func coverColorHex(_ track: SPTPlayerTrack?) -> String? {
+        guard let track else { return nil }
+
+        if let hex = track.metadata()["extracted_color"], !hex.isEmpty {
+            return hex
+        }
+
+        return track.string(ifResponding: "extractedColorHex")
     }
 
     /// `extractedColorHex()` → `UIColor`。8 位按 ARGB（`FF62787D`），6 位按 RGB。
