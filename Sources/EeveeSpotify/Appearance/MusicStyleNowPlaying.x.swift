@@ -25,7 +25,9 @@ import ObjectiveC.runtime
 ///      （手写 protocol 声明 ≠ 实现，2026-10-01 崩过两次）。
 struct MusicStyleNowPlayingGroup: HookGroup {}
 
-@MainActor
+/// 由 `applyNowPlayingAppearance` 统一驱动。**不标 `@MainActor`** ——
+/// 调用点已经过 `onMainThreadSync`，而"hook 方法/其直接调用链上不写 `@MainActor`"
+/// 是本仓库的成文规矩（见 `LyricsChromeVisibility.swift:3-17`）。
 enum MusicStyleNowPlaying {
 
     /// 旧开关：只驱动"我们画的那个大标题"。

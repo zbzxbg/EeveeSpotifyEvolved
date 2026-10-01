@@ -50,7 +50,9 @@ enum NowPlayingShell {
         if let existing = current, existing.superview === root {
             shell = existing
         } else {
-            shell?.removeFromSuperview()
+            // ⚠️ `current` 是 weak，这里取到的一定是非 Optional（上面那行 `if let`
+            // 已经绑过了）；早期版本写成 `shell?.removeFromSuperview()` 是错的。
+            current?.removeFromSuperview()
             let created = NowPlayingShellView()
             created.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(created)
@@ -147,12 +149,16 @@ final class NowPlayingShellView: UIView {
         // 窗口里按**无障碍标签**找"原生收起键" —— 那个函数自带 `isOwnControl` +
         // `isForwardingTap` 双重防重入（历史上自己点自己爆过栈）。所以我们只做两件事：
         // 不给它设 `accessibilityLabel`（不参与标签匹配），动作**只走那个函数**。
-        var chevronConfig = UIButton.Configuration.plain()
-        chevronConfig.image = UIImage(
-            systemName: "chevron.down",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        // ⚠️ 不用 `UIButton.Configuration`（那条 API 是 **iOS 15+**，而本工程
+        //    `Makefile` 的 deployment target 是 14.0 —— 用了就是编译期错误，
+        //    不是运行期判断能救的）。退回 iOS 7 起就有的写法。
+        chevronButton.setImage(
+            UIImage(
+                systemName: "chevron.down",
+                withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+            ),
+            for: .normal
         )
-        chevronButton.configuration = chevronConfig
         chevronButton.tintColor = .white
         chevronButton.translatesAutoresizingMaskIntoConstraints = false
         chevronButton.addTarget(self, action: #selector(onChevron), for: .touchUpInside)
@@ -196,7 +202,7 @@ final class NowPlayingShellView: UIView {
             headerGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
             headerGlass.topAnchor.constraint(equalTo: topAnchor),
             headerGlass.heightAnchor.constraint(
-                equalTo: safeAreaLayoutGuide.topAnchor,
+                equalTo: safeAreaLayoutGuide.heightAnchor,
                 constant: NowPlayingShellMetrics.headerHeight
             ),
 
@@ -600,15 +606,23 @@ class NowPlayingShellHook: ClassHook<UIViewController> {
 
     func viewDidLayoutSubviews() {
         orig.viewDidLayoutSubviews()
+        // ⚠️ hook 方法上**不要**写 `@MainActor`，也别在这里直接调被标了 `@MainActor`
+        // 的函数 —— 本仓库有成文的规矩与现成 helper：见 `LyricsChromeVisibility.swift:3-17`
+        // 与 `onMainThreadSync`（Orion 的生成器是按源码文本拼 `override` 的，
+        // 给覆写方法加 `@MainActor` 会拼出非法属性）。
         applyNowPlayingAppearance(to: self.target.view)
     }
 }
 
 /// 两条外观路径的统一入口（壳 + 旧版样品标题）。
-@MainActor
+///
+/// 用仓库既有的 `onMainThreadSync` 表达"这里是主线程"，不自己写
+/// `MainActor.assumeIsolated`（少一处重复实现，也少一处和仓库规矩打架的地方）。
 func applyNowPlayingAppearance(to root: UIView?) {
-    NowPlayingShell.apply(to: root)
-    MusicStyleNowPlaying.applyLegacyTitle(to: root)
+    onMainThreadSync {
+        NowPlayingShell.apply(to: root)
+        MusicStyleNowPlaying.applyLegacyTitle(to: root)
+    }
 }
 
 func activateNowPlayingShell() {
