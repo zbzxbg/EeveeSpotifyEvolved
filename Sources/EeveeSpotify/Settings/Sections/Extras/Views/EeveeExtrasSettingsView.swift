@@ -42,6 +42,10 @@ struct EeveeExtrasSettingsView: View {
         var gestureFullscreenLyrics = UserDefaults.playerGestureFullscreenLyrics
 
         var musicStyleNowPlaying = UserDefaults.musicStyleNowPlaying
+
+        var shellEnabled = UserDefaults.nowPlayingShellEnabled
+        var shellBackdrop = UserDefaults.nowPlayingShellBackdrop
+        var shellHeader = UserDefaults.nowPlayingShellHeader
     }
 
     var body: some View {
@@ -133,10 +137,42 @@ struct EeveeExtrasSettingsView: View {
                 )
             }
 
+            // 听歌页自绘壳。总开关下面那两条只在总开关打开时出现 ——
+            // 关着的时候它们本来也不生效，摆在那里只会让人以为"调了没用"。
             Section(
-                header: Text("music_style_section".localized),
-                footer: Text("music_style_nowplaying_description".localized)
+                header: Text("now_playing_shell_section".localized),
+                footer: Text("now_playing_shell_description".localized)
             ) {
+                Toggle(
+                    "now_playing_shell".localized,
+                    isOn: shadowBinding(
+                        \.shellEnabled,
+                        persist: { UserDefaults.nowPlayingShellEnabled = $0 }
+                    )
+                )
+
+                if shellEnabled {
+                    Toggle(
+                        "now_playing_shell_backdrop".localized,
+                        isOn: shadowBinding(
+                            \.shellBackdrop,
+                            persist: { UserDefaults.nowPlayingShellBackdrop = $0 }
+                        )
+                    )
+
+                    Toggle(
+                        "now_playing_shell_header".localized,
+                        isOn: shadowBinding(
+                            \.shellHeader,
+                            persist: { UserDefaults.nowPlayingShellHeader = $0 }
+                        )
+                    )
+                }
+            }
+
+            // 旧版样品标题（名字 + 顶栏都由壳负责之后，它只剩"那个大标题"）。
+            // 默认关，且与上面的壳互不影响。
+            Section(footer: Text("music_style_nowplaying_description".localized)) {
                 Toggle(
                     "music_style_nowplaying".localized,
                     isOn: shadowBinding(

@@ -52,7 +52,27 @@ def check(path: Path) -> list[str]:
             i += 2
             continue
 
-        # 字符串字面量（含多行 """）
+        # 字符串字面量（含多行 """ 与 raw string #"..."#）
+        #
+        # ⚠️ raw string 必须单独处理：Swift 5 的 `#"..."#` 里 `\` 不是转义，
+        # 而里面的正则（例如 `[^\s"<>]+`）会带引号 —— 不认它就会把那个引号
+        # 当成字符串结尾，后面的方括号全部错位（`CleanShareLinks.x.swift` 就是
+        # 这么被误报的）。
+        if ch == "#" and src.startswith('#"', i):
+            hashes = 0
+            while i + hashes < n and src[i + hashes] == "#":
+                hashes += 1
+            terminator = '"' + ("#" * hashes)
+            i += hashes + 1
+            while i < n:
+                if src[i] == "\n":
+                    line += 1
+                if src.startswith(terminator, i):
+                    i += len(terminator)
+                    break
+                i += 1
+            continue
+
         if src.startswith('"""', i):
             i += 3
             while i < n and not src.startswith('"""', i):

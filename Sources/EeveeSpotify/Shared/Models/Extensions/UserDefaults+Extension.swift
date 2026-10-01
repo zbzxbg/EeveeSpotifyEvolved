@@ -37,6 +37,10 @@ extension UserDefaults {
     private static let blockedArtistsKey = "blockedArtists"
     private static let musicStyleNowPlayingKey = "musicStyleNowPlaying"
     private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
+    private static let nowPlayingShellEnabledKey = "nowPlayingShellEnabled"
+    private static let nowPlayingShellBackdropKey = "nowPlayingShellBackdrop"
+    private static let nowPlayingShellHeaderKey = "nowPlayingShellHeader"
+    private static let nowPlayingShellGlassKey = "nowPlayingShellGlass"
 
     static var musixmatchToken: String {
         get {
@@ -404,6 +408,54 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: musicStyleNowPlayingKey)
+        }
+    }
+
+    // MARK: - 听歌页自绘壳（NowPlayingShell）
+
+    /// 听歌页壳总开关。**默认开** —— 这是整套"观感自绘"路线的主开关，
+    /// 关掉等于整页交还原生（背景、顶栏、让位全部撤销）。
+    static var nowPlayingShellEnabled: Bool {
+        get {
+            container.object(forKey: nowPlayingShellEnabledKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingShellEnabledKey)
+        }
+    }
+
+    /// 跟封面取色的满屏背景。默认开。
+    ///
+    /// 它是最像 Apple Music 的那一件（MeloX 的截图证明：传输行只是扁平白图标，
+    /// 靠这层底色撑着就已经很 AM 了），所以默认开。
+    static var nowPlayingShellBackdrop: Bool {
+        get {
+            container.object(forKey: nowPlayingShellBackdropKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingShellBackdropKey)
+        }
+    }
+
+    /// 自绘顶栏（⌄ + 歌名 + 艺人），并让原生吸顶头让位。默认开。
+    ///
+    /// 关掉它 = 原生吸顶头拿回自己的底色与文字（`restore()`），我们不画顶栏。
+    static var nowPlayingShellHeader: Bool {
+        get {
+            container.object(forKey: nowPlayingShellHeaderKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingShellHeaderKey)
+        }
+    }
+
+    /// 顶栏是否用真玻璃（探测到 `UIGlassEffect` 才生效，否则退材质）。默认开。
+    static var nowPlayingShellGlass: Bool {
+        get {
+            container.object(forKey: nowPlayingShellGlassKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingShellGlassKey)
         }
     }
 
