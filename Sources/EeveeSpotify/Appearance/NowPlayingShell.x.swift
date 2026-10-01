@@ -129,9 +129,21 @@ final class NowPlayingShellView: UIView {
         isUserInteractionEnabled = true
         backgroundColor = .clear
 
+        // ── 背景用"透明档"，而不是歌词页那档实心底（照片 19/20 换来的）──────
+        //
+        // `LyricsBackdropView` 是给**全屏歌词页**写的：那一页我们要**替换**整页内容，
+        // 所以它可以铺一张不透明的模糊封面 + 黑纱（`isBackdropOpaque = true`）。
+        // 但听歌页的原生内容**正是我们要显示的东西**（封面、进度、三键都在下面），
+        // 一铺实心就被整页盖住 —— 照片 19 是一片纯蓝，照片 20 连封面和按钮都成了
+        // 模糊残影，就是这么来的。
+        //
+        // 所以这里走它**预留好的那条路**：`isBackdropOpaque = false` 时它整块透明、
+        // 只留一圈边缘暗化渐变给我们的白字当底（那个类注释里写明这条路的用途是
+        // "数据不可用就整块透明、交还原生"）。底色感由上面那条顶栏色带 + 原生自己的
+        // 封面染色给，不再和我们自己抢画面。
         backdrop.style = .stage
-        backdrop.solid = true
-        backdrop.isBackdropOpaque = true
+        backdrop.solid = false
+        backdrop.isBackdropOpaque = false
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         addSubview(backdrop)
 
@@ -331,13 +343,19 @@ final class NowPlayingShellView: UIView {
 
     /// 顶栏玻璃。
     ///
-    /// ⚠️ 探测式：真 `UIGlassEffect`（iOS 26+）拿得到就用，拿不到退
-    /// `.systemUltraThinMaterialDark`（iOS 13+ 就有）——**不写 `#available`**，
-    /// 与本仓库既有做法一致（见 `AmoledTheme.x.swift` 的同一套写法）。
+    /// ── 为什么**默认不用**真玻璃（照片 20 换来的）────────────────────────────
+    /// iOS 27 上 `UIGlassEffect` **是真的能拿到**，但液态玻璃不是"贴上去就好看"的东西：
+    /// 它的看家本领是折射与透镜，代价是**把底下的内容整个糊掉**。
+    /// 照片 20 就是它盖在 121pt 高的顶栏上的结果 —— 连封面和按钮都成了残影，
+    /// 读起来像"糊了一层玻璃上去"。
     ///
-    /// 为什么不自己画"折射感"：那正是系统玻璃与"模糊 + 描边"的差距所在；
-    /// 但把它做成**必需**就等于把开关在旧系统上置灰（spoti.pw 就是这么做的，
-    /// 它还为此挂了一个未修复的 iOS 17 问题）。这里选"降级可用"。
+    /// 所以这里改成**默认不铺**，只留那条"从上往下渐隐"的色带（见 `applyHeaderTint`）：
+    /// 它同样能让状态栏 → 导航条 → 内容连成一片，但**不吃画面**。
+    /// 想做真玻璃观感时再打开 `nowPlayingShellGlass`（设置里那个开关），
+    /// 并且那时应当把它**收窄到只有安全区那条**（写在这里当备忘）。
+    ///
+    /// 仍然保留探测式写法：拿得到就用真的、拿不到退材质，**不写 `#available`**
+    ///（与本仓库既有做法一致，见 `AmoledTheme.x.swift`）。
     private func applyGlass(to view: UIVisualEffectView) {
         guard UserDefaults.nowPlayingShellGlass else {
             view.effect = nil
@@ -374,12 +392,16 @@ final class NowPlayingShellView: UIView {
 
         let gradient = CAGradientLayer()
         gradient.name = NowPlayingShellMetrics.tintLayerName
+        // 只压顶部那一小块（状态栏与原生导航条所在），往下很快淡掉。
+        // 数值是照片 19 之后调的：原来 0.98/0.55/0.00 会把"我们自己的标题"以外的
+        // 东西也糊住。这里再收一档，因为底色已经交回给原生了，顶栏只需要一点点暗底
+        // 保证白字清楚。
         gradient.colors = [
-            resolved.withAlphaComponent(0.98).cgColor,
             resolved.withAlphaComponent(0.55).cgColor,
+            resolved.withAlphaComponent(0.22).cgColor,
             resolved.withAlphaComponent(0.00).cgColor,
         ]
-        gradient.locations = [0.0, 0.62, 1.0]
+        gradient.locations = [0.0, 0.55, 1.0]
         gradient.startPoint = CGPoint(x: 0.5, y: 0)
         gradient.endPoint = CGPoint(x: 0.5, y: 1)
         gradient.frame = headerTint.bounds
@@ -420,7 +442,10 @@ final class NowPlayingShellView: UIView {
         guard !stickyViews.isEmpty else {
             if !didLogStickyHeaderOutcome {
                 didLogStickyHeaderOutcome = true
-                writeDebugLog("[Shell] ⚠️ 没找到 ScrollStickyHeader — 原生吸顶头无法让位（标题可能仍会被盖）")
+                writeDebugLog(
+                    "[Shell] ⚠️ 没找到 ScrollStickyHeader — 原生吸顶头无法让位（标题可能仍会被盖）"
+                        + "；本页带 Sticky/Header/Bar 字样的类名：\(stickyHeaderCandidates(in: searchRoot))"
+                )
             }
             return
         }
@@ -446,6 +471,28 @@ final class NowPlayingShellView: UIView {
     }
 
     private var didLogStickyHeaderOutcome = false
+
+    /// 排障用：把当前页里"名字像吸顶头"的类名列出来。
+    ///
+    /// 为什么需要它：真机日志 17 报 `没找到 ScrollStickyHeader`，而日志 12/14 的
+    /// 视图树 dump 里明明有 `ScrollStickyHeader.ContentView` —— 说明这个 build 上
+    /// **承载那道渐显底色的容器换了类名**（或换了实现）。与其猜，不如把候选名字打出来
+    /// （只读、只打一次、不建任何东西）。
+    private func stickyHeaderCandidates(in root: UIView) -> String {
+        var names: [String] = []
+        func walk(_ node: UIView) {
+            if names.count >= 12 { return }
+            let name = NSStringFromClass(type(of: node))
+            let lowered = name.lowercased()
+            if (lowered.contains("sticky") || lowered.contains("header") || lowered.contains("herobg"))
+                && !names.contains(name) {
+                names.append(name)
+            }
+            for sub in node.subviews { walk(sub) }
+        }
+        walk(root)
+        return names.isEmpty ? "(无)" : names.joined(separator: ", ")
+    }
 
     private func collectStickyHeaderViews(in view: UIView, into result: inout [UIView]) {
         let name = NSStringFromClass(type(of: view))

@@ -449,10 +449,14 @@ extension UserDefaults {
         }
     }
 
-    /// 顶栏是否用真玻璃（探测到 `UIGlassEffect` 才生效，否则退材质）。默认开。
+    /// 顶栏是否用真玻璃（探测到 `UIGlassEffect` 才生效，否则退材质）。
+    ///
+    /// **默认关**（照片 20 换来的）：界面是真玻璃的看家本领是折射，代价是把底下
+    /// 的内容整个糊掉 —— 盖在 121pt 高的顶栏上，连封面和按钮都成了残影。
+    /// 想试真玻璃观感时再打开；那时应当把它收窄到只有安全区那一条。
     static var nowPlayingShellGlass: Bool {
         get {
-            container.object(forKey: nowPlayingShellGlassKey) as? Bool ?? true
+            container.object(forKey: nowPlayingShellGlassKey) as? Bool ?? false
         }
         set {
             container.set(newValue, forKey: nowPlayingShellGlassKey)

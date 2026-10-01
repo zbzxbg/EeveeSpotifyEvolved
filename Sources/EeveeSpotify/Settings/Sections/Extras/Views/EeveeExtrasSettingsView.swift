@@ -46,6 +46,7 @@ struct EeveeExtrasSettingsView: View {
         var shellEnabled = UserDefaults.nowPlayingShellEnabled
         var shellBackdrop = UserDefaults.nowPlayingShellBackdrop
         var shellHeader = UserDefaults.nowPlayingShellHeader
+        var shellGlass = UserDefaults.nowPlayingShellGlass
     }
 
     var body: some View {
@@ -170,6 +171,21 @@ struct EeveeExtrasSettingsView: View {
                             persist: { UserDefaults.nowPlayingShellHeader = $0 }
                         )
                     )
+
+                    // 真液态玻璃（iOS 26+ 才有）。**默认关**：它会把顶栏底下那一片糊掉
+                    // （真机照片 20 就是这么糊的），所以单独给一个开关，让用户自己权衡。
+                    if shadow.shellHeader, UserDefaults.nowPlayingShellGlass
+                        || NSClassFromString("UIGlassEffect") != nil {
+                        Section(footer: Text("now_playing_shell_glass_description".localized)) {
+                            Toggle(
+                                "now_playing_shell_glass".localized,
+                                isOn: shadowBinding(
+                                    \.shellGlass,
+                                    persist: { UserDefaults.nowPlayingShellGlass = $0 }
+                                )
+                            )
+                        }
+                    }
                 }
             }
 
