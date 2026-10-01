@@ -22,7 +22,7 @@
 | Public release | `v0.1.0` | 9.1.76 |
 | Development | `v1.0.0-beta.53` | 9.1.86 |
 
-Development version last updated: `2026/09/27`.
+Development version last updated: `2026/10/01`.
 
 > [!WARNING]
 > Development versions are not made publicly available to users.
