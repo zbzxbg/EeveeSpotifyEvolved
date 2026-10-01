@@ -470,3 +470,137 @@ B（胶囊跟手）/ C（拖动切换标签）**本轮不做**，C 因为要驱�
 [TabBarDump]  ---- 标签栏内部结构 begin（bar 414x83）----      ← 结构没变
 [TabBarSel]   ---- 选中信号 begin（4 颗对比着看）----          ← 哪一颗被选中的判据
 ```
+
+---
+
+## 14. v4.2 真机验收（日志 23 + 照片 26/27）+ 两个新结论
+
+### 14.1 v4.2 生效 ✅
+
+```
+[TabBarPlate] 胶囊 (43,-3 312x60) r=30.0 ← 图标内容带 (63,5 272x44) [栏 414x83]   ← 首次
+[TabBarPlate] 胶囊 (46,-3 323x60) r=30.0 ← 图标内容带 (66,5 283x44) [栏 414x83]   ← 稳定后
+```
+
+- 胶囊从 **398×71（5.6:1）→ 约 320×60（5.3:1）**：更短、更厚 ✓（照片 26/27 与日志一致）；
+- 内容带从 **342 宽 → 272~293 宽** ⇒ `tightenRow` 的 transform 真的生效，而且**是在量之前跑的** ✓；
+- v4.1 的护栏也验证了：结构 dump 那一刻 `#4 UIVisualEffectView frame=(0,0 0x0) hidden`
+  —— **几何没准备好时它就是不画**，再也没有那条 16pt 小棍 ✓。
+- 顺带看到一次 `[栏 414x49]`（没有底部安全区的那一帧，估计是转场），胶囊跟着变 322×57 ✓ 没出错。
+
+### 14.2 ★「哪一颗被选中」的判据（`[TabBarSel]` 第一次真机数据）
+
+```
+[TabBarSel] item=? traits=0x0 itemTint=#0091FF/1.00 label(UILabel)text=#FFFFFF/1.00   ← 选中（主页）
+[TabBarSel] item=? traits=0x0 itemTint=#0091FF/1.00 label(UILabel)text=#B3B3B3/1.00   ← 未选中 ×3
+```
+
+- `accessibilityTraits` 四颗全是 `0x0` → **没有 `selected` 位，这条路不通**；
+- `itemTint` 四颗都是 #0091FF → **不通**；
+- **`UILabel.textColor`：选中 = `#FFFFFF`，未选中 = `#B3B3B3`** → ✅ **这就是判据**。
+- 另：`item=?` 是因为 id 挂在**更里面那层** `TabBarItemElementView` 上，stack 的直接子视图是
+  `ElementContentView`（没 id）——下次要拿 id 得往里走一层。
+
+⇒ 想画"选中胶囊"（照片 21 的深色药丸 / 25 里房子背后那块亮底）**现在有可靠信号了**：
+按 item 找它的 `UILabel.textColor`，接近白的那一颗就是选中项；用 0.5s 复查 + 变了才写那套节拍
+去挪我们自己的胶囊即可。
+
+### 14.3 「节省流量模式」突然自动开启：谁开的
+
+**结论：是 Spotify 自己的功能，不是插件"打开"的**（但有一条间接关联，见下）。
+
+- 9.1.86 里确实有这套东西（IPA 字面量表）：
+  `ios-datasaver-automatic-impl` → `enabled` / `event_logging_enabled` / `messaging_enabled`，
+  以及 `ios-feature-datasaver` → `dynamic_data_saver_stream_quality` / `enable_local_override`、
+  `ios-feature-nowplayingbar` → `data_saver_tooltip`、`ios-settings-connectivitypageplugin-impl`
+  → `show_data_saver_multiple_choice_item`。
+  ⇒ **"自动数据节省"是 Spotify 的服务端实验**，由它按网络状况/分组自行开启。
+- 全仓库 grep：`datasaver|data_saver` **一处都没有** ⇒ 我们的代码没有碰过它。
+- 但服务端 customize 体里就有网络相关字段（日志 23 第 188 行那条 `[PreRelease] HIT` 上下文里
+  能看到 `core-bitrate` 与 `net_fortune_*`）⇒ Spotify 是**按"网络运气"测量**决定要不要省流的，
+  走代理/VPN 时测量结果差，很容易被它判定该省流。
+- **唯一可疑的间接关联**：我们改写了产品状态字典里的 `streaming-rules`（置空）与 `high-bitrate=1`
+  （`EeveePremiumForce.x.swift:38-40`、`DynamicPremium+ModifyingFunctions.swift:766`），
+  而作者自己留过一行注释：**"Over-seeding caused greyed-out tracks (streaming-rules mismatch)"**
+  —— 这块动过就会出灰歌。数据节省和它是同一个"音质/带宽"家族，所以**不能 100% 排除我们这边**。
+
+**怎么定性（现场）**：它自动开启的那一刻导出日志，看两处 ——
+1. 有没有 `[Flags] replacement …datasaver…`（**没有这行 = 不是我们改的**）；
+2. `[REVERT_WATCH][setOriginal] …` 里 `type/product/on-demand/streaming-rules` 有没有变。
+
+**怎么关掉（零代码）**：设置 → 扩展功能 → Flag 覆盖 → 添加
+`name = enabled`、`scope = ios-datasaver-automatic-impl`、写入指定值 → `false` → 重启 Spotify。
+（想连本地覆盖一起放开：再写 `ios-feature-datasaver.enable_local_override = true`。）
+**要"永久关"**：在 `propertyReplacements` 加一行 `.forceBool(false)`（服务端没下发也会追加）。
+
+---
+
+## 15. v4.3：胶囊 + 四颗可以拖着走，松手弹回（2026-10-02，用户要求）
+
+用户要的是"**胶囊和选项可以拖动 + 照片 23 那种真实物理反射**"。已实现：
+
+| 部分 | 做法 |
+|---|---|
+| 拖动 | `UIPanGestureRecognizer` 装在**栏**上；拖动时**玻璃 + 四颗一起走**（图标继续走 `transform`，玻璃走我们自己的 frame） |
+| 不吃点击 | `cancelsTouchesInView = false`、`delaysTouchesBegan = false`、与别的识别器**并行**（`shouldRecognizeSimultaneouslyWith → true`） |
+| 什么时候认 | `gestureRecognizerShouldBegin`：**明显横向**（`|vx| > 1.5|vy|` 且 `|vx| > 80`）才开始 —— 竖滑列表/点击标签都不受影响 |
+| 范围 | `dragLimit = ±70 / ±24`（**故意小**：这是"推一下看它折"，不是"把栏搬走"—— 搬走会撞安全区、迷你条、系统手势） |
+| 松手 | 0.5s 弹簧（damping 0.72）弹回原位；**回弹过程里折射一直在动**，"液体"手感就来自这里 |
+| 真实折射 | 本来就是系统 `UIGlassEffect`（动起来才看得出来）；另**探测式**打开 `UIGlassEffect.isInteractive`（按下弹性反馈） |
+
+### 15.1 三条实现纪律（都写进代码注释了）
+
+1. **量内容带时必须 `includeDrag: false`** —— 否则拖动量会被量进内容带、之后再加一次（算两次）；
+2. `isInteractive` 只在这两个 selector **都在**（`isInteractive` + `setInteractive:`）时才走 KVC ——
+   KVC 碰未知 key 会抛异常（崩），所以必须先探；
+3. ⚠️ **`UIView.animate` 的 `animations:` 是 escaping 闭包、不继承 actor 隔离** ——
+   里面直接调 `@MainActor` 的 `apply` 是编译错，必须套仓库既有的 `onMainThreadSync`
+   （这次编译前自查抓到的，见 `endDrag`）。
+
+### 15.2 逃生门与旋钮
+
+- 逃生门：拖动**跟着「标签栏玻璃」那个开关**走 —— 关掉玻璃 = 拖动/收紧/胶囊一起停（不留尾巴）；
+- 旋钮（一行）：`dragLimit`（范围）、`endDrag` 的时长/阻尼（手感）、`tightenFactor`（收紧程度）。
+
+### 15.3 下次日志要看的
+
+```
+[TabBarPlate] 拖动已装（±70/±24pt，松手弹回）
+[TabBarPlate] UIGlassEffect.isInteractive = true（按下会回弹）
+[TabBarPlate] 胶囊 (…,-3 3xx x60) …        ← 拖动过程中这行会随位移变化
+[TabBarSel]   item=TabBar.Item.主页 …       ← 这次 id 应该不再是 "?" 了
+```
+
+**没做的**：把整条栏拖到屏幕别处（会撞安全区/迷你条/系统手势，故意不做）；
+"选中胶囊"还等用户定样式（判据已拿到：`UILabel.textColor` 白=选中 / 灰=未选中）。
+
+---
+
+## 16. 三个"已经没用"的功能就地删除（2026-10-02，用户确认）
+
+判据来自**日志 23 的真实行为**（不是猜的）：
+
+| 功能 | 日志 23 证据 | 结论 | 处置 |
+|---|---|---|---|
+| **深色栏底色**（AMOLED） | `[AMOLED] installed (enabled=OFF)` + `[NewDesign] … active=yes` | 新设计下 `strip()` 第一件事就是让位 → **纯空操作** | ✅ 删文件（420 行）+ 设置开关 + `amoledEnabled` + Tweak 激活 |
+| **背景跟封面取色** | `backdrop=ON`，但 `isBackdropOpaque = false` 在 `LyricsBackdropArtworkView` 里 = **整块透明** | **视觉上等于没做**（假开关） | ✅ 删设置开关 + `nowPlayingShellBackdrop` + 壳里那一层（视图/约束/刷新/两处日志） |
+| **顶部大标题**（旧"样品"） | 日志 23 无 `[MusicStyle]` 行（用户关着）；代码上它是**另一套**标题，与壳的顶栏标题重复 | **重复**（两个都开就画两遍） | ✅ 删文件（135 行）+ 设置开关 + `musicStyleNowPlaying` + `applyNowPlayingAppearance` 里那次调用 |
+| **AM 式头部**（音乐库大标题） | `[Library] 大标题已换成 AM 档：24pt → 30pt` ✅ | **有效** | 保留 |
+
+**净效果**：11 个文件、**−336 行**；三个检查器 310/310/255 全过；
+`LyricsBackdropView` 仍被歌词页用着（不是孤儿类）。
+
+### 16.1 ⚠️ 删 AMOLED 时**必须**一起搬走的东西
+
+AMOLED 的导航栏遍历是**运行期"新设计"兜底信号**的唯一观察者
+（`NewDesignLanguage.noteObservedNewDesign()`）。删掉它 = 以后 iOS 若忽略
+`UIDesignRequiresCompatibility`，我们会判错、把旧设计补丁重新叠到玻璃上。
+→ 已搬到 `NewDesignYield.observeNewDesignMarkersIfNeeded`：
+只在"构建意图说兼容"时扫一次，在**已经在走的子树**里认 `Platter` / `ScrollEdgeEffect`
+（不做运行时类枚举 —— 本仓库为 `objc_getClassList` 崩过两次）。
+
+### 16.2 ⚠️ 下次装机要顺眼看一眼的副作用
+
+壳的**顶栏**还在（用户开着 `header=ON`）。背景那层删掉之后，
+**原生那颗 ⌄ 理论上又能看见/能点了** —— 而我们还自绘了一颗 ⌄。
+装上后看一眼顶栏是不是**两颗 ⌄ 叠着**；是的话我下一轮把自绘那颗去掉（或改成只在原生不可见时才画）。

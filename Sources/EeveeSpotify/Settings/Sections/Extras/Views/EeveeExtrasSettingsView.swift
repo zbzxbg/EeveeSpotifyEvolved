@@ -29,8 +29,6 @@ struct EeveeExtrasSettingsView: View {
     /// Flag 覆盖页用 `@State newMode` —— 它们先改本地状态（触发重绘）再落盘。
     /// 这里照同一套做法：`set` 里**先改影子值，再写 UserDefaults**。
     private struct Shadow {
-        var amoled = UserDefaults.amoledEnabled
-
         var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
         var hideSingalongLine = UserDefaults.hideSingalongLine
         var hideHomeHeader = UserDefaults.hideHomeHeader
@@ -41,10 +39,7 @@ struct EeveeExtrasSettingsView: View {
         var gestureNowPlaying = UserDefaults.playerGestureNowPlaying
         var gestureFullscreenLyrics = UserDefaults.playerGestureFullscreenLyrics
 
-        var musicStyleNowPlaying = UserDefaults.musicStyleNowPlaying
-
         var shellEnabled = UserDefaults.nowPlayingShellEnabled
-        var shellBackdrop = UserDefaults.nowPlayingShellBackdrop
         var shellHeader = UserDefaults.nowPlayingShellHeader
         var shellGlass = UserDefaults.nowPlayingShellGlass
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
@@ -53,12 +48,8 @@ struct EeveeExtrasSettingsView: View {
 
     var body: some View {
         List {
-            Section(footer: Text("amoled_description".localized)) {
-                Toggle(
-                    "amoled".localized,
-                    isOn: shadowBinding(\.amoled, persist: { UserDefaults.amoledEnabled = $0 })
-                )
-            }
+            // ⛔「深色栏底色」(AMOLED) 已于 2026-10-02 删除：
+            // 新设计语言下它每次布局都主动让位，是个纯空操作（见 `Tweak.x.swift` 里那段说明）。
 
             Section(footer: Text("declutter_description".localized)) {
                 Toggle(
@@ -158,13 +149,8 @@ struct EeveeExtrasSettingsView: View {
                 // **嵌套私有结构**，实例在 `@State private var shadow` 里 ——
                 // 裸写属性名是取不到的（2026-10-01 CI 的 `cannot find 'shellEnabled' in scope`）。
                 if shadow.shellEnabled {
-                    Toggle(
-                        "now_playing_shell_backdrop".localized,
-                        isOn: shadowBinding(
-                            \.shellBackdrop,
-                            persist: { UserDefaults.nowPlayingShellBackdrop = $0 }
-                        )
-                    )
+                    // ⛔「背景跟封面取色」已于 2026-10-02 删除：
+                    // 它挂的那层（`isBackdropOpaque = false`）从头到尾是全透明的 —— 等于假开关。
 
                     Toggle(
                         "now_playing_shell_header".localized,
@@ -219,17 +205,8 @@ struct EeveeExtrasSettingsView: View {
                 )
             }
 
-            // 旧版样品标题（名字 + 顶栏都由壳负责之后，它只剩"那个大标题"）。
-            // 默认关，且与上面的壳互不影响。
-            Section(footer: Text("music_style_nowplaying_description".localized)) {
-                Toggle(
-                    "music_style_nowplaying".localized,
-                    isOn: shadowBinding(
-                        \.musicStyleNowPlaying,
-                        persist: { UserDefaults.musicStyleNowPlaying = $0 }
-                    )
-                )
-            }
+            // ⛔「顶部大标题」（旧"样品"开关）已于 2026-10-02 删除：
+            // 壳自己会画顶栏标题（`header=ON` 时），那条是**另一套**标题 —— 两个都开就会画两遍。
 
             Section(footer: Text("extras_description".localized)) {
                 Button {

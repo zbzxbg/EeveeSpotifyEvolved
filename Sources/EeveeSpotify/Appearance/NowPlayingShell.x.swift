@@ -6,7 +6,7 @@ import ObjectiveC.runtime
 /// 听歌页的「自绘壳」—— 把整页做成我们自己的，而不是往 Spotify 的图层里见缝插针。
 ///
 /// ── 为什么推倒重来（v1 的真机实证）──────────────────────────────────────────
-/// v1 (`MusicStyleNowPlaying`) 的做法是：
+/// v1（`MusicStyleNowPlaying`，**已于 2026-10-02 删除**）的做法是：
 ///   · 背景：`root.layer.insertSublayer(gradient, at: 0)`
 ///   · 标题：`root.addSubview(stack)`
 /// 日志 12/14 的 A/B + 照片 18 证明这条路上限很低：
@@ -129,12 +129,12 @@ enum NowPlayingShell {
 
 // MARK: - 壳本体
 
-/// 听歌页自绘壳。三个开关各自独立：背景 / 自绘顶栏 / 顶栏玻璃。
+/// 听歌页自绘壳。开关：自绘顶栏 / 顶栏玻璃。
+/// （原来的"满屏取色背景"已于 2026-10-02 删除 —— 它一直是"整块全透明"，视觉上等于没做。）
 final class NowPlayingShellView: UIView {
 
     // MARK: 子视图
 
-    private let backdrop = LyricsBackdropView()
     private let headerGlass = UIVisualEffectView(effect: nil)
     private let headerTint = UIView()
     private let titleLabel = UILabel()
@@ -143,8 +143,8 @@ final class NowPlayingShellView: UIView {
     private let titleContainer = UIView()
     private let chevronButton = UIButton(type: .system)
 
-    /// 上一次用于构建背景的 track key + 底色，避免每次 layout 都重建/重绘。
-    private var lastBackdropKey: String?
+    /// 上一次用于打日志的 track key（只在换歌时报一次）。
+    private var lastRefreshKey: String?
     /// 上一次施加时的尺寸（只在尺寸变化时才做一次性的收尾工作）。
     private var lastLayoutSize: CGSize = .zero
 
@@ -165,24 +165,11 @@ final class NowPlayingShellView: UIView {
         isUserInteractionEnabled = true
         backgroundColor = .clear
 
-        // ── 背景用"透明档"，而不是歌词页那档实心底（照片 19/20 换来的）──────
-        //
-        // `LyricsBackdropView` 是给**全屏歌词页**写的：那一页我们要**替换**整页内容，
-        // 所以它可以铺一张不透明的模糊封面 + 黑纱（`isBackdropOpaque = true`）。
-        // 但听歌页的原生内容**正是我们要显示的东西**（封面、进度、三键都在下面），
-        // 一铺实心就被整页盖住 —— 照片 19 是一片纯蓝，照片 20 连封面和按钮都成了
-        // 模糊残影，就是这么来的。
-        //
-        // 所以这里走它**预留好的那条路**：`isBackdropOpaque = false` 时它整块透明、
-        // 只留一圈边缘暗化渐变给我们的白字当底（那个类注释里写明这条路的用途是
-        // "数据不可用就整块透明、交还原生"）。底色感由上面那条顶栏色带 + 原生自己的
-        // 封面染色给，不再和我们自己抢画面。
-        backdrop.style = .stage
-        backdrop.solid = false
-        backdrop.isBackdropOpaque = false
-        backdrop.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(backdrop)
-
+        // ⛔ "满屏取色背景"已于 2026-10-02 删除。
+        // 它挂的是 `LyricsBackdropView`，而那个类的注释写明：`isBackdropOpaque = false` 时
+        // **整块背景（含封面层与暗化渐变）一起透明** —— 也就是说这一层从头到尾是全透明的，
+        // 用户看不到任何取色（会话文档 §2.3 早就这么判定过）。与其留一个"假开关"，
+        // 不如删掉；要真做就是"半透明档"（§2.3 里唯一没试过的那一档），那是另一件事。
         headerGlass.translatesAutoresizingMaskIntoConstraints = false
         headerGlass.isHidden = true
         addSubview(headerGlass)
@@ -237,13 +224,7 @@ final class NowPlayingShellView: UIView {
     // MARK: 布局
 
     private func activateConstraints() {
-        // 背景铺满整屏（含状态栏）——这是"整页取色"能看见的前提。
         NSLayoutConstraint.activate([
-            backdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
-            backdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
-            backdrop.topAnchor.constraint(equalTo: topAnchor),
-            backdrop.bottomAnchor.constraint(equalTo: bottomAnchor),
-
             // 顶栏：只占**上沿那一条**，高度是"安全区 + 62"（照全屏歌词壳的排版常数）。
             // 不铺满整屏是刻意的：中间与底部必须留给 Spotify 的原生内容。
             headerGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -342,17 +323,8 @@ final class NowPlayingShellView: UIView {
         let track = statefulPlayer?.currentTrack()
         let trackKey = track?.trackIdentifier ?? "unknown"
 
-        // ── 背景 ──
-        //
-        // `LyricsBackdropView` 自己去取封面（`loadArtworkIfNeeded`，带缓存），
-        // 我们只负责喂底色 + 决定有没有封面。
+        // 底色仍然要算：顶栏那条色带用它（背景层已删，见 `setup()` 里的说明）。
         let baseColor = NowPlayingShellColors.baseColor()
-        backdrop.configure(
-            baseColor: baseColor,
-            showsArtwork: UserDefaults.nowPlayingShellBackdrop && track != nil,
-            material: true
-        )
-        backdrop.isHidden = !UserDefaults.nowPlayingShellBackdrop
 
         // ── 顶栏 ──
         let showsHeader = UserDefaults.nowPlayingShellHeader
@@ -373,11 +345,10 @@ final class NowPlayingShellView: UIView {
             if artistLabel.text != artist { artistLabel.text = artist }
         }
 
-        if lastBackdropKey != trackKey {
-            lastBackdropKey = trackKey
+        if lastRefreshKey != trackKey {
+            lastRefreshKey = trackKey
             writeDebugLog(
                 "[Shell] 听歌页壳刷新 — track=\(trackKey)"
-                    + " backdrop=\(UserDefaults.nowPlayingShellBackdrop ? "ON" : "OFF")"
                     + " header=\(UserDefaults.nowPlayingShellHeader ? "ON" : "OFF")"
                     + " glass=\(UserDefaults.nowPlayingShellGlass ? "ON" : "OFF")"
             )
@@ -398,7 +369,7 @@ final class NowPlayingShellView: UIView {
     /// 并且那时应当把它**收窄到只有安全区那条**（写在这里当备忘）。
     ///
     /// 仍然保留探测式写法：拿得到就用真的、拿不到退材质，**不写 `#available`**
-    ///（与本仓库既有做法一致，见 `AmoledTheme.x.swift`）。
+    ///（与本仓库既有做法一致，见 `TabBarGlass.x.swift` 里那条探测式取系统类）。
     private func applyGlass(to view: UIVisualEffectView) {
         guard UserDefaults.nowPlayingShellGlass else {
             view.effect = nil
@@ -547,7 +518,7 @@ enum NowPlayingShellColors {
 
 /// 听歌页（大封面那页）：`_TtC21NowPlaying_ScrollImpl23NPVScrollViewController`。
 ///
-/// ⚠️ **这个 selector 只能有一个 hook**。`MusicStyleNowPlaying.x.swift` 里原来那条
+/// ⚠️ **这个 selector 只能有一个 hook**。`MusicStyleNowPlaying.x.swift`（**已于 2026-10-02 删除**）里原来那条
 /// `viewDidLayoutSubviews` 已经改名为 `applyNowPlayingAppearance` 并由这里统一调用 ——
 /// 同一个 selector 挂两条 Orion hook 就是在赌 swizzle 顺序，没必要冒这个险。
 ///
@@ -566,14 +537,13 @@ class NowPlayingShellHook: ClassHook<UIViewController> {
     }
 }
 
-/// 两条外观路径的统一入口（壳 + 旧版样品标题）。
+/// 外观入口（现在只剩壳这一条路；旧的"样品大标题"那条已于 2026-10-02 删除）。
 ///
 /// 用仓库既有的 `onMainThreadSync` 表达"这里是主线程"，不自己写
 /// `MainActor.assumeIsolated`（少一处重复实现，也少一处和仓库规矩打架的地方）。
 func applyNowPlayingAppearance(to root: UIView?) {
     onMainThreadSync {
         NowPlayingShell.apply(to: root)
-        MusicStyleNowPlaying.applyLegacyTitle(to: root)
     }
 }
 
@@ -687,7 +657,6 @@ func activateNowPlayingShell() {
     writeDebugLog(
         "[Shell] 听歌页壳 installed (shell="
             + "\(UserDefaults.nowPlayingShellEnabled ? "ON" : "OFF")"
-            + " backdrop=\(UserDefaults.nowPlayingShellBackdrop ? "ON" : "OFF")"
             + " header=\(UserDefaults.nowPlayingShellHeader ? "ON" : "OFF")"
             + " glass=\(UserDefaults.nowPlayingShellGlass ? "ON" : "OFF"))"
     )

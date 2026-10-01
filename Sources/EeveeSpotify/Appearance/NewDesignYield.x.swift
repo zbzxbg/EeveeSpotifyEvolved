@@ -42,6 +42,13 @@ class TabBarGradientYieldHook: ClassHook<UIView> {
     func layoutSubviews() {
         orig.layoutSubviews()
 
+        // ★ 运行期兜底信号（`NewDesignLanguage` 的信号 2）：兼容构建里才扫一次。
+        // 原观察点在 AMOLED 的导航栏遍历里；2026-10-02 删 AMOLED 时搬到这里 ——
+        // 它是"万一将来 iOS 忽略 `UIDesignRequiresCompatibility`"时唯一能救我们的东西。
+        if let window = self.target.window {
+            onMainThreadSync { observeNewDesignMarkersIfNeeded(in: window) }
+        }
+
         // 判据放在**运行期**而不是装配期：`plistSaysNewDesign` 之外还有"运行期观察到 Platter"
         // 那个兜底信号（见 `NewDesignLanguage`），它是在第一次导航栏布局之后才可能变真的。
         // 兼容模式的构建里这个 hook 也会装，但这里会直接返回，标签栏渐隐照旧。
@@ -58,6 +65,37 @@ class TabBarGradientYieldHook: ClassHook<UIView> {
 }
 
 private var didReportGradientYield = false
+
+/// 运行期兜底信号的**唯一观察点**（`NewDesignLanguage` 的信号 2）。
+///
+/// 为什么要有它：万一将来某个 iOS 开始**忽略** `UIDesignRequiresCompatibility`，
+/// 只看"构建意图"会判错 —— 我们那些给旧设计打的补丁就会重新叠到玻璃上。
+///
+/// 两条纪律（沿用 AMOLED 那版）：
+///   · 只在"构建意图说这是兼容模式"时才扫（`isActive` 一真就零开销）；
+///   · **只扫一次**（成不成都不再扫），而且是在**已经在走的视图子树**里认类名 ——
+///     刻意不做运行时类枚举（本仓库为 `objc_getClassList` 崩过两次）。
+@MainActor
+private func observeNewDesignMarkersIfNeeded(in window: UIView) {
+    guard !NewDesignLanguage.isActive, !didObserveNewDesignMarkers else { return }
+    didObserveNewDesignMarkers = true
+
+    var found = false
+    func walk(_ node: UIView, _ depth: Int) {
+        guard !found, depth <= 12 else { return }
+        let name = NSStringFromClass(type(of: node))
+        if name.contains("Platter") || name.contains("ScrollEdgeEffect") {
+            found = true
+            return
+        }
+        for sub in node.subviews { walk(sub, depth + 1) }
+    }
+    walk(window, 0)
+
+    if found { NewDesignLanguage.noteObservedNewDesign() }
+}
+
+private var didObserveNewDesignMarkers = false
 
 func activateNewDesignYield() {
     // ⚠️ 这里**不按 plist 键决定装不装**：那个键将来可能被系统忽略

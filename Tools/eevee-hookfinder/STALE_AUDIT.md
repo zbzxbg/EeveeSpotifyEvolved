@@ -76,11 +76,13 @@
 
 | 功能 | 证据 | 状态 |
 |---|---|---|
-| 「深色栏底色」(AMOLED) | `AmoledTheme.x.swift:106,374`：`if NewDesignLanguage.isActive { reportYieldingOnce(by: "AMOLED"); return }` | **对你自己的构建永远是空操作** → 建议：开关置灰/隐藏，或整条线删掉 |
-| 「听歌页外观（样品）」 | v1 背景已删，只剩 `applyLegacyTitle`；已被「听歌页自绘壳」取代 | 冗余开关（默认关） |
+| 「深色栏底色」(AMOLED) | `AmoledTheme.x.swift:106,374`：`if NewDesignLanguage.isActive { reportYieldingOnce(by: "AMOLED"); return }` | ✅ **已删除（2026-10-02）**：纯空操作 + 21KB 死代码。它承担的"运行期观察新设计"兜底信号已搬到 `NewDesignYield.observeNewDesignMarkersIfNeeded` |
+| 「听歌页外观（样品）」（顶部大标题） | 只画 `applyLegacyTitle`，与壳自己的顶栏标题**重复**（两个都开就画两遍） | ✅ **已删除（2026-10-02）**（文件 + 设置开关 + UserDefaults 键） |
+| 「背景跟封面取色」 | 壳给它 `isBackdropOpaque = false`，而这一档在 `LyricsBackdropArtworkView` 里是"整块背景（含封面层与暗化渐变）一起透明" | ✅ **已删除（2026-10-02）**：一直是"假开关"（视觉上等于没做）。要真做是"半透明档"（§2.3 唯一没试过的一档），另开一轮 |
 | 「隐藏标签栏渐隐」 | 已删（`SESSION_2026-10-01.md` §2.2） | 已清理 |
-| 「Flag 覆盖」 | 2026-10-01 已修；日志 20 有 100+ 条 `[Flags]` + `[CustomizeSeed]` | **不再是假开关** |
-| 清爽五件套 / 双击手势 / 屏蔽艺人 | 日志 20 全部 `installed`、无 `missing` | 在役 |
+| 「Flag 覆盖」 | 2026-10-01 已修；日志 20/23 有 100+ 条 `[Flags]` + `[CustomizeSeed]` | **不再是假开关** |
+| 「AM 式头部」（音乐库大标题） | 日志 23：`[Library] 大标题已换成 AM 档：24pt → 30pt` | ✅ **在役、有效**（保留） |
+| 清爽五件套 / 双击手势 / 屏蔽艺人 | 日志 20/23 全部 `installed`、无 `missing` | 在役 |
 
 ## 三、过时的文档 / 资产
 

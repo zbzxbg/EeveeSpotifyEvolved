@@ -40,7 +40,8 @@ enum NewDesignLanguage {
     private static var observedNewDesign = false
     private static var didReportObservation = false
 
-    /// 由 `AmoledTheme` 在导航栏那次遍历里看到新设计标志时调用。
+    /// 由 `NewDesignYield.observeNewDesignMarkersIfNeeded` 扫到新设计标志时调用。
+    /// （原来挂在 `AmoledTheme` 的导航栏遍历里 —— 2026-10-02 删 AMOLED 时搬了过去。）
     static func noteObservedNewDesign() {
         guard !observedNewDesign else { return }
         observedNewDesign = true

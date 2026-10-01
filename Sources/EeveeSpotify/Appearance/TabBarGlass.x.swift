@@ -110,6 +110,9 @@ enum TabBarGlassPlate {
     private static var retryCount = 0
     private static var didReportGiveUp = false
 
+    /// 系统玻璃是否支持 `isInteractive`（按下弹性反馈）。造玻璃时探一次，之后只用结果。
+    private static var interactiveOn = false
+
     /// 给**栏**铺一条玻璃胶囊。幂等：位置没变就一个字节都不碰。
     @MainActor
     static func apply(to bar: UIView) {
@@ -134,7 +137,8 @@ enum TabBarGlassPlate {
 
         // ★ 先把四颗往中间收（用 transform，**不改布局**），**再**量内容带 ——
         //   这样量到的就是收紧后的真实位置，胶囊自然贴着它们走。
-        if let stack { tightenRow(stack, in: bar) }
+        //   ⚠️ 这一步**不带拖动位移**：带了就会把它量进内容带、之后被算第二次。
+        if let stack { tightenRow(stack, in: bar, includeDrag: false) }
 
         // ── 摆位：以"图标内容带"为心（不是整条栏；v3 就是死在这里）─────────────
         let band = contentBand(in: bar, stack: stack)
@@ -172,9 +176,13 @@ enum TabBarGlassPlate {
             height: height
         )
 
+        // ★ 现在才把"拖动"这一份加上去：四颗 + 玻璃一起挪（仍然不动布局）。
+        if let stack { tightenRow(stack, in: bar, includeDrag: true) }
+
         // frame 是相对**父视图**的：v4 起玻璃住在 CompactView 里，坐标系与栏一致，
         // 但仍然显式换算一次 —— 免得将来层序再变就摆错地方。
         let frame = (plate.superview ?? bar).convert(target, from: bar)
+            .offsetBy(dx: dragOffset.x, dy: dragOffset.y)
 
         if !plate.frame.equalTo(frame) {
             plate.frame = frame
@@ -192,6 +200,77 @@ enum TabBarGlassPlate {
         guard let plate = objc_getAssociatedObject(bar, &plateKey) as? UIVisualEffectView else { return }
         plate.removeFromSuperview()
         objc_setAssociatedObject(bar, &plateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    // MARK: - 拖动（"推一下、玻璃像液体一样折、松手弹回"）
+
+    /// 当前拖动位移。**玻璃和四颗图标一起挪**，所以它同时作用于：
+    /// `tightenRow`（写进四颗的 transform）与胶囊自己的 frame。
+    private static var dragOffset: CGPoint = .zero
+
+    /// 拖动范围（横向 / 纵向）。**故意夹得很小**：
+    /// 这是"推一下看它折"的手感，不是"把标签栏搬到屏幕别处"——
+    /// 搬走会撞上安全区、迷你播放条和系统手势。
+    private static let dragLimit = CGSize(width: 70, height: 24)
+
+    private static var panKey: UInt8 = 0
+
+    /// 给栏装一个拖动手势。幂等（关联对象挡住重复安装）。
+    ///
+    /// ⚠️ 两条纪律：
+    ///   · `cancelsTouchesInView = false` / `delaysTouchesBegan = false`
+    ///     —— **绝不吃掉标签的点击**（手势只"看"，不抢）；与别的识别器**并行**（见 `TabBarDragTarget`）；
+    ///   · 只平移，**不改任何布局**（图标走 transform，玻璃走我们自己的 frame）。
+    @MainActor
+    static func installDrag(on bar: UIView) {
+        guard isEnabled else { return }
+        guard objc_getAssociatedObject(bar, &panKey) == nil else { return }
+
+        let pan = UIPanGestureRecognizer(
+            target: TabBarDragTarget.shared,
+            action: #selector(TabBarDragTarget.handle(_:))
+        )
+        pan.cancelsTouchesInView = false
+        pan.delaysTouchesBegan = false
+        pan.maximumNumberOfTouches = 1
+        pan.delegate = TabBarDragTarget.shared
+        bar.addGestureRecognizer(pan)
+        objc_setAssociatedObject(bar, &panKey, pan, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        writeDebugLog(
+            "[TabBarPlate] 拖动已装（±\(Int(dragLimit.width))/±\(Int(dragLimit.height))pt，松手弹回）"
+        )
+    }
+
+    @MainActor
+    static func updateDrag(_ translation: CGPoint, on bar: UIView) {
+        let clamped = CGPoint(
+            x: max(-dragLimit.width, min(dragLimit.width, translation.x)),
+            y: max(-dragLimit.height, min(dragLimit.height, translation.y))
+        )
+        if abs(clamped.x - dragOffset.x) < 0.5, abs(clamped.y - dragOffset.y) < 0.5 { return }
+        dragOffset = clamped
+        apply(to: bar)
+    }
+
+    @MainActor
+    static func endDrag(on bar: UIView) {
+        guard dragOffset != .zero else { return }
+        dragOffset = .zero
+        // 弹回：动画里跑一次 `apply` —— 目标状态是"不带偏移"，
+        // 于是玻璃与四颗会自己滑回去；**这个过程里折射一直在动**，
+        // 照片 23 那种"液体"手感就来自这个动态过程。
+        UIView.animate(
+            withDuration: 0.5,
+            delay: 0,
+            usingSpringWithDamping: 0.72,
+            initialSpringVelocity: 0.6,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            // ⚠️ `animations:` 是 **escaping** 闭包，不继承 actor 隔离 ——
+            // 直接写 `apply(to: bar)` 会被判"在非隔离上下文里调 @MainActor 函数"（编译错）。
+            // 仓库的写法就是套一层 `onMainThreadSync`（已经在主线程时同步执行，动画照样生效）。
+            onMainThreadSync { apply(to: bar) }
+        }
     }
 
     // MARK: - 层序
@@ -212,8 +291,12 @@ enum TabBarGlassPlate {
             bar.insertSubview(plate, at: 0)
         }
 
-        // 下面四条只写自己身上，且值没变就不写（写值会安排布局，白写等于自找活干）。
-        if plate.isUserInteractionEnabled { plate.isUserInteractionEnabled = false }
+        // 下面几条只写自己身上，且值没变就不写（写值会安排布局，白写等于自找活干）。
+        // 玻璃要能"按下回弹"就得收触摸：它在图标**之下**，标签点击不受影响，
+        // 只有胶囊四角的空白会落到它身上（那里本来也没东西可点）。
+        if plate.isUserInteractionEnabled != interactiveOn {
+            plate.isUserInteractionEnabled = interactiveOn
+        }
         if plate.autoresizingMask != [] { plate.autoresizingMask = [] }
         if !plate.clipsToBounds { plate.clipsToBounds = true }
         if plate.layer.cornerCurve != .continuous { plate.layer.cornerCurve = .continuous }
@@ -237,18 +320,25 @@ enum TabBarGlassPlate {
     ///
     /// 幂等 + 可撤销：值没变不写；`tightenFactor = 0` 时恢复 `.identity`。
     /// 只在"四颗"这个已知形状上动：数量一变就什么都不做（宁可不动，也别乱动）。
+    /// - Parameter includeDrag: 是否把当前的拖动位移一起写进去。
+    ///   **量内容带时必须传 `false`**（理由见 `apply` 里那一步的注释）。
     @MainActor
-    private static func tightenRow(_ stack: UIView, in bar: UIView) {
+    private static func tightenRow(_ stack: UIView, in bar: UIView, includeDrag: Bool) {
         let items = stack.subviews
         guard items.count == 4 else { return }
 
         let centerX = bar.bounds.midX
         for item in items {
             let layoutMidX = stack.convert(CGPoint(x: item.frame.midX, y: 0), to: bar).x
-            let dx = (centerX - layoutMidX) * tightenFactor
-            let wanted: CGAffineTransform = abs(dx) < 0.5
+            var dx = (centerX - layoutMidX) * tightenFactor
+            var dy: CGFloat = 0
+            if includeDrag {
+                dx += dragOffset.x
+                dy += dragOffset.y
+            }
+            let wanted: CGAffineTransform = (abs(dx) < 0.5 && abs(dy) < 0.5)
                 ? .identity
-                : CGAffineTransform(translationX: dx, y: 0)
+                : CGAffineTransform(translationX: dx, y: dy)
             if item.transform != wanted { item.transform = wanted }
         }
     }
@@ -393,12 +483,25 @@ enum TabBarGlassPlate {
     ///
     /// ⚠️ **探测式**：iOS 26+ 上 `UIGlassEffect` 是真的（系统液态玻璃，带折射与边缘高光），
     /// 拿不到就退 `.systemUltraThinMaterialDark`（iOS 13+ 就有）。
-    /// **不写 `#available`** —— 与本仓库既有做法一致（`AmoledTheme.x.swift`）。
+    /// **不写 `#available`** —— 与本仓库既有做法一致（探测式取系统类，见 `TabBarGlassProbe`）。
     @MainActor
     private static func makeGlassView() -> UIVisualEffectView {
         let view = UIVisualEffectView(effect: nil)
         if let glassType = NSClassFromString("UIGlassEffect") as? UIVisualEffect.Type {
-            view.effect = glassType.init()
+            let effect = glassType.init()
+            // ★ 按下时的弹性反馈（`UIGlassEffect.isInteractive`，iOS 26+）。
+            // **探测式**：getter/setter 都在才写 KVC —— 否则 KVC 碰到未知 key 会抛异常（崩）。
+            let object = effect as? NSObject
+            let hasGetter = object?.responds(to: NSSelectorFromString("isInteractive")) ?? false
+            let hasSetter = object?.responds(to: NSSelectorFromString("setInteractive:")) ?? false
+            if hasGetter, hasSetter {
+                object?.setValue(true, forKey: "interactive")
+                interactiveOn = true
+                writeDebugLog("[TabBarPlate] UIGlassEffect.isInteractive = true（按下会回弹）")
+            } else {
+                writeDebugLog("[TabBarPlate] 这版没有 isInteractive — 跳过按下回弹")
+            }
+            view.effect = effect
             writeDebugLog("[TabBarPlate] 用的是系统真玻璃 UIGlassEffect")
         } else {
             view.effect = UIBlurEffect(style: .systemUltraThinMaterialDark)
@@ -431,7 +534,49 @@ class TabBarPlateHook: ClassHook<UIView> {
         let bar = self.target
         onMainThreadSync {
             TabBarGlassPlate.apply(to: bar)
+            TabBarGlassPlate.installDrag(on: bar)   // 幂等：装一次就够
         }
+    }
+}
+
+// MARK: - 拖动的手势目标
+
+/// 单开一个 target：Orion 的 hook 类不适合直接当手势目标。
+///
+/// ⚠️ 这个手势**只"看"，不抢**：
+///   · `cancelsTouchesInView = false`（在 `installDrag` 里设）→ 标签点击照常；
+///   · 与别的识别器**并行** → 就算 Spotify 自己也在这条栏上装了手势，两边都能识别；
+///   · 只有"明显横向的拖动"才开始（`gestureRecognizerShouldBegin`）→ 竖着滑页面不受影响。
+final class TabBarDragTarget: NSObject, UIGestureRecognizerDelegate {
+
+    static let shared = TabBarDragTarget()
+
+    @objc func handle(_ pan: UIPanGestureRecognizer) {
+        guard let bar = pan.view else { return }
+        let translation = pan.translation(in: bar)
+
+        switch pan.state {
+        case .began, .changed:
+            onMainThreadSync { TabBarGlassPlate.updateDrag(translation, on: bar) }
+        case .ended, .cancelled, .failed:
+            onMainThreadSync { TabBarGlassPlate.endDrag(on: bar) }
+        default:
+            break
+        }
+    }
+
+    /// 明显横向、且有速度，才认。避免和"点击标签""竖滑列表"抢。
+    @objc func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard let pan = gesture as? UIPanGestureRecognizer, let bar = pan.view else { return false }
+        let velocity = pan.velocity(in: bar)
+        return abs(velocity.x) > abs(velocity.y) * 1.5 && abs(velocity.x) > 80
+    }
+
+    @objc func gestureRecognizer(
+        _ gesture: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+    ) -> Bool {
+        true
     }
 }
 

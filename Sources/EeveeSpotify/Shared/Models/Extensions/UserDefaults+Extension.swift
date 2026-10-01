@@ -24,7 +24,6 @@ extension UserDefaults {
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
     private static let hapticsLogControlsKey = "hapticsLogControls"
     private static let dumpViewTreeKey = "dumpViewTree"
-    private static let amoledEnabledKey = "amoledEnabled"
     private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
     private static let hideSingalongLineKey = "hideSingalongLine"
     private static let hideHomeHeaderKey = "hideHomeHeader"
@@ -35,10 +34,8 @@ extension UserDefaults {
     private static let playerGestureBehaviorKey = "playerGestureBehavior"
     private static let blockedArtistsEnabledKey = "blockedArtistsEnabled"
     private static let blockedArtistsKey = "blockedArtists"
-    private static let musicStyleNowPlayingKey = "musicStyleNowPlaying"
     private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
     private static let nowPlayingShellEnabledKey = "nowPlayingShellEnabled"
-    private static let nowPlayingShellBackdropKey = "nowPlayingShellBackdrop"
     private static let nowPlayingShellHeaderKey = "nowPlayingShellHeader"
     private static let nowPlayingShellGlassKey = "nowPlayingShellGlass"
     private static let libraryLargeTitleKey = "libraryLargeTitle"
@@ -265,16 +262,8 @@ extension UserDefaults {
 
     // MARK: - 外观（Appearance）
 
-    /// 深色栏底色（仿 Apple Music）：导航栏保持透明，Spotify 自己画底色时换成深色材质。
-    /// 默认关。**实时读**（hook 总是装着，改视图前才判断），所以打开即生效。
-    static var amoledEnabled: Bool {
-        get {
-            container.object(forKey: amoledEnabledKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: amoledEnabledKey)
-        }
-    }
+    // ⛔「深色栏底色」(amoledEnabled) 已于 2026-10-02 删除：
+    // 新设计语言下它每次布局都主动让位，是个纯空操作。
 
     // MARK: - 清爽（Declutter）
 
@@ -398,20 +387,8 @@ extension UserDefaults {
         }
     }
 
-    // MARK: - 听歌页外观（Music 式版式，样品）
-
-    /// 「听歌页 Music 式版式」开关。**默认关**：
-    /// 这是整套"观感自绘"路线的**第一屏样品**，用途是判断值不值得铺到其它七屏，
-    /// 而不是默认给所有人开。开着时只**多加**一层封面取色的背景 + 顶部大标题，
-    /// **不藏任何 Spotify 原生控件**（关掉即完全还原）。
-    static var musicStyleNowPlaying: Bool {
-        get {
-            container.object(forKey: musicStyleNowPlayingKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: musicStyleNowPlayingKey)
-        }
-    }
+    // ⛔「听歌页外观（样品）」(musicStyleNowPlaying) 已于 2026-10-02 删除：
+    // 它只画"另一套顶部大标题"，与壳自己的顶栏标题重复（两个都开就会画两遍）。
 
     // MARK: - 听歌页自绘壳（NowPlayingShell）
 
@@ -426,18 +403,9 @@ extension UserDefaults {
         }
     }
 
-    /// 跟封面取色的满屏背景。默认开。
-    ///
-    /// 它是最像 Apple Music 的那一件（MeloX 的截图证明：传输行只是扁平白图标，
-    /// 靠这层底色撑着就已经很 AM 了），所以默认开。
-    static var nowPlayingShellBackdrop: Bool {
-        get {
-            container.object(forKey: nowPlayingShellBackdropKey) as? Bool ?? true
-        }
-        set {
-            container.set(newValue, forKey: nowPlayingShellBackdropKey)
-        }
-    }
+    // ⛔「背景跟封面取色」(nowPlayingShellBackdrop) 已于 2026-10-02 删除：
+    // 它挂的那层用 `isBackdropOpaque = false`，而那一档在 `LyricsBackdropArtworkView` 里
+    // 是"整块背景（含封面层与暗化渐变）一起透明" → 视觉上等于没做。
 
     /// 自绘顶栏（⌄ + 歌名 + 艺人），并让原生吸顶头让位。默认开。
     ///

@@ -90,16 +90,32 @@ enum TabBarGlassProbe {
     static func dumpSelectionSignals(_ bar: UIView) {
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return }
         writeDebugLog("[TabBarSel] ---- 选中信号 begin（4 颗对比着看）----")
-        for item in stack.subviews {
+        for container in stack.subviews {
             var parts: [String] = []
-            parts.append("item=\(item.accessibilityIdentifier ?? "?")")
-            parts.append(String(format: "traits=0x%llx", UInt64(item.accessibilityTraits.rawValue)))
-            if item.accessibilityTraits.contains(.selected) { parts.append("★selected") }
-            parts.append("itemTint=\(describeColor(item.tintColor))")
-            collectColorSignals(item, into: &parts, depth: 0)
+            parts.append("item=\(firstIdentifier(below: container) ?? "?")")
+            parts.append(String(format: "traits=0x%llx", UInt64(container.accessibilityTraits.rawValue)))
+            if container.accessibilityTraits.contains(.selected) { parts.append("★selected") }
+            parts.append("itemTint=\(describeColor(container.tintColor))")
+            collectColorSignals(container, into: &parts, depth: 0)
             writeDebugLog("[TabBarSel] " + parts.joined(separator: " "))
         }
         writeDebugLog("[TabBarSel] ---- end ----")
+    }
+
+    /// 往下一层一层找第一个带无障碍标识符的视图。
+    ///
+    /// 为什么需要它：id（`TabBar.Item.主页`）挂在**更里面那层** `TabBarItemElementView` 上，
+    /// 而 `stack` 的直接子视图是 `ElementContentView`（没 id）—— 第一次真机日志里全是 `item=?`。
+    @MainActor
+    private static func firstIdentifier(below view: UIView) -> String? {
+        var node: UIView? = view
+        var depth = 0
+        while let current = node, depth < 5 {
+            if let id = current.accessibilityIdentifier, !id.isEmpty { return id }
+            node = current.subviews.first
+            depth += 1
+        }
+        return nil
     }
 
     @MainActor

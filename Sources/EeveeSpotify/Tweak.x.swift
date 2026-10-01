@@ -372,18 +372,20 @@ struct EeveeSpotify: Tweak {
         // 里，只是兜底）。这条**总是装**，开关在运行期读 —— 打开就生效，不必重启。
         activateTelemetryRequestBlock()
 
-        // AMOLED 纯黑（导航栏 / 标签栏）。同样总是装、开关实时读。
-        // ⚠️ 新设计语言（液态玻璃）下它会主动让位，见 `NewDesignLanguage`。
-        activateAmoledTheme()
+        // ⛔ AMOLED（深色栏底色）已于 2026-10-02 删除。
+        // 理由：新设计语言下它每次布局都主动让位（`if NewDesignLanguage.isActive { 记一行; return }`），
+        // 是个纯空操作 + 21KB 死代码；只有兼容模式的构建（`liquid_glass=false`）里才活，
+        // 而本仓库只服务新设计基线。它原来承担的那个"运行期观察新设计"的兜底信号
+        // 已搬到 `NewDesignYield.observeNewDesignMarkersIfNeeded`。
 
         // 新设计语言下让我们自己给旧设计打的补丁让位（目前是标签栏那层渐隐遮罩）。
         activateNewDesignYield()
 
-        // 听歌页自绘壳：满屏取色背景 + 玻璃顶栏 + 让原生吸顶头让位（默认开）。
+        // 听歌页自绘壳：玻璃顶栏 + 让原生吸顶头让位（默认开）。
         //
-        // ⚠️ 它同时是 `MusicStyleNowPlaying` 那条旧钩子的唯一挂载点
-        // （`applyNowPlayingAppearance` 会顺带跑旧版的标题）—— 同一个 selector
-        // 只能有一条 hook，见 `NowPlayingShellHook` 的说明。
+        // ⚠️ 同一个 selector 只能有一条 hook，见 `NowPlayingShellHook` 的说明。
+        // （旧的"顶部大标题"与"满屏取色背景"两条已于 2026-10-02 删除：前者与壳的顶栏标题重复，
+        //   后者一直是"整块全透明"= 视觉上等于没做。）
         activateNowPlayingShell()
 
         // 吸顶头让位：让 Spotify 那道"滚动时渐显的底色"别盖在我们的玻璃顶栏上。
