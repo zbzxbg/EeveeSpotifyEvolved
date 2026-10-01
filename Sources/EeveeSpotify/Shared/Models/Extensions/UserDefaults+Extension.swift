@@ -26,7 +26,6 @@ extension UserDefaults {
     private static let dumpViewTreeKey = "dumpViewTree"
     private static let amoledEnabledKey = "amoledEnabled"
     private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
-    private static let hideFreeTierBarKey = "hideFreeTierBar"
     private static let hideSingalongLineKey = "hideSingalongLine"
     private static let hideHomeHeaderKey = "hideHomeHeader"
     private static let hideConnectButtonKey = "hideConnectButton"
@@ -34,6 +33,8 @@ extension UserDefaults {
     private static let playerGestureNowPlayingKey = "playerGestureNowPlaying"
     private static let playerGestureFullscreenLyricsKey = "playerGestureFullscreenLyrics"
     private static let playerGestureBehaviorKey = "playerGestureBehavior"
+    private static let blockedArtistsEnabledKey = "blockedArtistsEnabled"
+    private static let blockedArtistsKey = "blockedArtists"
 
     static var musixmatchToken: String {
         get {
@@ -279,16 +280,6 @@ extension UserDefaults {
         }
     }
 
-    /// 隐藏 free-tier 提示条。默认关，实时读。
-    static var hideFreeTierBar: Bool {
-        get {
-            container.object(forKey: hideFreeTierBarKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: hideFreeTierBarKey)
-        }
-    }
-
     /// 隐藏封面与歌名之间那行跟唱单行歌词（`id=singalong-lyrics-view`）。
     ///
     /// **默认关**：用户明确说过那一行本身**不是**问题 —— 他反馈的是"逐词歌词开、更好的
@@ -371,6 +362,31 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: playerGestureBehaviorKey)
+        }
+    }
+
+    // MARK: - 屏蔽的艺人（Blocked artists）
+
+    /// 「屏蔽的艺人」总开关。**默认开** —— 名单空着时什么都不做（`BlockedArtists.match`
+    /// 先判名单是否为空），所以开着没有副作用；而名单一旦有内容，用户显然就是要它生效。
+    /// 这个开关的用处是"临时全停"，不用去把名单清空。
+    static var blockedArtistsEnabled: Bool {
+        get {
+            container.object(forKey: blockedArtistsEnabledKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: blockedArtistsEnabledKey)
+        }
+    }
+
+    /// 名单。存用户输入时的原样（只去掉首尾空白），**匹配时才转小写** ——
+    /// 这样设置页里显示的是 "MIMI" 而不是 "mimi"。
+    static var blockedArtists: [String] {
+        get {
+            container.stringArray(forKey: blockedArtistsKey) ?? []
+        }
+        set {
+            container.set(newValue, forKey: blockedArtistsKey)
         }
     }
 

@@ -68,13 +68,27 @@ enum AmoledTheme {
         var barBackground = 0
         /// 只在 `alwaysOpaqueBlack` 下用：隐藏 `*Gradient*` 的次数。
         var gradient = 0
+        /// 遍历途中看到了**新设计才有的视图**（SwiftUI Platter / 系统滚动边缘效果）。
+        /// 正信号 —— 旧设计里一个都不会出现（日志 8 全程 0 处，日志 9 大量）。
+        var newDesignMarker = false
 
         var summary: String {
             "scrim=\(scrim) blur=\(blur) bar=\(bar) barBg=\(barBackground) gradient=\(gradient)"
+                + (newDesignMarker ? " newDesign=1" : "")
         }
     }
 
     private static var reportedClasses: Set<String> = []
+
+    /// AMOLED 是给**旧设计**打的补丁，新设计下要**主动让位**（判定与两个信号见
+    /// `NewDesignLanguage`；让位时的说明日志也由它打，只打一次）。
+    ///
+    /// 一句话：旧导航栏有灰 scrim + 一层模糊、旧标签栏完全没底色，所以我们才需要动手；
+    /// 新设计里 Spotify 自己已经有玻璃 —— 导航栏那两层**已经不存在**（日志 9：`scrim=0 blur=0`），
+    /// 标签栏自带 `UIVisualEffectView`。再按旧方案插材质，只会把系统玻璃压成一块不透的深色
+    /// （用户 2026-10-01 的反馈正是这个："标签栏看起来正常不透"）。
+    ///
+    /// 只在**这份构建真的进入了新设计语言**时让位；跑兼容模式的构建一切照旧。
 
     /// 扫一遍 bar 的子树（加上贴顶的同级兄弟），做两件事（仿 Apple Music）：
     ///   1. 藏掉 `_UIBarBackground` 里的灰色渐变遮罩 `UIImageView`；
@@ -83,8 +97,16 @@ enum AmoledTheme {
     /// `alwaysOpaqueBlack = true` 时另加三件事：给 bar 自己铺黑底、涂黑
     /// `_UIBarBackground`、隐藏 `*Gradient*` —— 代价是封面不再从标题下透出，
     /// 见那个常量上的说明。
-    static func strip(_ view: UIView) {
+    static func strip(_ view: UIView, isNavBar: Bool = false) {
         guard isEnabled else { return }
+
+        // 新设计下让位（见 `NewDesignLanguage`）：**只在"构建意图"或"已观察到"任一成立时**跳过遍历。
+        // 之所以不在这里直接 `return` 而是先判一次：兼容模式下我们要照常走完，顺手在导航栏那次
+        // 遍历里找新设计的正信号（将来键被系统忽略时靠它兜底）。
+        if NewDesignLanguage.isActive {
+            NewDesignLanguage.reportYieldingOnce(by: "AMOLED")
+            return
+        }
 
         var hits = Hits()
 
@@ -118,6 +140,13 @@ enum AmoledTheme {
         }
 
         reportOnce(hits, source: String(describing: type(of: view)))
+
+        // 只在**导航栏**那次遍历里认新设计标志：导航栏子树里出现 SwiftUI Platter /
+        // 系统滚动边缘效果 = 这份构建其实跑在新设计下（哪怕 plist 那个键还写着兼容）。
+        // 认到之后 `NewDesignLanguage.isActive` 变真，从下一次起我们就让位。
+        if isNavBar, hits.newDesignMarker {
+            NewDesignLanguage.noteObservedNewDesign()
+        }
     }
 
     /// 每个类只报第一趟：既证明 hook 真的跑到了，也说明那一趟改了几处。
@@ -132,6 +161,13 @@ enum AmoledTheme {
         guard depth <= limit else { return }
 
         let name = String(describing: type(of: view))
+
+        // 新设计的**正信号**（旧设计里一个都不会出现，见 `NewDesignLanguage` 的说明）：
+        //   `NavigationBarPlatterContainer_v2` / `PlatterContainerHostingView<…>` —— 导航栏那层
+        //   SwiftUI Platter；`ScrollEdgeEffectView` —— 系统接管"内容滚到栏下"的边缘效果。
+        if name.contains("Platter") || name.contains("ScrollEdgeEffect") {
+            hits.newDesignMarker = true
+        }
 
         if alwaysOpaqueBlack {
             // 标签栏的两种 bar 视图**自己就是底色**（真机：`TabBarView > TabBarCompactView`，
@@ -265,7 +301,8 @@ class SPNavigationBarAmoledHook: ClassHook<UIView> {
 
     func layoutSubviews() {
         orig.layoutSubviews()
-        AmoledTheme.strip(self.target)
+        // `isNavBar: true` —— 只有这次遍历会去认"新设计"的正信号（SwiftUI Platter）。
+        AmoledTheme.strip(self.target, isNavBar: true)
     }
 }
 
@@ -330,6 +367,16 @@ extension AmoledTheme {
     static func ensureTabBarMaterial(in tabBar: UIView) {
         guard isEnabled else { return }
 
+        // ⚠️ 新设计下**不要插**：这一层的作用是补上旧设计里"标签栏完全没底色"的空缺，
+        // 而新设计的标签栏已经有系统玻璃 —— 我们的 `systemThinMaterialDark` 叠在下面、
+        // 玻璃罩在上面，合起来就是一块不透的深色（用户反馈的"正常的不透底栏"）。
+        // 如果之前（让位信号还没出现时）已经插过，这里顺手拔掉。
+        if NewDesignLanguage.isActive {
+            NewDesignLanguage.reportYieldingOnce(by: "AMOLED tab bar")
+            removeTabBarMaterialIfAny(from: tabBar)
+            return
+        }
+
         if let material = objc_getAssociatedObject(tabBar, &amoledTabBarMaterialKey) as? UIView {
             if material.superview !== tabBar {
                 tabBar.insertSubview(material, at: 0)
@@ -358,5 +405,16 @@ extension AmoledTheme {
         )
 
         writeDebugLog("[AMOLED] tab bar material inserted (systemThinMaterialDark)")
+    }
+
+    /// 拔掉我们插过的那层标签栏材质（让位时用；只认我们自己的关联对象，不碰别人的视图）。
+    private static func removeTabBarMaterialIfAny(from tabBar: UIView) {
+        guard let material = objc_getAssociatedObject(tabBar, &amoledTabBarMaterialKey) as? UIView else {
+            return
+        }
+
+        material.removeFromSuperview()
+        objc_setAssociatedObject(tabBar, &amoledTabBarMaterialKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        writeDebugLog("[AMOLED] removed the tab bar material we had inserted — handing the bar back to the system glass")
     }
 }

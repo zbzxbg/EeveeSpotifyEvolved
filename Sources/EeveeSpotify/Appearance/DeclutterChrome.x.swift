@@ -26,7 +26,6 @@ import ObjectiveC.runtime
 ///   1. 目标类自己的 `layoutSubviews`（快路径，保持原样）；
 ///   2. `MainWindow` 的节流复查 + 开关被手动切换 + App 回到前台（兜底，见 `reconcile`）。
 struct HideMiniPlayerGroup: HookGroup {}
-struct HideFreeTierGroup: HookGroup {}
 struct HideHomeHeaderGroup: HookGroup {}
 struct HideTransportChromeGroup: HookGroup {}
 
@@ -54,7 +53,6 @@ private func clearHiddenByUs(_ view: UIView) {
 enum DeclutterChrome {
 
     static var hideMiniPlayerBar: Bool { UserDefaults.hideMiniPlayerBar }
-    static var hideFreeTierBar: Bool { UserDefaults.hideFreeTierBar }
 
     /// 封面与歌名之间那一行"跟唱单行歌词"。
     ///
@@ -156,7 +154,6 @@ enum DeclutterChrome {
     /// 下一轮重扫即可。
     private struct ResolvedTargets {
         weak var miniBar: UIView?
-        weak var freeTierBar: UIView?
         weak var singalong: UIView?
         weak var homeHeader: UIView?
         weak var connect: UIView?
@@ -207,14 +204,6 @@ enum DeclutterChrome {
                 reportMessage: "mini player bar hidden (TouchPassthroughView)"
             )
         }
-        if let view = targets.freeTierBar {
-            apply(
-                wantHidden: hideFreeTierBar,
-                to: view,
-                reportKey: "freeTier",
-                reportMessage: "free tier indicator bar hidden"
-            )
-        }
         if let view = targets.singalong {
             apply(
                 wantHidden: hideSingalongLine,
@@ -258,7 +247,6 @@ enum DeclutterChrome {
     /// 是一场不必要的赌注；而 **hook 手里已经有实例了**，让它顺手登记一下最稳。
     enum Target {
         case miniBar
-        case freeTierBar
         case singalong
         case homeHeader
     }
@@ -266,7 +254,6 @@ enum DeclutterChrome {
     static func note(_ target: UIView, as kind: Target) {
         switch kind {
         case .miniBar: targets.miniBar = target
-        case .freeTierBar: targets.freeTierBar = target
         case .singalong: targets.singalong = target
         case .homeHeader: targets.homeHeader = target
         }
@@ -372,26 +359,6 @@ class MiniPlayerBarHideHook: ClassHook<UIView> {
             to: self.target,
             reportKey: "miniPlayer",
             reportMessage: "mini player bar hidden (TouchPassthroughView)"
-        )
-    }
-}
-
-/// free-tier 提示条。
-class FreeTierBarHideHook: ClassHook<UIView> {
-    typealias Group = HideFreeTierGroup
-    static let targetName =
-        "_TtC44LimitedExperienceIndicator_MessageBarRuntime29LimitedExperienceIndicatorBar"
-
-    func layoutSubviews() {
-        orig.layoutSubviews()
-
-        DeclutterChrome.note(self.target, as: .freeTierBar)
-
-        DeclutterChrome.apply(
-            wantHidden: DeclutterChrome.hideFreeTierBar,
-            to: self.target,
-            reportKey: "freeTier",
-            reportMessage: "free tier indicator bar hidden"
         )
     }
 }
@@ -505,12 +472,6 @@ func activateDeclutterChrome() {
         writeDebugLog("[Declutter] missing \(MiniPlayerBarHideHook.targetName) — mini player hook inactive")
     }
 
-    if NSClassFromString(FreeTierBarHideHook.targetName) != nil {
-        HideFreeTierGroup().activate()
-    } else {
-        writeDebugLog("[Declutter] missing \(FreeTierBarHideHook.targetName) — free tier hook inactive")
-    }
-
     if NSClassFromString(SingalongLyricsLineHideHook.targetName) != nil {
         HideSingalongLineGroup().activate()
     } else {
@@ -541,7 +502,6 @@ func activateDeclutterChrome() {
     writeDebugLog(
         "[Declutter] installed (miniPlayer="
             + "\(DeclutterChrome.hideMiniPlayerBar ? "ON" : "OFF")"
-            + " freeTier=\(DeclutterChrome.hideFreeTierBar ? "ON" : "OFF")"
             + " singalongLine=\(DeclutterChrome.hideSingalongLine ? "ON" : "OFF")"
             + " homeHeader=\(DeclutterChrome.hideHomeHeader ? "ON" : "OFF")"
             + " connectButton=\(DeclutterChrome.hideConnectButton ? "ON" : "OFF")"

@@ -357,7 +357,6 @@ extras_description = "Features added on top of EeveeSpotify, kept together here 
 
 declutter_description = "Hides Spotify's own non-content chrome by class name, taken from this device's view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
 hide_mini_player_bar = "Hide the mini player bar";
-hide_free_tier_bar = "Hide the free-tier bar";
 hide_singalong_line = "Hide the one-line lyrics under the cover";
 declutter_home_player_section = "Home and player";
 declutter_home_player_description = "Hides three more of Spotify's own chrome, each taken from this device's view-tree dumps. The connect button is shared between the mini bar and the player, so hiding it removes it from every transport row.";
@@ -372,3 +371,14 @@ gesture_behavior_skip = "Previous / next track";
 gesture_behavior_seek = "Back / forward 15s";
 gesture_on_now_playing = "On the now playing page";
 gesture_on_fullscreen_lyrics = "On the full screen lyrics";
+
+/* MARK: Blocked artists */
+blocked_artists_title = "Blocked artists";
+blocked_artists_enabled = "Skip blocked artists automatically";
+blocked_artists_description = "A track by a blocked artist is skipped to the next one as it starts, wherever it comes from: your playlists, someone else's, radio or a share link. This only skips playback — nothing is removed or hidden in Spotify (playlists, search and Home are untouched). Names are matched ignoring case, and as substrings: blocking MIMI also matches MIMI, Sumire, so an artist with a similar name is caught too. Only the first few seconds of a track are checked, and after 5 skips in a row it stops, so a queue made entirely of blocked artists will not flip through forever.";
+blocked_artists_list_header = "Blocked";
+blocked_artists_empty = "No artists blocked yet";
+blocked_artists_add_placeholder = "artist name";
+blocked_artists_add = "Add";
+blocked_artists_add_footer = "Type the artist's name as Spotify shows it. Matching ignores case; adding the same name again in different case does nothing.";
+blocked_artists_clear_all = "Remove all blocked artists";

@@ -32,7 +32,6 @@ struct EeveeExtrasSettingsView: View {
         var amoled = UserDefaults.amoledEnabled
 
         var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
-        var hideFreeTierBar = UserDefaults.hideFreeTierBar
         var hideSingalongLine = UserDefaults.hideSingalongLine
         var hideHomeHeader = UserDefaults.hideHomeHeader
         var hideConnectButton = UserDefaults.hideConnectButton
@@ -58,14 +57,6 @@ struct EeveeExtrasSettingsView: View {
                     isOn: declutterBinding(
                         \.hideMiniPlayerBar,
                         persist: { UserDefaults.hideMiniPlayerBar = $0 }
-                    )
-                )
-
-                Toggle(
-                    "hide_free_tier_bar".localized,
-                    isOn: declutterBinding(
-                        \.hideFreeTierBar,
-                        persist: { UserDefaults.hideFreeTierBar = $0 }
                     )
                 )
 
@@ -173,6 +164,16 @@ struct EeveeExtrasSettingsView: View {
                         color: Color(hex: "#5E5CE6"),
                         title: "flag_override_title".localized,
                         imageSystemName: "slider.horizontal.3"
+                    )
+                }
+
+                Button {
+                    push(with: EeveeBlockedArtistsSettingsView(), title: "blocked_artists_title")
+                } label: {
+                    NavigationSectionView(
+                        color: Color(hex: "#FF9F0A"),
+                        title: "blocked_artists_title".localized,
+                        imageSystemName: "person.slash.fill"
                     )
                 }
             }

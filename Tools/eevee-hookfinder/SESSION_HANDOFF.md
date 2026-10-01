@@ -290,7 +290,7 @@ spoti.pw 文档里说它"强制的那批 flag"（玻璃导航栏 / 新播放器�
 | **关掉开关当场恢复** | ✅ —— §8.3 那次修的核心 |
 | 触感 / Flag 覆盖 / 上报拦截 | ✅ |
 | 隐藏标签栏渐隐 | ⚠️ 生效（日志里有上报）但肉眼不可见 → **已删** |
-| 隐藏 free-tier 条 | ⚠️ 该账号上高度为 0，无法观察（**保留**） |
+| 隐藏 free-tier 条 | ⚠️ 该账号上高度为 0，永远看不出效果 → **已删**（见 §10.2） |
 
 → `build 2` 的四个坏点（迷你条 / 加号 / 15 秒 / 选择器不刷新）全部修好并验证。
 
@@ -324,3 +324,139 @@ spoti.pw 文档里说它"强制的那批 flag"（玻璃导航栏 / 新播放器�
 3. D 档小项（Updates 页 / Home 渐变 / Accent / Navbar labels）—— 用户已明确**等玻璃做完再说**。
 4. 若第 1 步确认 9.1.86 没带那套玻璃 → 回到"**一屏玻璃样品**"（挑正在播放页或歌单页，
    日志 8 已把这两屏的类名/frame 抓全）。
+
+---
+
+# 10. 2026-10-01 第三批：★ 液态玻璃成立 + 屏蔽艺人 + 再删两个开关
+
+## 10.1 ★ 玻璃路线成立（本轮最重要的结论）
+
+用户在带 `liquid_glass` 开关的构建上实测：**按钮/开关变成了液态玻璃，部分页面的栏也有液态玻璃**。
+
+→ 结论：**Spotify 9.1.86 里那套 Reprise / Liquid Glass 是带着的**，
+`UIDesignRequiresCompatibility = true`（Spotify 自己写的）就是**唯一那道硬闸**；
+flag 通道的 `.forceEnum` 是第二道（软闸）。
+→ 也就是说"**重绘 10 个页面**"这条路线**可以先不做**：在 Spotify 自己的新外观上做减法就行。
+
+**副作用（待诊断）**：用户报「深色栏底色（AMOLED）似乎失效了」。
+最可能的原因：新外观下导航栏的视图结构变了 —— 我们的 AMOLED 挂在 `SPNavigationBar` 上，
+靠 `_UIBarBackground` 里的 scrim `UIImageView` 与 `UIVisualEffectView` 判定（见 §3），
+要么 hook 根本没跑到，要么跑到了但那里已经没有可改的东西。
+**要一份带视图树转储的日志**才能定论，见 §10.4 第 1 条。
+
+## 10.2 再删两个开关（页面变短）
+
+- **隐藏 free-tier 提示条**：`FreeTierBarHideHook` / `HideFreeTierGroup` / 复查里的 `freeTierBar` /
+  设置行 / `hideFreeTierBar` 键 / 文案，全删。该账号上它高度恒为 0，永远看不出效果。
+- 至此「扩展功能」的清爽开关从 7 个减到 **5 个**：隐藏迷你播放条 / 隐藏封面下的一行歌词 /
+  隐藏首页顶部条 / 隐藏设备按钮 / 隐藏加号按钮。
+
+## 10.3 新增：屏蔽的艺人（Blocked artists）
+
+| 文件 | 作用 |
+|---|---|
+| `Sources/EeveeSpotify/Artists/BlockedArtists.swift` | 名单 + 规范化（去空白/忽略大小写去重）+ 匹配（包含式） |
+| `Sources/EeveeSpotify/Artists/BlockedArtistSkip.swift` | 1 秒轮询：换歌 → 命中 → **开头 3 秒内**跳下一首；连续跳 5 首停手 |
+| `Sources/EeveeSpotify/Settings/Sections/Artists/Views/EeveeBlockedArtistsSettingsView.swift` | 名单页（开关 / 列表滑动删除 / 输入框添加 / 清空） |
+| 入口 | 「扩展功能」里一行（橙色 `person.slash.fill`） |
+
+- 键：`blockedArtistsEnabled`（**默认开**，名单空着就是 no-op）、`blockedArtists`（字符串数组）。
+- **刻意不新增 Orion hook**：注入工具进程里解析不到目标有 SIGTRAP 先例（见
+  `CustomLyrics+AllTracksLyrics.x.swift` 顶部）。只用已验证的原语：
+  `statefulPlayer.currentTrack()`（`artistName()`/`artistTitle()`）、
+  `WordByWordPositionResolver.shared.currentPositionSeconds()`、
+  `WordByWordPlaybackControl.skipToNext()`（日志 8 已证明可用）。
+- **刻意没有"熄屏就不跑"的 guard**（与 `DeclutterChrome` 的复查相反）：屏蔽艺人要在锁屏/后台
+  放歌时也生效 —— Spotify 放音频时进程不挂起。
+- ⚠️ **耦合**：`statefulPlayer` 挂在 `BaseLyricsGroup` 上 → **歌词模块关掉时屏蔽艺人不工作**，
+  日志会打一行 `[BlockArtist] statefulPlayer.currentTrack() 不可用…`（每次启动只打一次）。
+
+## 10.4 下一批待办
+
+1. **诊断 AMOLED 在新外观下失效**（需要一份日志）：开**日志记录** + 开**转储视图树** +
+   打开**深色栏底色**，在 **首页 / 资料库 / 歌单** 各停一下，导出日志。
+   我要看：`[AMOLED] SPNavigationBar first layout — scrim=… blur=…` 那几行**还在不在**，
+   以及新结构里导航栏是怎么画的。
+2. 在玻璃基线下回归一遍：5 个清爽开关、双击手势、全屏歌词自绘壳是否都还正常。
+3. 之后按"**在 Spotify 自己的新外观上做减法**"重排：D 档小项（Updates 页 / Home 渐变 /
+   Accent / Navbar labels）现在可能比原来便宜 —— 玻璃已经在了，我们只需要调它、或藏它。
+
+## 10.5 日志 9 判读 + "标签栏不透"是我们自己挡的（已让位）
+
+**日志 9 = 玻璃构建**（`scrim=0 blur=0`，兼容模式是 `scrim=2 blur=2`），
+而且它证明了 **`flag overrides=0` 也能有玻璃** → 玻璃完全来自删掉
+`UIDesignRequiresCompatibility`，不需要任何 flag 覆盖。
+
+**AMOLED 失效的病根**：hook **跑到了**（有日志），但旧结构已经不存在 ——
+新导航栏是 SwiftUI 托管的 Platter：
+`SPNavigationBar`(54pt) → `_UIBarBackground` → `NavigationBarContentView` →
+`NavigationBarTransitionContainer` → `HostedViewContainer` →
+**`NavigationBarPlatterContainer_v2`** → **`PlatterContainerHostingView<NavigationBarPlatterContent>`**，
+外加系统的 `BackdropView` / `ScrollEdgeEffectView`。旧那两层（灰 scrim `UIImageView` +
+同级 `UIVisualEffectView`）**整个没了** → 我们找到 0 处，什么都不做。
+→ 而新设计**自己就实现了 AMOLED 想要的效果**（透明 + 边缘模糊），所以导航栏那半在新设计下多余。
+
+**"标签栏是正常的不透底栏"= 我们自己挡的（两处）**：
+1. `AmoledTheme.ensureTabBarMaterial` 插的 `systemThinMaterialDark`（旧设计下标签栏
+   完全没有底色才需要我们插）；新设计的标签栏**自带**
+   `UIVisualEffectView` + `_UIVisualEffectBackdropView`（日志 9 的树）→ 玻璃罩在我们的
+   深色材质上 = 一块实心深色；
+2. **`TabBarGradientView`**（黑→透明，正好覆盖整条：日志 9 里 `@0,-112,414,195` 且**没有 hidden**）
+   —— 上一批把「隐藏标签栏渐隐」开关删了，它就**一直露着**，进一步压暗玻璃。
+
+**修法**（`NewDesignLanguage` + `NewDesignYield.x.swift`）：
+- `NewDesignLanguage.isEnabled`：读 `Bundle.main` 的 `UIDesignRequiresCompatibility` ——
+  键被删（`liquid_glass` 构建）= 新设计语言；键在且为 true = 兼容模式。**不靠类名判定**
+  （那些 Swift 私有类换版本会改名）。
+- AMOLED 在新设计下**主动让位**：`strip` 与 `ensureTabBarMaterial` 都提前返回，并打一行
+  `[AMOLED] new design language in effect — yielding (…)`。
+- 新设计下**默认藏掉** `TabBarGradientView`（打一行 `[NewDesign] hid TabBarGradientView …`），
+  不再做成开关。
+- ⚠️ 用户已拍板：**以后默认用玻璃构建**（`liquid_glass` 开）。
+
+**顺手得到的一条**：`[SB] activate: … class=<found> addPlayerObserver=N` —— 我改的类名
+`_TtC17Player_CommonImpl30SPTPlayerServiceImplementation` **找对了**，但那个类**没有
+`addPlayerObserver:`** → SponsorBlock 的观察者仍然装不上。要修得换选择器/换条路（不急）。
+
+## 10.6 "是不是 iOS 27 强制玻璃？" —— 已用我们自己的两份日志排除
+
+用户提出：他在 **iOS 27** 上，苹果好像在 iOS 27 强制液态玻璃，所以他怀疑看到的玻璃
+不是我们解锁的。**同一台机器、同一个 iOS 27.0，两份日志的结构完全不同**：
+
+| | 日志 8（兼容构建，`UIDesignRequiresCompatibility=true`） | 日志 9（`liquid_glass` 构建，键已删） |
+|---|---|---|
+| iOS | **27.0** | **27.0** |
+| `Platter` / `ScrollEdgeEffect` / `FloatingBar` | **0 处** | 大量（`NavigationBarPlatterContainer_v2`、`PlatterContainerHostingView<NavigationBarPlatterContent>`、`ScrollEdgeEffectView`、`FloatingBarHostingView<FloatingBarContainer>`…） |
+| 导航栏 | `SPNavigationBar@0,48,414,44` + 灰 scrim/blur（`scrim=2 blur=2`） | `SPNavigationBar@0,48,414,54` + SwiftUI Platter |
+
+→ **iOS 27 上那个键仍然被尊重**，App 可以明确 opt out（日志 8 是活证）。
+玻璃是删键那次构建带来的，不是系统强制的。
+
+**但由此做了一处加固**：判定不再只看 plist 键，改成**两个信号取或**（`NewDesignLanguage`）：
+1. `plistSaysNewDesign`：`Bundle.main` 里 `UIDesignRequiresCompatibility` 的取值（构建意图）；
+2. `observedNewDesign`：**运行期正信号** —— 导航栏子树里出现 `Platter*` / `ScrollEdgeEffect*`
+   （旧设计里一个都不会出现，见上表）。由 `AmoledTheme.strip(…, isNavBar: true)` 顺手认，
+   **不做运行时类枚举**（那是本仓库栽过两次崩溃的雷区）。
+   将来某个 iOS 忽略那个键时，这第二个信号会兜住，我们仍然自动让位。
+另外：`ensureTabBarMaterial` 在让位时会把**已经插过的**材质拔掉；
+`TabBarGradientYieldHook` 改成**总是装**、判据放在 `layoutSubviews`（这样兜底信号也管用）。
+
+## 10.7 六个设置页底部被标签栏挡住（已修）
+
+用户反馈：「扩展功能」页滚不到底，看不到隐私 / 触感 / Flag 覆盖那三行的说明；
+Flag 页最底下一行被挡。
+
+根因：这些页都走**同一个宿主** `EeveeSettingsViewController`（`SPTPageViewController` +
+`UIHostingController`，SwiftUI `List` 直接贴在 `view` 边缘）。而 **Spotify 的标签栏
+（`id=elements-tabs-view-identifier`）与迷你条（类名 `TouchPassthroughView`）是它自己的视图，
+不参与 `safeAreaInsets`** → List 的底部安全区是 0，内容滚到标签栏**下面**去、最后一行滚不上来。
+
+修法（`EeveeSettingsViewController.viewDidLayoutSubviews`）：
+- 量一次底部 chrome 的顶边 → 折算成 `additionalSafeAreaInsets.bottom`
+  （`systemBottom = view.safeAreaInsets.bottom − additionalSafeAreaInsets.bottom`，
+  避免叠加两次、也避免自我放大；**只在变化 > 0.5pt 时才写**，否则会触发布局循环）；
+- 迷你条用**精确类名相等**判定，**不能**用 `hasSuffix` —— UIKit 的 `_UITouchPassthroughView`
+  是 414x896（整屏），后缀匹配会算出巨大的内边距；
+- 走查有 2000 节点上限（本仓库纪律）。
+
+→ **六个设置页一起修好**（根页 / 歌词 / 实验 / 扩展 / 隐私 / 触感 / Flag / 已知 flag 全用这个宿主）。

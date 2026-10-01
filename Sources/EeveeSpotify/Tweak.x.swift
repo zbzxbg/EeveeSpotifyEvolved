@@ -363,7 +363,11 @@ struct EeveeSpotify: Tweak {
         activateTelemetryRequestBlock()
 
         // AMOLED 纯黑（导航栏 / 标签栏）。同样总是装、开关实时读。
+        // ⚠️ 新设计语言（液态玻璃）下它会主动让位，见 `NewDesignLanguage`。
         activateAmoledTheme()
+
+        // 新设计语言下让我们自己给旧设计打的补丁让位（目前是标签栏那层渐隐遮罩）。
+        activateNewDesignYield()
 
         // 清爽开关（迷你播放条 / 标签栏渐隐 / free-tier 提示条）。同上：总是装、实时读。
         activateDeclutterChrome()
@@ -374,6 +378,10 @@ struct EeveeSpotify: Tweak {
         // 调试用视图树转储：默认关，开关在「调试」页且打开即生效（那边会直接调
         // `applyEnabledState()`）；这里只是让重启后能自动续上。
         ViewTreeDumper.applyEnabledState()
+
+        // 屏蔽艺人：1 秒一次的只读轮询，发现换歌就判一次（名单空着时它什么都不做）。
+        // 不用新增 hook 的原因写在 `BlockedArtistSkip` 顶部。
+        BlockedArtistSkip.start()
 
         // TESTING: extended ad blocker (NPV/lyrics ad, home brand-ads, in-stream).
         activateEeveeAdBlockerExtended()
