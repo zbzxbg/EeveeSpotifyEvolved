@@ -38,6 +38,7 @@ extension UserDefaults {
     private static let libraryLargeTitleKey = "libraryLargeTitle"
     private static let tabBarGlassKey = "tabBarGlass"
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
+    private static let miniBarGlassKey = "miniBarGlass"
 
     static var musixmatchToken: String {
         get {
@@ -426,6 +427,23 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: tabBarHideLabelsKey)
+        }
+    }
+
+    // MARK: - 迷你播放条玻璃（默认开）
+
+    /// 迷你播放条也铺一层**液态玻璃胶囊**：与标签栏那条**同高、同圆角、同材质**，
+    /// 宽度贴它自己的内容（真机 398pt，因为要装封面 + 歌名 + 按钮）。
+    /// **默认开** —— 用户 2026-10-02 直接点名要的（照片 33：那条实心红底太扎眼）。
+    ///
+    /// 关掉即完全还原：玻璃撤掉，被我们清空的封面色底与放开过的裁剪都还回去
+    /// （见 `MiniBarGlassPlate.removePlate`）。
+    static var miniBarGlass: Bool {
+        get {
+            container.object(forKey: miniBarGlassKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: miniBarGlassKey)
         }
     }
 

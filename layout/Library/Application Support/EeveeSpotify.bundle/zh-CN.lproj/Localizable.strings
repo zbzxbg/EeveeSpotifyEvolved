@@ -398,3 +398,7 @@ flag_catalog_description = "这些名字与 scope 都来自本机自己的调试
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
 flag_catalog_empty_result = "没有匹配的 flag";
 tab_bar_hide_labels = "隐藏标签文字";
+
+mini_bar_glass_section = "迷你播放条";
+mini_bar_glass = "迷你播放条用液态玻璃";
+mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃胶囊：**同高（60pt）、同圆角、同材质**，宽度贴它自己的内容（封面 + 歌名 + 按钮）。开着的时候那条实心封面色底会被清掉，关掉开关完全还原。与标签栏那条之间**保留原来的间隙**，不会粘成一条。";

@@ -354,6 +354,14 @@ class MiniPlayerBarHideHook: ClassHook<UIView> {
         // 即使它自己后来不再收到 layout 回合。
         DeclutterChrome.note(self.target, as: .miniBar)
 
+        // ★ 迷你播放条的**液态玻璃胶囊**（`MiniBarGlass.swift`）蹭的就是这个布局回调 ——
+        //   同一个类上再挂一个 ClassHook 是没验证过的行为，所以那边只画、不钩。
+        //   顺序无所谓：藏掉时它照样画（看不见而已），开关关掉它会自己撤掉并把底色还原。
+        // ⚠️ hook 方法体是**非隔离**的（Orion 的代码生成器会把 `@MainActor` 拼坏，见
+        //   `LyricsChromeVisibility.swift` 顶上那段），所以这里必须套 `onMainThreadSync`。
+        let host = self.target
+        onMainThreadSync { MiniBarGlassPlate.apply(to: host) }
+
         DeclutterChrome.apply(
             wantHidden: DeclutterChrome.hideMiniPlayerBar,
             to: self.target,

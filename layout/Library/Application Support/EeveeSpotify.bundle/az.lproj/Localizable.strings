@@ -265,3 +265,7 @@ Done = "Done";
 Loading = "Loading";
 episode_header = "Episode %@";
 tab_bar_hide_labels = "Hide tab labels";
+
+mini_bar_glass_section = "Mini player";
+mini_bar_glass = "Liquid Glass on the mini player";
+mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsule as the tab bar: same 60 pt height, same corner radius, same material, sized to its own content (artwork + title + buttons). The solid cover-coloured background is cleared while this is on and fully restored when you switch it off. The gap between it and the tab bar capsule is kept — they do not merge.";

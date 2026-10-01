@@ -403,3 +403,7 @@ now_playing_shell_description = "Draws the now playing page ourselves instead of
 music_style_nowplaying = "Cover-tinted background + big title";
 music_style_nowplaying_description = "The first sample of the Apple Music style: the page background takes the cover's own colour, and the song title and artist sit at the top. It only ADDS those two things and hides nothing of Spotify's own player, so switching it off restores the page exactly. It applies the next time the now playing page lays out — no restart.";
 tab_bar_hide_labels = "Hide tab labels";
+
+mini_bar_glass_section = "Mini player";
+mini_bar_glass = "Liquid Glass on the mini player";
+mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsule as the tab bar: same 60 pt height, same corner radius, same material, sized to its own content (artwork + title + buttons). The solid cover-coloured background is cleared while this is on and fully restored when you switch it off. The gap between it and the tab bar capsule is kept — they do not merge.";

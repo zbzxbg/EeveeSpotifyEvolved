@@ -40,6 +40,17 @@ import ObjectiveC.runtime
 ///      （`UIGlassEffect.isInteractive`）**保留**，折射本来就是系统玻璃自带的；
 ///      pan / dragOffset / dragLimit / `TabBarDragTarget` 全部删除。
 ///
+/// ── v4.6.1（2026-10-02，照片 30/31/32 + 日志 26）────────────────────────────
+///   **"点开『创建』之后另外三颗图标被顶高了"** —— v4.6 的 `dy` 是**四颗共用一个数**，
+///   而「创建」那颗在菜单打开时它的 `SPTEncoreIconView` 会从 `24×24` 变成 **`33×33`**
+///   （真机 tree #7：`IconView@35,7,33,33`）→ 图标带 `272x24` 变 `277x36`、中心 17→23
+///   → `dy` 从 `+10.0` 缩到 `+3.8` → 另外三颗被顶高 6pt（照片 32 逐像素量 7pt）。
+///   日志 26 两条自报就是现场：`312x60 / dy=+10.0` ↔ `317x60 / dy=+3.8`。
+///   **修法**：①尺寸**按中位归一化**（每块矩形用中位宽高重建、只保留自己的中心）
+///   —— 胶囊因此恒为 `312x60`，不再 312 ↔ 317；②纵向位移**一颗一个数**
+///   （`rowShifts`，基准是每颗**自己看得见的内容**）——「创建」那颗由它的白圆底去对中心，
+///   另外三颗仍由各自的 24pt 图标去对，谁也不会被对方拽偏。
+///
 /// ── v4.2（2026-10-02，用户反馈两条）────────────────────────────────────────
 ///   ① **"四颗离得太开"** → `tightenRow` 用 **transform** 把四颗往中心收 20%
 ///      （外两颗各向内 ~31pt，间距 103.5 → 82.7pt）。用 transform 是因为它
@@ -92,12 +103,9 @@ enum TabBarGlassPlate {
     /// 左右留边。照片 21 里那条胶囊**不是**贴边的，两侧有明显留白。
     private static let sideInset: CGFloat = 8
 
-    /// 上下留边：胶囊高 = **"有文字"版式那条带子**的高 + 上下各这么多。
-    /// **这一项就是"胖瘦"旋钮**：5 → 53pt 高；8 → 61pt（2026-10-02 用户反馈
-    /// "玻璃太扁（宽高比不对）"，从 5 调到 8）。
-    /// ⚠️ v4.6 起这里的"带子"**永远按有文字的版式算**（见 `contentBands`），
-    /// 所以高度与「隐藏标签文字」开关无关 —— 用户拍板的就是这一条。
-    private static let verticalPadding: CGFloat = 8
+    /// 上下留边**已经不在这里**了（v4.7）：高度改由 `GlassCapsule.height` 统一给，
+    /// 因为用户要求迷你播放条那条胶囊**与这条等高**（见 `GlassCapsule` 的说明）。
+    /// 历史：v4.2 时这里是个"胖瘦旋钮"（5 → 53pt；8 → 60pt），实测值就是 8。
 
     /// 左右留边：胶囊 = **有文字版式那条带子** + 左右各这么多。
     /// ⚠️ 不再是"栏宽 − 固定值"：四颗被收紧之后，胶囊要贴着那一行走，不然又变成一条长条。
@@ -117,11 +125,7 @@ enum TabBarGlassPlate {
     /// `TabBarGradientView(0,-112 414x195)` 就画在栏顶以上 112pt 处。
     private static let maxOverhang: CGFloat = 8
 
-    /// 边缘高光：借 **MeloX** 的手法 —— 他们旧系统兜底那一支画的是
-    /// `Capsule().stroke(.white.opacity(0.32), lineWidth: 0.75)`。
-    /// 我们这条是深色玻璃，取比他们更淡一点，只负责把边缘"立"起来。
-    private static let edgeHighlightWidth: CGFloat = 0.75
-    private static let edgeHighlightAlpha: CGFloat = 0.22
+    // 边缘那圈 0.75pt 描边高光已经搬到 `GlassCapsule`（与迷你播放条那条共用一份定义）。
 
     /// 上一次报出去的胶囊 frame（只在变化时打日志，不在布局回调里刷屏）。
     private static var lastReportedFrame: CGRect = .null
@@ -164,24 +168,25 @@ enum TabBarGlassPlate {
         }
         layering(plate: plate, stack: stack, bar: bar)
 
-        // ★ 按开关处理"标签文字"（默认藏）。**量算不再依赖这件事** ——
-        //   `contentBands` 走的是"布局几何 + **有文字的版式**"（v4.6）：
-        //   文字藏没藏、「创建」那颗的白色圆底露没露出，量出来的带子都一样。
+        // ★ 按开关处理"标签文字"（默认藏）。**量算不依赖这件事** ——
+        //   `measure` 走的是"布局几何 + **有文字的版式**"：文字藏没藏、
+        //   「创建」那颗的白色圆底露没露出、它的图标是 24 还是 33pt，胶囊都一样。
         applyLabelVisibility(in: stack)
 
         // ★ 四颗的横向收紧量：**只看布局**（v4.4 起就是这么算的），不看 transform。
         let dx = tightenOffsets(in: bar, stack: stack)
 
-        // ── 摆位：以"有文字的那条带子"为心 ──────────────────────────────────────
-        //   ⚠️ 这里的带子**含横向收紧量、不含纵向位移** ——
-        //   胶囊的位置与大小因此与"我们给四颗挪了多少"完全无关（不会自我反馈）。
-        let bands = contentBands(in: bar, stack: stack, dx: dx, dy: 0)
+        // ── 量算 + 摆位：以"有文字的那条带子"为心 ────────────────────────────────
+        //   ⚠️ 带子**含横向收紧量、不含纵向位移** —— 胶囊的位置与大小因此与
+        //   "我们给四颗挪了多少"完全无关（不会自我反馈）。
+        let measured = measure(in: bar, stack: stack, dx: dx)
         // 兜底：图标/文字一个都没认出来（类名换了）→ 退回 v4.5 的老量法（看得见的内容）。
-        let band = bands.full ?? bands.icons ?? contentBand(in: bar, stack: stack)
+        let band = measured?.full ?? measured?.icons ?? contentBand(in: bar, stack: stack)
 
-        // ── 纵向：文字藏起来时，把四个图标挪到这条带子的**中心** ────────────────
-        //   有文字时不动（那是 Spotify 自己的"图标 + 文字"版式，本来就填满这条带子）。
-        let dy = rowShiftForIcons(bands: bands)
+        // ── 纵向：每颗把自己**看得见的内容**摆到胶囊中心（中心 = band.midY）─────────
+        //   v4.6.1 起**一颗一个数**：四颗共用一个数时，「创建」那颗一开菜单
+        //   （内容变成 40pt 白圆底 + 33pt 图标）就会把另外三颗顶高 6pt（照片 30→32 的现场）。
+        let dy = measured.map { rowShifts(bands: $0.itemBands, center: band.midY) } ?? []
 
         // ⚠️ 几何不可信就**什么都不画**（v4.0 在这里画出了一条 16pt 的小棍）。
         // 真机证据（日志 21）：
@@ -202,12 +207,10 @@ enum TabBarGlassPlate {
             max(16, bar.bounds.width - sideInset * 2),
             max(16, band.width + horizontalPadding * 2)
         )
-        // 高：**"有文字"版式的那条带子** + 上下留边（用户 2026-10-02 拍板：
-        //     无论「隐藏标签文字」开还是关，高度都按有文字时算 —— 高度因此恒定）。
-        let height = min(
-            bar.bounds.height + maxOverhang,
-            max(16, band.height + verticalPadding * 2)
-        )
+        // 高：**与迷你播放条那条胶囊同一个数**（`GlassCapsule.height` = 真机实测 60）。
+        //     用户 2026-10-02 拍板：无论「隐藏标签文字」开关如何，高度都按"有文字"版式算 ——
+        //     现在它直接是一个共用常量，两条胶囊**不可能再漂**（见 `GlassCapsule`）。
+        let height = min(bar.bounds.height + maxOverhang, max(16, GlassCapsule.height))
         let centeredY = band.midY - height / 2
         let y = min(max(-maxOverhang, centeredY), max(0, bar.bounds.height - height))
         let target = CGRect(
@@ -234,7 +237,14 @@ enum TabBarGlassPlate {
             plate.layer.cornerRadius = radius
         }
 
-        report(frame: frame, band: band, icons: bands.icons, shift: dy, bar: bar, host: plate.superview)
+        report(
+            frame: frame,
+            band: band,
+            icons: measured?.icons,
+            shifts: dy,
+            bar: bar,
+            host: plate.superview
+        )
     }
 
     @MainActor
@@ -269,78 +279,81 @@ enum TabBarGlassPlate {
         }
     }
 
-    /// 四颗的**内容带**：`icons` 只算图标，`full` 是"图标 ∪ 文字"（= **有文字的版式**）。
-    ///
-    /// ── 为什么另起一套，不用下面的 `contentBand`（"看得见的内容"并集）──────────
-    /// v4.5 那条"点『创建』玻璃就被拉高"正是它造成的：「创建」那颗**选中时会显示一个
-    /// 40×40 的白色圆底**（dump：`UIView frame=(32,4 40x40) bg=#FFFFFF alpha=0.00`）——
-    /// 它既不是图标也不是文字，却会被"并集"算成内容 → 文字藏着时带子 24 → 40pt →
-    /// 胶囊 40 → 56pt（照片 29 实测 55pt，且图标落在中心上方 8pt）。
-    /// 现在只认两类节点（图标 / 文字）：白色圆底天然不算内容；文字**藏没藏都算**
-    /// （藏起来时它的 frame 仍然有效，真机 dump：`SPTEncoreLabel frame=(41,34 22x16) hidden`）
-    /// → 量出来的**永远是有文字的版式**，与「隐藏标签文字」这个开关无关。
-    ///
-    /// ── 为什么读 `layer.position` / `bounds`，不读 `frame` / `convert(...)` ──
-    /// 后两者**包含我们上一轮写进去的 transform**；v4.6 起 transform 里还有纵向位移，
-    /// 一漂就变成"胶囊跟着一起往下走"。CALayer 的 `position` 是"布局把这一颗放在哪儿"
-    /// （transform 是绕 anchorPoint 施加的，不动 position），`bounds` 是布局尺寸，两个都干净。
-    /// 子树内部用 `node.convert(node.bounds, to: item)` —— 这一段不经过 item 自己的 transform。
-    ///
-    /// - Parameters:
-    ///   - dx: 每颗的横向收紧量（**要算进**带子，胶囊才贴着收紧后的那一行走）。
-    ///   - dy: 纵向位移。**量胶囊时传 0**：胶囊的位置绝不能随我们给四颗的位移走
-    ///     （否则纵向位移会把胶囊一起搬下去 —— 看着像"没居中"，其实是整体在漂）。
-    @MainActor
-    private static func contentBands(
-        in bar: UIView,
-        stack: UIView?,
-        dx: [CGFloat],
-        dy: CGFloat
-    ) -> (icons: CGRect?, full: CGRect?) {
-        guard let stack else { return (icons: nil, full: nil) }
-
+    /// 一次量算的全部结果（都在**栏坐标系**里，而且**只走布局几何**）。
+    private struct Measurements {
+        /// 每颗**看得见的内容**的范围（一颗一个）→ 纵向居中的基准。
+        var itemBands: [CGRect?] = []
+        /// 图标带（尺寸已归一化）。
         var icons: CGRect?
+        /// "有文字的版式"：图标 ∪ 文字（尺寸已归一化）→ 胶囊的尺寸与位置都用它。
         var full: CGRect?
+    }
+
+    /// 量四颗的几何。
+    ///
+    /// ── 为什么只读布局几何（`layer.position` / `bounds`）──────────────────────
+    /// `frame` / `convert(_:to: bar)` 都**包含我们上一轮写进去的 transform**，而 v4.6 起
+    /// transform 里有纵向位移 —— 用它量就会"胶囊跟着一起漂"。CALayer 的 `position` 是
+    /// "布局把这一颗放在哪儿"（transform 是绕 anchorPoint 施加的，不动 position），
+    /// `bounds` 是布局尺寸，两个都干净。子树内部用 `node.convert(node.bounds, to: item)`
+    /// —— 这一段不经过 item 自己的 transform。
+    ///
+    /// ── 为什么尺寸要**归一化到中位尺寸**（v4.6.1：照片 30/32 + 日志 26 的教训）──────
+    /// 「创建」那颗在菜单打开时，它的 `SPTEncoreIconView` 会从 `24×24` 变成
+    /// **`33×33`**（真机 tree #7 原文：`IconView@35,7,33,33`）→ 图标带从 `272x24`
+    /// 变成 `277x36`、中心从 17 掉到 23 → 四颗共用的 `dy` 从 `+10.0` 缩到 `+3.8`
+    /// → **另外三颗被顶高 6pt**（照片 32 一眼可见，逐像素量是 7pt；日志 26 的两条自报
+    /// 就是现场：`312x60 / 272x24 / dy=+10.0` ↔ `317x60 / 277x36 / dy=+3.8`）。
+    /// 现在每块矩形都**按中位尺寸重建、只保留自己的中心**：尺寸不再忽大忽小，
+    /// 位置仍跟真实中心走。
+    ///
+    /// - Parameter dx: 每颗的横向收紧量（**要算进**带子，胶囊才贴着收紧后的那一行走）。
+    @MainActor
+    private static func measure(in bar: UIView, stack: UIView?, dx: [CGFloat]) -> Measurements? {
+        guard let stack, !stack.subviews.isEmpty else { return nil }
+
+        var result = Measurements()
+        var iconRects: [CGRect] = []
+        var labelRects: [CGRect] = []
 
         for (index, item) in stack.subviews.enumerated() {
             let size = item.bounds.size
             // ⚠️ **有一颗还没排（size 0）就整条都不量**：宁可退回老量法（`contentBand`）
             //    并等下一次布局，也不要拿"四颗里只有一颗有几何"去算胶囊 ——
             //    那会画出一条只裹着那一颗的小胶囊（v4.0 的"16pt 小棍"就是同一类事故）。
-            guard size.width > 1, size.height > 1 else { return (icons: nil, full: nil) }
+            guard size.width > 1, size.height > 1 else { return nil }
 
-            // ① 布局原点（`layer.position` 不受 transform 影响，见上面的说明）。
+            // ① 布局原点：`layer.position` 不受 transform 影响（见上面的说明）。
             let position = item.layer.position
-            let originX = position.x - size.width / 2 + (index < dx.count ? dx[index] : 0)
-            let originY = position.y - size.height / 2 + dy
+            let origin = CGPoint(
+                x: position.x - size.width / 2 + (index < dx.count ? dx[index] : 0),
+                y: position.y - size.height / 2
+            )
+            // ② 子树里的矩形是**相对 item** 的；加上布局原点与收紧位移，再换算到栏坐标系。
+            func inBar(_ rect: CGRect) -> CGRect {
+                stack.convert(rect.offsetBy(dx: origin.x, dy: origin.y), to: bar)
+            }
 
-            var iconUnion: CGRect?
-            var labelUnion: CGRect?
+            // ★ 这一颗**看得见的内容**（含「创建」那颗的白色圆底）→ 它自己的纵向居中基准。
+            result.itemBands.append(visibleBand(in: item, node: item, depth: 0).map(inBar))
+
+            // ★ 图标 / 文字（只认这两类，**不受「隐藏标签文字」开关影响**）→ 胶囊的尺寸与位置。
+            var iconNodes: [CGRect] = []
+            var labelNodes: [CGRect] = []
             collectBandNodes(
                 in: item, node: item, depth: 0,
-                iconInto: &iconUnion, labelInto: &labelUnion
+                iconInto: &iconNodes, labelInto: &labelNodes
             )
-
-            // ② 子树里的矩形是**相对 item** 的；加上布局原点与位移，再整体换算到栏坐标系。
-            func inBar(_ rect: CGRect) -> CGRect {
-                stack.convert(rect.offsetBy(dx: originX, dy: originY), to: bar)
-            }
-
-            if let iconUnion {
-                let rect = inBar(iconUnion)
-                icons = icons.map { $0.union(rect) } ?? rect
-                full = full.map { $0.union(rect) } ?? rect
-            }
-            if let labelUnion {
-                let rect = inBar(labelUnion)
-                full = full.map { $0.union(rect) } ?? rect
-            }
+            iconRects.append(contentsOf: iconNodes.map(inBar))
+            labelRects.append(contentsOf: labelNodes.map(inBar))
         }
 
-        return (icons: icons, full: full)
+        result.icons = unionNormalized(iconRects)
+        result.full = unionOf(result.icons, unionNormalized(labelRects))
+        return result
     }
 
-    /// 一棵子树里的**图标**与**文字**（并集成相对 `root` 的矩形）。
+    /// 一棵子树里的**图标**与**文字**（相对 `root` 的矩形）。
     ///
     /// 认类名（`EncoreIconView` / `EncoreLabel`），**不做运行时类枚举** —— 那条路崩过两次。
     /// ⚠️ 这里**故意不看 `isHidden` / `alpha`**：要的就是"有文字的版式"（文字是我们自己藏的），
@@ -350,8 +363,8 @@ enum TabBarGlassPlate {
         in root: UIView,
         node: UIView,
         depth: Int,
-        iconInto: inout CGRect?,
-        labelInto: inout CGRect?
+        iconInto: inout [CGRect],
+        labelInto: inout [CGRect]
     ) {
         guard depth <= 8 else { return }
 
@@ -361,11 +374,7 @@ enum TabBarGlassPlate {
         if isIcon || isLabel {
             let rect = node.convert(node.bounds, to: root)
             if rect.width > 0.5, rect.height > 0.5 {
-                if isIcon {
-                    iconInto = iconInto.map { $0.union(rect) } ?? rect
-                } else {
-                    labelInto = labelInto.map { $0.union(rect) } ?? rect
-                }
+                if isIcon { iconInto.append(rect) } else { labelInto.append(rect) }
             }
             // 图标/文字底下不再往下找（里层的 `UILabel` 类名是 `UILabel`，本来也不会命中）。
             return
@@ -379,18 +388,74 @@ enum TabBarGlassPlate {
         }
     }
 
-    /// 文字藏起来时，四个图标要**往下挪多少**才落在这一行的中心上。
+    /// 一颗标签里**看得见的内容**的范围（相对 `root`；只走布局几何）。
     ///
-    /// `dy = 有文字带.midY − 图标带.midY`（真机 ≈ +10pt）。两个带子都是"布局几何"量的，
-    /// 而且 dy 同时作用于两者 → 相减之后 **dy 自己消掉**：这是**常量**，一次算准、不自我反馈。
-    /// 有文字时返回 0：那是 Spotify 自己的"图标 + 文字"版式，本来就填满这条带子。
+    /// 判据与老量法 `collectContent` 一致（`hidden` / `alpha≈0` 不算；子节点都没成形时算自己），
+    /// 区别是**不 `convert(_:to: bar)`**，所以不吃我们写进四颗的 transform。
+    /// 这一份专门给**纵向居中**用：每颗拿自己"看得见的那块"去对胶囊的中心 ——
+    /// 于是「创建」那颗在菜单打开时（40×40 白圆底 + 33×33 图标）由**它们**去对中心，
+    /// 另外三颗仍然由各自的 24pt 图标去对，谁也不会被对方拽偏。
     @MainActor
-    private static func rowShiftForIcons(bands: (icons: CGRect?, full: CGRect?)) -> CGFloat {
-        guard UserDefaults.tabBarHideLabels else { return 0 }
-        guard let icons = bands.icons, let full = bands.full else { return 0 }
-        let delta = full.midY - icons.midY
-        guard abs(delta) >= 0.5 else { return 0 }
-        return max(-rowShiftLimit, min(rowShiftLimit, delta))
+    private static func visibleBand(in root: UIView, node: UIView, depth: Int) -> CGRect? {
+        guard depth <= 8, !node.isHidden, node.alpha > 0.01 else { return nil }
+
+        var union: CGRect?
+        for sub in node.subviews where !sub.isHidden && sub.alpha > 0.01 {
+            if let rect = visibleBand(in: root, node: sub, depth: depth + 1) {
+                union = union.map { $0.union(rect) } ?? rect
+            }
+        }
+        if let union { return union }
+
+        let rect = node.convert(node.bounds, to: root)
+        guard rect.width > 0.5, rect.height > 0.5 else { return nil }
+        return rect
+    }
+
+    /// 一组矩形的并集，**每块先按中位尺寸重建**（各自保留中心）。
+    ///
+    /// 见 `measure` 的说明：「创建」那颗的图标会在 24×24 ↔ 33×33 之间变，
+    /// 直接用真实矩形量，胶囊与 `dy` 都会跟着跳。
+    private static func unionNormalized(_ rects: [CGRect]) -> CGRect? {
+        guard !rects.isEmpty else { return nil }
+        let widths = rects.map { $0.width }.sorted()
+        let heights = rects.map { $0.height }.sorted()
+        let width = widths[widths.count / 2]
+        let height = heights[heights.count / 2]
+        guard width > 0.5, height > 0.5 else { return nil }
+
+        return rects.reduce(CGRect?.none) { union, rect in
+            let normalized = CGRect(
+                x: rect.midX - width / 2,
+                y: rect.midY - height / 2,
+                width: width,
+                height: height
+            )
+            return union.map { $0.union(normalized) } ?? normalized
+        }
+    }
+
+    /// 两个可选矩形的并集。
+    private static func unionOf(_ a: CGRect?, _ b: CGRect?) -> CGRect? {
+        guard let a else { return b }
+        guard let b else { return a }
+        return a.union(b)
+    }
+
+    /// 每颗的纵向位移：把它自己**看得见的内容**摆到胶囊中心（`center`）。
+    ///
+    /// v4.6.1 起**一颗一个数**（原来是四颗共用一个）：共用时「创建」那颗一开菜单，
+    /// 主体就变成 40pt 的白圆底（比三颗图标低 7pt），一个数必然顾此失彼 ——
+    /// 要么三颗图标被顶高（照片 32），要么圆底被压低。各算各的，两边都落在中心上。
+    /// 有文字时每个 item 的可见内容 = "图标 + 文字"那条带子，中心天然就是胶囊中心 → 位移 ≈ 0。
+    @MainActor
+    private static func rowShifts(bands: [CGRect?], center: CGFloat) -> [CGFloat] {
+        bands.map { band in
+            guard let band, band.height > 1 else { return 0 }
+            let delta = center - band.midY
+            guard abs(delta) >= 0.5 else { return 0 }
+            return max(-rowShiftLimit, min(rowShiftLimit, delta))
+        }
     }
 
     // MARK: - 拖动：**已删除**（v4.6）
@@ -447,21 +512,21 @@ enum TabBarGlassPlate {
     /// 代价与两条纪律：
     ///   · 这几颗的"视觉位置"与"布局位置"分开了 → **凡是反过来量它们位置的地方，
     ///     一律不能读 `frame` / `center`**（那里带着我们的位移）；v4.6 起量算全部改走
-    ///     `layer.position` / `bounds`（见 `contentBands`），理由都写在那儿；
-    ///   · `dx` / `dy` **由调用方算好**（`tightenOffsets` / `rowShiftForIcons`），
+    ///     `layer.position` / `bounds`（见 `measure`），理由都写在那儿；
+    ///   · `dx` / `dy` **由调用方算好**（`tightenOffsets` / `rowShifts`），
     ///     这个函数只负责"写进 transform、幂等"。
     ///
-    /// 幂等 + 可撤销：值没变不写；`tightenFactor = 0` 且 `dy = 0` 时恢复 `.identity`。
+    /// 幂等 + 可撤销：值没变不写；`tightenFactor = 0` 且位移 ≈ 0 时恢复 `.identity`。
     /// - Parameters:
     ///   - dx: 每颗的横向收紧量；数量对不上（不是四颗 / 布局还没排好）时传空数组 = 不动。
-    ///   - dy: 纵向位移（文字藏起来时的"落到中心"，见 `rowShiftForIcons`）。
+    ///   - dy: 每颗的纵向位移（v4.6.1 起**一颗一个数**，见 `rowShifts`）。
     @MainActor
-    private static func tightenRow(_ stack: UIView, in bar: UIView, dx: [CGFloat], dy: CGFloat) {
+    private static func tightenRow(_ stack: UIView, in bar: UIView, dx: [CGFloat], dy: [CGFloat]) {
         let items = stack.subviews
-        guard items.count == 4, dx.count == items.count else { return }
+        guard items.count == dx.count else { return }
 
         for (index, item) in items.enumerated() {
-            let offset = CGPoint(x: dx[index], y: dy)
+            let offset = CGPoint(x: dx[index], y: index < dy.count ? dy[index] : 0)
             let wanted: CGAffineTransform = (abs(offset.x) < 0.5 && abs(offset.y) < 0.5)
                 ? .identity
                 : CGAffineTransform(translationX: offset.x, y: offset.y)
@@ -475,7 +540,7 @@ enum TabBarGlassPlate {
     ///
     /// ── 为什么这件事值得做 ────────────────────────────────────────────────────
     /// ① 观感：照片里那条栏只有图标，文字一去掉整条就"干净"了；
-    /// ② 藏掉之后**图标那一行更干净、也更矮**，但要按什么高度画由 `contentBands` 说了算 ——
+    /// ② 藏掉之后**图标那一行更干净、也更矮**，但要按什么高度画由 `measure` 说了算 ——
     ///    v4.6 起"带子"永远按**有文字的版式**量，所以这条开关**只影响文字与图标的纵向居中，
     ///    不影响胶囊的高度**（用户 2026-10-02 拍板）。
     ///
@@ -579,7 +644,7 @@ enum TabBarGlassPlate {
 
     /// 图标那一行**真正看得见的内容**的范围（栏坐标系）。
     ///
-    /// ⚠️ **v4.6 起这个只当兜底**：正常路径走 `contentBands`（布局几何 + 有文字的版式）。
+    /// ⚠️ **v4.6 起这个只当兜底**：正常路径走 `measure`（布局几何 + 有文字的版式）。
     /// 只有"图标 / 文字一个都没认出来"（类名换了）或"四颗还没排"时才落到这里，
     /// 好处是**行为跟 v4.5 一致**（宁可保持原样，也不画错）。
     ///
@@ -675,17 +740,18 @@ enum TabBarGlassPlate {
         return true
     }
 
-    /// 报一次账：插在哪、摆在哪、**有文字版式那条带子**是多少、图标被下移了多少。
+    /// 报一次账：插在哪、摆在哪、**有文字版式那条带子**是多少、四颗各被挪了多少。
     /// 只在 frame 变化时报，且最多 10 条 —— 下次日志不用看图就能验这条改动。
     ///
-    /// v4.6 起这一行是**验收证据**：高度应当是"有文字"的 `~61`（`…x61`），
-    /// 而且**点不点「创建」都是这个数**；`dy=+10` 表示图标已经被挪到这一行的中心。
+    /// v4.6 起这一行是**验收证据**：高度应当是"有文字"的 `~60`（`…x60`），
+    /// 而且**点不点「创建」都是这个数**（v4.6.1 之前它会从 312 跳到 317 —— 见 §19.7）；
+    /// `dy=[…]` 里前三颗应当一直是 `+10` 上下、**点开「创建」也不变**。
     @MainActor
     private static func report(
         frame: CGRect,
         band: CGRect,
         icons: CGRect?,
-        shift: CGFloat,
+        shifts: [CGFloat],
         bar: UIView,
         host: UIView?
     ) {
@@ -698,14 +764,17 @@ enum TabBarGlassPlate {
             String(format: "(%.0f,%.0f %.0fx%.0f)",
                    $0.origin.x, $0.origin.y, $0.size.width, $0.size.height)
         } ?? "—"
+        let shiftText = shifts.isEmpty
+            ? "—"
+            : "[" + shifts.map { String(format: "%+.1f", $0) }.joined(separator: ",") + "]"
 
         writeDebugLog(String(
             format: "[TabBarPlate] 胶囊 (%.0f,%.0f %.0fx%.0f) r=%.1f ← 有文字带 (%.0f,%.0f %.0fx%.0f)"
-                + " 图标带 %@ dy=%+.1f [栏 %.0fx%.0f] 插在 %@ 里",
+                + " 图标带 %@ dy=%@ [栏 %.0fx%.0f] 插在 %@ 里",
             frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
             frame.size.height / 2,
             band.origin.x, band.origin.y, band.size.width, band.size.height,
-            iconText, shift,
+            iconText, shiftText,
             bar.bounds.width, bar.bounds.height,
             host.map { className($0) } ?? "—"
         ))
@@ -714,41 +783,31 @@ enum TabBarGlassPlate {
     /// 造玻璃视图。
     ///
     /// ⚠️ **探测式**：iOS 26+ 上 `UIGlassEffect` 是真的（系统液态玻璃，带折射与边缘高光），
-    /// 拿不到就退 `.systemUltraThinMaterialDark`（iOS 13+ 就有）。
-    /// **不写 `#available`** —— 与本仓库既有做法一致（探测式取系统类，见 `TabBarGlassProbe`）。
+    /// 造玻璃视图。
+    ///
+    /// v4.7 起**公用 `GlassCapsule.makeGlassView`**（与迷你播放条那条胶囊同一份材质：
+    /// 系统 `UIGlassEffect` + 那圈 0.75pt 描边高光）。这里只负责**本模块的日志**
+    /// （那几行是验收清单里的固定行，别改文案）+ 记下 interactive 到底开没开。
+    ///
+    /// ★ 按下回弹（`UIGlassEffect.isInteractive`）**只有标签栏这条要**：
+    ///   它在图标**之下**，接住的只有胶囊四角那点空白；迷你条整条是个大按钮，那边主动关掉了。
     @MainActor
     private static func makeGlassView() -> UIVisualEffectView {
-        let view = UIVisualEffectView(effect: nil)
-        if let glassType = NSClassFromString("UIGlassEffect") as? UIVisualEffect.Type {
-            let effect = glassType.init()
-            // ★ 按下时的弹性反馈（`UIGlassEffect.isInteractive`，iOS 26+）。
-            // **探测式**：getter/setter 都在才写 KVC —— 否则 KVC 碰到未知 key 会抛异常（崩）。
-            let object = effect as? NSObject
-            let hasGetter = object?.responds(to: NSSelectorFromString("isInteractive")) ?? false
-            let hasSetter = object?.responds(to: NSSelectorFromString("setInteractive:")) ?? false
-            if hasGetter, hasSetter {
-                object?.setValue(true, forKey: "interactive")
-                interactiveOn = true
+        let made = GlassCapsule.makeGlassView(wantsInteractive: true)
+        interactiveOn = made.isInteractive
+
+        if GlassCapsule.hasSystemGlass {
+            writeDebugLog("[TabBarPlate] 用的是系统真玻璃 UIGlassEffect")
+            if made.isInteractive {
                 writeDebugLog("[TabBarPlate] UIGlassEffect.isInteractive = true（按下会回弹）")
             } else {
                 writeDebugLog("[TabBarPlate] 这版没有 isInteractive — 跳过按下回弹")
             }
-            view.effect = effect
-            writeDebugLog("[TabBarPlate] 用的是系统真玻璃 UIGlassEffect")
         } else {
-            view.effect = UIBlurEffect(style: .systemUltraThinMaterialDark)
             writeDebugLog("[TabBarPlate] 系统没有 UIGlassEffect — 退回材质")
         }
 
-        // 一圈极淡的白色描边高光（照片 21/23/25 那条胶囊的边缘就是这么"立"起来的）。
-        // 借的是 MeloX 的写法 —— 他们旧系统兜底那一支画的是
-        // `Capsule().stroke(.white.opacity(0.32), lineWidth: 0.75)`。
-        // `UIGlassEffect` 自带边缘高光，但在深色内容上不够，补这一圈把"廉价感"压下去
-        // （文档 §3.5 早就预判了这条：形状对了但廉价 → 加淡描边高光，不改结构）。
-        view.layer.borderWidth = edgeHighlightWidth
-        view.layer.borderColor = UIColor.white.withAlphaComponent(edgeHighlightAlpha).cgColor
-
-        return view
+        return made.view
     }
 
     private static func className(_ view: UIView) -> String {

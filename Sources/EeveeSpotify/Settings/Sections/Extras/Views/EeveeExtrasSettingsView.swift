@@ -42,6 +42,7 @@ struct EeveeExtrasSettingsView: View {
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
         var tabBarGlass = UserDefaults.tabBarGlass
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
+        var miniBarGlass = UserDefaults.miniBarGlass
     }
 
     var body: some View {
@@ -153,6 +154,25 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.tabBarHideLabels,
                         persist: { UserDefaults.tabBarHideLabels = $0 }
+                    )
+                )
+            }
+
+            // 迷你播放条：用户 2026-10-02 点名要的（照片 33：那条实心封面色底太扎眼）。
+            // 与上面那条**同高同材质**，宽度贴它自己的内容 —— 两条胶囊之间的间隙保持不动。
+            Section(
+                header: Text("mini_bar_glass_section".localized),
+                footer: Text("mini_bar_glass_description".localized)
+            ) {
+                Toggle(
+                    "mini_bar_glass".localized,
+                    isOn: shadowBinding(
+                        \.miniBarGlass,
+                        persist: { value in
+                            UserDefaults.miniBarGlass = value
+                            // 迷你条的布局回合不常有：改完当场落地（撤玻璃/还原底色都在这一句里）。
+                            MiniBarGlassPlate.reconcileNow()
+                        }
                     )
                 )
             }

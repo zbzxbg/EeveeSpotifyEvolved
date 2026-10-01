@@ -333,3 +333,7 @@ Done = "Done";
 Loading = "Loading";
 episode_header = "Episode %@";
 tab_bar_hide_labels = "隱藏標籤文字";
+
+mini_bar_glass_section = "迷你播放條";
+mini_bar_glass = "迷你播放條用液態玻璃";
+mini_bar_glass_description = "給迷你播放條鋪一層和標籤欄同一套的液態玻璃膠囊：**同高（60pt）、同圓角、同材質**，寬度貼它自己的內容（封面 + 歌名 + 按鈕）。開著的時候那條實心封面色底會被清掉，關掉開關完全還原。與標籤欄那條之間**保留原來的間隙**，不會黏成一條。";
