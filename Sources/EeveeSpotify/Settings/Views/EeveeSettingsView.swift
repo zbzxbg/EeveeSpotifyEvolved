@@ -262,6 +262,23 @@ struct EeveeSettingsView: View {
                     .foregroundColor(.red)
                 }
             }
+
+            // 「转储 customize 响应体」：**只为一件事**存在 —— 换掉随包的种子快照。
+            //
+            // 背景：flag 改写依赖 customize 的响应体，而 304 无 body 时我们只能回放
+            // 种子（`SpotifyResponsePatcher.seedCustomizeDataIfNeeded`，用的是 9.1.76
+            // 时期转存的 `.bnk`）。打开这个开关 + 用一次「覆盖配置」（它会清缓存、
+            // 逼服务器回 200）→ 下次启动就能从日志里取到**你这版**的真 body。
+            // 单独一个 Section：它写在日志里，而日志是要导出的，别和"清空日志"混。
+            Section(footer: Text("dump_customize_body_description".localized)) {
+                Toggle(
+                    "dump_customize_body".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.dumpCustomizeBody },
+                        set: { UserDefaults.dumpCustomizeBody = $0 }
+                    )
+                )
+            }
             
             // 「分享日志前脱敏」：只影响**导出**这一份 → 见 `DebugLogSanitizer.redactForSharing`。
             // 单独一个 Section（不塞进上面那个），因为上面那个的 footer 讲的是"要不要记日志"。

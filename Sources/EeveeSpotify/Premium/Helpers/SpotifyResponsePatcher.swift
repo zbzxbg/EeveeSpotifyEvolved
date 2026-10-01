@@ -27,6 +27,141 @@ enum SpotifyResponsePatcher {
         return _handledCustomizeTasks.remove(id) != nil
     }
 
+    // MARK: - customize 种子（2026-10-01）
+
+    /// 启动时用随包快照喂一份 `cachedCustomizeData`。
+    ///
+    /// ── 不这么做会怎样（真机实证）──────────────────────────────────────────
+    /// 冷启动第一个 `customize` 往往是 **304、没有 body**：Spotify 自己的 HTTP 缓存里
+    /// 已经有那份配置，服务器只回"没变"。于是：
+    ///
+    ///     没有 body → 进不了 `patch()` → `cachedCustomizeData` 永远是 nil
+    ///       → 304 兜底（`DataLoaderServiceHooks.x.swift` 的 304 分支）没有可回放的东西
+    ///         → `modifyRemoteConfiguration()` 一次都不跑
+    ///           → `[Flags]` 一条都不打、所有 flag 替换（含用户「Flag 覆盖」）全部静默失效
+    ///
+    /// 关键是：`cachedCustomizeData` **唯一**的写入点在 `patch()` 的 customize 分支里，
+    /// 而 `patch()` 只有在**已经拿到 body** 之后才会被调用 —— 这条路径自我死锁，
+    /// 一旦第一个响应是 304，就再也回不来了。
+    ///
+    /// ── 同设备对照（同一台 iPhone12,1 / iOS 27 / Spotify 9.1.86）────────────
+    ///   · 09-30（14 号前后的日志）：首次 customize 有数据 → `[Flags]` **61 行**；
+    ///   · 10-01（`eeveespotify_debug_shared 12.log:351`）：`[HCUS] Missing buffered body
+    ///     … /v1/customize` → `[Flags]` **0 行**。
+    /// 差别只在"这次有没有拿到 body"，不是"Spotify 不下发"。
+    ///
+    /// ── 为什么种子用 `.bnk` 是安全的 ────────────────────────────────────────
+    /// `.bnk` 是 `ResolveConfiguration` 的序列化（`BundleHelper.resolveConfiguration()`
+    /// 本来就这么读它），而 `UcsResponse+Extension` 已给出桥接：`assignedValues`
+    /// 就是 `resolve.configuration.assignedValues`。于是：
+    ///
+    ///     .bnk → ResolveConfiguration → ResolveResponse.configuration
+    ///          → UcsResponse.resolve.configuration → 包成 CustomizeMessage(response:)
+    ///
+    /// 刻意**只放这一个字段**：`CustomizeMessage` 是个 oneof（`response` / `error`），
+    /// 我们只填 `response`；种子里**不带 `attributes`** —— 那是账号态（Premium / 国家），
+    /// 必须由线上响应说了算，绝不能用旧快照去顶（`modifyRemoteConfiguration` 里的
+    /// 「覆盖配置」分支同样只动 `resolve.configuration`，理由一致）。
+    ///
+    /// 幂等：只填空位（`_cachedCustomizeData == nil`），真 body 一到就被 `patch()` 覆盖
+    /// 成线上版本，种子自然退场。
+    static func seedCustomizeDataIfNeeded() {
+        lock.lock()
+        let alreadySeeded = _cachedCustomizeData != nil
+        lock.unlock()
+        guard !alreadySeeded else {
+            eeveeSanitizedNSLog("[CustomizeSeed] already have a body — 种子不需要")
+            return
+        }
+
+        let spotifyVersion = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? ""
+        let resourceName = BundledConfigurationPolicy.resourceName(for: spotifyVersion)
+
+        guard let bundle = BundleHelper.shared.configurationBundle,
+              let url = bundle.url(forResource: resourceName, withExtension: "bnk") else {
+            eeveeSanitizedNSLog("[CustomizeSeed] \u{26a0}\u{fe0f} \(resourceName).bnk 不在包里 — 种子缺席")
+            return
+        }
+
+        do {
+            let configuration = try ResolveConfiguration(serializedBytes: try Data(contentsOf: url))
+
+            var resolved = ResolveResponse()
+            resolved.configuration = configuration
+
+            var response = UcsResponse()
+            response.resolve = resolved
+
+            // ⚠️ 用 `init()` + 属性赋值，不用 `CustomizeMessage(response:)`：
+            // 生成代码里**只有** `init()`（Account.pb.swift），标量字段的便捷初始化器不存在。
+            var message = CustomizeMessage()
+            message.response = response
+            let data = try message.serializedData()
+            cachedCustomizeData = data
+
+            eeveeSanitizedNSLog(
+                "[CustomizeSeed] seeded cachedCustomizeData from \(resourceName).bnk"
+                    + " — \(configuration.assignedValues.count) assignedValues,"
+                    + " \(data.count) bytes (spotify \(spotifyVersion))"
+            )
+            writeDebugLog(
+                "[CustomizeSeed] 种子就绪 \(resourceName).bnk"
+                    + " — \(configuration.assignedValues.count) 条 flag，\(data.count) 字节。"
+                    + " 无 body 的 304 会回放它；真 body 一到即被替换。"
+            )
+        } catch {
+            eeveeSanitizedNSLog("[CustomizeSeed] \u{26a0}\u{fe0f} 构造失败: \(error)")
+        }
+    }
+
+    // MARK: - customize 响应体抓取（只为替换种子）
+
+    /// 抓取一次**原始** customize 响应体到调试日志（base64），供替换种子快照。
+    ///
+    /// 放在 `patch()` 的 customize 分支入口 —— 必须在任何改写**之前**，
+    /// 否则抓到的是我们自己改过的版本。
+    ///
+    /// 为什么写进日志而不是写文件：日志是你已经在导出的那一份，不用再去容器里翻；
+    /// 用 base64 而不是 hex 是为了**减半**（100KB 的 body ≈ 133KB 文本）。
+    /// 取回后这样变成新的 `.bnk`（只需做一次）：
+    ///
+    ///     $txt = Get-Content .\eeveespotify_debug_shared.log -Raw
+    ///     $b64 = [regex]::Match($txt, '(?s)\[CustomizeBody\] base64-begin\r?\n(.*?)\r?\n\[CustomizeBody\] base64-end').Groups[1].Value
+    ///     $msg = [Convert]::FromBase64String($b64)
+    ///     # 前 N 字节是 CustomizeMessage 的字段头，跳过它才拿到 ResolveConfiguration：
+    ///     # 这里用现成的提取脚本，别手抠（见 Tools/eevee-hookfinder/ 的说明）
+    ///
+    /// ⚠️ 一次性：抓到一次就够，别留在发布版里常开。
+    private static var didDumpCustomizeBody = false
+
+    /// 单次抓取上限。真实 customize body 约 100KB；超过这个数说明拿到的不是它
+    /// （或结构变了），宁可不抓也不要往日志里灌一坨没用的东西。
+    private static let customizeDumpLimit = 262_144
+
+    static func dumpCustomizeBodyIfEnabled(_ buffer: Data) {
+        guard UserDefaults.dumpCustomizeBody else { return }
+        guard !didDumpCustomizeBody else { return }
+        didDumpCustomizeBody = true
+
+        guard buffer.count <= customizeDumpLimit else {
+            writeDebugLog(
+                "[CustomizeBody] \u{26a0}\u{fe0f} 跳过：\(buffer.count) 字节超过上限"
+                    + " \(customizeDumpLimit)（结构可能变了，先人工看一眼）"
+            )
+            return
+        }
+
+        writeDebugLog(
+            "[CustomizeBody] 原始响应 \(buffer.count) 字节"
+                + " — 下面两行之间就是它（base64），复制出来即可替换种子"
+        )
+        writeDebugLog("[CustomizeBody] base64-begin")
+        writeDebugLog(buffer.base64EncodedString())
+        writeDebugLog("[CustomizeBody] base64-end")
+    }
+
     // MARK: - `has_lyrics` 线上来源探针（排障用）
 
     /// 找出 track 元数据里的 `has_lyrics` 到底搭**哪个 HTTP 响应**过来。
@@ -592,6 +727,10 @@ enum SpotifyResponsePatcher {
             return PatchResult(data: try msg.serializedBytes(), tag: .bootstrap)
         }
         if url.isCustomize {
+            // 抓取必须在**任何改写之前**：这个 buffer 是服务器原样给的那份，
+            // 下面 `serializedData()` 之后就是我们的版本了。
+            dumpCustomizeBodyIfEnabled(buffer)
+
             var msg = try CustomizeMessage(serializedBytes: buffer)
             modifyRemoteConfiguration(&msg.response)
             let data = try msg.serializedData()

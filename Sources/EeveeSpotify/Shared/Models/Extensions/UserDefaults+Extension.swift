@@ -36,6 +36,7 @@ extension UserDefaults {
     private static let blockedArtistsEnabledKey = "blockedArtistsEnabled"
     private static let blockedArtistsKey = "blockedArtists"
     private static let musicStyleNowPlayingKey = "musicStyleNowPlaying"
+    private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
 
     static var musixmatchToken: String {
         get {
@@ -403,6 +404,27 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: musicStyleNowPlayingKey)
+        }
+    }
+
+    // MARK: - customize 响应体抓取（排障用）
+
+    /// 「转储 customize 响应体」。**默认关**，只为**替换种子快照**而存在。
+    ///
+    /// 背景：flag 改写依赖 `customize` 的响应体，而我们只能改写**拿得到的** body。
+    /// 现在用的是随包的 `.bnk`（9.1.76 时期转存）当种子，它够了、但不够**精确**——
+    /// 那份快照里没有 9.1.86 新下发的条目（新设计那批 flag 就在其中）。
+    ///
+    /// 所以：打开这个开关 + 打开「覆盖配置」清一次缓存（逼出 200）→ 下一次启动
+    /// 就能从调试日志里取到**你自己这版**的真 body（base64），把它转成新的
+    /// `.bnk` 换掉旧的即可（见 `SpotifyResponsePatcher.dumpCustomizeBodyIfEnabled`
+    /// 的说明，里面有解码命令）。
+    static var dumpCustomizeBody: Bool {
+        get {
+            container.object(forKey: dumpCustomizeBodyKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: dumpCustomizeBodyKey)
         }
     }
 

@@ -354,6 +354,16 @@ struct EeveeSpotify: Tweak {
 
         activateEeveeCrossfadeForce()
 
+        // customize 种子（2026-10-01）：必须在任何网络改写之前跑。
+        //
+        // 冷启动第一个 customize 常是 304、没有 body，那条路径下
+        // `cachedCustomizeData` 会永远填不满（唯一写入点在 `patch()` 里，而它只有拿到
+        // body 才会被调用）→ `modifyRemoteConfiguration()` 一次都不跑 → `[Flags]` 全灭、
+        // flag 替换（含「Flag 覆盖」）静默失效。这里用随包的 `.bnk` 先喂一份，
+        // 304 兜底就有东西可回放；真 body 一到即被替换。详见
+        // `SpotifyResponsePatcher.seedCustomizeDataIfNeeded`。
+        SpotifyResponsePatcher.seedCustomizeDataIfNeeded()
+
         // 播放器控件触感：开关关着时连 hook 都不装（见 PlayerHaptics.x.swift），
         // 所以不开触感的用户是零开销。开关在设置页读一次，改动需重启。
         activatePlayerHaptics()

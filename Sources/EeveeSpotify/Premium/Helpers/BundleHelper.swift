@@ -78,4 +78,14 @@ class BundleHelper {
             serializedBytes: try Data(contentsOf: url)
         )
     }
+
+    /// 只把 bundle 交出去，让调用方自己定位资源。
+    ///
+    /// 为什么需要它：`resolveConfiguration()` 会**顺带打一行 `[CONFIG]` 日志**并假定
+    /// 调用者就是要"现在用这份配置"。而种子（`SpotifyResponsePatcher.seedCustomizeDataIfNeeded`）
+    /// 只是**读**同一份 `.bnk` 去构造 customize body，既不该冒充"正在用配置"、
+    /// 也不该依赖"覆盖配置"开关的状态 —— 所以给它一个只暴露 bundle 的入口。
+    var configurationBundle: Bundle? {
+        bundle
+    }
 }
