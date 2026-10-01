@@ -38,13 +38,21 @@ enum TabBarGlass {
     /// 玻璃层的关联键（挂在每一颗 tab 视图上，避免重复插）。
     private static var glassKey: UInt8 = 0
 
-    /// 圆角：按每一颗自己的高度算胶囊（`103×49` → 24.5）。
+    /// 玻璃**内缩**多少（每边）。
     ///
-    /// 为什么不做"几颗连成一个整体"：那需要把它们当成同一个玻璃容器（SwiftUI 的
-    /// `GlassEffectContainer` / UIKit 的 `UIGlassContainerEffect`），是另一种做法，
-    /// 而且要把四颗的 frame 合成一条 —— 先做单颗，看起来不对再说。
-    private static func cornerRadius(for bounds: CGRect) -> CGFloat {
-        min(bounds.height, bounds.width) / 2
+    /// ── 为什么要内缩（真机照片 21 换来的）────────────────────────────────────
+    /// iOS 27 的新设计**自己就有一条通栏玻璃筋**（那条"胶囊玻璃"），选中态还有
+    /// Spotify 自己的 `TabBarSelectionController` 在滑动。我们原来铺满整块 103×49，
+    /// 等于**给系统那条筋糊了一层膜** —— 现象就是"四个各自独立的玻璃方块"，
+    /// 而用户要的恰恰是系统那条会滑动、有反射的筋。
+    ///
+    /// 所以改成：只在**图标那一小块**垫一层（每边缩 10pt），
+    /// 系统的筋、滑块、图标全部露出来 —— 我们只做"别挡它"。
+    private static let inset: CGFloat = 10
+
+    /// 圆角：按玻璃自己的尺寸算胶囊。
+    private static func cornerRadius(for size: CGSize) -> CGFloat {
+        min(size.height, size.width) / 2
     }
 
     /// 给一颗 tab 上玻璃。幂等：已经插过就只更新 frame。
@@ -64,16 +72,29 @@ enum TabBarGlass {
             // ★ 插到**索引 0**：图标是 item 的子视图，插在最底下就永远不会盖住它。
             item.insertSubview(glass, at: 0)
             objc_setAssociatedObject(item, &glassKey, glass, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            writeDebugLog("[TabBarGlass] 玻璃已加在 \(className(item)) 上")
+            writeDebugLog("[TabBarGlass] 玻璃已加在 \(className(item)) 上（内缩 \(Int(inset))pt，不盖系统的筋）")
         }
 
-        glass.frame = item.bounds
-        glass.layer.cornerRadius = cornerRadius(for: item.bounds)
+        // 内缩一圈：把系统那条玻璃筋与本地的选中滑块让出来。
+        let size = CGSize(
+            width: max(8, item.bounds.width - inset * 2),
+            height: max(8, item.bounds.height - inset * 2)
+        )
+        glass.frame = CGRect(
+            x: (item.bounds.width - size.width) / 2,
+            y: (item.bounds.height - size.height) / 2,
+            width: size.width,
+            height: size.height
+        )
+        glass.layer.cornerRadius = cornerRadius(for: size)
         glass.layer.cornerCurve = .continuous
         glass.clipsToBounds = true
         // 玻璃自己不吃触摸 —— 点击必须落到 tab 自己的手势上。
         glass.isUserInteractionEnabled = false
-        glass.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        // ⚠️ 内缩之后**不能**再用 autoresizingMask 跟尺寸：那会把 inset 吃掉，
+        // 所以每次布局都由这里重算 frame（hook 在 target 自己的 `layoutSubviews` 上，
+        // 只在它自己布局时跑，滚动中不会去动它）。
+        glass.autoresizingMask = []
     }
 
     /// 造玻璃视图。
