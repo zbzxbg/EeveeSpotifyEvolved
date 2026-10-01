@@ -23,6 +23,23 @@ import ObjectiveC.runtime
 ///
 /// **v4 的规矩**：以"图标内容带"为心（不是整条栏）。
 ///
+/// ── v4.6（2026-10-02，用户反馈两条）────────────────────────────────────────
+///   ① **"点『创建』之后玻璃被拉高"** → 病根：胶囊是按"**看得见**的内容"量出来的，
+///      而「创建」那颗**被选中时会显示一个 40×40 的白色圆底**
+///      （dump：`UIView frame=(32,4 40x40) bg=#FFFFFF alpha=0.00`）。文字藏着时
+///      内容带只剩图标 24pt → 那颗圆底一出现就把带子撑到 40pt → 胶囊 40 → 56pt 且
+///      **图标落在胶囊中心上方 8pt**（照片 29 逐像素实测：胶囊 110px=55pt、图标中心偏上 8pt）。
+///      **规矩（用户拍板）**：胶囊高度**永远按"有文字"的版式**算 ——
+///      与「隐藏标签文字」开关、与「创建」选中与否都无关。
+///   ② **文字藏起来时，四个图标要在这一行里垂直居中** → 量算改成**只读布局几何**
+///      （`layer.position` / `bounds`，**不含我们写进去的 transform**），于是
+///      `dy = 有文字带.midY − 图标带.midY` 是个**常量**（真机 ≈ +10pt）：
+///      一次算准、不自我反馈；关掉开关时它自己回到 0。
+///   ③ **删掉拖动**（v4.3 那一套）：用户报「本该不可滑动的导航栏在某个页面里能被拖着走」
+///      （日志 25 的 `[Tree]` 里能看到胶囊与四颗一起被拖到 y=-27）。按下回弹
+///      （`UIGlassEffect.isInteractive`）**保留**，折射本来就是系统玻璃自带的；
+///      pan / dragOffset / dragLimit / `TabBarDragTarget` 全部删除。
+///
 /// ── v4.2（2026-10-02，用户反馈两条）────────────────────────────────────────
 ///   ① **"四颗离得太开"** → `tightenRow` 用 **transform** 把四颗往中心收 20%
 ///      （外两颗各向内 ~31pt，间距 103.5 → 82.7pt）。用 transform 是因为它
@@ -75,12 +92,14 @@ enum TabBarGlassPlate {
     /// 左右留边。照片 21 里那条胶囊**不是**贴边的，两侧有明显留白。
     private static let sideInset: CGFloat = 8
 
-    /// 上下留边：胶囊高 = 图标内容带高 + 上下各这么多。
-    /// **这一项就是"胖瘦"旋钮**：5 → 53pt 高；8 → 60pt（2026-10-02 用户反馈
+    /// 上下留边：胶囊高 = **"有文字"版式那条带子**的高 + 上下各这么多。
+    /// **这一项就是"胖瘦"旋钮**：5 → 53pt 高；8 → 61pt（2026-10-02 用户反馈
     /// "玻璃太扁（宽高比不对）"，从 5 调到 8）。
+    /// ⚠️ v4.6 起这里的"带子"**永远按有文字的版式算**（见 `contentBands`），
+    /// 所以高度与「隐藏标签文字」开关无关 —— 用户拍板的就是这一条。
     private static let verticalPadding: CGFloat = 8
 
-    /// 左右留边：胶囊 = **图标内容带** + 左右各这么多。
+    /// 左右留边：胶囊 = **有文字版式那条带子** + 左右各这么多。
     /// ⚠️ 不再是"栏宽 − 固定值"：四颗被收紧之后，胶囊要贴着那一行走，不然又变成一条长条。
     private static let horizontalPadding: CGFloat = 20
 
@@ -89,7 +108,11 @@ enum TabBarGlassPlate {
     /// **只在 `stack.subviews.count == 4` 这个已知形状上生效**。
     private static let tightenFactor: CGFloat = 0.20
 
-    /// 允许胶囊最多越出栏顶多少。
+    /// 纵向居中的位移上限。真机算出来是 ≈ +10pt；给它 24 是"万一量歪了，
+    /// 也不至于把图标推到栏外去"的保险丝。
+    private static let rowShiftLimit: CGFloat = 24
+
+    /// 允许胶囊最多越出栏顶多少（v4.6 起基本用不到：有文字版式算出来是 `y = -3`）。
     /// 依据（真机，日志 20）：这条栏**不裁剪** —— 它自己的
     /// `TabBarGradientView(0,-112 414x195)` 就画在栏顶以上 112pt 处。
     private static let maxOverhang: CGFloat = 8
@@ -141,17 +164,24 @@ enum TabBarGlassPlate {
         }
         layering(plate: plate, stack: stack, bar: bar)
 
-        // ★ 先把四颗往中间收（用 transform，**不改布局**），**再**量内容带 ——
-        //   这样量到的就是收紧后的真实位置，胶囊自然贴着它们走。
-        //   ⚠️ 这一步**不带拖动位移**：带了就会把它量进内容带、之后被算第二次。
-        if let stack { tightenRow(stack, in: bar, includeDrag: false) }
-
-        // ★ 再按开关处理"标签文字"（默认藏）。**必须在量内容带之前** ——
-        //   藏掉之后 `collectContent` 会自然跳过被隐藏的视图，胶囊就只剩图标那一圈（~40pt）。
+        // ★ 按开关处理"标签文字"（默认藏）。**量算不再依赖这件事** ——
+        //   `contentBands` 走的是"布局几何 + **有文字的版式**"（v4.6）：
+        //   文字藏没藏、「创建」那颗的白色圆底露没露出，量出来的带子都一样。
         applyLabelVisibility(in: stack)
 
-        // ── 摆位：以"图标内容带"为心（不是整条栏；v3 就是死在这里）─────────────
-        let band = contentBand(in: bar, stack: stack)
+        // ★ 四颗的横向收紧量：**只看布局**（v4.4 起就是这么算的），不看 transform。
+        let dx = tightenOffsets(in: bar, stack: stack)
+
+        // ── 摆位：以"有文字的那条带子"为心 ──────────────────────────────────────
+        //   ⚠️ 这里的带子**含横向收紧量、不含纵向位移** ——
+        //   胶囊的位置与大小因此与"我们给四颗挪了多少"完全无关（不会自我反馈）。
+        let bands = contentBands(in: bar, stack: stack, dx: dx, dy: 0)
+        // 兜底：图标/文字一个都没认出来（类名换了）→ 退回 v4.5 的老量法（看得见的内容）。
+        let band = bands.full ?? bands.icons ?? contentBand(in: bar, stack: stack)
+
+        // ── 纵向：文字藏起来时，把四个图标挪到这条带子的**中心** ────────────────
+        //   有文字时不动（那是 Spotify 自己的"图标 + 文字"版式，本来就填满这条带子）。
+        let dy = rowShiftForIcons(bands: bands)
 
         // ⚠️ 几何不可信就**什么都不画**（v4.0 在这里画出了一条 16pt 的小棍）。
         // 真机证据（日志 21）：
@@ -172,7 +202,8 @@ enum TabBarGlassPlate {
             max(16, bar.bounds.width - sideInset * 2),
             max(16, band.width + horizontalPadding * 2)
         )
-        // 高：内容带 + 上下留边；允许最多越出栏顶 `maxOverhang`（栏不裁剪，见常量说明）。
+        // 高：**"有文字"版式的那条带子** + 上下留边（用户 2026-10-02 拍板：
+        //     无论「隐藏标签文字」开还是关，高度都按有文字时算 —— 高度因此恒定）。
         let height = min(
             bar.bounds.height + maxOverhang,
             max(16, band.height + verticalPadding * 2)
@@ -186,13 +217,14 @@ enum TabBarGlassPlate {
             height: height
         )
 
-        // ★ 现在才把"拖动"这一份加上去：四颗 + 玻璃一起挪（仍然不动布局）。
-        if let stack { tightenRow(stack, in: bar, includeDrag: true) }
+        // ★ 最后才写四颗的 transform：横向收紧 + （文字藏起来时）纵向居中。
+        //   幂等（值没变不写）且**不动布局** —— 与 v4.2 起定的纪律一致。
+        if let stack { tightenRow(stack, in: bar, dx: dx, dy: dy) }
 
         // frame 是相对**父视图**的：v4 起玻璃住在 CompactView 里，坐标系与栏一致，
         // 但仍然显式换算一次 —— 免得将来层序再变就摆错地方。
+        // ⚠️ v4.6 起**没有**拖动位移这一项了（拖动已删，见文件头 ③）。
         let frame = (plate.superview ?? bar).convert(target, from: bar)
-            .offsetBy(dx: dragOffset.x, dy: dragOffset.y)
 
         if !plate.frame.equalTo(frame) {
             plate.frame = frame
@@ -202,7 +234,7 @@ enum TabBarGlassPlate {
             plate.layer.cornerRadius = radius
         }
 
-        report(frame: frame, band: band, bar: bar, host: plate.superview)
+        report(frame: frame, band: band, icons: bands.icons, shift: dy, bar: bar, host: plate.superview)
     }
 
     @MainActor
@@ -212,76 +244,166 @@ enum TabBarGlassPlate {
         objc_setAssociatedObject(bar, &plateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
-    // MARK: - 拖动（"推一下、玻璃像液体一样折、松手弹回"）
+    // MARK: - 量算：四颗的布局几何（v4.6 起不再读 frame，也不 convert 到栏）
 
-    /// 当前拖动位移。**玻璃和四颗图标一起挪**，所以它同时作用于：
-    /// `tightenRow`（写进四颗的 transform）与胶囊自己的 frame。
-    private static var dragOffset: CGPoint = .zero
-
-    /// 拖动范围（横向 / 纵向）。**故意夹得很小**：
-    /// 这是"推一下看它折"的手感，不是"把标签栏搬到屏幕别处"——
-    /// 搬走会撞上安全区、迷你播放条和系统手势。
-    private static let dragLimit = CGSize(width: 70, height: 24)
-
-    private static var panKey: UInt8 = 0
-
-    /// 给栏装一个拖动手势。幂等（关联对象挡住重复安装）。
+    /// 四颗的**横向收紧量**（只看布局，不看 transform —— v4.4 的教训）。
     ///
-    /// ⚠️ 两条纪律：
-    ///   · `cancelsTouchesInView = false` / `delaysTouchesBegan = false`
-    ///     —— **绝不吃掉标签的点击**（手势只"看"，不抢）；与别的识别器**并行**（见 `TabBarDragTarget`）；
-    ///   · 只平移，**不改任何布局**（图标走 transform，玻璃走我们自己的 frame）。
+    /// ⚠️ 首次布局时 `stack.bounds.width == 0`（内容还没排），那时按它推算会得到
+    /// "四颗全被推 +41"（照片 28 / 日志 24 的真凶）。所以宽度没过闸就**一律返回空**：
+    /// 这一轮不收紧（量出来的就是没收紧的布局），`apply` 那边的有界重试会把我们叫回来。
+    /// 形状不是"四颗"时同样不动（宁可不动，也别乱动）。
     @MainActor
-    static func installDrag(on bar: UIView) {
-        guard isEnabled else { return }
-        guard objc_getAssociatedObject(bar, &panKey) == nil else { return }
+    private static func tightenOffsets(in bar: UIView, stack: UIView?) -> [CGFloat] {
+        guard let stack, stack.subviews.count == 4, stack.bounds.width > 100 else { return [] }
+        let count = CGFloat(stack.subviews.count)
+        let centerX = bar.bounds.midX
 
-        let pan = UIPanGestureRecognizer(
-            target: TabBarDragTarget.shared,
-            action: #selector(TabBarDragTarget.handle(_:))
-        )
-        pan.cancelsTouchesInView = false
-        pan.delaysTouchesBegan = false
-        pan.maximumNumberOfTouches = 1
-        pan.delegate = TabBarDragTarget.shared
-        bar.addGestureRecognizer(pan)
-        objc_setAssociatedObject(bar, &panKey, pan, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        writeDebugLog(
-            "[TabBarPlate] 拖动已装（±\(Int(dragLimit.width))/±\(Int(dragLimit.height))pt，松手弹回）"
-        )
-    }
-
-    @MainActor
-    static func updateDrag(_ translation: CGPoint, on bar: UIView) {
-        let clamped = CGPoint(
-            x: max(-dragLimit.width, min(dragLimit.width, translation.x)),
-            y: max(-dragLimit.height, min(dragLimit.height, translation.y))
-        )
-        if abs(clamped.x - dragOffset.x) < 0.5, abs(clamped.y - dragOffset.y) < 0.5 { return }
-        dragOffset = clamped
-        apply(to: bar)
-    }
-
-    @MainActor
-    static func endDrag(on bar: UIView) {
-        guard dragOffset != .zero else { return }
-        dragOffset = .zero
-        // 弹回：动画里跑一次 `apply` —— 目标状态是"不带偏移"，
-        // 于是玻璃与四颗会自己滑回去；**这个过程里折射一直在动**，
-        // 照片 23 那种"液体"手感就来自这个动态过程。
-        UIView.animate(
-            withDuration: 0.5,
-            delay: 0,
-            usingSpringWithDamping: 0.72,
-            initialSpringVelocity: 0.6,
-            options: [.allowUserInteraction, .beginFromCurrentState]
-        ) {
-            // ⚠️ `animations:` 是 **escaping** 闭包，不继承 actor 隔离 ——
-            // 直接写 `apply(to: bar)` 会被判"在非隔离上下文里调 @MainActor 函数"（编译错）。
-            // 仓库的写法就是套一层 `onMainThreadSync`（已经在主线程时同步执行，动画照样生效）。
-            onMainThreadSync { apply(to: bar) }
+        return (0..<stack.subviews.count).map { index in
+            // ★ 用**等分布局推算**中心，而不是读 `item.frame.midX`：
+            //   Apple 对 `frame` 的说明是"transform 非恒等时该值未定义"，实测它会把我们
+            //   上一轮写进去的位移算进去 → 每轮又按"已经被挪过的位置"再收一次 →
+            //   收敛点整体偏移，**两端最明显**（第 4 颗「创建」偏得最多）。
+            let localMidX = stack.bounds.width * (CGFloat(index) + 0.5) / count
+            let layoutMidX = stack.convert(CGPoint(x: localMidX, y: 0), to: bar).x
+            return (centerX - layoutMidX) * tightenFactor
         }
     }
+
+    /// 四颗的**内容带**：`icons` 只算图标，`full` 是"图标 ∪ 文字"（= **有文字的版式**）。
+    ///
+    /// ── 为什么另起一套，不用下面的 `contentBand`（"看得见的内容"并集）──────────
+    /// v4.5 那条"点『创建』玻璃就被拉高"正是它造成的：「创建」那颗**选中时会显示一个
+    /// 40×40 的白色圆底**（dump：`UIView frame=(32,4 40x40) bg=#FFFFFF alpha=0.00`）——
+    /// 它既不是图标也不是文字，却会被"并集"算成内容 → 文字藏着时带子 24 → 40pt →
+    /// 胶囊 40 → 56pt（照片 29 实测 55pt，且图标落在中心上方 8pt）。
+    /// 现在只认两类节点（图标 / 文字）：白色圆底天然不算内容；文字**藏没藏都算**
+    /// （藏起来时它的 frame 仍然有效，真机 dump：`SPTEncoreLabel frame=(41,34 22x16) hidden`）
+    /// → 量出来的**永远是有文字的版式**，与「隐藏标签文字」这个开关无关。
+    ///
+    /// ── 为什么读 `layer.position` / `bounds`，不读 `frame` / `convert(...)` ──
+    /// 后两者**包含我们上一轮写进去的 transform**；v4.6 起 transform 里还有纵向位移，
+    /// 一漂就变成"胶囊跟着一起往下走"。CALayer 的 `position` 是"布局把这一颗放在哪儿"
+    /// （transform 是绕 anchorPoint 施加的，不动 position），`bounds` 是布局尺寸，两个都干净。
+    /// 子树内部用 `node.convert(node.bounds, to: item)` —— 这一段不经过 item 自己的 transform。
+    ///
+    /// - Parameters:
+    ///   - dx: 每颗的横向收紧量（**要算进**带子，胶囊才贴着收紧后的那一行走）。
+    ///   - dy: 纵向位移。**量胶囊时传 0**：胶囊的位置绝不能随我们给四颗的位移走
+    ///     （否则纵向位移会把胶囊一起搬下去 —— 看着像"没居中"，其实是整体在漂）。
+    @MainActor
+    private static func contentBands(
+        in bar: UIView,
+        stack: UIView?,
+        dx: [CGFloat],
+        dy: CGFloat
+    ) -> (icons: CGRect?, full: CGRect?) {
+        guard let stack else { return (icons: nil, full: nil) }
+
+        var icons: CGRect?
+        var full: CGRect?
+
+        for (index, item) in stack.subviews.enumerated() {
+            let size = item.bounds.size
+            // ⚠️ **有一颗还没排（size 0）就整条都不量**：宁可退回老量法（`contentBand`）
+            //    并等下一次布局，也不要拿"四颗里只有一颗有几何"去算胶囊 ——
+            //    那会画出一条只裹着那一颗的小胶囊（v4.0 的"16pt 小棍"就是同一类事故）。
+            guard size.width > 1, size.height > 1 else { return (icons: nil, full: nil) }
+
+            // ① 布局原点（`layer.position` 不受 transform 影响，见上面的说明）。
+            let position = item.layer.position
+            let originX = position.x - size.width / 2 + (index < dx.count ? dx[index] : 0)
+            let originY = position.y - size.height / 2 + dy
+
+            var iconUnion: CGRect?
+            var labelUnion: CGRect?
+            collectBandNodes(
+                in: item, node: item, depth: 0,
+                iconInto: &iconUnion, labelInto: &labelUnion
+            )
+
+            // ② 子树里的矩形是**相对 item** 的；加上布局原点与位移，再整体换算到栏坐标系。
+            func inBar(_ rect: CGRect) -> CGRect {
+                stack.convert(rect.offsetBy(dx: originX, dy: originY), to: bar)
+            }
+
+            if let iconUnion {
+                let rect = inBar(iconUnion)
+                icons = icons.map { $0.union(rect) } ?? rect
+                full = full.map { $0.union(rect) } ?? rect
+            }
+            if let labelUnion {
+                let rect = inBar(labelUnion)
+                full = full.map { $0.union(rect) } ?? rect
+            }
+        }
+
+        return (icons: icons, full: full)
+    }
+
+    /// 一棵子树里的**图标**与**文字**（并集成相对 `root` 的矩形）。
+    ///
+    /// 认类名（`EncoreIconView` / `EncoreLabel`），**不做运行时类枚举** —— 那条路崩过两次。
+    /// ⚠️ 这里**故意不看 `isHidden` / `alpha`**：要的就是"有文字的版式"（文字是我们自己藏的），
+    /// 而「创建」那颗白色圆底那种装饰，靠"不是图标也不是文字"被排除掉。
+    @MainActor
+    private static func collectBandNodes(
+        in root: UIView,
+        node: UIView,
+        depth: Int,
+        iconInto: inout CGRect?,
+        labelInto: inout CGRect?
+    ) {
+        guard depth <= 8 else { return }
+
+        let name = NSStringFromClass(type(of: node))
+        let isIcon = name.contains("EncoreIconView")
+        let isLabel = name.contains("EncoreLabel")
+        if isIcon || isLabel {
+            let rect = node.convert(node.bounds, to: root)
+            if rect.width > 0.5, rect.height > 0.5 {
+                if isIcon {
+                    iconInto = iconInto.map { $0.union(rect) } ?? rect
+                } else {
+                    labelInto = labelInto.map { $0.union(rect) } ?? rect
+                }
+            }
+            // 图标/文字底下不再往下找（里层的 `UILabel` 类名是 `UILabel`，本来也不会命中）。
+            return
+        }
+
+        for sub in node.subviews {
+            collectBandNodes(
+                in: root, node: sub, depth: depth + 1,
+                iconInto: &iconInto, labelInto: &labelInto
+            )
+        }
+    }
+
+    /// 文字藏起来时，四个图标要**往下挪多少**才落在这一行的中心上。
+    ///
+    /// `dy = 有文字带.midY − 图标带.midY`（真机 ≈ +10pt）。两个带子都是"布局几何"量的，
+    /// 而且 dy 同时作用于两者 → 相减之后 **dy 自己消掉**：这是**常量**，一次算准、不自我反馈。
+    /// 有文字时返回 0：那是 Spotify 自己的"图标 + 文字"版式，本来就填满这条带子。
+    @MainActor
+    private static func rowShiftForIcons(bands: (icons: CGRect?, full: CGRect?)) -> CGFloat {
+        guard UserDefaults.tabBarHideLabels else { return 0 }
+        guard let icons = bands.icons, let full = bands.full else { return 0 }
+        let delta = full.midY - icons.midY
+        guard abs(delta) >= 0.5 else { return 0 }
+        return max(-rowShiftLimit, min(rowShiftLimit, delta))
+    }
+
+    // MARK: - 拖动：**已删除**（v4.6）
+
+    /// v4.3 那套"推一下、玻璃像液体一样折、松手弹回"**整段删掉了**。
+    ///
+    /// 用户 2026-10-02 反馈：「本该不可滑动的导航栏，在某个页面里能被拖着走」
+    /// —— 日志 25 的 `[Tree]` 就是现场：`UIVisualEffectView@39,0,312,40` /
+    /// `ElementContentView@19,3,103,49`，胶囊与四颗一起被拖到 y=-27。
+    ///
+    /// 保留的是**按下回弹**（造玻璃时的 `UIGlassEffect.isInteractive`，见 `makeGlassView`）——
+    /// 那才是"液态"的手感来源；拖动是 v4.3 额外加的一层，现在按用户要求撤掉。
+    /// （要恢复的话：git 历史里的 v4.3 那一段 + `tightenRow` 的 `dx/dy` 上加一份 dragOffset。）
 
     // MARK: - 层序
 
@@ -312,9 +434,9 @@ enum TabBarGlassPlate {
         if plate.layer.cornerCurve != .continuous { plate.layer.cornerCurve = .continuous }
     }
 
-    // MARK: - 收紧四颗（用户反馈"图标之间距离太大"）
+    // MARK: - 四颗的位移（横向收紧 + 纵向居中）
 
-    /// 把四颗标签往中间收一点。
+    /// 把四颗标签挪到位：**横向往中间收** + **纵向落到这一行的中心**（v4.6）。
     ///
     /// ⚠️ **为什么用 `transform` 而不是改 frame/约束**：
     /// transform 是"渲染期"的位移，**不参与布局** —— 于是
@@ -323,48 +445,26 @@ enum TabBarGlassPlate {
     ///      把布局与手势打断。
     ///
     /// 代价与两条纪律：
-    ///   · 这几颗的"视觉位置"与"布局位置"分开了 → **凡是反过来量它们位置的地方一律用
-    ///     `convert(_:to:)`**（UIKit 会算上 transform）；本文件里所有取值都已经这么做了；
-    ///   · 算"往中心收多少"时**必须用 `item.frame.midX`**（布局位置，不受 transform 影响），
-    ///     不能用 `convert(item.center)` —— 那会把自己上一轮收进去的量再算一遍，越收越拢。
+    ///   · 这几颗的"视觉位置"与"布局位置"分开了 → **凡是反过来量它们位置的地方，
+    ///     一律不能读 `frame` / `center`**（那里带着我们的位移）；v4.6 起量算全部改走
+    ///     `layer.position` / `bounds`（见 `contentBands`），理由都写在那儿；
+    ///   · `dx` / `dy` **由调用方算好**（`tightenOffsets` / `rowShiftForIcons`），
+    ///     这个函数只负责"写进 transform、幂等"。
     ///
-    /// 幂等 + 可撤销：值没变不写；`tightenFactor = 0` 时恢复 `.identity`。
-    /// 只在"四颗"这个已知形状上动：数量一变就什么都不做（宁可不动，也别乱动）。
-    /// - Parameter includeDrag: 是否把当前的拖动位移一起写进去。
-    ///   **量内容带时必须传 `false`**（理由见 `apply` 里那一步的注释）。
+    /// 幂等 + 可撤销：值没变不写；`tightenFactor = 0` 且 `dy = 0` 时恢复 `.identity`。
+    /// - Parameters:
+    ///   - dx: 每颗的横向收紧量；数量对不上（不是四颗 / 布局还没排好）时传空数组 = 不动。
+    ///   - dy: 纵向位移（文字藏起来时的"落到中心"，见 `rowShiftForIcons`）。
     @MainActor
-    private static func tightenRow(_ stack: UIView, in bar: UIView, includeDrag: Bool) {
+    private static func tightenRow(_ stack: UIView, in bar: UIView, dx: [CGFloat], dy: CGFloat) {
         let items = stack.subviews
-        guard items.count == 4 else { return }
-
-        // ⚠️ 布局还没好就别算。首次那几帧 stack 宽度是 0，按它推算出来是"四颗全部 +41"；
-        // 而 `frame` 在 transform 非恒等时又是**未定义**的 —— 两个坑叠起来，就是照片 28 里
-        // "刚启动时『创建』偏了、划掉再进 / 点一下就正常"（v4.3 的真机现象，日志 24 的
-        // dump 里四颗整整齐齐 +41 就是证据）。这一轮什么都不做即可：
-        // `apply` 那边的有界重试会把我们叫回来。
-        guard stack.bounds.width > 100 else { return }
-
-        let count = CGFloat(items.count)
-        let centerX = bar.bounds.midX
+        guard items.count == 4, dx.count == items.count else { return }
 
         for (index, item) in items.enumerated() {
-            // ★ 用**等分布局推算**中心，而不是读 `item.frame.midX`：
-            //   Apple 对 `frame` 的说明是"transform 非恒等时该值未定义"，实测它会把我们
-            //   上一轮写进去的位移算进去 → 每轮又按"已经被挪过的位置"再收一次 →
-            //   收敛点整体偏移，**两端最明显**（第 4 颗「创建」偏得最多）。
-            //   这里只用 stack 的宽度与序号，**不依赖任何被 transform 影响过的值**。
-            let localMidX = stack.bounds.width * (CGFloat(index) + 0.5) / count
-            let layoutMidX = stack.convert(CGPoint(x: localMidX, y: 0), to: bar).x
-
-            var dx = (centerX - layoutMidX) * tightenFactor
-            var dy: CGFloat = 0
-            if includeDrag {
-                dx += dragOffset.x
-                dy += dragOffset.y
-            }
-            let wanted: CGAffineTransform = (abs(dx) < 0.5 && abs(dy) < 0.5)
+            let offset = CGPoint(x: dx[index], y: dy)
+            let wanted: CGAffineTransform = (abs(offset.x) < 0.5 && abs(offset.y) < 0.5)
                 ? .identity
-                : CGAffineTransform(translationX: dx, y: dy)
+                : CGAffineTransform(translationX: offset.x, y: offset.y)
             if item.transform != wanted { item.transform = wanted }
         }
     }
@@ -375,8 +475,9 @@ enum TabBarGlassPlate {
     ///
     /// ── 为什么这件事值得做 ────────────────────────────────────────────────────
     /// ① 观感：照片里那条栏只有图标，文字一去掉整条就"干净"了；
-    /// ② **顺手把"玻璃太扁"解掉**：内容带从"图标 + 文字 44pt"变成"只有图标 ~24pt"，
-    ///    胶囊自动收到 ~40pt —— 正好是照片里的比例，图标仍然居中。
+    /// ② 藏掉之后**图标那一行更干净、也更矮**，但要按什么高度画由 `contentBands` 说了算 ——
+    ///    v4.6 起"带子"永远按**有文字的版式**量，所以这条开关**只影响文字与图标的纵向居中，
+    ///    不影响胶囊的高度**（用户 2026-10-02 拍板）。
     ///
     /// ⚠️ 会不会被 Spotify 的 binder 写回来？—— 每次栏布局我们都会再走一遍，并且**计数**；
     /// 写回超过 `labelWriteBackLimit` 次就停手并打日志（宁可保持原生，也不跟它抢 —— 文档铁律）。
@@ -478,6 +579,10 @@ enum TabBarGlassPlate {
 
     /// 图标那一行**真正看得见的内容**的范围（栏坐标系）。
     ///
+    /// ⚠️ **v4.6 起这个只当兜底**：正常路径走 `contentBands`（布局几何 + 有文字的版式）。
+    /// 只有"图标 / 文字一个都没认出来"（类名换了）或"四颗还没排"时才落到这里，
+    /// 好处是**行为跟 v4.5 一致**（宁可保持原样，也不画错）。
+    ///
     /// 为什么不用 stack 自己的框：真机树里 stack 是 `0..49`，但里面的
     /// `Encore.IconView` 在 `5..29`、`Encore.Label` 在 `33..48` —— 那 5pt 的顶部留白
     /// 不该算进"图标那一行"，否则胶囊又会偏下去（v3 的错就是这么来的）。
@@ -526,7 +631,7 @@ enum TabBarGlassPlate {
             if !didReportGiveUp {
                 didReportGiveUp = true
                 writeDebugLog(
-                    "[TabBarPlate] ⚠️ 拿不到图标内容带的几何（栏还没进窗口？）— 这一轮先不画，等下一次布局"
+                    "[TabBarPlate] ⚠️ 拿不到四颗的几何（栏还没进窗口？）— 这一轮先不画，等下一次布局"
                 )
             }
             return
@@ -570,21 +675,37 @@ enum TabBarGlassPlate {
         return true
     }
 
-    /// 报一次账：插在哪、摆在哪、内容带是多少。
-    /// 只在 frame 变化时报，且最多 6 条 —— 下次日志不用看图就能验这条改动。
+    /// 报一次账：插在哪、摆在哪、**有文字版式那条带子**是多少、图标被下移了多少。
+    /// 只在 frame 变化时报，且最多 10 条 —— 下次日志不用看图就能验这条改动。
+    ///
+    /// v4.6 起这一行是**验收证据**：高度应当是"有文字"的 `~61`（`…x61`），
+    /// 而且**点不点「创建」都是这个数**；`dy=+10` 表示图标已经被挪到这一行的中心。
     @MainActor
-    private static func report(frame: CGRect, band: CGRect, bar: UIView, host: UIView?) {
+    private static func report(
+        frame: CGRect,
+        band: CGRect,
+        icons: CGRect?,
+        shift: CGFloat,
+        bar: UIView,
+        host: UIView?
+    ) {
         guard !frame.equalTo(lastReportedFrame) else { return }
         lastReportedFrame = frame
-        guard reportCount < 6 else { return }
+        guard reportCount < 10 else { return }
         reportCount += 1
 
+        let iconText = icons.map {
+            String(format: "(%.0f,%.0f %.0fx%.0f)",
+                   $0.origin.x, $0.origin.y, $0.size.width, $0.size.height)
+        } ?? "—"
+
         writeDebugLog(String(
-            format: "[TabBarPlate] 胶囊 (%.0f,%.0f %.0fx%.0f) r=%.1f ← 图标内容带 (%.0f,%.0f %.0fx%.0f)"
-                + " [栏 %.0fx%.0f] 插在 %@ 里",
+            format: "[TabBarPlate] 胶囊 (%.0f,%.0f %.0fx%.0f) r=%.1f ← 有文字带 (%.0f,%.0f %.0fx%.0f)"
+                + " 图标带 %@ dy=%+.1f [栏 %.0fx%.0f] 插在 %@ 里",
             frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
             frame.size.height / 2,
             band.origin.x, band.origin.y, band.size.width, band.size.height,
+            iconText, shift,
             bar.bounds.width, bar.bounds.height,
             host.map { className($0) } ?? "—"
         ))
@@ -644,7 +765,7 @@ enum TabBarGlassPlate {
 ///  `#1 NavigationUI_TabBarImpl.TabBarView frame=(0,0 414x83) id=elements-tabs-view-identifier`）。
 ///
 /// ⚠️ 只碰**这一个目标**（栏自己）：不像听歌页那版"遍历整窗 + 每帧清别人底色"，
-/// 所以不会影响滚动或别处。
+/// 所以不会影响滚动或别处。v4.6 起**也不再往这条栏上装任何手势**（拖动已删）。
 class TabBarPlateHook: ClassHook<UIView> {
     typealias Group = TabBarGlassGroup
     static let targetName = "NavigationUI_TabBarImpl.TabBarView"
@@ -654,49 +775,7 @@ class TabBarPlateHook: ClassHook<UIView> {
         let bar = self.target
         onMainThreadSync {
             TabBarGlassPlate.apply(to: bar)
-            TabBarGlassPlate.installDrag(on: bar)   // 幂等：装一次就够
         }
-    }
-}
-
-// MARK: - 拖动的手势目标
-
-/// 单开一个 target：Orion 的 hook 类不适合直接当手势目标。
-///
-/// ⚠️ 这个手势**只"看"，不抢**：
-///   · `cancelsTouchesInView = false`（在 `installDrag` 里设）→ 标签点击照常；
-///   · 与别的识别器**并行** → 就算 Spotify 自己也在这条栏上装了手势，两边都能识别；
-///   · 只有"明显横向的拖动"才开始（`gestureRecognizerShouldBegin`）→ 竖着滑页面不受影响。
-final class TabBarDragTarget: NSObject, UIGestureRecognizerDelegate {
-
-    static let shared = TabBarDragTarget()
-
-    @objc func handle(_ pan: UIPanGestureRecognizer) {
-        guard let bar = pan.view else { return }
-        let translation = pan.translation(in: bar)
-
-        switch pan.state {
-        case .began, .changed:
-            onMainThreadSync { TabBarGlassPlate.updateDrag(translation, on: bar) }
-        case .ended, .cancelled, .failed:
-            onMainThreadSync { TabBarGlassPlate.endDrag(on: bar) }
-        default:
-            break
-        }
-    }
-
-    /// 明显横向、且有速度，才认。避免和"点击标签""竖滑列表"抢。
-    @objc func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        guard let pan = gesture as? UIPanGestureRecognizer, let bar = pan.view else { return false }
-        let velocity = pan.velocity(in: bar)
-        return abs(velocity.x) > abs(velocity.y) * 1.5 && abs(velocity.x) > 80
-    }
-
-    @objc func gestureRecognizer(
-        _ gesture: UIGestureRecognizer,
-        shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
-    ) -> Bool {
-        true
     }
 }
 
@@ -709,5 +788,6 @@ func activateTabBarGlass() {
     writeDebugLog(
         "[TabBarPlate] installed (enabled=\(UserDefaults.tabBarGlass ? "ON" : "OFF"))"
             + " — 一条玻璃胶囊，锚在图标那一行上，图标浮在它上面"
+            + "（v4.6：高度按「有文字」版式恒定、无拖动）"
     )
 }
