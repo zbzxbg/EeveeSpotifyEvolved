@@ -1,3 +1,10 @@
+// ⚠️ 这个文件原来**没有任何 import**（此前只调协议自己的方法，不需要）。
+// 加了 `string(ifResponding:)` 之后就用到了 `NSObject` / `Selector` / `perform` ——
+// 它们来自 Foundation（ObjectiveC 由 Foundation 再导出），**必须显式 import**
+// （2026-10-01 CI：`cannot find type 'NSObject' in scope` / `cannot find 'Selector' in scope`）。
+import Foundation
+import ObjectiveC.runtime
+
 extension SPTPlayerTrack {
     var trackIdentifier: String {
         self.URI().spt_trackIdentifier()

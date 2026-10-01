@@ -105,7 +105,7 @@ enum MusicStyleNowPlaying {
         guard let tint = tintColor(fromHex: track?.extractedColorHex()) else {
             // 拿不到颜色（本地文件、还没抽好）→ 给一层中性的深色，保证页面不出现"半透明黑洞"。
             layer.colors = [UIColor(white: 0.10, alpha: 1).cgColor, UIColor(white: 0.04, alpha: 1).cgColor]
-            layer.locations = [0, 1]
+            layer.locations = [NSNumber(value: 0), NSNumber(value: 1)]
             return
         }
 
@@ -114,7 +114,9 @@ enum MusicStyleNowPlaying {
             darken(tint, by: 0.55).cgColor,
             UIColor(white: 0.03, alpha: 1).cgColor,
         ]
-        layer.locations = [0, 0.55, 1]
+        // 显式 `NSNumber`：`locations` 是 `[NSNumber]?`，混合整/浮点字面量靠推断容易出岔子
+        // （盲写没有编译器，这种地方一律写死类型）。
+        layer.locations = [NSNumber(value: 0), NSNumber(value: 0.55), NSNumber(value: 1)]
     }
 
     /// `extractedColorHex()` → `UIColor`。8 位按 ARGB（`FF62787D`），6 位按 RGB。
