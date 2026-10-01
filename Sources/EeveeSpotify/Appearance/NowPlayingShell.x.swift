@@ -1,4 +1,5 @@
 import Foundation
+import Orion
 import UIKit
 import ObjectiveC.runtime
 
@@ -28,6 +29,8 @@ import ObjectiveC.runtime
 ///   2. 幂等：所有施加都先判断再写，重复 layout 不叠加、不改动别人；
 ///   3. 探测式取值：`SPTPlayerTrack` 的 getter 一律走 `string(ifResponding:)`
 ///      （手写 protocol 声明 ≠ 实现，2026-10-01 崩过两次）。
+struct NowPlayingShellGroup: HookGroup {}
+
 enum NowPlayingShell {
 
     /// 当前活着的壳（一页一个）。weak：页面销毁后自动失效。

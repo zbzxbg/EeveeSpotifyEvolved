@@ -151,7 +151,10 @@ struct EeveeExtrasSettingsView: View {
                     )
                 )
 
-                if shellEnabled {
+                // ⚠️ `shadow.shellEnabled` 而不是 `shellEnabled`：`Shadow` 是这个 View 的
+                // **嵌套私有结构**，实例在 `@State private var shadow` 里 ——
+                // 裸写属性名是取不到的（2026-10-01 CI 的 `cannot find 'shellEnabled' in scope`）。
+                if shadow.shellEnabled {
                     Toggle(
                         "now_playing_shell_backdrop".localized,
                         isOn: shadowBinding(
