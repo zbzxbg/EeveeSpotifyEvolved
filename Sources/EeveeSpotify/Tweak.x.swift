@@ -396,6 +396,11 @@ struct EeveeSpotify: Tweak {
         // 与 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`。
         activateTabBarGlass()
 
+        // 标签栏内部结构探针：**只读、只打一次日志**，用来量出那条栏的真实层级
+        // （谁是底、谁是选中滑块、图标在哪、安全区多少）。
+        // 第一版玻璃我是按"每颗 103×49"猜的，结果又难看又挡了选中胶囊 —— 不再猜。
+        activateTabBarGlassProbe()
+
         // 音乐库：改**原生**视图的第一批（大标题左对齐 + 收掉顶部滚边渐隐）。
         // 与听歌页那条"加壳"路线不同 —— 它改的是 Spotify 自己的视图，关掉即还原。
         activateLibraryAppearance()
