@@ -86,6 +86,45 @@ enum NowPlayingShell {
     static func teardown() {
         remove()
     }
+
+    // MARK: - 让原生吸顶头让位（状态 + 逻辑都住在这里）
+
+    // ⚠️ 这两个成员**必须**在这个枚举里，不能放进下面的 `NowPlayingShellView` ——
+    // `StickyHeaderYieldHook` 与 `NowPlayingShellView.restore()` 引用的都是
+    // `NowPlayingShell.xxx`。（第一版插错了作用域，编译期直接报 no member。）
+
+    /// 吸顶头的底色原值（`StickyHeaderYieldHook` 填，`restore()` 写回）。
+    static weak var yieldedTintView: UIView?
+    static var yieldedTintOriginalColor: UIColor?
+
+    /// 从歌曲标题那个 label 往上找**第一个带不透明底色的祖先** —— 那就是吸顶头那道渐显底色。
+    ///
+    /// 为什么用这条路而不是类名：Spotify 的头部类名在版本之间换过
+    /// （`ScrollStickyHeader` 在 9.1.86 上**根本不存在**，那是 element 的标识符），
+    /// 而"标题文字上面压着一层底色"这件事是稳定的。
+    static func firstTintedAncestor(of label: UILabel) -> UIView? {
+        var node: UIView? = label.superview
+        var depth = 0
+        while let current = node, depth < 10 {
+            if let color = current.backgroundColor, color.cgColor.alpha > 0.01 {
+                return current
+            }
+            node = current.superview
+            depth += 1
+        }
+        return nil
+    }
+
+    /// 收掉那道底色。**幂等**：已经是透明的就什么都不做。
+    static func yieldTint(of view: UIView) {
+        if yieldedTintView !== view {
+            yieldedTintView = view
+            yieldedTintOriginalColor = view.backgroundColor
+        }
+        guard let color = view.backgroundColor, color.cgColor.alpha > 0.01 else { return }
+        view.backgroundColor = .clear
+        writeDebugLog("[Shell] 吸顶头底色已收掉 (\(NSStringFromClass(type(of: view))))")
+    }
 }
 
 // MARK: - 壳本体
@@ -434,36 +473,12 @@ final class NowPlayingShellView: UIView {
     ///   · 目标按**类名**找（`ScrollStickyHeader`，日志 14/16 的 dump 里逐字可见），
     ///     找到几个清几个，找不到就什么都不做（不猜、不猜类名、不做运行时类枚举）。
     ///   · 原值全部记下来，`restore()` 时写回 —— 关掉开关必须完全还原。
-    // MARK: 让原生吸顶头让位（正确做法：只 hook 它自己，只在它自己布局时收一次）
+    // MARK: 让原生吸顶头让位 —— 实现见 `NowPlayingShell` 枚举（那边是"状态 + 逻辑"的家）
 
-    // 上一版是在壳的 `layoutSubviews` 里"遍历整窗 + 每帧清别人的底色"，结果把滚动搞停了。
-    // 正确做法在 `StickyHeaderYieldHook`（文件末尾）：
-    //   · 由**那个视图自己**的 `layoutSubviews` 触发 —— 只在它自己布局时跑，滚动中不动它；
-    //   · 目标不用类名，改用"从歌曲标题 label 往上找第一个不透明的祖先"（见下面
-    //     `firstTintedAncestor(of:)`）—— 不依赖任何会变的类名；
-    //   · 只清一次（清了就记下来，值没变就一个字节都不动）。
-
-    /// 吸顶头的底色原值（`StickyHeaderYieldHook` 填，`restore()` 写回）。
-    static weak var yieldedTintView: UIView?
-    static var yieldedTintOriginalColor: UIColor?
-
-    /// 从歌曲标题那个 label 往上找**第一个带不透明底色的祖先** —— 那就是吸顶头那道渐显底色。
-    ///
-    /// 为什么用这条路而不是类名：日志里 Spotify 的头部类名在版本之间换过
-    /// （`ScrollStickyHeader` 在 9.1.86 上根本不存在），而"标题文字上面压着一层底色"
-    /// 这件事是稳定的。
-    static func firstTintedAncestor(of label: UILabel) -> UIView? {
-        var node: UIView? = label.superview
-        var depth = 0
-        while let current = node, depth < 10 {
-            if let color = current.backgroundColor, color.cgColor.alpha > 0.01 {
-                return current
-            }
-            node = current.superview
-            depth += 1
-        }
-        return nil
-    }
+    // ⚠️ 这两个 static 成员与 `firstTintedAncestor(of:)` **曾经被我插错作用域**：
+    // 插进了这个 `NowPlayingShellView` 类，而用它们的是 `NowPlayingShell` 枚举 ——
+    // 编译期报 `type 'NowPlayingShell' has no member 'yieldedTintView'` 之类。
+    // 现在它们都在枚举里（文件上半部分）。这里只留这句备注，避免再插错。
 
     /// 收掉那道底色（幂等：已经是透明的就什么都不做）。
     static func yieldTint(of view: UIView) {

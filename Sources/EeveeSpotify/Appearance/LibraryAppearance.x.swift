@@ -143,7 +143,11 @@ enum LibraryAppearance {
         if originalFont == nil {
             originalFont = label.font
         }
-        guard let original = originalFont, let target = largeTitleFont(from: original) else { return }
+        // ⚠️ `largeTitleFont(from:)` 返回的是**非 Optional** 的 `UIFont`，所以这里不能写
+        // `let target = …`（那是给 Optional 用的语法，编译期报
+        // "initializer for conditional binding must have Optional type"）。
+        guard let original = originalFont else { return }
+        let target = largeTitleFont(from: original)
 
         // 字体被 binder 写回去了吗？（判据：当前点数 ≠ 目标点数）
         //
@@ -262,12 +266,9 @@ enum LibraryAppearance {
         originalFont = nil
         titleLabel = nil
         hasAppliedOnce = false
-
-        if let gradient = gradientView, let alpha = originalGradientAlpha, gradient.alpha != alpha {
-            gradient.alpha = alpha
-        }
-        originalGradientAlpha = nil
-        gradientView = nil
+        // 注：灰纱（`LiquidGlass.GradientView`）那一项已经整段删除（见上面 §②），
+        // 所以这里**不再**有 `gradientView` / `originalGradientAlpha` 要还原 ——
+        // 第一版删代码时漏删了这两行引用，编译期报 "cannot find … in scope"。
     }
 
     private static func className(_ view: UIView) -> String {
