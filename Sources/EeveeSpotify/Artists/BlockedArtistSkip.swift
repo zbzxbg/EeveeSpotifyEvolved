@@ -9,11 +9,14 @@ import UIKit
 /// **注入工具进程**里解析不到目标时有 SIGTRAP 的先例（见
 /// `CustomLyrics+AllTracksLyrics.x.swift` 顶部那段）。轮询只用已经验证可用的原语：
 ///
-///   · 曲目与艺人：`statefulPlayer.currentTrack()` → `artistName()` / `artistTitle()`
-///     （`AppleMusicLyricsPlaybackControl` 已经在用同一个调用读时长）
-///   · 位置：`WordByWordPositionResolver.shared.currentPositionSeconds()`
+///   · 曲目：`statefulPlayer.currentTrack()`（`AppleMusicLyricsPlaybackControl` 已经在用
+///     同一个调用读时长、`CustomLyrics` 用它读 `trackIdentifier`，两条都在真机跑过）；
+///   · 艺人 / 标题：**每个都先 `responds(to:)` 探一下再调** —— `SPTPlayerTrack` 是我们手写的
+///     `@objc protocol`，声明了不等于这版对象实现了（`artistTitle()` 就不是；
+///     2026-10-01 的崩溃正是它）。探测写在共用扩展里：`SPTPlayerTrack.string(ifResponding:)`；
+///   · 位置：`WordByWordPositionResolver.shared.currentPositionSeconds()`（内部自带探测）；
 ///   · 跳歌：`WordByWordPlaybackControl.skipToNext()`
-///     —— 日志 8 已证明它可用（`[Shell] skipToNext via statefulPlayer.skipToNextTrack()`）
+///     —— 日志 8 已证明它可用（`[Shell] skipToNext via statefulPlayer.skipToNextTrack()`）。
 ///
 /// 1 秒一次、只读几个字段，代价可以忽略。
 ///
@@ -76,8 +79,9 @@ enum BlockedArtistSkip {
         guard trackKey != lastSeenTrackID else { return }
         lastSeenTrackID = trackKey
 
-        let artistName = track.artistName()
-        let artistTitle = track.artistTitle()
+        let artistName = track.string(ifResponding: "artistName")
+        let artistTitle = track.string(ifResponding: "artistTitle")
+        reportGettersOnce(track)
 
         guard let hit = BlockedArtists.match(artistName: artistName, artistTitle: artistTitle) else {
             consecutiveSkips = 0   // 这一首没命中 → 连续跳过的计数重来
@@ -99,7 +103,27 @@ enum BlockedArtistSkip {
             return
         }
 
-        writeDebugLog("[BlockArtist] 命中 \"\(hit)\" —— 跳过 \"\(track.trackTitle())\"（艺人 \"\(artistTitle ?? artistName ?? "")\"）")
+        writeDebugLog("[BlockArtist] 命中 \"\(hit)\" —— 跳过 \"\(track.string(ifResponding: "trackTitle") ?? "<unknown>")\"（艺人 \"\(artistTitle ?? artistName ?? "")\"）")
         WordByWordPlaybackControl.skipToNext()
+    }
+
+    private static var didReportGetters = false
+
+    /// 第一次拿到曲目时，把这台设备上 `SPTPlayerTrack` 实际实现了哪些 getter 写进日志。
+    private static func reportGettersOnce(_ track: SPTPlayerTrack) {
+        guard !didReportGetters else { return }
+        didReportGetters = true
+
+        let object = track as AnyObject
+        let responds: (String) -> String = { name in
+            ((object as? NSObject)?.responds(to: Selector(name)) ?? false) ? "Y" : "N"
+        }
+
+        writeDebugLog(
+            "[BlockArtist] SPTPlayerTrack getters:"
+                + " artistName=\(responds("artistName"))"
+                + " artistTitle=\(responds("artistTitle"))"
+                + " trackTitle=\(responds("trackTitle"))"
+        )
     }
 }

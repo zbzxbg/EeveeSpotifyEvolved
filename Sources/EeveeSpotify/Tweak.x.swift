@@ -369,6 +369,9 @@ struct EeveeSpotify: Tweak {
         // 新设计语言下让我们自己给旧设计打的补丁让位（目前是标签栏那层渐隐遮罩）。
         activateNewDesignYield()
 
+        // 听歌页 Music 式版式（样品 v1）：背景跟封面取色 + 顶部大标题。开关默认关。
+        activateMusicStyleNowPlaying()
+
         // 清爽开关（迷你播放条 / 标签栏渐隐 / free-tier 提示条）。同上：总是装、实时读。
         activateDeclutterChrome()
 

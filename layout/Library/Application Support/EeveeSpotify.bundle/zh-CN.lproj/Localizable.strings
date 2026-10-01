@@ -374,6 +374,11 @@ blocked_artists_add = "添加";
 blocked_artists_add_footer = "按 Spotify 里显示的名字填；匹配不区分大小写，大小写不同的同一条不会重复添加。";
 blocked_artists_clear_all = "清空名单";
 
+/* MARK: 听歌页外观（样品） */
+music_style_section = "听歌页外观（样品）";
+music_style_nowplaying = "背景跟封面取色 + 顶部大标题";
+music_style_nowplaying_description = "Apple Music 风格的第一个样品：整页背景取封面的主色，歌名与艺人压在顶部。它只加不删——不隐藏 Spotify 自己的任何播放器控件，所以关掉开关即完全还原。播放页下次布局时生效，不用重启。";
+
 flag_catalog_description = "这些名字与 scope 都来自本机自己的调试日志，没有一条是猜的。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
 flag_catalog_empty_result = "没有匹配的 flag";

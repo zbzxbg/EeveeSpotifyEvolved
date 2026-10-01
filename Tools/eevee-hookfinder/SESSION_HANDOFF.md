@@ -460,3 +460,76 @@ Flag 页最底下一行被挡。
 - 走查有 2000 节点上限（本仓库纪律）。
 
 → **六个设置页一起修好**（根页 / 歌词 / 实验 / 扩展 / 隐私 / 触感 / Flag / 已知 flag 全用这个宿主）。
+
+## 10.8 屏蔽艺人"一放歌就崩"：手写 @objc protocol ≠ 对象实现了（已修）
+
+用户：加入屏蔽艺人名字后，一播放就崩。崩溃报告 `C:\dsh\readlog\Spotify-2026-10-01-103208.ips`：
+
+```
+exception : NSInvalidArgumentException — unrecognized selector sent to instance 0x13bd6ca20
+lastExceptionBacktrace : __exceptionPreprocess → objc_exception_throw → __retain_OA →
+    ___forwarding___ → _CF_forwarding_prep_0 → [EeveeSpotify.dylib ×2] → __NSFireTimer → …
+（usedImages[3] = EeveeSpotify.dylib）
+```
+
+→ 崩在**屏蔽艺人那个 1 秒轮询的定时器**里。元凶：`tick()` 里的 `track.artistTitle()`。
+
+**为什么它不存在**（仓库里早就有证据）：`SPTPlayerTrack` 是我们**手写**的
+`@objc protocol`（`Lyrics/Models/Headers/SPTPlayerTrack.swift`），声明了
+`trackTitle()` / `artistTitle()` / `artistName()` —— 但 `artistTitle()` 在整个仓库里**只在**
+`hookTarget == .lastAvailableiOS14` 那一支被调用（`CustomLyrics.x.swift:99`、
+`LyricsWordByWord.x.swift:875`、`AppleMusicLyricsOverlay.swift:543` 三处都是同一个三目），
+**9.1.x 这一版从来没调用过它**，所以"它到底实现了没有"从来没被验证过。
+
+### ★ 纪律（新增，写代码时照做）
+
+> **手写 protocol 里列出的方法只是"我们以为有"。**
+> 对第三方私有类做**跨版本 / 首次**调用前，先 `responds(to:)` 探测再调
+> （本仓库既有的 `WordByWordPositionResolver` 就是这么做的）。
+> `perform` 只在这些方法**返回对象**时可用（`artistName` / `artistTitle` / `trackTitle`
+> 都返回 String，所以可以）。
+
+修法：新增 `stringIfResponding(_:_:)`（先 `responds` 再 `perform`），三个 getter 全走它；
+并加一行**一次性能力日志**，把猜测变成事实：
+
+```
+[BlockArtist] SPTPlayerTrack getters: artistName=Y artistTitle=? trackTitle=?
+```
+
+## 10.9 ★「Flag 覆盖」在这台机器上是**空转的**（已确诊）+ 听歌页样品 v1
+
+### Flag 通道断了（这解释了一连串现象）
+
+- 日志 10：`[HCUS] Missing buffered body for https://gae2-spclient.spotify.com/user-customization-service/v1/customize (taskId=7)`
+  → **配置响应没有 body** → 没有 `assignedValues` 可改 → 覆盖无从作用；
+- **现存全部日志（1,2,3,5,6,7,8,9,10）里一条 `[Flags]` 都没有**；按代码只要那次改写跑过
+  就必然有 `[Flags] user overrides in effect: N`；
+- 我们自己的代码早就记着这件事：`EeveeDebugSettingsViewModel.swift:43` ——
+  "customize 走 304 无 body，flag 替换那段代码整段没执行"。
+
+**含义**：
+1. 用户"试了 abcd 四条设计 flag 没变化"是**无效实验**（覆盖根本没被应用），
+   **不能**据此说"Spotify 没带那些版式"；
+2. 设置页里那个「Flag 覆盖」对用户是个**假开关**（写着重启生效，实际从未生效）；
+3. 想走"白捡版式"这条路，得先修通道（搞清 9.1.86 上 bootstrap/customize 的 body 从哪来），
+   **那是另一个工程且不确定能通** → 所以决定：**先走自绘**。
+
+### 听歌页 Music 式版式样品 v1（已写，等编译）
+
+- 文件：`Sources/EeveeSpotify/Appearance/MusicStyleNowPlaying.x.swift`
+- 开关：设置 → 扩展功能 → **听歌页外观（样品）→ 背景跟封面取色 + 顶部大标题**（**默认关**）
+- 只做两件：①整页背景取封面主色（渐变，插在 `root.layer` 第 0 层）；
+  ②顶部大标题（歌名 + 艺人，Auto Layout 锚在安全区顶部居中）。
+- **只加不删**：不隐藏任何 Spotify 原生控件；关掉开关移除我们的视图 → **完全还原**。
+- 挂 `viewDidLayoutSubviews`（与手势 hook 的 `viewDidAppear` 是**不同 selector**，互不干扰）。
+- 取色来自 `SPTPlayerTrack.extractedColorHex()`（8 位 ARGB，如 `FF62787D`）；探测式取标题/艺人。
+- 日志：`[MusicStyle] installed (sample=…)` + 首次施加时 `[MusicStyle] now playing sample applied …`。
+
+**下一批（v2，等 v1 观感确认）**：玻璃胶囊控件行（上一首/播放暂停/下一首，动作转发给
+Spotify 原生控件 —— 复用 `AppleMusicLyricsPlaybackControl.tapControl` 的防重入转发）+
+把原生传输行藏掉（可撤销）。
+
+### 顺带：探测式 getter 已抽成共用
+
+`SPTPlayerTrack.string(ifResponding:)`（`Lyrics/Models/Extensions/SPTPlayerTrack+Extension.swift`）
+—— 手写 protocol 声明 ≠ 实现，跨版本调私有方法前先探测。屏蔽艺人与新样品都用它。

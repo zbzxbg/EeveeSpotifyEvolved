@@ -35,6 +35,7 @@ extension UserDefaults {
     private static let playerGestureBehaviorKey = "playerGestureBehavior"
     private static let blockedArtistsEnabledKey = "blockedArtistsEnabled"
     private static let blockedArtistsKey = "blockedArtists"
+    private static let musicStyleNowPlayingKey = "musicStyleNowPlaying"
 
     static var musixmatchToken: String {
         get {
@@ -387,6 +388,21 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: blockedArtistsKey)
+        }
+    }
+
+    // MARK: - 听歌页外观（Music 式版式，样品）
+
+    /// 「听歌页 Music 式版式」开关。**默认关**：
+    /// 这是整套"观感自绘"路线的**第一屏样品**，用途是判断值不值得铺到其它七屏，
+    /// 而不是默认给所有人开。开着时只**多加**一层封面取色的背景 + 顶部大标题，
+    /// **不藏任何 Spotify 原生控件**（关掉即完全还原）。
+    static var musicStyleNowPlaying: Bool {
+        get {
+            container.object(forKey: musicStyleNowPlayingKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: musicStyleNowPlayingKey)
         }
     }
 

@@ -40,6 +40,8 @@ struct EeveeExtrasSettingsView: View {
         var gestureBehavior = UserDefaults.playerGestureBehavior
         var gestureNowPlaying = UserDefaults.playerGestureNowPlaying
         var gestureFullscreenLyrics = UserDefaults.playerGestureFullscreenLyrics
+
+        var musicStyleNowPlaying = UserDefaults.musicStyleNowPlaying
     }
 
     var body: some View {
@@ -127,6 +129,19 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.gestureFullscreenLyrics,
                         persist: { UserDefaults.playerGestureFullscreenLyrics = $0 }
+                    )
+                )
+            }
+
+            Section(
+                header: Text("music_style_section".localized),
+                footer: Text("music_style_nowplaying_description".localized)
+            ) {
+                Toggle(
+                    "music_style_nowplaying".localized,
+                    isOn: shadowBinding(
+                        \.musicStyleNowPlaying,
+                        persist: { UserDefaults.musicStyleNowPlaying = $0 }
                     )
                 )
             }

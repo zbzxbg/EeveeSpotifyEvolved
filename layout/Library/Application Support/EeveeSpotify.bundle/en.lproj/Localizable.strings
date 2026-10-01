@@ -382,3 +382,8 @@ blocked_artists_add_placeholder = "artist name";
 blocked_artists_add = "Add";
 blocked_artists_add_footer = "Type the artist's name as Spotify shows it. Matching ignores case; adding the same name again in different case does nothing.";
 blocked_artists_clear_all = "Remove all blocked artists";
+
+/* MARK: Now playing look (sample) */
+music_style_section = "Now playing look (sample)";
+music_style_nowplaying = "Cover-tinted background + big title";
+music_style_nowplaying_description = "The first sample of the Apple Music style: the page background takes the cover's own colour, and the song title and artist sit at the top. It only ADDS those two things and hides nothing of Spotify's own player, so switching it off restores the page exactly. It applies the next time the now playing page lays out — no restart.";
