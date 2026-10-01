@@ -94,22 +94,41 @@ enum SpotifyResponsePatcher {
             var response = UcsResponse()
             response.resolve = resolved
 
-            // ⚠️ 用 `init()` + 属性赋值，不用 `CustomizeMessage(response:)`：
-            // 生成代码里**只有** `init()`（Account.pb.swift），标量字段的便捷初始化器不存在。
+            // ⚠️ 关键一步：种子**在落袋之前**就要先过一遍 flag 改写。
+            //
+            // 为什么：304 的回放路径（`didReceiveResponse` 里那两个分支）是**直接投递
+            // 缓存字节**、不经过 `patch()` 的 —— 所以如果种子里装的是"原始配置"，
+            // 回放出去的就是一份**没有我们任何替换**的配置：Spotify 能正常拿到配置，
+            // 但 `[Flags]` 一行不打、所有 flag 替换失效，现象和没修一模一样（真机日志 15
+            // 就是这个：种子打出来了、`[Flags]` 却是 0 行，因为回放不跑改写）。
+            //
+            // 在这里跑一次既安全又省事：`modifyRemoteConfiguration` 是纯函数级的改写
+            // （只动 assign 列表 + attributes 里的账号态），不碰网络；而且它对
+            // `.setBool` / `.remove` 这类"命中才改"是幂等的 —— 之后真 body 到了再走一遍
+            // `patch()` 也不会叠加出问题。
             var message = CustomizeMessage()
             message.response = response
+
+            // 先打种子那一行，再跑改写：`modifyRemoteConfiguration` 会顺带把
+            // `[Flags] …` 那批取证行打出来，顺序反了的话日志会读成"flag 是服务端下发的"。
+            eeveeSanitizedNSLog(
+                "[CustomizeSeed] seeded cachedCustomizeData from \(resourceName).bnk"
+                    + " — \(configuration.assignedValues.count) assignedValues (spotify \(spotifyVersion))"
+            )
+            writeDebugLog(
+                "[CustomizeSeed] 种子就绪 \(resourceName).bnk — \(configuration.assignedValues.count) 条 flag"
+                    + "（随包快照，非服务端当前下发）。下面那批 [Flags] 行就是**从这份种子**跑改写时打出来的。"
+            )
+
+            modifyRemoteConfiguration(&message.response)
+
             let data = try message.serializedData()
             cachedCustomizeData = data
 
-            eeveeSanitizedNSLog(
-                "[CustomizeSeed] seeded cachedCustomizeData from \(resourceName).bnk"
-                    + " — \(configuration.assignedValues.count) assignedValues,"
-                    + " \(data.count) bytes (spotify \(spotifyVersion))"
-            )
+            eeveeSanitizedNSLog("[CustomizeSeed] seed assembled, \(data.count) bytes")
             writeDebugLog(
-                "[CustomizeSeed] 种子就绪 \(resourceName).bnk"
-                    + " — \(configuration.assignedValues.count) 条 flag，\(data.count) 字节。"
-                    + " 无 body 的 304 会回放它；真 body 一到即被替换。"
+                "[CustomizeSeed] 种子已改写好并入袋：\(data.count) 字节。"
+                    + " 无 body 的 304 会原样回放它；真 body 一到即被替换。"
             )
         } catch {
             eeveeSanitizedNSLog("[CustomizeSeed] \u{26a0}\u{fe0f} 构造失败: \(error)")

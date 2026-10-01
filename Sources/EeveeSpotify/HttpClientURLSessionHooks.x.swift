@@ -139,6 +139,8 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
                 return
             }
+            // ⚠️ 这行不是装饰：它是"种子真的被回放了"的**唯一**直接证据。
+            writeDebugLog("[HCUS] customize 304 → 回放种子 \(cached.count) 字节")
             orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: cached)
             SpotifyResponsePatcher.markCustomizeTaskHandled(task.taskIdentifier)
