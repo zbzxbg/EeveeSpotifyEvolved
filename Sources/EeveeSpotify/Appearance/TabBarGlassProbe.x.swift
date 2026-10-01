@@ -26,6 +26,37 @@ enum TabBarGlassProbe {
 
     private static var didDump = false
 
+    /// 从任意一颗标签往上找到标签栏容器（`TabBarView`）。
+    ///
+    /// 用类名而不是"往上走几层"：层级会随版本变（dump 里是 容器 → CompactView →
+    /// StackView → ElementContentView → ElementView → 标签），走类名稳。
+    @MainActor
+    static func enclosingTabBar(from item: UIView) -> UIView? {
+        var node: UIView? = item
+        var depth = 0
+        while let current = node, depth < 12 {
+            let name = NSStringFromClass(type(of: current))
+            if name.contains("NavigationUI_TabBarImpl") && name.hasSuffix(".TabBarView") {
+                return current
+            }
+            node = current.superview
+            depth += 1
+        }
+        return nil
+    }
+
+    /// 顺便把**容器自己的 frame**（相对屏幕）也记下来 —— 决定我们的玻璃要摆在哪。
+    @MainActor
+    static func dumpWindowFrame(of bar: UIView) {
+        guard let window = bar.window else { return }
+        let frame = bar.convert(bar.bounds, to: window)
+        writeDebugLog(String(
+            format: "[TabBarDump] bar 在窗口里的位置 = (%.0f,%.0f %.0fx%.0f)  [窗口 %.0fx%.0f]",
+            frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
+            window.bounds.width, window.bounds.height
+        ))
+    }
+
     /// 把这条栏的**内部结构**摊进日志（每个节点：类名/子树序号/frame/底色/圆角/alpha）。
     ///
     /// 只跑一次（`didDump` 挡住重复），且只在同一个 runloop 里读属性 —— 不遍历整窗、
@@ -36,6 +67,7 @@ enum TabBarGlassProbe {
         didDump = true
 
         writeDebugLog("[TabBarDump] ---- 标签栏内部结构 begin（bar \(Int(bar.bounds.width))x\(Int(bar.bounds.height))）----")
+        dumpWindowFrame(of: bar)
         var index = 0
         walk(bar, depth: 0, index: &index)
         writeDebugLog("[TabBarDump] ---- end ----")
@@ -91,27 +123,59 @@ enum TabBarGlassProbe {
 
 /// 挂在标签栏容器上，布局好了就 dump 一次。
 ///
-/// 真类名：`NavigationUI_TabBarImpl.TabBarView`
-/// （IPA `_TtC23NavigationUI_TabBarImpl10TabBarView` ↔ 真机 dump
-///  `10.TabBarView@0,0,414,83,id=elements-tabs-view-identifier`）。
-class TabBarProbeHook: ClassHook<UIView> {
+/// ⚠️ **不能在 `TabBarView` 第一次 `layoutSubviews` 里 dump** —— 日志 19 实证：
+/// 那次所有内部节点都是 `frame=(0,0 0x0)`（内容还没排），测出来等于没测。
+/// 改成挂在**每一颗标签自己**的布局上，并且**等它真的有尺寸**（>1pt）再 dump，
+/// 这样拿到的才是排好之后的真 frame。
+///
+/// 真类名：
+///   `NavigationUI_TabBarImpl.TabBarItemElementView`
+///   `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`
+class TabBarProbeItemHook: ClassHook<UIView> {
     typealias Group = TabBarGlassProbeGroup
-    static let targetName = "NavigationUI_TabBarImpl.TabBarView"
+    static let targetName = "NavigationUI_TabBarImpl.TabBarItemElementView"
 
     func layoutSubviews() {
         orig.layoutSubviews()
-        let bar = self.target
+        let item = self.target
         onMainThreadSync {
+            guard item.bounds.width > 1, item.bounds.height > 1 else { return }
+            // 从这一颗往上走到标签栏容器，再整棵 dump —— 此时尺寸已经是真的了。
+            guard let bar = TabBarGlassProbe.enclosingTabBar(from: item) else { return }
+            TabBarGlassProbe.dumpOnce(bar)
+        }
+    }
+}
+
+/// 「创建」那颗（另一个模块）也挂一下：万一用户先进的是它那一页，也能触发 dump。
+class TabBarProbeCreateItemHook: ClassHook<UIView> {
+    typealias Group = TabBarGlassProbeGroup
+    static let targetName = "CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        let item = self.target
+        onMainThreadSync {
+            guard item.bounds.width > 1, item.bounds.height > 1 else { return }
+            guard let bar = TabBarGlassProbe.enclosingTabBar(from: item) else { return }
             TabBarGlassProbe.dumpOnce(bar)
         }
     }
 }
 
 func activateTabBarGlassProbe() {
-    guard NSClassFromString(TabBarProbeHook.targetName) != nil else {
-        writeDebugLog("[TabBarDump] missing \(TabBarProbeHook.targetName) — 探针未装")
+    var targets: [String] = []
+    for name in [TabBarProbeItemHook.targetName, TabBarProbeCreateItemHook.targetName] {
+        if NSClassFromString(name) != nil {
+            targets.append(name)
+        } else {
+            writeDebugLog("[TabBarDump] missing \(name)")
+        }
+    }
+    guard !targets.isEmpty else {
+        writeDebugLog("[TabBarDump] 两个目标都没有 — 探针未装")
         return
     }
     TabBarGlassProbeGroup().activate()
-    writeDebugLog("[TabBarDump] 探针已装 — 进任意页面后日志里会出现 ---- 标签栏内部结构 begin ----")
+    writeDebugLog("[TabBarDump] 探针已装（等标签排好再 dump）：\(targets.joined(separator: " + "))")
 }
