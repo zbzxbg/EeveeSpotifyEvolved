@@ -106,11 +106,8 @@ final class NowPlayingShellView: UIView {
 
     /// 上一次用于构建背景的 track key + 底色，避免每次 layout 都重建/重绘。
     private var lastBackdropKey: String?
-    /// 上一次施加时的尺寸：尺寸没变就不重算约束（约束由 Auto Layout 管，不必手算）。
+    /// 上一次施加时的尺寸（只在尺寸变化时才做一次性的收尾工作）。
     private var lastLayoutSize: CGSize = .zero
-    /// 原生吸顶头的原值（可撤销）。
-    private var nativeTintSnapshots: [(view: UIView, color: UIColor?)] = []
-    private var nativeLabelSnapshots: [(label: UILabel, text: String?)] = []
 
     // MARK: 初始化
 
@@ -274,11 +271,18 @@ final class NowPlayingShellView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        // ⚠️⚠️ 这里**曾经**在布局里跑一遍"让原生吸顶头让位"（清它的底色与文字）。
+        // 已经**整个删掉**，原因是真机反馈"页面划不动"：
+        //   · 它每次布局都走一遍**整窗视图树**，并且在滚动过程中**改 Spotify 自己视图的
+        //     `backgroundColor`** —— 等于边滚边动人家的视图，足以把滚动卡死；
+        //   · 而它**没有任何视觉收益**：那个类名在 9.1.86 上根本没找到（日志 17 已证），
+        //     也就是说这段代码在真机上一直是空转 + 添乱。
+        //
+        // 教训与仓库里那条一致：**不要为"可能有用"去动别人的视图**。
+        // 要做"让位"，必须先拿到真类名（探针在查），并且只做**只读判断 + 一次性改动**，
+        // 不在布局回调里反复写。
         guard bounds.size != lastLayoutSize else { return }
         lastLayoutSize = bounds.size
-        // 尺寸变了才重跑一遍"让位"——但它同时是幂等的，Spotify 把底色写回来时
-        // 下一个尺寸变化还会再清一次。
-        nativeTintYield()
     }
 
     // MARK: 触摸
@@ -371,28 +375,25 @@ final class NowPlayingShellView: UIView {
 
     /// 顶栏那道"承上启下"的色带。
     ///
-    /// 为什么需要它，而不是只留玻璃：听歌页有两块**属于原生的**界面在顶栏区域
-    /// —— 上面是 Spotify 自己的导航条（含 ⋯ 与那颗 `✓`），下面是它那排内容。
-    /// 只铺玻璃的话，我们画的玻璃会盖在导航条上、色调和页面脱节（"壳肉割裂"）。
-    /// 所以这里读出**原生此刻正在用的那个封面底色**（`bg=#F8A880` 那一路），
-    /// 用同一个颜色做一条从上往下渐隐的带子，让状态栏 → 导航条 → 内容平滑连起来。
+    /// 顶栏那道"承上启下"的色带。
+    ///
+    /// 只用**我们算出来的封面底色**（`NowPlayingShellColors.baseColor()`）做一条
+    /// 从上往下渐隐的带子：让状态栏 → 导航条 → 内容之间的过渡有个统一的色，白字也压得住。
+    ///
+    /// ⚠️ 这里**不再**去读原生吸顶头当下的颜色了。上一版那么做过，但它属于
+    /// "主动去翻别人的视图树" 那一类做法 —— 与刚删掉的让位代码同源，同样有
+    /// 边滚边读、影响页面的风险，而收益只是"颜色更贴一点"。底色我们本来就算得出来。
     private func applyHeaderTint(_ baseColor: UIColor) {
         headerTint.backgroundColor = .clear
         headerTint.layer.sublayers?.forEach { layer in
             if layer.name == NowPlayingShellMetrics.tintLayerName { layer.removeFromSuperlayer() }
         }
 
-        // 拿不到原生底色就不铺（宁可只有玻璃，也不要一个猜出来的颜色）。
-        //
-        // ⚠️ 从**窗口**开始走：吸顶头挂在 `SPTNowPlayingViewContainerViewController`
-        // 那一层，从壳自己往下走是走不到的（第一版就是栽在这个范围上，已改）。
-        let searchRoot = window ?? self
-        guard let nativeTint = NowPlayingShellColors.nativeStickyHeaderColor(in: searchRoot) else { return }
-        let resolved = NowPlayingShellColors.isUsable(nativeTint) ? nativeTint : baseColor
+        let resolved = baseColor
 
         let gradient = CAGradientLayer()
         gradient.name = NowPlayingShellMetrics.tintLayerName
-        // 只压顶部那一小块（状态栏与原生导航条所在），往下很快淡掉。
+        // 只压顶部那一小块（状态栏与导航条所在），往下很快淡掉。
         // 数值是照片 19 之后调的：原来 0.98/0.55/0.00 会把"我们自己的标题"以外的
         // 东西也糊住。这里再收一档，因为底色已经交回给原生了，顶栏只需要一点点暗底
         // 保证白字清楚。
@@ -433,108 +434,62 @@ final class NowPlayingShellView: UIView {
     ///   · 目标按**类名**找（`ScrollStickyHeader`，日志 14/16 的 dump 里逐字可见），
     ///     找到几个清几个，找不到就什么都不做（不猜、不猜类名、不做运行时类枚举）。
     ///   · 原值全部记下来，`restore()` 时写回 —— 关掉开关必须完全还原。
-    private func nativeTintYield() {
-        guard UserDefaults.nowPlayingShellHeader else { return }
-        guard let searchRoot = window ?? superview else { return }
+    // MARK: 让原生吸顶头让位（正确做法：只 hook 它自己，只在它自己布局时收一次）
 
-        var stickyViews: [UIView] = []
-        collectStickyHeaderViews(in: searchRoot, into: &stickyViews)
-        guard !stickyViews.isEmpty else {
-            if !didLogStickyHeaderOutcome {
-                didLogStickyHeaderOutcome = true
-                writeDebugLog(
-                    "[Shell] ⚠️ 没找到 ScrollStickyHeader — 原生吸顶头无法让位（标题可能仍会被盖）"
-                        + "；本页带 Sticky/Header/Bar 字样的类名：\(stickyHeaderCandidates(in: searchRoot))"
-                )
+    // 上一版是在壳的 `layoutSubviews` 里"遍历整窗 + 每帧清别人的底色"，结果把滚动搞停了。
+    // 正确做法在 `StickyHeaderYieldHook`（文件末尾）：
+    //   · 由**那个视图自己**的 `layoutSubviews` 触发 —— 只在它自己布局时跑，滚动中不动它；
+    //   · 目标不用类名，改用"从歌曲标题 label 往上找第一个不透明的祖先"（见下面
+    //     `firstTintedAncestor(of:)`）—— 不依赖任何会变的类名；
+    //   · 只清一次（清了就记下来，值没变就一个字节都不动）。
+
+    /// 吸顶头的底色原值（`StickyHeaderYieldHook` 填，`restore()` 写回）。
+    static weak var yieldedTintView: UIView?
+    static var yieldedTintOriginalColor: UIColor?
+
+    /// 从歌曲标题那个 label 往上找**第一个带不透明底色的祖先** —— 那就是吸顶头那道渐显底色。
+    ///
+    /// 为什么用这条路而不是类名：日志里 Spotify 的头部类名在版本之间换过
+    /// （`ScrollStickyHeader` 在 9.1.86 上根本不存在），而"标题文字上面压着一层底色"
+    /// 这件事是稳定的。
+    static func firstTintedAncestor(of label: UILabel) -> UIView? {
+        var node: UIView? = label.superview
+        var depth = 0
+        while let current = node, depth < 10 {
+            if let color = current.backgroundColor, color.cgColor.alpha > 0.01 {
+                return current
             }
+            node = current.superview
+            depth += 1
+        }
+        return nil
+    }
+
+    /// 收掉那道底色（幂等：已经是透明的就什么都不做）。
+    static func yieldTint(of view: UIView) {
+        if yieldedTintView !== view {
+            yieldedTintView = view
+            yieldedTintOriginalColor = view.backgroundColor
+        }
+        guard let color = view.backgroundColor, color.cgColor.alpha > 0.01 else { return }
+        view.backgroundColor = .clear
+        writeDebugLog("[Shell] 吸顶头底色已收掉 (\(NSStringFromClass(type(of: view))))")
+    }
+
+    /// 完全还原。
+    ///
+    /// 现在只需要打一行日志：壳自己的东西随 `removeFromSuperview()` 一起消失，
+    /// 而**我们持有改动的唯一原生视图就是吸顶头那道底色**（上面那对变量），写回即可。
+    func restore() {
+        if let view = NowPlayingShell.yieldedTintView,
+           let original = NowPlayingShell.yieldedTintOriginalColor {
+            view.backgroundColor = original
+            NowPlayingShell.yieldedTintView = nil
+            NowPlayingShell.yieldedTintOriginalColor = nil
+            writeDebugLog("[Shell] 壳已拆除（吸顶头底色已写回）")
             return
         }
-        if !didLogStickyHeaderOutcome {
-            didLogStickyHeaderOutcome = true
-            writeDebugLog("[Shell] 找到原生吸顶头 \(stickyViews.count) 个 — 已让它让位")
-        }
-
-        for sticky in stickyViews {
-            for node in [sticky] + allSubviews(of: sticky) {
-                // 底色：只清"有底色且不是透明"的那些，并记原值。
-                if let color = node.backgroundColor, color.cgColor.alpha > 0.01 {
-                    rememberTint(node, node.backgroundColor)
-                    node.backgroundColor = .clear
-                }
-                // 文字：清空原生标题/歌手（我们自己在画）。
-                if let label = node as? UILabel, let text = label.text, !text.isEmpty {
-                    rememberLabelText(label, text)
-                    label.text = nil
-                }
-            }
-        }
-    }
-
-    private var didLogStickyHeaderOutcome = false
-
-    /// 排障用：把当前页里"名字像吸顶头"的类名列出来。
-    ///
-    /// 为什么需要它：真机日志 17 报 `没找到 ScrollStickyHeader`，而日志 12/14 的
-    /// 视图树 dump 里明明有 `ScrollStickyHeader.ContentView` —— 说明这个 build 上
-    /// **承载那道渐显底色的容器换了类名**（或换了实现）。与其猜，不如把候选名字打出来
-    /// （只读、只打一次、不建任何东西）。
-    private func stickyHeaderCandidates(in root: UIView) -> String {
-        var names: [String] = []
-        func walk(_ node: UIView) {
-            if names.count >= 12 { return }
-            let name = NSStringFromClass(type(of: node))
-            let lowered = name.lowercased()
-            if (lowered.contains("sticky") || lowered.contains("header") || lowered.contains("herobg"))
-                && !names.contains(name) {
-                names.append(name)
-            }
-            for sub in node.subviews { walk(sub) }
-        }
-        walk(root)
-        return names.isEmpty ? "(无)" : names.joined(separator: ", ")
-    }
-
-    private func collectStickyHeaderViews(in view: UIView, into result: inout [UIView]) {
-        let name = NSStringFromClass(type(of: view))
-        if name.contains("ScrollStickyHeader") {
-            result.append(view)
-            return  // 同一个头里不再往里找，避免把子视图重复清一遍
-        }
-        for sub in view.subviews {
-            collectStickyHeaderViews(in: sub, into: &result)
-        }
-    }
-
-    private func allSubviews(of view: UIView) -> [UIView] {
-        var result: [UIView] = []
-        for sub in view.subviews {
-            result.append(sub)
-            result.append(contentsOf: allSubviews(of: sub))
-        }
-        return result
-    }
-
-    private func rememberTint(_ view: UIView, _ color: UIColor?) {
-        guard !nativeTintSnapshots.contains(where: { $0.view === view }) else { return }
-        nativeTintSnapshots.append((view: view, color: color))
-    }
-
-    private func rememberLabelText(_ label: UILabel, _ text: String?) {
-        guard !nativeLabelSnapshots.contains(where: { $0.label === label }) else { return }
-        nativeLabelSnapshots.append((label: label, text: text))
-    }
-
-    /// 完全还原：把记下来的原值写回。
-    func restore() {
-        for snapshot in nativeTintSnapshots where snapshot.view.superview != nil {
-            snapshot.view.backgroundColor = snapshot.color
-        }
-        for snapshot in nativeLabelSnapshots where snapshot.label.superview != nil {
-            snapshot.label.text = snapshot.text
-        }
-        nativeTintSnapshots.removeAll()
-        nativeLabelSnapshots.removeAll()
-        writeDebugLog("[Shell] 已还原原生吸顶头")
+        writeDebugLog("[Shell] 壳已拆除（未改动任何原生视图）")
     }
 
     // MARK: 动作
@@ -595,47 +550,6 @@ enum NowPlayingShellColors {
 
         return UIColor(white: 0.07, alpha: 1)
     }
-
-    /// 从视图树里读**原生吸顶头此刻正在用的那个底色**。
-    ///
-    /// 为什么值得读它：日志 12/14 里 `6.UIView@0,0,414,48,bg=#F8A880` 这个颜色就是
-    /// Spotify 自己算好的"这首歌的封面底色"。我们拿它做顶栏色带，就不用自己再算一遍、
-    /// 也不会和它那排内容撞色。
-    ///
-    /// ⚠️ 搜索范围必须是**窗口**而不是听歌页的根视图：吸顶头虽然在同一个头里，
-    /// 但它挂在 `SPTNowPlayingViewContainerViewController` 那一层（dump 实测），
-    /// 从我们自己的 superview 往下走**根本走不到它**（这是第一版的错，已改）。
-    static func nativeStickyHeaderColor(in root: UIView) -> UIColor? {
-        var found: UIColor?
-        func walk(_ node: UIView) {
-            if found != nil { return }
-            if NSStringFromClass(type(of: node)).contains("ScrollStickyHeader") {
-                for child in [node] + descendants(of: node) {
-                    if let color = child.backgroundColor, color.cgColor.alpha > 0.01 {
-                        found = color
-                        return
-                    }
-                }
-            }
-            for sub in node.subviews { walk(sub) }
-        }
-        walk(root)
-        return found
-    }
-
-    private static func descendants(of view: UIView) -> [UIView] {
-        var result: [UIView] = []
-        for sub in view.subviews {
-            result.append(sub)
-            result.append(contentsOf: descendants(of: sub))
-        }
-        return result
-    }
-
-    /// 这个颜色能不能用来画（避免把 `.clear` 或近乎透明的色当成底色）。
-    static func isUsable(_ color: UIColor) -> Bool {
-        color.cgColor.alpha > 0.01
-    }
 }
 
 // MARK: - Hook
@@ -670,6 +584,106 @@ func applyNowPlayingAppearance(to root: UIView?) {
         NowPlayingShell.apply(to: root)
         MusicStyleNowPlaying.applyLegacyTitle(to: root)
     }
+}
+
+// MARK: - 让原生吸顶头让位（只 hook 它自己）
+
+/// 原生的"滚动吸顶头"控制器。
+///
+/// 真名来自**解密 IPA**（`dump-9.1.86.txt:2034`）：
+/// `_TtC19NowPlaying_ViewImpl30StickyHeaderViewControllerImpl`
+/// → `NowPlaying_ViewImpl.StickyHeaderViewControllerImpl`。
+///
+/// ⚠️ 上一版按 `ScrollStickyHeader` 找，那个名字在 9.1.86 上**根本不存在**
+/// （只有 `ScrollStickyHeader.ContentView` 这种 element 标识符，不是类名）——
+/// 所以它一直在空转，而我却把"清别人底色"的逻辑放在了壳的每帧布局里，把页面搞到划不动。
+/// 这一版两条都改：
+///   · 挂在**正确的类**上，并且用它自己的 `viewDidLayoutSubviews` 触发
+///     （只在"这个头自己重新布局"时才会跑，滚动过程中不会去动它）；
+///   · 只清**一次**（值没变就什么都不做）。
+class StickyHeaderYieldHook: ClassHook<UIViewController> {
+    typealias Group = NowPlayingShellGroup
+    static let targetName = "NowPlaying_ViewImpl.StickyHeaderViewControllerImpl"
+
+    /// 被写回的次数。Spotify 若在每次布局都把底色写回来，我们就不再和它对着干
+    /// （那种循环正是"滚动卡住"的温床）—— 这条计数就是判据。
+    private static var resetCount = 0
+
+    func viewDidLayoutSubviews() {
+        orig.viewDidLayoutSubviews()
+        let controller = self.target
+        onMainThreadSync {
+            guard UserDefaults.nowPlayingShellHeader else { return }
+            guard let view = controller.view else { return }
+            guard let label = StickyHeaderYieldHook.findTitleLabel(in: view) else {
+                StickyHeaderYieldHook.reportMissingLabelOnce()
+                return
+            }
+            guard let tint = NowPlayingShell.firstTintedAncestor(of: label) else { return }
+
+            let wasTransparent = tint.backgroundColor.map { $0.cgColor.alpha <= 0.01 } ?? true
+            if !wasTransparent {
+                StickyHeaderYieldHook.resetCount += 1
+                if StickyHeaderYieldHook.resetCount > 5 {
+                    if !StickyHeaderYieldHook.didGiveUp {
+                        StickyHeaderYieldHook.didGiveUp = true
+                        writeDebugLog(
+                            "[Shell] ⚠️ 吸顶头底色被反复写回 \(StickyHeaderYieldHook.resetCount) 次"
+                                + " — 不再与它抢（保持原生，避免滚动受影响）"
+                        )
+                    }
+                    return
+                }
+            }
+            NowPlayingShell.yieldTint(of: tint)
+        }
+    }
+
+    private static var didReportMissingLabel = false
+    private static var didGiveUp = false
+
+    /// 在吸顶头里找**歌曲标题**那个 label。
+    ///
+    /// 两条判据，任一中就够：
+    ///   1. 文本等于当前曲名（最稳，不依赖任何标识符）；
+    ///   2. 无障碍标识符里带 `trackTitle` / `title` 字样（备选）。
+    private static func findTitleLabel(in view: UIView) -> UILabel? {
+        let currentTitle = statefulPlayer?.currentTrack()?.string(ifResponding: "trackTitle")
+
+        var fallback: UILabel?
+        func walk(_ node: UIView) {
+            if let label = node as? UILabel, let text = label.text, !text.isEmpty {
+                if let currentTitle, !currentTitle.isEmpty, text == currentTitle {
+                    fallback = label
+                    return
+                }
+                if let identifier = label.accessibilityIdentifier,
+                   identifier.contains("trackTitle") || identifier.contains("Title") {
+                    fallback = fallback ?? label
+                }
+            }
+            for sub in node.subviews { walk(sub) }
+        }
+        walk(view)
+        return fallback
+    }
+
+    private static func reportMissingLabelOnce() {
+        guard !didReportMissingLabel else { return }
+        didReportMissingLabel = true
+        writeDebugLog("[Shell] 吸顶头里没找到曲名 label — 让位这一步先跳过（不影响其它）")
+    }
+}
+
+func activateStickyHeaderYield() {
+    // ⚠️ 这里**不**调 `NowPlayingShellGroup().activate()`：它与壳共用同一个 group，
+    // 上面 `activateNowPlayingShell()` 已经装过了。重复 activate 等于对同一个方法
+    // 再 swizzle 一次 —— 这种赌没必要打。
+    guard NSClassFromString(StickyHeaderYieldHook.targetName) != nil else {
+        writeDebugLog("[Shell] missing \(StickyHeaderYieldHook.targetName) — 吸顶头让位未装")
+        return
+    }
+    writeDebugLog("[Shell] 吸顶头让位 hook on（\(StickyHeaderYieldHook.targetName)）")
 }
 
 func activateNowPlayingShell() {

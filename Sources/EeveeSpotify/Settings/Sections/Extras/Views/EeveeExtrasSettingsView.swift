@@ -48,6 +48,7 @@ struct EeveeExtrasSettingsView: View {
         var shellHeader = UserDefaults.nowPlayingShellHeader
         var shellGlass = UserDefaults.nowPlayingShellGlass
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
+        var tabBarGlass = UserDefaults.tabBarGlass
     }
 
     var body: some View {
@@ -188,6 +189,20 @@ struct EeveeExtrasSettingsView: View {
                         }
                     }
                 }
+            }
+
+            // 底部标签栏玻璃：每颗标签后面垫一层真液态玻璃（iOS 26+）或材质。
+            Section(
+                header: Text("tab_bar_glass_section".localized),
+                footer: Text("tab_bar_glass_description".localized)
+            ) {
+                Toggle(
+                    "tab_bar_glass".localized,
+                    isOn: shadowBinding(
+                        \.tabBarGlass,
+                        persist: { UserDefaults.tabBarGlass = $0 }
+                    )
+                )
             }
 
             // 音乐库：**改原生**的第一批（不是加壳）—— 大标题左对齐 + 收掉顶部渐隐灰纱。

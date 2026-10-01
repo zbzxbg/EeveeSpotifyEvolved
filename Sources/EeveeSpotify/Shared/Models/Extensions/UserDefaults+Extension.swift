@@ -42,6 +42,7 @@ extension UserDefaults {
     private static let nowPlayingShellHeaderKey = "nowPlayingShellHeader"
     private static let nowPlayingShellGlassKey = "nowPlayingShellGlass"
     private static let libraryLargeTitleKey = "libraryLargeTitle"
+    private static let tabBarGlassKey = "tabBarGlass"
 
     static var musixmatchToken: String {
         get {
@@ -461,6 +462,22 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingShellGlassKey)
+        }
+    }
+
+    // MARK: - 标签栏玻璃
+
+    /// 底部标签栏（主页 / 搜索 / 音乐库 / 创建）加真液态玻璃。**默认开**。
+    ///
+    /// 为什么这里敢默认开、而听歌页顶栏的不敢：标签栏是**浮在内容之上的小控件**
+    /// （每颗 103×49），玻璃压在按钮区域不会糊掉内容；听歌页那道 121pt 高的顶栏会。
+    /// 这正是液态玻璃的设计用法。关掉即把插进去的玻璃层全部移除。
+    static var tabBarGlass: Bool {
+        get {
+            container.object(forKey: tabBarGlassKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: tabBarGlassKey)
         }
     }
 

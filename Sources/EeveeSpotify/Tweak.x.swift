@@ -386,6 +386,16 @@ struct EeveeSpotify: Tweak {
         // 只能有一条 hook，见 `NowPlayingShellHook` 的说明。
         activateNowPlayingShell()
 
+        // 吸顶头让位：让 Spotify 那道"滚动时渐显的底色"别盖在我们的玻璃顶栏上。
+        // 真类名 `NowPlaying_ViewImpl.StickyHeaderViewControllerImpl`（从解密 IPA 核出）。
+        // 与壳共用一个 HookGroup，所以上面那条一装它就有；这里只负责自报日志。
+        activateStickyHeaderYield()
+
+        // 底部标签栏（主页/搜索/音乐库/创建）的真液态玻璃。
+        // 真类名从解密 IPA 核出：`NavigationUI_TabBarImpl.TabBarItemElementView`
+        // 与 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`。
+        activateTabBarGlass()
+
         // 音乐库：改**原生**视图的第一批（大标题左对齐 + 收掉顶部滚边渐隐）。
         // 与听歌页那条"加壳"路线不同 —— 它改的是 Spotify 自己的视图，关掉即还原。
         activateLibraryAppearance()
