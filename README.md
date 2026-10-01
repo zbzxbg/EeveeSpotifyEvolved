@@ -3,7 +3,7 @@
 > This repository is independently maintained by me and is not affiliated with whoeevee or SideloadLabs.
 
 > [!IMPORTANT]
-> After testing, this modded version can reliably display lyrics for every song on Spotify 9.1.86, including when the Genius fallback is enabled.
+> After testing, this modded version can reliably display lyrics for every song on Spotify 9.1.88, including when the Genius fallback is enabled.
 
 ## Features
 
@@ -13,7 +13,7 @@
 - **Per-language romanization**: Chinese, Korean, and Japanese can be configured separately. Upstream only has a single “Enable romanization” switch.
 - **Disable lyrics**: Option to disable lyrics.
 - **Cleaner lyrics**: Removes interlude symbols such as `♪`.
-- **Future updates**: Not limited to Spotify 9.1.86; this project will continue to follow Spotify updates.
+- **Future updates**: Not limited to Spotify 9.1.88; this project will continue to follow Spotify updates.
 
 ## Versions
 
