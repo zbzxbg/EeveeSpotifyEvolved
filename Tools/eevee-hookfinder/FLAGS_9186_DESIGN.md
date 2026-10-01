@@ -101,15 +101,21 @@ queue 与 Connect sheet / 重设计播放器头 / 睡眠定时器选项 sheet」
 
 | 闸 | 事实（都查过） | 怎么解（已做） |
 |---|---|---|
-| **硬闸** | 解密 IPA 的 `Info.plist` 里 **`UIDesignRequiresCompatibility = True`** —— 这是 **Spotify 自己**写的，等于要求 iOS 26 用**兼容模式**跑它。整个 App 不进新设计语言，任何 flag 都不可能让它变玻璃。spoti.pw 的 `plist/` 覆盖干的就是这件事 | 打 IPA 时删掉这个键。已做成**构建开关**：CI 工作流新增 `liquid_glass` 布尔输入；本地脚本认 `ALLOW_LIQUID_GLASS=1`。**默认关** |
+| **硬闸** | 解密 IPA 的 `Info.plist` 里 **`UIDesignRequiresCompatibility = True`** —— 这是 **Spotify 自己**写的，等于要求 iOS 26 用**兼容模式**跑它。整个 App 不进新设计语言，任何 flag 都不可能让它变玻璃。spoti.pw 的 `plist/` 覆盖干的就是这件事 | 打 IPA 时删掉这个键。已做成**构建开关**：CI 工作流 `liquid_glass`（**默认开**）、本地脚本 `ALLOW_LIQUID_GLASS`（**默认 1**）。2026-10-01 实测通过后它就是新基线 |
 | **软闸** | 设置页的「写入指定值」原来映射到 `.setEnum`，**只改服务端已下发的条目、不会新增**；设计类 flag 服务端基本不下发 → 空枪。而且命中数只对歌词/NPV 打，连"是不是空枪"都看不见 | 新增 `.forceEnum`（没有就追加）；「写入指定值」改用它；并新增一行 `[Flags] override <scope>.<name> — N match(es)`，**所有**用户覆盖都打 |
 
 ### 怎么跑这个实验
 
-- **CI**：跑 `Build IPA — patched` 时把 **liquid_glass** 勾上 → 产出的 IPA 里那个键已被删掉。
-- **本地**：`ALLOW_LIQUID_GLASS=1 ./build-ipa-local.sh <vanilla.ipa>`。
+- **CI**：`Build IPA — patched` 的 **liquid_glass 默认已勾上**（新基线）；想回旧外观就把它设成 false。
+- **本地**：默认就是开；想回旧外观用 `ALLOW_LIQUID_GLASS=0 ./build-ipa-local.sh <vanilla.ipa>`。
 - 装完**先不碰任何 flag**，看基线（有没有变玻璃 / 有没有错位）；确认不崩，再叠 `mode=force_enabled`。
-- **回退**：重跑一次**不带**这个开关的构建即可，不用改代码。
+- **回退**：把 `liquid_glass` / `ALLOW_LIQUID_GLASS` 设成 false / 0 重跑一次构建即可，不用改代码。
+
+### ⚠️ 已过时的一段（保留作记录）
+
+下面那行"该看什么"是**当初以为要强制 flag** 时写的。**2026-10-01 实测已经推翻了它**：
+`flag overrides=0` 也能有玻璃 —— 玻璃**完全来自删掉 `UIDesignRequiresCompatibility`**，
+`mode` 这个 flag 根本不用碰。留着只为说明 `.forceEnum` 那个改动是为什么做的。
 
 ### 这次日志里该看什么
 

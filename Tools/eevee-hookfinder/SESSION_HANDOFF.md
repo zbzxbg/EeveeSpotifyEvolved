@@ -310,17 +310,17 @@ spoti.pw 文档里说它"强制的那批 flag"（玻璃导航栏 / 新播放器�
    → 服务端**没下发**的 flag 也能被覆盖（原来的 `.setEnum` 是空枪）。
 2. `[Flags] override <scope>.<name> — N match(es)` 一行（在改写**之前**数命中），
    **所有**用户覆盖都打 → 从日志就能分清"没生效"和"生效了但界面没变"。
-3. **构建开关（默认关）**：CI 工作流新增 `liquid_glass` 布尔输入；本地脚本认
-   `ALLOW_LIQUID_GLASS=1` → 删掉 Spotify 自己写的 `UIDesignRequiresCompatibility=true`
+3. **构建开关**：CI 工作流 `liquid_glass`（**默认开**）、本地脚本 `ALLOW_LIQUID_GLASS`（**默认 1**）
+   → 删掉 Spotify 自己写的 `UIDesignRequiresCompatibility=true`。想回旧外观就设成 false / 0。
    （读 IPA 得到的事实：那是玻璃的**硬闸**）。
 
 ## 9.4 下一批待办（按优先级）
 
-1. **玻璃基线实验**：跑一次**带** `liquid_glass` 的构建，**先不加任何 flag**，看基线
-   （变玻璃了？错位了？崩了？）。不崩再叠 `mode=force_enabled`。
-2. **屏蔽艺人**（C 档唯一的真功能）：复用 `SPTPlayerTrackHook` +
-   `WordByWordPlaybackControl.skipToNext()`（日志 8 已证明可用）。**待定**：名单怎么加
-   （建议：艺人页/正在播放页一键加入 + 设置页手动增删）。
+> ⚠️ **本节已被 §10 取代**（第 1 条当天就做完了，结论见 §10.1）。留着只为看当时的判断顺序。
+
+1. ~~**玻璃基线实验**~~：**已做** —— 玻璃构建实测通过（按钮/开关变液态玻璃），
+   `liquid_glass` 现在是**默认开**（新基线），见 §10.1。
+2. **屏蔽艺人**（C 档唯一的真功能）：**已实现**，见 §10.3。
 3. D 档小项（Updates 页 / Home 渐变 / Accent / Navbar labels）—— 用户已明确**等玻璃做完再说**。
 4. 若第 1 步确认 9.1.86 没带那套玻璃 → 回到"**一屏玻璃样品**"（挑正在播放页或歌单页，
    日志 8 已把这两屏的类名/frame 抓全）。
