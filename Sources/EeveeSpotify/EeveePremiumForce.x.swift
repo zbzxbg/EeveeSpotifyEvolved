@@ -131,9 +131,18 @@ private func passiveLogProductState(_ tag: String, _ dict: NSDictionary) {
     if !pairs.isEmpty {
         // 走 `eeveeSanitizedNSLog`：这条 NSLog 不受「启用日志记录」开关控制，
         // 脱敏不能漏（见 `DebugLogSanitizer` 的说明）。
-        eeveeSanitizedNSLog("[REVERT_WATCH][\(tag)] \(pairs.joined(separator: " "))")
+        let line = "[REVERT_WATCH][\(tag)] \(pairs.joined(separator: " "))"
+        eeveeSanitizedNSLog(line)
+        // ⚠️ 2026-10-02 追加：**同一行也进导出文件**。
+        // 排查"整库变黑 / 听不了歌"时，产品状态（ads / on-demand / unrestricted /
+        // player-license / catalogue …）有没有被服务端改回去，是**唯一**的本地判据；
+        // 而它原先只走 NSLog，导出来的 `eeveespotify_debug_shared*.log` 里根本看不到。
+        // `writeDebugLog` 内部自己会过 `DebugLogSanitizer`，所以脱敏不漏。
+        writeDebugLog(line)
     } else if dict.count > 0 {
-        eeveeSanitizedNSLog("[REVERT_WATCH][\(tag)] keys=\(dict.count) (no premium-relevant)")
+        let line = "[REVERT_WATCH][\(tag)] keys=\(dict.count) (no premium-relevant)"
+        eeveeSanitizedNSLog(line)
+        writeDebugLog(line)
     }
 }
 

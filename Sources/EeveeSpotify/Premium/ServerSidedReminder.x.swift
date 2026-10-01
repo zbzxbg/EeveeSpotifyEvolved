@@ -21,16 +21,6 @@ private func showPlaylistDownloadingPopUp(_ isPlaylist: Bool, onSecondaryClick: 
 
 //
 
-class StreamQualitySettingsSectionHook: ClassHook<NSObject> {
-    typealias Group = IOS14PremiumPatchingGroup
-    static let targetName = "StreamQualitySettingsSection"
-
-    func shouldResetSelection() -> Bool {
-        showHighQualityPopUp()
-        return true
-    }
-}
-
 class ListRowInteractionListenerViewHook: ClassHook<UIView> {
     typealias Group = NonIOS14PremiumPatchingGroup
     static let targetName = "_TtC15Settings_ECMKit30ListRowInteractionListenerView"

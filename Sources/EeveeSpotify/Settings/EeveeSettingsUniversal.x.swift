@@ -3,101 +3,16 @@ import SwiftUI
 import UIKit
 
 // Universal settings integration.
-// Split into multiple HookGroups so missing classes in newer Spotify builds
-// (e.g., RootSettingsViewController removed in 9.1.36) don't crash when activating.
-struct UniversalSettingsIntegrationProfileGroup: HookGroup { }
-struct UniversalSettingsIntegrationSettingsVCGroup: HookGroup { }
-struct UniversalSettingsIntegrationRootSettingsVCGroup: HookGroup { }
-struct UniversalSettingsIntegrationNavGroup: HookGroup { }
-
-// 9.1.44 dropped ProfileSettingsSection; Settings root is now SettingsListViewController.
+//
+// ⚠️ 2026-10-02：老的 `ProfileSettingsSection` / `SettingsViewController` /
+// `RootSettingsViewController` / "按标题猜设置"的兜底 hook **全部删除** ——
+// 它们的入口类只在 Spotify 9.1.0 上存在（扫过 9.1.0 / 9.1.74 / 9.1.76 / 9.1.86 四个包），
+// 在唯一的目标版本 9.1.86 上只会走到 `else` 分支打一行 `Skipped settings integration`。
+// 9.1.44+ 唯一那条路是下面这个。
 struct UniversalSettingsIntegrationListVCGroup: HookGroup { }
 
-// MARK: - Primary: ProfileSettingsSection hook for settings menu row
-class UniversalProfileSettingsSectionHook: ClassHook<NSObject> {
-    typealias Group = UniversalSettingsIntegrationProfileGroup
-    static let targetName = "ProfileSettingsSection"
-    
-    func numberOfRows() -> Int {
-        let original = orig.numberOfRows()
-        return original + 1
-    }
-    
-    func didSelectRow(_ row: Int) {
-        let originalRows = orig.numberOfRows()
-        
-        if row == originalRows {
-            openEeveeSettingsFromHook()
-            return
-        }
-        
-        orig.didSelectRow(row)
-    }
-    
-    func cellForRow(_ row: Int) -> UITableViewCell {
-        let originalRows = orig.numberOfRows()
-        
-        if row == originalRows {
-            let settingsTableCell = Dynamic.SPTSettingsTableViewCell
-                .alloc(interface: SPTSettingsTableViewCell.self)
-                .initWithStyle(3, reuseIdentifier: "EeveeSpotify")
-            
-            let tableViewCell = Dynamic.convert(settingsTableCell, to: UITableViewCell.self)
-            
-            tableViewCell.accessoryView = type(
-                of: Dynamic.SPTDisclosureAccessoryView
-                    .alloc(interface: SPTDisclosureAccessoryView.self)
-            )
-            .disclosureAccessoryView()
-            
-            tableViewCell.textLabel?.text = "EeveeSpotify"
-            
-            return tableViewCell
-        }
-        
-        return orig.cellForRow(row)
-    }
-    
-    private func openEeveeSettingsFromHook() {
-        // Try to find the root settings controller
-        let rootSettingsController = WindowHelper.shared.findFirstViewController("RootSettingsViewController")
-            ?? WindowHelper.shared.findFirstViewController("SettingsViewController")
-            ?? WindowHelper.shared.findFirstViewController("ProfileViewController")
-        
-        guard let rootController = rootSettingsController,
-              let navigationController = rootController.navigationController else {
-            return
-        }
-        
-        let eeveeSettingsController = EeveeSettingsViewController(
-            rootController.view.bounds,
-            settingsView: AnyView(EeveeSettingsView(navigationController: navigationController)),
-            navigationTitle: "EeveeSpotify"
-        )
-        
-        let button = UIButton()
-        
-        if let githubImage = BundleHelper.shared.uiImage("github") {
-            button.setImage(githubImage.withRenderingMode(.alwaysOriginal), for: .normal)
-        } else {
-             // Fallback if github image is missing
-             button.setImage(UIImage(systemName: "globe"), for: .normal)
-        }
-        
-        button.addTarget(
-            eeveeSettingsController,
-            action: #selector(eeveeSettingsController.openRepositoryUrl(_:)),
-            for: .touchUpInside
-        )
-        
-        let menuBarItem = UIBarButtonItem(customView: button)
-        menuBarItem.customView?.heightAnchor.constraint(equalToConstant: 22).isActive = true
-        menuBarItem.customView?.widthAnchor.constraint(equalToConstant: 22).isActive = true
-        eeveeSettingsController.navigationItem.rightBarButtonItem = menuBarItem
-        
-        navigationController.pushViewController(eeveeSettingsController, animated: true)
-    }
-}
+// （`ProfileSettingsSection` 那条老入口已于 2026-10-02 删除：入口类只在 Spotify 9.1.0 上存在。）
+
 
 // MARK: - Global Helper to avoid Orion Hooking Issues with setupEeveeButton
 // This logic is moved outside the ClassHook so Orion doesn't try to find it as an Obj-C method on the target class.
@@ -175,37 +90,8 @@ func injectEeveeButton(into target: UIViewController) {
     NSLog("[EeveeSpotify] Button injected. Items count: \(items.count)")
 }
 
-// MARK: - Fallback: Hook SettingsViewController directly (New UI)
-class SettingsViewControllerHook: ClassHook<UIViewController> {
-    typealias Group = UniversalSettingsIntegrationSettingsVCGroup
-    static let targetName = "SettingsViewController"
+// （`SettingsViewController` / `RootSettingsViewController` 两条老入口已于 2026-10-02 删除。）
 
-    func viewDidLoad() {
-        orig.viewDidLoad()
-        injectEeveeButton(into: target)
-    }
-
-    func viewWillAppear(_ animated: Bool) {
-        orig.viewWillAppear(animated)
-        injectEeveeButton(into: target)
-    }
-}
-
-// MARK: - Fallback: Hook RootSettingsViewController directly
-class RootSettingsViewControllerHook: ClassHook<UIViewController> {
-    typealias Group = UniversalSettingsIntegrationRootSettingsVCGroup
-    static let targetName = "RootSettingsViewController"
-
-    func viewDidLoad() {
-        orig.viewDidLoad()
-        injectEeveeButton(into: target)
-    }
-
-    func viewWillAppear(_ animated: Bool) {
-        orig.viewWillAppear(animated)
-        injectEeveeButton(into: target)
-    }
-}
 
 class SettingsListViewControllerHook: ClassHook<UIViewController> {
     typealias Group = UniversalSettingsIntegrationListVCGroup
@@ -359,119 +245,3 @@ private func pushEeveeSettings(from vc: UIViewController) {
     nav.pushViewController(host, animated: true)
 }
 
-// MARK: - Generic Fallback: Hook UINavigationController to catch Settings by title/class name
-class SettingsNavigationStackHook: ClassHook<UINavigationController> {
-    typealias Group = UniversalSettingsIntegrationNavGroup
-
-    func pushViewController(_ viewController: UIViewController, animated: Bool) {
-        orig.pushViewController(viewController, animated: animated)
-        
-        let targetVC = viewController
-        
-        // Check both immediately and with a delay
-        let checkBlock = {
-            let className = String(describing: type(of: targetVC))
-            
-            // Check title - localized "Settings" / "Preferences" in Spotify-supported languages
-            let settingsTitles: Set<String> = [
-                // English
-                "Settings", "Preferences",
-                // German
-                "Einstellungen", "Präferenzen",
-                // French
-                "Paramètres", "Préférences",
-                // Spanish
-                "Configuración", "Ajustes", "Preferencias",
-                // Italian
-                "Impostazioni", "Preferenze",
-                // Portuguese
-                "Definições", "Configurações", "Preferências",
-                // Dutch
-                "Instellingen", "Voorkeuren",
-                // Turkish
-                "Ayarlar", "Tercihler",
-                // Polish
-                "Ustawienia", "Preferencje",
-                // Russian
-                "Настройки", "Параметры",
-                // Ukrainian
-                "Налаштування", "Параметри",
-                // Czech
-                "Nastavení", "Předvolby",
-                // Swedish
-                "Inställningar",
-                // Norwegian
-                "Innstillinger",
-                // Danish
-                "Indstillinger",
-                // Finnish
-                "Asetukset",
-                // Hungarian
-                "Beállítások",
-                // Romanian
-                "Setări", "Preferințe",
-                // Slovak
-                "Nastavenia",
-                // Croatian/Bosnian/Serbian
-                "Postavke", "Podešavanja",
-                // Slovenian
-                "Nastavitve",
-                // Bulgarian
-                "Настройки",
-                // Greek
-                "Ρυθμίσεις", "Προτιμήσεις",
-                // Hebrew
-                "הגדרות", "העדפות",
-                // Arabic
-                "الإعدادات", "التفضيلات",
-                // Persian
-                "تنظیمات", "ترجیحات",
-                // Japanese
-                "設定", "環境設定",
-                // Korean
-                "설정", "환경설정",
-                // Chinese (Simplified)
-                "设置", "偏好设置",
-                // Chinese (Traditional)
-                "設定", "偏好設定",
-                // Thai
-                "การตั้งค่า",
-                // Vietnamese
-                "Cài đặt", "Tùy chọn",
-                // Indonesian
-                "Pengaturan", "Setelan", "Preferensi",
-                // Malay
-                "Tetapan", "Keutamaan",
-                // Filipino
-                "Mga Setting", "Mga Kagustuhan",
-                // Hindi
-                "सेटिंग", "प्राथमिकताएं",
-                // Bengali
-                "সেটিংস",
-                // Tamil
-                "அமைப்புகள்",
-                // Catalan
-                "Configuració", "Preferències",
-                // Basque
-                "Ezarpenak",
-                // Galician
-                "Configuración", "Preferencias",
-            ]
-            if let title = targetVC.title, settingsTitles.contains(title) {
-                NSLog("[EeveeSpotify] Detected Settings via Title: \(className)")
-                injectEeveeButton(into: targetVC)
-                return
-            }
-            
-            // Check class name
-            if className.contains("Settings") && !className.contains("Eevee") {
-                NSLog("[EeveeSpotify] Detected Settings via Class Name: \(className)")
-                injectEeveeButton(into: targetVC)
-                return
-            }
-        }
-        
-        checkBlock()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: checkBlock)
-    }
-}

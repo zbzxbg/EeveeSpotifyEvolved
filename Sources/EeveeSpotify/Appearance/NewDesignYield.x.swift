@@ -6,9 +6,15 @@ import UIKit
 ///
 /// 为什么：新设计里 Spotify 已经自带玻璃 —— 导航栏是 SwiftUI 托管的 Platter
 /// （`NavigationBarPlatterContainer_v2` / `PlatterContainerHostingView<NavigationBarPlatterContent>`），
-/// 标签栏自带 `UIVisualEffectView` + `_UIVisualEffectBackdropView`，内容滚到其下时由系统的
-/// `ScrollEdgeEffectView` 负责边缘模糊。我们那些补丁是为**旧设计**（没有任何底色/材质）打的，
-/// 叠上去只会把玻璃压成一块不透的深色。
+/// 内容滚到其下时由系统的 `ScrollEdgeEffectView` 负责边缘模糊。我们那些补丁是为**旧设计**
+/// （没有任何底色/材质）打的，叠上去只会把玻璃压成一块不透的深色。
+///
+/// ⚠️ **2026-10-02 更正**：这里原来说"**标签栏**自带 `UIVisualEffectView` +
+/// `_UIVisualEffectBackdropView`" —— 那是**错的**。日志 20 的全树 dump 里
+/// `UIVisualEffectView` **只有我们自己铺的那一块**（`(8,6 398x71)`），标签栏本身没有任何材质；
+/// 系统玻璃只在**上面**那条（Platter / `ScrollEdgeEffectView`）。
+/// 所以标签栏那条玻璃得我们自己做（见 `TabBarGlass.x.swift`），
+/// **别去"让位"给一个不存在的玻璃**。
 ///
 /// 真机证据（日志 9，玻璃构建）：
 ///   · `[AMOLED] SPNavigationBar first layout — scrim=0 blur=0 bar=0 barBg=0 gradient=0`

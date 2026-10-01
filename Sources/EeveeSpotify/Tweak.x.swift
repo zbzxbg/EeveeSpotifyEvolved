@@ -611,28 +611,11 @@ struct EeveeSpotify: Tweak {
                 }
             }
 
-            // Settings integration (guarded)
-            if let cls = NSClassFromString("ProfileSettingsSection"),
-               class_getInstanceMethod(cls, Selector(("numberOfRows"))) != nil,
-               class_getInstanceMethod(cls, Selector(("didSelectRow:"))) != nil,
-               class_getInstanceMethod(cls, Selector(("cellForRow:"))) != nil {
-
-                UniversalSettingsIntegrationProfileGroup().activate()
-
-                if NSClassFromString("SettingsViewController") != nil {
-                    UniversalSettingsIntegrationSettingsVCGroup().activate()
-                }
-                // RootSettingsViewController was removed in some 9.1.x builds (9.1.36).
-                // Only activate if the class exists.
-                if NSClassFromString("RootSettingsViewController") != nil {
-                    UniversalSettingsIntegrationRootSettingsVCGroup().activate()
-                }
-                // UINavigationController exists; this hook is generic and safe.
-                UniversalSettingsIntegrationNavGroup().activate()
-
-            } else {
-                writeDebugLog("[INIT] Skipped settings integration (ProfileSettingsSection API mismatch)")
-            }
+            // Settings 入口：9.1.44+ 唯一那条路（见下面）。
+            // ⚠️ 2026-10-02：原来这里还有一段"老设置页"（`ProfileSettingsSection` +
+            // `SettingsViewController` + `RootSettingsViewController` + 按标题猜设置的兜底）
+            // —— 入口类只在 Spotify 9.1.0 上存在（扫过 9.1.0/9.1.74/9.1.76/9.1.86 四个包），
+            // 在本仓库唯一的目标版本 9.1.86 上永远走 `else` 打一行 Skipped。**已按死代码删除。**
 
             // 9.1.44 path — ProfileSettingsSection gone, new SettingsListViewController owns Settings root.
             if NSClassFromString("_TtC21Settings_PlatformImpl26SettingsListViewController") != nil {
@@ -648,9 +631,8 @@ struct EeveeSpotify: Tweak {
         }
 
         // For other versions, activate all features normally
-        if UserDefaults.experimentsOptions.showInstagramDestination {
-            InstgramDestinationGroup().activate()
-        }
+        // （Instagram 分享位那个实验已于 2026-10-02 删除：目标类 `SPTSharingSDK` /
+        //   `SPTShare_FoundationImplProperties` 只在 Spotify 9.1.0 上存在。）
         
         if UserDefaults.darkPopUps {
             DarkPopUps().activate()
@@ -671,17 +653,12 @@ struct EeveeSpotify: Tweak {
             }
         }
         
-        // Always activate settings integration (except for 9.1.x which exits early above)
-        UniversalSettingsIntegrationProfileGroup().activate()
-        UniversalSettingsIntegrationSettingsVCGroup().activate()
-        if NSClassFromString("RootSettingsViewController") != nil {
-            UniversalSettingsIntegrationRootSettingsVCGroup().activate()
-        }
+        // Settings 入口：只留 9.1.44+ 那条（`SettingsListViewController`）。
+        // 老的 ProfileSettingsSection / SettingsViewController / RootSettingsViewController /
+        // "按标题猜设置"的那条兜底 hook 已于 2026-10-02 删除（只服务 9.1.86 之前的版本）。
         if NSClassFromString("_TtC21Settings_PlatformImpl26SettingsListViewController") != nil {
             UniversalSettingsIntegrationListVCGroup().activate()
         }
-        UniversalSettingsIntegrationNavGroup().activate()
-        SettingsIntegrationGroup().activate()
 
         // These were previously only activated in the 9.1.x branch above
         // (before its early `return`) — meaning karaoke, SponsorBlock, and

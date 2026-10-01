@@ -70,7 +70,62 @@ enum TabBarGlassProbe {
         dumpWindowFrame(of: bar)
         var index = 0
         walk(bar, depth: 0, index: &index)
+        // 顺手把"哪一颗被选中"的信号摊出来（照片 21/25 里那颗明显和另外三颗不一样）。
+        dumpSelectionSignals(bar)
         writeDebugLog("[TabBarDump] ---- end ----")
+    }
+
+    /// 「哪一颗被选中」的**只读**探针。
+    ///
+    /// 为什么需要它：照片 21 / 25 里那颗**被选中的标签**明显和另外三颗不一样
+    /// （实心、更亮，背后还有一块选中底）。要照做，先得知道**怎么判"选中了哪一颗"** ——
+    /// 而我们不碰 Spotify 的视图，只能读。这一趟把四颗身上所有"可能表示选中"的信号都摊出来：
+    ///   · 无障碍 traits（`selected` 那个 bit）、
+    ///   · 各层的 `tintColor`（item 自己 + 图标 `UIImageView`）、
+    ///   · 图标图片的 `renderingMode`（`.alwaysTemplate` = 会被 tint 染色 / `.alwaysOriginal` = 原样）、
+    ///   · 文字 `UILabel.textColor`。
+    ///
+    /// 只读、只打一次，和结构 dump 同一趟。**拿到这份数据再决定要不要画"选中胶囊"。**
+    @MainActor
+    static func dumpSelectionSignals(_ bar: UIView) {
+        guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return }
+        writeDebugLog("[TabBarSel] ---- 选中信号 begin（4 颗对比着看）----")
+        for item in stack.subviews {
+            var parts: [String] = []
+            parts.append("item=\(item.accessibilityIdentifier ?? "?")")
+            parts.append(String(format: "traits=0x%llx", UInt64(item.accessibilityTraits.rawValue)))
+            if item.accessibilityTraits.contains(.selected) { parts.append("★selected") }
+            parts.append("itemTint=\(describeColor(item.tintColor))")
+            collectColorSignals(item, into: &parts, depth: 0)
+            writeDebugLog("[TabBarSel] " + parts.joined(separator: " "))
+        }
+        writeDebugLog("[TabBarSel] ---- end ----")
+    }
+
+    @MainActor
+    private static func collectColorSignals(_ node: UIView, into parts: inout [String], depth: Int) {
+        guard depth <= 4 else { return }
+
+        if let imageView = node as? UIImageView {
+            let mode = imageView.image.map { String(describing: $0.renderingMode) } ?? "-"
+            parts.append("img(\(NSStringFromClass(type(of: node))))tint=\(describeColor(imageView.tintColor)) mode=\(mode)")
+        }
+        if let label = node as? UILabel {
+            parts.append("label(\(NSStringFromClass(type(of: node))))text=\(describeColor(label.textColor))")
+        }
+
+        for sub in node.subviews { collectColorSignals(sub, into: &parts, depth: depth + 1) }
+    }
+
+    @MainActor
+    private static func describeColor(_ color: UIColor?) -> String {
+        guard let color else { return "-" }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        if color.getRed(&r, green: &g, blue: &b, alpha: &a) {
+            return String(format: "#%02X%02X%02X/%.2f",
+                          Int(r * 255), Int(g * 255), Int(b * 255), a)
+        }
+        return String(describing: color)
     }
 
     private static func walk(_ view: UIView, depth: Int, index: inout Int) {
