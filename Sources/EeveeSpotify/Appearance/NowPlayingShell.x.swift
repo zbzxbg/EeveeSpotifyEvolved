@@ -459,42 +459,18 @@ final class NowPlayingShellView: UIView {
         }
     }
 
-    // MARK: 让原生吸顶头让位（可撤销）
-
-    /// 把原生那道随滚动变不透明的封面底色**收掉**，并把它的标题文字清空。
-    ///
-    /// 照片 18 的病根：滚动时 `6.UIView@0,0,414,48` 的 alpha 从 0 涨到 1，
-    /// 那是一个整屏不透明的容器，盖上来就把我们画的标题吃了。
-    ///
-    /// 做法与理由：
-    ///   · **清底色而不是藏视图** —— 藏掉那个容器等于把里面的 ⋯ 菜单一起藏了；
-    ///     清成透明则它带来的交互原封不动（这也符合"差不多就行、别动原生"的选择）；
-    ///   · **清文字而不是清容器** —— 否则我们画完标题，它自己又画一遍，两个标题叠在一起；
-    ///   · 目标按**类名**找（`ScrollStickyHeader`，日志 14/16 的 dump 里逐字可见），
-    ///     找到几个清几个，找不到就什么都不做（不猜、不猜类名、不做运行时类枚举）。
-    ///   · 原值全部记下来，`restore()` 时写回 —— 关掉开关必须完全还原。
     // MARK: 让原生吸顶头让位 —— 实现见 `NowPlayingShell` 枚举（那边是"状态 + 逻辑"的家）
 
-    // ⚠️ 这两个 static 成员与 `firstTintedAncestor(of:)` **曾经被我插错作用域**：
-    // 插进了这个 `NowPlayingShellView` 类，而用它们的是 `NowPlayingShell` 枚举 ——
-    // 编译期报 `type 'NowPlayingShell' has no member 'yieldedTintView'` 之类。
-    // 现在它们都在枚举里（文件上半部分）。这里只留这句备注，避免再插错。
-
-    /// 收掉那道底色（幂等：已经是透明的就什么都不做）。
-    static func yieldTint(of view: UIView) {
-        if yieldedTintView !== view {
-            yieldedTintView = view
-            yieldedTintOriginalColor = view.backgroundColor
-        }
-        guard let color = view.backgroundColor, color.cgColor.alpha > 0.01 else { return }
-        view.backgroundColor = .clear
-        writeDebugLog("[Shell] 吸顶头底色已收掉 (\(NSStringFromClass(type(of: view))))")
-    }
+    // ⚠️ 这里**曾经有一份重复的 `yieldTint(of:)`**（我搬代码时没删干净）。
+    // 它落在这个 `NowPlayingShellView` 类里，却引用枚举的 `yieldedTintView` /
+    // `yieldedTintOriginalColor` —— 编译期报 "cannot find … in scope"。
+    // 现在那两个 static 成员与 `yieldTint(of:)` 都在枚举里（文件上半部分），
+    // 这里只留备注，别再往这个类里放"让位"的状态。
 
     /// 完全还原。
     ///
-    /// 现在只需要打一行日志：壳自己的东西随 `removeFromSuperview()` 一起消失，
-    /// 而**我们持有改动的唯一原生视图就是吸顶头那道底色**（上面那对变量），写回即可。
+    /// 壳自己的东西随 `removeFromSuperview()` 一起消失；
+    /// 而**我们改动过的唯一原生视图就是吸顶头那道底色**（状态存在 `NowPlayingShell` 里），写回即可。
     func restore() {
         if let view = NowPlayingShell.yieldedTintView,
            let original = NowPlayingShell.yieldedTintOriginalColor {
