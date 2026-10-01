@@ -62,6 +62,11 @@ struct EeveeFlagOverrideSettingsView: View {
                 TextField("flag_override_value_placeholder".localized, text: $newValue)
             }
 
+            if newMode == .number {
+                TextField("flag_override_number_placeholder".localized, text: $newValue)
+                    .keyboardType(.numbersAndPunctuation)
+            }
+
             Button("flag_override_add".localized) {
                 add()
             }
@@ -70,11 +75,18 @@ struct EeveeFlagOverrideSettingsView: View {
     }
 
     private var isAddDisabled: Bool {
-        if newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
-        if newMode == .set, newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return true
+        let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch newMode {
+        case .set:
+            return newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || trimmedValue.isEmpty
+        case .number:
+            return newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || Int32(trimmedValue) == nil
+        default:
+            return newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        return false
     }
 
     // MARK: - 已生效
@@ -98,7 +110,7 @@ struct EeveeFlagOverrideSettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    if item.mode == .set, !item.value.isEmpty {
+                    if (item.mode == .set || item.mode == .number), !item.value.isEmpty {
                         Text(verbatim: "= \(item.value)")
                             .font(.caption)
                             .foregroundColor(.secondary)

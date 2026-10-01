@@ -40,6 +40,57 @@ extension UserDefaults {
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
     private static let miniBarGlassKey = "miniBarGlass"
 
+    /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
+    ///
+    /// ⚠️ 为什么必须是白名单、而不是"遍历 `dictionaryRepresentation()` 全导/全删"：
+    /// 这个进程的 `.standard` **同时就是 Spotify 自己的偏好存储**（tweak 注进 Spotify.app）。
+    /// 全删会把 Spotify 的登录态周边、播放设置一起清掉 —— 那是 `FullResetHelper`（"重置
+    /// Spotify 状态"，另一个按钮）的语义，不是"重置本仓库的设置"。
+    ///
+    /// 加新键时**记得往这里也加一行**（否则它不会被导出/导入/重置）。
+    static let ownedKeys: [String] = [
+        musixmatchTokenKey,
+        darkPopUpsKey,
+        patchTypeKey,
+        trueShuffleEnabledKey,
+        overwriteConfigurationKey,
+        lyricsColorsKey,
+        lyricsOptionsKey,
+        hasShownCommonIssuesTipKey,
+        hasPatchedBootstrapKey,
+        iconNamePrettifyKey,
+        cleanShareLinksKey,
+        enableLogRecordingKey,
+        redactSharedLogKey,
+        blockTelemetryKey,
+        telemetryObserveOnlyKey,
+        telemetryExtraKeywordsKey,
+        hapticsEnabledKey,
+        hapticsStrengthKey,
+        hapticsSurfaceKeywordsKey,
+        hapticsLogControlsKey,
+        dumpViewTreeKey,
+        hideMiniPlayerBarKey,
+        hideSingalongLineKey,
+        hideHomeHeaderKey,
+        hideConnectButtonKey,
+        hideAddToButtonKey,
+        playerGestureNowPlayingKey,
+        playerGestureFullscreenLyricsKey,
+        playerGestureBehaviorKey,
+        blockedArtistsEnabledKey,
+        blockedArtistsKey,
+        dumpCustomizeBodyKey,
+        libraryLargeTitleKey,
+        tabBarGlassKey,
+        tabBarHideLabelsKey,
+        miniBarGlassKey,
+
+        // 不在上面那批常量里、但同样属于我们的：
+        // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
+        "flagOverrides",
+    ]
+
     static var musixmatchToken: String {
         get {
             container.string(forKey: musixmatchTokenKey) ?? ""

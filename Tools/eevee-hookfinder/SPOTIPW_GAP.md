@@ -107,3 +107,179 @@ Navbar Hide labels、Licenses 页、Reset-to-stock、`spotify:` 链接派发（�
 2. **Spicy Lyrics** 只在 CHANGELOG 0.20.0 出现，`docs/tweaks.md` 的歌词来源清单里没有。
 3. Backup settings 的具体行为、诊断工具细节、部分 flag 名：文档未说明（需读源码 → 按红线，不读）。
 4. 文档未见"需要自建服务器"的要求；歌词走公开端点，更新检查走它自己的 GitHub Releases。
+
+---
+
+## 5. ★ 2026-10-02 复核：拿到 **v0.23.0-beta 的 deb** 之后（新增/纠正）
+
+用户把 `C:\dsh\else\com.spotipw_0.23.0-beta_iphoneos-arm.deb` 给了我们 —— 比上面那次
+（v0.22.0，**只读 `.md`**）新。红线不变：**不读它的源码、不反汇编**。
+这次的证据来源只是**它自己的设置页文案**（等于把它的设置页翻了一遍），工具是新写的
+`Tools/eevee-hookfinder/inspect_tweak_deb.py`（只抽可见字符串与 plist，**不反汇编**）。
+
+deb 里只有 `spotifyglass.dylib`（2.4MB）+ 过滤器 plist，没有 `.bundle` → 文案都编在二进制里。
+抽到 **36546 条**去重字符串（含 3000+ 个 SF Symbol 名，那是它"自定义导航栏图标选择器"的底料）。
+
+### 5.1 这次才看见的**大块新东西**
+
+| # | 新发现 | 说明（来自它的文案） |
+|---|---|---|
+| 1 | ★ **Sing = 端上 AI 卡拉OK / 人声分离** | Core ML 推理 + **可下载的 voice model**（`huggingface.co/Darkkos/spoti-sing/…`）、"Connect to Wi-Fi to download Sing's voice model."、"Sing stopped so your iPhone can cool down."、"Sing is unavailable over AirPlay."、`Vocal volume` / `Karaoke` / `Vocals`。**上面那份 §1 完全没有这一项** —— 它 0.23 的主体 |
+| 2 | **Custom navbar（自选按钮）** | "Custom navbar" / "Choose a Link" / "Choose an Icon" / "Use search to find any SF Symbol" / "Enter a custom link" → 往导航栏塞自己的按钮（任意 SF Symbol + 任意链接） |
+| 3 | **App 图标选择器** | "App icon" / "Choose an Icon" / "The icon did not change"（alternate icons，得随包塞图标） |
+| 4 | **设置导出 / 导入** | "Export settings" / "Import settings" / "Import and restart" / "Not a settings file" |
+| 5 | **诊断三件** | 屏幕 dump、**hang sampler**（`SGHangSamplerStart/Stop`）、**FLEX**（`FLEXManager`）→ 上面 §1 只记到 tree server |
+
+### 5.2 把上面 §1 里"⚠️ 只有一半"的几项说准
+
+- **清理开关不是 7 条，是 25 条**（`Hide …` 前缀，逐条实测）：
+  `Hide above the tracks` / `Hide cards below the player` / `Hide in the header` /
+  `Hide in the playlist header` / `Hide labels` / `Hide lyrics` / `Hide on Home` / `Hide on the page` /
+  `Hide on the player` / `Hide playlist buttons` / `Hide Pronunciation` / `Hide social proof in Search` /
+  `Hide Translation` / **`Hide the account switching tip`** / **`Hide the AI playlist creation tip`** /
+  **`Hide the concert notifications tip`** / **`Hide the data saver tip`** / `Hide the device button` /
+  **`Hide the live event tip`** / **`Hide the live event venue tip`** / **`Hide the Puffin nudge`** /
+  **`Hide the smart shuffle helper`** / `Hide the tab bar` / **`Hide the video carousel in Search`** /
+  **`Hide the watch feed explorer tip`**。
+  → 我们只有 5 条；**加粗的那些是"藏 Spotify 自己的提示/推广/新功能气泡"**，全是同一种做法
+  （`DeclutterChrome` 的可撤销隐藏 + 复查），**一次编译能带一大批**、风险最低。
+- **Tab 编辑器**：确认含拖动排序、点按显隐、**"Add a Tab"**、图标选择。
+- **真·DSP 链有十件套**（不是笼统的"效果链"）：`Graphic EQ`（带编辑器）/ `Equalizer` / `Crossfeed` /
+  `Bass boost` / `Convolver` + **脉冲响应文件** / `Multiband compander` / `Stereo widening` /
+  `Tube amplifier warmth` / `Limiter`(threshold/release) / `Loudness` / **`AutoEq` + 耳机校正文件
+  (DDC)** / **`ViPER DDC`** / **`Liveprog`（EEL2 脚本）** / `Varispeed`。
+  它的自报里有 `audio pipeline: mixer import unavailable; output processing only` 与
+  `dsp: output gain … limiter …` → 它**确实把音频图接上了**。
+- **变速变调**：`Speed and pitch`（含独立面板、`Pitch follows speed`、`Semitones`、`Varispeed`）。
+  ⚠️ 这一条**可能不用碰音频图**：我们自己的日志 25 里出现过 Spotify 自己的
+  `com.spotify.service.playbackcontrol.playbackspeed` 服务 → **值得先做一次只读探针**看能不能借它。
+- **Music Haptics**：确认在（`Vibrations` + "A tap on each kick and snare, and a rumble under the bass"），
+  同样要音频 buffer。
+- **队列/设备**：`Queue as a bottom sheet` / `Connect as a bottom sheet` / `Queue badge` /
+  `Queue flip transition` / `Sheet style player` / `New progress slider` / `Glowing pill` /
+  `Bar to cover art animation` / `Video in the mini player`（这些属"行为+外观"之间，单列）。
+- **零碎但便宜**：`Text sizes` / `Denser rows` / `Tooltips` / `Pull to refresh` / `Shortcuts grid` /
+  `Reduce interventions` / `Sleep timer` / `Like and dislike buttons` / `Follow` 变勾 / `Add to library` 变勾 /
+  `Snake on the cover art`（彩蛋）/ `Welcome tour` / `Licenses` / `Updates` / `All releases` / `Donate`。
+
+### 5.3 结论（回答"是不是还有很多没做"）
+
+**是。** 扣掉美化（它那套自绘玻璃界面）之后，还差：
+
+1. **音频三块**（Sing 人声分离 / DSP 十件套 / Music Haptics）—— 都在同一条技术门槛上：
+   **我们没有音频图访问**（9.1.86 的 dump 里没有 audio unit / 渲染类；它走的是 hook 音频管线）。
+   要吃这块得先"抽 IPA 导入符号表 + fishhook 重绑"，**用户此前已搁置**；Sing 还多一个"模型是它的"。
+2. **一批中等功能**：Custom navbar、Tab 编辑器、App 图标选择器、设置导入导出、
+   All flags（AUTO 档 + 数字/文本输入）、诊断三件（dump / hang sampler / FLEX / tree server）。
+3. **一堆小项**：25 条清理开关（我们 5 条）、Updates/Licenses/tour/Donate、
+   Text sizes / Denser rows / Tooltips / Pull to refresh、队列与设备底部卡片、sheet 式播放器、
+   新进度滑条、封面→条动画……**大多是"一次编译捎带好几条"的量级**。
+4. **我们比它多的**（§1 已记）：SponsorBlock 全套、41 条真机 flag 目录、多语言罗马音分配置、
+   Premium 修补链路。
+
+**建议顺序（仍按"无 Mac、一次编译很贵"）**：
+① 先把手上这两条线验完（v4.6.1 图标 / v4.7.1 迷你条玻璃）；
+② **25 条清理开关**（最便宜、最贴"清爽"这条线，复用 `DeclutterChrome` 的复查框架）；
+③ **设置导出/导入 + Updates/Licenses/tour**（离线、零风险、一次编译一条）；
+④ **诊断 tree server + hang sampler**（对我们"抓类名"的痛点最对症）；
+⑤ **变速变调只读探针**（借 Spotify 自己的 `playbackspeed` 服务，零风险，成了就是白捡）；
+⑥ Custom navbar / Tab 编辑器（中等，需先取证导航栏与 tab 的结构）；
+⑦ 音频三块继续搁置（除非决定做那个"符号表 + fishhook"的工程）。
+
+---
+
+## 6. 工程量估算（**按"轮次"算，不按行数**）
+
+为什么用"轮次"当单位：没有 Mac ⇒ 每改一次都要 **写码 → 提交 → CI 编译 → 装机 → 抓日志/截图 → 我判读 → 再修**。
+一轮的**固定开销**（编译+装机+抓日志≈几十分钟到一小时）跟改动大小基本无关，所以"一次编译带几条"才是省力的关键。
+
+**本仓库自己的标尺**（都是实测）：
+- 2026-10-02 这一晚，为了"底部两条玻璃"发了 **4 轮**（v4.6 → v4.6.1 → v4.7 → v4.7.1），
+  每轮 1 个文件、100~300 行；**每轮都暴露一个只有真机才能看见的问题**
+  （「创建」那颗图标 33×33、Spotify 把封面色写回、宽度跟着入场动画抽动）。
+- 屏蔽艺人：4 个文件 + 2 轮（含一轮修崩溃）。
+- SponsorBlock：19 个文件、多轮。
+→ 经验值：**"一个文件级改动" ≈ 1 轮；"一个新功能" ≈ 1~3 轮**（含取证与修 bug）。
+
+| 块 | 代码量 | 轮次（装机验证） | 前置 / 风险 |
+|---|---|---|---|
+| 25 条清理开关 | 1~2 文件（框架现成） | **2~4** | 每个目标要**先取证**（类名/id）→ 靠转储器一次抓多屏；低风险 |
+| 设置导出/导入 + Updates/Licenses/tour/Donate | 4~6 文件 | **3~5** | 离线、零风险，最稳的一批 |
+| All flags（AUTO 档 + 数字/文本输入） | 1~2 文件 | **1~2** | 目录已有 41 条真机值 |
+| 诊断：tree server + hang sampler | 2~3 文件 | **2~3** | 要在手机上跑 iproxy/网络，用户侧步骤变多 |
+| Custom navbar（SF Symbol + 链接） | 2~3 文件 | **2~4** | 要取证导航栏结构；3000 个 SF Symbol 的选择器是 UI 工作量 |
+| Tab 编辑器（排序/显隐/加 tab） | 3~5 文件 | **3~5** | ⚠️ 排序/显隐要动 Spotify 的布局与手势 —— 撞本仓库"不动布局"的红线，风险最高的一档 |
+| App 图标选择器 | 2~3 文件 + 构建流程 | **2~3** | 图标得随 IPA 塞进去（改 CI） |
+| 变速变调 | 1~2 文件 | **2~4** | 先 1 轮**只读探针**试 Spotify 自己的 `playbackspeed`；命中就便宜，不中就归入音频工程 |
+| 歌词零碎（逐行释义 / RTL / 间奏三点 / BiniLyrics+Unison） | 3~6 文件 | **3~5** | 间奏动画要自绘 |
+| 小项群（Text sizes / Denser rows / Tooltips / Pull to refresh / 队列与设备底部卡片 / sheet 式播放器 / 新进度滑条 / 封面→条动画 / Sleep timer / 彩蛋） | 每条几十~一两百行 | **每条 1 轮，批量 3~5 条一次 → 共 4~6** | 单条都便宜，**合批**是关键 |
+| **音频：Music Haptics** | 中等 | **3~5** | 要音频 buffer ⇒ 先有音频图 |
+| **音频：DSP 十件套 + AutoEq/DDC + Liveprog** | 大（自研 DSP 链） | **10~15+** | 需先抽 IPA **导入符号表** + fishhook 重绑；**没有把握** |
+| **音频：Sing（AI 人声分离）** | 大 | **5~10+** | 同上，且**模型是它的**（得自己找/训一个） |
+| Live Activity / 小组件 / 锁屏 / 动态封面 | 大（要 extension target） | —— | 用户已否决/暂缓 |
+
+**合起来**：
+- **扣掉音频三块**：约 **22~35 轮**（其中"小项群"和"清理开关"能靠合批压到更少）。
+- **加上音频三块**：约 **40~55 轮**，而且音频那部分**风险不是"慢"而是"可能做不出来"**
+  （我们是 Swift/Orion、无 Mac；spoti.pw 是 ObjC/Theos、有 Mac 且在音频管线上工作）。
+
+**结论**：**"全加"不划算**。合理做法是分成三批 —— ①便宜大碗（清理开关 + 设置页那批，6~9 轮就能有"很大变化"）；
+②中等（诊断 / 变速探针 / Custom navbar，6~11 轮）；③音频单独当**项目**评估，而不是当"功能"排进批次。
+
+---
+
+## 7. 砍掉 **A 区（音频）** 与 **D 区（封面/锁屏/桌面）** 之后
+
+用户 2026-10-02 问："音频功能 / D 区功能不考虑的情况下，工作量是不是少很多" → **是，而且不止是"少"，
+是性质变了**：剩下的几乎全是"UI 层、可撤销、框架现成"的活，**没有"可能做不出来"的块**。
+
+砍掉的是：Sing / DSP 十件套 / Music Haptics / 变速变调（A 区，**20~34 轮**里的大头）
++ Canvas/Fluid artwork/动态封面/锁屏歌词/锁屏小组件/主屏 widget/Live Activity（D 区）。
+
+| 剩下的块 | 轮次 | 风险 |
+|---|---|---|
+| 25 条清理开关 | 2~4 | 低（框架现成；每个目标要先取证） |
+| 设置与工具页（导出导入 / Reset / Updates / Licenses / tour / Donate / 遥测计数 / All flags 补齐 AUTO+输入） | 3~4（**小页面能一次写 3~4 个，一轮装一次**） | 低 |
+| 歌词零碎（逐行释义 / RTL / 间奏三点 / BiniLyrics+Unison / 开关组合） | 2~3 | 低（间奏动画要自绘） |
+| 播放器/队列行为（sheet 播放器 / 新进度滑条 / 队列与设备底部卡片 / 队列角标 / 控制菜单） | 3~5 | 中（要动 presentation 层） |
+| ⚠️ **封面→条 morph 动画**（`Bar to cover art animation`） | 2~3 | **高**：pw 是 hook 私有转场类做的；建议**也划掉** |
+| 导航栏/标签栏：Custom navbar + Tab **显隐**/Icons only | 2~4 | 中低 |
+| ⚠️ Tab **拖动排序** | 3~5 | **高**：要动 Spotify 布局与手势，撞本仓库红线；建议砍成"只做显隐" |
+| App 图标选择器 | 2~3 | 中（要改 CI 把图标塞进 IPA） |
+| 诊断：tree server + hang sampler | 2~3 | 中（用户侧要跑 iproxy） |
+| 小项群（Text sizes / Denser rows / Tooltips / Pull to refresh / 库排序 / 勾状态反馈 / `?` 菜单 …） | 每条 1 轮，**批量 3~5 条一次 → 共 3~5** | 低 |
+| ⭐ 白捡 flag 条目（Snake / 关 Canvas / 各类 tooltip / account switching…） | **0 轮代码 + 1 轮验证**（先加进 Flag 覆盖目录点着试） | 无（但**可能点了没反应**，要一条条验） |
+| Sleep timer | 1~2 | 低：Spotify 自己有 `com.spotify.service.sleeptimer`（我们日志里出现过），**很可能能借** |
+
+**合计：约 17~25 轮**（对比"全加"的 40~55 轮，砍掉一半以上）。
+
+**如果只要"高价值子集"**（我建议的最小集）：
+25 条清理开关 + 设置导入导出/Updates/Licenses + All flags 补齐 + flag 白捡条目 + 诊断 tree server
+= **6~10 轮**，覆盖的是 pw 里**日常最常碰**的那部分。
+
+**要点**：砍掉 A/D 之后，**编译器与真机的固定开销**（每轮几十分钟 + 你装机抓日志的时间）
+成了主要成本 ⇒ **合批比挑功能更重要**（一次编译带 3~5 条小项）。
+
+---
+
+## 8. 第一批已开工（2026-10-02 夜，用户"行，做吧"）
+
+按 §7 的"高价值子集"开工，**这一轮的交付**（等一次装机验证）：
+
+| 交付 | 说明 |
+|---|---|
+| ★ **"白捡组"：28 条 flag 目录** | 在 deb 的可见字符串里发现 Spotify 自己的**"减少打扰"模块** `ios-messaging-reduceinterventions-impl`（一条提示一个 flag），配合 9.1.86 的 flag 表逐条核对（`.spotify-ipa/flag-table.txt`）后，加进「已知 flag」的两个新分组：**推广与提示**（10 条 reduceinterventions + 省流量提示/视频 tooltip/免费档推销/演唱会/社交提示）、**界面元素与彩蛋**（播放条元素 7 条 + Canvas + 封面贪吃蛇 + 多账号 2 条）。**零新 hook、零取证**：点一下写一条覆盖，日志里 `[Flags] override … N match(es)` 就是证据 |
+| **All flags 补齐** | `EeveePropertyModification.forceInt(Int32)` + 「写入数字」档（`FlagOverride.Mode.number`）→ 整数 flag（节流秒数 / 次数上限）从"只能看"变成"能改" |
+| **备份与重置** | `SettingsBackup.swift`：只碰 `UserDefaults.ownedKeys` 白名单 —— `.standard` 里**同时躺着 Spotify 自己的偏好**，全删是"重置 Spotify 状态"那个按钮的语义。导出成 JSON 走**剪贴板**（Spotify 沙箱不对 Files 开放） |
+| **更新日志页** | `GitHubRelease` 补 5 个**可选**字段（不影响版本检查）+ 一页列表（tag/日期/正文/打开） |
+| **开源许可页** | 只写仓库里查得到的事实（GPL-3.0 / fork 出处 / 内置第三方**没有**随附许可文件就照实说 / spoti.pw 只借鉴思路） |
+
+**下一步（第二刀）要取证的那批**（§7 表里的"25 条清理开关"剩下的部分）：
+它们不是 flag，而是**界面元素**（"藏掉播放页下方那张卡""藏掉歌单头里的按钮""藏掉列表上方那块"），
+必须先拿到真机树里的 **id / 类名**。取证方式**不用新写探针**：用现成的「转储视图树」，
+在**搜索页 / 歌单页 / 播放页 / 首页**各停 2 秒，导出日志即可（转储器一次启动 20 份，
+够抓这四屏）。拿到那几份日志我就能把剩下的开关按 `DeclutterChrome` 那套写出来。
+
+
+
+

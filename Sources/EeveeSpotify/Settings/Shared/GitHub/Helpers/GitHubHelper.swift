@@ -29,6 +29,15 @@ struct GitHubHelper {
         let data = try await perform("/repos/zbzxbg/EeveeSpotify-ng-latest/releases/latest")
         return try decoder.decode(GitHubRelease.self, from: data)
     }
+
+    /// 「更新日志」页用：最近 30 个 release（含正文）。
+    ///
+    /// 与版本检查**同一个仓库、同一个 decoder**（`convertFromSnakeCase` → `tagName` /
+    /// `htmlUrl` / `publishedAt` 这些都能对上）。没有 release 时返回空数组而不是抛错。
+    func getReleases() async throws -> [GitHubRelease] {
+        let data = try await perform("/repos/zbzxbg/EeveeSpotify-ng-latest/releases?per_page=30")
+        return try decoder.decode([GitHubRelease].self, from: data)
+    }
     
     func getUser(_ username: String) async throws -> GitHubUser {
         let data = try await perform("/users/\(username)")

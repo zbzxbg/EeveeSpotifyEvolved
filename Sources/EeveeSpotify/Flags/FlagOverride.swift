@@ -21,12 +21,20 @@ struct FlagOverride: Codable, Equatable, Identifiable {
         /// 所以这条模式配不存在的 name/scope 就是空枪（日志里会显示 0 match）。
         case set
 
+        /// 写入 `value` 里那个**整数**（2026-10-02 新增）。
+        ///
+        /// 对应 `EeveePropertyModification.forceInt`：命中就覆盖、没有就追加一条。
+        /// 用途是 Spotify 自己的"减少打扰"（`ios-messaging-reduceinterventions-impl`）
+        /// 里那批整数开关（节流秒数、次数上限……）。
+        case number
+
         var localizedKey: String {
             switch self {
             case .on: return "flag_override_mode_on"
             case .off: return "flag_override_mode_off"
             case .remove: return "flag_override_mode_remove"
             case .set: return "flag_override_mode_set"
+            case .number: return "flag_override_mode_number"
             }
         }
     }
@@ -41,10 +49,17 @@ struct FlagOverride: Codable, Equatable, Identifiable {
     /// 同一 `scope + name` 视为同一条，重复添加是覆盖而不是追加（`value` 不参与身份）。
     var id: String { scope.isEmpty ? name : "\(scope).\(name)" }
 
-    /// `.set` 必须带值，否则写入的是一个空 enum。UI 会禁掉这种输入，
-    /// 这里再兜一层：`activeReplacements` 会把不合法的条目滤掉。
+    /// `.set` 必须带值，否则写入的是一个空 enum；`.number` 必须能解析成整数。
+    /// UI 会禁掉这种输入，这里再兜一层：`activeReplacements` 会把不合法的条目滤掉。
     var isValid: Bool {
-        mode != .set || !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        switch mode {
+        case .set:
+            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .number:
+            return Int32(value.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+        default:
+            return true
+        }
     }
 
     init(name: String, scope: String = "", mode: Mode, value: String = "") {

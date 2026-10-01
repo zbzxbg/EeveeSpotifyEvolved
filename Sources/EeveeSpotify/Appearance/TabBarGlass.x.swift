@@ -146,6 +146,20 @@ enum TabBarGlassPlate {
     /// 系统玻璃是否支持 `isInteractive`（按下弹性反馈）。造玻璃时探一次，之后只用结果。
     private static var interactiveOn = false
 
+    // MARK: - 报给迷你播放条用的宽度（两条要等宽）
+
+    /// 标签栏这条胶囊**当前的宽度**（pt，栏坐标系）。
+    /// 迷你播放条那条要跟它**等宽**（用户 2026-10-02 拍的板），所以每次摆位都刷新一次。
+    /// ⚠️ 只有本文件写它（约定只读；`swift_member_check.py` 认不了 `private(set)`，
+    ///    所以这里没用那个修饰符 —— 与本仓库既有的 static 成员写法保持一致）。
+    static var capsuleWidth: CGFloat = 0
+
+    /// 上面那个宽度**相对栏宽的比例**（真机 312 / 414 ≈ 0.754）。
+    ///
+    /// 迷你条那边按"**自己的宿主宽 × 这个比例**"来算，于是换设备 / 换屏幕宽度时两条仍然等宽
+    /// （直接传绝对值的话，iPad 上就不成对了）。拿不到时那边有兜底比例，见 `MiniBarGlass`。
+    static var capsuleWidthRatio: CGFloat = 0
+
     /// 给**栏**铺一条玻璃胶囊。幂等：位置没变就一个字节都不碰。
     @MainActor
     static func apply(to bar: UIView) {
@@ -207,6 +221,9 @@ enum TabBarGlassPlate {
             max(16, bar.bounds.width - sideInset * 2),
             max(16, band.width + horizontalPadding * 2)
         )
+        // ★ 顺手报给迷你播放条那条胶囊（用户要求两条**等宽**）：绝对值 + 相对栏宽的比例。
+        capsuleWidth = width
+        capsuleWidthRatio = bar.bounds.width > 1 ? width / bar.bounds.width : 0
         // 高：**与迷你播放条那条胶囊同一个数**（`GlassCapsule.height` = 真机实测 60）。
         //     用户 2026-10-02 拍板：无论「隐藏标签文字」开关如何，高度都按"有文字"版式算 ——
         //     现在它直接是一个共用常量，两条胶囊**不可能再漂**（见 `GlassCapsule`）。

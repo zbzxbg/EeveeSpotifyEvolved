@@ -38,6 +38,15 @@ extension FlagOverride {
                 scope: resolvedScope,
                 modification: .forceEnum(value)
             )
+        case .number:
+            // 解析失败在这里兜成 0（不合法条目会被 `activeReplacements` 提前滤掉，
+            // 所以这条基本不会走到；留着是为了不让 `??` 成为一个隐形的静默失败点）。
+            let number = Int32(value.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            return EeveePropertyReplacement(
+                name: name,
+                scope: resolvedScope,
+                modification: .forceInt(number)
+            )
         }
     }
 }

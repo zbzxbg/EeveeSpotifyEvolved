@@ -11,6 +11,14 @@ enum EeveePropertyModification {
     // 且**一点痕迹都没有**。`.forceBool` 早就有"没有就追加"的能力，enum 这边缺一个
     // 对等的。见 `Tools/eevee-hookfinder/FLAGS_9186_DESIGN.md`。
     case forceEnum(String)
+
+    // Set the int if present, **append if missing** (needs name + scope).
+    //
+    // 为什么需要它（2026-10-02）：Spotify 自己的"减少打扰"
+    // （`ios-messaging-reduceinterventions-impl`）里有一批**整数**开关
+    // （节流秒数、次数上限、`max_account_age_days` 之类），设置页只有 bool/enum 两档
+    // 时这些只能看不能改。与 `.forceEnum` 对等：命中就覆盖、没有就追加。
+    case forceInt(Int32)
 }
 
 struct EeveePropertyReplacement {

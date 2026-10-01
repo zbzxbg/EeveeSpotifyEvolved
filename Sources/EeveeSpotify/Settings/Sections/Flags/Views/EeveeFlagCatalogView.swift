@@ -22,7 +22,12 @@ struct EeveeFlagCatalogView: View {
             }
 
             ForEach(filteredGroups, id: \.titleKey) { group in
-                Section(header: Text(group.titleKey.localized)) {
+                // `footer:` 用**非可选**的 `Text`（空串就是不显示）：`Text?` 的写法会跟
+                // "header/footer 类型可不同"的那个重载撞上，编译器说不清用哪个。
+                Section(
+                    header: Text(group.titleKey.localized),
+                    footer: Text(group.footerKey.map { $0.localized } ?? "")
+                ) {
                     ForEach(group.flags, id: \.self) { flag in
                         row(flag)
                     }
@@ -53,7 +58,9 @@ struct EeveeFlagCatalogView: View {
                 $0.name.lowercased().contains(needle) || $0.scope.lowercased().contains(needle)
             }
 
-            return flags.isEmpty ? nil : KnownFlagGroup(titleKey: group.titleKey, flags: flags)
+            return flags.isEmpty
+                ? nil
+                : KnownFlagGroup(titleKey: group.titleKey, footerKey: group.footerKey, flags: flags)
         }
     }
 
@@ -69,7 +76,11 @@ struct EeveeFlagCatalogView: View {
                         .font(.system(.caption, design: .monospaced))
                         .foregroundColor(.primary)
 
-                    Text(verbatim: "\(flag.scope) · \(flag.observedValue)")
+                    // `observedValue` 为空 = 只在 IPA 字面量表里见过（没在设备日志里出现过），
+                    // 这一行就只显示 scope，别编一个假的"观察值"出来。
+                    Text(verbatim: flag.observedValue.isEmpty
+                         ? flag.scope
+                         : "\(flag.scope) · \(flag.observedValue)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
 
@@ -85,14 +96,16 @@ struct EeveeFlagCatalogView: View {
                 if isOverridden(flag) {
                     Image(systemName: "checkmark")
                         .foregroundColor(.green)
-                } else if flag.type == .int {
+                } else if KnownFlagCatalog.prefilledOverride(for: flag) == nil {
+                    // 目前只有"没观察到过数值的 int"会走到这里：点不了，但可以在
+                    // 「Flag 覆盖」页用「写入数字」自己填 —— 那条提示挂在 flag 的 `noteKey` 上。
                     Text("flag_catalog_unsupported".localized)
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
             }
         }
-        .disabled(flag.type == .int)
+        .disabled(KnownFlagCatalog.prefilledOverride(for: flag) == nil && !isOverridden(flag))
     }
 
     private func isOverridden(_ flag: KnownFlag) -> Bool {

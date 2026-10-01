@@ -240,6 +240,41 @@ struct EeveeExtrasSettingsView: View {
                     )
                 }
             }
+
+            // 设置本身的维护 + 关于（2026-10-02 新增）。
+            // 三页全是"离线/只读"性质：备份与重置只碰我们自己的键、许可页是静态、
+            // 更新日志只读 GitHub —— 都不需要新 hook，也不需要新取证。
+            Section(header: Text("maintenance_section".localized)) {
+                Button {
+                    push(with: EeveeBackupSettingsView(), title: "backup_title")
+                } label: {
+                    NavigationSectionView(
+                        color: Color(hex: "#64D2FF"),
+                        title: "backup_title".localized,
+                        imageSystemName: "externaldrive.badge.timemachine"
+                    )
+                }
+
+                Button {
+                    push(with: EeveeUpdatesSettingsView(), title: "updates_title")
+                } label: {
+                    NavigationSectionView(
+                        color: Color(hex: "#32ADE6"),
+                        title: "updates_title".localized,
+                        imageSystemName: "clock.arrow.circlepath"
+                    )
+                }
+
+                Button {
+                    push(with: EeveeLicensesSettingsView(), title: "licenses_title")
+                } label: {
+                    NavigationSectionView(
+                        color: Color(hex: "#8E8E93"),
+                        title: "licenses_title".localized,
+                        imageSystemName: "doc.badge.ellipsis"
+                    )
+                }
+            }
         }
         .listStyle(GroupedListStyle())
         // 每次进页重新同步一次：别处（Flag 页、重置、上一版遗留的存储）改了 UserDefaults 时

@@ -647,6 +647,13 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
                 })
                 continue
 
+            case .forceInt(let newValue):
+                values.append(AssignedValue.with {
+                    $0.propertyID = AssignedIdentifier.with { $0.scope = scope; $0.name = name }
+                    $0.intValue = IntValue.with { $0.value = newValue }
+                })
+                continue
+
             // 命中 0 条时仍然是静默 no-op（原有语义，不动）。
             case .remove, .setBool, .setEnum:
                 break
@@ -669,6 +676,9 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
 
             case .forceEnum(let newValue):
                 values[index].enumValue = EnumValue.with { $0.value = newValue }
+
+            case .forceInt(let newValue):
+                values[index].intValue = IntValue.with { $0.value = newValue }
             }
         }
     }
