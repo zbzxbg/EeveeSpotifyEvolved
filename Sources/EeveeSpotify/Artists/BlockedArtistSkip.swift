@@ -34,8 +34,9 @@ enum BlockedArtistSkip {
     private static let startWindow: Double = 3
 
     private static var timer: Timer?
-    /// 已经判过的曲目 URI：同一首只判一次，跳不动时（比如队列只有一首）不会反复试。
-    private static var lastSeenURI: String?
+    /// 已经判过的曲目：同一首只判一次，跳不动时（比如队列只有一首）不会反复试。
+    /// 存的是 `trackIdentifier`（`spotify:track:<id>` 里的 id），不是整条 URI —— 见 tick 里的说明。
+    private static var lastSeenTrackID: String?
     private static var consecutiveSkips = 0
     private static var didWarnMissingPlayer = false
 
@@ -61,9 +62,19 @@ enum BlockedArtistSkip {
             return
         }
 
-        guard let uri = track.URI()?.absoluteString, !uri.isEmpty else { return }
-        guard uri != lastSeenURI else { return }
-        lastSeenURI = uri
+        // ⚠️ 这里**不能**写 `track.URI()?.absoluteString`：
+        //   · `SPTPlayerTrack.URI()` 返回的是**非可选**的 `any SPTURL`；
+        //   · 而 `SPTURL` 是我们手写的 `@objc protocol`（真身是 NSURL，见那个头文件），
+        //     声明里只有 `spt_trackIdentifier()` / `isPlaylistURL()`，**没有** `absoluteString`
+        //     —— 编译期直接报 "has no member 'absoluteString'"（2026-10-01 CI 就这么挂的）。
+        // 仓库里既有的读法是扩展 `trackIdentifier`
+        // （`SPTPlayerTrack+Extension.swift`，内部就是 `URI().spt_trackIdentifier()`），
+        // 拿到 `spotify:track:<id>` 里的 id —— 用它判断"换歌了没有"正好，比整条 URI 还稳。
+        let trackKey = track.trackIdentifier
+        guard !trackKey.isEmpty else { return }
+        // 同一首只判一次：跳不动（比如队列就一首）时不会反复试。
+        guard trackKey != lastSeenTrackID else { return }
+        lastSeenTrackID = trackKey
 
         let artistName = track.artistName()
         let artistTitle = track.artistTitle()
