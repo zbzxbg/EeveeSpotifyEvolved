@@ -510,6 +510,20 @@ struct EeveeSpotify: Tweak {
                 + " | flag overrides=\(FlagOverrideStore.count)"
         )
 
+        // ★ 2026-10-02：把「覆盖配置」（补丁页那个开关）的状态也打出来。
+        //
+        // 排查"整库变黑 / 听不了歌"时，**H2（我们的 premium 伪装漏了一次）与
+        // H1/H3（服务端按会话地区 / 账号风控）的区分全看它开没开**（见
+        // `SESSION_2026-10-02_APPEARANCE.md` §12.2–12.3）：
+        //   · 开着还是黑 → 大概率不是产品状态那一层（H1/H3）；
+        //   · 关着 → 先怀疑 H2，把开关打开再试。
+        // 日志 30 里一个字都没有，于是"开了覆盖配置也没用"这句话没法验证。
+        writeDebugLog(
+            "[INIT] patching: overwriteConfig="
+                + "\(UserDefaults.overwriteConfiguration ? "ON" : "OFF")"
+                + "（ON = 用随包的 Premium 配置快照整体替换服务端下发的那份）"
+        )
+
         // CarPlay crash fix (Issue #16) — safe-gated
         activateCarPlayCrashFix()
 

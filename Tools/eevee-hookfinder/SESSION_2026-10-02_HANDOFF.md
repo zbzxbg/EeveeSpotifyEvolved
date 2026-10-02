@@ -515,33 +515,39 @@ fi
 
 **⑤ 我看哪几行**：见 12.2。
 
-### 12.2 预期日志行（对着比）
+### 12.2 预期日志行（对着比）　★ 判据已按 **v4.10** 更新
 
 ```
-[TabBarPlate] 胶囊 (27,-3 360x60) … dy=[+10.0,+10.0,+10.0,+10.0] 基=图标·整行 …
+[TabBarPlate] 胶囊 (27,-3 360x60) … dy=[+10.0,+10.0,+10.0,+10.0] 基=图标 …
 [TabBarPlate] 这一行暂时不齐（多半是「创建」菜单开着）— 会在 ~0.5s 内自己复核，不需要再有布局回合（v4.9）
-[Tree] …ElementContentView<…TabBarItemElement>@279,10,103,49          ← ★ 全程必须是 10
+[TabBarPlate] 胶囊 (27,-3 360x60) … dy=[+10.0,+10.0,+10.0,+2.5] 基=图标 …   ← 点开「创建」那一刻（对的）
+[TabBarPlate] 胶囊 (27,-3 360x60) … dy=[+10.0,+10.0,+10.0,+10.0] 基=图标 …   ← ★ 取消之后必须回到这一行
+[Tree] …ElementContentView<…TabBarItemElement>@279,2 …    ← 菜单开着时（对的，它自己居中）
+[Tree] …ElementContentView<…TabBarItemElement>@279,10 …   ← ★ 取消之后必须回到 10，且**不能一直停在 2**
 [MiniBarGlass] 封面色底写回第 N 次 — 已再清掉
 [GitHub] /repos/zbzxbg/EeveeSpotifyEvolved/releases?per_page=30 -> … bytes
 [Settings] AMLL preferred -> ON                                        ← 勾上「AMLL 优先」时
 [Lyrics] AMLL preferred — trying AMLL first, fallback target: <你选的源>
+[REVERT_WATCH][init] ads=… on-demand=… catalogue=… country=…          ← ★ 新增：每份日志都会有（产品状态）
+[INIT] patching: overwriteConfig=ON/OFF（…）                           ← ★ 新增：覆盖配置开关状态
 ```
 
 CI 日志里（不在手机日志里）：
 
 ```
 == 注册应用图标（CFBundleAlternateIcons）==
-[alt-icons] applied 34 icon(s) to Spotify.app
+[alt-icons applied 34 icon(s) to Spotify.app]
 CFBundleAlternateIcons = { … }
 ```
 
 ### 12.3 「不该出现」清单（出现了就是没修好）
 
-* `dy=[+10.0,+10.0,+10.0,+2.5]` 之后**没有**回到全 `+10`，或 `[Tree]` 里那一颗**一直是 `@279,2`** → v4.9 没生效；
-* 点开「创建」时**多出一行** `胶囊 …`（四颗不同值）→ 不该再有（现在是整行一个数）；
+* 点开「创建」时的 `+2.5` **在取消之后没有回到全 `+10`**，或 `[Tree]` 里那一颗**一直停在 `@279,2`** → 复核没生效（v4.8 那个卡死病回来了）；
+* 点开「创建」时那颗白圈**明显低于另外三颗**（照片 38 那种）→ v4.10 没生效；
 * 任何 `missing ` / `⚠️` 的安装失败行；
 * 阿拉伯语歌词仍**贴左** → RTL 没生效（顺手记下当时「更好的逐词歌词」是开还是关）；
-* 界面上出现**裸键名**（如 `ngzhwm_amll_preferred`）→ l10n 没进包。
+* 界面上出现**裸键名**（如 `ngzhwm_amll_preferred`）→ l10n 没进包；
+* `[REVERT_WATCH]` **一行都没有** → 新加的 init 日志没生效（那就还是拿不到"整库变黑"的判据）。
 
 ### 12.4 两个**老的"待验"项已经不存在**了（别再去找）
 
@@ -562,3 +568,64 @@ CFBundleAlternateIcons = { … }
 **「减少打扰」人话开关页**、**All flags 的 AUTO 档 + 文本输入**、
 状态反馈小项（下载三态 / Add-to-library 与 Follow 变勾 / `?` 菜单）——
 再往后是需要**四屏取证**的「视图类清理开关」，取证就靠上面第 11 步。
+
+---
+
+## 13. 2026-10-02 第八轮：**日志 30 判读** + v4.10（照片 38 的下偏）+「整库变黑」补判据
+
+### 13.1 日志 30 判读（用户实测 + `eeveespotify_debug_shared 30.log`）
+
+| 项目 | 证据 | 判定 |
+|---|---|---|
+| **v4.9 的复核真的会跑** | `[TabBarPlate] 这一行暂时不齐（多半是「创建」菜单开着）— 会在 ~0.5s 内自己复核…（v4.9）` | ✅ 机制成立 |
+| **「创建」取消后不再上移** | 菜单开着那一刻报的是 `dy=[+10,+10,+10,+10] 基=图标·整行` | ✅ 上移治好（日志 29 的病根解除） |
+| **但菜单开着时那一颗往下偏** | **照片 38**：白圈明显低于另外三颗（~7pt） | ❌ → **v4.10 修** |
+| **「AMLL 优先」恢复后真的走 AMLL** | `[Lyrics] AMLL preferred — trying AMLL first, fallback target: Musixmatch` + `[AMLL] matched id=5998805469122509 … word-level coverage 64/65 — keeping words` + `mapped 65 line(s), translation=yes` | ✅ |
+| **应用图标** | 用户："功能可用"（CI 里 `alt-icons` 那段是对的） | ✅ |
+| 备份与重置 / 开源许可 / 已知 flag | 用户："没问题 / 没问题 / 有展示" | ✅ |
+| **更新日志** | 接口限流：`[GitHub] ⚠️ … → HTTP 403（280 bytes）{"message":"API rate limit exceeded for 23.132.124.130…"}` | ✅ **功能正常**，只是没额度；顺带把 v4.8 的推断**坐实**了（280 字节 = 限流体） |
+| 安装健康度 | 整份日志**没有** `missing` / `⚠️` 的失败行；2 条 `ORION ERROR` 都是 SponsorBlock（`enabled=N`，`addPlayerObserver:` 那个已知装不上） | ✅ |
+| RTL 贴右 | 用户这轮没提 | ⏳ 待确认（阿拉伯语歌 ×2 截图） |
+
+### 13.2 v4.10：把「创建」的**下偏**修掉（3 个文件）
+
+**病根**：v4.9 为了根治"取消后上移"，把纵向位移改成"整行共用一个数（中位数）"——
+于是菜单开着时那一颗**不再按自己的内容居中**，而它的 33pt 图标 + 40pt 白圆底仍按整行的 `+10` 摆，
+圆心就落到胶囊中心**下方 ~7pt**（照片 38）。
+
+**修法**：**回到"一颗一个数"**（v4.8 的 `iconShifts`），**上移那个老毛病交给 v4.9 的复核机制兜**：
+
+| 状态 | 期望 | 由谁保证 |
+|---|---|---|
+| 菜单**开着** | 那一颗 `dy = +2.5`（白圈正落胶囊中心） | `iconShifts`（一颗一个数） |
+| 菜单**关掉** | 回到全 `+10`，**不需要等布局回合** | `rowIsTransient` → 短促重试（0.2/0.5/1/2/3.5s）+ `DeclutterChrome` 的 0.5s 节拍，**自己直接调 `apply`** |
+
+改动：`Appearance/TabBarGlass.x.swift`（`iconShifts` 回归、删掉 v4.9 的 `rowShift(from:)` 与
+`iconPreferredShifts`、判据简化为 `hasDeviation(dy)`、文件头加 v4.10 段、`report` 文档同步）。
+
+### 13.3 ★「整库变黑 / 听不了歌」：日志 30 **没有判据** —— 原因是诊断有个缺口，已补
+
+**用户这轮的说法**："开启**覆盖配置**之后也没用"。
+⚠️ 先把词对齐（`APPEARANCE` §12.3 已澄清）：这里的「覆盖配置」= **补丁页那个开关**
+（`UserDefaults.overwriteConfiguration`，= 用随包的 Premium 配置快照**整体替换**服务端下发的那份），
+**不是**「Flag 覆盖」（那两件事完全无关；日志 30 的 `flag overrides=0` 说的是后者，别混）。
+
+**这次为什么判不出来**：`[REVERT_WATCH]` 在日志 30 里**一行都没有** ——
+因为那条诊断只挂在 `setOriginalValues:` / `setOverrides:` 上，而**初始的 `initWithValuesDict:` 没打**。
+一个"启动之后产品状态没再被改过"的会话，自然就是 0 行 ⇒ 无法区分
+**H2（我们的 premium 伪装漏了）** 与 **H1/H3（服务端按会话地区 / 账号风控）**。
+
+**这一轮补的两个口子**（都很小、零风险）：
+
+| 文件 | 补了什么 |
+|---|---|
+| `EeveePremiumForce.x.swift` | `initWithValuesDict:` 也打 `passiveLogProductState("init", dict)` → **每份日志至少有一行 `[REVERT_WATCH][init] ads=… on-demand=… catalogue=… country=…`** |
+| `Tweak.x.swift` | `[INIT]` 段新增 `patching: overwriteConfig=ON/OFF（…）` → **再也不会出现"不知道这个开关开没开"** |
+
+**下次变黑时要你回答/提供**（这次日志里看不出来的）：
+
+1. 那一刻**「覆盖配置」（补丁页）是开还是关**？（新日志会自动打出来）
+2. **广告有没有回来 / Premium 徽章还在不在**？—— 这是 H2 与 H1/H3 的分水岭（§12.2 那张表）；
+3. Spotify 设置里的**账号国家**与你当时的**网络出口**是否一致（H1）；
+4. 重启 App / 重新登录 / 换网络，哪一步能让它恢复？
+5. **变黑当场就导出日志**（别等恢复之后）—— 这样 `[REVERT_WATCH][init]` 与那一刻的产品状态才是黑的时候的值。

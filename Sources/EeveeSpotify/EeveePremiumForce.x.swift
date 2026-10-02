@@ -161,6 +161,13 @@ class CoreProductStateHook: ClassHook<NSObject> {
     }
 
     func initWithValuesDict(_ dict: NSDictionary, scheduler: UnsafeRawPointer) -> Any {
+        // ★ 2026-10-02 补：**初始那一次也要打**。
+        //
+        // 以前只有 `setOriginalValues:` / `setOverrides:` 会打 —— 于是"启动之后没再被改过"
+        // 的会话里 `[REVERT_WATCH]` **一行都没有**，排查"整库变黑 / 听不了歌"时反而没有判据
+        // （日志 30 就是这样：0 行，H2 与 H1/H3 分不开）。
+        // 打的是**改写前**的原始字典：要看的就是"服务端给的是什么档"。
+        passiveLogProductState("init", dict)
         let d = enableDictRewrite ? rewritePremiumDict(dict) : dict
         return orig.initWithValuesDict(d, scheduler: scheduler)
     }

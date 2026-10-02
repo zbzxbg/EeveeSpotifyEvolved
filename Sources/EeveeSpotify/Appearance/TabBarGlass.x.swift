@@ -51,6 +51,21 @@ import ObjectiveC.runtime
 ///   （`rowShifts`，基准是每颗**自己看得见的内容**）——「创建」那颗由它的白圆底去对中心，
 ///   另外三颗仍由各自的 24pt 图标去对，谁也不会被对方拽偏。
 ///
+/// ── v4.10（2026-10-02 第三轮，日志 30 + 照片 38）────────────────────────────
+///   **v4.9 的"整行共用一个数"治好了上移，却带来了下偏** ——
+///   用户："点击『创建』之后，那个按钮会**往下偏**（关闭展示标签栏文字才有这个问题）"。
+///   照片 38 就是现场：菜单开着时那颗**白圈明显低于另外三颗**（约 7pt）。
+///   原因：整行只按 `+10` 走，而那一颗的内容（33pt 图标 + 40pt 白圆底）中心在 24.5
+///   → 圆心被摆到了胶囊中心下方。
+///
+///   **v4.10 的结论：回到"一颗一个数"（v4.8 的 `iconShifts`），上移那个老毛病交给
+///   v4.9 的复核机制兜**（`rowIsTransient` + 短促重试 + `DeclutterChrome` 的 0.5s 节拍，
+///   **不等布局回合** —— "等不到布局"正是 v4.8 卡死的根因）。
+///   两根钉子各管一头：
+///     · 菜单**开着** → 它按自己的内容居中（`dy` → `+2.5`），白圈正落胶囊中心；
+///     · 菜单**关掉** → 复核在 ≤0.5s 内自己重算回 `+10`（日志 30 已证复核真的会跑：
+///       `[TabBarPlate] 这一行暂时不齐…（v4.9）`）。
+///
 /// ── v4.9（2026-10-02 第二轮，**Spotify 9.1.88** + 日志 29）───────────────────
 ///   用户："还是有点击『创建』再取消，这个按钮看起来的高度还有文字时一样（上移）"。
 ///   **日志 29 的现场**（9.1.88）：
@@ -253,18 +268,17 @@ enum TabBarGlassPlate {
         // ── 纵向：把四颗摆到胶囊中心（中心 = band.midY）──────────────────────────
         //   v4.6.1 起"一颗一个数" → v4.8 改按图标 → **v4.9 起文字藏起来时四颗共用一个数**
         //   （详细理由与日志 29 的现场都写在文件头 v4.9 那一段）。
-        let iconPreferred = measured.map {
-            iconPreferredShifts(bands: $0.itemIconBands, center: band.midY)
-        } ?? []
-
         let dy: [CGFloat]
         let basis: String
         if UserDefaults.tabBarHideLabels, let measured {
-            // ① **整行一个数**（中位数）：菜单开着时只有「创建」那颗的期望值不同，
-            //    中位数不受影响 → 它再也不会相对另外三颗上移。
-            let row = rowShift(from: iconPreferred)
-            dy = [CGFloat](repeating: row, count: measured.itemIconBands.count)
-            basis = "图标·整行"
+            // ★ v4.10：**一颗一个数**（回到 v4.8 的算法）。v4.9 的"整行共用一个数"
+            // 虽然杜绝了"点开再取消之后上移"，但菜单**开着**时那一颗会**往下偏 ~7pt**
+            // （照片 38：白圈明显低于另外三颗）—— 用户不接受这个代价。
+            // 现在两根钉子同时钉住：开着时它按**自己**的内容居中（dy → +2.5，白圈正落中心）；
+            // 关掉后由 v4.9 那套复核在 ≤0.5s 内自己重算回 +10（**不需要等布局回合**，
+            // 而"等不到布局"正是 v4.8 卡死的根因）。
+            dy = iconShifts(bands: measured.itemIconBands, center: band.midY)
+            basis = "图标"
         } else if let measured {
             // 文字显示时仍按 v4.6.1 的"每颗自己看得见的内容"：那时必须让**文字**也留在
             // 胶囊里（拿图标当基准会把整颗往下推 10pt、文字被推出胶囊底）。
@@ -277,8 +291,10 @@ enum TabBarGlassPlate {
 
         //  ② 安全网：只要这一行"明显不齐"（多半是「创建」菜单开着），就置位并排复核 ——
         //     菜单关掉时这条栏**不一定会再布局**，那时只有我们自己再来一次才能把 transform 改回去。
+        //     ⚠️ 判据只看 `dy`：v4.10 起 dy 是**一颗一个数**，那一颗偏离时它自己就不齐；
+        //     文字显示那条支（`visibleBand`）同理 —— 不需要再单独看一份"期望值"。
         lastBar = bar
-        rowIsTransient = hasDeviation(dy) || hasDeviation(iconPreferred)
+        rowIsTransient = hasDeviation(dy)
         if rowIsTransient { armRowRecheck() }
 
         // ⚠️ 几何不可信就**什么都不画**（v4.0 在这里画出了一条 16pt 的小棍）。
@@ -579,38 +595,37 @@ enum TabBarGlassPlate {
         }
     }
 
-    /// 每颗"按**自己那颗图标**"算出来的期望纵向位移（**只包含认得出图标的那几颗**）。
-    /// ★ v4.8 新增 / v4.9 改成只返回有效值。
+    /// 每颗的纵向位移：把它**自己那颗图标**摆到胶囊中心（`center`）。
     ///
-    /// 基准为什么用图标：它是四颗里唯一稳定的东西 ——「创建」那颗的白圆底（40×40、alpha 会停在 1）
-    /// 与"子树整个不可见时兜底返回整颗 item 框（103×49、中心 24.5）"都不会进来。
-    /// 真机期望值：`+10.0`（图标 5…29 → 中心 17；有文字带中心 27）。
-    /// 认不出图标的那一颗**不贡献**（返回里直接没有它）—— v4.9 只拿这些值求中位数，
-    /// 所以"某颗认不出来"不会把整行拽偏。
+    /// 历史：★ v4.8 新增（一颗一个数）→ v4.9 换成"整行共用一个中位数" → **v4.10 换回来**。
+    /// 换回来的理由（照片 38）：整行一个数时，菜单开着的那一颗会**往下偏 ~7pt**
+    /// （它 33pt 的图标 + 40pt 白圆底仍按整行的 `+10` 摆，圆心落在胶囊中心下方）；
+    /// 而"取消后上移 8pt 卡死"那个老毛病，现在由 v4.9 的**复核机制**兜住了
+    /// （`rowIsTransient` → 短促重试 + `DeclutterChrome` 的 0.5s 节拍，**不等布局回合**）。
+    ///
+    /// 基准为什么用图标而不是"看得见的内容"：图标是四颗里唯一稳定的东西 ——
+    /// 「创建」那颗的白圆底（40×40、alpha 会停在 1）与"子树整个不可见时兜底返回整颗
+    /// item 框（103×49、中心 24.5）"都不会进来。真机期望值：`+10.0`（图标 5…29 → 中心 17）。
+    ///
+    /// 图标一个都没认出来时，用**其余几颗的中位中心**兜底（四颗是同一套版式，
+    /// 别人的中心就是它的中心）；连一颗都认不出才返回 0（不动）。
     @MainActor
-    private static func iconPreferredShifts(bands: [CGRect?], center: CGFloat) -> [CGFloat] {
-        bands.compactMap { band in
-            guard let band, band.height > 1 else { return nil }
-            let delta = center - band.midY
+    private static func iconShifts(bands: [CGRect?], center: CGFloat) -> [CGFloat] {
+        let known = bands.compactMap { $0 }.filter { $0.height > 1 }.map { $0.midY }.sorted()
+        let fallbackMidY: CGFloat? = known.isEmpty ? nil : known[known.count / 2]
+
+        return bands.map { band in
+            var midY: CGFloat?
+            if let band, band.height > 1 {
+                midY = band.midY
+            } else {
+                midY = fallbackMidY
+            }
+            guard let midY else { return 0 }
+            let delta = center - midY
             guard abs(delta) >= 0.5 else { return 0 }
             return max(-rowShiftLimit, min(rowShiftLimit, delta))
         }
-    }
-
-    /// 文字藏起来时**四颗共用的那一个纵向位移**：上面那些期望值的**中位数**。
-    ///
-    /// ★ v4.9 的核心。为什么不"一颗一个数"（v4.6.1–v4.8 的做法）：
-    /// 点开「创建」时那一颗的期望值会掉到 `+2.5`（它 33pt 的图标中心跑到 24.5），
-    /// 而**菜单关掉时这条栏不一定再布局** → 那个值就**永远留在它的 transform 上**
-    /// （日志 29：`@279,2` 一直挂到日志结束，用户看到的就是"创建那颗上移 8pt"）。
-    /// 取中位数：菜单开着时 4 颗里只有 1 颗不同 → 中位数仍是 `+10` → **那颗的暂时态带不动自己**。
-    @MainActor
-    private static func rowShift(from deltas: [CGFloat]) -> CGFloat {
-        guard !deltas.isEmpty else { return 0 }
-        let sorted = deltas.sorted()
-        let middle = sorted[sorted.count / 2]
-        guard abs(middle) >= 0.5 else { return 0 }
-        return max(-rowShiftLimit, min(rowShiftLimit, middle))
     }
 
     /// 这一组位移是不是"**明显不齐**"（有一颗和别的不一样）→ v4.9 复核的判据。
@@ -973,11 +988,12 @@ enum TabBarGlassPlate {
     /// `dy=[…]` 里前三颗应当一直是 `+10` 上下、**点开「创建」也不变**。
     ///
     /// ★ v4.8 加了两样，验收照这个看：
-    ///   · `基=` —— 这一轮用的纵向基准（`图标·整行` = 隐藏标签文字时（v4.9 起四颗共用中位数）；
+    ///   · `基=` —— 这一轮用的纵向基准（`图标` = 隐藏标签文字时（**v4.10 起是一颗一个数**）；
     ///     `可见内容` = 文字显示时）；
     ///   · 胶囊宽度应当是 **360**（`…x60` 那个数换成 `360x60`），不再是 312；
     ///   · **点开「创建」再取消之后**，`dy` 必须回到 `[+10.0,+10.0,+10.0,+10.0]`
-    ///     —— 且 v4.9 起**四颗永远是同一个数**（`图标·整行` 那一支不可能出现四个不同的值）。
+    ///     —— **v4.10 起判据分两段**：点开「创建」那一刻那一颗是 `+2.5` 上下（它 33pt 的图标
+    ///     要居中，**这是对的**），**取消之后必须回到全 `+10`**（复核会在 ≤0.5s 内做到）。
     @MainActor
     private static func report(
         frame: CGRect,
