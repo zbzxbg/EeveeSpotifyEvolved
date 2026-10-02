@@ -210,10 +210,25 @@ enum NowPlayingLyricsPlate {
         // 不满足时安静收掉，而不是画一块莫名其妙的空白。
         guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else {
             remove(reason: "better word-by-word lyrics is off")
+            noteSkip("「更好的逐词歌词」是关的（本层复用的就是那条渲染链）")
             return false
         }
-        guard hasUsableWordLevelData(currentLyricsDto) else {
-            remove(reason: "no word-level lyrics for this track")
+
+        // ★ 2026-10-04 放宽：**行级歌词也画**（原来是"只画逐词"）。
+        //
+        // 为什么改：日志 44 的现场 —— `[WordByWord] handing back to Spotify's native lyrics
+        // page/card — no word-level timing (line-level usable=false)`，而 Spotify 自己的歌词卡
+        // **行级歌词照样渲染**。那张卡正是被「一屏」折掉的 ⇒ 我再要求"必须逐词"，
+        // 结果就是**两边都空**（照片 46 里那一大片空白）。
+        //
+        // 渲染层本来就吃行级数据：`LyricsDto.toAppleMusicLyricLines()` 对只有行级时间的行
+        // 给 `.lineSynchronized`（注释里写着"末行用 `LyricVocalDurationEstimator` 估算"），
+        // 逐词那一档只是把每一行再拆成字。
+        let wordLevel = hasUsableWordLevelData(currentLyricsDto)
+        let lineLevel = hasUsableLineLevelData(currentLyricsDto)
+        guard wordLevel || lineLevel else {
+            remove(reason: "no usable lyrics for this track")
+            noteSkip("这首歌没有可用的歌词（行级也没有）")
             return false
         }
 
@@ -229,6 +244,7 @@ enum NowPlayingLyricsPlate {
         let lines = (currentLyricsDto?.toAppleMusicLyricLines()) ?? []
         guard !lines.isEmpty else {
             remove(reason: "no lines")
+            noteSkip("行模型是空的（`toAppleMusicLyricLines` 没产出可渲染的行）")
             return false
         }
 
@@ -236,6 +252,7 @@ enum NowPlayingLyricsPlate {
         let frame = plateFrame(in: page)
         guard frame.height >= minimumHeight else {
             remove(reason: "no room between the player and the bottom stack")
+            noteSkip("播放器与底部那一坨之间没有位置（高 \(Int(frame.height))pt < \(Int(minimumHeight))pt）")
             return false
         }
 
@@ -267,9 +284,10 @@ enum NowPlayingLyricsPlate {
                     }
                 )
                 changed = true
+                lastSkipReason = ""
                 writeDebugLog(
                     "[\(logTag)] 已挂上 (\(Int(frame.width))x\(Int(frame.height)))"
-                        + " — \(lines.count) 行逐词，v\(version)"
+                        + " — \(lines.count) 行\(wordLevel ? "逐词" : "行级")，v\(version)"
                 )
             }
 
@@ -290,7 +308,21 @@ enum NowPlayingLyricsPlate {
         return changed
     }
 
-    /// 关掉开关 / 这一首没词时把我们的容器整个拿走（Spotify 那边一个字节都没改）。
+    /// 「这一拍为什么不显示」。**只在与上次不同时报一次** —— 这一层刻意在复查节拍上重复跑，
+        /// 每次都打会刷屏；一句不打又会让人（包括我自己）事后瞎猜。
+        ///
+        /// 2026-10-04 的教训就是后者：日志 44 里 `[NPVLyrics]` **0 行** —— 因为门禁没过时
+        /// `remove()` 发现"本来就没挂上"就安静返回了。结果照片 46 那片空白，
+        /// 得靠对照 `[WordByWord] handing back … no word-level timing` 才反推出原因。
+        private static func noteSkip(_ reason: String) {
+            guard lastSkipReason != reason else { return }
+            lastSkipReason = reason
+            writeDebugLog("[\(logTag)] 本次不显示（\(reason)）")
+        }
+
+        private static var lastSkipReason: String = ""
+
+        /// 关掉开关 / 这一首没词时把我们的容器整个拿走（Spotify 那边一个字节都没改）。
     ///
     /// ⚠️ **什么都没挂时就什么都不做、也不打日志**：这个函数在复查节拍上会被反复调用
     /// （没开开关、这一首没逐词、位置不够……），不加这道闸门就会每 0.3s 刷一行日志
