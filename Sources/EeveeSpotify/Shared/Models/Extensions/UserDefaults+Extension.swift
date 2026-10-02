@@ -39,6 +39,7 @@ extension UserDefaults {
     private static let tabBarGlassKey = "tabBarGlass"
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
     private static let miniBarGlassKey = "miniBarGlass"
+    private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -85,6 +86,7 @@ extension UserDefaults {
         tabBarGlassKey,
         tabBarHideLabelsKey,
         miniBarGlassKey,
+        nowPlayingBackdropKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -495,6 +497,21 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: miniBarGlassKey)
+        }
+    }
+
+    // MARK: - 听歌页（NPV）：仿 AM 的取色渐变底
+
+    /// 听歌页**整页底色**换成"封面取色"的三层渐变（AM 那种）。**默认开**。
+    ///
+    /// 取值来源与理由（含"为什么不模糊"）都写在 `NowPlayingBackdrop` 的文件头。
+    /// 关掉即完全还原：把我们改过的那些视图的 `backgroundColor` 写回原值、删掉渐变层。
+    static var nowPlayingBackdrop: Bool {
+        get {
+            container.object(forKey: nowPlayingBackdropKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingBackdropKey)
         }
     }
 

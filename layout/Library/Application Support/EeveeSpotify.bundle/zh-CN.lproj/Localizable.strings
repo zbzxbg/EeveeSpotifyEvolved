@@ -461,6 +461,8 @@ licenses_bundled = "内置的第三方源码";
 licenses_bundled_detail = "仓库内置了第三方源码（SwiftProtobuf、XMLCoder、fishhook 等）；仓库里**没有**随附它们各自的许可文件，需要时请看它们自己的项目。";
 licenses_inspiration = "只借鉴了思路的";
 licenses_inspiration_detail = "部分功能只借鉴思路（spoti.pw，PolyForm Strict 1.0.0）—— 没有复用任何一行代码，全部自己写。";
+licenses_kumone = "kumone";
+licenses_kumone_detail = "听歌页那层「整页取色底」（用封面取色调一层渐变铺满整页）的配方来自 kumone（独立网易云客户端）—— LGPL-3.0（库）/ GPL-3.0（应用），与本仓库 GPL-3.0 兼容。只借了数值、曲线与图层做法，这里的视图代码是我们自己的 UIKit。";
 
 // ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
 // 这些开关写的是 Spotify 的 **flag 覆盖**（`ios-messaging-reduceinterventions-impl` 那批），
@@ -510,3 +512,10 @@ reduce_interventions_scope_predictability = "设备提示";
 reduce_interventions_scope_predictability_footer = "Spotify「设备预测」那套实验里的提示。";
 reduce_interventions_scope_yourlibaryx = "音乐库";
 reduce_interventions_scope_yourlibaryx_footer = "音乐库里出现的提示、横幅与卡片。";
+
+// ── 听歌页取色底（2026-10-03）────────────────────────────────────────────────
+// 配方（取色渐变，不是模糊）借鉴 kumone（LGPL-3.0 / GPL-3.0），
+// 见 Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift。
+now_playing_backdrop_section = "听歌页";
+now_playing_backdrop = "整页封面取色底";
+now_playing_backdrop_description = "用封面取色调出一层渐变铺满听歌页（Apple Music 那种观感）。会接管 Spotify 自己那层封面底色；关掉即把它原样写回。";

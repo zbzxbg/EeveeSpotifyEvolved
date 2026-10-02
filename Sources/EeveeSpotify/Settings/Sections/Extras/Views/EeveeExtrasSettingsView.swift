@@ -43,6 +43,7 @@ struct EeveeExtrasSettingsView: View {
         var tabBarGlass = UserDefaults.tabBarGlass
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
         var miniBarGlass = UserDefaults.miniBarGlass
+        var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
     }
 
     var body: some View {
@@ -172,6 +173,30 @@ struct EeveeExtrasSettingsView: View {
                             UserDefaults.miniBarGlass = value
                             // 迷你条的布局回合不常有：改完当场落地（撤玻璃/还原底色都在这一句里）。
                             MiniBarGlassPlate.reconcileNow()
+                        }
+                    )
+                )
+            }
+
+            // 听歌页（NPV）：仿 Apple Music 的**整页取色渐变底**。
+            // 借鉴来源与"为什么不模糊"写在 `NowPlayingBackdrop` 的文件头。
+            Section(
+                header: Text("now_playing_backdrop_section".localized),
+                footer: Text("now_playing_backdrop_description".localized)
+            ) {
+                Toggle(
+                    "now_playing_backdrop".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingBackdrop,
+                        persist: { value in
+                            UserDefaults.nowPlayingBackdrop = value
+                            // 关掉要**当场**还原（不用等下一次进听歌页）；
+                            // 打开就顺手刷一次，用户可以在听歌页里立刻看到。
+                            if value {
+                                refreshNowPlayingBackdrop()
+                            } else {
+                                NowPlayingBackdrop.remove(reason: "switch off")
+                            }
                         }
                     )
                 )

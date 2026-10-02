@@ -43,6 +43,15 @@ struct EeveeLicensesSettingsView: View {
                 symbol: "lightbulb",
                 color: Color(hex: "#BF5AF2")
             ),
+            // 2026-10-03：听歌页那层"整页取色底"的配方借自 kumone（LGPL-3.0 / GPL-3.0，
+            // 与本仓库 GPL-3.0 兼容）。这类**兼容许可**的借用必须署名 —— 与上面
+            // spoti.pw（PolyForm，只借思路）不是一回事，所以单列一条。
+            Entry(
+                title: "licenses_kumone".localized,
+                detailKey: "licenses_kumone_detail",
+                symbol: "music.note.house",
+                color: Color(hex: "#FF375F")
+            ),
         ]
     }
 

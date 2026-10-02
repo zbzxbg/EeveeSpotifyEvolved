@@ -400,6 +400,15 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
 
         // 9.1.x 上内嵌歌词宿主已改名，改为运行时查找（不新增 hook，避免注册期崩溃）。
         InlineLyricsHostLocator.scheduleLookup(from: target as? UIViewController)
+
+        // 「仿 AM 的整页取色底」——**搭在这条既有 hook 上**，不新开 hook
+        // （Orion 注册期解析不到目标会崩注入工具，本仓库有先例）。
+        //
+        // ⚠️ 故意**不**加 `viewDidLayoutSubviews`：那是可选方法，9.1.88 的
+        // `NPVScrollViewController` 没覆写就会 `Failed to hook method`。
+        // 刷新时机改为"每次进这一页" + "设置里切开关时当场落地"两处，
+        // 见 `refreshNowPlayingBackdrop()` / `NowPlayingBackdrop.remove(reason:)`。
+        refreshNowPlayingBackdrop()
     }
     
     func viewWillDisappear(_ animated: Bool) {
@@ -410,8 +419,25 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
     }
 }
 
-class NowPlayingScrollViewControllerHook: ClassHook<NSObject> {
-    typealias Group = LegacyLyricsGroup
+/// 「仿 AM 的整页取色底」的**唯一**刷新入口（全局函数，不是某个 hook 的方法）。
+///
+/// 两个调用点：
+///   1. `NPVScrollViewControllerHook.viewWillAppear` —— 每次进听歌页；
+///   2. 设置页切那个开关时 —— 关掉要**当场**还原，不能等下一次进页面。
+///
+/// 取封面色与歌词配色**同一处口径**（`track.metadata()["extracted_color"]`），
+/// 避免两套取色各说各话。
+func refreshNowPlayingBackdrop() {
+    guard let page = npvScrollViewController as? UIViewController else { return }
+    let view = page.view
+    guard let view, view.bounds.width > 1 else { return }
+
+    let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
+    let hex = track?.metadata()["extracted_color"]
+    NowPlayingBackdrop.apply(hex: hex, in: view)
+}
+
+class NowPlayingScrollViewControllerHook: ClassHook<NSObject> {    typealias Group = LegacyLyricsGroup
     static var targetName = "NowPlaying_ScrollImpl.NowPlayingScrollViewController"
     
     func nowPlayingScrollViewModelWithDidLoadComponentsFor(
