@@ -52,7 +52,10 @@ enum NowPlayingBackdrop {
     private struct Touched {
         let view: UIView
         let originalColor: UIColor?
+        /// 主渐变（主色 → 暗角 → 底部压黑）。
         let layer: CAGradientLayer
+        /// 左上白光晕（径向）。单独一层，见 `adopt`。
+        let halo: CAGradientLayer
     }
 
     private static var touched: [Touched] = []
@@ -114,6 +117,7 @@ enum NowPlayingBackdrop {
         let count = touched.count
         for item in touched {
             item.layer.removeFromSuperlayer()
+            item.halo.removeFromSuperlayer()
             item.view.backgroundColor = item.originalColor
         }
         touched.removeAll()
@@ -144,14 +148,35 @@ enum NowPlayingBackdrop {
         view.backgroundColor = .clear
         view.layer.insertSublayer(gradient, at: 0)
 
-        let item = Touched(view: view, originalColor: original, layer: gradient)
+        // ② 左上白光晕（kumone 的第二层）：`RadialGradient(.white 12% → clear, 圆心左上)`。
+        // UIKit 里就是一个 `CAGradientLayer` 换成 `.radial`。
+        // ⚠️ 单独一层而不是并进主渐变：`locations` 只能沿一条轴走，径向的没法用同一层表达。
+        // 少了它日志里那句"左上 12% 白光"就是**说了没做** —— 2026-10-03 自查时抓到过。
+        let halo = CAGradientLayer()
+        halo.type = .radial
+        halo.startPoint = CGPoint(x: 0, y: 0)
+        halo.endPoint = CGPoint(x: 1, y: 1)
+        halo.locations = [0.0, 1.0]
+        halo.colors = [
+            UIColor.white.withAlphaComponent(0.12).cgColor,
+            UIColor.clear.cgColor,
+        ]
+        halo.frame = view.bounds
+        halo.zPosition = -1
+        view.layer.insertSublayer(halo, at: 1)
+
+        let item = Touched(view: view, originalColor: original, layer: gradient, halo: halo)
         touched.append(item)
         return gradient
     }
 
     private static func syncFrame(_ item: Touched) {
-        if item.layer.frame != item.view.bounds {
-            item.layer.frame = item.view.bounds
+        let bounds = item.view.bounds
+        if item.layer.frame != bounds {
+            item.layer.frame = bounds
+        }
+        if item.halo.frame != bounds {
+            item.halo.frame = bounds
         }
     }
 
@@ -186,8 +211,12 @@ enum NowPlayingBackdrop {
 
             if view === root { continue }
             if view.layer.zPosition < 0 { continue }        // 我们自己的层
+            // 判据（2026-10-03 放宽过一次）：真机里那层是**满宽**的，但未必满高
+            // （`7.UIView@0,0,414,896` 是满高，滚动后同一层会变成 `414x1370` 之类）。
+            // 只卡"满宽 + 足够高"，否则滚动状态下会一层都找不到，日志只会说
+            // "no full-page coloured sibling found"，让人以为 Spotify 没这层。
             guard view.bounds.width >= root.bounds.width - 1,
-                  view.bounds.height >= root.bounds.height - 1 else { continue }
+                  view.bounds.height >= 150 else { continue }
             guard let color = view.backgroundColor, color != .clear else { continue }
             // 纯色才接管：动态色 / 图案色读不出分量，硬改会变成一块黑。
             // ⚠️ 条件拆开写 —— 合成一个长表达式会喂给类型检查器一个难题

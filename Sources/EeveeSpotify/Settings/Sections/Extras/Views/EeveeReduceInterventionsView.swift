@@ -44,11 +44,11 @@ struct EeveeReduceInterventionsView: View {
                     header: Text("reduce_interventions_master".localized),
                     footer: Text("reduce_interventions_master_footer".localized)
                 ) {
-                    toggle(
-                        flag: master,
-                        labelKey: "reduce_interventions_master",
-                        descriptionKey: "reduce_interventions_master_description"
-                    )
+                    // ⚠️ 这一行的标签/说明键是**写死**的（不像其它行由 flag 名拼出来），
+                    // 所以单独造一个 `Row` 传给同一个渲染函数 —— 上一版这里漏改，
+                    // 还在用重构前的 `toggle(flag:labelKey:descriptionKey:)`，
+                    // 编译期报 "extra arguments at positions #2, #3"。
+                    toggle(Self.masterRow(for: master))
                 }
             }
 
@@ -273,6 +273,15 @@ struct EeveeReduceInterventionsView: View {
         let label: String = labelKey(for: flag)
         let description: String = descriptionKey(for: flag)
         return Row(flag: flag, labelKey: label, descriptionKey: description)
+    }
+
+    /// 总闸那一行：标签/说明键**写死**（它就是"一键全关"，不该跟着 flag 名走）。
+    private static func masterRow(for flag: KnownFlag) -> Row {
+        Row(
+            flag: flag,
+            labelKey: "reduce_interventions_master",
+            descriptionKey: "reduce_interventions_master_description"
+        )
     }
 
     /// 第二批每节的标题/脚注键。scope 里带 `-` 与 `.`，不能直接拼进键名 →
