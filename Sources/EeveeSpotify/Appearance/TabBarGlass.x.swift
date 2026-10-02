@@ -51,6 +51,28 @@ import ObjectiveC.runtime
 ///   （`rowShifts`，基准是每颗**自己看得见的内容**）——「创建」那颗由它的白圆底去对中心，
 ///   另外三颗仍由各自的 24pt 图标去对，谁也不会被对方拽偏。
 ///
+/// ── v4.9（2026-10-02 第二轮，**Spotify 9.1.88** + 日志 29）───────────────────
+///   用户："还是有点击『创建』再取消，这个按钮看起来的高度还有文字时一样（上移）"。
+///   **日志 29 的现场**（9.1.88）：
+/// ```
+/// 02:14:51  [TabBarPlate] … dy=[+10.0,+10.0,+10.0,+10.0] 基=图标      ← 正常
+/// 02:14:53  [TabBarPlate] … dy=[+10.0,+10.0,+10.0,+2.5] 基=图标      ← 点开「创建」的瞬间
+/// 02:14:53  [Tree] #1   ElementContentView@279,10                     ← 还没变
+/// 02:14:54  [Tree] #2   ElementContentView@279,2                      ← 之后 7 份 dump 全是 2
+/// …一直到 02:15:09（#8）还是 @279,2                                    ← 16 秒没回来
+/// ```
+///   v4.8 的“按图标当基准”**算对了**，但只解决了一半：**菜单关掉时这条栏不一定会再布局**
+///   （`TabBarView.layoutSubviews` 不再来）→ 我们那个 `+2.5` 的 transform **没人去改**，
+///   于是创建那颗永远比另外三颗高 8pt。两个修法叠起来：
+///   ① **四颗共用一个位移**（不再是"一颗一个数"）：取每颗"按自己图标"算出来的期望值的
+///      **中位数**。菜单开着时只有「创建」那一颗的期望值不同（它 33pt 的图标中心跑到
+///      24.5）→ 中位数仍然是 `+10` → **那一颗的暂时态再也带不动自己**，卡死这条路直接断掉。
+///      （这也是 v4.6.1 想解决的事的"正解"：共用一个数要**取中位数**，不能取被拉偏的那个。）
+///   ② **安全网**：一旦这一行"明显不齐"（`hasDeviation`），置位 `rowIsTransient` 并
+///      排一轮短促复核（0.2/0.5/1/2/3.5s）+ 蹭 `DeclutterChrome` 既有的 0.5s 节拍
+///      （`reconcileRowIfTransient()`）—— **不等布局回合**，自己直接重算。
+///      行一稳，两边都变成一次 bool 读（零开销）。
+///
 /// ── v4.8（2026-10-02，用户反馈两条 + 日志 28 / 照片 36/37）──────────────────
 ///   ① **"液态玻璃的宽度有点少"** → `horizontalPadding` `20 → 44`：
 ///      真机 272 + 44×2 = **360pt**（屏宽 414 的 87%；v4.2–v4.7 是 312）。
@@ -228,26 +250,36 @@ enum TabBarGlassPlate {
         // 兜底：图标/文字一个都没认出来（类名换了）→ 退回 v4.5 的老量法（看得见的内容）。
         let band = measured?.full ?? measured?.icons ?? contentBand(in: bar, stack: stack)
 
-        // ── 纵向：每颗把自己**看得见的内容**摆到胶囊中心（中心 = band.midY）─────────
-        //   v4.6.1 起**一颗一个数**：四颗共用一个数时，「创建」那颗一开菜单
-        //   （内容变成 40pt 白圆底 + 33pt 图标）就会把另外三颗顶高 6pt（照片 30→32 的现场）。
-        //
-        //   ★ v4.8 起**分两种基准**（用户 2026-10-02：「隐藏标签文字时，点『创建』再取消，
-        //     创建那颗变高，变成有文字时的高度」，日志 28 的 `dy=…,+2.5` 就是现场）：
-        //     · 文字**藏起来** → 基准 = 这一颗**自己的图标**（`itemIconBands`）。
-        //       图标是唯一稳定的东西：「创建」那颗的白圆底（40×40）与"子树整个不可见时
-        //       兜底返回整颗 item 框（103×49、中心 24.5 → dy=+2.5）都不会进来，
-        //       而取消菜单后图标一定回到 `24×24@y=5` → `dy` 回到 `+10`，与另外三颗齐平。
-        //       菜单开着的瞬间它的图标临时变 33pt，这一支会跟着把它摆正（那是一次的、对的）。
-        //     · 文字**显示** → 仍走 v4.6.1 的 `visibleBand`：那时必须让**文字**也留在胶囊里，
-        //       拿图标当基准会把整颗往下推 10pt、文字会被推出胶囊底。
+        // ── 纵向：把四颗摆到胶囊中心（中心 = band.midY）──────────────────────────
+        //   v4.6.1 起"一颗一个数" → v4.8 改按图标 → **v4.9 起文字藏起来时四颗共用一个数**
+        //   （详细理由与日志 29 的现场都写在文件头 v4.9 那一段）。
+        let iconPreferred = measured.map {
+            iconPreferredShifts(bands: $0.itemIconBands, center: band.midY)
+        } ?? []
+
         let dy: [CGFloat]
+        let basis: String
         if UserDefaults.tabBarHideLabels, let measured {
-            dy = iconShifts(bands: measured.itemIconBands, center: band.midY)
+            // ① **整行一个数**（中位数）：菜单开着时只有「创建」那颗的期望值不同，
+            //    中位数不受影响 → 它再也不会相对另外三颗上移。
+            let row = rowShift(from: iconPreferred)
+            dy = [CGFloat](repeating: row, count: measured.itemIconBands.count)
+            basis = "图标·整行"
+        } else if let measured {
+            // 文字显示时仍按 v4.6.1 的"每颗自己看得见的内容"：那时必须让**文字**也留在
+            // 胶囊里（拿图标当基准会把整颗往下推 10pt、文字被推出胶囊底）。
+            dy = rowShifts(bands: measured.itemBands, center: band.midY)
+            basis = "可见内容"
         } else {
-            dy = measured.map { rowShifts(bands: $0.itemBands, center: band.midY) } ?? []
+            dy = []
+            basis = "可见内容"
         }
-        let basis = (UserDefaults.tabBarHideLabels && measured != nil) ? "图标" : "可见内容"
+
+        //  ② 安全网：只要这一行"明显不齐"（多半是「创建」菜单开着），就置位并排复核 ——
+        //     菜单关掉时这条栏**不一定会再布局**，那时只有我们自己再来一次才能把 transform 改回去。
+        lastBar = bar
+        rowIsTransient = hasDeviation(dy) || hasDeviation(iconPreferred)
+        if rowIsTransient { armRowRecheck() }
 
         // ⚠️ 几何不可信就**什么都不画**（v4.0 在这里画出了一条 16pt 的小棍）。
         // 真机证据（日志 21）：
@@ -547,32 +579,104 @@ enum TabBarGlassPlate {
         }
     }
 
-    /// 每颗的纵向位移：把它**自己那颗图标**摆到胶囊中心（`center`）。★ v4.8 新增。
+    /// 每颗"按**自己那颗图标**"算出来的期望纵向位移（**只包含认得出图标的那几颗**）。
+    /// ★ v4.8 新增 / v4.9 改成只返回有效值。
     ///
-    /// 与 `rowShifts` 的唯一区别是基准：那边是"这颗**看得见**的内容"，这边是"这颗的**图标**"。
-    /// 「隐藏标签文字」开着时走这一支 —— 理由（白圆底 / item 兜底框会把 dy 拽跑，而且
-    /// 取消菜单后回不来）写在 `apply` 里那段。真机期望值：四颗全是 `+10.0`（图标 5…29、
-    /// 带子中心 27），**点开「创建」再取消之后必须还是 `+10.0`**。
-    ///
-    /// 图标一个都没认出来时，用**其余几颗的中位中心**兜底（四颗是同一套版式，
-    /// 别人的中心就是它的中心）；连一颗都认不出才返回 0（不动）。
+    /// 基准为什么用图标：它是四颗里唯一稳定的东西 ——「创建」那颗的白圆底（40×40、alpha 会停在 1）
+    /// 与"子树整个不可见时兜底返回整颗 item 框（103×49、中心 24.5）"都不会进来。
+    /// 真机期望值：`+10.0`（图标 5…29 → 中心 17；有文字带中心 27）。
+    /// 认不出图标的那一颗**不贡献**（返回里直接没有它）—— v4.9 只拿这些值求中位数，
+    /// 所以"某颗认不出来"不会把整行拽偏。
     @MainActor
-    private static func iconShifts(bands: [CGRect?], center: CGFloat) -> [CGFloat] {
-        let known = bands.compactMap { $0 }.filter { $0.height > 1 }.map { $0.midY }.sorted()
-        let fallbackMidY: CGFloat? = known.isEmpty ? nil : known[known.count / 2]
-
-        return bands.map { band in
-            var midY: CGFloat?
-            if let band, band.height > 1 {
-                midY = band.midY
-            } else {
-                midY = fallbackMidY
-            }
-            guard let midY else { return 0 }
-            let delta = center - midY
+    private static func iconPreferredShifts(bands: [CGRect?], center: CGFloat) -> [CGFloat] {
+        bands.compactMap { band in
+            guard let band, band.height > 1 else { return nil }
+            let delta = center - band.midY
             guard abs(delta) >= 0.5 else { return 0 }
             return max(-rowShiftLimit, min(rowShiftLimit, delta))
         }
+    }
+
+    /// 文字藏起来时**四颗共用的那一个纵向位移**：上面那些期望值的**中位数**。
+    ///
+    /// ★ v4.9 的核心。为什么不"一颗一个数"（v4.6.1–v4.8 的做法）：
+    /// 点开「创建」时那一颗的期望值会掉到 `+2.5`（它 33pt 的图标中心跑到 24.5），
+    /// 而**菜单关掉时这条栏不一定再布局** → 那个值就**永远留在它的 transform 上**
+    /// （日志 29：`@279,2` 一直挂到日志结束，用户看到的就是"创建那颗上移 8pt"）。
+    /// 取中位数：菜单开着时 4 颗里只有 1 颗不同 → 中位数仍是 `+10` → **那颗的暂时态带不动自己**。
+    @MainActor
+    private static func rowShift(from deltas: [CGFloat]) -> CGFloat {
+        guard !deltas.isEmpty else { return 0 }
+        let sorted = deltas.sorted()
+        let middle = sorted[sorted.count / 2]
+        guard abs(middle) >= 0.5 else { return 0 }
+        return max(-rowShiftLimit, min(rowShiftLimit, middle))
+    }
+
+    /// 这一组位移是不是"**明显不齐**"（有一颗和别的不一样）→ v4.9 复核的判据。
+    ///
+    /// 用途：`rowIsTransient`。行一稳它立刻是 `false`，复核（短促重试 + 0.5s 节拍）就都变成
+    /// 一次 bool 读 —— 常态零开销。
+    private static func hasDeviation(_ shifts: [CGFloat]) -> Bool {
+        guard let minValue = shifts.min(), let maxValue = shifts.max() else { return false }
+        return maxValue - minValue > 1
+    }
+
+    // MARK: - v4.9 复核（"这一行还没稳"时自己再来一次，不等布局回合）
+
+    /// 最近一次铺过的那条栏（复核用；weak，栏被换掉自动失效）。
+    private static weak var lastBar: UIView?
+
+    /// 这一行现在"不齐"吗 —— 不齐就说明有颗处于暂时态（多半是「创建」菜单开着），
+    /// 而**它结束的时候这条栏不一定会再布局**，所以要有人自己回来复核一次。
+    private static var rowIsTransient = false
+
+    /// 复核的节奏与节流（与 `scheduleRetry` 同一招，区别是那个只管"几何不可信"）。
+    private static let rowRecheckDelays: [Double] = [0.2, 0.5, 1.0, 2.0, 3.5]
+    private static var rowRecheckUntil: CFAbsoluteTime = 0
+    private static var didLogTransient = false
+
+    /// 排一轮短促复核。**只排一轮、不叠加**（`rowRecheckUntil` 占位）——
+    /// 否则每次布局都排一次就成了变相轮询（仓库纪律不允许）。
+    @MainActor
+    private static func armRowRecheck() {
+        if !didLogTransient {
+            didLogTransient = true
+            writeDebugLog(
+                "[TabBarPlate] 这一行暂时不齐（多半是「创建」菜单开着）— 会在 ~0.5s 内自己复核，"
+                    + "不需要再有布局回合（v4.9）"
+            )
+        }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now >= rowRecheckUntil else { return }
+        rowRecheckUntil = now + (rowRecheckDelays.last ?? 3.5)
+
+        for delay in rowRecheckDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                onMainThreadSync { recheckRow() }
+            }
+        }
+    }
+
+    /// 复核一次：**自己直接调 `apply`**（不等 `layoutSubviews` —— 那正是这次故障的根）。
+    ///
+    /// - Returns: 有没有真的跑（给日志/排查用，不参与判断）。
+    @MainActor
+    @discardableResult
+    private static func recheckRow() -> Bool {
+        guard isEnabled, rowIsTransient, let bar = lastBar, bar.window != nil else { return false }
+        apply(to: bar)
+        return true
+    }
+
+    /// 给 `DeclutterChrome` 那个**既有的 0.5s 复查节拍**用的兜底入口（`reconcile` 里一行调用）。
+    ///
+    /// 为什么需要它：短促复核只有 5 发（~3.5s），要是「创建」菜单开着超过这个时间、
+    /// 之后再关掉，就只剩这条 0.5s 的节拍能救。行稳着时它只是一次 bool 读。
+    @MainActor
+    static func reconcileRowIfTransient() {
+        recheckRow()
     }
 
     // MARK: - 拖动：**已删除**（v4.6）
@@ -869,11 +973,11 @@ enum TabBarGlassPlate {
     /// `dy=[…]` 里前三颗应当一直是 `+10` 上下、**点开「创建」也不变**。
     ///
     /// ★ v4.8 加了两样，验收照这个看：
-    ///   · `基=` —— 这一轮用的纵向基准（`图标` = 隐藏标签文字时；`可见内容` = 文字显示时）；
+    ///   · `基=` —— 这一轮用的纵向基准（`图标·整行` = 隐藏标签文字时（v4.9 起四颗共用中位数）；
+    ///     `可见内容` = 文字显示时）；
     ///   · 胶囊宽度应当是 **360**（`…x60` 那个数换成 `360x60`），不再是 312；
     ///   · **点开「创建」再取消之后**，`dy` 必须回到 `[+10.0,+10.0,+10.0,+10.0]`
-    ///     （菜单开着那一刻「创建」那颗是 `+2.5` 上下 —— 那是对的，它 33pt 的图标要居中；
-    ///       **取消后回不到 +10 才是 bug**）。
+    ///     —— 且 v4.9 起**四颗永远是同一个数**（`图标·整行` 那一支不可能出现四个不同的值）。
     @MainActor
     private static func report(
         frame: CGRect,

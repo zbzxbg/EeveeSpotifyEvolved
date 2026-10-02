@@ -244,6 +244,12 @@ enum DeclutterChrome {
         //   它自己还有一轮 50ms 级的短促重试负责首帧。
         //   ⚠️ 刻意**不新开定时器** —— 蹭的就是这个既有的节拍（0.5s，且非前台不跑）。
         onMainThreadSync { MiniBarGlassPlate.reconcileCoverColor() }
+
+        // ★ v4.9：标签栏那一行的**纵向复核**。点开「创建」时那一颗处于暂时态，
+        //   而**菜单关掉时这条栏不一定再布局** —— 日志 29 里我们的 transform 就停在
+        //   `+2.5`，创建那颗一直比另外三颗高 8pt（16 秒没回来）。
+        //   这里跟上面同一个纪律：**只在"这一行还没稳"时才真的重算**，稳着时是一次 bool 读。
+        onMainThreadSync { TabBarGlassPlate.reconcileRowIfTransient() }
     }
 
     // MARK: 目标登记
