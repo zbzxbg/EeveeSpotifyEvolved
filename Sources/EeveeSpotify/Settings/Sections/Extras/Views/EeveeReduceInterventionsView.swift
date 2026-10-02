@@ -20,11 +20,11 @@ import UIKit
 /// 1. **不另开改配置的路径**：开关写的仍是 `FlagOverrideStore`（`scope` 一定带上 ——
 ///    `.forceBool` 只有在给了 scope 时才**追加**服务端没下发过的条目，见
 ///    `DynamicModifyingFunctions.modifyAssignedValues` 那段"没有就追加"）。
-/// 2. **`UserDefaults` 不参与语义**：点过就写覆盖，取消就删覆盖；页面重进时用
-///    `existingOverride(for:)` 反查，所以在「Flag 覆盖」页手改过的条目也能正确显示。
-/// 3. **默认值两端一致**：`flag.observedValue == "false"` 的提示按"本来就不发"处理
-///    （开关显示关），其余按"默认发"（开关显示开）；不会出现"显示开着、
-///    其实 Spotify 本来就不发"的假象。
+/// 2. **`UserDefaults` 不参与语义**：点过就写覆盖、取消就删覆盖；页面重进时用
+///    `existingOverride(for:)` 反查真实状态 —— 所以在「Flag 覆盖」页手写/手删过的条目
+///    这一页也显示得对（开关的唯一含义就是"**有没有一条把它关掉的覆盖**"）。
+/// 3. **只认 `.off` 那一种覆盖**：`on` / `set` / `number` 在这条路径上是空操作，
+///    所以要按"有没有**关掉**"来显示，而不是"有没有覆盖"。
 ///
 /// ## 依赖与代价（照实写）
 ///
@@ -58,11 +58,9 @@ struct EeveeReduceInterventionsView: View {
                 footer: Text("reduce_interventions_tips_footer".localized)
             ) {
                 ForEach(Self.tipFlags, id: \.self) { flag in
-                    toggle(
-                        flag: flag,
-                        labelKey: Self.labelKey(for: flag),
-                        descriptionKey: Self.descriptionKey(for: flag)
-                    )
+                    let labelKey: String = Self.labelKey(for: flag)
+                    let descriptionKey: String = Self.descriptionKey(for: flag)
+                    toggle(flag: flag, labelKey: labelKey, descriptionKey: descriptionKey)
                 }
             }
         }
@@ -97,7 +95,7 @@ struct EeveeReduceInterventionsView: View {
                         FlagOverride(name: flag.name, scope: flag.scope, mode: .off)
                     )
                 } else {
-                    FlagOverrideStore.remove(id: flag.id)
+                    FlagOverrideStore.remove(id: Self.overrideId(for: flag))
                 }
                 // 立刻回读，让重进页面/切换开关都看到真实状态。
                 overrides = FlagOverrideStore.all
@@ -105,19 +103,53 @@ struct EeveeReduceInterventionsView: View {
         )
     }
 
+    /// 覆盖表里的稳定 id。
+    ///
+    /// ⚠️ **不能写 `flag.id`**：`KnownFlag` 只有 `name` / `scope` / `type` / `observedValue` /
+    /// `noteKey`，**没有 `id`** —— 有 `id` 的是 `FlagOverride`。
+    /// 规则必须与 `FlagOverride.id` 那行（`scope.isEmpty ? name : "\(scope).\(name)"`）
+    /// **逐字一致**，否则这一页反查不到已存在的覆盖，「Flag 覆盖」页里手写的条目会显示成"没关"。
+    /// 这里 scope 恒非空（目录里每条都带 scope），但空 scope 的分支照抄，保持与那边同构。
+    private static func overrideId(for flag: KnownFlag) -> String {
+        let scope: String = flag.scope
+        let name: String = flag.name
+        if scope.isEmpty {
+            return name
+        }
+        return scope + "." + name
+    }
+
     /// 已有的、且**确实把这条关掉**的覆盖。`on` / `set` / `number` 不算 —— 那样会让
     /// 用户在「Flag 覆盖」页写的其它模式被这一页误读成"已关闭"。
+    ///
+    /// ⚠️ 写法刻意为"**逐句、显式类型**"，不要合并回一个长表达式：
+    /// 第一版写的是 `overrides.first { $0.id == flag.id && $0.mode == .off }`，CI 直接报
+    /// `the compiler is unable to type-check this expression in reasonable time`
+    /// （真实原因之一是里面那个不存在的 `flag.id` 让求解器发散；但即使修掉它，
+    /// `first(where:)` + 两个成员比较 + 隐私字段访问仍容易踩同一条线）。
     private func existingOverride(for flag: KnownFlag) -> FlagOverride? {
-        overrides.first { $0.id == flag.id && $0.mode == .off }
+        let wantedId: String = Self.overrideId(for: flag)
+        let matches: [FlagOverride] = overrides.filter { item in
+            let sameId: Bool = item.id == wantedId
+            let muted: Bool = item.mode == .off
+            return sameId && muted
+        }
+        return matches.first
     }
 
     // MARK: - 名单（全部来自目录）
 
     private static let interventionsScope = "ios-messaging-reduceinterventions-impl"
 
-    /// 总闸：目录里唯一那条带 `noteKey` 的（`flag_note_interventions_master`）。
+    /// 总闸：目录里那条 `enabled`（带 `flag_note_interventions_master`）。
     private static var masterFlag: KnownFlag? {
-        knownFlags.first { $0.scope == interventionsScope && $0.name == "enabled" }
+        let all: [KnownFlag] = knownFlags
+        let matches: [KnownFlag] = all.filter { flag in
+            let inScope: Bool = flag.scope == interventionsScope
+            let isMaster: Bool = flag.name == "enabled"
+            return inScope && isMaster
+        }
+        return matches.first
     }
 
     /// 逐条提示 = 这一组里除总闸、整数开关之外的 bool。
@@ -132,12 +164,17 @@ struct EeveeReduceInterventionsView: View {
     ]
 
     private static var tipFlags: [KnownFlag] {
-        knownFlags.filter {
-            $0.scope == interventionsScope
-                && $0.name != "enabled"
-                && $0.type == .bool
-                && !mergedIntoAnotherRow.contains($0.name)
+        // ⚠️ 逐句、显式类型：一处 `&&` 链里混四种判据（含 Set.contains）也是
+        // `unable to type-check in reasonable time` 的常见触发形状。宁可多几行。
+        let all: [KnownFlag] = knownFlags
+        let candidates: [KnownFlag] = all.filter { flag in
+            let inScope: Bool = flag.scope == interventionsScope
+            let notMaster: Bool = flag.name != "enabled"
+            let isBool: Bool = flag.type == .bool
+            let standalone: Bool = !mergedIntoAnotherRow.contains(flag.name)
+            return inScope && notMaster && isBool && standalone
         }
+        return candidates
     }
 
     private static var knownFlags: [KnownFlag] {
@@ -174,8 +211,10 @@ struct EeveeReduceInterventionsView: View {
         }
 
         let prefix = "enable_message_"
-        return flag.name.hasPrefix(prefix)
-            ? String(flag.name.dropFirst(prefix.count))
-            : flag.name
+        if flag.name.hasPrefix(prefix) {
+            let dropped: Substring = flag.name.dropFirst(prefix.count)
+            return String(dropped)
+        }
+        return flag.name
     }
 }

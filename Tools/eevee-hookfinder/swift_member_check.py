@@ -69,6 +69,14 @@ KNOWN_FALSE_POSITIVES = {
 #   · `X.self` / `X.Type` 这类语言级写法。
 SYNTHESIZED_OR_NESTED_MEMBERS = {"allCases", "default", "self", "Type", "init"}
 
+# 局部变量名挡板：这些名字在本仓库里到处都是（循环变量、闭包参数、别处的属性），
+# 同一个文件里很可能既有 `let item: Foo = …` 又有别的 `item.something`。
+# 认了它们只会制造误报 —— 规则②b 宁可漏，也不要把真问题淹掉。
+LOCAL_NAME_MUFFLE = {
+    "item", "line", "view", "cell", "index", "value", "result", "data", "node",
+    "first", "last", "element", "component", "target", "source", "current",
+}
+
 TRIVIA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -211,6 +219,57 @@ def main(argv: list[str]) -> int:
                 problems.append(
                     f"{f}:{line}: `{type_name}.{member}` —— 类型 `{type_name}` 里没有这个成员"
                     "（这类错编译期报 no member，通常是成员插错了作用域）"
+                )
+
+    # ②b 局部变量上的成员：`let flag: KnownFlag = …` 之后写 `flag.id`
+    #
+    # 2026-10-03 加（CI 实证）：写「减少打扰」页时我写了 `flag.id` ——
+    # `KnownFlag` 有 `name` / `scope` / `type` / `observedValue` / `noteKey`，
+    # **没有 `id`**（有 `id` 的是 `FlagOverride`）。编译期报
+    # `value of type 'KnownFlag' has no member 'id'`，同一条语句还连带
+    # `the compiler is unable to type-check this expression in reasonable time`。
+    # 上面那条规则（①）只认 `Type.member`，抓不到"变量.成员"。
+    #
+    # ⚠️ **只校验 struct / enum**（不做 class）：
+    # 类的成员可能来自父类（UIKit 的 `superview` / `window` / `layer` …），
+    # 本脚本看不到继承链 ⇒ 校验类必然误报（第一版就在
+    # `LyricsWordByWord.x.swift` 上误报 `overlay.superview`）。struct / enum 没有继承，
+    # 成员集合就是全部，所以"表里没有"= 真的没有。这条规则的价值也正在此：
+    # 本仓库栽过的两次（`SPTPlayerTrack.artistTitle()`、今天的 `flag.id`）都是值/协议形态。
+    #
+    # 其余保守约定：只认显式标注类型的局部声明；类型必须与使用处**同文件**声明。
+    value_types: set[str] = set()
+    for f, src in per_file_src.items():
+        for m in re.finditer(r"\b(?:struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)", src):
+            value_types.add(m.group(1))
+
+    for f, src in per_file_src.items():
+        local_decls: dict[str, str] = {}
+        for m in re.finditer(
+            r"\b(?:let|var)\s+([a-z_][A-Za-z0-9_]*)\s*:\s*([A-Z][A-Za-z0-9_]*)\b", src
+        ):
+            var, type_name = m.group(1), m.group(2)
+            if var in LOCAL_NAME_MUFFLE:
+                continue
+            if type_name not in value_types:
+                continue
+            # 类型必须在本文件里声明过，否则成员表可能不全（跨文件的 extension）。
+            if not re.search(r"\b(?:struct|enum)\s+" + re.escape(type_name) + r"\b", src):
+                continue
+            local_decls[var] = type_name
+
+        for var, type_name in local_decls.items():
+            known = members.get(type_name, set())
+            if not known:
+                continue
+            for m in re.finditer(r"\b" + re.escape(var) + r"\.([a-z_][A-Za-z0-9_]*)\b", src):
+                member = m.group(1)
+                if member in known or member in SYNTHESIZED_OR_NESTED_MEMBERS:
+                    continue
+                line = src[:m.start()].count("\n") + 1
+                problems.append(
+                    f"{f}:{line}: `{var}.{member}` —— `{var}` 是 `{type_name}`（struct/enum），"
+                    f"该类型里没有 `{member}`（编译期报 has no member）"
                 )
 
     # ② guard let 绑非 Optional（只查本地函数返回类型确定不带 ? 的情形）
