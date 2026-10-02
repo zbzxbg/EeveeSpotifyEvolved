@@ -89,6 +89,28 @@ private func handleLyricsErrorPopUp(_ error: LyricsError?) {
     }
 }
 
+/// 从曲目元数据里把**全部**艺人名抠出来（`artist_name` / `artist_name:1` / `artist_name:2` …）。
+///
+/// 为什么走 metadata 而不是新 API：`SPTPlayerTrack` 是我们**手写**的 protocol，
+/// 只有 `artistName()` / `artistTitle()` 两个 getter（而且 `artistTitle()` 在 9.1.x 上
+/// 根本不存在 —— 仓库为它崩过两次）。metadata 字典是 `SPTPlayerTrackHook` 覆写过的，
+/// 一定在，而且真机日志里见过 `artist_name:1` 这种合作艺人键。
+///
+/// 只读、失败就返回空数组（选歌那边对空名单会退回"只按时长"的旧行为）。
+private func allArtistNames(from track: SPTPlayerTrack) -> [String] {
+    guard let metadata = track.metadata() as? [String: Any] else { return [] }
+
+    let keys = metadata.keys
+        .filter { $0 == "artist_name" || $0.hasPrefix("artist_name:") }
+        .sorted()
+
+    return keys.compactMap { key -> String? in
+        guard let value = metadata[key] as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     guard let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack else {
         throw LyricsError.noCurrentTrack
@@ -98,7 +120,10 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         title: track.trackTitle(),
         primaryArtist: EeveeSpotify.hookTarget == .lastAvailableiOS14 ? track.artistTitle() : track.artistName(),
         spotifyTrackId: track.trackIdentifier,
-        durationMs: track.trackDurationMilliseconds
+        durationMs: track.trackDurationMilliseconds,
+        // 全部艺人（`artist_name` / `artist_name:1` / …）—— 选歌判定要比对歌手，
+        // 只靠 `primaryArtist` 会被同曲异名 / 翻唱骗过去（日志 45 的现场）。
+        artistNames: allArtistNames(from: track)
     )
 
     let options = UserDefaults.lyricsOptions

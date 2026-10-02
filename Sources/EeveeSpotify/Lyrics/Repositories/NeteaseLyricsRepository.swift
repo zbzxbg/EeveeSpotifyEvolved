@@ -800,44 +800,110 @@ class NeteaseLyricsRepository: LyricsRepository {
         }
         writeDebugLog("[NetEase] Search returned \(songs.count) result(s)")
 
-        // 选歌：信任网易搜索相关度（搜索词已是完整歌名 + 歌手），但**不再盲取第一位**。
+        // 选歌：**歌手 + 时长都要对得上**，按相关度顺序取第一个满足的。
         //
-        // 时长闸门的原实现只看第一位：第一位时长与 Spotify 差 > 5s 就直接 noSuchSong，
-        // 哪怕后面几位的时长完全对得上也拿不到词。真机日志实证（`eeveespotify_debug 4.log`）：
-        // 「だれかの心臓になれたなら」的第一位是《ウサギの現実は逃げる》（198s vs 229s）
-        // → 整首没有我们的歌词 → 界面交还 Spotify 自己的歌词，全屏页脚因此写着
-        // 「歌词提供者：プチリリ」（那是 Spotify 日区歌词的来源，不是我们），
-        // 而且不跟着罗马化设置走。
+        // 历史（两版）：
+        //   · 第一版只看第一位：第一位时长差 > 5s 就 noSuchSong（哪怕后面有对得上的）；
+        //   · 第二版改成"按相关度找第一个时长对得上的"，但**完全不比对歌手**。
         //
-        // 现在：**按相关度顺序**在候选里找第一个时长对得上的；一个都对不上，
-        // 才退回原判据（取第一位，若第一位时长不符则 noSuchSong 交给兜底源）。
-        // 安全性不变：时长不符的候选仍然不会被采用。
+        // 2026-10-04 真机日志 45 暴露了第二版的漏洞：同一时长里躺着翻唱 / 伴奏 / 同曲异名版本，
+        // 于是"能展示的歌词也全是错的"（用户原话）。现场是一串
+        // `[NetEase] Chosen[11] → yrc absent → No usable lyrics` 与
+        // `Chosen[0] → Duration mismatch` 交替出现。
+        //
+        // 现在：**时长必须对得上**（±5s），并且**歌手必须对得上**（候选的 `ar[].name`
+        // 里任意一个与我们的任一艺人名互相包含，忽略大小写）。找不到这样的候选时：
+        //   · 还有"时长对得上但歌手对不上"的 → **不用它**（那正是翻唱），交给兜底源；
+        //   · 一个时长都对不上 → noSuchSong。
+        // 拿不到时长（本地文件）时退回"只看歌手"，仍比盲取第一位安全。
         let durationToleranceMs = 5000
-        let chosen: [String: Any]
-        let chosenIndex: Int
-        if let spotifyDurationMs = query.durationMs,
-           let match = songs.enumerated().first(where: { entry in
-               guard let ms = (entry.element["duration"] as? NSNumber)?.intValue else { return false }
-               return abs(ms - spotifyDurationMs) <= durationToleranceMs
-           }) {
-            chosen = match.element
-            chosenIndex = match.offset
-        } else {
-            chosen = songs[0]
-            chosenIndex = 0
-        }
-        writeDebugLog(
-            "[NetEase] Chosen[\(chosenIndex)]: \(chosen["name"] as? String ?? "?")"
-                + " (id \(chosen["id"] ?? "?"))"
-        )
+        let spotifyDurationMs = query.durationMs
+        let wantedArtists = query.allArtistNames.map { $0.lowercased() }
 
-        if chosenIndex == 0,
-           let spotifyDurationMs = query.durationMs,
-           let neteaseDurationMs = (chosen["duration"] as? NSNumber)?.intValue,
-           abs(neteaseDurationMs - spotifyDurationMs) > durationToleranceMs {
-            writeDebugLog("[NetEase] Duration mismatch: spotify=\(spotifyDurationMs)ms netease=\(neteaseDurationMs)ms — noSuchSong")
+        func candidateDuration(_ song: [String: Any]) -> Int? {
+            (song["duration"] as? NSNumber)?.intValue
+        }
+
+        /// 候选的歌手名（网易是 `ar: [{id, name}, …]`）。
+        func candidateArtists(_ song: [String: Any]) -> [String] {
+            guard let list = song["ar"] as? [[String: Any]] else { return [] }
+            return list.compactMap { $0["name"] as? String }
+        }
+
+        func artistMatches(_ song: [String: Any]) -> Bool? {
+            guard !wantedArtists.isEmpty else { return nil }
+            let names = candidateArtists(song).map { $0.lowercased() }
+            guard !names.isEmpty else { return nil }
+            for name in names {
+                for wanted in wantedArtists where name.contains(wanted) || wanted.contains(name) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        var chosen: [String: Any]?
+        var chosenIndex = -1
+        var fallbackByDurationOnly: Int?
+
+        for (index, song) in songs.enumerated() {
+            let durationOK: Bool
+            if let spotifyDurationMs, let ms = candidateDuration(song) {
+                durationOK = abs(ms - spotifyDurationMs) <= durationToleranceMs
+            } else {
+                // 拿不到 Spotify 时长（本地文件）⇒ 这一关不参与判定。
+                durationOK = true
+            }
+            guard durationOK else { continue }
+
+            switch artistMatches(song) {
+            case .some(true):
+                chosen = song
+                chosenIndex = index
+            case .some(false):
+                // 时长对、歌手不对 —— 记下来当"最差可用"，但**优先继续找歌手也对得上的**。
+                if fallbackByDurationOnly == nil { fallbackByDurationOnly = index }
+                continue
+            case .none:
+                // 网易没给歌手名（或我们没有艺人名可比）⇒ 只能按时长认。
+                if fallbackByDurationOnly == nil { fallbackByDurationOnly = index }
+                continue
+            }
+            if chosen != nil { break }
+        }
+
+        if chosen == nil, let index = fallbackByDurationOnly {
+            chosen = songs[index]
+            chosenIndex = index
+            writeDebugLog(
+                "[NetEase] 没有「歌手+时长都对得上」的候选，退回仅时长匹配的第 \(index) 位"
+                    + "（搜到 \(songs.count) 条）"
+            )
+        }
+
+        guard let chosen else {
+            if let spotifyDurationMs {
+                writeDebugLog(
+                    "[NetEase] 没有任何候选的时长与 Spotify 对得上"
+                        + "（spotify=\(spotifyDurationMs)ms，搜到 \(songs.count) 条）— noSuchSong"
+                )
+            } else {
+                writeDebugLog("[NetEase] 没有可用候选（搜到 \(songs.count) 条）— noSuchSong")
+            }
             throw LyricsError.noSuchSong
         }
+
+        let chosenArtists = candidateArtists(chosen).joined(separator: " / ")
+        let chosenDuration = candidateDuration(chosen).map { "\($0)ms" } ?? "?"
+        writeDebugLog(
+            "[NetEase] Chosen[\(chosenIndex)]: \(chosen["name"] as? String ?? "?")"
+                + " — \(chosenArtists.isEmpty ? "?" : chosenArtists)"
+                + " \(chosenDuration)"
+                + " (我们: \(query.primaryArtist) \(spotifyDurationMs.map { "\($0)ms" } ?? "?"))"
+        )
+
+        // 旧版这里还有一道"第一位时长不符就 noSuchSong"的闸门 —— 现在选歌本身已经要求
+        // 时长对得上（或退回的那一位就是时长匹配的），所以那道闸门是重复的，删掉。
 
         guard let songId = songId(from: chosen) else {
             writeDebugLog("[NetEase] Chosen result has no song id")
@@ -885,13 +951,19 @@ class NeteaseLyricsRepository: LyricsRepository {
 
             if !yrcParsed.isEmpty {
                 writeDebugLog("[NetEase] Word-by-word (yrc) lyrics — \(yrcParsed.count) line(s)")
-                lines = yrcParsed.map {
-                    LyricsLineDto(
-                        content: cleanedInterludeSymbol($0.content.lyricsNoteIfEmpty),
-                        offsetMs: $0.offsetMs,
-                        words: $0.words
-                    )
-                }
+                // `LyricsMarkerFilter.isNonLyricLine` = 与其他源共用的"结构标注行"过滤器。
+                // 网易的 `<Music>` 间奏标记就靠它拦掉（2026-10-04 真机日志 45 的现场：
+                // 那行被当正文渲染，跟着歌词列一起滚）。判为标注行的**丢掉整行**，
+                // 而不是留个空行 —— 空行在 AM 渲染层里会占一行高度，看着像"漏了一句"。
+                lines = yrcParsed
+                    .map {
+                        LyricsLineDto(
+                            content: cleanedInterludeSymbol($0.content.lyricsNoteIfEmpty),
+                            offsetMs: $0.offsetMs,
+                            words: $0.words
+                        )
+                    }
+                    .filter { !LyricsMarkerFilter.isNonLyricLine($0.content) }
             } else {
                 if preferWordByWord {
                     writeDebugLog("[NetEase] yrc unavailable — falling back to line-synced (lrc)")
@@ -933,12 +1005,14 @@ class NeteaseLyricsRepository: LyricsRepository {
                     timeSynced = false
                     writeDebugLog("[NetEase] Unsynced lyrics fallback (\(lines.count) line(s))")
                 } else {
-                    lines = parsed.map {
-                        LyricsLineDto(
-                            content: cleanedInterludeSymbol($0.content.lyricsNoteIfEmpty),
-                            offsetMs: $0.offsetMs
-                        )
-                    }
+                    lines = parsed
+                        .map {
+                            LyricsLineDto(
+                                content: cleanedInterludeSymbol($0.content.lyricsNoteIfEmpty),
+                                offsetMs: $0.offsetMs
+                            )
+                        }
+                        .filter { !LyricsMarkerFilter.isNonLyricLine($0.content) }
                 }
             }
 

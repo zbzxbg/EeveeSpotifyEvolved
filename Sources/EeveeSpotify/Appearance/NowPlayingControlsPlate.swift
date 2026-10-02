@@ -252,6 +252,14 @@ enum NowPlayingControlsPlate {
                 // 叶子：这才是真正画东西的那些。
                 if view.alpha == 0 { return }
                 if view.bounds.width > size.width * 1.2 || view.bounds.height > size.height * 1.2 { return }
+                // ⚠️ 只动"看起来是图形"的叶子类。2026-10-05 加这条：用户报"自定义的暂停键
+                // 点了没反应"，而在拿到日志之前，**能自己排除的风险就要排除** ——
+                // 递归到底可能顺手把某个非图形的内部件（命中层/装饰层的子件）也透明掉。
+                // 白名单只放 UILabel / UIImage / *ImageView / *IconView，其它一律不碰。
+                let visual = className.contains("Label")
+                    || className.contains("Image")
+                    || className.contains("IconView")
+                if !visual { return }
                 if !changed.contains(where: { $0 === view }) { changed.append(view) }
                 view.alpha = 0
                 hidden += 1
