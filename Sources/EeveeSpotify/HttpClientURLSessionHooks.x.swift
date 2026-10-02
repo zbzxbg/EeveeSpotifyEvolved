@@ -132,17 +132,16 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                         .fetched(bytes: customLyricsData.count, elapsed: Date().timeIntervalSince(startedAt)),
                         route: "HCUS", plan: plan
                     )
-                } else if waitResult == .timedOut {
-                    lyricsPayload = unavailableLyricsBytes(original: originalLyrics) ?? buffer
-                    cache.recordOutcome(
-                        .placeholder(dueToTimeout: true, elapsed: Date().timeIntervalSince(startedAt)),
-                        route: "HCUS", plan: plan
-                    )
                 } else {
-                    // 取词在预算内失败（报错/没有词）→ 仍要交一份占位，否则卡片不建。
-                    lyricsPayload = unavailableLyricsBytes(original: originalLyrics) ?? buffer
+                    // ⚠️ 2026-10-03：这里**不再交占位**，放行 Spotify 原始响应 ——
+                    // 日志 36 证明了"1.5s 到点就交占位"的代价：占位被按曲目留下，
+                    // 3 秒后真词到手也刷不进去（用户看到的就是"未找到歌词"）。
+                    // 详见 `LyricsResponseCache.firstAttemptBudget` 的说明。
+                    // 现在两条路都只交真结果；这条边只在"取词真的失败/超时"时走到。
+                    lyricsPayload = buffer
                     cache.recordOutcome(
-                        .placeholder(dueToTimeout: false, elapsed: Date().timeIntervalSince(startedAt)),
+                        .placeholder(dueToTimeout: waitResult == .timedOut,
+                                     elapsed: Date().timeIntervalSince(startedAt)),
                         route: "HCUS", plan: plan
                     )
                 }

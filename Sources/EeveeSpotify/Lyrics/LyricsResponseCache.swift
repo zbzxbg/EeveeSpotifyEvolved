@@ -44,16 +44,29 @@ final class LyricsResponseCache {
 
     static let shared = LyricsResponseCache()
 
-    /// 第一次请求的等待上限。
+    /// 第一次请求的等待上限 —— **18s，与后续请求相同**（2026-10-03 撤销 v4.11 的 1.5s）。
     ///
-    /// 取 1.5s：档① 的「≤1 秒 → 卡片一定在」是实测安全区，而 4 秒那一档已经开始丢，
-    /// 1.5s 留了余量又没越界。注意 `getLyricsDataForCurrentTrack` 内部还有一段最多
-    /// **3 秒**的「等播放器元数据跟上」的循环（切歌瞬间常会吃掉一部分），所以这首歌的
-    /// 第一次请求大概率交的是占位 —— 那正是我们要的：**先把卡片建出来**，
-    /// 内容交给紧接着的第二次请求。
-    static let firstAttemptBudget: TimeInterval = 1.5
+    /// ## 为什么把 1.5s 撤掉（真机证据：2026-10-02 日志 36，曲目 `Starboy`）
+    ///
+    /// ```
+    /// 07:43:27  服务端 200 + 1712B 真官方歌词；我们开始取词（AMLL 起跑）
+    /// 07:43:29  ★ 1.6s 到点 → 交了 62 字节占位（"未找到歌词"）
+    /// 07:43:30  服务端下发**已含歌词卡片元素**（has5=true）
+    /// 07:43:31  卡片建出来 → 高 98pt（正常卡片 320pt）= 只剩标题 + 那句占位
+    /// 07:43:32  ★ 真词到手（AMLL 65 行 / 逐词 64）→ **卡片里还是那句占位**
+    /// 之后      该曲**再也没有任何一次歌词请求**（t2 的第二次请求在 15 秒后）
+    /// ```
+    ///
+    /// ⇒ 占位一旦交出去，**Spotify 就按曲目把它当成结论留下**，我们后面那份真词白取；
+    ///   用户的观感正是"第一次听不显示、退出重进才好"。
+    /// ⇒ 前提也错了：**卡片的"座位"是服务端元素列表给的**（`has5=true` 那一条），
+    ///   在 07:43:30 就到了 —— 不需要我们用"1.5s 内先交占位"去抢。
+    ///
+    /// 所以这里回到"**只交**真结果"，代价是**响应时间 = 取词链的耗时**（本机实测 5~15s），
+    /// 换来的是**卡片里不可能再锁死假状态**。备忘复用、计数、`[DL]/[HCUS]` 结果行全部保留。
+    static let firstAttemptBudget: TimeInterval = 18
 
-    /// 后续请求的等待上限：沿用原来的 18 秒。卡片此时已经建出来了，晚到只影响内容。
+    /// 后续请求的等待上限：与第一次相同（留作可调点）。
     static let followUpBudget: TimeInterval = 18
 
     /// 结果备忘的有效期。只覆盖「立刻重请求」那一小段，避免拿旧结果糊弄人。
@@ -175,9 +188,9 @@ final class LyricsResponseCache {
             )
         case let .placeholder(dueToTimeout, elapsed):
             writeDebugLog(
-                "[\(route)] 取词超过 \(plan.budget)s 预算（\(plan.isFirstAttempt ? "首次" : "后续")请求）"
-                    + "— 先交占位把卡片建出来"
-                    + (dueToTimeout ? "" : "（取词报错，不是超时）")
+                "[\(route)] ⚠️ 这次没取到真词（预算 \(plan.budget)s・\(plan.isFirstAttempt ? "首次" : "后续")请求）"
+                    + "— 该路**只交真结果**，本次放行 Spotify 原始响应"
+                    + (dueToTimeout ? "（超时）" : "（取词报错）")
                     + "｜经过 \(Self.format(elapsed))s・第 \(plan.attempt) 次请求"
             )
         case let .passthrough(hadData, timedOut, elapsed):
