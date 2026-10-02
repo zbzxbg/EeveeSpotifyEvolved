@@ -72,7 +72,7 @@ projects credited in this document.
 
 Two more projects shaped this fork.
 
-- [spoti.pw](https://spoti.pw) — **feature roadmap reference only** (`Tools/eevee-hookfinder/SPOTIPW_GAP.md`). Only its Markdown documentation was read; no source was read, disassembled or reused, and everything here is written from scratch. If a feature exists in both projects, the overlap is the *idea*, not the code.
+- [spoti.pw](https://spoti.pw) — [**feature roadmap reference only**](`Tools/eevee-hookfinder/SPOTIPW_GAP.md`). Only its Markdown documentation was read; no source was read, disassembled or reused, and everything here is written from scratch. If a feature exists in both projects, the overlap is the *idea*, not the code.
 - [kumone](https://github.com/missuo/kumone) — **source of layout ideas for the Now Playing page and main pages** ([Tools/eevee-hookfinder/KUMONE_REFERENCE.md](Tools/eevee-hookfinder/KUMONE_REFERENCE.md)).
 
 Neither project endorses this fork, and neither is affiliated with it.
