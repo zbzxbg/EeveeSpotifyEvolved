@@ -20,7 +20,7 @@
 | Channel | Version | Spotify |
 | --- | --- | --- |
 | Public release | `v0.1.0` | 9.1.76 |
-| Development | `v1.0.0-beta.59` | 9.1.88 |
+| Development | `v1.0.0-beta.63` | 9.1.88 |
 
 Development version last updated: `2026/10/02`.
 
