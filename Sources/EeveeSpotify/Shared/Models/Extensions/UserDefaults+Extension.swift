@@ -40,6 +40,7 @@ extension UserDefaults {
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
     private static let nowPlayingVolumeKey = "nowPlayingVolume"
     private static let nowPlayingLyricsInPlayerKey = "nowPlayingLyricsInPlayer"
+    private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -87,6 +88,7 @@ extension UserDefaults {
         nowPlayingOneScreenKey,
         nowPlayingVolumeKey,
         nowPlayingLyricsInPlayerKey,
+        nowPlayingControlGlyphsKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -544,6 +546,24 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingLyricsInPlayerKey)
+        }
+    }
+
+    /// 听歌页「**控制键换成本地字形**」（上一首 / 播放暂停 / 下一首）。**默认关**。
+    ///
+    /// 这是照 spoti.pw v0.21.1（GPL-3.0）`PlayerControls.x` 的做法：**原生按钮留着**
+    /// （动作 / 可用状态 / 无障碍 / 手势区全在），只把按钮里原来那个图标**设成透明**，
+    /// 再叠一个我们自己的 SF Symbol 字形（不吃触摸）。播放键底下那层白圆盘一起透明掉 ——
+    /// 照片 40/41（kumone）里是**裸字形**，没有圆盘。
+    ///
+    /// ⚠️ 默认关的理由：它改的是**别人按钮的内部**（透明度），这类改动本仓库栽过
+    /// （藏错一个视图 = 整页空白），所以先让用户看一眼；关掉即把透明度写回并拿走我们的字形。
+    static var nowPlayingControlGlyphs: Bool {
+        get {
+            container.object(forKey: nowPlayingControlGlyphsKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingControlGlyphsKey)
         }
     }
 

@@ -273,6 +273,10 @@ enum DeclutterChrome {
         //   肉眼与每帧没差别）。没开开关时成本 = 一次 bool 读。
         onMainThreadSync { _ = NowPlayingLyricsPlate.reconcile() }
 
+        // ★ 2026-10-04：「控制键换成本地字形」的保活（Spotify 换帧会重排那一排的 subviews）。
+        //   没开开关时成本 = 一次 bool 读。
+        onMainThreadSync { _ = NowPlayingControlsPlate.reconcile() }
+
         // ★ 2026-10-03 夜：**只读播放器状态探针**（`PlayerStateProbe`）—— 给「突然无法播放
         //   任何歌曲」那条线补现场判据（它至今零判据：31 份日志里 drm/license/unplayable
         //   全零命中，分不开"服务端按地区判不可播"和"账号风控"）。

@@ -43,6 +43,7 @@ struct EeveeExtrasSettingsView: View {
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
         var nowPlayingLyricsInPlayer = UserDefaults.nowPlayingLyricsInPlayer
+        var nowPlayingControlGlyphs = UserDefaults.nowPlayingControlGlyphs
     }
 
     var body: some View {
@@ -227,6 +228,24 @@ struct EeveeExtrasSettingsView: View {
                                 NowPlayingLyricsPlate.reapply()
                             } else {
                                 NowPlayingLyricsPlate.remove(reason: "switch off")
+                            }
+                        }
+                    )
+                )
+
+                // 控制键换成本地字形：原生按钮留着（动作/状态/无障碍全在），
+                // 只把按钮里的原生图标设成透明、叠一个我们自己的 SF Symbol 字形。
+                // 做法照 pw v0.21.1 的 `PlayerControls.x`（GPL-3.0）：见 `NowPlayingControlsPlate` 文件头。
+                Toggle(
+                    "now_playing_control_glyphs".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingControlGlyphs,
+                        persist: { value in
+                            UserDefaults.nowPlayingControlGlyphs = value
+                            if value {
+                                NowPlayingControlsPlate.reapply()
+                            } else {
+                                NowPlayingControlsPlate.restore()
                             }
                         }
                     )

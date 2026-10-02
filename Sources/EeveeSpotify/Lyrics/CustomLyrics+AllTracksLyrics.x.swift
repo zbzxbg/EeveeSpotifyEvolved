@@ -425,6 +425,9 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
             // 「歌词进播放器」：那一刻列表/底部那一坨常常还没建好，`apply` 里的
             // `reconcile` 对"没位置"是安静的，真正的重算交给 `DeclutterChrome` 的复查节拍。
             NowPlayingLyricsPlate.apply(in: pageView)
+            // 「控制键换成本地字形」的兜底落点：万一 `PlaybackControlsElementsUnit` 那个 hook
+            // 被 Orion 拒了，这条路照样能把三个字形装上（判据都是 id，与类名无关）。
+            NowPlayingControlsPlate.apply(to: pageView)
         }
     }
 
@@ -445,6 +448,7 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
             NowPlayingPageOverlay.apply(in: pageView)
             ViewTreeDumper.setPage(pageView)
             NowPlayingLyricsPlate.apply(in: pageView)
+            NowPlayingControlsPlate.apply(to: pageView)
         }
     }
     
