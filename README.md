@@ -36,6 +36,34 @@ The modified features in this fork have been verified to work in this environmen
 > [!TIP]
 > If there are unexpected issues on the Now Playing page, such as lyrics not showing or outdated song teaser cards, simply exit the Now Playing page and re-enter it to resolve the issue.
 
+## Reverse-engineered data, and takedowns
+
+This project interoperates with Spotify's iOS client, which means parts of it were derived from
+a locally decrypted copy of that client. So that there is no ambiguity about what is (and is not)
+in this repository:
+
+**What is here.** Only derived *technical identifiers* needed to attach to the client's own
+extension points: Swift/ObjC class names, feature-flag names and scopes, gRPC service paths,
+view-hierarchy inventories, and a few resolver-configuration snapshots (`.bnk`). All of it is
+regenerable from a copy you supply yourself — see `Scripts/dump-spotify-symbols.py` and
+`Tools/eevee-hookfinder/`.
+
+**What is not here, and will not be added.**
+
+* No audio, no streams, no decryption keys, no DRM circumvention.
+* No lyrics files: lyrics are fetched at runtime from third-party providers by the user's device,
+  and none of their content is bundled.
+* No Spotify account credentials, tokens, or captured traffic.
+* No Spotify binary, no decrypted `.ipa`, no bundled assets of any kind — `*.ipa`,
+  `Decrypted IPA/` and `Tweaked IPA/` are ignored by git on purpose.
+
+**If you are a rights holder** and want something removed, open an issue or contact the maintainer
+directly and it will be removed — no need for a formal takedown. The same applies to third-party
+projects credited above.
+
+> This is not legal advice. It is a statement of what the repository does and does not contain,
+> which is the part a maintainer can actually control.
+
 ## Acknowledgements
 
 - Thanks to [whoeevee](https://github.com/whoeevee) for the original EeveeSpotify project.

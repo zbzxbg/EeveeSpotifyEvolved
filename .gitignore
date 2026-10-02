@@ -22,6 +22,12 @@ Sources/EeveeSpotify/Generated/
 Debs/
 Outputs/
 
+# Reverse-engineering **outputs** (regenerable with Scripts/dump-spotify-symbols.py and
+# Tools/eevee-hookfinder/*.py). Rationale, and the short list of derived data that is
+# deliberately kept in-tree, are in README › "Reverse-engineered data, and takedowns".
+# New dumps belong here rather than in the repository.
+.spotify-ipa/
+
 wrapper/
 
 # zxPluginsInject build outputs
