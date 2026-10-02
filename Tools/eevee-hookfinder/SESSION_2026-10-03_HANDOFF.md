@@ -334,4 +334,6 @@
 | **同一页的 dump 里有满页但 `hidden`/`alpha=0` 的视图**（`15.UIView@…,hidden,alpha=0.00`） | 选目标前先过**可见性闸门**（自己 + 祖先链 + 在窗口里） |
 | **`apply` 只在 `viewWillAppear`/`viewDidAppear` 跑** | 换歌/滚动要在**既有复查节拍**上自愈（不新开定时器） |
 | **`lastHex == hex` 就早退** | 早退 = 自愈永远来不了；幂等要做成"确保状态"，不是"什么都不做" |
+| ★ **Orion hook 方法里写 `self`** | 钩到的对象是 **`self.target`**（`self` 是 hook 类自己）。写成 `self` **只有 CI 才炸**，报成 `has no member 'clipsToBounds'` / `cannot convert value of type 'XHook' to expected argument type 'UICollectionViewCell'`，一路冒泡到 `make` exit 2、**deb 没生成**（2026-10-03 夜真机踩到）。既有 hook 全是 `self.target`，照抄那个写法。**`orion_hook_guard.py` 已加规则 4 拦它**（允许 `self.target` / `self.orig` / 本类自己声明的成员；不算 `[self]` 闭包捕获）—— 两向验证过：322 文件 0 误报、假错恰好抓两条 |
+
 
