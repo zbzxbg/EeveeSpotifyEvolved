@@ -133,6 +133,12 @@ private final class NowPlayingLyricsHost {
 }
 
 /// 「歌词进播放器」的对外门面（`DeclutterChrome` 的复查节拍与听歌页的 appear 都调它）。
+///
+/// ⚠️ **整个 enum 标 `@MainActor`**：它下面持有的宿主是 `@MainActor` 的（UIKit + SwiftUI 视图），
+/// 而所有这些入口本来就只在主线程被调（页面 appear / 复查节拍 / SwiftUI 设置页 binding）。
+/// 不标的话，编译器会按"非隔离 static 方法调用 MainActor 成员"逐行报错
+/// （2026-10-04 真机 CI 抓到：`isCurrent(version:trackId:)` / `isAttached` / `mount` / `tick` …）。
+@MainActor
 enum NowPlayingLyricsPlate {
 
     static let logTag = "NPVLyrics"

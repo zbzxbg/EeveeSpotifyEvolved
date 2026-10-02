@@ -68,6 +68,13 @@ class PlaybackControlsUnitHook: ClassHook<UIView> {
 
 // MARK: - 门面
 
+/// 「控制键换成本地字形」的门面。
+///
+/// ⚠️ **整个 enum 标 `@MainActor`**：它下面用的 `AppleMusicLyricsPlaybackProjection` 是
+/// `@MainActor` 的，而所有入口（hook 的布局回合 / 进页面 apply / 复查节拍 / 设置页 binding）
+/// 本来就都在主线程。不标的话编译器会逐行报"非隔离上下文里引用 MainActor 成员"
+/// （2026-10-04 CI 抓到：`init(positionProvider:)` / `refresh()` / `isPlaying`）。
+@MainActor
 enum NowPlayingControlsPlate {
 
     static let logTag = "NPVControls"
@@ -273,6 +280,11 @@ enum NowPlayingControlsPlate {
     ///
     /// 用仓库既有的 `AppleMusicLyricsPlaybackProjection`（它已经处理了"位置连续前进才算在播"这套
     /// 滞后判断，别处也用它），**不去猜 `isPaused` 这种未公开属性**。
+    ///
+    /// ⚠️ **必须只建一次并缓存**：`refresh()` 的判定是"相对上一次的锚点有没有前进"
+    /// （`advanceAnchor` 为空时只记锚点、不给 `isPlaying = true`）—— 每次新建一个实例的话
+    /// 它永远停在"暂停"，字形就永远画成 play。这个坑 `AppleMusicLyricsOverlayHost` 那边
+    /// 也是靠缓存同一个 projection 避开的。
     private static let projection = AppleMusicLyricsPlaybackProjection {
         WordByWordPositionResolver.shared.currentPositionSeconds()
     }
