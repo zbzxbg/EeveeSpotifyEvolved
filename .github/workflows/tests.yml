@@ -47,3 +47,46 @@ jobs:
                  Sources/EeveeSpotify/Shared/Models/Extensions/URL+Extension.swift \
                  -o url-ad-tests
           ./url-ad-tests
+
+      # ── 2026-10-03 补齐：下面这四条**本来只有 `builddeb.yml`（手动、要填 tag）会跑** ──
+      #
+      # 为什么必须搬到这里：本仓库没有 Mac，`builddeb.yml` 是 `workflow_dispatch` 手动的 ⇒
+      # 一次普通 push 之后，这四块逻辑**没人替我们验**。而它们覆盖的正是最容易改坏的几处：
+      #   · `DebugLogSanitizer` —— 日志脱敏（**隐私**，漏了就是把凭证写进导出日志）；
+      #   · `BrowsitaSectionStripper` —— 广告/推广区块剥离；
+      #   · `ServerSidedFeaturePolicy` / `BundledConfigurationPolicy` —— premium 伪装的边界
+      #     （哪些账号属性**不许**伪装、用哪份随包配置快照）。
+      #
+      # 每一步的编译命令与 `builddeb.yml` 里那一步**逐字一致**（同一个被测文件 +
+      # 同一个测试 main），所以两处的结论不会分叉。
+      - name: Debug log redaction (privacy)
+        run: |
+          swiftc Sources/EeveeSpotify/Shared/Helpers/DebugLogSanitizer.swift \
+                 Tests/DebugLogRedaction/main.swift \
+                 -o debug-log-redaction-tests
+          ./debug-log-redaction-tests
+
+      - name: Browsita section stripper (ads / promos)
+        run: |
+          swiftc Sources/EeveeSpotify/Premium/Helpers/BrowsitaSectionStripper.swift \
+                 Tests/BrowsitaSectionStripper/main.swift \
+                 -o browsita-section-stripper-tests
+          ./browsita-section-stripper-tests
+
+      - name: Server-sided feature policy
+        run: |
+          swiftc Sources/EeveeSpotify/Premium/Helpers/ServerSidedFeaturePolicy.swift \
+                 Tests/ServerSidedFeaturePolicy/main.swift \
+                 -o server-sided-feature-policy-tests
+          ./server-sided-feature-policy-tests
+
+      - name: Bundled configuration policy
+        run: |
+          swiftc Sources/EeveeSpotify/Premium/Helpers/BundledConfigurationPolicy.swift \
+                 Tests/BundledConfigurationPolicy/main.swift \
+                 -o bundled-configuration-policy-tests
+          ./bundled-configuration-policy-tests
+
+      # 唯一一个**不是** swiftc 的测试（纯 Python，不需要工具链）。
+      - name: Resolve-configuration snapshot
+        run: python3 Tests/ResolveConfigurationSnapshot/test.py
