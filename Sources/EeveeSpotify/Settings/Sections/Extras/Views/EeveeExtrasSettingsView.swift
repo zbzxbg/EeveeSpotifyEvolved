@@ -239,6 +239,20 @@ struct EeveeExtrasSettingsView: View {
                         imageSystemName: "person.slash.fill"
                     )
                 }
+
+                // 「减少打扰」：把 Spotify 自己的提示/推广/新功能气泡逐条关掉。
+                // 做法是写 flag 覆盖（`FlagOverrideStore`），**不隐藏视图、不碰布局** ——
+                // 原料（`ios-messaging-reduceinterventions-impl` 那批 flag）早在
+                // `KnownFlagCatalog` 里，这一页只把它变成人话开关。
+                Button {
+                    push(with: EeveeReduceInterventionsView(), title: "reduce_interventions_title")
+                } label: {
+                    NavigationSectionView(
+                        color: Color(hex: "#FF6482"),
+                        title: "reduce_interventions_title".localized,
+                        imageSystemName: "bell.slash.fill"
+                    )
+                }
             }
 
             // 设置本身的维护 + 关于（2026-10-02 新增）。

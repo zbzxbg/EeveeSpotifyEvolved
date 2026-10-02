@@ -466,3 +466,28 @@ licenses_bundled = "Bundled components";
 licenses_bundled_detail = "Third-party source ships in-tree (SwiftProtobuf, XMLCoder, fishhook …). The repository does not carry their separate license files — check those projects directly.";
 licenses_inspiration = "Ideas borrowed";
 licenses_inspiration_detail = "Some features only borrow ideas (spoti.pw, PolyForm Strict 1.0.0). No code was reused — everything here was written from scratch.";
+
+// ── Reduce interventions (2026-10-03) ─────────────────────────────────────────
+// These switches write Spotify **flag overrides** (the ios-messaging-reduceinterventions-impl
+// batch), which is why the footer has to say "restart Spotify" — remote config is fetched once
+// per session. Keys are named after the flag they control; see KnownFlagCatalog.
+reduce_interventions_title = "Reduce interruptions";
+reduce_interventions_master = "Turn all tips off";
+reduce_interventions_master_description = "Spotify's own master switch for this module. Turning it on is the quickest way to stop every tip below at once.";
+reduce_interventions_master_footer = "These switches write Spotify flag overrides. Restart Spotify for them to take effect.";
+reduce_interventions_tips_section = "One switch per tip";
+reduce_interventions_tips_footer = "Each row shows the exact flag it turns off. If a tip still shows up, that flag is not the one this build reads — check the [Flags] lines in the debug log.";
+reduce_interventions_flag_account_switching_tooltip = "Account switching tip";
+reduce_interventions_flag_account_switching_tooltip_description = "The nudge that suggests switching between accounts.";
+reduce_interventions_flag_your_library_ai_playlist_creation_tooltip = "AI playlist creation tip";
+reduce_interventions_flag_your_library_ai_playlist_creation_tooltip_description = "The prompt about creating playlists with AI, shown in Your Library.";
+reduce_interventions_flag_live_events_concert_notifications_tooltip = "Concert & live event tips";
+reduce_interventions_flag_live_events_concert_notifications_tooltip_description = "Concert notifications and the live-event banner, including the venue name row.";
+reduce_interventions_flag_puffin_nudge_end_optimization = "Puffin nudge";
+reduce_interventions_flag_puffin_nudge_end_optimization_description = "The nudge from Spotify's Puffin experiment.";
+reduce_interventions_flag_smart_shuffle_helper_tooltip = "Smart Shuffle helper";
+reduce_interventions_flag_smart_shuffle_helper_tooltip_description = "The explainer that appears the first time Smart Shuffle is used.";
+reduce_interventions_flag_watch_feed_entity_explorer_tooltip = "Watch feed explorer tip";
+reduce_interventions_flag_watch_feed_entity_explorer_tooltip_description = "The tip pointing at the watch feed explorer.";
+reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell = "Free-tier player upsell";
+reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell_description = "The suggestion card that pushes free listeners toward Premium in the player.";

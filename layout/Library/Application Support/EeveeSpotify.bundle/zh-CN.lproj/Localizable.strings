@@ -461,3 +461,28 @@ licenses_bundled = "内置的第三方源码";
 licenses_bundled_detail = "仓库内置了第三方源码（SwiftProtobuf、XMLCoder、fishhook 等）；仓库里**没有**随附它们各自的许可文件，需要时请看它们自己的项目。";
 licenses_inspiration = "只借鉴了思路的";
 licenses_inspiration_detail = "部分功能只借鉴思路（spoti.pw，PolyForm Strict 1.0.0）—— 没有复用任何一行代码，全部自己写。";
+
+// ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
+// 这些开关写的是 Spotify 的 **flag 覆盖**（`ios-messaging-reduceinterventions-impl` 那批），
+// 远端配置按会话下发一次，所以页脚必须写明"要重启 Spotify"。
+// 键名跟着它所控制的那条 flag 走，对照 `KnownFlagCatalog`。
+reduce_interventions_title = "减少打扰";
+reduce_interventions_master = "一键关掉全部提示";
+reduce_interventions_master_description = "Spotify 自己这个模块的总开关。想一次全关，开它就够。";
+reduce_interventions_master_footer = "这些开关写的是 Spotify flag 覆盖，重启 Spotify 后生效。";
+reduce_interventions_tips_section = "逐条关闭";
+reduce_interventions_tips_footer = "每行都标出它关的是哪条 flag。若某条提示还在，说明这个版本读的不是那条 —— 去看调试日志里的 [Flags] 行。";
+reduce_interventions_flag_account_switching_tooltip = "账号切换提示";
+reduce_interventions_flag_account_switching_tooltip_description = "建议你切换账号的那个气泡。";
+reduce_interventions_flag_your_library_ai_playlist_creation_tooltip = "AI 创建歌单提示";
+reduce_interventions_flag_your_library_ai_playlist_creation_tooltip_description = "音乐库里「用 AI 创建歌单」的提示。";
+reduce_interventions_flag_live_events_concert_notifications_tooltip = "演唱会 / 现场活动提示";
+reduce_interventions_flag_live_events_concert_notifications_tooltip_description = "演唱会通知与现场活动横幅（含场馆名那一行）。";
+reduce_interventions_flag_puffin_nudge_end_optimization = "Puffin 推广气泡";
+reduce_interventions_flag_puffin_nudge_end_optimization_description = "Spotify 那个 Puffin 实验的推广气泡。";
+reduce_interventions_flag_smart_shuffle_helper_tooltip = "智能随机说明";
+reduce_interventions_flag_smart_shuffle_helper_tooltip_description = "第一次用智能随机时弹的说明。";
+reduce_interventions_flag_watch_feed_entity_explorer_tooltip = "探索提示";
+reduce_interventions_flag_watch_feed_entity_explorer_tooltip_description = "指向 watch feed 探索入口的提示。";
+reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell = "免费档播放页推广";
+reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell_description = "播放页上推免费用户升级 Premium 的那张建议卡。";
