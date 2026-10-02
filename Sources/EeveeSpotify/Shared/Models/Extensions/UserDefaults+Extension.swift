@@ -488,12 +488,16 @@ extension UserDefaults {
     }
 
     /// 听歌页「**一屏**」：把播放器下面那些卡片全折起来 + 把列表钉在它的顶部
-    /// —— kumone / Music app 那种"一屏一首歌、滚不动"。**默认关**（见下）。
+    /// —— kumone / Music app 那种"一屏一首歌、滚不动"。**默认开**（2026-10-04 改的，见下）。
     ///
-    /// ⚠️ **为什么默认关**（不是忘了改）：它会连**歌词卡**一起折掉 —— 而 kumone 敢把卡片全折，
-    /// 是因为它把歌词**搬进了播放器**（pw `PlayerLyrics.x`），我们这一版还没做那一步。
-    /// 折掉之后听歌页就没有"打开歌词"的入口了（只能走别处），所以先让用户**自己选**。
-    /// 下一步（把歌词搬进播放器）做完之后，这个默认值才有资格改成开。
+    /// ⚠️ **默认值改过一次，两次都有理由**：
+    ///   · 原来**默认关**：折掉卡片会连**歌词卡**一起折掉，那会儿还没有替代的歌词入口；
+    ///   · 现在**默认开**：① 「歌词进播放器」（`NowPlayingLyricsPlate`）已经补上那个入口；
+    ///     ② 更要紧的是**照片 40/41（kumone）的对照** —— 它中间那块（185–644）**没有任何卡片**，
+    ///     卡片堆着就永远不像。而我们的 header 与底部已经和它逐条对上了 ⇒
+    ///     **卡片堆是"像不像"的唯一分水岭**，所以它必须是默认行为。
+    ///
+    /// 仍然可以一键关掉（关掉即完全还原：`restore()` 把列表的 bottom inset 写回记下的原值）。
     ///
     /// 思路与算法借自 spoti.pw v0.21.1（GPL-3.0）的 `Redesigned/Player/PlayerCards.x` +
     /// `PlayerScroll.x`；为什么是"钉住"而不是"把滚动关掉"（关掉会让播放器划不掉）
@@ -503,7 +507,7 @@ extension UserDefaults {
     /// 卡片折叠那一半读的就是这个开关（立刻生效，不必重启）。
     static var nowPlayingOneScreen: Bool {
         get {
-            container.object(forKey: nowPlayingOneScreenKey) as? Bool ?? false
+            container.object(forKey: nowPlayingOneScreenKey) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: nowPlayingOneScreenKey)

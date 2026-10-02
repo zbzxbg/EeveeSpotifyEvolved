@@ -18,14 +18,15 @@ import UIKit
 // 所以下面这个宿主是**本文件自己的**：各自的 hosting controller、各自的行模型版本号。
 // 结构上照抄那边（同样的字段组合），但不共享实例。
 //
-// ## 位置（依据：日志 42 的 `[NPVTree] #20`，993 节点那份）
+// ## 位置（依据：日志 42 的 `[NPVTree] #20` + kumone 照片 40/41 逐像素量的）
 //
-// ```
-// 8.UIStackView@4,593,406,240,id=npv.bottomStackView      ← 播放器底部那一坨（标题/进度/控件/footer）
-// ```
-// 气泡就摆在它**上面**：顶边让开我们自己的那一行，底留 8pt 间隙。
-// 量位置读**列表的 `layer.position`**（本仓库纪律：`frame` 在 transform 非恒等时不可信），
-// 读不到就退回"页面高 − 那一坨的标准高度（240）"。
+// Kumone 播放页只有三块：header（95–185）、**中间那块（185–644，有词就是歌词、无词就是居中大封面）**、
+// 底部（进度 644 / 三键 712–740 / 音量 776–784 / 三个圆钮 800–845）。
+// 我们这边 header 与底部**逐条对上了**（`UIStackView@0,48,414,48` / `npv.bottomStackView@4,593,406,240`），
+// 唯一差的就是中间那块 —— 所以歌词**只能摆在这一块**，绝不能往顶部放（会盖住 header）。
+//
+// 落点：顶边 = 底部那一坨的顶 − 240pt（≈ 353），底边 = 那一坨的顶 − 8pt（≈ 585）。
+// 于是它正好落在封面(约 115–489)的下半截 + 那块空里，**既盖住卡片堆、又不碰 header**。
 //
 // ## 开关与可撤销
 //
@@ -143,11 +144,10 @@ enum NowPlayingLyricsPlate {
     private static let bottomStackIdentifier = "npv.bottomStackView"
 
     /// 那一坨的**标准总高**（日志 42 的定向树：`npv.bottomStackView@4,593,406,240`）。
-    /// 只在量不到锚点时才用它兜底。
+    /// 它同时是歌词块的**高度**：block 就摆在那一坨正上方、同高 —— 这样量不到锚点时
+    /// 也有一份和 kumone"中间那块"对得上的保守落点。
     private static let bottomStackHeight: CGFloat = 240
-    /// 气泡顶边离页面顶留多少（我们自己的覆盖层 / 状态栏那一行）。
-    private static let topInset: CGFloat = 96
-    /// 气泡与底部那一坨之间留的间隙。
+    /// 歌词块与底部那一坨之间留的间隙。
     private static let bottomGap: CGFloat = 8
     /// 太矮就不画（横屏 / 转场中间帧）—— 宁可这一拍不显示，也不要糊一屏。
     private static let minimumHeight: CGFloat = 120
@@ -304,12 +304,16 @@ enum NowPlayingLyricsPlate {
 
     // MARK: - 位置
 
-    /// 气泡该占哪块地方：底部那一坨**上面**，顶边让开我们自己的那一层。
+    /// 歌词块该占哪块地方：**底部那一坨正上方、与它同高** —— 正是 kumone 照片里
+    /// "封面之下、进度条之上"那块（他们量的 185–644，8 成高就在 353–585）。
+    ///
+    /// ⚠️ 刻意**不往顶部放**：顶边在 96 那种写法会盖住 header（歌名/艺人/♥/⋯），
+    /// 2026-10-04 第一版就是这么写的，对着照片 40/41 才发现错了。
     private static func plateFrame(in page: UIView) -> CGRect {
         let bottomTop = bottomStackTop(in: page) ?? (page.bounds.height - bottomStackHeight)
 
-        let top = max(topInset, page.safeAreaInsets.top + 44)
-        let bottom = min(bottomTop - bottomGap, page.bounds.height)
+        let bottom = bottomTop - bottomGap
+        let top = max(page.safeAreaInsets.top + 44, bottom - bottomStackHeight)
 
         return CGRect(
             x: 0,
