@@ -417,7 +417,8 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
     /// ⚠️ 只用**视图控制器的** `viewDidAppear`，不用 `viewDidLayoutSubviews`：
     /// 视图控制器的 `viewDidAppear` 一定会被覆写（转场就是它驱动的），
     /// 而 `viewDidLayoutSubviews` 是可选方法 —— 挂上去可能 `Failed to hook method`。
-    /// 这一次的重复调用是**幂等**的（`NowPlayingBackdrop.apply` 同一个颜色不重刷）。
+    /// 这一次的重复调用是**幂等**的：`NowPlayingBackdrop.apply` 已经垫过就只对齐尺寸、
+    /// 颜色没变就一个字节都不碰（本轮起去掉了"同色就早退"—— 那个早退让自愈永远来不了）。
     func viewDidAppear(_ animated: Bool) {
         orig.viewDidAppear(animated)
         refreshNowPlayingBackdrop(page: target as? UIViewController)
@@ -434,8 +435,9 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
 /// 「仿 AM 的整页取色底」的**唯一**刷新入口（全局函数，不是某个 hook 的方法）。
 ///
 /// 调用点：
-///   1. `NPVScrollViewControllerHook.viewWillAppear` —— 每次进听歌页（**传入 `target`**）；
-///   2. 设置页切那个开关时 —— 关掉要**当场**还原（那时没有 `target`，退回到全局）。
+///   1. `NPVScrollViewControllerHook.viewWillAppear` / `.viewDidAppear` —— 每次进听歌页
+///      （**传入 `target`**）；
+///   2. 设置页切那个开关时 —— 关掉要**当场**还原（那时没有 `target`）。
 ///
 /// ⚠️ **为什么必须能传 `page`**（2026-10-03 真机日志 37 换来的）：
 /// 原来这个函数只认全局 `npvScrollViewController`，而给它赋值的
@@ -444,11 +446,18 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
 /// 日志里 `[NPVStyle]` 一行都没有、页面上什么都看不到。
 /// 现在 hook 直接把 `target`（它自己就是那个 VC）传进来，不再依赖那个全局。
 ///
+/// ★ 2026-10-03 夜（日志 38 之后）：日志 38 证明这条路已经通了（`[NPVStyle]` 两行），
+/// 但"垫上去了却没变化"。真正的刷新缺口在**换歌/滚动之后**
+/// （见 `NowPlayingBackdrop.reconcile()`）—— 不在这里。
+/// 这一版只多一件事：没有 VC 时（= 设置页切开关）退到
+/// `NowPlayingBackdrop.refreshLastPage()`，而不是干打一行"拿不到 VC"就结束。
+///
 /// 取封面色与歌词配色**同一处口径**（`track.metadata()["extracted_color"]`）。
 func refreshNowPlayingBackdrop(page: UIViewController? = nil) {
     let controller = page ?? (npvScrollViewController as? UIViewController)
     guard let controller else {
-        writeDebugLog("[NPVStyle] 拿不到听歌页 VC（全局为空且调用方没传）— 本次不施加")
+        // 设置页那条路：没有 VC，但有"最近一次垫过的那一页"。它还挂着就当场落地。
+        NowPlayingBackdrop.refreshLastPage()
         return
     }
 

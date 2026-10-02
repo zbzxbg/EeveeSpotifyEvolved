@@ -30,7 +30,7 @@ kumone 的许可是 copyleft 兼容的，**代码都能用**。
 
 | # | 借什么 | 它的位置 | 我们这边怎么落 | 状态 |
 |---|---|---|---|---|
-| 1 | **整页底 = 取色三层渐变（不是模糊）** | `Sources/Kumone/Features/Player/NowPlayingView.swift:185-202` | `Appearance/NowPlayingBackdrop.swift` —— 接管播放页那层整页封面底色，铺自己的 `CAGradientLayer` | ✅ 已实现（v6.6.x，开关「听歌页 → 整页封面取色底」） |
+| 1 | **整页底 = 取色三层渐变（不是模糊）** | `Sources/Kumone/Features/Player/NowPlayingView.swift:185-202` | `Appearance/NowPlayingBackdrop.swift` —— 在那层整页封面底色**之上垫一个我们自己的整页视图**（三层 `CAGradientLayer`），原来那层一字节都不改 | ✅ 本轮 重做（见 §2.1；开关「听歌页 → 整页封面取色底」） |
 | 2 | **几何/曲线常量表** | `Features/Player/NowPlayingPresentation.swift:7-91`（`NowPlayingPresentationMetrics`） | `Appearance/NowPlayingMetrics.swift` | ✅ 已落表（部分还没被消费） |
 | 3 | **歌词列上下渐隐 + 拖动暂停** | `NowPlayingView.swift:899-931`（`lyricsColumn`：`LazyVStack(spacing: 26)` + `LinearGradient` mask 停点 0/0.12/0.85/1 + `spring(0.8, 0.85)` 跟随，用户一拖就停） | 逐词层外层加 mask；`inline host found` 那条路径 | ⏳ 下一轮 |
 | 4 | 播放页头部排版（歌名加粗放大、`⋯` 靠右） | `NowPlayingView.swift` 的 `CompactTrackHeader` / `trackMetaView` | 靠 `LibraryAppearance` 那套**复查节拍**改 Spotify 标签（binder 会写回） | ⏳ 待定 |
@@ -56,22 +56,50 @@ ZStack {
 .animation(.easeInOut(duration: 0.8), value: colors)
 ```
 
-我们（UIKit，一个 `CAGradientLayer` 表达）：
+我们（UIKit，**三个** `CAGradientLayer`，与上面对齐）：
 
 ```swift
-gradient.startPoint = CGPoint(x: 0, y: 0)      // topLeading
-gradient.endPoint   = CGPoint(x: 1, y: 1)      // bottomTrailing
-gradient.locations  = [0.0, 0.55, 1.0]
-gradient.colors     = [base, base.darkened(by: 0.35), black.withAlphaComponent(0.35)]
-UIView.animate(withDuration: 0.8) { /* 换色 = CA 自己插值 */ }
+// ① 取色对角渐变（不透明 —— 它才是"把底色换掉"的那一层）
+base.startPoint = .init(x: 0, y: 0)      // topLeading
+base.endPoint   = .init(x: 1, y: 1)      // bottomTrailing
+base.colors     = [primary, primary.darkened(by: 0.35)]
+// ② 左上白光晕（kumone 的 700pt 半径 → 单位坐标要按尺寸换算）
+halo.type = .radial; halo.startPoint = .init(x: 0, y: 0)
+halo.endPoint = .init(x: 700 / w, y: 700 / h)
+halo.colors = [white 12%, clear]
+// ③ 底部压黑 35%
+scrim.startPoint = .init(x: 0.5, y: 0); scrim.endPoint = .init(x: 0.5, y: 1)
+scrim.colors = [clear, black 35%]
+// 换歌：CATransaction + easeInEaseOut + 0.8s（= kumone 的 .animation(.easeInOut(0.8))）
 ```
 
 **差异（有意）**：kumone 用**两个**主色（它自己从封面算 primary/secondary）；
 我们只有一个 `extracted_color`，所以"次色"由主色**降明度 35%** 得到 ——
 同一观感方向，且**不额外要数据**。
 
-**为什么必须记这一笔**：本仓库 2026-10-02 的"自绘壳"就是因为**加模糊层盖在内容上**
-而糊底被整块删除（见 `Tweak.x.swift:384-387`）。取色渐变是**在底层铺颜色**，
+### 2.1 ★ 本轮 为什么不再"清空人家的底色"（2026-10-03 夜，日志 38 换来的）
+
+旧做法是**清空那一层的 `backgroundColor` + 往它的 layer 栈里 `insertSublayer(at: 0)`**。
+日志 38（构建 `b14d6b9`）给了判决：
+
+```
+11:52:59  [NPVStyle] backdrop (414x896) ← 封面取色 e84838，接管 1 层   ← 自报成功
+11:53:01  [Tree] #7 7.UIView@0,0,414,896,bg=#E84838                  ← 那层还在（没被清掉）
+11:53:09  [Tree] #9 7.UIView@0,0,414,1682,bg=#584860                 ← 还自己换了色、长高了
+```
+
+`ViewTreeDumper.swift:159` 只在 `backgroundColor != nil && != .clear` 时才打 `bg=` ⇒
+"清空"这件事在树上**没有留下痕迹**，页面上零变化。⇒ 结论：**不要往别人的 layer 栈里塞东西、
+也不要跟它的 binder 抢 `backgroundColor`**（`MiniBarGlass.swift:244-285` 已经为同一个坑写过
+"清了又写回"）。
+
+新做法：**我们自己的一个整页 `UIView`（三层渐变作子层），`insertSubview(at: 0)`**：
+* 那层自己的底色在我们下面（我们铺的是不透明底）⇒ 观感上就是"换掉了底色"；
+* 那层自己的**子视图**（真有内容的话）仍然在我们上面 ⇒ **最坏只是"没效果"，不会盖掉内容**；
+* **零破坏性写入** ⇒ 关开关就是把我们的视图拿走，天然完全还原。
+
+**为什么旧的"模糊自绘壳"不一样**（`Tweak.x.swift:384-387`）：那次是**加模糊盖在内容上**
+（2026-10-02 的"自绘壳"就是这么糊底被整块删掉的）；这次是**只替掉背景那一层的颜色**，
 机理相反 —— 这条区别别忘。
 
 ---
@@ -86,8 +114,13 @@ UIView.animate(withDuration: 0.8) { /* 换色 = CA 自己插值 */ }
 8.UIView@0,0,414,48,bg=#121212                     ← 压在上面的 48pt 导航条
 ```
 
-⇒ 播放页**本来就有**一层"整页、底色等于封面取色"的视图。我们的做法是**接管它**
-（清空底色 + 塞自己的渐变层 + 记下原值以便还原），而不是在最上层再盖一层。
+⇒ 播放页**本来就有**一层"整页、底色等于封面取色"的视图。我们的做法是**在它之上垫一个
+我们自己的整页视图**（`insertSubview(at: 0)`，三层渐变），**它自己的底色/子视图一字节都不改**。
+为什么不是"清空它的底色 + 往它的 layer 栈里塞层"：见 §2.1（日志 38 的判决）。
+
+★ **这也让"哪一层"变成可核对的事**：`[NPVStyle] backdrop …` 那行现在会带上被垫那层的
+类名、frame、它自己的底色、`subviews` / `layer.sublayers` / **手插子层**数 ——
+下次不用再翻 `[Tree]` 的 BFS 层级反推（日志 38 就是这么反推出来的，代价很大）。
 
 ---
 

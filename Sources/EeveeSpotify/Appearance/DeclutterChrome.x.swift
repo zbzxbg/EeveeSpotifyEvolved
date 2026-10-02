@@ -245,6 +245,16 @@ enum DeclutterChrome {
         //   ⚠️ 刻意**不新开定时器** —— 蹭的就是这个既有的节拍（0.5s，且非前台不跑）。
         onMainThreadSync { MiniBarGlassPlate.reconcileCoverColor() }
 
+        // ★ 2026-10-03 夜：听歌页那层"封面取色底"的**换歌/滚动**自愈
+        //   （`NowPlayingBackdrop.reconcile()`）。日志 38 的 #7→#9 是现场：
+        //   用户**一直待在听歌页**，Spotify 那层底色自己从 `bg=#E84838` 变成 `bg=#584860`、
+        //   高度 896 变 1682，而这期间**没有第三次 `[NPVStyle]`**（`apply` 只在
+        //   `viewWillAppear`/`viewDidAppear` 跑）⇒ 换歌、滚动之后我们的层必然失配。
+        //   没在听歌页时它的成本 = 两次 weak 读 + 一次 `window` 读；
+        //   在听歌页时再加**一次 `backgroundColor` 读**（换色那一刻才问 metadata）。
+        //   同一条纪律：**不新开定时器**，蹭这个节拍。
+        onMainThreadSync { _ = NowPlayingBackdrop.reconcile() }
+
         // ★ v4.9：标签栏那一行的**纵向复核**。点开「创建」时那一颗处于暂时态，
         //   而**菜单关掉时这条栏不一定再布局** —— 日志 29 里我们的 transform 就停在
         //   `+2.5`，创建那颗一直比另外三颗高 8pt（16 秒没回来）。
