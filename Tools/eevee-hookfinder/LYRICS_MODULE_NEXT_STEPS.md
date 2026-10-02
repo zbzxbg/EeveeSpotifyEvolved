@@ -497,6 +497,126 @@ if let originalColors { $0.colors = originalColors }
 
 ---
 
+## 59. **RTL（阿拉伯语等）歌词"贴左不贴右"**（2026-10-02，用户报的）
+
+**用户原话**：「我看着逐词歌词的时间轴是没问题的。就是它是**贴左**的，不是贴右的。」
+
+### 59.1 先分清哪一半是好的、哪一半是坏的
+
+**好的那半（不用动）**——我们的渲染从来没有"左边就是第一个词"的假设：
+
+| 环节 | 为什么 RTL 本来就对 |
+|---|---|
+| 词序 / 连写 / 双向混排 | 交给 iOS 的 bidi（UAX#9）；我们只做**逻辑顺序**拼接 |
+| AM 页的逐词扫光、渐变、抬升、长音强调 | 方向取自 SwiftUI `Text.Layout.Run.layoutDirection` —— **按内容逐 run** 给（`LyricGlowTextRenderer.swift:195/224/264`、`LyricLongToneEmphasis.swift:57`） |
+| 旧 overlay 的逐词高亮 | 按**字符串区间**（`wordRanges`）上色，不做 x 坐标 → 词索引推断 |
+
+**坏的那半**：整行**贴哪一边**。两处都"跟系统语言、不跟歌词语言"：
+
+1. `AppleMusicLyricsPage.swift` 的 `row(for:)` 恒传 `alignment: .leading` —— SwiftUI 的
+   `Alignment.leading` / `TextAlignment.leading` / `UnitPoint.leading` 解析用的是
+   **环境 layoutDirection**，而环境方向来自**系统语言** → 中文界面 + 阿拉伯语歌词 = 贴左。
+2. `LyricsWordByWord.x.swift` 的三处 `textAlignment = .left`（正文 / 译文 / 来源页脚）
+   —— 写死左边。
+
+### 59.2 修法
+
+* **新工具**：`Sources/EeveeSpotify/Shared/Models/Extensions/String+ScriptDirection.swift`
+  → `String.prefersRightToLeftLayout`：照 UAX#9 的 P2/P3 取**第一个强方向字符**
+  （跳过数字/标点/空白/emoji；阿拉伯-印度数字 `٠-٩`/`۰-۹` 是弱方向字符，显式跳过），
+  落在 RTL 区段（希伯来 / 阿拉伯 / 叙利亚 / 塔纳 / NKo / 撒玛利亚 / 曼达 / 阿拉伯扩展-A /
+  呈现形式 A/B）就返回 true。
+  ⚠️ 刻意**只做码点区段判断**，不用 `Unicode.Scalar.Properties.bidiClass`（成员名/可用性
+  各家工具链不一致，而我们没有 Mac 可试错）。
+* **AM 页**：`row(for:)` 里按 `line.text.prefersRightToLeftLayout` 给整行
+  `.environment(\.layoutDirection, …)`。放在**链条最外层**，这样它同时盖住
+  ① 行内文字对齐（`SynchronizedLyricText` 内部的 `.frame(alignment:)` /
+  `.multilineTextAlignment`）与 ② 那个 `.scaleEffect(anchor: .leading)`（焦点行放大
+  也要从"自己那一侧"长出来）。`.leading` 于是变成"这一行自己的开头那一边"：
+  阿拉伯语 → 贴右、中英文 → 贴左、对唱翻转（`.trailing`）也跟着翻对。
+* **旧 overlay**：三处 `textAlignment = .left` → **`.natural`**。
+  容器是 `stackView.alignment = .fill`（label 占满整宽），所以 `.natural` 真的会改贴边；
+  `LineLabel` 是裸 `UILabel`（没覆写绘制），不会被绕开。
+
+### 59.3 没动的（说清楚边界）
+
+**只有逐词歌词由我们渲染**（见 `LyricsWordByWord.x.swift:1882-1884` 的产品规则）。
+**只有行级数据、或根本没有时间轴时，整首交还 Spotify 原生** —— 那两条路的对齐是
+Spotify 自己的事，我们只能保证"喂进去的是逻辑顺序、没有 LTR 假设"。
+pw 也是**专门做过**这条（v0.20 release note：*"lyrics in right-to-left scripts sit
+against the right edge and are sung from the right"*）——"从右往左扫"和"贴右边"是两件事，
+我们这次补的是后一件。
+
+### 59.4 未验证 + 怎么验
+
+本机没有 Swift 工具链（只过了仓库四个自检），**编译只能走 CI**。
+真机验证只要**一首阿拉伯语歌**：
+
+1. 「更好的逐词歌词」**开** → 全屏歌词页截图：歌词应当**贴右**，且焦点行放大从**右侧**长出来；
+2. 「更好的逐词歌词」**关** → 同一首截图：旧 overlay 也应当**贴右**；
+3. 顺手放一首**中文/英文**歌：应当仍然是**贴左**（没被这次改动带偏）。
+
+---
+
+## 58. **恢复**「AMLL 优先」（2026-10-02，用户要求）
+
+**用户原话**：「在很早以前我否认过 AMLL优先 这个歌词页的开关，你把它加回来。」
+
+### 58.1 它是什么（两句话）
+
+歌词来源是**单选**的（`.genius` / `.netease` / `.petit` / `.spicy` / `.amllTtml` / `.lrclib` / `.musixmatch` / 多级回退）。
+「AMLL 优先」在**单源**那条路上多插一层：**先向 AMLL 要逐词歌词**，而且
+**只接受"逐词可用"的结果**（判据与渲染层同一个 `hasUsableWordLevelData`，行级时间轴 / 无时间轴都算不合格）；
+不合格就**回退到用户自己选的那个源**（连同它的相关设置与 Genius 兜底）。
+
+回退目标刻意不硬编码：日本用户设 PetitLyrics、大陆用户设网易云、其它地区设 SpicyLyrics —— 各自回退到最合适的地方。
+**依赖逐词歌词**：`isWordByWordLyricsEnabled` 关着时视为未勾选；来源本身是 `.amllTtml` 时也不显示（回退目标不能是它自己）。
+设置页里**来源为 Genius / 多级回退 / LRCLIB / AMLL 时不展示**这个开关（没有"用户自己选的源"可回退）。
+
+### 58.2 删过、现在按原文恢复
+
+2026-09-25 用户看过之后说"感觉没什么用"，提交 `50528cd` 把整条链删掉（8 个文件，-125/+50 行）。
+这次**按那次删除的 diff 逐字取回**，共 6 处：
+
+| 文件 | 恢复的内容 |
+|---|---|
+| `Lyrics/CustomLyrics.x.swift` | `else`（单源）分支里整段 `if amllPreferred { … }`；`requestSingleSource` 的 `allowGeniusFallback` 文档说明；`catch` 里那句注释 |
+| `Settings/ngzhwm/ngzhwmSettingsViewModel.swift` | `amllPreferredKey`（`"ngzhwm_amllPreferred"`）+ `isAmllPreferred`（默认 **false**） |
+| `.../Lyrics/ViewModels/EeveeLyricsSettingsViewModel.swift` | `@Published var amllPreferred`（带写 UserDefaults 的 `didSet`）+ `animationValues` 里加回 |
+| `.../EeveeLyricsSettingsViewModel+setupBindings.swift` | `logBooleanSetting($amllPreferred, "AMLL preferred")` |
+| `.../Lyrics/Views/EeveeLyricsSettingsView.swift` | `amllPreferredSection()`（Toggle + footer，逐词歌词关着时 `.disabled`）+ 调用点（四个来源排除条件） |
+| `en` / `zh-CN` 两个 `Localizable.strings` | `ngzhwm_amll_preferred(_description)` 两个键（删前原值）。⚠️ 这两个键**从来只在 en/zh-CN**（`769bc4c` 加的时候就没进其它 25 个语言），所以不用补其它语言 |
+
+**与删前唯一的差异**：`makeLyrics` 的调用不再传 `durationMs` —— 那个参数 2026-09-27 已从签名里删掉（见 §53）。
+逻辑与文案其余逐字一致。
+
+### 58.3 已知代价（说清楚，免得又"感觉没什么用"）
+
+日志 1/2（9.1.86，AMLL 优先开）实测过一次 **14 秒阻塞**：`api.amll.dev` 的 TLS 重试吃掉了 11 秒。
+这是它当年"看起来没用"的真正原因之一 —— **网络摸不到 AMLL 时，用户要等**。
+如果真机上仍然慢，便宜的改法是给 AMLL 那一段单独加短超时（`AmllTtmlLyricsRepository` 的
+`URLSessionConfiguration.timeoutIntervalForRequest`），**但不改行为本身**（回退链不变）。
+**本次没做**，等真机反馈。
+
+### 58.4 未验证
+
+本机没有 Swift 工具链 ⇒ **只过了仓库自检**（`orion_hook_guard` 315 / `swift_brace_check` 315 /
+`swift_member_check` 260 / `l10n_lint` en+zh-CN 无输出），**编译只能走 CI**。
+设备上残留的旧键 `ngzhwm_amllPreferred`（若有）会被重新读起来 —— 与删前行为一致。
+
+**验收行**（下次真机日志里应当出现，前提：来源不是那四个排除项 + 逐词歌词开着 + 开关打开）：
+
+```
+[Settings] AMLL preferred -> ON
+[Lyrics] Single source: <你选的源>
+[Lyrics] AMLL preferred — trying AMLL first, fallback target: <你选的源>
+[Lyrics] AMLL succeeded — using it (N line(s))                       ← 或下面两条之一
+[Lyrics] AMLL returned N line(s) but not word-by-word (…) — falling back to <源>
+[Lyrics] AMLL unavailable — falling back to <源> with its own settings
+```
+
+---
+
 ## 57. 日志脱敏：**写入口硬脱敏 + 导出时假名化**（2026-09-30）
 
 **用户要求**：先问"日志是不是会记录 cookie 之类的敏感信息"，看完 19 号日志

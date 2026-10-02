@@ -29,8 +29,15 @@ struct EeveeLyricsSettingsView: View {
             }
             
             if viewModel.lyricsSource != .notReplaced {
-                // 「AMLL 优先」已删除（2026-09-25，用户反馈"没什么用"）：AMLL 仍然是
-                // 来源选择器里的一个普通来源，只是不再有"先试 AMLL 再回退"的那条链。
+                // 「AMLL 优先」需要有一个「用户自己选的源」作为回退目标，
+                // 所以来源为 Genius / 多级回退 / LRCLIB / AMLL 时不展示。
+                // ★ 2026-10-02 恢复（2026-09-25 曾整段删除）。
+                if viewModel.lyricsSource != .genius
+                    && viewModel.lyricsSource != .multiLevel
+                    && viewModel.lyricsSource != .lrclib
+                    && viewModel.lyricsSource != .amllTtml {
+                    amllPreferredSection()
+                }
                 
                 // Genius 回退保持原有条件：多级回退链路本身以 Genius 收尾，
                 // 不再重复提供该开关；来源为 Genius 时自己回退给自己没有意义。
@@ -126,8 +133,21 @@ struct EeveeLyricsSettingsView: View {
         }
     }
     
-    // 已移除 `amllPreferredSection()`（2026-09-25）：「AMLL 优先」整条链一起去掉，
-    // 连带 en / zh-CN 的 `ngzhwm_amll_preferred(_description)` 两个键也删了。
+    /// 「AMLL 优先」：勾选后先向 AMLL 要逐词歌词，没正常返回再回退到
+    /// 用户在来源选择器里设置的那个源。选项依赖逐词歌词，未开启时整体禁用。
+    ///
+    /// ★ 2026-10-02 恢复（2026-09-25 曾整段删除，连带两个 l10n 键）。
+    @ViewBuilder private func amllPreferredSection() -> some View {
+        Section {
+            Toggle(
+                "ngzhwm_amll_preferred".localized,
+                isOn: $viewModel.amllPreferred
+            )
+            .disabled(!viewModel.wordByWordLyrics)
+        } footer: {
+            Text("ngzhwm_amll_preferred_description".localized)
+        }
+    }
     
     @ViewBuilder private func romanizationSection() -> some View {
         Section(

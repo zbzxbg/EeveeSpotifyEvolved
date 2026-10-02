@@ -280,6 +280,40 @@ deb 里只有 `spotifyglass.dylib`（2.4MB）+ 过滤器 plist，没有 `.bundle
 在**搜索页 / 歌单页 / 播放页 / 首页**各停 2 秒，导出日志即可（转储器一次启动 20 份，
 够抓这四屏）。拿到那几份日志我就能把剩下的开关按 `DeclutterChrome` 那套写出来。
 
+---
+
+## 9. ★ 2026-10-02 第三次复核：**v0.23.0-beta 就是最新**（对完 GitHub releases）+ 5 条纠偏
+
+**基准确认**：`releases.atom` 显示最新 tag = **v0.23.0-beta（2026-09-28）**，正是用户给的那份 deb；
+本地 checkout 是 v0.22.0 → **上面 §5–§8 的特征集就是当前最新的**，不需要再补。
+
+### 9.1 清点文档里已经过时/写错的 5 条（**别按旧清单派活**）
+
+| # | 文档原话 | 代码现状（2026-10-02 复核） | 结论 |
+|---|---|---|---|
+| 1 | §1#12 / §5.1 "App 图标选择器 ❌" | **代码已有**：`Settings/Sections/AppIcon/Views/EeveeAppIconPickerView.swift`（挂在 `EeveeSettingsView.swift:122`）+ `Assets/AppIcon/` **34 套图标** + `Tools/alt-icons.sh` | ✅ **2026-10-02 已补上接线**：两个 IPA workflow 都在打包 zip 前调 `Tools/alt-icons.sh "$APP"`（PlistBuddy 写 `CFBundleIcons → CFBundleAlternateIcons`；失败只告警）。真机验收见 `SESSION_2026-10-02_HANDOFF.md` §11 |
+| 2 | §5.1 "诊断三件（dump / hang sampler / **FLEX**）" | `EeveeFlex.x.swift` **已有入口**（探测 `NSClassFromString("FLEXManager")`）；但 `Package.swift` / `modules/` 里**没有 FLEX** → 库没随包，入口是 no-op | 已有 🟡：要补的是 **FLEX 随包**（或直接砍掉，见 §9.3） |
+| 3 | §1#7 "缺 RTL / 间奏三点动画" | 歌词模块比文档记的强：`LyricGlowTextRenderer`（**有 `.rightToLeft` 分支**）、`LyricLongToneEmphasis`、`AppleMusicInterludeMotionProfile` + `LyricInterlude`（**Apple Music 的间奏运动曲线已移植**，只是没有接线到渲染） | 从"从零写"降级为"**接线 + 间奏检测**"；真正缺的只有 **Genius 逐行释义** + **BiniLyrics / Unison 两个源** |
+| 4 | §5.2 "变速变调可能不用碰音频图" | 我们自己**已经在用 KVC 读** `playbackSpeed`（`SponsorBlockSkipper.swift:170`：`state.value(forKey: "playbackSpeed")`）→ 那个 state 上确实有这个键 | 探针价值**上调**：先试"能不能写"，能写就是 1~2 轮的白捡 |
+| 5 | §7 "高价值子集" | 已交付：**28 条 flag / All flags 数字档 / 备份+导入+重置 / 更新日志页 / 开源许可页** | 剩下的只有 **25 条清理开关**、**All flags 的 AUTO 档 + 文本输入**、**诊断 tree server** |
+
+### 9.2 pw v0.23.0-beta 里新出现、上面几节没记的小项（对完 release notes）
+
+* ⭐ **"Spotify 不是本 mod 支持的版本"提示** + "EeveeSpotify 已注入"提示 → **对我们特别值**：
+  我们全靠类名 hook，刚经历 9.1.86 → 9.1.88 换基线；"版本不匹配就提示"是**极便宜且高价值**的保险。
+* `mini player in the tab bar`（迷你条做进标签栏）—— 我们的两条玻璃胶囊已经在同一块地方，属观感选择，不必追。
+* `Pitch follows speed`（变速时音高跟着走）、`Karaoke 行条目`、`redesign 可在 iOS 26 以下开（带警告）`、
+  `⋯ 菜单用 Music app 的方式画`、`专辑/歌单页把艺人头像放回名字旁`、`Fluid artwork`（封面模糊流动背景）。
+
+### 9.3 复核后的建议（按"一次编译能带几条"分三批）
+
+| 批 | 内容 | 轮次 | 取证 |
+|---|---|---|---|
+| **A（推荐先做）** | All flags 的 **AUTO 档 + 文本输入**、「减少打扰」专页（28 条 flag 原料已有）、遥测计数页 ~~、App 图标接线~~（**2026-10-02 已补**，见 §9.1） | 1~2 | **零取证**（全是离线小页面） |
+| **B** | **25 条清理开关**（我们只有 5 条）—— 复用 `DeclutterChrome` 的"可撤销隐藏 + 复查"框架 | 2~4 | 要一份**四屏转储日志**（搜索/歌单/播放/首页），**可蹭日志 30 顺手抓** |
+| **C（探针）** | Sleep timer（Spotify 自己有 `com.spotify.service.sleeptimer`）、变速变调（先只读、再试写 `playbackSpeed`） | 1~2 | 零取证，成了白捡 |
+| **不做** | 拖动排序（撞"不动布局"红线）、morph 转场（hook 私有转场类）、10 屏自绘（先给 1 屏样品）、FLEX 随包（性价比低） | — | — |
+
 
 
 

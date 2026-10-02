@@ -36,8 +36,15 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
     
-    // 已移除「AMLL 优先」（2026-09-25，用户反馈没意义）：AMLL 仍然是来源选择器里的
-    // 一个普通来源，但不再有"先试 AMLL、不合格再回退"的那条链。
+    /// 「AMLL 优先」开关。★ 2026-10-02 恢复（2026-09-25 删过一次）。
+    @Published var amllPreferred = NgzhwmSettingsViewModel.isAmllPreferred {
+        didSet {
+            UserDefaults.standard.set(
+                amllPreferred,
+                forKey: NgzhwmSettingsViewModel.amllPreferredKey
+            )
+        }
+    }
 
     // 已**搬走**两个开关（2026-09-27）：`injectLyricsCardElement` / `lyricsEntryPointFlag`
     // —— 它们是排查/验证型开关，属性与绑定整体挪到 `EeveeDebugSettingsViewModel`（「调试」页）。
@@ -124,10 +131,10 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             lyricsOptions,
             betterWordByWordLyrics,
             wordByWordLyrics,
-            // ⚠️ `amllPreferred`（已删功能）、`hideOfficialLyrics`（已写死启用）、
-            // `syntheticLineTiming`（2026-09-27 已整体删除），以及搬去「调试」页的
-            // `injectLyricsCardElement` / `lyricsEntryPointFlag` 都**不能**再列在这里
-            // —— 属性本身没了，列着就是编译错误。
+            amllPreferred,
+            // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`（2026-09-27 已整体删除），
+            // 以及搬去「调试」页的 `injectLyricsCardElement` / `lyricsEntryPointFlag`
+            // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
             removeMxmInterludeSymbol,
             neteaseRomajiLocal,

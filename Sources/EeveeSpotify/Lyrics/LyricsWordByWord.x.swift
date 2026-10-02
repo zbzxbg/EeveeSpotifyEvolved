@@ -1119,7 +1119,10 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
             let label = LineLabel()
             label.lineIndex = index
             label.numberOfLines = 0
-            label.textAlignment = .left
+            // `.natural`（**不是** `.left`）：按**内容**决定贴哪一边 ——
+            // 阿拉伯语 / 希伯来语歌词因此靠右，中英文不受影响（`.natural` = `.left`）。
+            // 见 `String+ScriptDirection.swift` 顶部那段（用户 2026-10-02 报的"贴左不贴右"）。
+            label.textAlignment = .natural
             label.font = .systemFont(ofSize: lyricsFontSize, weight: .semibold)
             // 折行宽度**建的时候**就给死：别等下一轮布局（`layoutSubviews` 里那次）
             // 才设，否则第一帧会按单行固有宽度排、把栈撑宽 —— 真机上就是
@@ -1153,7 +1156,9 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
                 if !t.isEmpty {
                     let translationLabel = UILabel()
                     translationLabel.numberOfLines = 0
-                    translationLabel.textAlignment = .left
+                    // 同上：按内容解析。译文通常跟界面语言走（中文 → 仍贴左），
+                    // 但阿拉伯语译文会自动贴右 —— 两种情况都对。
+                    translationLabel.textAlignment = .natural
                     translationLabel.font = .systemFont(ofSize: translationFontSize, weight: .regular)
                     translationLabel.preferredMaxLayoutWidth = currentWrapWidth
                     translationLabel.textColor = translationColor
@@ -1175,7 +1180,9 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         if showsProviderFooter, !currentLyricsProvider.isEmpty {
             let footer = UILabel()
             footer.numberOfLines = 0
-            footer.textAlignment = .left
+            // 同上：这条是**我们自己的本地化文案**（"歌词来源：…"），按内容解析时
+            // 仍然跟着界面语言走 —— 写死 `.left` 只会在阿拉伯语界面上出错。
+            footer.textAlignment = .natural
             footer.font = .systemFont(ofSize: 14, weight: .regular)
             footer.textColor = lineColor
             footer.text = "word_by_word_lyrics_provider".localizeWithFormat(currentLyricsProvider)

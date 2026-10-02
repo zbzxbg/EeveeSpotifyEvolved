@@ -354,6 +354,28 @@ jobs:
             echo "::warning::OpenSpotifySafariExtension 拉取失败，跳过（不影响 Orion）"
           fi
 
+          # ★ 应用图标（CFBundleAlternateIcons）—— **不注册的话设置里的「应用图标」页是空的**。
+          #
+          # iOS 只认 **app 的 Info.plist 里注册过**的图标：光把 PNG 放进 .app 不够，
+          # 必须在 `CFBundleIcons → CFBundleAlternateIcons` 下写出「名字 → CFBundleIconFiles」。
+          # 设置页那边读的就是这个结构（`EeveeAppIconPickerView.load()`），
+          # 传 `setAlternateIconName` 用的也是同一个名字 —— 两边必须一致。
+          # 脚本 `Tools/alt-icons.sh`：先用 macOS 的 sips 从 `Assets/AppIcon/sources/`
+          # 生成 @2x/@3x/~ipad 各尺寸，再用 PlistBuddy 写键，并**就地**改 app 目录
+          # （所以必须在打包 zip **之前**跑）。当前 34 套图标。
+          # ⚠️ 失败**不致命**：没有图标的包照常能装能跑，只是那一页列不出东西 ——
+          # 所以这里只告警、不中断构建（本仓库没有 Mac，出问题靠 CI 日志定位）。
+          # ⚠️ 另一个 workflow（build-ipa-with-orion.yml）里有同一段，改这里记得同步。
+          if [ -x /usr/libexec/PlistBuddy ]; then
+            echo "== 注册应用图标（CFBundleAlternateIcons）=="
+            bash "${{ github.workspace }}/Tools/alt-icons.sh" "$APP" \
+              || echo "::warning::应用图标注册失败（不影响安装，只是那页是空的）"
+            plutil -p "$APP/Info.plist" | grep -A3 'CFBundleAlternateIcons' | head -12 \
+              || echo "(Info.plist 里没有 CFBundleAlternateIcons —— 图标没注册上)"
+          else
+            echo "::warning::没有 PlistBuddy，跳过应用图标注册"
+          fi
+
           rm -f "$(basename "$OUT_IPA")"
           zip -qry "$(basename "$OUT_IPA")" Payload
           rm -rf Payload

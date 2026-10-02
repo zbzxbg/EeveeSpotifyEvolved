@@ -113,7 +113,7 @@ extension EeveeLyricsSettingsViewModel {
     private func logSettingChanges() {
         logBooleanSetting($wordByWordLyrics, "word-by-word lyrics")
         logBooleanSetting($betterWordByWordLyrics, "better word-by-word lyrics")
-        // 已移除：`$amllPreferred`（「AMLL 优先」整条链已删除）。
+        logBooleanSetting($amllPreferred, "AMLL preferred")
         // 「隐藏官方歌词」已写死启用（见 NgzhwmSettingsViewModel），设置页不再有开关，
         // 因此这里也没有可记录的绑定。
         // 已搬走：`$injectLyricsCardElement` / `$lyricsEntryPointFlag`

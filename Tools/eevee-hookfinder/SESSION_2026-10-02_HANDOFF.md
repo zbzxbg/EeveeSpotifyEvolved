@@ -21,6 +21,7 @@
 | **迷你播放条玻璃** | **v4.8：与标签栏等宽（360）、同高（60）**；内容等比缩到 **0.87**；封面色底有**两个驱动**（50ms 级短促重试 + 蹭 `DeclutterChrome` 的 0.5s 节拍）。**日志 29 已验 ✅**：8 份 `[Tree]` 里 `id=SPTNowPlayingBar` 全都不带 `bg=` |
 | **第一批功能**（上一轮） | ① 28 条新 flag；② All flags 补「写入数字」档；③ 备份/导入/重置；④ 更新日志页；⑤ 开源许可页 |
 | **更新日志页** | v4.8 修好，**日志 29 已验 ✅**：`[GitHub] GET /repos/zbzxbg/EeveeSpotifyEvolved/releases/latest -> 5863 bytes`（原来是 280 字节的限流体 → "格式不正确"）。**页面本身这次没打开**，下次顺手看一眼能不能列出 `v0.1.0-beta.1` |
+| **歌词：「AMLL 优先」** | **2026-10-02 恢复**（2026-09-25 你一句"感觉没什么用"删过一次，提交 `50528cd`）：单源模式下**先向 AMLL 要逐词歌词、只接受逐词**，不合格回退到你自己选的那个源。6 处按原文取回，默认**关**。细节见 `LYRICS_MODULE_NEXT_STEPS.md` **§58**（含"已知代价：AMLL 摸不到时会卡十几秒"） |
 | **基线** | ⚠️ **Spotify 换成 9.1.88 了**（`C:\dsh\ipa\dump-9.1.88.txt` + `Spotify-…_9.1.88_decrypted.ipa`）。本改动依赖的类名/id 已核：**一个都没变**（见 APPEARANCE §24.1） |
 | **本轮改动状态** | ⏳ **未提交**（工作区里是 v4.9 的源码 + 文档；v4.8 那一批已由用户提交成 `76c687d fix`） |
 | **装机验证状态** | v4.6→v4.7.1 已验证；**v4.8 由日志 29 验收：①③④ ✅ / ② ❌**（见 APPEARANCE §24.2）；**v4.9 未装机** → 验收清单在 **§8.4** |
@@ -345,3 +346,130 @@ Tools/eevee-hookfinder/SESSION_2026-10-02_HANDOFF.md   （本节）
 
 自检（提交前跑过，全过）：`orion_hook_guard` 315 / `swift_brace_check` 315 /
 `swift_member_check` 260 / `l10n_lint` en+zh-CN 无输出。
+
+---
+
+## 9. 2026-10-02 第五轮：**恢复「AMLL 优先」**（用户点名要加回来）
+
+**它是什么**：歌词来源是**单选**的；这个开关在单源那条路上多插一层 —— **先向 AMLL 要逐词歌词**，
+而且**只接受"逐词可用"的结果**（判据与渲染层同一个 `hasUsableWordLevelData`；只有行级时间轴、
+或干脆没有时间轴的，一律算不合格），不合格就**回退到你自己选的那个源**（连同它的设置与 Genius 兜底）。
+依赖逐词歌词；来源是 Genius / 多级回退 / LRCLIB / AMLL 时设置页**不显示**它（那时没有"回退目标"）。
+默认**关**。完整说明 + 当年为什么被删见 `LYRICS_MODULE_NEXT_STEPS.md` **§58**。
+
+**恢复方式**：2026-09-25 删除它的是提交 `50528cd`（8 文件）。这次**按那次 diff 逐字取回**，6 处：
+
+| 文件 | 内容 |
+|---|---|
+| `Lyrics/CustomLyrics.x.swift` | 单源分支里整段 `if amllPreferred { … }` + `allowGeniusFallback` 文档 + `catch` 注释 |
+| `Settings/ngzhwm/ngzhwmSettingsViewModel.swift` | `amllPreferredKey`（`"ngzhwm_amllPreferred"`）+ `isAmllPreferred`（默认 false） |
+| `.../Lyrics/ViewModels/EeveeLyricsSettingsViewModel.swift` | `@Published amllPreferred` + `animationValues` 里加回 |
+| `.../EeveeLyricsSettingsViewModel+setupBindings.swift` | `logBooleanSetting($amllPreferred, "AMLL preferred")` |
+| `.../Lyrics/Views/EeveeLyricsSettingsView.swift` | `amllPreferredSection()` + 调用点（四个来源排除条件） |
+| `en` / `zh-CN` `Localizable.strings` | 两个键（删前原值；**只在 en/zh-CN**，其它 25 个语言从来没加过，不用补） |
+
+**唯一差异**：`makeLyrics` 调用不再传 `durationMs`（该参数 2026-09-27 已从签名里删掉）。
+
+⚠️ **已知代价**（当年"感觉没什么用"的真正原因之一）：日志 1/2 实测过 **14 秒阻塞**
+（`api.amll.dev` 的 TLS 重试吃掉 11 秒）。真机上如果还是慢，便宜的改法是给那个仓库单独加短超时，
+**不改回退链**；本次没做，等反馈。
+
+**日志 30 顺手可以验**（前提：来源不是那四个排除项 + 逐词歌词开 + 开关打开）：
+
+```
+[Settings] AMLL preferred -> ON
+[Lyrics] AMLL preferred — trying AMLL first, fallback target: <你选的源>
+[Lyrics] AMLL succeeded — using it (N line(s))          ← 或 "…but not word-by-word…" / "AMLL unavailable…"
+```
+
+---
+
+## 10. 2026-10-02 第六轮：**RTL（阿拉伯语）歌词贴左 → 贴右**
+
+**用户原话**：「逐词歌词的时间轴没问题，就是**贴左**不是贴右。」
+
+**病根**：贴哪一边跟的是**系统语言**，不是歌词语言 ——
+AM 页 `row(for:)` 恒传 `alignment: .leading`（SwiftUI 的 `.leading` 用**环境 layoutDirection** 解析，
+环境方向＝系统语言）；旧 overlay 三处 `textAlignment = .left` 写死。
+（词序/连写/扫光方向本来就对：AM 渲染器读 `Text.Layout.Run.layoutDirection`，旧 overlay 按字符串区间上色。）
+
+**改动**（3 个文件）：
+| 文件 | 内容 |
+|---|---|
+| `Shared/Models/Extensions/String+ScriptDirection.swift`（**新**） | `String.prefersRightToLeftLayout`：UAX#9 P2/P3 取第一个强方向字符（跳过数字/标点/emoji，阿拉伯-印度数字显式跳过），RTL 区段返回 true。刻意**不用** `Unicode.Scalar.Properties.bidiClass`（成员名/可用性不稳，我们没 Mac 试错） |
+| `Lyrics/AppleMusic/AppleMusicLyricsPage.swift` | `row(for:)` 按 `line.text.prefersRightToLeftLayout` 给整行 `.environment(\.layoutDirection, …)`，放在**链条最外层**（同时盖住行内对齐与 `.scaleEffect(anchor: .leading)`） |
+| `Lyrics/LyricsWordByWord.x.swift` | 正文/译文/来源页脚三处 `textAlignment = .left` → **`.natural`**（容器是 `.fill`、`LineLabel` 是裸 UILabel，会生效） |
+
+**边界**：只有**逐词**那条路由我们渲染；只有行级数据 / 无时间轴时整首交还 Spotify 原生（那两条的对齐是 Spotify 自己的事）。
+
+**真机验收**（一首阿拉伯语歌，两张截图）：①「更好的逐词歌词」**开** → 贴右 + 焦点行从**右**侧放大；
+② 同一个开关**关** → 旧 overlay 也贴右；③ 顺手放首中文/英文歌确认仍**贴左**（没被带偏）。
+
+细节见 `LYRICS_MODULE_NEXT_STEPS.md` **§59**。
+
+---
+
+## 11. 2026-10-02 第七轮：**应用图标（App icon）接线** —— 「不可更改」的根因补掉
+
+**用户问**：「应用图标不可更改这个补了吗？」→ 之前只把它列进缺口清单（"代码在、接线缺"），**没动手**；这一轮补上。
+
+### 11.1 缺的到底是什么
+
+三块料**早就在**：
+
+* 设置页 `Settings/Sections/AppIcon/Views/EeveeAppIconPickerView.swift`（挂在 `EeveeSettingsView.swift:122`）；
+* `Assets/AppIcon/`：**34 套**图标（`sources/*.png` 原始图 + 仓库里已生成好的 `@2x/@3x/~ipad`）；
+* 工具 `Tools/alt-icons.sh`：sips 生成尺寸 → PlistBuddy 写键 → 就地改 app 目录。
+
+**唯一缺的**：没有任何构建流程调用那个脚本。而 iOS **只认 app 的 Info.plist 里注册过的图标**
+（`CFBundleIcons → CFBundleAlternateIcons → <名字> → CFBundleIconFiles`）——
+设置页读的就是这个结构，`setAlternateIconName` 也要求名字与那个 key 一致。
+所以装出来的包点开「应用图标」就是**空列表**（观感 = pw 那句 "The icon did not change"）。
+
+### 11.2 改了什么（2 个文件，都在打包前）
+
+两个 IPA workflow 的 `Ensure @executable_path/Frameworks rpath, then add OpeninSafari extension`
+步骤里，**在 `zip` 打包之前**加了一段：
+
+```bash
+if [ -x /usr/libexec/PlistBuddy ]; then
+  echo "== 注册应用图标（CFBundleAlternateIcons）=="
+  bash "${{ github.workspace }}/Tools/alt-icons.sh" "$APP" \
+    || echo "::warning::应用图标注册失败（不影响安装，只是那页是空的）"
+  plutil -p "$APP/Info.plist" | grep -A3 'CFBundleAlternateIcons' | head -12 \
+    || echo "(Info.plist 里没有 CFBundleAlternateIcons —— 图标没注册上)"
+else
+  echo "::warning::没有 PlistBuddy，跳过应用图标注册"
+fi
+```
+
+* 位置选在打包前、`$APP` 已就绪之后 —— 图标必须进**终包**。
+* 用 `${{ github.workspace }}` 的绝对路径：那一步已经 `cd` 到 IPA 所在目录，相对路径找不到脚本。
+* **失败不中断构建**（只 `::warning::`）：没有图标的包照常能装能跑，只是那页空 —— 本仓库没有 Mac，
+  真要排错只能靠 CI 日志，所以不能让它把构建带崩。
+* 两个 workflow 是**公共步骤**（文件头明确要求同步），两边都加了。
+
+### 11.3 本地校验（没有 Mac，能做的都做了）
+
+* `pyyaml` 解析两个 workflow：**都通过**（改坏了 YAML 的话 Actions 会直接不认）。
+* 抽出这一步的 shell 文本比对两份：差异只有 ①**本来就存在**的液态玻璃块（patched 版独有，13 行）
+  与 ②我写的那行"另一个 workflow 里有同一段"的提示 —— **没有引入新漂移**。
+* ⚠️ 本机 `bash` 是 WSL 启动器（没装发行版），所以**没法跑 `bash -n`**：shell 语法靠人眼 + 与
+  同一步里既有写法（`|| echo "(没有 LC_RPATH)"`）保持一致。
+
+### 11.4 真机验收 + 已知风险
+
+**验收**：
+1. CI 日志里应当有 `== 注册应用图标（CFBundleAlternateIcons）==`、`[alt-icons] applied 34 icon(s) to Spotify.app`、
+   以及一段 `CFBundleAlternateIcons` 的 plist 片段；
+2. 装机后：设置 → EeveeSpotify → **应用图标** → 列表不再是空的（34 项 + Default）→ 选一个 → 桌面图标变化。
+
+**已知风险（说在前面，免得真机踩了不知所以）**：
+
+* 这是**经典"按文件名"机制**（`CFBundleIconFiles` 指向 bundle 根目录里的 PNG），不是 asset catalog。
+  若 iOS 26 已经不认这种形式（只认 Assets.car 里的图标名），日志会显示注册成功但界面仍不生效 ——
+  那时的退路是给 `Spotify.app` 单独塞一份只含图标的 `Assets.car`（`actool` 编译，成本高一档）。
+* 名字里**带括号/空格**的（`Asta_Liebe(Green)`）在侧载包上 `setAlternateIconName` 可能失败 ——
+  设置页会弹错误（`EeveeAppIconPickerView` 的注释里就写着这条）。真机若确认失败，改法是
+  在脚本里把注册用的键名 sanitize 成纯 ASCII（**不要**改文件名映射那套）。
+* 塞文件 + 改 Info.plist 会让原有签名失效 → **必须重新签名**（侧载流程本来就会做，无额外步骤）。

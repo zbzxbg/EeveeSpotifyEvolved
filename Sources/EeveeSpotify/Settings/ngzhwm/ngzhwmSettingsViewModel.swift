@@ -8,8 +8,12 @@ class NgzhwmSettingsViewModel: ObservableObject {
     static let neteaseHideTranslationKey = "ngzhwm_neteaseHideTranslation"
     static let wordByWordLyricsKey = "ngzhwm_wordByWordLyrics"
     static let betterWordByWordLyricsKey = "ngzhwm_betterWordByWordLyrics"
-    // 已移除 `amllPreferredKey`（2026-09-25）：「AMLL 优先」整条链去掉，
-    // AMLL 仍是来源选择器里的普通来源。
+    /// 「AMLL 优先」的 UserDefaults 键。
+    ///
+    /// ⚠️ 2026-10-02 **恢复**：2026-09-25 曾因用户一句"感觉没什么用"把整条链删掉
+    /// （提交 `50528cd`，8 个文件），用户随后要求加回来。键名沿用旧名
+    /// （`ngzhwm_amllPreferred`），设备上可能还留着上次的值。
+    static let amllPreferredKey = "ngzhwm_amllPreferred"
     // 已删除一个 key（2026-09-27）：`ngzhwm_syntheticLineTiming` —— 「补全歌词时间轴」。
     //
     // 为什么删：真机 A/B（用户关掉它跑了一整场）结论是"差不多、或略好一点"，而**给本来就
@@ -61,9 +65,19 @@ class NgzhwmSettingsViewModel: ObservableObject {
         bool(forKey: neteaseHideTranslationKey, defaultValue: !isChineseDevice)
     }
 
-    // 已移除 `isAmllPreferred`（2026-09-25，用户反馈"感觉没什么用"）。
-    // 它原本做的事：先向 AMLL 要逐词歌词，不合格再回退到用户选的那个源。
-    // 现在 AMLL 只是来源选择器里的一个普通来源，选它就只查它。
+    /// 「AMLL 优先」：开启后先向 AMLL 要逐词歌词，没正常返回再回退到用户在
+    /// 来源选择器里设置的那个源（连同它的相关设置）。
+    ///
+    /// 之所以回退到「用户自己选的源」而不是硬编码一条回退链：哪个源适合兜底完全
+    /// 取决于地区与语言 —— 日本用户设 PetitLyrics、大陆用户设网易云、其它地区设
+    /// SpicyLyrics，各自回退到最合适的地方，不需要我们再维护地区判断。
+    ///
+    /// 默认关闭，已装用户的既有行为不变。
+    ///
+    /// ⚠️ 2026-10-02 **恢复**（2026-09-25 删过一次，来龙去脉见 `amllPreferredKey` 的说明）。
+    static var isAmllPreferred: Bool {
+        bool(forKey: amllPreferredKey, defaultValue: false)
+    }
 
     /// 「隐藏 Spotify 官方歌词」：我方来源取不到词时，**不再把 Spotify 的原始响应放行**，
     /// 而是用我们自己的一小段「未找到歌词」占位顶上去。

@@ -662,6 +662,15 @@ struct AppleMusicLyricsPage: View {
             isFocused: isFocused,
             isActive: isActive
         )
+        // ★ 2026-10-02：整行**贴哪一边**按歌词内容决定，不再跟系统语言走。
+        //
+        // `.leading` / `TextAlignment.leading` / `anchor: .leading` 解析用的都是
+        // **环境 layoutDirection** —— 而环境方向来自系统语言。于是"中文界面 + 阿拉伯语歌词"
+        // 必然被排到左边（用户报的原话："时间轴没问题，就是贴左不贴右"）。
+        // 把这一行的环境方向按**歌词自己**的书写方向覆盖掉（见 `String+ScriptDirection.swift`），
+        // `.leading` 就变成"这一行自己的开头那一边"：阿拉伯语 → 贴右、中英文 → 贴左，
+        // 对唱翻转（`.trailing` ＝ 推到另一端）也跟着一起翻对。
+        let isRightToLeft = line.text.prefersRightToLeftLayout
 
         SynchronizedLyricText(
             syllables: line.syllables,
@@ -707,6 +716,15 @@ struct AppleMusicLyricsPage: View {
         .animation(
             .spring(duration: 0.45, bounce: 0.05, blendDuration: 0),
             value: isFocused
+        )
+        // ★ 放在链条**最外层**：这样它同时盖住
+        //   ① 行内文字的对齐（`SynchronizedLyricText` 内部的 `.frame(alignment:)`
+        //      与 `.multilineTextAlignment(alignment.textAlignment)`）；
+        //   ② 上面那个 `.scaleEffect(anchor: .leading)` —— 焦点行放大时应当从
+        //      "这一行自己的那一侧"长出来，而不是永远从左边。
+        .environment(
+            \.layoutDirection,
+            isRightToLeft ? .rightToLeft : .leftToRight
         )
     }
 
