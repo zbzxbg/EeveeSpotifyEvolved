@@ -491,3 +491,29 @@ reduce_interventions_flag_watch_feed_entity_explorer_tooltip = "Watch feed explo
 reduce_interventions_flag_watch_feed_entity_explorer_tooltip_description = "The tip pointing at the watch feed explorer.";
 reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell = "Free-tier player upsell";
 reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell_description = "The suggestion card that pushes free listeners toward Premium in the player.";
+
+// ── Reduce interventions, batch 2 (2026-10-03) ────────────────────────────────
+// Tips that live in OTHER scopes (not Spotify's reduceinterventions module).
+// Key shape for these is `reduce_interventions_flag_<scope tail>_<flag name>`,
+// because plain flag names like `is_enabled` would collide across scopes.
+// Check with Tools/eevee-hookfinder/check_reduce_interventions_l10n.py.
+reduce_interventions_flag_connectnotifications_disable_connect_nudges = "Spotify Connect tips";
+reduce_interventions_flag_connectnotifications_disable_connect_nudges_description = "Nudges about Spotify Connect and connected devices.";
+reduce_interventions_flag_sleeptimer_nudge_on_audiobooks = "Sleep timer nudge on audiobooks";
+reduce_interventions_flag_sleeptimer_nudge_on_audiobooks_description = "The prompt that offers the sleep timer while an audiobook plays.";
+reduce_interventions_flag_predictability_is_smart_control_nudge_enabled = "Smart control tips";
+reduce_interventions_flag_predictability_is_smart_control_nudge_enabled_description = "Tips from the device-predictability experiment (\"where to play\" style hints).";
+reduce_interventions_flag_yourlibaryx_enable_euterpe_tooltip = "Library tooltip";
+reduce_interventions_flag_yourlibaryx_enable_euterpe_tooltip_description = "The Euterpe tooltip shown in Your Library.";
+reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card = "New-episodes card in Library";
+reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card_description = "The card announcing new episodes of shows you follow.";
+reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled = "\"Pin more items\" banner";
+reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled_description = "The banner suggesting you pin more items in Your Library.";
+reduce_interventions_scope_connectnotifications = "Connect";
+reduce_interventions_scope_connectnotifications_footer = "Nudges around connecting to other devices.";
+reduce_interventions_scope_sleeptimer = "Sleep timer";
+reduce_interventions_scope_sleeptimer_footer = "Prompts from the sleep-timer feature.";
+reduce_interventions_scope_predictability = "Device tips";
+reduce_interventions_scope_predictability_footer = "Tips from Spotify's device-predictability experiment.";
+reduce_interventions_scope_yourlibaryx = "Your Library";
+reduce_interventions_scope_yourlibaryx_footer = "Tips, banners and cards shown inside Your Library.";

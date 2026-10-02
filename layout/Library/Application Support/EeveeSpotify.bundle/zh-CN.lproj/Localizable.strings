@@ -486,3 +486,27 @@ reduce_interventions_flag_watch_feed_entity_explorer_tooltip = "探索提示";
 reduce_interventions_flag_watch_feed_entity_explorer_tooltip_description = "指向 watch feed 探索入口的提示。";
 reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell = "免费档播放页推广";
 reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell_description = "播放页上推免费用户升级 Premium 的那张建议卡。";
+
+// ── 减少打扰 · 第二批（2026-10-03）────────────────────────────────────────────
+// 这些提示散在**别的 scope**，键名形状是
+// `reduce_interventions_flag_<scope 末段>_<flag 名>`（只按 flag 名拼会撞车）。
+reduce_interventions_flag_connectnotifications_disable_connect_nudges = "Connect 提示";
+reduce_interventions_flag_connectnotifications_disable_connect_nudges_description = "关于 Spotify Connect 与已连接设备的提示。";
+reduce_interventions_flag_sleeptimer_nudge_on_audiobooks = "有声书的睡眠定时器提示";
+reduce_interventions_flag_sleeptimer_nudge_on_audiobooks_description = "放有声书时推荐睡眠定时器的那个提示。";
+reduce_interventions_flag_predictability_is_smart_control_nudge_enabled = "智能控制提示";
+reduce_interventions_flag_predictability_is_smart_control_nudge_enabled_description = "设备预测那套实验里的提示（「去哪儿播」那类）。";
+reduce_interventions_flag_yourlibaryx_enable_euterpe_tooltip = "音乐库气泡提示";
+reduce_interventions_flag_yourlibaryx_enable_euterpe_tooltip_description = "音乐库里的 Euterpe 气泡提示。";
+reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card = "音乐库的「新单集」卡";
+reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card_description = "提醒你关注的节目有新单集的那张卡。";
+reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled = "「置顶更多」横幅";
+reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled_description = "建议你在音乐库里置顶更多内容的横幅。";
+reduce_interventions_scope_connectnotifications = "Connect";
+reduce_interventions_scope_connectnotifications_footer = "连接其它设备相关的提示。";
+reduce_interventions_scope_sleeptimer = "睡眠定时器";
+reduce_interventions_scope_sleeptimer_footer = "睡眠定时器功能自己弹的提示。";
+reduce_interventions_scope_predictability = "设备提示";
+reduce_interventions_scope_predictability_footer = "Spotify「设备预测」那套实验里的提示。";
+reduce_interventions_scope_yourlibaryx = "音乐库";
+reduce_interventions_scope_yourlibaryx_footer = "音乐库里出现的提示、横幅与卡片。";

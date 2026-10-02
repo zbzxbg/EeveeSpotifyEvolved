@@ -219,6 +219,44 @@ enum KnownFlagCatalog {
                           "ios-feature-allboarding", observed: ""),
             ]
         ),
+
+        // ── 2026-10-03：第二批"能关的打扰"，跨 scope ────────────────────────────────
+        //
+        // 起因：用户问"实际能关的是不是比这多很多" —— 是。上面那组只覆盖
+        // `ios-messaging-reduceinterventions-impl`（Spotify 自己那个"减少打扰"模块，
+        // 11 条已全覆盖）；而 IPA flag 表（`.spotify-ipa/flag-table.txt`，2485 条）里
+        // 还有一批**同性质的提示/推销**散在别的 scope。
+        //
+        // ⚠️ 这一组每条都只是**IPA 字面量**（`observedValue` 留空）：这台设备上没见过
+        // 服务端下发它们，所以"关掉有没有效果"要靠日志里的 `[Flags] replacement … N match(es)`
+        // 判 —— 0 命中说明这条没被下发（`.forceBool` 仍会追加一条，但效果未知）。
+        //
+        // 入选标准（刻意保守）：**名字里明确写着"提示/推销"**，且**关掉不会拿掉真功能**。
+        // 因此排除了 `specialized_connect_nudge_for_video_variant`（变体选择器，取值不是开关）、
+        // `nudge_cooldown_ms` / `min_period_between_nudges` / `recommendation_nudge_delay`
+        // （节流秒数，属"写入数字"档，不是开关）这类。
+        KnownFlagGroup(
+            titleKey: "flag_group_hints",
+            footerKey: "flag_group_hints_footer",
+            flags: [
+                // Spotify Connect：名字直接就叫 disable。
+                KnownFlag("disable_connect_nudges", "ios-feature-connectnotifications", observed: ""),
+                // ⚠️ 刻意**不收**：`show_new_userawareness_nudge`
+                //（"新用户引导提示"——那是给新用户的功能，不属于"打扰"），
+                // 以及 `specialized_connect_nudge_for_video_variant`（变体选择器，不是开关）。
+
+                // 睡眠定时器：只在有声书上弹的推销。
+                KnownFlag("nudge_on_audiobooks", "ios-feature-sleeptimer", observed: ""),
+
+                // 设备提示（"智能控制"那套）。
+                KnownFlag("is_smart_control_nudge_enabled", "ios-device-predictability", observed: ""),
+
+                // 音乐库：Euterpe 提示 + 新单集引导卡 + "置顶更多"横幅。
+                KnownFlag("enable_euterpe_tooltip", "ios-feature-yourlibaryx", observed: ""),
+                KnownFlag("show_new_episodes_offboarding_card", "ios-feature-yourlibaryx", observed: ""),
+                KnownFlag("pin_more_items_banner_enabled", "ios-feature-yourlibaryx", observed: ""),
+            ]
+        ),
     ]
 
     /// 目录里一条的稳定 id —— 与 `FlagOverride.id` 同一套规则（scope 参与）。

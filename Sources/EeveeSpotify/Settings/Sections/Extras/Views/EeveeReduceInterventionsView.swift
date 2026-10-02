@@ -57,10 +57,20 @@ struct EeveeReduceInterventionsView: View {
                 header: Text("reduce_interventions_tips_section".localized),
                 footer: Text("reduce_interventions_tips_footer".localized)
             ) {
-                ForEach(Self.tipFlags, id: \.self) { flag in
-                    let labelKey: String = Self.labelKey(for: flag)
-                    let descriptionKey: String = Self.descriptionKey(for: flag)
-                    toggle(flag: flag, labelKey: labelKey, descriptionKey: descriptionKey)
+                ForEach(Self.interventionRows, id: \.key) { row in
+                    toggle(row)
+                }
+            }
+
+            // ── 第二批：别的 scope 里的同类提示（每个 scope 一节，副标题写清是哪条）──────
+            ForEach(Self.hintSections, id: \.scope) { section in
+                Section(
+                    header: Text(Self.hintSectionTitleKey(for: section.scope).localized),
+                    footer: Text(Self.hintFooterKey(for: section.scope).localized)
+                ) {
+                    ForEach(section.rows, id: \.key) { row in
+                        toggle(row)
+                    }
                 }
             }
         }
@@ -68,17 +78,36 @@ struct EeveeReduceInterventionsView: View {
         .onAppear { overrides = FlagOverrideStore.all }
     }
 
-    // MARK: - 一行开关
+    // MARK: - 行模型
 
-    private func toggle(flag: KnownFlag, labelKey: String, descriptionKey: String) -> some View {
-        Toggle(isOn: binding(for: flag)) {
+    /// 一行开关。把一个 `KnownFlag` 需要的东西**预先算好**，行视图里就只做渲染 ——
+    /// 这样 `body` 里的表达式都很小，不会喂给类型检查器一个长链（见 `existingOverride` 的注释）。
+    private struct Row: Hashable {
+        let flag: KnownFlag
+        let labelKey: String
+        let descriptionKey: String
+        var key: String { Self.stableKey(for: flag) }
+
+        static func stableKey(for flag: KnownFlag) -> String {
+            flag.scope + "|" + flag.name
+        }
+    }
+
+    private struct RowSection: Hashable {
+        let scope: String
+        let rows: [Row]
+    }
+
+    /// 一行开关（渲染）。
+    private func toggle(_ row: Row) -> some View {
+        Toggle(isOn: binding(for: row.flag)) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(labelKey.localized)
+                Text(row.labelKey.localized)
                 // flag 名留在副标题里：这一页的价值之一就是"看得见它关的是哪条"。
-                Text("\(flag.scope).\(flag.name)")
+                Text("\(row.flag.scope).\(row.flag.name)")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text(descriptionKey.localized)
+                Text(row.descriptionKey.localized)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -157,15 +186,22 @@ struct EeveeReduceInterventionsView: View {
     /// ⚠️ `live_events_event_entity_safe_tooltip` 与 `…venuename_header_too` 是**同一条提示的
     /// 另外两个开关**（都归在"演唱会 / 现场活动"那一行下），所以不各占一行 ——
     /// 每多一行就是多一个用户要猜"这条和那条差在哪"的地方。
-    /// ⇒ 这一页最终是 **7 行**（目录里 9 条 bool 提示 − 2 条合并）。
+    /// ⇒ 这一组最终是 **7 行**（目录里 9 条 bool 提示 − 2 条合并）。
     private static let mergedIntoAnotherRow: Set<String> = [
         "enable_message_live_events_event_entity_safe_tooltip",
         "enable_message_live_events_event_entity_venuename_header_too",
     ]
 
-    private static var tipFlags: [KnownFlag] {
+    private static var interventionRows: [Row] {
         // ⚠️ 逐句、显式类型：一处 `&&` 链里混四种判据（含 Set.contains）也是
         // `unable to type-check in reasonable time` 的常见触发形状。宁可多几行。
+        //
+        // ⚠️ **必须同时卡 scope**：`flag_group_interventions` 里还混着 6 条**别的 scope** 的
+        // 同名/近名 flag（`ios-feature-nowplayingbar.data_saver_tooltip`、
+        // `ios-datasaver-automatic-impl.messaging_enabled`、
+        // `ios-reinventfree-contextualupsellpremiumpromo-impl.is_promo_cta_enabled`、
+        // `ios-feature-search.concerts_enabled`、`ios-blend-socialprompting-impl.social_prompting_enabled`
+        // …）。不卡 scope 的话它们会挤进这一节、并且显示裸键名。
         let all: [KnownFlag] = knownFlags
         let candidates: [KnownFlag] = all.filter { flag in
             let inScope: Bool = flag.scope == interventionsScope
@@ -174,7 +210,86 @@ struct EeveeReduceInterventionsView: View {
             let standalone: Bool = !mergedIntoAnotherRow.contains(flag.name)
             return inScope && notMaster && isBool && standalone
         }
-        return candidates
+        let rows: [Row] = candidates.map { flag in makeRow(flag) }
+        return rows
+    }
+
+    /// 第二批（`flag_group_hints`）里**这一页要显示的行** —— 显式白名单，键是 `scope|name`。
+    ///
+    /// ⚠️ 为什么不直接渲染整组：那个组里还躺着 3 条我**没写文案**的 flag
+    /// （`ios-feature-nowplayingbar.data_saver_tooltip` / `ios-feature-search.concerts_enabled` /
+    /// `ios-reinventfree-contextualupsellpremiumpromo-impl.is_promo_cta_enabled`）。
+    /// 直接渲染整组的话，它们会**自动上屏并且显示裸键名** —— 2026-10-03 就是靠
+    /// `check_reduce_interventions_l10n.py` 才发现的（它会列出"这一页会拼出来的每个键"）。
+    /// 所以规则定死：**想让它上屏，先在这里加一行、再补两个 l10n 键**。
+    private static let curatedHints: Set<String> = [
+        // Connect：名字就叫 disable。
+        "ios-feature-connectnotifications|disable_connect_nudges",
+        // 睡眠定时器：只在有声书上弹的推销。
+        "ios-feature-sleeptimer|nudge_on_audiobooks",
+        // 设备提示（"智能控制"那套）。
+        "ios-device-predictability|is_smart_control_nudge_enabled",
+        // 音乐库：Euterpe 气泡 + 新单集卡 + "置顶更多"横幅。
+        "ios-feature-yourlibaryx|enable_euterpe_tooltip",
+        "ios-feature-yourlibaryx|show_new_episodes_offboarding_card",
+        "ios-feature-yourlibaryx|pin_more_items_banner_enabled",
+    ]
+
+    /// 见 `curatedHints`。这里做的是"白名单 + 保持目录里的顺序"。
+    private static var curatedHintFlags: [KnownFlag] {
+        let all: [KnownFlag] = hintFlags
+        let picked: [KnownFlag] = all.filter { flag in
+            let key: String = flag.scope + "|" + flag.name
+            return curatedHints.contains(key)
+        }
+        return picked
+    }
+
+    /// 第二批：按 scope 分组渲染（每节的标题/脚注由 scope 末段拼出来）。
+    private static var hintSections: [RowSection] {
+        let all: [KnownFlag] = curatedHintFlags
+        var order: [String] = []
+        var grouped: [String: [KnownFlag]] = [:]
+        for flag in all {
+            let scope: String = flag.scope
+            if grouped[scope] == nil {
+                order.append(scope)
+                grouped[scope] = []
+            }
+            grouped[scope]?.append(flag)
+        }
+
+        var sections: [RowSection] = []
+        for scope in order {
+            let flags: [KnownFlag] = grouped[scope] ?? []
+            let rows: [Row] = flags.map { flag in makeRow(flag) }
+            sections.append(RowSection(scope: scope, rows: rows))
+        }
+        return sections
+    }
+
+    /// 一行要用的三个东西一次算完：l10n 标签键、说明键、以及它关的那条 flag。
+    private static func makeRow(_ flag: KnownFlag) -> Row {
+        let label: String = labelKey(for: flag)
+        let description: String = descriptionKey(for: flag)
+        return Row(flag: flag, labelKey: label, descriptionKey: description)
+    }
+
+    /// 第二批每节的标题/脚注键。scope 里带 `-` 与 `.`，不能直接拼进键名 →
+    /// 用 scope 的**最后一段**（`ios-feature-yourlibaryx` → `yourlibaryx`）。
+    static func hintSectionTitleKey(for scope: String) -> String {
+        "reduce_interventions_scope_" + lastScopeSegment(scope)
+    }
+
+    static func hintFooterKey(for scope: String) -> String {
+        "reduce_interventions_scope_" + lastScopeSegment(scope) + "_footer"
+    }
+
+    private static func lastScopeSegment(_ scope: String) -> String {
+        let parts: [Substring] = scope.split(separator: "-")
+        let last: Substring? = parts.last
+        guard let last else { return scope }
+        return String(last)
     }
 
     private static var knownFlags: [KnownFlag] {
@@ -183,29 +298,42 @@ struct EeveeReduceInterventionsView: View {
             .flags ?? []
     }
 
-    /// 人话标签的 l10n 键 = `reduce_interventions_flag_<短名>`。
+    /// 第二批（`flag_group_hints`）的 flag —— 全是**别的 scope** 里的同类提示。
+    private static var hintFlags: [KnownFlag] {
+        KnownFlagCatalog.groups
+            .first { $0.titleKey == "flag_group_hints" }?
+            .flags ?? []
+    }
+
+    /// 人话标签的 l10n 键。
     ///
-    /// ⚠️ 键名必须与 `KnownFlagCatalog` 里那条 flag 的**短名**一一对应；
-    /// 名字改了而这里没改，表现是界面上出现**裸键名**（仓库已知的一种事故形状）。
+    /// ⚠️ 键名与 `KnownFlagCatalog` 里那条 flag **一一对应**，且**按 scope 决定形状**：
+    /// * scope 就是「减少打扰」那个模块（`ios-messaging-reduceinterventions-impl`）→
+    ///   `reduce_interventions_flag_<去掉 enable_message_ 前缀的名字>`（历史键名，别改）；
+    /// * 别的 scope → `reduce_interventions_flag_<scope 末段>_<flag 名>`。
+    ///
+    /// 为什么要分段：第二批里 `is_enabled` / `nudges` 这种名字在多个 scope 里都会出现，
+    /// 只用 flag 名拼键必然撞车 —— 撞了的表现就是**两行显示同一段文字**（不报错，只难看）。
+    ///
+    /// 名字改了而词典没跟上，表现是界面上出现**裸键名**（仓库已知的事故形状），
+    /// 所以 `Tools/eevee-hookfinder/check_reduce_interventions_l10n.py` 会把这一页**会拼出来的
+    /// 每个键**都拿去词典里找一遍 —— 改目录或改这里的规则之后，都要跑它。
     static func labelKey(for flag: KnownFlag) -> String {
-        "reduce_interventions_flag_\(shortName(of: flag))"
+        "reduce_interventions_flag_" + shortName(of: flag)
     }
 
     static func descriptionKey(for flag: KnownFlag) -> String {
-        "reduce_interventions_flag_\(shortName(of: flag))_description"
+        "reduce_interventions_flag_" + shortName(of: flag) + "_description"
     }
 
-    /// `enable_message_account_switching_tooltip` → `account_switching_tooltip`
-    /// （去掉统一的 `enable_message_` 前缀，纯为可读）。
-    ///
-    /// ⚠️ 两张被合并进"演唱会 / 现场活动"那一行的 flag 也走这里 → 它们的标签键与那行相同。
-    /// 键名改了而这里没改的表现是界面上出现**裸键名**（仓库已知的事故形状），
-    /// 所以 `KnownFlagCatalog` 里那条 flag 的短名与本函数的产物必须一一对应。
+    /// 见 `labelKey(for:)` 的说明：先按 scope 分段，再对「减少打扰」那一组去掉
+    /// `enable_message_` 前缀。两张被合并进"演唱会 / 现场活动"那行的 flag 也走这里
+    /// （所以它们的键与那一行相同，是有意的）。
     private static func shortName(of flag: KnownFlag) -> String {
         switch flag.name {
         case "enable_message_live_events_event_entity_safe_tooltip",
              "enable_message_live_events_event_entity_venuename_header_too":
-            return "live_events_concert_notifications_tooltip"
+            return scoped("live_events_concert_notifications_tooltip", for: flag)
         default:
             break
         }
@@ -213,8 +341,16 @@ struct EeveeReduceInterventionsView: View {
         let prefix = "enable_message_"
         if flag.name.hasPrefix(prefix) {
             let dropped: Substring = flag.name.dropFirst(prefix.count)
-            return String(dropped)
+            return scoped(String(dropped), for: flag)
         }
-        return flag.name
+        return scoped(flag.name, for: flag)
+    }
+
+    /// 「减少打扰」那个 scope 之外的 flag，键里带上 scope 末段，避免同名撞车。
+    private static func scoped(_ name: String, for flag: KnownFlag) -> String {
+        if flag.scope == interventionsScope {
+            return name
+        }
+        return lastScopeSegment(flag.scope) + "_" + name
     }
 }
