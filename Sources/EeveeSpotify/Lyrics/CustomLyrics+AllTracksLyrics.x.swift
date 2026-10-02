@@ -417,6 +417,7 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         // （`NowPlayingOneScreen.reconcile`，同一条"不新开定时器"的纪律）。
         if let page = target as? UIViewController, let pageView = page.view {
             NowPlayingOneScreen.apply(in: pageView)
+            NowPlayingPageOverlay.apply(in: pageView)
         }
     }
 
@@ -434,6 +435,7 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         // 「一屏」的第二次机会：`viewDidAppear` 时列表通常已经建好了。
         if let page = target as? UIViewController, let pageView = page.view {
             NowPlayingOneScreen.apply(in: pageView)
+            NowPlayingPageOverlay.apply(in: pageView)
         }
     }
     

@@ -531,3 +531,4 @@ now_playing_backdrop_description = "Paints the now-playing page with a gradient 
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
 now_playing_one_screen = "One screen (no scrolling)";
+now_playing_volume = "Volume slider at the bottom";

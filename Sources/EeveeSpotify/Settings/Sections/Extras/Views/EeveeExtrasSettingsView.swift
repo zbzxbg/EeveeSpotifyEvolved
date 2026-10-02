@@ -45,6 +45,7 @@ struct EeveeExtrasSettingsView: View {
         var miniBarGlass = UserDefaults.miniBarGlass
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
+        var nowPlayingVolume = UserDefaults.nowPlayingVolume
     }
 
     var body: some View {
@@ -217,6 +218,24 @@ struct EeveeExtrasSettingsView: View {
                                 NowPlayingOneScreen.reapply()
                             } else {
                                 NowPlayingOneScreen.restore()
+                            }
+                        }
+                    )
+                )
+
+                // 底部音量条：kumone 播放页下半屏的那一条（Apple Music 没有）。
+                // 落在**我们自己的透明覆盖层**上（`NowPlayingPageOverlay`），不碰 Spotify 属性。
+                Toggle(
+                    "now_playing_volume".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingVolume,
+                        persist: { value in
+                            UserDefaults.nowPlayingVolume = value
+                            // 打开就当场落地（页面还挂着的话），关掉当场把那一层拿走。
+                            if value {
+                                NowPlayingPageOverlay.reapply()
+                            } else {
+                                NowPlayingPageOverlay.remove(reason: "switch off")
                             }
                         }
                     )

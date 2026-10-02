@@ -262,6 +262,11 @@ enum DeclutterChrome {
         //   值没漂就一个字节都不写，没在听歌页时只是两次 weak 读。
         onMainThreadSync { _ = NowPlayingOneScreen.reconcile() }
 
+        // ★ 听歌页「**我们自己的覆盖层**」（`NowPlayingPageOverlay`）也要跟着重排：
+        //   Spotify 换帧会重排 subviews 把我们挤下去，换歌 / 转场之后底部锚的 frame 也会变。
+        //   同一条纪律：**不新开定时器**，frame 没变就一个字节都不写。
+        onMainThreadSync { _ = NowPlayingPageOverlay.reconcile() }
+
         // ★ 2026-10-03 夜：**只读播放器状态探针**（`PlayerStateProbe`）—— 给「突然无法播放
         //   任何歌曲」那条线补现场判据（它至今零判据：31 份日志里 drm/license/unplayable
         //   全零命中，分不开"服务端按地区判不可播"和"账号风控"）。

@@ -524,3 +524,4 @@ now_playing_backdrop_description = "用封面取色调出一层渐变铺满听�
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
 // Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift。
 now_playing_one_screen = "一屏（卡片折起来，不可滚动）";
+now_playing_volume = "底部音量条";

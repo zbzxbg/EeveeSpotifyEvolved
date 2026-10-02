@@ -41,6 +41,7 @@ extension UserDefaults {
     private static let miniBarGlassKey = "miniBarGlass"
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
+    private static let nowPlayingVolumeKey = "nowPlayingVolume"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -89,6 +90,7 @@ extension UserDefaults {
         miniBarGlassKey,
         nowPlayingBackdropKey,
         nowPlayingOneScreenKey,
+        nowPlayingVolumeKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -537,6 +539,20 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingOneScreenKey)
+        }
+    }
+
+    /// 听歌页底部那条**音量条**（我们自己的一层覆盖层上的第一件控件）。**默认关**。
+    ///
+    /// 它是 kumone 播放页下半屏的辨识度元素之一（Apple Music 没有）。落点与纪律写在
+    /// `NowPlayingPageOverlay` 的文件头：**透明覆盖层 + 只加我们自己的视图 +
+    /// 容器不吃触摸**，关掉 = 把那一层拿掉，天然完全还原。
+    static var nowPlayingVolume: Bool {
+        get {
+            container.object(forKey: nowPlayingVolumeKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingVolumeKey)
         }
     }
 
