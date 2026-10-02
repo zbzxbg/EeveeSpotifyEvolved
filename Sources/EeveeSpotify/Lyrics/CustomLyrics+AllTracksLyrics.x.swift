@@ -406,9 +406,21 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         //
         // ⚠️ 故意**不**加 `viewDidLayoutSubviews`：那是可选方法，9.1.88 的
         // `NPVScrollViewController` 没覆写就会 `Failed to hook method`。
-        // 刷新时机改为"每次进这一页" + "设置里切开关时当场落地"两处，
-        // 见 `refreshNowPlayingBackdrop()` / `NowPlayingBackdrop.remove(reason:)`。
-        refreshNowPlayingBackdrop()
+        // 刷新时机改为"每次进这一页" + "设置里切开关时当场落地"两处。
+        // ⚠️ 把 `target` 自己传进去 —— 它就是这个 VC；不能靠 `npvScrollViewController`
+        // 那个全局（9.1.x 上恒为 nil，见 `refreshNowPlayingBackdrop` 的说明）。
+        refreshNowPlayingBackdrop(page: target as? UIViewController)
+    }
+
+    /// 再补一次（`viewWillAppear` 那次可能早于曲目元数据/取色到位）。
+    ///
+    /// ⚠️ 只用**视图控制器的** `viewDidAppear`，不用 `viewDidLayoutSubviews`：
+    /// 视图控制器的 `viewDidAppear` 一定会被覆写（转场就是它驱动的），
+    /// 而 `viewDidLayoutSubviews` 是可选方法 —— 挂上去可能 `Failed to hook method`。
+    /// 这一次的重复调用是**幂等**的（`NowPlayingBackdrop.apply` 同一个颜色不重刷）。
+    func viewDidAppear(_ animated: Bool) {
+        orig.viewDidAppear(animated)
+        refreshNowPlayingBackdrop(page: target as? UIViewController)
     }
     
     func viewWillDisappear(_ animated: Bool) {
@@ -421,19 +433,38 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
 
 /// 「仿 AM 的整页取色底」的**唯一**刷新入口（全局函数，不是某个 hook 的方法）。
 ///
-/// 两个调用点：
-///   1. `NPVScrollViewControllerHook.viewWillAppear` —— 每次进听歌页；
-///   2. 设置页切那个开关时 —— 关掉要**当场**还原，不能等下一次进页面。
+/// 调用点：
+///   1. `NPVScrollViewControllerHook.viewWillAppear` —— 每次进听歌页（**传入 `target`**）；
+///   2. 设置页切那个开关时 —— 关掉要**当场**还原（那时没有 `target`，退回到全局）。
 ///
-/// 取封面色与歌词配色**同一处口径**（`track.metadata()["extracted_color"]`），
-/// 避免两套取色各说各话。
-func refreshNowPlayingBackdrop() {
-    guard let page = npvScrollViewController as? UIViewController else { return }
-    let view = page.view
-    guard let view, view.bounds.width > 1 else { return }
+/// ⚠️ **为什么必须能传 `page`**（2026-10-03 真机日志 37 换来的）：
+/// 原来这个函数只认全局 `npvScrollViewController`，而给它赋值的
+/// `provideScrollViewControllerWithDependencies:` 在 9.1.x 上已被移除、hook 被隔离在
+/// `V91UnavailableLyricsGroup` ⇒ **那个全局恒为 nil** ⇒ 函数第一行就 return，
+/// 日志里 `[NPVStyle]` 一行都没有、页面上什么都看不到。
+/// 现在 hook 直接把 `target`（它自己就是那个 VC）传进来，不再依赖那个全局。
+///
+/// 取封面色与歌词配色**同一处口径**（`track.metadata()["extracted_color"]`）。
+func refreshNowPlayingBackdrop(page: UIViewController? = nil) {
+    let controller = page ?? (npvScrollViewController as? UIViewController)
+    guard let controller else {
+        writeDebugLog("[NPVStyle] 拿不到听歌页 VC（全局为空且调用方没传）— 本次不施加")
+        return
+    }
+
+    let view = controller.view
+    guard let view, view.bounds.width > 1 else {
+        writeDebugLog("[NPVStyle] 听歌页 view 还没尺寸（\(type(of: controller))）— 本次不施加")
+        return
+    }
 
     let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
     let hex = track?.metadata()["extracted_color"]
+    if hex == nil {
+        // 这一行是 2026-10-03 补的：日志 37 里 `[NPVStyle]` **零行**，而当时分不清
+        // 是"没跑到"还是"跑到但没取色"。现在两种情况各有一条日志。
+        writeDebugLog("[NPVStyle] 这次没拿到封面取色（track=\(track == nil ? "nil" : "ok")）— 保留 Spotify 原始底")
+    }
     NowPlayingBackdrop.apply(hex: hex, in: view)
 }
 
