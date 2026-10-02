@@ -120,9 +120,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     semaphore.signal()
                 }
                 let waitResult = semaphore.wait(timeout: .now() + budget)
-                // 同 SPTDataLoaderService：预算内没拿到词也要给一份可解析的占位，
-                // 否则这次歌词请求等于"没有响应"，NPV 不会创建歌词卡片。
-                // 见 `unavailableLyricsBytes`（CustomLyrics.x.swift 文件作用域函数）。
+                // ⚠️ 2026-10-03：这条路上**没有占位**了 —— 取不到真词就放行 Spotify 原始响应，
+                // 与 v4.11 之前（`ffe3e69^`）的行为逐字一致。原因见下面 `else` 分支与
+                // `LyricsResponseCache.firstAttemptBudget` 的注释（日志 36 的证据链）。
                 let lyricsPayload: Data
                 if let customLyricsData {
                     lyricsPayload = customLyricsData
