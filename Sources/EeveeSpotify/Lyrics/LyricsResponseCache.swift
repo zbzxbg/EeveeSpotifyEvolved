@@ -161,7 +161,7 @@ final class LyricsResponseCache {
         /// 预算内没结论 → 交了占位。
         case placeholder(dueToTimeout: Bool, elapsed: TimeInterval)
         /// 连占位都构造不出来 → 只能放行 Spotify 原始响应。
-        case passthrough(hadData: Bool, timedOut: Bool)
+        case passthrough(hadData: Bool, timedOut: Bool, elapsed: TimeInterval)
     }
 
     func recordOutcome(_ outcome: Outcome, route: String, plan: BudgetPlan) {
@@ -180,7 +180,7 @@ final class LyricsResponseCache {
                     + (dueToTimeout ? "" : "（取词报错，不是超时）")
                     + "｜经过 \(Self.format(elapsed))s・第 \(plan.attempt) 次请求"
             )
-        case let .passthrough(hadData, timedOut):
+        case let .passthrough(hadData, timedOut, elapsed):
             writeDebugLog(
                 "[\(route)] lyrics passthrough（原始响应放行）— hadData=\(hadData) timedOut=\(timedOut)"
                     + "｜经过 \(Self.format(elapsed))s・第 \(plan.attempt) 次请求"
