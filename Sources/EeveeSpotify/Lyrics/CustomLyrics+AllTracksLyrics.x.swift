@@ -422,12 +422,18 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
             //   听歌页那一棵约 800 节点，整窗 BFS 的 400 预算永远够不到头部/控件/footer。
             //   登记只是一个指针，不改任何视图、不读任何内容。
             ViewTreeDumper.setPage(pageView)
-            // 「歌词进播放器」：那一刻列表/底部那一坨常常还没建好，`apply` 里的
-            // `reconcile` 对"没位置"是安静的，真正的重算交给 `DeclutterChrome` 的复查节拍。
-            NowPlayingLyricsPlate.apply(in: pageView)
-            // 「控制键换成本地字形」的兜底落点：万一 `PlaybackControlsElementsUnit` 那个 hook
-            // 被 Orion 拒了，这条路照样能把三个字形装上（判据都是 id，与类名无关）。
-            NowPlayingControlsPlate.apply(to: pageView)
+            // ⚠️ 下面这两层都是 `@MainActor` 的，而 hook 方法**不能**标 `@MainActor`
+            // （Orion 的代码生成器按源码文本拼接，会拼出 `@MainActoroverride` —— 成文规矩见
+            // `LyricsChromeVisibility.swift`）⇒ 用 `onMainThreadSync` 把"这里是主线程"
+            // 显式表达出来（已是主线程时**同步执行**，不改时序）。
+            onMainThreadSync {
+                // 「歌词进播放器」：那一刻列表/底部那一坨常常还没建好，`apply` 里的
+                // `reconcile` 对"没位置"是安静的，真正的重算交给 `DeclutterChrome` 的复查节拍。
+                NowPlayingLyricsPlate.apply(in: pageView)
+                // 「控制键换成本地字形」的兜底落点：万一 `PlaybackControlsElementsUnit`
+                // 那个 hook 被 Orion 拒了，这条路照样能装（判据都是 id，与类名无关）。
+                NowPlayingControlsPlate.apply(to: pageView)
+            }
         }
     }
 
@@ -447,8 +453,10 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
             NowPlayingOneScreen.apply(in: pageView)
             NowPlayingPageOverlay.apply(in: pageView)
             ViewTreeDumper.setPage(pageView)
-            NowPlayingLyricsPlate.apply(in: pageView)
-            NowPlayingControlsPlate.apply(to: pageView)
+            onMainThreadSync {
+                NowPlayingLyricsPlate.apply(in: pageView)
+                NowPlayingControlsPlate.apply(to: pageView)
+            }
         }
     }
     
@@ -460,7 +468,10 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         // 定向转储的登记也一起撤掉 —— 否则离开听歌页之后还会一直按"页面"预算转储。
         ViewTreeDumper.setPage(nil)
         // 「歌词进播放器」那一层也收掉：页面已经不在屏幕上，留着只是白占一份 hosting。
-        NowPlayingLyricsPlate.remove(reason: "page disappeared")
+        // ⚠️ 它在 `@MainActor` 上，而这里是非隔离的 hook 方法 ⇒ 走 `onMainThreadSync`。
+        // 这一处**必须同步**（`viewWillDisappear` 里的清理不能延后），而它已经是主线程，
+        // 所以 `assumeIsolated` 会立即执行 —— 时序与直接调用一致。
+        onMainThreadSync { NowPlayingLyricsPlate.remove(reason: "page disappeared") }
     }
 }
 

@@ -56,13 +56,19 @@ class PlaybackControlsUnitHook: ClassHook<UIView> {
     func layoutSubviews() {
         orig.layoutSubviews()
 
-        guard NowPlayingControlsPlate.isEnabled else { return }
-        let unit = self.target
-        NowPlayingControlsPlate.refreshGlyphs(
-            previous: NowPlayingControlsPlate.button(NowPlayingControlsPlate.previousButtonID, in: unit),
-            play: NowPlayingControlsPlate.button(NowPlayingControlsPlate.playButtonID, in: unit),
-            next: NowPlayingControlsPlate.button(NowPlayingControlsPlate.nextButtonID, in: unit)
-        )
+        // ⚠️ hook 方法**不能**标 `@MainActor`（Orion 的代码生成器按源码文本拼接，
+        // 会拼出 `@MainActoroverride` 这种非法属性 —— 成文规矩见 `LyricsChromeVisibility.swift`）。
+        // 布局回合本来就在主线程，用仓库既有的 `onMainThreadSync` 把这件事显式表达出来：
+        // 已是主线程 ⇒ 同步执行（不改时序），万一不是 ⇒ 异步派发而不是崩。
+        onMainThreadSync {
+            guard NowPlayingControlsPlate.isEnabled else { return }
+            let unit = self.target
+            NowPlayingControlsPlate.refreshGlyphs(
+                previous: NowPlayingControlsPlate.button(NowPlayingControlsPlate.previousButtonID, in: unit),
+                play: NowPlayingControlsPlate.button(NowPlayingControlsPlate.playButtonID, in: unit),
+                next: NowPlayingControlsPlate.button(NowPlayingControlsPlate.nextButtonID, in: unit)
+            )
+        }
     }
 }
 
