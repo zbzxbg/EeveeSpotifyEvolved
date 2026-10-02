@@ -62,6 +62,9 @@ enum NowPlayingOneScreen {
 
     private static var didLogPin = false
     private static var didLogGiveUp = false
+    private static var didLogNotNeeded = false
+    /// 合并用的占位：一次布局里几十张卡只排一枪（本仓库纪律：短促重试不叠加）。
+    private static var repinScheduled = false
 
     static var isEnabled: Bool { UserDefaults.nowPlayingOneScreen }
 
@@ -78,7 +81,7 @@ enum NowPlayingOneScreen {
             restore()
             return
         }
-        guard let list = findList(in: pageView) else { return }
+        guard let list = locateList(in: pageView) else { return }
         lastList = list
         pin(list)
     }
@@ -109,12 +112,40 @@ enum NowPlayingOneScreen {
         }
 
         // 列表换过实例（列表随页面重建）⇒ 重找一次。
-        guard let list = findList(in: page) else {
+        guard let list = locateList(in: page) else {
             logOnce("找不到听歌页的列表（\(listIdentifier)）— 本次不施加")
             return false
         }
         lastList = list
         return pin(list)
+    }
+
+    /// 卡片**折叠那一刻**叫一次（由 `NowPlayingOneScreenCards.x.swift` 调）。
+    ///
+    /// **为什么必须有这个入口**（2026-10-03 夜用户实测）：开启「一屏」后卡片确实全没了，
+    /// 但**页面还能往下滑** ⇒ 说明"钉住"要么没跑、要么跑在**卡片到货之前**：
+    /// 那时内容还没变高，公式给的是 `want >= 0`，我们按纪律什么都不做（见 `pin`），
+    /// 之后要是再没有布局 / 滚动回合，这个错就一直留在那儿。
+    ///
+    /// pw 的注释写得很清楚：卡片**是播放器之后很久才到的**，所以它也在 `willDisplayCell`
+    /// 里补了一枪；而且因为"cell 的高度是**一个 runloop 之后**才定的"，那一枪是 `dispatch_async`。
+    ///
+    /// **合并**：一次布局里有几十张卡，不合并就是几十个 block（本仓库纪律：短促重试不叠加）。
+    static func noteCardCollapsed() {
+        guard isEnabled, lastList != nil else { return }
+        guard !repinScheduled else { return }
+        repinScheduled = true
+        DispatchQueue.main.async {
+            repinScheduled = false
+            repinNow()
+        }
+    }
+
+    /// 合并后的那一枪：列表还在就重算一次。
+    private static func repinNow() {
+        guard isEnabled else { return }
+        guard let list = lastList, list.window != nil else { return }
+        pin(list)
     }
 
     /// 关掉开关时把 bottom inset 写回原值（我们只改过这一处）。
@@ -152,8 +183,20 @@ enum NowPlayingOneScreen {
         let over: CGFloat = list.contentSize.height - bounds.height
         let want: CGFloat = -adjusted.top - over - safeArea
 
-        // 正数表示"内容还没铺满一屏"，那就不需要压；差得太少也不值得写一次。
-        guard want < 0 else { return false }
+        // 正数表示"内容还没铺满一屏"（**卡片还没到货时就是这样**）⇒ 不需要压。
+        // ⚠️ 这一行是 2026-10-03 夜补的：用户实测"卡片全没了，但还能往下滑"，
+        //    而当时分不清是"压根没找到列表"还是"找到了、但没到该压的时候"。
+        //    静默分支不报，下一次就还得靠猜。
+        if want >= 0 {
+            if !didLogNotNeeded {
+                didLogNotNeeded = true
+                writeDebugLog(
+                    "[\(logTag)] 内容还没到一屏高（want=+\(Int(want))pt）— 不压"
+                        + "（卡片还没到货时就会这样）"
+                )
+            }
+            return false
+        }
         guard abs(want - own.bottom) > slack else { return false }
 
         rememberOriginalInset(of: list)
@@ -194,6 +237,18 @@ enum NowPlayingOneScreen {
             hops += 1
         }
         return false
+    }
+
+    /// 先在这一页的根视图里找；找不到再退到**窗口**里按那个 id 找。
+    ///
+    /// 为什么留这条兜底：pw 取证的是 **9.1.78**（它从 VC 的 view 里找得到那个 id），
+    /// 我们这套基线是 **9.1.88** —— 万一那条列表其实不在这一页的子树里，
+    /// `apply` 会**静默**失败、整个功能一动不动。那个 id 在整棵窗口树里只有一处，
+    /// 认错页的风险可以忽略；走查仍然有界（`maxNodes`）。
+    private static func locateList(in pageView: UIView) -> UIScrollView? {
+        if let list = findList(in: pageView) { return list }
+        guard let window = pageView.window else { return nil }
+        return findList(in: window)
     }
 
     /// 从听歌页根视图往下按 `accessibilityIdentifier` 找那张列表（有界广度优先）。

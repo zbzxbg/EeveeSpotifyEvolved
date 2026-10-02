@@ -53,6 +53,12 @@ class PlayerCardCollapseHook: ClassHook<UICollectionViewCell> {
         result.size = CGSize(width: result.size.width, height: 0)
         self.target.clipsToBounds = true
         PlayerCardCollapseHook.reportOnce(self.target)
+
+        // ★ 折完立刻请"钉住"那边重算一次（合并、异步一帧）。
+        //   为什么不能只靠进页面那一次：卡片**是播放器之后很久才到的**，
+        //   那时按公式算出来是"内容还没到一屏高 ⇒ 不压"，之后就没机会改了 ——
+        //   用户实测的表现就是"卡片没了，但还能往下滑"（2026-10-03 夜）。
+        NowPlayingOneScreen.noteCardCollapsed()
         return result
     }
 
