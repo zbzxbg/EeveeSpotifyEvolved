@@ -915,5 +915,44 @@ CFBundleAlternateIcons = { … }
 2. **削链**（把 5~15s 压下来）：AMLL 那跳不该再带 Genius 兜底；同一次请求 Genius 只查一次；
    多级回退的 `for` 串行改并发。这三条都能直接缩短上面那个"响应时间"。
 
+---
+
+## 18. 2026-10-03 第四轮：**回退链与用户设置不符**（用户指出 → 已修）
+
+**用户原话**：「我记得我的设置不是当开启 AMLL 优先的时候，如果未正常返回，回退用户的相关听歌设置。
+按我的设置，不应该是 AM-NE-Gen 吗」——**他说得对，代码没按设置走。**
+
+**病根**：`requestSingleSource(..., allowGeniusFallback:)` 默认 **true**（`CustomLyrics.x.swift:354`），
+而「AMLL 优先」那一跳**没传这个参数** ⇒ AMLL 一失败就先把 **Genius** 拉进来兜底，
+之后才轮到用户设的源。真实链因此是：
+
+```
+AMLL → Genius（AMLL 那跳自带）→ 用户源（多半再自带一次 Genius）
+```
+
+日志 36（t2，配置 = AMLL 优先 + NetEase + Genius 回退开）逐条对上：
+
+```
+07:44:05  AMLL preferred — trying AMLL first, fallback target: NetEase
+07:44:06  [AMLL] 404 → 超时重试（上限 5s×2）
+07:44:16  [Genius] Fetching…（这一跳是 AMLL 自带的兜底，用户不想要）
+07:44:19  [NetEase] Fetching…  → 57 行 ✓（用户设的源）
+07:44:20  [HCUS] 交付给 Spotify — 2933 bytes（请求起算 14.1s，服务端 404 起算 14.1s）
+```
+
+**改动**（`Lyrics/CustomLyrics.x.swift`，1 个文件）：
+
+| 位置 | 改动 |
+|---|---|
+| AMLL 那一跳（`:259`） | 传 **`allowGeniusFallback: false`** ⇒ AMLL 失败立刻落到用户源，**不再插一跳 Genius** |
+| 新增日志（`:239`） | `[Lyrics] chain: AMLL → NetEase → Genius（仅当用户源也失败）` —— 把**实际**链写死一行，下一份日志一眼可验 |
+| 过时注释 | `allowGeniusFallback` 的参数说明与"门 2"注释（原文写着"目前没有调用方传 false"）一起更正 |
+
+**现在的链**（用户要的那条）：`AMLL → 用户源 → Genius（仅当用户源也失败，且开关开着）`。
+**代价**：AMLL 失败时少一次"其实多半也没用的 Genius 查询"；若用户源也无词，Genius 仍然会被问一次（行为不变）。
+**收益（拿日志 36 估）**：t2 那条链 **15s → 约 7~8s**（省掉 AMLL 那一跳的 Genius ≈2s 与其等待），
+且链的顺序终于与设置页上的字面语义一致。
+
+
 
 

@@ -235,17 +235,33 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
         if amllPreferred {
             writeDebugLog("[Lyrics] AMLL preferred — trying AMLL first, fallback target: \(source.description)")
+            // 把**实际**会走的链写死在一行里（判读用）：Genius 只在"用户源也失败"时才兜一次。
+            writeDebugLog(
+                "[Lyrics] chain: AMLL → \(source.description)"
+                    + (options.geniusFallback && source != .genius ? " → Genius（仅当用户源也失败）" : "（无 Genius 兜底）")
+            )
 
             // 走同一套单源错误处理：记录 fallbackError、弹 MxM 相关弹窗。
             //
             // ⚠️ 结果里带的是**实际**给词的那个源：AMLL 请求失败而 Genius 兜底成功时，
             // 拿回来的 dto 是 Genius 的。以前这里只回传 dto、源名沿用调用方传的那个，
             // 于是"来源标签写 AMLL、内容其实是 Genius"。
+            // ⚠️ 2026-10-03 修正（用户指出，日志 36 坐实）：AMLL 这一跳**不再自带 Genius 兜底**。
+            //
+            // 用户设置的字面语义是"AMLL 拿不到就用**我选的那个源**"，而 `requestSingleSource`
+            // 的 `allowGeniusFallback` 默认是 true ⇒ 以前的真实链是
+            //     AMLL → Genius（AMLL 那跳自带的兜底）→ 用户源（多半再自带一次 Genius）
+            // 也就是 AM→Gen→NE→Gen，**比用户以为的多一跳、还多花一次 Genius 的时间**。
+            // 真机日志 36（t2，配置 = AMLL 优先 + NetEase + Genius 回退开）：
+            //     07:44:05 请求 → 07:44:06 AMLL 404…超时重试 → 07:44:16 Genius(AMLL 那跳)
+            //     → 07:44:19 NetEase（用户源）✓ → 07:44:20 交付，共 15 秒。
+            // 用户要的是 **AM → NE → Gen**（Genius 只在"用户源也失败"时兜一次）。
             let amllResult = try? requestSingleSource(
                 .amllTtml,
                 searchQuery: searchQuery,
                 options: options,
-                recordFallbackError: true
+                recordFallbackError: true,
+                allowGeniusFallback: false
             )
 
             // ⚠️ 判据是**逐词可用**，不是「有行」。
@@ -326,8 +342,10 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     /// - 非 Genius 源失败且 `options.geniusFallback` 开启时，再用 Genius 重试一次
     ///   （三道门与每一道门自己的日志见 `catch` 里那一段）。
     ///
-    /// - Parameter allowGeniusFallback: 为 false 时跳过 Genius 兜底。用于
-    ///   「AMLL 优先」模式下用户设置本身就是 Genius 的场景，避免重复请求同一个源。
+    /// - Parameter allowGeniusFallback: 为 false 时跳过 Genius 兜底。两个调用方：
+    ///   ①「AMLL 优先」的 **AMLL 那一跳**（2026-10-03 起传 false —— 用户设置的字面语义是
+    ///   "AMLL 拿不到就用我选的那个源"，不该先插一跳 Genius，见调用点注释）；
+    ///   ②「AMLL 优先」的**用户源那一跳**（用户源本身就是 Genius 时传 false，避免重复请求）。
     private func requestSingleSource(
         _ source: LyricsSource,
         searchQuery: LyricsSearchQuery,
@@ -380,7 +398,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                 throw error
             }
 
-            // 门 2：调用方显式要求这条链不做兜底（目前没有调用方传 false，保留语义）。
+            // 门 2：调用方显式要求这条链不做兜底。2026-10-03 起「AMLL 优先」的 AMLL 那一跳
+            //   与"用户源就是 Genius"那一跳都会传 false（见调用点），所以这门是**常走**的。
             if !allowGeniusFallback {
                 writeDebugLog(
                     "[Lyrics] \(source.description) failed — Genius fallback suppressed by caller, no retry"
