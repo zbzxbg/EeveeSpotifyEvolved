@@ -103,7 +103,9 @@ enum NowPlayingControlsPlate {
     private static var playStateKey: UInt8 = 0
 
     private static weak var lastUnit: UIView?
-    private static var didLogInstall = false
+    /// 上一次上报的"找到几个按钮 / 隐掉几个叶子"——只在这两个数变了时才打日志
+    /// （`refreshGlyphs` 在 hook 的每个布局回合都会跑，不能每次都打）。
+    private static var lastReportedSignature: String = ""
 
     static var isEnabled: Bool { UserDefaults.nowPlayingControlGlyphs }
 
@@ -160,27 +162,34 @@ enum NowPlayingControlsPlate {
     static func refreshGlyphs(previous: UIView?, play: UIView?, next: UIView?) {
         guard isEnabled else { return }
 
+        var hiddenLeaves = 0
+        var found = 0
+
         if let previous {
-            hideNativeContent(of: previous, excludingClassFragment: nil)
+            hiddenLeaves += hideNativeContent(of: previous, excludingClassFragment: nil)
             placeGlyph(in: previous, systemName: "backward.fill", size: skipGlyphSize)
+            found += 1
         }
         if let next {
-            hideNativeContent(of: next, excludingClassFragment: nil)
+            hiddenLeaves += hideNativeContent(of: next, excludingClassFragment: nil)
             placeGlyph(in: next, systemName: "forward.fill", size: skipGlyphSize)
+            found += 1
         }
         if let play {
             // 白圆盘要留一条命：它是播放键的"装饰层"，透明掉它、字形照旧叠在上面。
-            hideNativeContent(of: play, excludingClassFragment: playDiscClassFragment)
+            hiddenLeaves += hideNativeContent(of: play, excludingClassFragment: playDiscClassFragment)
             placeGlyph(in: play, systemName: playGlyphName(), size: playGlyphSize)
+            found += 1
         }
 
-        if !didLogInstall, previous != nil || play != nil || next != nil {
-            didLogInstall = true
-            writeDebugLog(
-                "[\(logTag)] 三个控制键已换成本地字形"
-                    + "（原生按钮的动作/状态/无障碍保留；只把原生图标设成透明）"
-            )
-        }
+        guard found > 0 else { return }
+        let signature = "\(found)/\(hiddenLeaves)"
+        guard lastReportedSignature != signature else { return }
+        lastReportedSignature = signature
+        writeDebugLog(
+            "[\(logTag)] 三个控制键已换成本地字形 — 找到 \(found) 个按钮、"
+                + "把 \(hiddenLeaves) 个原生图标叶子设成透明（按钮的动作/状态/无障碍保留）"
+        )
     }
 
     /// 那个 id 的按钮（给 hook 用；走查有界）。
@@ -202,7 +211,7 @@ enum NowPlayingControlsPlate {
             objc_setAssociatedObject(button, &playStateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         lastUnit = nil
-        didLogInstall = false
+        lastReportedSignature = ""
         writeDebugLog("[\(logTag)] 已还原（原生图标透明度写回、我们的字形已拿走）")
     }
 
@@ -211,33 +220,51 @@ enum NowPlayingControlsPlate {
     /// 把按钮里**原来画图标的那一层**设成透明（pw 的同款做法：透明而不是 hidden ——
     /// hidden 会让某些 Encore 布局把它当成"没有内容"而重排）。
     ///
-    /// * 只看**直接子视图**：按钮的图标就在那一层，再往下是图标自己的内部件；
+    /// ⚠️ **必须递归到底**（2026-10-04 真机教训）：第一版只透明了按钮的**直接子视图**，
+    /// 而 Spotify 的图标画在**更深几层**（`Tertiary > UIView > StackView > StackView > SPTEncoreIconView`
+    /// —— pw 的注释里就写着这个形状），结果我们的字形虽然装上了（日志 44 的树里三个
+    /// `id=eevee-npv-transport-glyph` 都在），**原生图标照样显示在最上面**：
+    /// 我们透明掉的是中间那几层容器，图标自己在更下面、完全不受影响。
+    ///
+    /// 规则：
+    /// * **只动叶子**（没有子视图的视图）—— 容器留着，免得把布局/触摸的骨架也弄没；
+    /// * 叶子必须**比自己小**（≥ 按钮 1.2 倍的跳过：那是命中区/背景，不是图标）；
     /// * 跳过我们自己的字形；
-    /// * 跳过"白圆盘"（`excludingClassFragment`）—— 它是按钮自己的装饰，我们只在播放键上放过它；
-    /// * 比按钮还大的子视图不动（那多半是命中区/背景，不是图标）；
-    /// * 记下改过的视图，`restore()` 要写回。
-    private static func hideNativeContent(of button: UIView, excludingClassFragment: String?) {
+    /// * 跳过"白圆盘"（`excludingClassFragment`）—— 它由调用方决定要不要留；
+    /// * 记下改过的视图，`restore()` 要逐个写回。
+    @discardableResult
+    private static func hideNativeContent(of button: UIView, excludingClassFragment: String?) -> Int {
         let size = button.bounds.size
-        guard size.width > 1, size.height > 1 else { return }
+        guard size.width > 1, size.height > 1 else { return 0 }
 
         var changed = (objc_getAssociatedObject(button, &alphaKey) as? [UIView]) ?? []
+        let glyph = objc_getAssociatedObject(button, &glyphKey) as? UIView
+        var hidden = 0
 
-        for sub in button.subviews {
-            if sub === (objc_getAssociatedObject(button, &glyphKey) as? UIView) { continue }
-            if sub.alpha == 0 { continue }
-            if sub.bounds.width > size.width + 1 || sub.bounds.height > size.height + 1 { continue }
-            if let fragment = excludingClassFragment,
-               NSStringFromClass(type(of: sub)).contains(fragment) {
-                continue
+        func visit(_ view: UIView, depth: Int) {
+            guard depth <= 8 else { return }
+            let className = NSStringFromClass(type(of: view))
+
+            if let fragment = excludingClassFragment, className.contains(fragment) { return }
+            if view === glyph || className.contains("eevee-npv-transport-glyph") { return }
+
+            if view.subviews.isEmpty {
+                // 叶子：这才是真正画东西的那些。
+                if view.alpha == 0 { return }
+                if view.bounds.width > size.width * 1.2 || view.bounds.height > size.height * 1.2 { return }
+                if !changed.contains(where: { $0 === view }) { changed.append(view) }
+                view.alpha = 0
+                hidden += 1
+                return
             }
-            // 已经是透明的不重复记（否则还原表会越滚越大）。
-            if !changed.contains(where: { $0 === sub }) {
-                changed.append(sub)
-            }
-            sub.alpha = 0
+
+            for sub in view.subviews { visit(sub, depth: depth + 1) }
         }
 
+        for sub in button.subviews { visit(sub, depth: 0) }
+
         objc_setAssociatedObject(button, &alphaKey, changed, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        return hidden
     }
 
     /// 在按钮上叠一个我们自己的字形（**不吃触摸** —— 按钮的动作原样生效）。
