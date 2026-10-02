@@ -262,6 +262,36 @@
 ⇒ **在最坏的情况下也只是相关（不是因果）** —— 但它是唯一变量 + 机制讲得通 + 文档当初就把它
 标成"唯一风险点"。**能自洽的解释只有这一个。**
 
+## ★ 9.2.1 「pw 那边有这个问题吗？」——**没有，而且是刻意避开的**（2026-10-04 用户问）
+
+因为 `≤ v0.21.1` 是 GPL-3.0（隔离副本 `.spotify-ipa/spotipw-v0.21.1`），这次是**读源码**回答的，
+不是猜：在它**整个 `tweak/Sources`** 里搜 `alwaysBounce` / `bounces`，只有 **3 处**，没有一处在播放器列表上：
+
+| 位置 | 用在哪 | 说明了什么 |
+|---|---|---|
+| `Redesigned/Lyrics/SGRKaraokeView.m:1029` | **它自己的**歌词滚动视图 | 自己造的视图随便设 |
+| `App/Onboarding/Tour.m:239` | 它自己的引导页 | 同上 |
+| `Redesigned/Player/PlayerScroll.x:38-40` | 播放器：**只改 `contentInset.bottom`**，且 `if (want >= 0 …) return;` | ★ 见下 |
+
+它那句注释（`PlayerScroll.x:6-11`）把"为什么不能关"写得很直白：
+*"**The list is not switched off**: the pull that dismisses the player rides on its own pan recogniser…
+Turning scrolling off takes that recogniser out with it and the player can no longer be swiped away."*
+⇒ 它连"把滚动关掉"都判死，**更没有去碰回弹** —— 因为那同样会动到同一个 pan 链条。
+
+**另一条旁证**（`Redesigned/Player/PlayerField.x:26-28`）：
+
+```objc
+// Past the plane's edges: above for the pull that dismisses the player, below for the bounce at the end
+// of the cards.
+static const UIEdgeInsets kBleed = {200, 0, 600, 0};
+```
+
+它给背景场**故意向上多铺 200pt**，理由写的就是"上面是**下拉关闭**那次拖动" ⇒
+"顶部下拉 = 关闭"这条机制在 pw 的真机上是**成立的、被依赖的**，不是我们这套基线的错觉。
+
+**所以这是个"我们可以避免、而且它已经避开了"的坑**，不是两个 mod 都有的通病：
+> 在这一页上，**别碰 `alwaysBounceVertical`（也别关滚动）**。要"一屏不滚"就只改 `contentInset.bottom`。
+
 ## 9.3 改了什么（5 个文件）
 
 | 文件 | 改动 |
@@ -374,13 +404,41 @@
 
 ## 10.3 ★ 要重做时的三条要求（先写下来，免得下次又踩同一个坑）
 
-1. **控件上不认**：接 `UIGestureRecognizerDelegate`，`shouldReceive touch` 里往上看 ≤4 层有没有
-   `UIControl`（`UIButton` / `UISlider` / `UISwitch` 都是它的子类）⇒ 播放键、进度条、Connect、
-   加号上的双击一律不接管。**这一条是必做项**（缺了它 = 双击播放键跳歌）。
-2. **单击让位**：对 Spotify 自己的单击手势挂 `requireGestureRecognizerToFail`，并按手势**计数重挂**
-   （Spotify 是后加手势的，顺序不受我们控制 —— pw 的 `Gestures.x` 就是这么说的）。可选，属观感。
-3. **另选挂点**：不要再挂页面根视图。要么挂封面那一层，要么按第 1 条把范围"砍"出来。
-   顺带决定要不要保留"左半区 / 右半区"这个分区（它是双击的语义基础，先留着）。
+> 📌 **这三条不是我想出来的** —— 2026-10-04 读了 pw v0.21.1 的 `Shared/Gestures/Gestures.x` +
+> `Redesigned/Player/PlayerGestures.x`（GPL-3.0，隔离副本），**它就是这么做的**，而且是照着
+> "控制键是兄弟不是子视图"这条真机树结论摆的挂点。照抄思路即可（义务：署名 + 标注改动）。
+
+1. **挂点：`AccessibleCollectionView`（封面/队列那条横向列表）** —— 不是页面根视图。
+   它文件头原话：*"the recognizer goes on that and the grid is the screen. Spotify's controls are
+   **sibling units rather than children of it**, so a tap on a button never reaches it."*
+   ⚠️ 我们真机上的类名是 `_TtC35NowPlaying_ContentLayerPlatformImpl24AccessibleCollectionView`
+   （ProbePack 实测在；旧日志 `[Tree]` 也见过它带 `id=nowplaying-contentlayer-collectionview`）。
+   顺带一条：它把**单击封面进 3D 倾斜**那个入口也管住了 ——
+   pw 是 hook `_TtC35CreativeWorkCommons_CoverArtTiltKit16CoverArtTiltView` 的 `handleTap`，
+   开关关着时 `return`（不让倾斜在双击的第一下打开）。我们那 9.1.88 上有没有这个类**要探**。
+2. **单击让位 + 按计数重挂** —— pw 的 `yieldSingleTaps(host, tap)`：从 host 往上遍历每一层，
+   把**所有 `numberOfTapsRequired == 1` 的 tap** 都 `requireGestureRecognizerToFail:` 我们那个双击；
+   并用 `tapsAbove(host)`（host 及以上各层的手势总数）记住"上次看到几个"，
+   **变了才重新让位一次**（因为 Spotify 是随控制器加载后加手势的，顺序不受我们控制）。
+   —— 这正好解释了我们日志 41 那条 `singleTapsAbove=2`：我们那版**没有任何让位**。
+3. **可选（pw 有的额外一件）**：它把双击做成了**分区动作表**（`SGGestureCellAt` + 设置里画的九宫格，
+   一格一个动作：上一首/下一首/播放暂停/快进/快退/随机/循环），且动作全部走
+   `SPTNowPlayingPlaybackControllerImplementation`（`canSkipNext` / `seekingAllowed` /
+   `disallowPausing` 这些**它自己的**能力位）。我们重做时**先只做左/右两区**就够，
+   但这解释了为什么它那套比我们那版"能用"得多 —— 它有播放器控制器的能力位可以问。
+
+**必做项排序**：①（挂点）> ②（让位）> ③（分区动作表，可选）。
+
+**★ 三个目标类在 9.1.88 上全都在**（2026-10-04 对 `dump-9.1.88.txt` 核过，逐字同名）：
+
+```
+_TtC35CreativeWorkCommons_CoverArtTiltKit16CoverArtTiltView              ← 封面 3D 倾斜的入口（单击）
+_TtC35NowPlaying_ContentLayerPlatformImpl24AccessibleCollectionView      ← ★ 手势挂点（封面/队列横向列表）
+SPTNowPlayingPlaybackControllerImplementation                            ← 动作要问的能力位
+```
+（前两个在 dump 里**各只有 1 条**，第三个由 ProbePack 在真机上确认过存在 ——
+所以"重做"不是空中楼阁，是把 pw 那套换到我们基线上；`handleTap` 这个**方法名**在 dump 里查不到，
+按仓库纪律要在 hook 前用 `responds(to:)` 探测。）
 
 ## 10.4 下一道工序（用户说"先下一道工序"）
 
