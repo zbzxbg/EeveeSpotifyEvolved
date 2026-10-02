@@ -1,50 +1,52 @@
 import Foundation
 import SwiftUI
 import UIKit
+import Orion
+import ObjectiveC.runtime
 
-// 「歌词进播放器」：把**我们自己那套 Apple Music 逐词歌词**画进正在播放页的中段
-// （播放器与底部控件之间那块，现在被 Spotify 的卡片占着）。
+// 「歌词进播放器」——**按 spoti.pw v0.21.1 的形状重做**（2026-10-05 第二轮）。
 //
-// ## 为什么复用现有的渲染层
+// ## 上一版错在哪（真机日志 47 + 照片 46/48 的教训）
 //
-// 那一层已经在真机上跑通了全屏页与内嵌预览两条路（同样的时间轴、同样的扫光、同样的 RTL），
-// 所以这里**不另造渲染器**，直接用已经暴露出来的 `AppleMusicLyricsOverlayView` +
-// 它自己的 `AppleMusicLyricsClock`。本文件只做三件事：算位置、搭宿主、把行模型喂进去。
+// 上一版是"在播放器中段**常驻**一块 414×240 的歌词层"：
+//   · 它和**封面抢同一块地方** ⇒ 看着像"糊在上面的一层"；
+//   · 它复用了内嵌档的**模糊封面背景**（`LyricsBackdropRepresentable`，写死 `isBackdropOpaque`）
+//     ⇒ 在取色底上又叠一层模糊，更糊（那层今天已修，但形状本身还是错的）。
 //
-// ## 与 `AppleMusicLyricsOverlayHost` 的关系：**不共用宿主**
+// ## pw 的形状（`Redesigned/Player/PlayerLyrics.x`，GPL-3.0 隔离副本，代码自己写）
 //
-// 那一个是 `shared` 单例，它的 `hostView` / `hostingController` 会被全屏页与内嵌预览
-// 抢着用（仓库文档里有一段"抢宿主"的血泪）。播放器这一层要**长期常驻**，绝不能去抢它，
-// 所以下面这个宿主是**本文件自己的**：各自的 hosting controller、各自的行模型版本号。
-// 结构上照抄那边（同样的字段组合），但不共享实例。
+// 它文件头原话：*"the footer's lyrics glyph is the only way to them: it **shrinks the cover into a
+// thumbnail** at the top of the artwork band, **lifts the track's title up beside it**, and fades the
+// lines into the room that frees between the title and the progress bar. Tapping it again puts the
+// cover back."*
 //
-// ## 位置（依据：日志 42 的 `[NPVTree] #20` + kumone 照片 40/41 逐像素量的）
+// 关键三条（照抄思路）：
+//   1. **不是常驻**：点一下才来，再点还原；
+//   2. **封面让位**：Spotify 那条封面 → `alpha 0`，我们自己画一张（同一张图，所以看不出换），
+//      用 `transform` 缩到 **72pt 缩略图**；标题行用 `transform` 上移 + 右移贴到缩略图旁边
+//      （**transform 扛得住 stack view 的重排**，改约束会被写回）；
+//   3. **位置是量出来的**：缩略图贴"封面区"左上，歌词区 = 标题之下、进度条之上那块。
 //
-// Kumone 播放页只有三块：header（95–185）、**中间那块（185–644，有词就是歌词、无词就是居中大封面）**、
-// 底部（进度 644 / 三键 712–740 / 音量 776–784 / 三个圆钮 800–845）。
-// 我们这边 header 与底部**逐条对上了**（`UIStackView@0,48,414,48` / `npv.bottomStackView@4,593,406,240`），
-// 唯一差的就是中间那块 —— 所以歌词**只能摆在这一块**，绝不能往顶部放（会盖住 header）。
+// 它的常量（原样抄，单位 pt）：缩略图 72 / 缩略图—标题 16 / 标题—控件 12 / 标题尾渐隐 20 /
+// 缩略图离封面区顶 8 / 歌词离标题 20、离进度条 8 / 进场 0.3s（延迟 0.12）/ 退场 0.16 / 换歌宽限 3s。
 //
-// 落点：顶边 = 底部那一坨的顶 − 240pt（≈ 353），底边 = 那一坨的顶 − 8pt（≈ 585）。
-// 于是它正好落在封面(约 115–489)的下半截 + 那块空里，**既盖住卡片堆、又不碰 header**。
+// ## 与 pw 的两处不同（刻意的）
 //
-// ## 开关与可撤销
+// | | pw | 我们 |
+// |---|---|---|
+// | 歌词绘制 | 它自己的 `SGRKaraokeView` | 复用 `AppleMusicLyricsOverlayView`（**透明档**，只有歌词） |
+// | 封面缩略图 | 它自己再画一张封面并飞过去 | 一样（`Encode.ImageView` 的那张图） |
 //
-// 扩展功能 → 听歌页 →「歌词进播放器」，**默认关**。关掉 = 把我们的子视图拿走，
-// **Spotify 的东西一个字节都没改**（我们只往页面根视图上加了一个自己的容器）。
-// 日志 tag：`[NPVLyrics]`。
+// 日志 tag：`[NPVLyrics]`。开关：扩展功能 → 听歌页 →「歌词进播放器」。
 
-/// 只属于播放器这一层的歌词宿主。结构照抄 `AppleMusicLyricsOverlayHost`，但**不共享实例**
-/// —— 那一个是给全屏页/内嵌预览用的单例，抢它的宿主是仓库里有记载的坑。
+// MARK: - 宿主（只属于这一层，不抢全屏页/卡片那个单例）
+
 @available(iOS 26.0, *)
 @MainActor
 private final class NowPlayingLyricsHost {
 
     private var hostingController: UIHostingController<AppleMusicLyricsOverlayView>?
-
-    /// 已经渲染进这一层的歌词版本号（`currentLyricsVersion` 随**歌词数据**自增）。
     private var renderedVersion: Int = -1
-    /// 已经渲染的这一份**属于哪首歌**（防止切歌到新词到达之间显示上一首的逐词）。
     private var renderedTrackId: String = ""
 
     private let clock = AppleMusicLyricsClock()
@@ -52,15 +54,12 @@ private final class NowPlayingLyricsHost {
         WordByWordPositionResolver.shared.currentPositionSeconds()
     }
 
-    /// 有没有东西挂着。
     var isAttached: Bool { hostingController != nil }
 
-    /// 这一刻是不是已经渲染到"当前歌词 + 当前曲目"了。
     func isCurrent(version: Int, trackId: String) -> Bool {
         isAttached && renderedVersion == version && renderedTrackId == trackId
     }
 
-    /// 把宿主视图铺进 `container`（容器自己的 frame 由调用方算）。
     func mount(
         in container: UIView,
         lines: [LyricLine],
@@ -70,17 +69,12 @@ private final class NowPlayingLyricsHost {
     ) {
         let root = AppleMusicLyricsOverlayView(
             lines: lines,
-            // `.card` = 内嵌那一档：**背景透明**（卡档不画背景），底下的取色底照样看得见。
+            // `.card` 与"透明档"一起用：不画任何背景（播放器这一档底下是整页取色底）。
             backdropStyle: .card,
             solidBackdrop: false,
-            // 不做自绘壳：曲名/艺人/进度条/三键都交给 Spotify 自己那一排，
-            // 我们只画歌词本身 —— 内嵌预览那一档就是这么用的。
             showsProviderFooter: false,
-            sideInset: 20,
+            sideInset: NowPlayingLyricsPlate.stageSideInset,
             previewHeaderInset: 0,
-            // ★ 只有歌词，**不要那层模糊封面背景**：播放器这一档底下铺的是整页取色底，
-            // 再叠一块 414×240 的模糊封面就是用户说的"糊在上面的一层"
-            // （2026-10-05 日志 47 的树：容器里挂着 `LyricsBackdropRepresentable`）。
             transparentBackdrop: true,
             onSeek: onSeek,
             trackTitle: "",
@@ -108,8 +102,6 @@ private final class NowPlayingLyricsHost {
         renderedTrackId = trackId
     }
 
-    /// 行模型换了（或换歌了）**就地更新**，不重建 hosting controller ——
-    /// 重建会把滚动位置丢掉，下一帧用户就看到歌词跳回顶部（全屏页那边学来的教训）。
     func updateLines(_ lines: [LyricLine], version: Int, trackId: String) {
         guard let hosting = hostingController else { return }
         hosting.rootView.lines = lines
@@ -117,13 +109,9 @@ private final class NowPlayingLyricsHost {
         renderedTrackId = trackId
     }
 
-    /// 用当前位置驱动时间轴。**约每 0.3s 一拍**（蹭 `DeclutterChrome` 的节拍），不是每帧 ——
-    /// 行与行之间的移动本身带 SwiftUI 动画，肉眼与每帧没差别，但省掉一个 CADisplayLink。
     func tick(seconds: TimeInterval?) {
         guard isAttached else { return }
-        if let seconds {
-            clock.submit(seconds: seconds)
-        }
+        if let seconds { clock.submit(seconds: seconds) }
         projection.refresh()
     }
 
@@ -136,58 +124,81 @@ private final class NowPlayingLyricsHost {
     }
 }
 
-/// 「歌词进播放器」的对外门面（`DeclutterChrome` 的复查节拍与听歌页的 appear 都调它）。
-///
-/// ⚠️ **整个 enum 标 `@MainActor`**：它下面持有的宿主是 `@MainActor` 的（UIKit + SwiftUI 视图），
-/// 而所有这些入口本来就只在主线程被调（页面 appear / 复查节拍 / SwiftUI 设置页 binding）。
-/// 不标的话，编译器会按"非隔离 static 方法调用 MainActor 成员"逐行报错
-/// （2026-10-04 真机 CI 抓到：`isCurrent(version:trackId:)` / `isAttached` / `mount` / `tick` …）。
+// MARK: - 门面
+
+/// 「歌词进播放器」。（整个 enum `@MainActor`：下面持有的是 UIKit/SwiftUI 视图，
+/// 而所有入口都在主线程 —— 与上一版同样的理由，见 `NowPlayingControlsPlate` 的注释。）
 @MainActor
 enum NowPlayingLyricsPlate {
 
     static let logTag = "NPVLyrics"
 
-    /// 我们的容器在页面上的 id（排查用）。
-    private static let containerIdentifier = "eevee-npv-lyrics-container"
+    // pw 的常量（原样抄；单位 pt）。
+    private static let thumbSide: CGFloat = 72
+    private static let thumbGap: CGFloat = 16
+    private static let titleGap: CGFloat = 12
+    private static let titleFade: CGFloat = 20
+    private static let thumbTop: CGFloat = 8
+    private static let lyricsTop: CGFloat = 20
+    private static let lyricsBottom: CGFloat = 8
+    private static let enterScale: CGFloat = 0.96
+    private static let enterDuration: TimeInterval = 0.3
+    private static let enterDelay: TimeInterval = 0.12
+    private static let exitDuration: TimeInterval = 0.16
 
-    /// 播放器底部那一坨的 id —— 与 `NowPlayingPageOverlay` 用的是同一个锚点。
+    /// 歌词区左右内缩。
+    static let stageSideInset: CGFloat = 20
+    /// 太低就不进场（还没布局完 / 横屏）。
+    private static let livingHeight: CGFloat = 200
+    /// 走查上限（本仓库纪律）。
+    private static let maxNodes = 800
+
+    // 判据（全部来自真机树，日志 42/47）
+    private static let listIdentifier = "scrolling_npv_collection_view_accessibility_identifier"
     private static let bottomStackIdentifier = "npv.bottomStackView"
+    private static let coverImageIdentifier = "Encore.ImageView"
+    private static let titleLabelIdentifier = "now-playing-title-label"
+    private static let playButtonIdentifier = "SPTNowPlayingPlayButton"
 
-    /// 那一坨的**标准总高**（日志 42 的定向树：`npv.bottomStackView@4,593,406,240`）。
-    /// 它同时是歌词块的**高度**：block 就摆在那一坨正上方、同高 —— 这样量不到锚点时
-    /// 也有一份和 kumone"中间那块"对得上的保守落点。
-    private static let bottomStackHeight: CGFloat = 240
-    /// 歌词块与底部那一坨之间留的间隙。
-    private static let bottomGap: CGFloat = 8
-    /// 太矮就不画（横屏 / 转场中间帧）—— 宁可这一拍不显示，也不要糊一屏。
-    private static let minimumHeight: CGFloat = 120
-
+    // 关联对象
     private static var containerKey: UInt8 = 0
+    private static var coverKey: UInt8 = 0
+    private static var toggleKey: UInt8 = 0
+    private static var titleMaskKey: UInt8 = 0
 
     private static weak var lastPage: UIView?
     private static weak var lastContainer: UIView?
+    private static weak var lastCover: UIImageView?
+    private static weak var lastToggleZone: UIControl?
+    private static weak var lastUnit: UIView?
+    private static weak var lastTitleElement: UIView?
 
-    /// ★ **一个宿主，跟页面走**（不做"每容器一个"的表：那种表要么泄漏、要么得自己清理，
-    /// 而页面本来就只有一张 —— 换页时 `apply(in:)` 会带新页面进来，那时把宿主重置）。
     private static var host: AnyObject?
     private static weak var hostPage: UIView?
 
+    /// 歌词是否展开（pw 的 `sg_open`）。
+    private static var isOpen = false
     private static var didLogInstall = false
+    private static var lastSkipReason = ""
 
     static var isEnabled: Bool { UserDefaults.nowPlayingLyricsInPlayer }
 
     // MARK: - 对外入口
 
-    /// 进听歌页时叫一次（蹭既有的 `NPVScrollViewControllerHook` 两个 appear 点）。
     static func apply(in pageView: UIView) {
         lastPage = pageView
 
         guard isEnabled else {
-            remove(reason: "switch off")
+            closeEverything(reason: "switch off")
             return
         }
         guard pageView.bounds.width > 1, pageView.bounds.height > 1 else { return }
-        reconcile()
+
+        // 挂那枚"歌词键"（在播放键上方）：**只有它被点才会展开** —— pw 的形状。
+        ensureToggleZone(in: pageView)
+
+        guard isOpen else { return }
+        layoutAndMount(in: pageView)
     }
 
     /// 设置页切开关时叫一次。
@@ -196,86 +207,82 @@ enum NowPlayingLyricsPlate {
         apply(in: page)
     }
 
-    /// 蹭 `DeclutterChrome` 既有的复查节拍（**不新开定时器**，本仓库纪律）。
-    ///
-    /// 一拍做四件事，任何一件不成立就安静地什么都不做：
-    /// 1. 没开开关 / 没在听歌页 → 走人（成本：两次 weak 读）；
-    /// 2. 这一首没有**逐词**数据（`hasUsableWordLevelData` 为假）→ 不显示（一律用逐词那一档）；
-    /// 3. 行模型属于**别的**曲目（切歌了、新词还没到）→ 收掉，宁可露原生；
-    /// 4. 否则：版本变了就更新行模型，量位置，再驱动时间轴。
+    /// 蹭 `DeclutterChrome` 的 0.3s 复查节拍：**展开期间**每拍把几何重新施加一遍
+    /// （pw：`The geometry is re-applied on every layout pass of the units` —— 换歌会重建元素）。
     @discardableResult
     static func reconcile() -> Bool {
         guard isEnabled else { return false }
         guard let page = lastPage, page.window != nil else { return false }
-
         guard #available(iOS 26.0, *) else { return false }
-        // 与全屏/内嵌那两层**同一个门禁**：我们复用的就是那条渲染链的视图，
-        // 而它只在「更好的逐词歌词」开着时才由那份数据驱动（整层还要求 iOS 26+）。
-        // 不满足时安静收掉，而不是画一块莫名其妙的空白。
-        guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else {
-            remove(reason: "better word-by-word lyrics is off")
-            noteSkip("「更好的逐词歌词」是关的（本层复用的就是那条渲染链）")
-            return false
+
+        if isOpen {
+            layoutAndMount(in: page)
+            return true
+        }
+        // 关着的时候只保证那枚键还在（Spotify 换帧会重排 subviews）。
+        ensureToggleZone(in: page)
+        return false
+    }
+
+    /// 进/出页面：`viewWillDisappear` 里收掉（pw：关闭播放器前要撤销几何，否则迷你条对不上）。
+    ///
+    /// ⚠️ **必须无条件走 `closeEverything`**（哪怕看起来"没展开"）：标题行的位移是我们用
+    /// `transform` 写上去的，**不撤销就会留在 Spotify 的元素上**（那一行此后永远偏上一截）。
+    /// `closeEverything` 自己有空守卫，没展开时不会打日志。
+    static func remove(reason: String) {
+        closeEverything(reason: reason)
+    }
+
+    /// 那枚"歌词键"被点了。
+    static func toggle() {
+        guard let page = lastPage, page.window != nil else { return }
+
+        if isOpen {
+            closeEverything(reason: "tapped")
+            return
+        }
+        guard canShow(for: page) else {
+            noteSkip("这首歌没有可用的歌词")
+            return
+        }
+        isOpen = true
+        layoutAndMount(in: page)
+    }
+
+    // MARK: - 开关与几何
+
+    /// 进场：把封面缩成缩略图、标题行上移贴边、歌词淡入到"标题之下、进度条之上"。
+    private static func layoutAndMount(in page: UIView) {
+        guard #available(iOS 26.0, *) else { return }
+        guard let geometry = measure(in: page) else {
+            noteSkip("量不到封面区/标题行（还没布局完？）")
+            return
         }
 
-        // ★ 2026-10-04 放宽：**行级歌词也画**（原来是"只画逐词"）。
-        //
-        // 为什么改：日志 44 的现场 —— `[WordByWord] handing back to Spotify's native lyrics
-        // page/card — no word-level timing (line-level usable=false)`，而 Spotify 自己的歌词卡
-        // **行级歌词照样渲染**。那张卡正是被「一屏」折掉的 ⇒ 我再要求"必须逐词"，
-        // 结果就是**两边都空**（照片 46 里那一大片空白）。
-        //
-        // 渲染层本来就吃行级数据：`LyricsDto.toAppleMusicLyricLines()` 对只有行级时间的行
-        // 给 `.lineSynchronized`（注释里写着"末行用 `LyricVocalDurationEstimator` 估算"），
-        // 逐词那一档只是把每一行再拆成字。
-        let wordLevel = hasUsableWordLevelData(currentLyricsDto)
-        let lineLevel = hasUsableLineLevelData(currentLyricsDto)
-        guard wordLevel || lineLevel else {
-            remove(reason: "no usable lyrics for this track")
-            noteSkip("这首歌没有可用的歌词（行级也没有）")
-            return false
-        }
+        // ① 我们自己画的那张封面（同一张图，所以"换"看不出来）。
+        let cover = ensureCover(in: page, geometry: geometry)
 
-        let trackId = liveTrackId()
-        let version = currentLyricsVersion
+        // ② 标题行上移 + 右移（transform —— 改约束会被 stack view 布局写回）。
+        applyTitleTransform(geometry: geometry, page: page)
 
-        // 行模型是不是别人的（切歌、而新歌词还没到）⇒ 收掉，别显示上一首。
-        if !renderedTrackId.isEmpty, !trackId.isEmpty, renderedTrackId != trackId {
-            remove(reason: "line model belongs to another track")
-            return false
-        }
-
-        let lines = (currentLyricsDto?.toAppleMusicLyricLines()) ?? []
-        guard !lines.isEmpty else {
-            remove(reason: "no lines")
-            noteSkip("行模型是空的（`toAppleMusicLyricLines` 没产出可渲染的行）")
-            return false
-        }
-
-        // 位置每一拍都重算：卡片折叠 / 换歌都会让底部那一坨动。
-        let frame = plateFrame(in: page)
-        guard frame.height >= minimumHeight else {
-            remove(reason: "no room between the player and the bottom stack")
-            noteSkip("播放器与底部那一坨之间没有位置（高 \(Int(frame.height))pt < \(Int(minimumHeight))pt）")
-            return false
+        // ③ 歌词区：标题之下、进度条之上。
+        let frame = geometry.stage
+        guard frame.height > livingHeight / 2 else {
+            noteSkip("标题与进度条之间没有位置（\(Int(frame.height))pt）")
+            return
         }
 
         let container = ensureContainer(in: page, frame: frame)
-
-        // 上下边缘渐隐：kumone 那一手（停点 0/0.12/0.85/1 早就落在
-        // `NowPlayingMetrics.lyricFadeStops` 里，一直没人消费）。用 mask 做，
-        // **不碰 Spotify 的任何东西** —— 只是我们自己这层的 layer.mask。
         applyEdgeFade(to: container)
 
-        var changed = false
+        guard let lines = currentLines(), let trackId = currentTrackId() else { return }
 
-        if #available(iOS 26.0, *), let host = currentHost(for: page) {
+        if let host = currentHost(for: page) {
+            let version = currentLyricsVersion
             if host.isCurrent(version: version, trackId: trackId) {
-                // 已经是最新的一份 → 这一拍只驱动时间轴。
-            } else if host.isAttached, renderedTrackId == trackId {
+                // 最新 → 这一拍只驱动时间轴。
+            } else if host.isAttached {
                 host.updateLines(lines, version: version, trackId: trackId)
-                changed = true
-                writeDebugLog("[\(logTag)] lines updated in place (\(lines.count) line(s), v\(version))")
             } else {
                 host.mount(
                     in: container,
@@ -283,110 +290,352 @@ enum NowPlayingLyricsPlate {
                     version: version,
                     trackId: trackId,
                     onSeek: { seconds in
-                        // 点歌词行 = 跳到那一行（与全屏页同一个动作原语）。
                         WordByWordSeeker.seek(toMs: Int((seconds * 1000).rounded()))
                     }
                 )
-                changed = true
-                lastSkipReason = ""
-                writeDebugLog(
-                    "[\(logTag)] 已挂上 (\(Int(frame.width))x\(Int(frame.height)))"
-                        + " — \(lines.count) 行\(wordLevel ? "逐词" : "行级")，v\(version)"
-                )
             }
-
-            renderedTrackId = trackId
-
-            if container.frame != frame {
-                container.frame = frame
-                changed = true
-                if !didLogInstall {
-                    didLogInstall = true
-                    writeDebugLog("[\(logTag)] 容器位置 \(frameText(frame))（播放器那一坨之上）")
-                }
-            }
-
             host.tick(seconds: WordByWordPositionResolver.shared.currentPositionSeconds())
         }
 
-        return changed
+        if !didLogInstall {
+            didLogInstall = true
+            writeDebugLog(
+                "[\(logTag)] 展开 — 缩略图 \(Int(geometry.thumb.width))pt、"
+                    + "歌词区 \(frameText(frame))、封面从 \(frameText(geometry.cover)) 缩过来"
+            )
+        }
+        _ = cover
     }
 
-    /// 「这一拍为什么不显示」。**只在与上次不同时报一次** —— 这一层刻意在复查节拍上重复跑，
-        /// 每次都打会刷屏；一句不打又会让人（包括我自己）事后瞎猜。
-        ///
-        /// 2026-10-04 的教训就是后者：日志 44 里 `[NPVLyrics]` **0 行** —— 因为门禁没过时
-        /// `remove()` 发现"本来就没挂上"就安静返回了。结果照片 46 那片空白，
-        /// 得靠对照 `[WordByWord] handing back … no word-level timing` 才反推出原因。
-        private static func noteSkip(_ reason: String) {
-            guard lastSkipReason != reason else { return }
-            lastSkipReason = reason
-            writeDebugLog("[\(logTag)] 本次不显示（\(reason)）")
+    /// 全部还原：标题与封面的 transform/alpha 写回、我们的层拿走。
+    private static func closeEverything(reason: String) {
+        guard isOpen || lastContainer != nil || lastCover != nil else { return }
+
+        isOpen = false
+
+        if let cover = lastCover {
+            cover.removeFromSuperview()
+            lastCover = nil
         }
-
-        private static var lastSkipReason: String = ""
-
-        /// 关掉开关 / 这一首没词时把我们的容器整个拿走（Spotify 那边一个字节都没改）。
-    ///
-    /// ⚠️ **什么都没挂时就什么都不做、也不打日志**：这个函数在复查节拍上会被反复调用
-    /// （没开开关、这一首没逐词、位置不够……），不加这道闸门就会每 0.3s 刷一行日志
-    /// —— 而且"本来就没事"会和"刚刚收掉"长得一模一样。
-    static func remove(reason: String) {
-        guard lastContainer != nil || !renderedTrackId.isEmpty else { return }
+        // Spotify 那条封面写回可见。
+        restoreSpotifyCover()
+        // 标题行的位移撤销。
+        lastUnit?.transform = .identity
+        lastTitleElement?.transform = .identity
+        clearTitleMask()
+        lastTitleElement = nil
 
         if #available(iOS 26.0, *) {
             (host as? NowPlayingLyricsHost)?.detach()
         }
         lastContainer?.removeFromSuperview()
         lastContainer = nil
-        renderedTrackId = ""
         didLogInstall = false
-        writeDebugLog("[\(logTag)] 已收掉（reason=\(reason)）")
+        writeDebugLog("[\(logTag)] 收起（reason=\(reason)）")
     }
 
-    // MARK: - 位置
+    // MARK: - 量几何（pw 的 `layoutIn`）
 
-    /// 歌词块该占哪块地方：**底部那一坨正上方、与它同高** —— 正是 kumone 照片里
-    /// "封面之下、进度条之上"那块（他们量的 185–644，8 成高就在 353–585）。
-    ///
-    /// ⚠️ 刻意**不往顶部放**：顶边在 96 那种写法会盖住 header（歌名/艺人/♥/⋯），
-    /// 2026-10-04 第一版就是这么写的，对着照片 40/41 才发现错了。
-    private static func plateFrame(in page: UIView) -> CGRect {
-        let bottomTop = bottomStackTop(in: page) ?? (page.bounds.height - bottomStackHeight)
+    private struct Geometry {
+        var cover: CGRect       // Spotify 现在把封面画在哪
+        var thumb: CGRect       // 缩略图该在哪
+        var stage: CGRect       // 歌词区
+        var lift: CGFloat       // 标题行上移多少（负数）
+        var shift: CGFloat      // 标题右移多少
+        var titleRow: UIView?   // 标题所在的那一行（要位移的）
+        var titleElement: UIView?
+    }
 
-        let bottom = bottomTop - bottomGap
-        let top = max(page.safeAreaInsets.top + 44, bottom - bottomStackHeight)
+    private static func measure(in page: UIView) -> Geometry? {
+        guard page.bounds.height >= livingHeight else { return nil }
+        guard let list = findByIdentifier(listIdentifier, in: page) else { return nil }
 
-        return CGRect(
-            x: 0,
-            y: top,
-            width: page.bounds.width,
-            height: max(0, bottom - top)
+        // 封面：列表子树里第一个**看得见**的 `Encore.ImageView`，且宽度像封面（>=200）。
+        guard let coverView = visibleCover(in: list) else { return nil }
+        let cover = coverView.convert(coverView.bounds, to: page)
+
+        // 标题行：`now-playing-title-label` 所在的那个 element 视图 + 它的父行。
+        let titleLabel = findByIdentifier(titleLabelIdentifier, in: list)
+        let titleElement = titleLabel?.superview
+        let titleRow = titleElement?.superview
+
+        // 缩略图：贴"封面区"左上 —— 我们用封面自己的左上 + `thumbTop`（pw 用 `SGRPlayerArtworkAreaIn`，
+        // 我们量不到那个 band，就用封面的顶；差别只是几 pt，且换歌会重算）。
+        let leading = titleElement.map { untransformed($0, in: page).minX } ?? (cover.minX + 20)
+        let thumb = CGRect(
+            x: leading,
+            y: cover.minY + thumbTop,
+            width: thumbSide,
+            height: thumbSide
+        )
+
+        // 标题行：缩略图右侧垂直居中（找不到标题就贴在缩略图下面）。
+        let rowFrame = titleRow.map { untransformed($0, in: page) }
+        let top = rowFrame.map { thumb.midY - $0.height / 2 } ?? (thumb.maxY + 12)
+        let lift = top - (rowFrame?.minY ?? top)
+        let shift = rowFrame == nil ? 0 : thumbSide + thumbGap
+
+        // 歌词区：缩略图/标题之下 → 进度条之上。
+        let barTop = bottomStackTop(in: list, page: page) ?? (page.bounds.height - 240)
+        let stageTop = max(thumb.maxY, top + (rowFrame?.height ?? 0)) + lyricsTop
+        let stage = CGRect(
+            x: stageSideInset,
+            y: stageTop,
+            width: page.bounds.width - stageSideInset * 2,
+            height: barTop - lyricsBottom - stageTop
+        )
+
+        guard stage.height > livingHeight / 2, lift < 0 else { return nil }
+
+        return Geometry(
+            cover: cover,
+            thumb: thumb,
+            stage: stage,
+            lift: lift,
+            shift: shift,
+            titleRow: titleRow,
+            titleElement: titleElement
         )
     }
 
-    /// 底部那一坨在**页面坐标系**里的顶边。
-    ///
-    /// 读列表与那一坨的 `layer.position` 而不是 `frame`：本仓库纪律 —— `frame` 在 transform
-    /// 非恒等时未定义（我们自己在标签栏上就写过 transform）。列表就是 `NowPlayingOneScreen`
-    /// 认出来的那一张（判据只留一处，别处不重复实现）。
-    private static func bottomStackTop(in page: UIView) -> CGFloat? {
-        guard let list = NowPlayingOneScreen.pinnedList, list.window != nil else { return nil }
-        guard let stack = findByIdentifier(bottomStackIdentifier, in: list) else { return nil }
+    /// 列表里那个"看得见的封面"（队列是一格一张封面，离屏的是 hidden —— pw 同判据）。
+    private static func visibleCover(in list: UIView) -> UIView? {
+        var visited = 0
+        var queue: [UIView] = [list]
 
-        // 先换算列表自己在页面里的位置（一屏钉住只改 inset、不动 transform，但转场会动），
-        // 再加上那一坨在列表里的位置。
-        let listPosition = list.layer.position
-        let listOriginY = listPosition.y - list.bounds.height / 2
-        let stackTopInList = stack.layer.position.y - stack.bounds.height / 2
+        while !queue.isEmpty, visited < maxNodes {
+            let view = queue.removeFirst()
+            visited += 1
 
-        return listOriginY + stackTopInList
+            if view.accessibilityIdentifier == coverImageIdentifier,
+               !view.isHidden, view.alpha > 0.01, view.window != nil,
+               view.bounds.width >= 200 {
+                return view
+            }
+            // hidden 的子树不往下走（离屏的那些封面一格一个，不必要）。
+            if view.isHidden { continue }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
     }
 
-    /// 上下边缘渐隐（kumone 的停点，`NowPlayingMetrics.lyricFadeStops` = 0/0.12/0.85/1）。
-    ///
-    /// 用 `CAGradientLayer` 当**我们自己这层**的 `mask` —— 不碰 Spotify 任何东西。
-    /// 位置/尺寸每次都同步（换歌、卡片折叠都会让容器变高）。
+    /// 底部那一坨的顶边（页面坐标系）——与上一版同一个判据（列表 + `layer.position`）。
+    private static func bottomStackTop(in list: UIView, page: UIView) -> CGFloat? {
+        guard let stack = findByIdentifier(bottomStackIdentifier, in: list) else { return nil }
+        let listPosition = list.layer.position
+        let listOriginY = listPosition.y - list.bounds.height / 2
+        return listOriginY + (stack.layer.position.y - stack.bounds.height / 2)
+    }
+
+    /// 去掉我们自己写上去的位移之后的 frame（pw 的 `untransformed`）。
+    private static func untransformed(_ view: UIView, in host: UIView) -> CGRect {
+        let frame = view.convert(view.bounds, to: host)
+        let t = view.transform
+        return frame.offsetBy(dx: -t.tx, dy: -t.ty)
+    }
+
+    // MARK: - 封面与标题
+
+    /// 我们自己画的那张缩略图封面（同图 ⇒ 看不出"换"），并**把 Spotify 那条藏起来**。
+    private static func ensureCover(in page: UIView, geometry: Geometry) -> UIImageView? {
+        // 图片从 Spotify 那个 `Encore.ImageView` 里取（它下面挂着真正的 UIImageView）。
+        guard let source = findByIdentifier(coverImageIdentifier, in: page),
+              let image = firstImage(in: source) else { return nil }
+
+        let cover: UIImageView
+        if let existing = lastCover {
+            cover = existing
+        } else {
+            cover = UIImageView()
+            cover.contentMode = .scaleAspectFill
+            cover.clipsToBounds = true
+            cover.layer.cornerCurve = .continuous
+            cover.layer.cornerRadius = 10
+            cover.isUserInteractionEnabled = false
+            cover.accessibilityIdentifier = "eevee-npv-cover-thumb"
+            page.addSubview(cover)
+            lastCover = cover
+        }
+        cover.image = image
+        if cover.superview !== page { page.addSubview(cover) }
+        page.bringSubviewToFront(cover)
+
+        // 进场动画：从封面的位置缩到缩略图（pw 是"飞过去"，我们做帧动画，效果同源）。
+        let target = geometry.thumb
+        if cover.frame != target {
+            let first = cover.frame == .zero
+            if first {
+                cover.frame = geometry.cover
+                cover.layer.cornerRadius = 10
+                UIView.animate(withDuration: enterDuration, delay: enterDelay, options: [.curveEaseOut]) {
+                    cover.frame = target
+                }
+            } else {
+                UIView.animate(withDuration: exitDuration) { cover.frame = target }
+            }
+        }
+
+        // Spotify 那条封面**透明掉**（不是 hidden：Encore 的布局会因 hidden 重排）。
+        hideSpotifyCover(in: page)
+        return cover
+    }
+
+    private static var hiddenCoverKey: UInt8 = 0
+
+    private static func hideSpotifyCover(in page: UIView) {
+        guard let source = findByIdentifier(coverImageIdentifier, in: page) else { return }
+        var hidden = (objc_getAssociatedObject(page, &hiddenCoverKey) as? [UIView]) ?? []
+        if !hidden.contains(where: { $0 === source }) { hidden.append(source) }
+        source.alpha = 0
+        // 它下面那层真正画图的 `UIImageView` 也一起（`Encode.ImageView` 只是壳）。
+        for sub in source.subviews where sub.alpha > 0.01 && sub.bounds.width >= 200 {
+            if !hidden.contains(where: { $0 === sub }) { hidden.append(sub) }
+            sub.alpha = 0
+        }
+        objc_setAssociatedObject(page, &hiddenCoverKey, hidden, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    private static func restoreSpotifyCover() {
+        guard let page = lastPage else { return }
+        let hidden = (objc_getAssociatedObject(page, &hiddenCoverKey) as? [UIView]) ?? []
+        for view in hidden { view.alpha = 1 }
+        objc_setAssociatedObject(page, &hiddenCoverKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    /// 在壳里找真正的 `UIImageView`（`Encore.ImageView` 自己不画图）。
+    private static func firstImage(in view: UIView) -> UIImage? {
+        if let imageView = view as? UIImageView, let image = imageView.image { return image }
+        for sub in view.subviews {
+            if let image = firstImage(in: sub) { return image }
+        }
+        return nil
+    }
+
+    /// 标题行上移 + 右移 + 尾部渐隐（pw 的 `placeTitleRow` / `clipTitle`）。
+    private static func applyTitleTransform(geometry: Geometry, page: UIView) {
+        guard let row = geometry.titleRow else { return }
+        lastUnit = row
+
+        let rise = CGAffineTransform(translationX: 0, y: geometry.lift.rounded())
+        if row.transform != rise { row.transform = rise }
+
+        if let title = geometry.titleElement {
+            lastTitleElement = title
+            let slide = CGAffineTransform(translationX: geometry.shift.rounded(), y: 0)
+            if title.transform != slide { title.transform = slide }
+            // 长标题向右会撞到"加号"：**用 mask 渐隐**，不改宽度（Spotify 的 marquee 会把宽度写回）。
+            applyTitleMask(to: title, page: page)
+        }
+    }
+
+    /// 渐隐宽度 = 标题可用宽度（到右边那排控件为止）—— 量不到就整行不遮。
+    private static func applyTitleMask(to title: UIView, page: UIView) {
+        let bounds = title.bounds
+        guard bounds.width > 1, bounds.height > 1 else { return }
+
+        let limit = trailingControlX(in: title, page: page)
+        let room = limit.map { $0 - titleGap } ?? bounds.width
+        let width = min(bounds.width, max(0, room))
+        guard width < bounds.width - 0.5 else {
+            title.layer.mask = nil
+            return
+        }
+
+        let mask: CAGradientLayer
+        if let existing = title.layer.mask as? CAGradientLayer {
+            mask = existing
+        } else {
+            mask = CAGradientLayer()
+            mask.colors = [UIColor.white.cgColor, UIColor.white.cgColor, UIColor.clear.cgColor]
+            mask.startPoint = CGPoint(x: 0, y: 0.5)
+            mask.endPoint = CGPoint(x: 1, y: 0.5)
+            title.layer.mask = mask
+        }
+        let fade = min(titleFade, width)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        mask.frame = CGRect(x: 0, y: 0, width: width, height: bounds.height)
+        mask.locations = [0, NSNumber(value: width > 0 ? (width - fade) / width : 0), 1]
+        CATransaction.commit()
+    }
+
+    private static func clearTitleMask() {
+        lastTitleElement?.layer.mask = nil
+    }
+
+    /// 标题右边那排控件的起点（找不到就不遮）。
+    private static func trailingControlX(in title: UIView, page: UIView) -> CGFloat? {
+        guard let row = title.superview else { return nil }
+        let titleLeft = untransformed(title, in: page).minX
+        var limit: CGFloat?
+
+        for sub in row.subviews {
+            if sub === title || sub.isHidden || sub.alpha < 0.01 || sub.bounds.width < 1 { continue }
+            let x = untransformed(sub, in: page).minX
+            if x > titleLeft, limit == nil || x < limit! { limit = x }
+        }
+        return limit
+    }
+
+    // MARK: - 歌词键（pw 把 glyph 放在 footer；我们放在播放键上方 —— 那里既稳又不挡进度条）
+
+    private static func ensureToggleZone(in page: UIView) {
+        // 位置：播放键上方 40pt，宽 120、高 44（一个看得见提示都没有的"热区"）。
+        guard let play = findByIdentifier(playButtonIdentifier, in: page) else {
+            noteSkip("找不到播放键，歌词键没处放")
+            return
+        }
+        let playFrame = play.convert(play.bounds, to: page)
+        let wanted = CGRect(
+            x: playFrame.midX - 60,
+            y: playFrame.minY - 44,
+            width: 120,
+            height: 44
+        )
+
+        if let zone = lastToggleZone {
+            if zone.frame != wanted { zone.frame = wanted }
+            if zone.superview !== page { page.addSubview(zone) }
+            page.bringSubviewToFront(zone)
+            return
+        }
+
+        let zone = UIControl(frame: wanted)
+        zone.backgroundColor = .clear
+        zone.accessibilityIdentifier = "eevee-npv-lyrics-toggle"
+        zone.accessibilityLabel = "歌词"
+        zone.addTarget(NowPlayingLyricsToggleTarget.shared, action: #selector(NowPlayingLyricsToggleTarget.tapped), for: .touchUpInside)
+        page.addSubview(zone)
+        page.bringSubviewToFront(zone)
+        lastToggleZone = zone
+        writeDebugLog("[\(logTag)] 歌词键已就位 \(frameText(wanted))（点它展开/收起）")
+    }
+
+    // MARK: - 我们自己的容器
+
+    private static func ensureContainer(in page: UIView, frame: CGRect) -> UIView {
+        if let existing = objc_getAssociatedObject(page, &containerKey) as? UIView {
+            if existing.superview !== page { page.addSubview(existing) }
+            if existing.frame != frame { existing.frame = frame }
+            // 歌词要能点（点行跳转），但**容器之外不吃触摸**；容器本身只占歌词区。
+            existing.isUserInteractionEnabled = true
+            page.bringSubviewToFront(existing)
+            lastContainer = existing
+            return existing
+        }
+
+        let container = UIView(frame: frame)
+        container.backgroundColor = .clear
+        container.clipsToBounds = true
+        container.accessibilityIdentifier = "eevee-npv-lyrics-container"
+        container.isAccessibilityElement = false
+        page.addSubview(container)
+        page.bringSubviewToFront(container)
+        objc_setAssociatedObject(page, &containerKey, container, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        lastContainer = container
+        return container
+    }
+
     private static func applyEdgeFade(to container: UIView) {
         let mask: CAGradientLayer
         if let existing = container.layer.mask as? CAGradientLayer {
@@ -404,63 +653,17 @@ enum NowPlayingLyricsPlate {
             mask.endPoint = CGPoint(x: 0.5, y: 1)
             container.layer.mask = mask
         }
-        // mask 不吃隐式动画（否则每次重排都会闪一下）。
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         mask.frame = container.bounds
         CATransaction.commit()
     }
 
-    /// 有界广度优先找 id（本仓库纪律：不给别人的视图树无界遍历）。
-    private static func findByIdentifier(_ identifier: String, in root: UIView) -> UIView? {
-        var visited = 0
-        var queue: [UIView] = [root]
-        let limit = 2000
+    // MARK: - 宿主与数据
 
-        while !queue.isEmpty, visited < limit {
-            let view = queue.removeFirst()
-            visited += 1
-            if view.accessibilityIdentifier == identifier { return view }
-            queue.append(contentsOf: view.subviews)
-        }
-        return nil
-    }
-
-    // MARK: - 容器与宿主
-
-    /// 我们的容器：**只加自己的子视图**（Spotify 的东西一个字节都不改）⇒ 拿走即完全还原。
-    private static func ensureContainer(in page: UIView, frame: CGRect) -> UIView {
-        if let existing = objc_getAssociatedObject(page, &containerKey) as? UIView {
-            if existing.superview !== page {
-                page.addSubview(existing)
-            }
-            // 与覆盖层同理：Spotify 换帧会重排 subviews，把我们挤下去。
-            if page.subviews.last !== existing {
-                page.bringSubviewToFront(existing)
-            }
-            lastContainer = existing
-            return existing
-        }
-
-        let container = UIView(frame: frame)
-        container.backgroundColor = .clear
-        container.clipsToBounds = true
-        container.accessibilityIdentifier = containerIdentifier
-        container.isAccessibilityElement = false
-        page.addSubview(container)
-        page.bringSubviewToFront(container)
-
-        objc_setAssociatedObject(page, &containerKey, container, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        lastContainer = container
-        return container
-    }
-
-    /// 取这一刻该用的宿主：页面换了就重置（容器是挂在页面上的，宿主必须跟着页面走）。
     @available(iOS 26.0, *)
     private static func currentHost(for page: UIView) -> NowPlayingLyricsHost? {
-        if let existing = host as? NowPlayingLyricsHost, hostPage === page {
-            return existing
-        }
+        if let existing = host as? NowPlayingLyricsHost, hostPage === page { return existing }
         (host as? NowPlayingLyricsHost)?.detach()
         let fresh = NowPlayingLyricsHost()
         host = fresh
@@ -468,18 +671,63 @@ enum NowPlayingLyricsPlate {
         return fresh
     }
 
-    // MARK: - 辅助
-
-    /// 当前播放器的曲目 id（与 `AppleMusicLyricsOverlayHost` 同源：两侧必须取自同一个来源）。
-    private static func liveTrackId() -> String {
-        (statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack)?
-            .trackIdentifier ?? ""
+    /// 这一首有没有能画的东西（行级即可 —— 与上一版放宽后的门禁一致）。
+    private static func canShow(for page: UIView) -> Bool {
+        if #available(iOS 26.0, *) {} else { return false }
+        guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else {
+            noteSkip("「更好的逐词歌词」是关的")
+            return false
+        }
+        guard hasUsableWordLevelData(currentLyricsDto) || hasUsableLineLevelData(currentLyricsDto) else {
+            noteSkip("这首歌没有可用的歌词")
+            return false
+        }
+        return currentLines() != nil
     }
 
-    /// 这一层**当前渲染的**曲目 id（收掉之后清空）。
-    private static var renderedTrackId: String = ""
+    private static func currentLines() -> [LyricLine]? {
+        let lines = (currentLyricsDto?.toAppleMusicLyricLines()) ?? []
+        return lines.isEmpty ? nil : lines
+    }
+
+    private static func currentTrackId() -> String? {
+        let id = (statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack)?
+            .trackIdentifier ?? ""
+        return id.isEmpty ? nil : id
+    }
+
+    // MARK: - 日志与小工具
+
+    private static func noteSkip(_ reason: String) {
+        guard lastSkipReason != reason else { return }
+        lastSkipReason = reason
+        writeDebugLog("[\(logTag)] 不展开（\(reason)）")
+    }
 
     private static func frameText(_ frame: CGRect) -> String {
         "\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))"
+    }
+
+    private static func findByIdentifier(_ identifier: String, in root: UIView) -> UIView? {
+        var visited = 0
+        var queue: [UIView] = [root]
+
+        while !queue.isEmpty, visited < maxNodes {
+            let view = queue.removeFirst()
+            visited += 1
+            if view.accessibilityIdentifier == identifier { return view }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+}
+
+/// 歌词键的手势目标（`UIControl` 的 target 必须是 ObjC 对象）。
+final class NowPlayingLyricsToggleTarget: NSObject {
+
+    static let shared = NowPlayingLyricsToggleTarget()
+
+    @objc func tapped() {
+        onMainThreadSync { NowPlayingLyricsPlate.toggle() }
     }
 }
