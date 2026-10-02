@@ -39,6 +39,7 @@ extension UserDefaults {
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
     private static let nowPlayingVolumeKey = "nowPlayingVolume"
+    private static let nowPlayingLyricsInPlayerKey = "nowPlayingLyricsInPlayer"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -85,6 +86,7 @@ extension UserDefaults {
         nowPlayingBackdropKey,
         nowPlayingOneScreenKey,
         nowPlayingVolumeKey,
+        nowPlayingLyricsInPlayerKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -519,6 +521,25 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingVolumeKey)
+        }
+    }
+
+    /// 听歌页「**歌词进播放器**」。**默认关**。
+    ///
+    /// 把**我们自己的**逐词歌词画进播放器中段（`npv.bottomStackView` 之上那块），
+    /// 这样「一屏」把卡片全折掉之后，页面上仍然有歌词可看 —— 它是「一屏」能默认开的**前置**。
+    ///
+    /// ⚠️ 默认关的两个理由：
+    ///   1. 它压住的是 Spotify 自己的卡片区（视觉上"遮了一块"），得先让用户看一眼认不认；
+    ///   2. 需要**逐词**数据（`hasUsableWordLevelData`），没有逐词的歌这一层会自己收起来。
+    /// 渲染复用 `AppleMusicLyricsOverlayView`（内嵌那一档，背景透明），宿主是
+    /// `NowPlayingLyricsPlate` 自己的一份 —— 不去抢全屏页那个单例宿主。
+    static var nowPlayingLyricsInPlayer: Bool {
+        get {
+            container.object(forKey: nowPlayingLyricsInPlayerKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingLyricsInPlayerKey)
         }
     }
 

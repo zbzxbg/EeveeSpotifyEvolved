@@ -290,8 +290,7 @@ enum NowPlayingOneScreen {
         objc_setAssociatedObject(list, &originalInsetKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
-    /// 这个视图是不是挂在**我们钉住的那张列表**下面。
-    ///
+    /// 这个视图是不是挂在**我们钉住的那张列表**下面。    ///
     /// 卡片折叠的**最硬判据**（`NowPlayingOneScreenCards.x.swift` 用它）：跟类名、模块名
     /// 怎么变都无关 —— 我们本来就是从 `accessibilityIdentifier` 认列表的。
     /// 跳数封顶 12：卡片离列表也就几层，超过说明不是它的后代。
@@ -307,6 +306,13 @@ enum NowPlayingOneScreen {
         }
         return false
     }
+
+    /// 我们认出来的那张播放器列表（可能为 nil：还没进过听歌页）。
+    ///
+    /// 为什么对别的功能开放：**「歌词进播放器」要把气泡摆在它上面**（用它的 `layer.position`
+    /// 量当前位置 —— `frame` 在 transform 非恒等时不可信，本仓库纪律）。
+    /// 认列表的判据仍然只有这一处（`accessibilityIdentifier`），别处别再抄一份。
+    static var pinnedList: UIScrollView? { lastList }
 
     /// 先在这一页的根视图里找；找不到再退到**窗口**里按那个 id 找。
     ///

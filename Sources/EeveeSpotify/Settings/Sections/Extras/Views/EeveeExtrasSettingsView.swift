@@ -42,6 +42,7 @@ struct EeveeExtrasSettingsView: View {
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
+        var nowPlayingLyricsInPlayer = UserDefaults.nowPlayingLyricsInPlayer
     }
 
     var body: some View {
@@ -207,6 +208,25 @@ struct EeveeExtrasSettingsView: View {
                                 NowPlayingPageOverlay.reapply()
                             } else {
                                 NowPlayingPageOverlay.remove(reason: "switch off")
+                            }
+                        }
+                    )
+                )
+
+                // 歌词进播放器：把**我们自己的**逐词歌词画进播放器中段
+                // （`npv.bottomStackView` 之上那块），这样「一屏」折掉卡片后页面上仍有歌词。
+                // 渲染复用内嵌那一档（背景透明），宿主是 `NowPlayingLyricsPlate` 自己的一份。
+                Toggle(
+                    "now_playing_lyrics_in_player".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingLyricsInPlayer,
+                        persist: { value in
+                            UserDefaults.nowPlayingLyricsInPlayer = value
+                            // 打开就当场落地（页面还挂着的话），关掉当场把我们的容器拿走。
+                            if value {
+                                NowPlayingLyricsPlate.reapply()
+                            } else {
+                                NowPlayingLyricsPlate.remove(reason: "switch off")
                             }
                         }
                     )

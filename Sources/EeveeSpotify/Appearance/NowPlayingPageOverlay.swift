@@ -197,13 +197,19 @@ enum NowPlayingPageOverlay {
         return slider
     }
 
-    /// 先在这一页的子树里找底部锚；找不到再退到**窗口**里按 id 找。
+    /// `npv.bottomStackView` 在哪：**页面 → 播放器列表 → 窗口**，三跳。
     ///
-    /// 为什么要这条兜底：日志 40 的现场 —— `npv.bottomStackView` **在这一页的子树里没找到**
-    /// （退回了安全区底；落点本身没问题：音量条落在 `8,860,398,32`，没压到原生控件）。
-    /// 那个 id 在整棵窗口树里只有一处，认错页的风险可以忽略；走查仍然有界（`maxNodes`）。
+    /// 为什么要补中间那一跳（2026-10-04，日志 40/41/42/43 四次同样的现场）：
+    /// 它**不在页面根视图的子树里**（日志 42 的定向树显示它在
+    /// `scrolling_npv_collection_view_accessibility_identifier` 的子树里，`4,593,406,240`），
+    /// 而"窗口"那一跳也没命中 ⇒ 每次进页面都退回安全区底。
+    /// 列表这一跳用的是 `NowPlayingOneScreen` 认出来的那一张（判据只留一处）。
     private static func locateBottomAnchor(in page: UIView) -> UIView? {
         if let anchor = findBottomAnchor(in: page) { return anchor }
+        if let list = NowPlayingOneScreen.pinnedList,
+           let anchor = findBottomAnchor(in: list) {
+            return anchor
+        }
         guard let window = page.window else { return nil }
         return findBottomAnchor(in: window)
     }

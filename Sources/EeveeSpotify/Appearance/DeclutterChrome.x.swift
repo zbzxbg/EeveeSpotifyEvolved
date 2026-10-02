@@ -267,6 +267,12 @@ enum DeclutterChrome {
         //   同一条纪律：**不新开定时器**，frame 没变就一个字节都不写。
         onMainThreadSync { _ = NowPlayingPageOverlay.reconcile() }
 
+        // ★ 2026-10-04：「歌词进播放器」那一层也要跟着重排 + 驱动时间轴。
+        //   它的位置来自底部那一坨（卡片折叠/换歌都会动），时间轴**刻意**就用这个节拍
+        //   （约 0.3s 一拍，不新开 CADisplayLink —— 行间移动本身带 SwiftUI 动画，
+        //   肉眼与每帧没差别）。没开开关时成本 = 一次 bool 读。
+        onMainThreadSync { _ = NowPlayingLyricsPlate.reconcile() }
+
         // ★ 2026-10-03 夜：**只读播放器状态探针**（`PlayerStateProbe`）—— 给「突然无法播放
         //   任何歌曲」那条线补现场判据（它至今零判据：31 份日志里 drm/license/unplayable
         //   全零命中，分不开"服务端按地区判不可播"和"账号风控"）。

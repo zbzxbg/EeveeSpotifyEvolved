@@ -422,6 +422,9 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
             //   听歌页那一棵约 800 节点，整窗 BFS 的 400 预算永远够不到头部/控件/footer。
             //   登记只是一个指针，不改任何视图、不读任何内容。
             ViewTreeDumper.setPage(pageView)
+            // 「歌词进播放器」：那一刻列表/底部那一坨常常还没建好，`apply` 里的
+            // `reconcile` 对"没位置"是安静的，真正的重算交给 `DeclutterChrome` 的复查节拍。
+            NowPlayingLyricsPlate.apply(in: pageView)
         }
     }
 
@@ -441,6 +444,7 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
             NowPlayingOneScreen.apply(in: pageView)
             NowPlayingPageOverlay.apply(in: pageView)
             ViewTreeDumper.setPage(pageView)
+            NowPlayingLyricsPlate.apply(in: pageView)
         }
     }
     
@@ -451,6 +455,8 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         InlineLyricsHostLocator.stopLookup()
         // 定向转储的登记也一起撤掉 —— 否则离开听歌页之后还会一直按"页面"预算转储。
         ViewTreeDumper.setPage(nil)
+        // 「歌词进播放器」那一层也收掉：页面已经不在屏幕上，留着只是白占一份 hosting。
+        NowPlayingLyricsPlate.remove(reason: "page disappeared")
     }
 }
 
