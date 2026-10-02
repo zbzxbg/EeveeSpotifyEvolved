@@ -526,4 +526,8 @@ reduce_interventions_scope_yourlibaryx_footer = "Tips, banners and cards shown i
 // see Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift.
 now_playing_backdrop_section = "Now playing";
 now_playing_backdrop = "Cover-coloured background";
-now_playing_backdrop_description = "Paints the now-playing page with a gradient built from the cover art's colour — the Apple Music look. Takes over Spotify's own background layer and puts it back when you turn this off.";
+now_playing_backdrop_description = "Paints the now-playing page with a gradient built from the cover art's colour — the Apple Music look. Takes over Spotify's own background layer and puts it back when you turn this off. The switch below folds away every card under the player and pins the list to its top, so the player is one screen you cannot scroll — the Music app's player. It folds the lyrics card away too, so leave it off unless you open lyrics from elsewhere.";
+// One screen: every card under the player is folded away and the list is pinned to its top,
+// so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
+// see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
+now_playing_one_screen = "One screen (no scrolling)";

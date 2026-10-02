@@ -410,6 +410,14 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         // ⚠️ 把 `target` 自己传进去 —— 它就是这个 VC；不能靠 `npvScrollViewController`
         // 那个全局（9.1.x 上恒为 nil，见 `refreshNowPlayingBackdrop` 的说明）。
         refreshNowPlayingBackdrop(page: target as? UIViewController)
+
+        // 「一屏」：把播放器下面那些卡片折起来 + 把列表钉在顶部（kumone 那种"一屏一首歌"）。
+        // ⚠️ 这一刻列表常常还没建出来 —— `apply` 对"找不到"是**静默**的，
+        // 真正的重算交给 `DeclutterChrome` 那条既有的 0.3s 复查节拍
+        // （`NowPlayingOneScreen.reconcile`，同一条"不新开定时器"的纪律）。
+        if let page = target as? UIViewController, let pageView = page.view {
+            NowPlayingOneScreen.apply(in: pageView)
+        }
     }
 
     /// 再补一次（`viewWillAppear` 那次可能早于曲目元数据/取色到位）。
@@ -422,6 +430,11 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
     func viewDidAppear(_ animated: Bool) {
         orig.viewDidAppear(animated)
         refreshNowPlayingBackdrop(page: target as? UIViewController)
+
+        // 「一屏」的第二次机会：`viewDidAppear` 时列表通常已经建好了。
+        if let page = target as? UIViewController, let pageView = page.view {
+            NowPlayingOneScreen.apply(in: pageView)
+        }
     }
     
     func viewWillDisappear(_ animated: Bool) {

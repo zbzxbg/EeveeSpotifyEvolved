@@ -255,6 +255,13 @@ enum DeclutterChrome {
         //   同一条纪律：**不新开定时器**，蹭这个节拍。
         onMainThreadSync { _ = NowPlayingBackdrop.reconcile() }
 
+        // ★ 2026-10-03 夜：听歌页「一屏」的**重算节拍**（`NowPlayingOneScreen.reconcile()`）。
+        //   卡片是列表建好之后**才陆续到**的，每来一张都会把内容高度顶上去，而 `apply`
+        //   只在进页面时跑一遍；`willDisplayCell` 那一刻的高度更是"一个 runloop 之后才定"
+        //   （pw 为此专门补了一枪 async）。同一条纪律：**不新开定时器**，蹭这个节拍；
+        //   值没漂就一个字节都不写，没在听歌页时只是两次 weak 读。
+        onMainThreadSync { _ = NowPlayingOneScreen.reconcile() }
+
         // ★ v4.9：标签栏那一行的**纵向复核**。点开「创建」时那一颗处于暂时态，
         //   而**菜单关掉时这条栏不一定再布局** —— 日志 29 里我们的 transform 就停在
         //   `+2.5`，创建那颗一直比另外三颗高 8pt（16 秒没回来）。

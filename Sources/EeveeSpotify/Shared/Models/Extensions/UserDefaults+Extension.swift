@@ -40,6 +40,7 @@ extension UserDefaults {
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
     private static let miniBarGlassKey = "miniBarGlass"
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
+    private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -87,6 +88,7 @@ extension UserDefaults {
         tabBarHideLabelsKey,
         miniBarGlassKey,
         nowPlayingBackdropKey,
+        nowPlayingOneScreenKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -512,6 +514,29 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingBackdropKey)
+        }
+    }
+
+    /// 听歌页「**一屏**」：把播放器下面那些卡片全折起来 + 把列表钉在它的顶部
+    /// —— kumone / Music app 那种"一屏一首歌、滚不动"。**默认关**（见下）。
+    ///
+    /// ⚠️ **为什么默认关**（不是忘了改）：它会连**歌词卡**一起折掉 —— 而 kumone 敢把卡片全折，
+    /// 是因为它把歌词**搬进了播放器**（pw `PlayerLyrics.x`），我们这一版还没做那一步。
+    /// 折掉之后听歌页就没有"打开歌词"的入口了（只能走别处），所以先让用户**自己选**。
+    /// 下一步（把歌词搬进播放器）做完之后，这个默认值才有资格改成开。
+    ///
+    /// 思路与算法借自 spoti.pw v0.21.1（GPL-3.0）的 `Redesigned/Player/PlayerCards.x` +
+    /// `PlayerScroll.x`；为什么是"钉住"而不是"把滚动关掉"（关掉会让播放器划不掉）
+    /// 写在 `NowPlayingOneScreen` 的文件头。
+    ///
+    /// 关掉即完全还原：`restore()` 把列表的 bottom inset 写回我们记下的原值，
+    /// 卡片折叠那一半读的就是这个开关（立刻生效，不必重启）。
+    static var nowPlayingOneScreen: Bool {
+        get {
+            container.object(forKey: nowPlayingOneScreenKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingOneScreenKey)
         }
     }
 

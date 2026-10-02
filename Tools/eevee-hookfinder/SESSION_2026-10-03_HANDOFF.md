@@ -319,7 +319,8 @@
 
 | # | 还差 | 位置 | 状态 |
 |---|---|---|---|
-| 1 | 整页取色底 | `NowPlayingBackdrop.swift` | 🔁 本轮 重做，**等这次验收** |
+| 1 | 整页取色底 | `NowPlayingBackdrop.swift` | 🔁 本轮重做，**等这次验收** |
+| 1b | **一屏**（卡片全折 + 列表钉顶部 —— kumone 那种"一屏一首歌、滚不动"） | `NowPlayingOneScreen.swift` + `NowPlayingOneScreenCards.x.swift`（借 spoti.pw **v0.21.1**，GPL-3.0） | ✅ 已实现，**默认关**（会连**歌词卡**一起折掉，见 `SPOTIPW_0211_PORT_ASSESSMENT.md` §8），等验收 |
 | 2 | 歌词列**上下渐隐 + 拖动暂停** | 逐词层外层加 mask；`NowPlayingMetrics.lyricFadeStops` 已经备好（0/0.12/0.85/1） | ⏳ 下一轮（取色底能看见之后再排） |
 | 3 | 播放页**头部排版**（歌名加粗放大、`⋯` 靠右） | 要动 Spotify 标签 ⇒ 必须走 `LibraryAppearance` 那套复查节拍 | ⏳ 待定 |
 | 4 | 控件行的间距/尺寸对齐 kumone（`NowPlayingView.swift:766`） | `NowPlayingMetrics` 已落表，部分还没被消费 | ⏳ 低优先 |

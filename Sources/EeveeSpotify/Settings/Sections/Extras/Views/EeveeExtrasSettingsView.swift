@@ -44,6 +44,7 @@ struct EeveeExtrasSettingsView: View {
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
         var miniBarGlass = UserDefaults.miniBarGlass
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
+        var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
     }
 
     var body: some View {
@@ -196,6 +197,26 @@ struct EeveeExtrasSettingsView: View {
                                 refreshNowPlayingBackdrop()
                             } else {
                                 NowPlayingBackdrop.remove(reason: "switch off")
+                            }
+                        }
+                    )
+                )
+
+                // 一屏：把播放器下面那些卡片折起来 + 把列表钉在它的顶部
+                // （kumone / Music app 那种"一屏一首歌、滚不动"）。
+                // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），写在 `NowPlayingOneScreen` 文件头。
+                Toggle(
+                    "now_playing_one_screen".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingOneScreen,
+                        persist: { value in
+                            UserDefaults.nowPlayingOneScreen = value
+                            // 关掉要**当场**把 inset 写回（不用等下一次进听歌页）；
+                            // 打开就顺手落地一次。
+                            if value {
+                                NowPlayingOneScreen.reapply()
+                            } else {
+                                NowPlayingOneScreen.restore()
                             }
                         }
                     )

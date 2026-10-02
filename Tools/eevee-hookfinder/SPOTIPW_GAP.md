@@ -13,6 +13,33 @@
 - 本次清点**只读了它的 `.md`**：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`docs/tweaks.md`、
   `harness/*/README.md`（19 个）。`tweak/`、`vendor/`、`extension/`、`scripts/` 一行没看。
   所以下面每一条都能追到文档，没有一条来自它的实现。
+
+> ### ★ 2026-10-03 夜：**上面那条红线已经作废，换成按 tag 划的边界**
+>
+> 用户指出（复核确认）：**本地是完整 git 仓库，tag 从 `v0.18.0` 到 `v0.23.0-beta`**，
+> 而换许可发生在 **`v0.21.1` 之后**：
+> * `git show v0.21.1:LICENSE` → **GNU GPL v3**；
+> * `git log v0.21.1..v0.22.0 -- LICENSE` → 只有一条 `f44abdf`（改为 PolyForm Strict 1.0.0）；
+> * `git tag --contains f44abdf` → **只有 `v0.22.0` / `v0.23.0-beta`**。
+>
+> ⇒ **新规矩（按 tag 划，不按"看不看源码"划）**：
+>
+> | 范围 | 能做 | 不能做 |
+> |---|---|---|
+> | **`≤ v0.21.1`（GPL-3.0）** | **读、复用、改** —— 与本仓库 GPL-3.0 兼容 | —— |
+> | **`≥ v0.22.0`（PolyForm Strict）** | 只读它的 **`.md`**（`README` / `CHANGELOG` / `docs/` / `AGENTS.md`） | **源码一行都不碰**（该许可明确禁止 *making changes or new works based on the software*） |
+>
+> **复用的三条义务**（GPL-3.0 §5）：① 保留版权与许可声明（署名写进「开源许可」页）；
+> ② **标注"我们改过"与日期**；③ 衍生作品继续 GPL-3.0（我们本来就是）。
+>
+> **工程卫生**：GPL 那份只在隔离副本里读 ——
+> `.spotify-ipa/spotipw-v0.21.1`（`git worktree`，detached `a08b38b`，已被 `.gitignore` 收口），
+> **物理上避开工作区那份 v0.22.0**。
+>
+> **代价**：`v0.21.1` 之后的修复拿不到（v0.22/v0.23 的改进全在 PolyForm 期）。
+>
+> **第一个产出**：本目录新增 [`SPOTIPW_0211_PORT_ASSESSMENT.md`](SPOTIPW_0211_PORT_ASSESSMENT.md) ——
+> 听歌页（播放器）的移植评估：目标类在 9.1.88 上的存活情况、依赖面、"一屏不滚"的最小可移植子集。
 - 它的基线与我们不同，比较时要记住：
 
 | | spoti.pw | 本仓库 |
