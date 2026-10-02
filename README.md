@@ -69,3 +69,22 @@ projects credited above.
 - Thanks to [whoeevee](https://github.com/whoeevee) for the original EeveeSpotify project.
 - Thanks to [SideloadLabs](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) for creating the SpicyLyrics lyrics provider, as well as the logging and export functionality. The relevant code has been modified to fit this project.
 - Thanks to the [MeloX](https://github.com/youshen2/MeloX) project for the inspiration behind this project's karaoke lyrics feature. The relevant code has been modified to fit this project.
+
+Two more projects shaped this fork. They play different roles, because their licences are
+different — worth spelling out so nobody has to guess:
+
+- [spoti.pw](https://github.com/) — **feature roadmap only.** Its published feature list is what our
+  own gap analysis (`Tools/eevee-hookfinder/SPOTIPW_GAP.md`) is measured against. Its licence is
+  **PolyForm Strict 1.0.0**, so only its Markdown documentation was read; **no source was read,
+  disassembled or reused**, and everything here is written from scratch. If a feature exists in
+  both projects, the overlap is the *idea*, not the code.
+- [kumone](https://github.com/) — **implementation recipes.** An independent, open-source NetEase
+  Cloud Music client (LGPL-3.0 for the library part, GPL-3.0 for the app — both compatible with
+  this repository's GPL-3.0). The now-playing page's full-page colour backdrop, and the timing
+  curves / geometry constants around it, follow kumone's recipe. What was taken is **values,
+  animation curves and the layer recipe**; the UIKit view code here is our own. The exact list of
+  what was borrowed (and what was deliberately *not*) is in
+  [`Tools/eevee-hookfinder/KUMONE_REFERENCE.md`](Tools/eevee-hookfinder/KUMONE_REFERENCE.md), and it
+  is credited in-app on the Licenses page.
+
+Neither project endorses this fork, and neither is affiliated with it.
