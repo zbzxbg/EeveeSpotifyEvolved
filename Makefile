@@ -7,7 +7,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = EeveeSpotify
 
 REPO_SLUG ?= $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*github\.com[:/]([^/]+/[^/.]+)(\.git)?$$|\1|')
-REPO_SLUG_FINAL := $(if $(REPO_SLUG),$(REPO_SLUG),zbzxbg/EeveeSpotify-ng-latest)
+REPO_SLUG_FINAL := $(if $(REPO_SLUG),$(REPO_SLUG),zbzxbg/EeveeSpotifyEvolved)
 
 BRANCH_NAME ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
 BRANCH_NAME_FINAL := $(if $(BRANCH_NAME),$(BRANCH_NAME),Master)

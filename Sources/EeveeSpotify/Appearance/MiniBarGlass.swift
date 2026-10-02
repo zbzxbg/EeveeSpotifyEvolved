@@ -33,6 +33,18 @@ import ObjectiveC.runtime
 ///      v4.7.1 起玻璃住**宿主**里（不再住内容里），所以连宿主也要不裁剪。
 ///   ③ **玻璃不进内容视图**：因为内容要被缩放 —— 玻璃要是它的子视图就会跟着缩。
 ///      所以玻璃插在 `host.subviews[0]`（整条内容之下、宿主背景之上），自己不受缩放影响。
+///   ④ ★ v4.8 **底色守卫**：Spotify 的写回**不一定**伴随宿主的布局回合，只靠"每次布局都清"
+///      会留下照片 36 那块封面色（日志 28 的 `SPTNowPlayingBar bg=#041454`），一直到用户
+///      碰巧触发了下一次布局才消失（照片 37 是点完「创建」/进过一次听歌页之后）。
+///      现在多两个驱动：写回后 **50ms 级的短促重试**（`armColorGuard`，带节流、不叠加）
+///      + `DeclutterChrome` **既有的 0.5s 复查节拍**（`reconcileCoverColor`）。
+///      ⚠️ 两个都是"看一眼 + 幂等清"，**不是常驻轮询**（与本仓库的纪律一致）。
+///
+/// ── v4.8（2026-10-02）：用户「液态玻璃的宽度有点少」+ 照片 36/37 ────────────────
+///   · 宽度**不写死**：跟着标签栏那条的比例走（v4.8 起标签栏那条真机是 **360pt**，
+///     本机 414 宽就是 360）；拿不到时的兜底比例也跟着改成 `360/414`。
+///   · 顺带的好处：内容要缩的比例从 `(312−16)/398 ≈ 0.74` 抬到 `(360−16)/398 ≈ 0.86`
+///     —— 歌名、连接键、播放键都比以前大一圈。
 ///
 /// 开关：设置 → EeveeSpotify → 扩展功能 → **迷你播放条** →「迷你播放条用液态玻璃」，默认**开**。
 ///
@@ -53,8 +65,8 @@ enum MiniBarGlassPlate {
     /// 内容缩到胶囊里时左右各留多少（与标签栏那条的 `sideInset` 同一个数）。
     private static let sideInset: CGFloat = 8
 
-    /// 拿不到标签栏那条的宽度比例时的兜底（真机实测 312 / 414）。
-    private static let fallbackWidthRatio: CGFloat = 312.0 / 414.0
+    /// 拿不到标签栏那条的宽度比例时的兜底（真机实测 360 / 414；v4.8 起标签栏那条已加宽）。
+    private static let fallbackWidthRatio: CGFloat = 360.0 / 414.0
 
     private static var plateKey: UInt8 = 0
     private static var hostClipKey: UInt8 = 0
@@ -65,6 +77,14 @@ enum MiniBarGlassPlate {
     /// （与 `DeclutterChrome.reconcileNow()` 同一招：不用等下一次布局、更不用重启）。
     private static weak var lastHost: UIView?
     private static weak var lastContent: UIView?
+
+    /// ★ v4.8 底色守卫盯的那一个内容视图（`reconcileCoverColor()` 用；weak，视图换掉自动失效）。
+    private static weak var colorGuardTarget: UIView?
+    /// 一轮"短促重试"的占位截止时间。作用：**每次布局不重复排队** ——
+    /// 布局回调一秒能来几十次，不节流就变成变相轮询了（仓库纪律不允许）。
+    private static var guardBurstUntil: CFAbsoluteTime = 0
+    /// 短促重试的节奏：写回通常发生在我们清完之后的一两帧内，5 次覆盖到 ~1.2s 就够。
+    private static let guardBurstDelays: [Double] = [0.05, 0.15, 0.35, 0.7, 1.2]
 
     private static var didReportInstall = false
     private static var didLogClipRelease = false
@@ -118,8 +138,12 @@ enum MiniBarGlassPlate {
         let wanted = CGAffineTransform(scaleX: scale, y: scale)
         if content.transform != wanted { content.transform = wanted }
 
-        // ── ③ 底色：**每次布局都清**（Spotify 会写回来 —— 见文件头 ①）────────────
+        // ── ③ 底色：**每次布局都清**（Spotify 会写回来 —— 见文件头 ① / ④）────────────
         clearCoverColor(of: content)
+        // ★ v4.8：把这次见过的那一个记下来，并排一轮"短促重试" —— 写回往往就发生在
+        //   我们这次清完之后的一两帧内，而那一帧**不一定**还有宿主的布局回合。
+        colorGuardTarget = content
+        armColorGuard()
 
         // ── ④ 不裁剪：胶囊比内容高 4pt，内容与宿主都不能裁 ──────────────────────
         releaseClipping(of: content, rememberIn: &originalClipKey)
@@ -137,6 +161,8 @@ enum MiniBarGlassPlate {
     /// 关掉开关时：**撤玻璃 + 还原**（缩放 / 底色 / 裁剪，只还原我们自己改过的）。
     @MainActor
     static func removePlate(host: UIView?, content: UIView?) {
+        // ★ v4.8：守卫跟着一起撤 —— 关掉开关之后不该再有人去清别人的底色。
+        colorGuardTarget = nil
         if let host, let plate = objc_getAssociatedObject(host, &plateKey) as? UIVisualEffectView {
             plate.removeFromSuperview()
             objc_setAssociatedObject(host, &plateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -224,8 +250,11 @@ enum MiniBarGlassPlate {
     /// 16:50:27  手动开关一次 → 再清一次 → 之后树上没有 bg 了   ← 照片 35 才干净
     /// ```
     /// 这正是仓库纪律里写过的"binder 写回"：值没变不写，值被写回就再清，并**计数**。
+    ///
+    /// - Returns: 这一次**真的清掉了**东西吗（v4.8 起返回值给守卫用：清到了就再排一轮短促重试）。
     @MainActor
-    private static func clearCoverColor(of content: UIView) {
+    @discardableResult
+    private static func clearCoverColor(of content: UIView) -> Bool {
         if let current = content.backgroundColor, current.cgColor.alpha > 0.01 {
             // 记"最后一次看见的原色"用于还原 —— Spotify 会随封面换色，第一次那个不算数。
             objc_setAssociatedObject(
@@ -241,13 +270,57 @@ enum MiniBarGlassPlate {
             } else if colorWriteBacks == 6 {
                 writeDebugLog("[MiniBarGlass] ⚠️ 封面色底被反复写回（>5 次）— 继续清，不再逐次打日志")
             }
-        } else if objc_getAssociatedObject(content, &originalColorKey) == nil {
+            return true
+        }
+
+        if objc_getAssociatedObject(content, &originalColorKey) == nil {
             // 第一次见到时它就是透明的（Spotify 还没来得及上色）：先记一笔"当时是空的"，
             // 关开关时才不会还原成我们不认识的值；真正的原色会在上面那条分支里被补上。
             objc_setAssociatedObject(
                 content, &originalColorKey, content.backgroundColor as Any,
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
+        }
+        return false
+    }
+
+    /// 兜底守卫：**只看一眼**内容视图的底色，被写回来就当场清掉。★ v4.8 新增。
+    ///
+    /// 由 `DeclutterChrome` **既有的** 0.5s 复查节拍调用（那份节拍本来就带着
+    /// "App 不在前台就不跑"的 guard）—— 不新开定时器。
+    /// 单次成本 = 一次 `backgroundColor` 读 + 一次 `window` 读；开关关着 / 没有迷你条时
+    /// 直接返回（`colorGuardTarget` 与 `lastContent` 都是 nil）。
+    ///
+    /// ★ 真机日志 28 的那个现场：切歌时 Spotify 在 00:47:46 写下 `bg=#10346C`，
+    /// 而**下一次宿主的布局回合要等到 00:47:54** —— 中间 8 秒用户看到的就是照片 36 那块蓝。
+    /// 这一支把这个窗口压到 ≤0.5s；而且**清掉之后顺手再排一轮短促重试**，
+    /// 因为"刚清完又被写回"（首帧那种）就是靠那一轮兜住的。
+    @MainActor
+    static func reconcileCoverColor() {
+        guard isEnabled else { return }
+        guard let content = colorGuardTarget ?? lastContent else { return }
+        guard content.window != nil else { return }
+        if clearCoverColor(of: content) { armColorGuard() }
+    }
+
+    /// 写回之后的**短促重试**：排几次"看一眼 + 幂等清"，~1.2s 内自己收手。
+    ///
+    /// 为什么需要：照片 36 那块封面色（`bg=#041454`）就是"我们清完 → Spotify 又写回来 →
+    /// 而那一帧没有宿主的布局回合"造成的。写回通常紧随我们这一次清色（同一帧或下一帧），
+    /// 所以 50ms 级看几次就够；`reconcileCoverColor()` 那 0.5s 的节拍负责漏网之鱼。
+    ///
+    /// ⚠️ **只排一轮，不叠加**（`guardBurstUntil` 占位）—— 否则每次布局都排一次，
+    /// 就成了变相轮询，正是仓库纪律里禁止的那种写法。
+    @MainActor
+    private static func armColorGuard() {
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now >= guardBurstUntil else { return }
+        guardBurstUntil = now + (guardBurstDelays.last ?? 1.2)
+
+        for delay in guardBurstDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                onMainThreadSync { reconcileCoverColor() }
+            }
         }
     }
 

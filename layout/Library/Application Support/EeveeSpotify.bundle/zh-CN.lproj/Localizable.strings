@@ -401,7 +401,7 @@ tab_bar_hide_labels = "隐藏标签文字";
 
 mini_bar_glass_section = "迷你播放条";
 mini_bar_glass = "迷你播放条用液态玻璃";
-mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃胶囊：**与标签栏那条等宽（真机 312pt）、同高（60pt）、同圆角、同材质**，两条之间保留原来的小间隙。迷你条自己的内容（封面 + 歌名 + 按钮 + 进度线）会**等比缩到胶囊里**（约 75%）。开着的时候那条实心封面色底会被清掉（Spotify 会把它写回来，我们每次布局都再清一次）；关掉开关完全还原：玻璃撤掉、内容回原始大小、底色与裁剪都还回去。";
+mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃胶囊：**与标签栏那条等宽（真机 360pt）、同高（60pt）、同圆角、同材质**，两条之间保留原来的小间隙。迷你条自己的内容（封面 + 歌名 + 按钮 + 进度线）会**等比缩到胶囊里**（约 86%）。开着的时候那条实心封面色底会被清掉 —— 包括刚出现 / 刚切歌时 Spotify 又写回来的那一次；关掉开关完全还原：玻璃撤掉、内容回原始大小、底色与裁剪都还回去。";
 
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";
@@ -439,10 +439,17 @@ backup_reset_confirm_message = "会把本仓库存下来的设置全部删掉；
 backup_reset_done = "已重置 %ld 条。";
 updates_title = "更新日志";
 updates_loading = "读取中…";
-updates_failed_footer = "本仓库可能还没有 tag 化的 release —— 那样 GitHub 接口会回 404，这是预期内的，不影响任何功能。";
+updates_failed_footer = "数据来自本仓库的 GitHub releases；结果缓存 5 分钟并用 ETag 复验，反复打开这一页不会再消耗接口额度。";
 updates_empty = "没有取到 release。";
 updates_prerelease = "预发布";
 updates_open = "在 GitHub 上打开";
+updates_retry = "重试";
+updates_error_rate_limit = "GitHub 的接口额度用完了。未登录时每小时 60 次、按出口 IP 算（运营商大内网是很多人共用）。过一会儿再试。";
+updates_error_rate_limit_reset = "GitHub 的接口额度用完了。未登录时每小时 60 次、按出口 IP 算（运营商大内网是很多人共用）。大约 %d 分钟后恢复。";
+updates_error_not_found = "本仓库还没有 release（GitHub 接口回了 404）。这是预期内的，不影响任何功能。";
+updates_error_network = "连不上 GitHub，检查网络后重试。";
+updates_error_format = "GitHub 返回的数据这一页读不出来：";
+updates_error_status = "GitHub 接口回了 HTTP %d。";
 licenses_title = "开源许可";
 licenses_footer = "这一页只写仓库里查得到的事实；没有随附许可文件的组件就照实说没有，不猜 SPDX 名字。";
 licenses_this_repo = "本仓库";

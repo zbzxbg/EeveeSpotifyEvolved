@@ -51,6 +51,25 @@ import ObjectiveC.runtime
 ///   （`rowShifts`，基准是每颗**自己看得见的内容**）——「创建」那颗由它的白圆底去对中心，
 ///   另外三颗仍由各自的 24pt 图标去对，谁也不会被对方拽偏。
 ///
+/// ── v4.8（2026-10-02，用户反馈两条 + 日志 28 / 照片 36/37）──────────────────
+///   ① **"液态玻璃的宽度有点少"** → `horizontalPadding` `20 → 44`：
+///      真机 272 + 44×2 = **360pt**（屏宽 414 的 87%；v4.2–v4.7 是 312）。
+///      迷你条那条按比例跟着变长（两条永远等宽），副作用是**好事**：
+///      它内容要缩的比例从 0.74 抬到 ~0.86，歌名/按钮看得更清楚。
+///   ② **"隐藏标签文字时，点『创建』再取消，创建那颗变高（到了有文字时的高度）"**
+///      —— 日志 28 的现场：`dy=[+10.0,+10.0,+10.0,+2.5]`，而且**取消之后不再回到 +10**
+///      （dump #5→#13 里那一颗的 `ElementContentView` 一直渲染在 `y=2` 而不是 `y=10`）。
+///      v4.6.1 的纵向基准是每颗**看得见的内容**（`visibleBand`），它对「创建」那颗会塌成
+///      两个坏值：菜单开合时它**把整颗 item 的框（103×49，中心 24.5）当内容**
+///      （子树那一刻整个不可见 → 兜底返回自己），于是 `dy = 27 − 24.5 = +2.5` —— 正好是
+///      用户说的"有文字时的高度"（有文字时 `dy = 0`，图标就在 5…29，比居中位置高 7.5pt）。
+///      **修法**：文字藏起来时**改用每颗自己的图标**（`EncoreIconView`）当纵向基准
+///      —— 图标是最稳定的东西（菜单开着时它临时变 33pt、那一次跟着居中；**取消后一定
+///      回到 24×24@y=5**），白圆底与 item 兜底框都不再参与定位。文字**显示**时仍走
+///      `visibleBand`（那时必须让文字留在胶囊里，用图标当基准会把整颗往下推 10pt）。
+///      验收行：点开「创建」再取消，日志里 `dy` 必须回到 `[+10.0,+10.0,+10.0,+10.0]`
+///      （v4.8 起 `report` 在 **dy 变了**时也会打一行，见 `report`）。
+///
 /// ── v4.2（2026-10-02，用户反馈两条）────────────────────────────────────────
 ///   ① **"四颗离得太开"** → `tightenRow` 用 **transform** 把四颗往中心收 20%
 ///      （外两颗各向内 ~31pt，间距 103.5 → 82.7pt）。用 transform 是因为它
@@ -109,7 +128,13 @@ enum TabBarGlassPlate {
 
     /// 左右留边：胶囊 = **有文字版式那条带子** + 左右各这么多。
     /// ⚠️ 不再是"栏宽 − 固定值"：四颗被收紧之后，胶囊要贴着那一行走，不然又变成一条长条。
-    private static let horizontalPadding: CGFloat = 20
+    ///
+    /// **v4.8 值 = 44**（用户 2026-10-02：「液态玻璃的宽度有点少，给它伸长一点」）：
+    /// 真机带子是 272 → `272 + 44×2 = 360pt`（屏宽 414 的 87%），比 v4.2–v4.7 的 312 长 48。
+    /// 改这一个数**两条胶囊一起变**（迷你条按 `capsuleWidthRatio` 等宽跟随），
+    /// 并且迷你条的内容缩放会从 `(312−16)/398 ≈ 0.74` 抬到 `(360−16)/398 ≈ 0.86`
+    /// （缩得越少，歌名/按钮越清楚）—— 见 `MiniBarGlass`。
+    private static let horizontalPadding: CGFloat = 44
 
     /// 四颗往中心收的比例（0 = 不动，1 = 全收到中心）。
     /// 用户反馈"四个图标之间距离太大" → 0.20：外两颗各向内 ~31pt，间距 103.5 → 82.7pt。
@@ -129,7 +154,13 @@ enum TabBarGlassPlate {
 
     /// 上一次报出去的胶囊 frame（只在变化时打日志，不在布局回调里刷屏）。
     private static var lastReportedFrame: CGRect = .null
+    /// 上一次报出去的 `dy` 向量。★ v4.8：**dy 变了也要报一行** —— v4.6.1 那版只在
+    /// frame 变化时报，于是"点开『创建』→ dy 从 +10 掉到 +2.5 → 取消后再也没回来"
+    /// 这件事在日志里**只留下半句**（日志 28 只有那半句，害得诊断得靠 dump 里的渲染 y 反推）。
+    private static var lastReportedShifts: [CGFloat] = []
     private static var reportCount = 0
+    /// 上报条数上限。v4.8 从 10 抬到 14：dy 变化也会占一行（菜单开合各一行就够用）。
+    private static let reportLimit = 14
 
     /// 已经成功摆过一次"可信几何"的胶囊了吗。
     ///
@@ -200,7 +231,23 @@ enum TabBarGlassPlate {
         // ── 纵向：每颗把自己**看得见的内容**摆到胶囊中心（中心 = band.midY）─────────
         //   v4.6.1 起**一颗一个数**：四颗共用一个数时，「创建」那颗一开菜单
         //   （内容变成 40pt 白圆底 + 33pt 图标）就会把另外三颗顶高 6pt（照片 30→32 的现场）。
-        let dy = measured.map { rowShifts(bands: $0.itemBands, center: band.midY) } ?? []
+        //
+        //   ★ v4.8 起**分两种基准**（用户 2026-10-02：「隐藏标签文字时，点『创建』再取消，
+        //     创建那颗变高，变成有文字时的高度」，日志 28 的 `dy=…,+2.5` 就是现场）：
+        //     · 文字**藏起来** → 基准 = 这一颗**自己的图标**（`itemIconBands`）。
+        //       图标是唯一稳定的东西：「创建」那颗的白圆底（40×40）与"子树整个不可见时
+        //       兜底返回整颗 item 框（103×49、中心 24.5 → dy=+2.5）都不会进来，
+        //       而取消菜单后图标一定回到 `24×24@y=5` → `dy` 回到 `+10`，与另外三颗齐平。
+        //       菜单开着的瞬间它的图标临时变 33pt，这一支会跟着把它摆正（那是一次的、对的）。
+        //     · 文字**显示** → 仍走 v4.6.1 的 `visibleBand`：那时必须让**文字**也留在胶囊里，
+        //       拿图标当基准会把整颗往下推 10pt、文字会被推出胶囊底。
+        let dy: [CGFloat]
+        if UserDefaults.tabBarHideLabels, let measured {
+            dy = iconShifts(bands: measured.itemIconBands, center: band.midY)
+        } else {
+            dy = measured.map { rowShifts(bands: $0.itemBands, center: band.midY) } ?? []
+        }
+        let basis = (UserDefaults.tabBarHideLabels && measured != nil) ? "图标" : "可见内容"
 
         // ⚠️ 几何不可信就**什么都不画**（v4.0 在这里画出了一条 16pt 的小棍）。
         // 真机证据（日志 21）：
@@ -259,6 +306,7 @@ enum TabBarGlassPlate {
             band: band,
             icons: measured?.icons,
             shifts: dy,
+            basis: basis,
             bar: bar,
             host: plate.superview
         )
@@ -298,8 +346,15 @@ enum TabBarGlassPlate {
 
     /// 一次量算的全部结果（都在**栏坐标系**里，而且**只走布局几何**）。
     private struct Measurements {
-        /// 每颗**看得见的内容**的范围（一颗一个）→ 纵向居中的基准。
+        /// 每颗**看得见的内容**的范围（一颗一个）→ 文字**显示**时的纵向居中基准。
         var itemBands: [CGRect?] = []
+        /// 每颗**自己的图标**的范围（一颗一个）→ 文字**藏起来**时的纵向居中基准。
+        ///
+        /// ★ v4.8 新增。为什么把它单列出来：图标是四颗里**唯一稳定**的东西 ——
+        /// 「创建」那颗的白圆底（40×40、alpha 会停在 1）与"子树整个不可见时兜底返回
+        /// 整颗 item 框（103×49）"都不会出现在这里，而那两样正是把它的 `dy` 从 `+10`
+        /// 拽到 `+2.5`、且取消菜单后**回不来**的元凶（日志 28）。
+        var itemIconBands: [CGRect?] = []
         /// 图标带（尺寸已归一化）。
         var icons: CGRect?
         /// "有文字的版式"：图标 ∪ 文字（尺寸已归一化）→ 胶囊的尺寸与位置都用它。
@@ -361,8 +416,12 @@ enum TabBarGlassPlate {
                 in: item, node: item, depth: 0,
                 iconInto: &iconNodes, labelInto: &labelNodes
             )
-            iconRects.append(contentsOf: iconNodes.map(inBar))
+            let iconsInBar = iconNodes.map(inBar)
+            iconRects.append(contentsOf: iconsInBar)
             labelRects.append(contentsOf: labelNodes.map(inBar))
+            // ★ v4.8：这一颗**自己的图标带**（栏坐标）→ 文字藏起来时的纵向基准。
+            //   认不出图标（类名换了）就是 nil，`iconShifts` 会拿别的几颗兜底。
+            result.itemIconBands.append(unionAll(iconsInBar))
         }
 
         result.icons = unionNormalized(iconRects)
@@ -459,17 +518,58 @@ enum TabBarGlassPlate {
         return a.union(b)
     }
 
+    /// 一组矩形的并集，**不做中位归一化**（用于"这一颗自己的图标带"这个纵向基准：
+    /// 那里要的就是真实中心，尺寸归一化是给胶囊尺寸用的，见 `unionNormalized`）。
+    private static func unionAll(_ rects: [CGRect]) -> CGRect? {
+        var union: CGRect?
+        for rect in rects {
+            guard rect.width > 0.5, rect.height > 0.5 else { continue }
+            union = union.map { $0.union(rect) } ?? rect
+        }
+        return union
+    }
+
     /// 每颗的纵向位移：把它自己**看得见的内容**摆到胶囊中心（`center`）。
     ///
     /// v4.6.1 起**一颗一个数**（原来是四颗共用一个）：共用时「创建」那颗一开菜单，
     /// 主体就变成 40pt 的白圆底（比三颗图标低 7pt），一个数必然顾此失彼 ——
     /// 要么三颗图标被顶高（照片 32），要么圆底被压低。各算各的，两边都落在中心上。
     /// 有文字时每个 item 的可见内容 = "图标 + 文字"那条带子，中心天然就是胶囊中心 → 位移 ≈ 0。
+    ///
+    /// ⚠️ v4.8 起这一支**只在「隐藏标签文字」关掉时**用（文字看得见）。
     @MainActor
     private static func rowShifts(bands: [CGRect?], center: CGFloat) -> [CGFloat] {
         bands.map { band in
             guard let band, band.height > 1 else { return 0 }
             let delta = center - band.midY
+            guard abs(delta) >= 0.5 else { return 0 }
+            return max(-rowShiftLimit, min(rowShiftLimit, delta))
+        }
+    }
+
+    /// 每颗的纵向位移：把它**自己那颗图标**摆到胶囊中心（`center`）。★ v4.8 新增。
+    ///
+    /// 与 `rowShifts` 的唯一区别是基准：那边是"这颗**看得见**的内容"，这边是"这颗的**图标**"。
+    /// 「隐藏标签文字」开着时走这一支 —— 理由（白圆底 / item 兜底框会把 dy 拽跑，而且
+    /// 取消菜单后回不来）写在 `apply` 里那段。真机期望值：四颗全是 `+10.0`（图标 5…29、
+    /// 带子中心 27），**点开「创建」再取消之后必须还是 `+10.0`**。
+    ///
+    /// 图标一个都没认出来时，用**其余几颗的中位中心**兜底（四颗是同一套版式，
+    /// 别人的中心就是它的中心）；连一颗都认不出才返回 0（不动）。
+    @MainActor
+    private static func iconShifts(bands: [CGRect?], center: CGFloat) -> [CGFloat] {
+        let known = bands.compactMap { $0 }.filter { $0.height > 1 }.map { $0.midY }.sorted()
+        let fallbackMidY: CGFloat? = known.isEmpty ? nil : known[known.count / 2]
+
+        return bands.map { band in
+            var midY: CGFloat?
+            if let band, band.height > 1 {
+                midY = band.midY
+            } else {
+                midY = fallbackMidY
+            }
+            guard let midY else { return 0 }
+            let delta = center - midY
             guard abs(delta) >= 0.5 else { return 0 }
             return max(-rowShiftLimit, min(rowShiftLimit, delta))
         }
@@ -560,6 +660,10 @@ enum TabBarGlassPlate {
     /// ② 藏掉之后**图标那一行更干净、也更矮**，但要按什么高度画由 `measure` 说了算 ——
     ///    v4.6 起"带子"永远按**有文字的版式**量，所以这条开关**只影响文字与图标的纵向居中，
     ///    不影响胶囊的高度**（用户 2026-10-02 拍板）。
+    ///
+    /// ★ v4.8 补充：这条开关**还决定纵向居中用哪一支基准** ——
+    ///   开着（文字藏）= `iconShifts`（按每颗自己的图标），关掉 = `rowShifts`（按看得见的内容）。
+    ///   理由见 `apply` 里那段。
     ///
     /// ⚠️ 会不会被 Spotify 的 binder 写回来？—— 每次栏布局我们都会再走一遍，并且**计数**；
     /// 写回超过 `labelWriteBackLimit` 次就停手并打日志（宁可保持原生，也不跟它抢 —— 文档铁律）。
@@ -758,23 +862,34 @@ enum TabBarGlassPlate {
     }
 
     /// 报一次账：插在哪、摆在哪、**有文字版式那条带子**是多少、四颗各被挪了多少。
-    /// 只在 frame 变化时报，且最多 10 条 —— 下次日志不用看图就能验这条改动。
+    /// 只在 **frame 或 `dy` 变化**时报（v4.8 起 dy 也算 —— 见 `lastReportedShifts`），最多 14 条。
     ///
     /// v4.6 起这一行是**验收证据**：高度应当是"有文字"的 `~60`（`…x60`），
     /// 而且**点不点「创建」都是这个数**（v4.6.1 之前它会从 312 跳到 317 —— 见 §19.7）；
     /// `dy=[…]` 里前三颗应当一直是 `+10` 上下、**点开「创建」也不变**。
+    ///
+    /// ★ v4.8 加了两样，验收照这个看：
+    ///   · `基=` —— 这一轮用的纵向基准（`图标` = 隐藏标签文字时；`可见内容` = 文字显示时）；
+    ///   · 胶囊宽度应当是 **360**（`…x60` 那个数换成 `360x60`），不再是 312；
+    ///   · **点开「创建」再取消之后**，`dy` 必须回到 `[+10.0,+10.0,+10.0,+10.0]`
+    ///     （菜单开着那一刻「创建」那颗是 `+2.5` 上下 —— 那是对的，它 33pt 的图标要居中；
+    ///       **取消后回不到 +10 才是 bug**）。
     @MainActor
     private static func report(
         frame: CGRect,
         band: CGRect,
         icons: CGRect?,
         shifts: [CGFloat],
+        basis: String,
         bar: UIView,
         host: UIView?
     ) {
-        guard !frame.equalTo(lastReportedFrame) else { return }
+        let frameChanged = !frame.equalTo(lastReportedFrame)
+        let shiftsChanged = shifts != lastReportedShifts
+        guard frameChanged || shiftsChanged else { return }
         lastReportedFrame = frame
-        guard reportCount < 10 else { return }
+        lastReportedShifts = shifts
+        guard reportCount < reportLimit else { return }
         reportCount += 1
 
         let iconText = icons.map {
@@ -787,11 +902,11 @@ enum TabBarGlassPlate {
 
         writeDebugLog(String(
             format: "[TabBarPlate] 胶囊 (%.0f,%.0f %.0fx%.0f) r=%.1f ← 有文字带 (%.0f,%.0f %.0fx%.0f)"
-                + " 图标带 %@ dy=%@ [栏 %.0fx%.0f] 插在 %@ 里",
+                + " 图标带 %@ dy=%@ 基=%@ [栏 %.0fx%.0f] 插在 %@ 里",
             frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
             frame.size.height / 2,
             band.origin.x, band.origin.y, band.size.width, band.size.height,
-            iconText, shiftText,
+            iconText, shiftText, basis,
             bar.bounds.width, bar.bounds.height,
             host.map { className($0) } ?? "—"
         ))

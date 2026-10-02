@@ -236,6 +236,14 @@ enum DeclutterChrome {
                 reportMessage: "add-to button hidden (Components.UI.AddToButton)"
             )
         }
+
+        // ★ v4.8：迷你条那条胶囊的"封面色底"守卫（`MiniBarGlass.swift`）——
+        //   Spotify 会在我们清完之后**再写回**封面色，而那个写回**不一定**伴随宿主的
+        //   布局回合（照片 36 那块蓝就是这么留下来的：清一次 → 被写回 → 再没有布局回合）。
+        //   这里就是"看一眼 + 幂等清"（一次属性读），开关关着 / 没迷你条时零开销；
+        //   它自己还有一轮 50ms 级的短促重试负责首帧。
+        //   ⚠️ 刻意**不新开定时器** —— 蹭的就是这个既有的节拍（0.5s，且非前台不跑）。
+        onMainThreadSync { MiniBarGlassPlate.reconcileCoverColor() }
     }
 
     // MARK: 目标登记

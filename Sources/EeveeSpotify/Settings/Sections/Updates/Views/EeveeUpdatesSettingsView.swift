@@ -36,6 +36,15 @@ struct EeveeUpdatesSettingsView: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundColor(.secondary)
+
+                    // 限流（未登录 60 次/小时）是**会自己恢复**的失败，所以给一个重试入口 ——
+                    // 不然用户只能杀掉 App 再进。重试走的是同一条 `load()`（带 5 分钟缓存，
+                    // 缓存还新鲜时根本不发请求）。
+                    Button("updates_retry".localized) {
+                        state = .loading
+                        Task { await load() }
+                    }
+                    .font(.subheadline)
                 }
 
             case .loaded(let releases) where releases.isEmpty:
@@ -122,7 +131,41 @@ struct EeveeUpdatesSettingsView: View {
             let releases = try await GitHubHelper.shared.getReleases()
             state = .loaded(releases)
         } catch {
-            state = .failed(error.localizedDescription)
+            writeDebugLog("[Updates] 取 release 失败：\(error)")
+            state = .failed(message(for: error))
+        }
+    }
+
+    /// 失败原因 → 人话。
+    ///
+    /// ⚠️ **别再直接把 `error.localizedDescription` 怼给用户**：2026-10-02 用户看到的是
+    /// 「未能读取该数据，因为它的格式不正确」——那是 `DecodingError` 的文案，而真因在
+    /// HTTP 层（GitHub 未登录限流，日志 28 里那次请求只回了 280 字节的 403 响应体）。
+    /// 见 `GitHubAPIError` 里那段说明。
+    private func message(for error: Error) -> String {
+        guard let apiError = error as? GitHubAPIError else {
+            return error.localizedDescription
+        }
+
+        switch apiError {
+        case .rateLimited(let reset):
+            guard let reset, reset.timeIntervalSinceNow > 0 else {
+                return "updates_error_rate_limit".localized
+            }
+            let minutes = max(1, Int((reset.timeIntervalSinceNow / 60).rounded(.up)))
+            return "updates_error_rate_limit_reset".localizeWithFormat(minutes)
+
+        case .notFound:
+            return "updates_error_not_found".localized
+
+        case .transport:
+            return "updates_error_network".localized
+
+        case .decoding(let detail):
+            return "updates_error_format".localized + "\n" + detail
+
+        case .httpStatus(let status):
+            return "updates_error_status".localizeWithFormat(status)
         }
     }
 }

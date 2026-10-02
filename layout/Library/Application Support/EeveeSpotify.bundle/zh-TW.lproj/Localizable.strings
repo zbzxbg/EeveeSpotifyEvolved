@@ -336,7 +336,7 @@ tab_bar_hide_labels = "隱藏標籤文字";
 
 mini_bar_glass_section = "迷你播放條";
 mini_bar_glass = "迷你播放條用液態玻璃";
-mini_bar_glass_description = "給迷你播放條鋪一層和標籤欄同一套的液態玻璃膠囊：**與標籤欄那條等寬（真機 312pt）、同高（60pt）、同圓角、同材質**，兩條之間保留原來的小間隙。迷你條自己的內容（封面 + 歌名 + 按鈕 + 進度線）會**等比縮到膠囊裡**（約 75%）。開著的時候那條實心封面色底會被清掉（Spotify 會把它寫回來，我們每次佈局都再清一次）；關掉開關完全還原：玻璃撤掉、內容回原始大小、底色與裁剪都還回去。";
+mini_bar_glass_description = "給迷你播放條鋪一層和標籤欄同一套的液態玻璃膠囊：**與標籤欄那條等寬（真機 360pt）、同高（60pt）、同圓角、同材質**，兩條之間保留原來的小間隙。迷你條自己的內容（封面 + 歌名 + 按鈕 + 進度線）會**等比縮到膠囊裡**（約 86%）。開著的時候那條實心封面色底會被清掉（Spotify 會把它寫回來 —— 剛出現 / 剛切歌時尤其如此；我們每次佈局都再清一次）；關掉開關完全還原：玻璃撤掉、內容回原始大小、底色與裁剪都還回去。";
 
 flag_override_mode_number = "寫入數字";
 flag_override_number_placeholder = "數字（例如 30）";
@@ -374,10 +374,17 @@ backup_reset_confirm_message = "會把本倉庫存下來的設定全部刪掉；
 backup_reset_done = "已重置 %ld 條。";
 updates_title = "更新日誌";
 updates_loading = "讀取中…";
-updates_failed_footer = "本倉庫可能還沒有 tag 化的 release —— 那樣 GitHub 介面會回 404，這是預期內的，不影響任何功能。";
+updates_failed_footer = "資料來自本倉庫的 GitHub releases；結果快取 5 分鐘並用 ETag 複驗，反覆開啟這一頁不會再消耗介面額度。";
 updates_empty = "沒有取到 release。";
 updates_prerelease = "預發佈";
 updates_open = "在 GitHub 上開啟";
+updates_retry = "重試";
+updates_error_rate_limit = "GitHub 的介面額度用完了。未登入時每小時 60 次、依出口 IP 計算（電信大內網是很多人共用）。請稍後再試。";
+updates_error_rate_limit_reset = "GitHub 的介面額度用完了。未登入時每小時 60 次、依出口 IP 計算（電信大內網是很多人共用）。大約 %d 分鐘後恢復。";
+updates_error_not_found = "本倉庫還沒有 release（GitHub 介面回了 404）。這是預期內的，不影響任何功能。";
+updates_error_network = "連不上 GitHub，檢查網路後重試。";
+updates_error_format = "GitHub 回傳的資料這一頁讀不出來：";
+updates_error_status = "GitHub 介面回了 HTTP %d。";
 licenses_title = "開源授權";
 licenses_footer = "這一頁只寫倉庫裡查得到的事實；沒有隨附授權檔的元件就照實說沒有，不猜 SPDX 名字。";
 licenses_this_repo = "本倉庫";

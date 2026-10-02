@@ -120,6 +120,9 @@ class EeveeSettingsViewController: SPTPageViewController {
         //
         // 这里刻意写死而不是用 `EeveeSpotify.repoSlug`：那颗球是"我是谁"的入口，
         // 不该随构建机的 git remote 漂移（改名/换 fork 时容易指到别人仓库）。
-        UIApplication.shared.open(URL(string: "https://github.com/zbzxbg/EeveeSpotify-ng-latest")!)
+        //
+        // ⚠️ 2026-10-02：仓库从 `EeveeSpotify-ng-latest` 改名成 **`EeveeSpotifyEvolved`**，
+        // 这里跟着改（改名前 GitHub 会 302，但用户看到的名字应当是新的那个）。
+        UIApplication.shared.open(URL(string: "https://github.com/zbzxbg/EeveeSpotifyEvolved")!)
     }
 }

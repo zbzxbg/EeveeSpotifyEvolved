@@ -422,7 +422,7 @@ tab_bar_hide_labels = "Hide tab labels";
 
 mini_bar_glass_section = "Mini player";
 mini_bar_glass = "Liquid Glass on the mini player";
-mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsule as the tab bar: **same width (312 pt on this device), same 60 pt height, same corner radius, same material**, keeping the small gap between the two. The mini player's own content (artwork, title, buttons, progress line) is scaled down uniformly to fit inside (~75%). While it is on, the solid cover-coloured background is cleared (Spotify writes it back, so it is cleared again on every layout); switching it off restores everything — glass removed, content back to its original size, background and clipping restored.";
+mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsule as the tab bar: **same width (360 pt on this device), same 60 pt height, same corner radius, same material**, keeping the small gap between the two. The mini player's own content (artwork, title, buttons, progress line) is scaled down uniformly to fit inside (~86%). While it is on, the solid cover-coloured background is cleared (Spotify writes it back, so it is cleared again on every layout); switching it off restores everything — glass removed, content back to its original size, background and clipping restored.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
@@ -460,10 +460,17 @@ backup_reset_confirm_message = "This removes every setting this tweak stored. Sp
 backup_reset_done = "Reset %ld key(s).";
 updates_title = "Changelog";
 updates_loading = "Loading…";
-updates_failed_footer = "This fork may not have tagged releases yet — the GitHub API then answers 404, which is expected and harmless.";
+updates_failed_footer = "Read from this repository's GitHub releases. The result is cached for 5 minutes and re-validated with an ETag, so re-opening this page does not spend API quota.";
 updates_empty = "No releases found.";
 updates_prerelease = "pre";
 updates_open = "Open on GitHub";
+updates_retry = "Try again";
+updates_error_rate_limit = "GitHub's API quota is used up. Without a login it is 60 requests per hour per IP address, and shared carrier addresses count together. Please try again later.";
+updates_error_rate_limit_reset = "GitHub's API quota is used up. Without a login it is 60 requests per hour per IP address, and shared carrier addresses count together. It should recover in about %d minute(s).";
+updates_error_not_found = "This repository has no release yet (the GitHub API answered 404). That is expected and harmless.";
+updates_error_network = "Could not reach GitHub. Check your connection and try again.";
+updates_error_format = "GitHub answered with something this page could not read:";
+updates_error_status = "The GitHub API answered HTTP %d.";
 licenses_title = "Licenses";
 licenses_footer = "Only facts that can be checked in the repository. Where no license file ships with a bundled component, this page says so instead of guessing an SPDX name.";
 licenses_this_repo = "This repository";
