@@ -358,14 +358,6 @@ hide_home_header = "隐藏首页顶部条";
 hide_connect_button = "隐藏设备按钮";
 hide_add_to_button = "隐藏加号按钮";
 
-gesture_section = "双击手势";
-gesture_description = "双击播放器的左半区或右半区。动作取上面那一项；在哪几个面生效由你决定。不会抢 Spotify 自己的点击与拖动，开关立即生效。";
-gesture_behavior = "动作";
-gesture_behavior_skip = "上一首 / 下一首";
-gesture_behavior_seek = "后退 / 前进 15 秒";
-gesture_on_now_playing = "正在播放页";
-gesture_on_fullscreen_lyrics = "全屏歌词页";
-
 /* MARK: 屏蔽的艺人 */
 blocked_artists_title = "屏蔽的艺人";
 blocked_artists_enabled = "自动跳过被屏蔽的艺人";
@@ -525,4 +517,3 @@ now_playing_backdrop_description = "用封面取色调出一层渐变铺满听�
 // Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift。
 now_playing_one_screen = "一屏（卡片折起来，不可滚动）";
 now_playing_volume = "底部音量条";
-now_playing_no_bounce = "禁止回弹（打开后请试下拉关闭）";

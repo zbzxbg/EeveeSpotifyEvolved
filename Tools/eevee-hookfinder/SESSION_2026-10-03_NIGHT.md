@@ -8,6 +8,11 @@
 >
 > ⚠️ 这一夜的改动**大部分还没在真机上验收**（§4 是验收清单）。验过的只有：**取色底** ✅、
 > **一屏的卡片折叠** ✅。
+>
+> 🆕 **2026-10-04 追加两节（写在同一夜之后，本文件仍是入口）**：
+> **§9 = 「禁止回弹」弄坏下拉关闭 → 已删除**（用户报的 bug，日志 41 判决）；
+> **§10 = 双击手势整体删除**（用户拍板"先删了，之后再搞"）+ **下一道工序**。
+> 两份都**还没装机验**（§9/§10 各带验收清单）。
 
 ---
 
@@ -20,7 +25,7 @@
 | **AM 页面（kumone 那种）** | 🟢 **已开工**：覆盖层地基 + 底部音量条（照片 45 可见）；剩下四件见 §4 |
 | **spoti.pw 许可边界** | ✅ 钉死：**≤v0.21.1 = GPL-3.0 可读可复用**；**≥v0.22.0 = PolyForm，一行都不碰** |
 | **它的播放页目标在 9.1.88 上还在吗** | ✅ **14/14 全在**（ProbePack 实测）⇒ AM 页面可照搬其结构 |
-| **双击手势** | 🟡 探针证明"第一下漏给 Spotify 单击"这条坑**是活的**（`singleTapsAbove=2`）⇒ 值得花 1 轮修 |
+| **双击手势** | ⛔ **2026-10-04 整体删除**（用户拍板"先删了，之后再搞"）—— 不是坏了才删：**没人用 + 会误伤播放键**（§10） |
 | **「突然无法播放任何歌曲」** | 🟡 首次有现场（日志 39 位置卡住 3s+），但探针**分不清暂停**，待补 `isPaused` |
 
 ---
@@ -105,11 +110,11 @@
 |---|---|---|---|
 | 整页封面取色底 | `Appearance/NowPlayingBackdrop.swift` | 扩展功能→听歌页→「整页封面取色底」/ **开** | ✅ 真机 |
 | 一屏（折卡片 + 钉顶） | `Appearance/NowPlayingOneScreen.swift` + `NowPlayingOneScreenCards.x.swift` | 「一屏（卡片折起来，不可滚动）」/ **关**（会连歌词卡一起折） | 🟡 折叠 ✅ / 钉住待验 |
-| 禁止回弹 | 同上（`applyNoBounceIfWanted`） | 「禁止回弹（打开后请试下拉关闭）」/ **关** | ❌ 全新 |
+| ~~禁止回弹~~ | ~~同上~~ | ⛔ **2026-10-03 已删除** —— 开了它**下拉关闭就坏**（日志 41 判决），见 §9 | ❌ 删掉才是对的 |
 | 覆盖层地基 + 底部音量条 | `Appearance/NowPlayingPageOverlay.swift` | 「底部音量条」/ **关** | 🟡 照片 45 可见，未正式验 |
 | 探针包 | `Diagnostics/ProbePack.swift` | 跟随「启用日志记录」 | ✅ 日志 39/40 |
 | 播放器状态探针 | `Diagnostics/PlayerStateProbe.swift` | 同上 | ✅ 捕获到一个现场 |
-| 双击手势（旧） | `Gestures/PlayerGestures.x.swift` | 「双击手势」两个面 / 现在页 **开** | 🟡 已知缺陷（见 §8） |
+| ~~双击手势~~ | ~~`Gestures/PlayerGestures.x.swift`~~ | ⛔ **2026-10-04 整体删除**（用户拍板"先删了，之后再搞"），见 §10 | ❌ 不是坏了才删，是"没人用 + 会误伤播放键" |
 
 ---
 
@@ -117,20 +122,26 @@
 
 ### 4.1 一次装机就能推进（**先做这个**）
 
+> ⚠️ **本节第 2、3 条已作废**：用户按这一条开了「禁止回弹」，结果是 4 条里唯一真出事的那条
+> —— **开了就划不掉播放器**（2026-10-03 日志 41）。开关已删，复盘与机制见 **§9**。
+
 1. 开「一屏」→ **还能不能往下滑？**（那 34pt 现在应该被归零了）
-2. 若**还能拉动但会弹回** ⇒ 那是**回弹** ⇒ 打开「**禁止回弹**」再看；
-3. ⚠️ 打开「禁止回弹」后**务必试下拉关闭播放器** —— 这是它唯一的风险点。
-   坏了就**只关这一个开关**（「一屏」不用关）。
+2. ~~若还能拉动但会弹回 ⇒ 打开「禁止回弹」~~ ⛔ **那条路走不通**（会弄坏下拉关闭）；
+   剩下的橡皮筋是「一屏」**无法消除**的残留，除非先能自己接管关闭手势。
+3. ~~打开「禁止回弹」后务必试下拉关闭~~ → 已删。
 4. 顺手：看一眼「底部音量条」的落点对不对（照片 45 里是对的）。
 
 要看的日志行：`[OneScreen] 把列表自带的 inset.bottom=34pt 归零…` /
-`[OneScreen] 已关掉列表的回弹…` / `[OneScreen] 回弹设置已写回 …` / `[NPVPage] 覆盖层已装 …`。
+`[OneScreen] diag … bounce=on`（★ 必须 on） / `[NPVPage] 覆盖层已装 …`。
 
 ### 4.2 之后的三刀（借 spoti.pw v0.21.1，答案都写在它代码里）
 
+> ⚠️ **第 1 条（双击手势）已于 2026-10-04 整体删除**（用户拍板"先删了，之后再搞"）——
+> 删除清单与"要重做时的三条要求"在 **§10**。下表的顺序因此变成：**歌词 → 封面场 → 头部/控件**。
+
 | # | 做什么 | 轮次 | 为什么排这里 |
 |---|---|---|---|
-| 1 | **修双击手势**：单击让位（`requireGestureRecognizerToFail`，且要按手势计数**重挂**）+ 吞掉封面单击（3D 倾斜）+ 挂到封面网格而不是页面根视图 | 1 | 探针证明坑是活的；它和"一屏"在同一页，不修会互相干扰 |
+| ~~1~~ | ~~**修双击手势**~~ ⛔ 已删除（§10） | —— | 不是坏了才删：**没人用 + 会误伤播放键** |
 | 2 | **歌词搬进播放器**（pw `PlayerLyrics.x`） | 2~3 | 它是"一屏默认开"的前置（现在卡片全折 ⇒ 歌词卡也没了）；也是 kumone 中段的另一半 |
 | 3 | **封面场**（pw `PlayerArtwork.x` + `SGRArtworkField`，注意后者定义在**专辑页**里） | 2~3 | kumone 的中段：无词 → 居中大封面 |
 | 4 | 头部一行（歌名/艺人/♥/···）+ 控件收三键 + footer 三个字形 | 3~5 | ⚠️ **要新取证**：需要原生标题/艺人/徽章、`PlaybackControlsElementsUnit`、`FooterElementsUnit` 的子视图 |
@@ -173,6 +184,9 @@
 6. ★ **目标值别做二选一**：不是"压 / 不压"，而是 `min(want, 0)` 这种**统一的目标值** + "与现值差多少才写"。
 7. ★ **有风险的那一步单独开关**：「禁止回弹」可能影响下拉关闭 ⇒ 单独一个键，
    坏了只关它，别牵连「一屏」。
+   📌 **当天夜里就被证伪了**（§9）：「单独一个开关"只让用户避开坏掉的那一半 —— 而那个开关本身
+   就不该存在。**能弄坏别人的手势/交互的"观感调参"，宁可不做**；真要留风险项，也得先有
+   真机验收它的手段（这一条是花了用户一次装机 + 一次报 bug 换来的）。
 8. ★ **改"跟已有功能共用视图 / 手势 / inset"的东西，必须真机验收** —— 代码能编过、机制来自 pw，
    集成时机照样会错（这一夜三次都是这类）。
 9. **`pw` 的结论不能照抄**：它基线 9.1.78、我们 9.1.88。它说"下拉关闭骑在
@@ -202,6 +216,199 @@
 | 「无法播放任何歌曲」 | 有一个候选现场（位置卡 3s+ 未恢复），但**探针分不清暂停**。`SPTNowPlayingPlaybackControllerImplementation` **在 9.1.88 上存在**（探针实测）⇒ 下一版可补**只读 `isPaused`** |
 | `country=` | **不用补**：`EeveePremiumForce.x.swift` 的白名单里早就有，看不到值是 `DebugLogSanitizer` **故意**替换成 `<redacted>` |
 | morph 转场 | ❌ 目标类不存在，**正式划掉** |
-| 下拉关闭在 9.1.88 的现实机制 | **未知**（pw 说的那个类不存在）⇒ 「禁止回弹」的验收必须以"下拉还能关吗"为准 |
+| 下拉关闭在 9.1.88 的现实机制 | ⚠️ **已定位到"它经不起什么"**（见 §9）：唯一动 `alwaysBounceVertical` 的那次构建 = 关闭坏掉的那次；那条代码路径**已删**。窗口那一侧怎么写的仍未反汇编验证 |
 | `npv.bottomStackView` | 在**页面子树里找不到**（日志 40），已加**窗口兜底**；位置兜底本身没问题 |
-| 双击手势 | 有缺陷（单击漏给 Spotify、挂在页面根视图 ⇒ 双击播放键也跳歌），**未修** |
+| 双击手势 | ⛔ **已整体删除**（2026-10-04，用户拍板）—— 它不是坏了才删：切歌那条路日志 8/17 证明能用；删是因为**没人用 + 会误伤播放键**。清单与重做要求见 §10 |
+
+---
+
+# 9. 2026-10-03 收尾：「禁止回弹」**弄坏了下拉关闭** → 已删除 + 验收清点（日志 41）
+
+> 输入：用户报「**开启静止回弹后，无法下滑关闭听歌页面**」+ **日志 41**
+> （`C:\dsh\ipa\eeveespotify_debug_shared 41.log`，2855 行，15:42:36–15:43:10）。
+> 判据全部来自日志与源码，**没有反汇编**。
+
+## 9.1 结论（一句话）
+
+**「禁止回弹」把列表的 `alwaysBounceVertical` 关掉，而这一页的下拉关闭是"经过列表那一层"接管的**
+⇒ 列表在顶部又不肯再接下拉时，**窗口永远收不到那次拖动** ⇒ 播放器划不掉。
+那条代码路径**已整块删除**（开关 / UI 行 / UserDefaults 键 / en+zh-CN 文案 / 写属性的那一行）。
+
+## 9.2 证据链（三步，缺一不可）
+
+**① 日志 41 是唯一的现场**。全量 37 份日志里，这一行**只出现过一次**：
+
+```
+[2026-10-02 15:42:54] [OneScreen] 已关掉列表的回弹（alwaysBounceVertical=false） — 若下拉关闭坏了，把这个开关关掉就是
+[2026-10-02 15:42:54] [OneScreen] diag inset.bottom=0 content.h=896 bounds.h=896 adj.top=0 adj.bottom=0 bounce=off panRecs=3
+```
+
+对照组（同一台机器、同一首歌、同一页）：
+
+| 日志 | `inset.bottom` | `content.h` / `bounds.h` | `bounce` | 唯一差别 |
+|---|---|---|---|---|
+| 39 | `-1236` | `2132 / 896` | `on` | —— |
+| 40（两次进页） | `34` | `896 / 896` | `on` | —— |
+| **41** | **`0`** | `896 / 896` | **`off`** | ★ 就是它 |
+
+**② 源码里只有一个地方会写那个属性** —— `NowPlayingOneScreen.applyNoBounceIfWanted()`
+（旧第 278–291 行），只作用于那张 NPV 列表（按 `accessibilityIdentifier` 认出来的）。
+
+**③ 机制与 pw v0.21.1 的记载同源**（`PlayerScroll.x` 文件头，GPL-3.0）：
+*"下拉关闭骑在列表自己的 pan recogniser 上 …… 把滚动关掉会把那个 recogniser 一起带走 ⇒
+播放器再也划不掉"*。我们的"钉住"本来只改 `contentInset.bottom`（范围），所以一直没事；
+「禁止回弹」是**那一版唯一越线去碰开关的东西**。
+
+⇒ **在最坏的情况下也只是相关（不是因果）** —— 但它是唯一变量 + 机制讲得通 + 文档当初就把它
+标成"唯一风险点"。**能自洽的解释只有这一个。**
+
+## 9.3 改了什么（5 个文件）
+
+| 文件 | 改动 |
+|---|---|
+| `Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift` | 删 `applyNoBounceIfWanted()` / `restoreBounce()` / `originalBounceKey`；`restore()` 只写回 inset；`pin()` 不再调它；**文件头新增 §「曾经的禁止回弹已删除」**（含日志 41 现场与机制）；`diag` 那行的 `bounce=` 从"调参项"变成**只读回归哨兵**（必须一直是 `on`） |
+| `Sources/EeveeSpotify/Settings/Sections/Extras/Views/EeveeExtrasSettingsView.swift` | 删 Toggle + `Shadow.nowPlayingNoBounce`；原位留一条⛔注释说明为什么删 |
+| `Sources/EeveeSpotify/Shared/Models/Extensions/UserDefaults+Extension.swift` | 删 `nowPlayingNoBounceKey` / `ownedKeys` 那一行 / getter |
+| `en.lproj` / `zh-CN.lproj` `Localizable.strings` | 删 `now_playing_no_bounce`（只有这两种语言有它）。**没在 `.strings` 里补注释**：本机没有 Swift 工具链，改 `.strings` 的注释会不会让真机构建出岔子**没法先验** ⇒ 删干净最稳（"为什么删"写在源码文件头与本文件 §9） |
+
+**代价（写清楚，别当成 bug）**：列表拖拽时**仍然有橡皮筋** —— 那是「一屏」目前**无法消除**的残留：
+想去掉它就得碰 `alwaysBounceVertical`，一碰关闭手势就坏。要真去掉，得先有"自己接管关闭手势"的办法
+（pw 那套 `SPTBar*` 在 9.1.88 上**不存在**，探针实测）。
+
+**自检**：`orion_hook_guard`（325 文件）/ `swift_brace_check`（325）/ `swift_member_check`（270）
+/ `l10n_lint --locale en` / `--locale zh-CN` —— **5 条退出码全 0**。
+⚠️ 这 5 条**不做类型检查**，本机也没有 Swift 工具链 ⇒ **编译仍只能靠 CI**。
+
+## 9.4 ★ 日志 41 验收清点（用户第二次选择的活儿）
+
+### A. 日志 41 直接判为 ✅ 的（不用再动）
+
+| 项 | 日志 41 的证据 |
+|---|---|
+| **pw 播放页目标存活** | `[Probe] pw 播放页目标：14 个，在 14 个，缺 0 个 — 全部可搬`；缺失 2 个：`SPTBarOverlayPresentationTransition` / `SPTBarInteractivePresentationController` |
+| **取色底** | `[NPVStyle] backdrop 414x896 ← 封面取色 E03038，垫在 UIView 0,0,414,896 之下（那层底色 E03038，subviews=2，layer.sublayers=2，手插子层=0）` + `有 1 个满页着色层是 hidden / 透明 / 不在窗口里 — 已排除`（可见性闸门真的在挡） |
+| **迷你条玻璃 v4.7.1** | 7 份 `[Tree]` 里 `id=SPTNowPlayingBar` **全部不带 `bg=`**；`封面色底写回第 1/2 次 — 已再清掉` |
+| **标签栏胶囊 v4.10** | `[TabBarPlate] 胶囊 (27,-3 360x60) … dy=[+10.0,+10.0,+10.0,+10.0] 基=图标 [栏 414x83]` |
+| **更新日志页 ④** | `[GitHub] /repos/zbzxbg/EeveeSpotifyEvolved/releases/latest -> 5863 bytes`（新仓库名 + 不再是 280 字节限流体） |
+| **安装健康度** | 无 `missing ` / `⚠️` 安装失败行；2 条 `ORION ERROR` 都是 SB 那个已知的 `addPlayerObserver:` 装不上 |
+| **一屏②（钉住，部分）** | `把列表自带的 inset.bottom=34pt 归零` + `diag … inset.bottom=0 content.h=896 bounds.h=896` + 3 种卡片被折 |
+
+### B. ⏳ 还要人眼/人手的（一次装机 + 一次点按就能清完）
+
+| # | 项 | 判据 | 为什么日志判不了 |
+|---|---|---|---|
+| 1 | **下拉关闭已经修好** | 装新构建 → 进听歌页 → 下拉 → 播放器关掉 | 这是手势，日志里没有钩子能看见 |
+| 2 | **「一屏」文字不再出现** | 设置 → 扩展功能 → 听歌页：只剩「整页封面取色底 / 一屏 / 底部音量条」 | —— |
+| 3 | **回弹哨兵** | 新日志里 `[OneScreen] diag … bounce=on` | `off` 回归 = 又有人碰了关闭链条 |
+| 4 | **底部音量条落点** | 照片 45 已经对（`8,860,398,32`），正式确认一次 | 照片只能人眼看 |
+| 5 | **一屏默认关时的老路径**（顺手） | 关掉「一屏」→ `列表 inset.bottom 已写回原值 …（reason=switch off）` | 日志判得了，但要有人去点 |
+| 6 | **切歌后取色底跟到换色** | `[NPVStyle] 跟到换色 → …（第 N 次）` | 日志 41 里**没有**这行（只待了一小会儿、没切歌） |
+| 7 | **RTL 贴右** | 一首**有逐词**的阿拉伯语歌 ×2 张截图（「更好的逐词歌词」开/关） | 从未验过 |
+| 8 | **双击手势** | 现在页双击左/右 → `[Gestures] double tap left → previous` | 日志 41 里 `[Gestures]` 只有 3 行，**没有一次 double tap** |
+| 9 | **「减少打扰」页** | 开一条 → `[Flags] replacement <那条> — N match(es)` | 日志 41 里 `reduce_interventions` **零命中**（那一页没打开过） |
+| 10 | 触感 / 上报拦截 / Flag 覆盖 | 各自要**重启**才能装 hook；日志 41 里分别是 `off` / `block=OFF observeOnly=OFF` / `flags=0` | 都没开过 |
+
+### C. 顺手看到的两条（不是这一轮的活，记下来）
+
+* **`[PLAYER] ⚠️ position stalled at 62.4s for ~3s` → 3 秒后 `position resumed`** ——
+  "无法播放任何歌曲"那条线的第二个候选现场。探针仍**分不清"暂停"与"卡住"** ⇒ 下一版补**只读 `isPaused`**。
+* **歌词这一轮走的是"单源 + 未找到"那条路**：`[Lyrics] Single source: PetitLyrics` →
+  `[Petit] PetitLyrics failed: 未找到歌曲` → `[HCUS] lyrics 交付给 Spotify（404 合成 200）— 69 bytes`。
+  69 字节是**正常的占位**（这首歌 PetitLyrics 里没有），**不是 v4.11 那个毒丸**（那条已撤销）。
+  但 `[Lyrics] chain: …` 这行**没出现** —— 因为 `genius fallback: OFF` 且是单源，本来就不该有。
+  想验回退链，得换一个**开着 Genius 回退**的配置再跑。
+
+## 9.5 下一个构建的"五件事"（只验 §9.4-B 那批）
+
+1. **workflow**：`.github/workflows/build-ipa-with-orion-patched.yml`，`liquid_glass` 默认开，其余不动。
+2. **设置**：调试 →「启用日志记录」开（「转储视图树」这次不用开）；扩展功能 → 听歌页：
+   「整页封面取色底」保持开、「一屏」保持开（**「禁止回弹」这一行已经不存在了**）。
+3. **按顺序点**：① 进听歌页 → **下拉关闭**（← ★ 本轮的验收点）；② 再进听歌页 → **切一次歌** →
+   等 1 秒（看取色底跟色）；③ 关掉「一屏」→ 再进听歌页（看 inset 写回）；④ 回设置看「扩展功能」
+   那一页 —— **「双击手势」整节应当不见了**（§10）；⑤ **调试 →「转储视图树」开着**（§10.4.1 要的
+   那份原料），进听歌页**停 3 秒**再走。
+4. **发什么**：`eeveespotify_debug_shared 42.log` + 一张设置页（听歌页那一节）截图。
+5. **看哪几行**：
+   ```
+   [OneScreen] diag inset.bottom=0 content.h=896 bounds.h=896 … bounce=on panRecs=3   ← ★ 必须是 on
+   [OneScreen] 列表已钉在顶部 — 折掉 …（上拉只回弹；下拉关闭靠列表自己在顶部让位，我们只改范围、不动回弹）
+   [NPVStyle] 跟到换色 → …
+   [OneScreen] 列表 inset.bottom 已写回原值 …（reason=switch off）
+   [NPVTree] #N begin … nodes=…        ← ★ 新：听歌页那一棵的**定向**树（§10.4.1）
+   ```
+   **不该出现**：`已关掉列表的回弹`（代码已删，出现就说明装的是旧包）、`now_playing_no_bounce` 字面、
+   `[Gestures] installed` / `[Gestures] attached` / `[Gestures] diag … singleTapsAbove`（§10 已整体删除）。
+
+---
+
+# 10. 2026-10-04：双击手势**整体删除**（用户拍板）+ 下一道工序
+
+## 10.1 结论
+
+用户问"这双击手势真的有用吗"，查完三件事后拍板：**先删掉，之后再搞**。
+**它不是坏了才删** —— 切歌那条路是真的能用（日志 8：`double tap left/right` + 真换曲；日志 17 还有一次）。
+删的依据是三条**它自己的**事实：
+
+| # | 事实 | 证据 |
+|---|---|---|
+| ① | 手势挂在**页面根视图**上 ⇒ **在播放键上方双击也会跳歌**（本该是播放/暂停） | `[Gestures] diag surface=now playing page host=UIView singleTapsAbove=2`（日志 39/40/41；该诊断 39 才加，之前看不见） |
+| ② | 它**最该起作用的那一面**（全屏歌词页）默认关，且**从来没验过** —— 30 份日志的 `[Gestures] installed` 里 `fullscreenLyrics=OFF` 出现在除日志 8 之外的全部 | `[Gestures] installed (nowPlaying=ON fullscreenLyrics=OFF behavior=skip)` ×29 |
+| ③ | 最近 8 份日志（覆盖一整天）里它**一次都没被用过**（`double tap` 只出现在日志 8/17） | 全量日志扫描 |
+
+## 10.2 删了哪些（5 处，全部删除、不留"按了没反应"的入口）
+
+| 文件 | 删除内容 |
+|---|---|
+| `Sources/EeveeSpotify/Gestures/PlayerGestures.x.swift` | **整文件删除**（唯一实现；`Gestures/` 目录随之空掉） |
+| `Tweak.x.swift` | `activatePlayerGestures()` 调用点 → 换成一条⛔注释（记原因 + 指向本文件 §10） |
+| `Settings/Sections/Extras/Views/EeveeExtrasSettingsView.swift` | 「双击手势」整节（Picker + 两个 Toggle）+ `Shadow` 里三个字段 → 换成⛔注释 |
+| `Shared/Models/Extensions/UserDefaults+Extension.swift` | 三个键声明 + `ownedKeys` 三行 + 三个 getter |
+| `en.lproj` / `zh-CN.lproj` | 7 个文案键（`gesture_section` / `_description` / `_behavior` / `_behavior_skip` / `_behavior_seek` / `_on_now_playing` / `_on_fullscreen_lyrics`）。**这两条历史上只在 en/zh-CN**，其它 25 个语言本来就没有 |
+
+**没动的**：`WordByWordPlaybackControl` / `WordByWordSeeker` / `WordByWordPositionResolver`
+—— 它们被歌词层、屏蔽艺人、`PlayerStateProbe` 共用（删的是消费者，不是原语）。
+`SponsorBlockHelpView` 里那个 `playerGesturesTitle` 是**另一件事**（SB 的帮助页），别误删。
+
+**自检**：`orion_hook_guard` 324 文件 / `swift_brace_check` 324 / `swift_member_check` 269 /
+`l10n_lint` en+zh-CN —— **5 条全 0**（文件数各少 1 = 删掉的那个）。
+
+## 10.3 ★ 要重做时的三条要求（先写下来，免得下次又踩同一个坑）
+
+1. **控件上不认**：接 `UIGestureRecognizerDelegate`，`shouldReceive touch` 里往上看 ≤4 层有没有
+   `UIControl`（`UIButton` / `UISlider` / `UISwitch` 都是它的子类）⇒ 播放键、进度条、Connect、
+   加号上的双击一律不接管。**这一条是必做项**（缺了它 = 双击播放键跳歌）。
+2. **单击让位**：对 Spotify 自己的单击手势挂 `requireGestureRecognizerToFail`，并按手势**计数重挂**
+   （Spotify 是后加手势的，顺序不受我们控制 —— pw 的 `Gestures.x` 就是这么说的）。可选，属观感。
+3. **另选挂点**：不要再挂页面根视图。要么挂封面那一层，要么按第 1 条把范围"砍"出来。
+   顺带决定要不要保留"左半区 / 右半区"这个分区（它是双击的语义基础，先留着）。
+
+## 10.4 下一道工序（用户说"先下一道工序"）
+
+按**风险从低到高**、且**不再新增未验证的手势/属性写入**排：
+
+| 顺序 | 做什么 | 为什么排这里 | 需要什么 |
+|---|---|---|---|
+| **1** | **把这一批装机验掉**（§9 的下拉关闭修复 + §10 的删除） | 两处都改了别人的行为面，必须真机裁决 | 一次构建（CI）+ 一次点按 |
+| **2** | **歌词搬进播放器**（pw `PlayerLyrics.x` 的思路） | ★ 它是「一屏」能**默认开**的唯一前置（现在折卡片会连歌词卡一起折掉）；也是 kumone 播放页中段那半 | 现有证据够开工；先做"能看见歌词"，渐隐/拖动暂停后置 |
+| **3** | **头部 / 控件 / footer** 对齐 kumone | 观感收益大，但**现在没有证据**：pw 说的 `HeaderElementsUnit` / `PlaybackControlsElementsUnit` / `FooterElementsUnit` **全量日志零命中** | **要一次定向取证**：见下 |
+| **4** | 封面场（`CoverArtTiltView` / `AccessibleCollectionView` 都在） | 与 3 同族，可以在同一次取证里一起拿 | 同上 |
+
+**为什么 3/4 卡在取证上**：听歌页一棵树约 **800 节点**，而 `ViewTreeDumper` 是**广度优先 + `maxNodes = 400`**
+⇒ 底部那坨（头部 / 控件 / footer）**永远被截掉**。日志 40 的 20 份树每份 402 行，正好卡在它自己的上限。
+⚠️ 用户**不用重装**就能给这份取证 —— 现在装的那版本来就带「调试 → 转储视图树」。
+
+### ★ 10.4.1 取证缺口**已经补掉**（2026-10-04，同一个构建里）
+
+`ViewTreeDumper` 新增**定向页转储**：
+
+| 改动 | 内容 |
+|---|---|
+| `ViewTreeDumper.setPage(_:)` | 由**页面自己的 hook** 登记页根（听歌页 = `NPVScrollViewControllerHook` 的 `viewWillAppear` / `viewDidAppear`；`viewWillDisappear` 传 `nil` 撤销）。**只登记一个指针**，不改任何视图、不读任何内容 |
+| `dumpOnce()` | 在登记过的页上 ⇒ **只走这一页的子树**、预算 `maxPageNodes = 1200`、tag 用 **`[NPVTree]`**；其它屏照旧 `[Tree]`（整窗 BFS、400 节点） |
+| `collect(…, limit:)` | 预算从常量改成参数（整窗 400 / 页面 1200） |
+
+**用法（用户侧，不用改任何设置）**：调试 →「转储视图树」**保持开着** → 进听歌页停 3 秒 →
+日志里就会出现 `[NPVTree] #N begin … nodes=…`。那一份里**应当能看到** pw 说的
+`HeaderElementsUnit` / `PlaybackControlsElementsUnit` / `FooterElementsUnit`
+（或者它们的 9.1.88 真名）—— 这就是"头部排版 / 控件行"那一刀的原料。
+⚠️ "结构没变就不重复打"照旧（共用同一个 `lastSkeleton`），所以停着不动只有一份；换歌 / 折卡片会各来一份。

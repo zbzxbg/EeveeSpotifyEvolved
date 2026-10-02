@@ -24,6 +24,37 @@ import ObjectiveC.runtime
 /// 所以这里关的是"范围"：把 `contentInset.bottom` 设成"让列表最多只能滚到它自己的顶部"。
 /// 于是上拉只拉伸回弹、下拉仍能到负偏移、**关闭手势完全不受影响**。
 ///
+/// ## ⛔ 曾经的「禁止回弹」已删除（2026-10-03 真机日志 41 的判决）
+///
+/// 那一版在钉住之后还把列表的 `alwaysBounceVertical` 关掉，想连最后一点橡皮筋也去掉。
+/// 用户实测：**开了它就再也划不掉播放器了** —— 文档当初把它标成"唯一风险点"，
+/// 它确实是，而且坏得很干脆。
+///
+/// 日志 41（全量 37 份日志里唯一一份 `bounce=off`）的现场：
+///
+/// ```
+/// [OneScreen] 已关掉列表的回弹（alwaysBounceVertical=false）
+/// [OneScreen] diag inset.bottom=0 content.h=896 bounds.h=896 adj.top=0 adj.bottom=0 bounce=off panRecs=3
+/// ```
+///
+/// **机制**（与 pw v0.21.1 `PlayerScroll.x` 的记载同源）：**下拉关闭是经过列表那一层接管的** ——
+/// 列表在顶部时把下拉让给窗口，窗口那一侧才启动关闭。所以：
+///   · `alwaysBounceVertical = true`：下拉被列表接住（它愿意接），
+///     而钉住之后**列表没有任何内部可滚范围**（`content.h == bounds.h`）
+///     ⇒ 这次拖动只能落到"让位"那条路 ⇒ **关得掉**；
+///   · `alwaysBounceVertical = false` **且内容不满一屏**：pan 既不滚、也不进让位那条路
+///     ⇒ **窗口永远收不到这次下拉** ⇒ 播放器划不掉。
+///
+/// ⚠️ 这条"机制"是从**它坏掉的方式**反推出来的（日志 41 的现场 + pw 那句"关闭骑在列表的 pan 上"），
+/// 我们**没有**反汇编去证 9.1.88 的窗口那侧是怎么写的（`SPTBar*` 在 9.1.88 的 dump 里一个都没有）。
+/// 但结论足够硬：**唯一动过那个属性的那次构建，就是关闭坏掉的那次。**
+///
+/// ⇒ 所以：**在这一页上 `alwaysBounceVertical` 不是"观感调参"，它是关闭手势链条的一环。**
+/// 代价（说清楚）：列表拖拽时仍会有橡皮筋 —— 那是"一屏"目前**无法消除**的残留：
+/// 想去掉它就得碰上面那个属性，一碰关闭手势就坏。
+/// 开关与它的 UI 行、UserDefaults 键、en / zh-CN 的文案**全部删除**，不留"按了会坏"的入口
+/// （那两条文案历史上只存在这两种语言）。
+///
 /// ## 我们和 pw 的两处不同（刻意的）
 ///
 /// | | pw v0.21.1 | 我们 |
@@ -56,8 +87,6 @@ enum NowPlayingOneScreen {
 
     /// 我们改过的列表上记着**它原来的** bottom inset —— 关开关要原样写回。
     private static var originalInsetKey: UInt8 = 0
-    /// 列表**原来的** `alwaysBounceVertical` —— "禁止回弹"那个开关要能还原。
-    private static var originalBounceKey: UInt8 = 0
 
     private static weak var lastPage: UIView?
     private static weak var lastList: UIScrollView?
@@ -151,7 +180,8 @@ enum NowPlayingOneScreen {
         pin(list)
     }
 
-    /// 关掉开关时把 bottom inset 与**回弹设置**都写回原值 —— 我们只改过这两处。
+    /// 关掉开关时把 bottom inset 写回原值 —— 我们只改过这一处
+    /// （`alwaysBounceVertical` 从此一字节都不碰，见文件头）。
     static func restore() {
         guard let list = lastList else { return }
 
@@ -167,20 +197,6 @@ enum NowPlayingOneScreen {
                 )
             }
         }
-
-        restoreBounce()
-    }
-
-    /// 只把**回弹设置**写回原值（「禁止回弹」那个开关单独关掉时用）。
-    static func restoreBounce() {
-        guard let list = lastList else { return }
-        guard let boxed = objc_getAssociatedObject(list, &originalBounceKey) as? NSNumber else { return }
-
-        list.alwaysBounceVertical = boxed.boolValue
-        objc_setAssociatedObject(list, &originalBounceKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        writeDebugLog(
-            "[\(logTag)] 回弹设置已写回 \(boxed.boolValue ? "on" : "off")（reason=switch off）"
-        )
     }
 
     // MARK: - 钉住
@@ -212,8 +228,6 @@ enum NowPlayingOneScreen {
         // 统一成 `min(want, 0)`：该压就压，不该压就把自带的那截**归零**（不做无谓的正 inset）。
         let target: CGFloat = min(want, 0)
 
-        applyNoBounceIfWanted(list)
-
         guard abs(target - own.bottom) > slack else { return false }
 
         if target == 0, own.bottom > slack, !didLogNotNeeded {
@@ -234,7 +248,7 @@ enum NowPlayingOneScreen {
             didLogPin = true
             writeDebugLog(
                 "[\(logTag)] 列表已钉在顶部 — 折掉 \(Int(max(0, -want)))pt 的卡片范围"
-                    + "（上拉只回弹，下拉关闭不受影响）"
+                    + "（上拉只回弹；下拉关闭靠列表自己在顶部让位，我们只改范围、不动回弹）"
             )
         }
         logDiagnosticOnce(list)
@@ -249,10 +263,11 @@ enum NowPlayingOneScreen {
     ///   · `inset.bottom` —— 我们到底压了多少（0 = 一个字都没压）；
     ///   · `content.h` vs `bounds.h` —— 内容比一屏高多少（高多少就该压多少）；
     ///   · `adj.top/bottom` —— 安全区那块（公式里必须留着的）；
-    ///   · `bounce` —— **`alwaysBounceVertical`**：即使钉得完美，它开着就仍然能往下拽一把
-    ///     （内容不满一屏时那只是回弹，不是滚动 —— 要彻底去掉得关它，而关它有风险，
-    ///     见 `NowPlayingOneScreen` 文件头）；
-    ///   · `panRecs` —— 那条列表上有几个 pan 手势（pw 说**下拉关闭**就骑在其中一个上）。
+    ///   · `bounce` —— **`alwaysBounceVertical`，只读**：它必须一直是 `on`。
+    ///     ⚠️ 这一格是**回归判据**：曾经我们把它写成 `false`（「禁止回弹」），
+    ///     结果**下拉关闭播放器直接坏掉**（日志 41）。它现在是只读的哨兵 ——
+    ///     `bounce=off` 再出现，就说明有人又把关闭手势链条碰断了。
+    ///   · `panRecs` —— 那条列表上有几个 pan 手势（下拉关闭就骑在其中一个上）。
     private static func logDiagnosticOnce(_ list: UIScrollView) {
         guard !didLogDiag else { return }
         didLogDiag = true
@@ -266,27 +281,6 @@ enum NowPlayingOneScreen {
                 + " content.h=\(Int(list.contentSize.height)) bounds.h=\(Int(list.bounds.height))"
                 + " adj.top=\(Int(adjusted.top)) adj.bottom=\(Int(adjusted.bottom))"
                 + " bounce=\(list.alwaysBounceVertical ? "on" : "off") panRecs=\(pans)"
-        )
-    }
-
-    /// 「禁止回弹」开关：钉住之后**唯一还可能让页面动**的就是它。
-    ///
-    /// ⚠️ 为什么单开一个开关、而且**默认关**：这是**唯一有可能影响"下拉关闭播放器"**的一步。
-    /// pw 的注释说"下拉关闭骑在这条列表的 pan recogniser 上"，但**那个类在 9.1.88 上并不存在**
-    /// （ProbePack 实测：`SPTBarInteractivePresentationController` 缺失）⇒ 它那条结论在我们的
-    /// 基线上**不能照抄**，只能实测。单独一个开关 ⇒ 万一关闭手势坏了，用户只关它，「一屏」照常。
-    private static func applyNoBounceIfWanted(_ list: UIScrollView) {
-        guard UserDefaults.nowPlayingNoBounce else { return }
-        guard list.alwaysBounceVertical else { return }
-
-        if objc_getAssociatedObject(list, &originalBounceKey) == nil {
-            let value = NSNumber(value: list.alwaysBounceVertical)
-            objc_setAssociatedObject(list, &originalBounceKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        }
-        list.alwaysBounceVertical = false
-        writeDebugLog(
-            "[\(logTag)] 已关掉列表的回弹（alwaysBounceVertical=false）"
-                + " — 若下拉关闭坏了，把这个开关关掉就是"
         )
     }
 

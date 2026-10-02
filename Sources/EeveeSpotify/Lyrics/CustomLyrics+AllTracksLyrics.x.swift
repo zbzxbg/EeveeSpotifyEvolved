@@ -418,6 +418,10 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         if let page = target as? UIViewController, let pageView = page.view {
             NowPlayingOneScreen.apply(in: pageView)
             NowPlayingPageOverlay.apply(in: pageView)
+            // ★ 2026-10-04：把这一页登记给「定向转储」（`ViewTreeDumper.setPage`）——
+            //   听歌页那一棵约 800 节点，整窗 BFS 的 400 预算永远够不到头部/控件/footer。
+            //   登记只是一个指针，不改任何视图、不读任何内容。
+            ViewTreeDumper.setPage(pageView)
         }
     }
 
@@ -436,6 +440,7 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         if let page = target as? UIViewController, let pageView = page.view {
             NowPlayingOneScreen.apply(in: pageView)
             NowPlayingPageOverlay.apply(in: pageView)
+            ViewTreeDumper.setPage(pageView)
         }
     }
     
@@ -444,6 +449,8 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         orig.viewWillDisappear(animated)
         // 页面要走了：停掉内嵌宿主看门狗（否则它会对着一个已经离开屏幕的页面一直查）。
         InlineLyricsHostLocator.stopLookup()
+        // 定向转储的登记也一起撤掉 —— 否则离开听歌页之后还会一直按"页面"预算转储。
+        ViewTreeDumper.setPage(nil)
     }
 }
 

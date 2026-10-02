@@ -29,9 +29,6 @@ extension UserDefaults {
     private static let hideHomeHeaderKey = "hideHomeHeader"
     private static let hideConnectButtonKey = "hideConnectButton"
     private static let hideAddToButtonKey = "hideAddToButton"
-    private static let playerGestureNowPlayingKey = "playerGestureNowPlaying"
-    private static let playerGestureFullscreenLyricsKey = "playerGestureFullscreenLyrics"
-    private static let playerGestureBehaviorKey = "playerGestureBehavior"
     private static let blockedArtistsEnabledKey = "blockedArtistsEnabled"
     private static let blockedArtistsKey = "blockedArtists"
     private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
@@ -42,7 +39,6 @@ extension UserDefaults {
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
     private static let nowPlayingVolumeKey = "nowPlayingVolume"
-    private static let nowPlayingNoBounceKey = "nowPlayingNoBounce"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -79,9 +75,6 @@ extension UserDefaults {
         hideHomeHeaderKey,
         hideConnectButtonKey,
         hideAddToButtonKey,
-        playerGestureNowPlayingKey,
-        playerGestureFullscreenLyricsKey,
-        playerGestureBehaviorKey,
         blockedArtistsEnabledKey,
         blockedArtistsKey,
         dumpCustomizeBodyKey,
@@ -92,7 +85,6 @@ extension UserDefaults {
         nowPlayingBackdropKey,
         nowPlayingOneScreenKey,
         nowPlayingVolumeKey,
-        nowPlayingNoBounceKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -384,41 +376,13 @@ extension UserDefaults {
         }
     }
 
-    // MARK: - 播放器双击手势（Gestures）
-    /// 正在播放页（大封面那页）上的双击手势。**默认开**。
-    ///
-    /// 两个面里只有它默认开：它是"播放器"的主界面，也是 spoti.pw 加手势的那一面；
-    /// 另一面（全屏歌词页）由用户自己决定，免得和既有操作打架。
-    /// （迷你播放条那一面 2026-10-01 已按用户要求整体删除。）
-    static var playerGestureNowPlaying: Bool {
-        get {
-            container.object(forKey: playerGestureNowPlayingKey) as? Bool ?? true
-        }
-        set {
-            container.set(newValue, forKey: playerGestureNowPlayingKey)
-        }
-    }
-
-    /// 全屏歌词页上的双击手势。默认关。
-    static var playerGestureFullscreenLyrics: Bool {
-        get {
-            container.object(forKey: playerGestureFullscreenLyricsKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: playerGestureFullscreenLyricsKey)
-        }
-    }
-
-    /// 双击的行为：`0` = 切歌（左半区上一首 / 右半区下一首，**默认**），
-    /// `1` = 前后跳 15 秒。存 `Int` 而不是枚举，方便以后加项而不动旧数据。
-    static var playerGestureBehavior: Int {
-        get {
-            container.object(forKey: playerGestureBehaviorKey) as? Int ?? 0
-        }
-        set {
-            container.set(newValue, forKey: playerGestureBehaviorKey)
-        }
-    }
+    // MARK: - 播放器双击手势（Gestures）—— ⛔ 2026-10-04 整体删除
+    //
+    // 删掉的是 `playerGestureNowPlaying` / `playerGestureFullscreenLyrics` /
+    // `playerGestureBehavior` 三个键与它们的 getter（含 `ownedKeys` 里的三行）。
+    // 为什么删（都不是"坏了"）：① 手势挂在页面根视图上 ⇒ **在播放键上方双击也会跳歌**；
+    // ② 最该起作用的全屏歌词那一面默认关、从没验过；③ 最近 8 份日志里它一次都没被用过。
+    // 重做时的三条要求见 `Tools/eevee-hookfinder/SESSION_2026-10-03_NIGHT.md` §10。
 
     // MARK: - 屏蔽的艺人（Blocked artists）
 
@@ -555,20 +519,6 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingVolumeKey)
-        }
-    }
-
-    /// 听歌页「**禁止回弹**」：把列表的 `alwaysBounceVertical` 关掉 —— 钉住之后**唯一还能让
-    /// 页面动**的只剩它。**默认关**：它是唯一有可能影响"下拉关闭播放器"的一步，而 pw 那条
-    /// 结论（下拉关闭骑在列表的 pan recogniser 上）**在 9.1.88 上不能照抄** ——
-    /// 那个类 `SPTBarInteractivePresentationController` 在 9.1.88 上**不存在**（ProbePack 实测）。
-    /// 单独一个开关 ⇒ 万一关闭手势坏了，只关它，「一屏」照常。
-    static var nowPlayingNoBounce: Bool {
-        get {
-            container.object(forKey: nowPlayingNoBounceKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: nowPlayingNoBounceKey)
         }
     }
 

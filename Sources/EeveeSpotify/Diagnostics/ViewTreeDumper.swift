@@ -31,7 +31,23 @@ enum ViewTreeDumper {
     /// 节点上限。广度优先之后这个数就是"能看到多少个节点"，400 足以铺满一整屏的
     /// 宽度（第三轮的 250 被外壳吃掉，屏幕下半部分完全看不到）。
     private static let maxNodes = 400
+    /// ★ 2026-10-04：**定向页子树**的节点预算（听歌页那一棵约 800 节点，400 永远够不到底部那坨）。
+    ///
+    /// 为什么必须单开一档：日志 40/41 的 20 份树**每份正好 402 行**，正好卡在 `maxNodes` 上
+    /// ⇒ 头部 / 控件 / footer 一次都没进过日志（pw 说的 `HeaderElementsUnit` /
+    /// `PlaybackControlsElementsUnit` / `FooterElementsUnit` 在全量日志里**零命中**，
+    /// 而"头部排版 / 控件行"这两刀正卡在这份证据上）。
+    private static let maxPageNodes = 1200
     private static let maxDumps = 20
+
+    /// ★ 定向转储的页根（2026-10-04）：由**页面自己的 hook** 登记（听歌页 = `NPVScrollViewControllerHook`）。
+    ///
+    /// 为什么不能在这里自己按类名找：那要做运行时类枚举 / 猜类名，本仓库为此崩过两次
+    /// （见文件头纪律 1）。登记进来的这条链是**弱引用 + 校验还在窗口里**，页面走了就自动失效。
+    ///
+    /// 语义：开着「转储视图树」且用户在听歌页时，这一拍**只转储这一页的子树**（预算 `maxPageNodes`），
+    /// 打 `[NPVTree]`；其它屏照旧走 `[Tree]`（整窗 BFS、400 节点）。
+    private static weak var pageRoot: UIView?
 
     private static var timer: Timer?
     private static var dumpsTaken = 0
@@ -61,6 +77,16 @@ enum ViewTreeDumper {
         timer = nil
     }
 
+    /// ★ 定向转储：页面自己的 hook 在 `viewWillAppear` / `viewDidAppear` 里把**这一页的根视图**
+    /// 登记进来（听歌页那两处调用点在 `CustomLyrics+AllTracksLyrics.x.swift` 的
+    /// `NPVScrollViewControllerHook`）。**只登记一个指针**，什么都不做、什么都不改。
+    ///
+    /// 传 `nil` 会清掉登记（比如页面要走了）。刻意**不做**"自动判断页面是否还在"以外的清理：
+    /// 每次用之前都会 `window` 校验一次，页面销毁后 weak 引用自己会变 nil。
+    static func setPage(_ page: UIView?) {
+        pageRoot = page
+    }
+
     private static func dumpOnce() {
         // 定时器跑在主线程；访视图必须在主线程 —— 这两件事正好一致。
         guard dumpsTaken < maxDumps else {
@@ -71,9 +97,17 @@ enum ViewTreeDumper {
         guard UIApplication.shared.applicationState == .active else { return }
         guard let window = keyWindow() else { return }
 
+        // ★ 在"登记过的页"上 → 只转储这一页的子树（预算更大），tag 用 `[NPVTree]`。
+        //   为什么要换预算而不是追加：听歌页那一棵 800 节点，整窗 BFS 的前 400 个
+        //   全被外壳和页面上半截吃掉 —— 那正是头部/控件/footer 从来没进过日志的原因。
+        if let page = pageRoot, page.window != nil {
+            dumpPage(page)
+            return
+        }
+
         var nodes: [String] = []
         var skeleton: [String] = []
-        collect(window, nodes: &nodes, skeleton: &skeleton)
+        collect(window, nodes: &nodes, skeleton: &skeleton, limit: maxNodes)
         guard !nodes.isEmpty else { return }
 
         let skeletonText = skeleton.joined(separator: "/")
@@ -94,6 +128,31 @@ enum ViewTreeDumper {
             writeDebugLog("[Tree] #\(dumpsTaken) \(node)")
         }
         writeDebugLog("[Tree] #\(dumpsTaken) end")
+    }
+
+    /// ★ 定向页转储：只走这一页的子树，预算 `maxPageNodes`，tag = `[NPVTree]`。
+    ///
+    /// 与整窗那份的**唯一**区别就是起点与预算；"结构没变就不打"那条规则照旧（同一套 skeleton）。
+    /// 用**独立的**计数器后缀（`npv#N`）而不是接着 `[Tree] #N` 数：两份日志混在一起时，
+    /// "这一份是整窗还是页面"必须一眼看得出来，否则事后又要靠行数反推。
+    private static func dumpPage(_ page: UIView) {
+        var nodes: [String] = []
+        var skeleton: [String] = []
+        collect(page, nodes: &nodes, skeleton: &skeleton, limit: maxPageNodes)
+        guard !nodes.isEmpty else { return }
+
+        let skeletonText = "page/" + skeleton.joined(separator: "/")
+        guard skeletonText != lastSkeleton else { return }
+        lastSkeleton = skeletonText
+        dumpsTaken += 1
+
+        writeDebugLog(
+            "[NPVTree] #\(dumpsTaken) begin \(String(describing: type(of: page))) nodes=\(nodes.count)"
+        )
+        for node in nodes {
+            writeDebugLog("[NPVTree] #\(dumpsTaken) \(node)")
+        }
+        writeDebugLog("[NPVTree] #\(dumpsTaken) end")
     }
 
     private static func keyWindow() -> UIWindow? {
@@ -126,7 +185,8 @@ enum ViewTreeDumper {
     private static func collect(
         _ root: UIView,
         nodes: inout [String],
-        skeleton: inout [String]
+        skeleton: inout [String],
+        limit: Int
     ) {
         // ⚠️ **广度优先**，不是深度优先。
         //
@@ -140,7 +200,7 @@ enum ViewTreeDumper {
         var queue: [(view: UIView, depth: Int)] = [(root, 0)]
         var index = 0
 
-        while index < queue.count, nodes.count < maxNodes {
+        while index < queue.count, nodes.count < limit {
             let (view, depth) = queue[index]
             index += 1
 

@@ -35,10 +35,6 @@ struct EeveeExtrasSettingsView: View {
         var hideConnectButton = UserDefaults.hideConnectButton
         var hideAddToButton = UserDefaults.hideAddToButton
 
-        var gestureBehavior = UserDefaults.playerGestureBehavior
-        var gestureNowPlaying = UserDefaults.playerGestureNowPlaying
-        var gestureFullscreenLyrics = UserDefaults.playerGestureFullscreenLyrics
-
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
         var tabBarGlass = UserDefaults.tabBarGlass
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
@@ -46,7 +42,6 @@ struct EeveeExtrasSettingsView: View {
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
-        var nowPlayingNoBounce = UserDefaults.nowPlayingNoBounce
     }
 
     var body: some View {
@@ -101,38 +96,13 @@ struct EeveeExtrasSettingsView: View {
                 )
             }
 
-            Section(
-                header: Text("gesture_section".localized),
-                footer: Text("gesture_description".localized)
-            ) {
-                Picker(
-                    "gesture_behavior".localized,
-                    selection: shadowBinding(
-                        \.gestureBehavior,
-                        persist: { UserDefaults.playerGestureBehavior = $0 }
-                    )
-                ) {
-                    Text("gesture_behavior_skip".localized).tag(0)
-                    Text("gesture_behavior_seek".localized).tag(1)
-                }
-                .pickerStyle(MenuPickerStyle())
-
-                Toggle(
-                    "gesture_on_now_playing".localized,
-                    isOn: shadowBinding(
-                        \.gestureNowPlaying,
-                        persist: { UserDefaults.playerGestureNowPlaying = $0 }
-                    )
-                )
-
-                Toggle(
-                    "gesture_on_fullscreen_lyrics".localized,
-                    isOn: shadowBinding(
-                        \.gestureFullscreenLyrics,
-                        persist: { UserDefaults.playerGestureFullscreenLyrics = $0 }
-                    )
-                )
-            }
+            // ⛔「双击手势」整节已于 2026-10-04 删除（用户拍板：先删掉，之后再搞）。
+            //   它不是"坏了"才删：切歌那条路日志 8/17 证明能用；删是因为 ——
+            //   ① 手势挂在页面根视图上，**在播放键上方双击也会跳歌**（本该是播放/暂停）；
+            //   ② 最该起作用的全屏歌词那一面默认关、从没验过；
+            //   ③ 最近 8 份日志里它一次都没被用过。
+            //   重做时的三条要求（控件上不认 / 单击让位 / 另选挂点）见
+            //   `Tools/eevee-hookfinder/SESSION_2026-10-03_NIGHT.md` §10。
 
             // ⛔ 听歌页那一整节（自绘壳 / 自绘顶栏 / 顶栏玻璃）已于 2026-10-02 **整节删除**：
             // 那几版 bug 太多（糊底、两颗 ⌄、与原生吸顶头打架……），先放一边，
@@ -242,23 +212,11 @@ struct EeveeExtrasSettingsView: View {
                     )
                 )
 
-                // 禁止回弹：钉住之后**唯一还能让页面动**的只剩它。
-                // ⚠️ 也是唯一可能影响**下拉关闭**的一步 —— pw 那条结论在 9.1.88 上不能照抄
-                //    （它说的那个类在这版里不存在），所以单独一个开关：坏了只关它，「一屏」照常。
-                Toggle(
-                    "now_playing_no_bounce".localized,
-                    isOn: shadowBinding(
-                        \.nowPlayingNoBounce,
-                        persist: { value in
-                            UserDefaults.nowPlayingNoBounce = value
-                            if value {
-                                NowPlayingOneScreen.reapply()
-                            } else {
-                                NowPlayingOneScreen.restoreBounce()
-                            }
-                        }
-                    )
-                )
+                // ⛔「禁止回弹」已于 2026-10-03 夜删除（真机日志 41）：
+                // 它把列表的 `alwaysBounceVertical` 关掉，用户实测**开了就划不掉播放器**
+                // （下拉关闭是经过列表那一层接管的，那个属性是链条的一环）。
+                // 列表拖拽时剩下的那点橡皮筋是"一屏"**无法消除**的残留 ——
+                // 要碰它就得先有办法自己接管关闭手势。理由写在 `NowPlayingOneScreen` 文件头。
             }
 
             // 音乐库：**改原生**的第一批（不是加壳）—— 大标题左对齐 + 收掉顶部渐隐灰纱。
