@@ -15,11 +15,16 @@
   这些全是**同一个原因**的下游连锁 —— 很容易被误判成"Orion 宏坏了 / 注入没生效"，
   于是花时间去查构建系统。其实编译器说得没错：那个编译单元里根本没有这些类型。
 
-本脚本检查三件事（都是纯文本规则，不是编译器）：
+本脚本检查四件事（都是纯文本规则，不是编译器）：
   1. 用到 Orion 类型（HookGroup / ClassHook / IvarHook / FunctionHook …）的文件，
      必须有 `import Orion`；
   2. `ClassHook` 里 override 的方法体内必须调用 `orig.<同名>(...)` —— 不调等于把原实现吃掉；
-  3. `typealias Group` 引用的 HookGroup 必须能在本文件或全仓库里找到定义。
+  3. `typealias Group` 引用的 HookGroup 必须能在本文件或全仓库里找到定义；
+  4. ★ 2026-10-03 新增：`ClassHook` 里**钩到的对象是 `self.target`，不是 `self`**。
+     写成 `self` 那些行会**只有 CI 才炸**（实测：`NowPlayingOneScreenCards.x.swift`
+     三处 `self` → `cannot convert value of type 'XHook' to expected argument type
+     'UICollectionViewCell'` / `has no member 'clipsToBounds'`，一路冒泡到 `make` exit 2、
+     deb 没生成）。允许 `self.target`、`self.orig`，以及**本类自己声明**的成员。
 
 用法：
     python Tools/eevee-hookfinder/orion_hook_guard.py            # 扫 Sources/EeveeSpotify
@@ -48,6 +53,16 @@ GROUP_ALIAS = re.compile(r"typealias\s+Group\s*=\s*(\w+)")
 # ⚠️ `{ }` 与 `{}` 两种写法都有（`struct X: HookGroup {}` / `struct X: HookGroup { }`），
 #    漏掉一种就会把存在的定义判成"找不到"（第一版就是这么误报的）。
 GROUP_DEF = re.compile(r"(?:struct|class|enum)\s+(\w+)\s*:\s*HookGroup\b")
+
+# ── 规则 4：hook 方法里钩到的对象是 `self.target`，不是 `self` ──────────────────
+# 只允许 `self.target` / `self.orig`，以及**本类自己声明**的成员（`func` / `var` / `let`）。
+SELF_MEMBER = re.compile(r"self\.(\w+)")
+ALLOWED_SELF_MEMBERS = {"target", "orig"}
+DECLARED_MEMBER = re.compile(r"(?m)^\s*(?:@\w+\s+)*(?:private\s+|fileprivate\s+|public\s+|internal\s+|static\s+|final\s+|lazy\s+)*(?:func|var|let)\s+(\w+)")
+# 把 `self` 当参数传：`f(self)` / `f(self, x)`。`[self]`（闭包捕获）**不算** ——
+# 那在既有代码里是合法写法（`DataLoaderServiceHooks.x.swift` 就在用）。
+ARG_SELF = re.compile(r"\(\s*self\s*[,)]")
+
 
 
 def strip_comments_and_strings(src: str) -> str:
@@ -124,6 +139,23 @@ def check_file(path: Path, defined_groups: set[str]) -> list[str]:
             group = alias.group(1)
             if group not in defined_groups:
                 problems.append(f"{path}: {name} 的 `typealias Group = {group}` 找不到对应的 HookGroup 定义")
+
+        # ── 规则 4：`self` vs `self.target` ────────────────────────────────
+        declared = set(DECLARED_MEMBER.findall(body))
+        for hit in SELF_MEMBER.finditer(body):
+            member = hit.group(1)
+            if member in ALLOWED_SELF_MEMBERS or member in declared:
+                continue
+            problems.append(
+                f"{path}: {name} 里写了 `self.{member}` —— hook 方法里**钩到的对象是 "
+                "`self.target`**（`self` 是 hook 类自己）。这种错只有 CI 编译才炸，"
+                "实测会一路报成 `has no member` / `cannot convert value of type 'XHook'`"
+            )
+        if ARG_SELF.search(body):
+            problems.append(
+                f"{path}: {name} 里把 `self` 当参数传了 —— 应该是 `self.target`"
+                "（`[self]` 闭包捕获是合法的，不在此列）"
+            )
 
         # ⚠️ 只查**真的覆盖了 Spotify 方法**的那些 —— 判别方式是"这个方法名在类里
         #    被 `orig.` 提到过"。类的普通私有辅助函数（如 `allSubviews()`）不在 Orion

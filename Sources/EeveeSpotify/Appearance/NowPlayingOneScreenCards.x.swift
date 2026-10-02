@@ -43,12 +43,16 @@ class PlayerCardCollapseHook: ClassHook<UICollectionViewCell> {
         let result = orig.preferredLayoutAttributesFittingAttributes(attributes)
 
         guard NowPlayingOneScreen.isEnabled else { return result }
-        guard PlayerCardCollapseHook.isPlayerCard(self) else { return result }
+        // ⚠️ hook 方法里钩到的对象是 **`self.target`**，`self` 是 hook 类自己 ——
+        // 写成 `self` 会编不过（`PlayerCardCollapseHook` 不是 UIView）。
+        // 仓库里既有的 hook（`DeclutterChrome` / `TabBarGlass` / `LibraryAppearance` …）
+        // 全是 `self.target` 这个写法；本仓库的 `orion_hook_guard.py` 现在也会拦这一条。
+        guard PlayerCardCollapseHook.isPlayerCard(self.target) else { return result }
 
         // 高度报 0 ⇒ 列表把它当"没有这张卡"，自己合拢。
         result.size = CGSize(width: result.size.width, height: 0)
-        self.clipsToBounds = true
-        PlayerCardCollapseHook.reportOnce(self)
+        self.target.clipsToBounds = true
+        PlayerCardCollapseHook.reportOnce(self.target)
         return result
     }
 
