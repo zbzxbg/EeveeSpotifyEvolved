@@ -9,10 +9,12 @@
 > ⚠️ 这一夜的改动**大部分还没在真机上验收**（§4 是验收清单）。验过的只有：**取色底** ✅、
 > **一屏的卡片折叠** ✅。
 >
-> 🆕 **2026-10-04 追加两节（写在同一夜之后，本文件仍是入口）**：
+> 🆕 **2026-10-04 追加三节（写在同一夜之后，本文件仍是入口）**：
 > **§9 = 「禁止回弹」弄坏下拉关闭 → 已删除**（用户报的 bug，日志 41 判决）；
-> **§10 = 双击手势整体删除**（用户拍板"先删了，之后再搞"）+ **下一道工序**。
-> 两份都**还没装机验**（§9/§10 各带验收清单）。
+> **§10 = 双击手势整体删除**（用户拍板"先删了，之后再搞"）+ **下一道工序**；
+> **§11 = 日志 42/43 判读** —— ★ **下拉关闭已恢复（43 实测）**、定向转储拿到播放器底部真实层级、
+> **歌词卡就在播放器里**（下一刀的地基）。
+> 代码改动见提交 `49b9565`（修复+删除）与 `f3353af`（pw 对照结论）。
 
 ---
 
@@ -21,8 +23,8 @@
 | 线 | 状态 |
 |---|---|
 | **取色底（仿 AM 整页取色）** | ✅ **真机验成**（日志 39 + 照片 42/43/44：整页红/粉/紫跟着换歌走） |
-| **「一屏」（卡片全折 + 列表钉顶）** | 🟡 卡片折叠 ✅ 验收；**钉住**这一夜被真机打回**三次**，第三次修完（`980cbef`）**待验** |
-| **AM 页面（kumone 那种）** | 🟢 **已开工**：覆盖层地基 + 底部音量条（照片 45 可见）；剩下四件见 §4 |
+| **「一屏」（卡片全折 + 列表钉顶）** | ✅ **2026-10-04 验收**（日志 43）：钉住 + 折 4 种卡片 + **下拉关闭正常**（`bounce=on` 哨兵成立） |
+| **AM 页面（kumone 那种）** | 🟢 **已开工**：覆盖层地基 + 底部音量条（照片 45 可见）；底部四行（标题/进度/控件/footer）的**真实层级已拿到**（§11.3）；**歌词卡本来就在播放器里**（§11.4）⇒ 下一刀是"歌词进播放器" |
 | **spoti.pw 许可边界** | ✅ 钉死：**≤v0.21.1 = GPL-3.0 可读可复用**；**≥v0.22.0 = PolyForm，一行都不碰** |
 | **它的播放页目标在 9.1.88 上还在吗** | ✅ **14/14 全在**（ProbePack 实测）⇒ AM 页面可照搬其结构 |
 | **双击手势** | ⛔ **2026-10-04 整体删除**（用户拍板"先删了，之后再搞"）—— 不是坏了才删：**没人用 + 会误伤播放键**（§10） |
@@ -491,3 +493,87 @@ SPTNowPlayingPlaybackControllerImplementation                            ← 动
 
 ⇒ 所以"头部 / 控件 / footer"那一刀**不是零原料**：控件名与元数据字段**已有**；
 缺的是**新设计（Plastic/Platter）下的层级与 frame** —— 那正是 §10.4.1 那份 `[NPVTree]` 要补的。
+
+---
+
+# 11. ★ 日志 42 / 43 判读（2026-10-04）：**下拉关闭已恢复**、定向树拿到、歌词卡结构确认
+
+> 输入：`C:\dsh\ipa\eeveespotify_debug_shared 42.log`（11654 行，16:30:42–16:31:56）+
+> `… 43.log`（**343 行**，16:35:09–16:35:50）。
+
+## 11.1 日志 43 = §9 那次修复的**验收现场** ✅
+
+```
+[16:35:11] [Tree] off                                        ← 这次没开转储（故意的，日志才 343 行）
+[16:35:11] [INIT] Spotify: 9.1.88 (build 918802209) / iOS 27.0.1
+[16:35:18] [NPVPage] 覆盖层已装 0,0,414,896；底部锚 npv.bottomStackView = 没找到（退回安全区底）
+[16:35:18] [OneScreen] 把列表自带的 inset.bottom=34pt 归零（内容刚好一屏时，那正是还能往下滑的距离）
+[16:35:18] [OneScreen] 列表已钉在顶部 — 折掉 0pt 的卡片范围（上拉只回弹；下拉关闭靠列表自己在顶部让位，我们只改范围、不动回弹）
+[16:35:18] [OneScreen] diag inset.bottom=0 content.h=896 bounds.h=896 adj.top=0 adj.bottom=0 bounce=on panRecs=3
+[16:35:20] [OneScreen] collapsed card root Lyrics_CardElementImpl.CardView（第 1 种）… UIView … CreatorBiographyCardLayout … InteractableLayoutBackingButton（第 4 种）
+```
+
+| 项 | 判定 |
+|---|---|
+| **★ `bounce=on` + `inset.bottom=0`** | ✅ **回归哨兵成立**：钉住生效、**而我们一个字都没再碰回弹**（对照日志 41 的 `bounce=off`） |
+| **一屏：折卡片（4 种）+ 钉顶** | ✅ |
+| **`[Gestures]` 0 行 / `已关掉列表的回弹` 0 行** | ✅ 装的是 §10 之后的新包，删除生效 |
+| **用户退出听歌页**（16:35:20 折完卡片 → 16:35:35 回来） | ✅ **用户实测"下拉能关掉播放器"** —— 这就是 §9 的修复判据 |
+| ⚠️ `npv.bottomStackView = 没找到`（退回安全区底，音量条仍落在 `8,860,398,32`） | 已知问题：与日志 40/41/42 同形。落点没问题，但**锚点该找到才对**（日志 42 的定向树里它明明在 `4,593,406,240`）—— 见 §11.4 待办 ② |
+
+⇒ **§9 收口**。剩下没验的是"关掉「一屏」应当写回 inset"（`restore()`）——不急，随时可测。
+
+## 11.2 日志 42 = **定向转储的第一次收获** ✅
+
+| 项 | 证据 |
+|---|---|
+| **`[NPVTree]` 真的跑起来了** | **7531 行 / 10 份**，每份 336→**993** 节点（旧转储永远卡在 402） |
+| 取色底 + 跟色 | `backdrop … E03038` → `跟到换色 → C84098（第 2 次）` → `A00030（第 3 次）`；可见性闸门挡掉 1~2 个隐形满页层 |
+| `[OneScreen]` 0 行 | ⚠️ 那一次「一屏」是**关**的（所以 42 不能当 §9 的验收，43 才是） |
+| `[Gestures]` 0 行 | ✅ 删除生效 |
+
+## 11.3 ★ 播放器底部那一坨：新设计下的**真实层级**（`[NPVTree] #20`，993 节点那份）
+
+```
+8.UIStackView@4,593,406,240,id=npv.bottomStackView
+  9.UIView@0,0,406,67      ← ① 标题行（两个 label：id=title / id=subtitle）
+                             + ExplicitIcon / 19andOverIcon（12x12，各带 -internal）
+  9.UIView@0,67,406,41     ← ② 进度（外部另有 Components.UI.ProgressBarUnitNowPlaying
+                             + SPTNowPlayingSliderV2@-2,10,362,17）
+  9.UIView@0,108,406,88    ← ③ 控件行：SPTNowPlayingPlayButton@64x64 / ShuffleButton /
+                             Nowplaying-RepeatButton / AddToButton@48x48 / ConnectButtonOutputSwitcher
+  9.UIView@0,196,406,44    ← ④ footer
+```
+
+★ **pw 说的 `*ElementsUnit` 在 9.1.88 上确实不存在** —— 真身就是上面这四行 **UIView**。
+（`Units`/`Unit` 类名在日志 42/43 里**零命中**，可按 id 认：`Components.UI.ProgressBarUnitNowPlaying` 那种。）
+
+**播放页根视图下、与 `npv.bottomStackView` 平级的还有**（同样是第四级）：
+`UIStackView@0,48,414,48`（吸顶头，`PassthroughView@0,0,414,896` 是它的兄弟）/
+`UIView@0,833,414,62`（底部条）/ `AccessibleCollectionView@0,0,414,896,
+id=nowplaying-contentlayer-collectionview`（**pw 挂手势的那条横向封面列表**，里面 `CoverArtCellImpl#5000`
+偏移 `@2070000` = 横向队列；全场只有 1 张非 hidden ⇒ 与 pw"一张封面一屏"一致）。
+
+## 11.4 ★ 歌词：**播放器里本来就有歌词卡**（这一刀的地基）
+
+```
+9.ContainerRecreateView<LyricsTextState>@0,0,342,256,id=lyrics-card-view
+  10.ElementView<LyricsTextElementProps, Any, Any>@0,0,342,256
+  11.EncoreButton@0,0,44,44,id=lyrics-expand-button      ← 进全屏歌词
+  11.EncoreButton@0,0,44,44,id=lyrics-share-button
+  11.EncoreButton@0,0,44,44,id=lyrics-translations-button
+```
+* 它**随状态换尺寸**：日志 42 的 dump #8/#9/#10 里是 `342x34`（未加载/单行），#13 之后变 `342x256`（歌词到位）；
+* 它**就在播放页那条列表里**（`scrolling_npv_collection_view_accessibility_identifier` 的子树），
+  所以「一屏」折卡片会把它一起折掉 —— §10 的"默认关"理由**在证据上成立**；
+* ⇒ **"歌词搬进播放器"不必从零造**：入口（三个 button 的 id）与容器（`lyrics-card-view`）都在，
+  要做的是**在播放器头部/中段给它一块位置**（或接管这块卡的排布），而不是重写渲染。
+
+## 11.5 顺带两条（不是本轮的活）
+
+* `[PLAYER] ⚠️ position stalled at 45.8s for ~3s` → 3 秒后 `resumed`（日志 39/41 之后**第三次**同形现场）
+  ⇒ 补一个只读 `isPaused` 的性价比依旧很高。
+* 日志 43 里 `npv.bottomStackView` 又是"没找到"：它在**页面子树里**确实不在（日志 42 的定向树里它在
+  **列表的子树**里）⇒ `NowPlayingPageOverlay.locateBottomAnchor` 的**窗口兜底**应当找得到，
+  但这次**窗口兜底也没找到**（否则不会退回安全区底）。⇒ **待办**：把定向树里那条路径
+  （列表 → `npv.bottomStackView`）纳入查找，或把兜底顺序改成"页面 → 列表 → 窗口"。
