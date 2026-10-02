@@ -20,7 +20,7 @@
 | Channel | Version | Spotify |
 | --- | --- | --- |
 | Public release | `v0.1.0` | 9.1.76 |
-| Development | `v1.0.0-beta.63` | 9.1.88 |
+| Development | `v1.0.0-beta.72` | 9.1.88 |
 
 Development version last updated: `2026/10/02`.
 
@@ -29,7 +29,7 @@ Development version last updated: `2026/10/02`.
 
 ## Verified Environment
 
-`iPhone 11` · `Spotify 9.1.88` · `iOS 27.0` · certificate-signed · `LCSign` · rootless DEB
+`iPhone 11` · `Spotify 9.1.88` · `iOS 27.0.1` · certificate-signed · `LCSign` · rootless DEB
 
 The modified features in this fork have been verified to work in this environment.
 
