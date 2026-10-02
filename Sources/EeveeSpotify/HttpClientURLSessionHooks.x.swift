@@ -148,6 +148,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 }
                 orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
+                // 交付时刻自报：**这是肉眼唯一看不见、却决定"卡片这一帧建不建得出来"的量**
+                // （NPV 的模块列表在组件加载完之后才建）。和 `[Lyrics] Request for …` 配对读。
+                writeDebugLog("[HCUS] lyrics 交付给 Spotify — \(lyricsPayload.count) bytes（请求起算 \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s）")
                 return
             }
 
@@ -211,6 +214,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         // Fetch on a background queue while holding the completion handler open.
         // Calling getLyricsDataForCurrentTrack synchronously here would block the
         // delegate queue and prevent subsequent delegate callbacks from firing.
+        // ⚠️ 这条路**没走** `LyricsResponseCache` 的分档预算（它是"服务端说这首歌没词"的
+        // 404 分支，一条请求只来一次，没有"第二次请求"可指望）——所以这里只量耗时。
+        let responseStartedAt = Date()
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             let data = try? getLyricsDataForCurrentTrack(url.path)
             // 同 SPTDataLoaderService：404 也要给出 200 + 占位，
@@ -227,6 +233,8 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
             orig.URLSession(session, task: task, didCompleteWithError: nil)
+            // 404 分支的交付时刻（与上面 200 分支同族；`hasData=` 区分"取到了词"还是"只有占位"）。
+            writeDebugLog("[HCUS] lyrics 交付给 Spotify（404 合成 200）— \(lyricsData.count) bytes, hasData=\(data != nil)，服务端 404 起算 \(String(format: "%.1f", Date().timeIntervalSince(responseStartedAt)))s")
         }
     }
 

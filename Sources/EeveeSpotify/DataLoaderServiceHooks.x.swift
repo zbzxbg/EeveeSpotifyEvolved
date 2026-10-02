@@ -192,6 +192,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 DispatchQueue.main.async { [self] in
                     orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                     orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    // 交付时刻自报（与 HttpClient 那条路同族）——决定"卡片这一帧建不建得出来"。
+                    writeDebugLog("[DL] lyrics 交付给 Spotify — \(lyricsPayload.count) bytes（请求起算 \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s）")
                 }
                 return
             }
