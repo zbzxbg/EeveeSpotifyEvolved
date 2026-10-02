@@ -81,6 +81,7 @@ enum PlayerGestures {
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
             writeDebugLog("[Gestures] attached on \(surface)")
+            reportDiagnosticOnce(for: view, surface: surface)
             return
         }
 
@@ -89,6 +90,49 @@ enum PlayerGestures {
         view.removeGestureRecognizer(recognizer)
         objc_setAssociatedObject(view, &playerGestureRecognizerKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         writeDebugLog("[Gestures] detached on \(surface)")
+    }
+
+    /// 诊断只报一次（每个面一次）。
+    private static var reportedSurfaces: Set<String> = []
+
+    /// ★ 诊断（一次性）：**双击的第一下会不会漏给 Spotify 自己的单击**。
+    ///
+    /// 依据：pw v0.21.1（GPL-3.0）`Shared/Gestures/Gestures.x` 写明 —— Spotify 自己的单击
+    /// （封面进 3D 倾斜 / 滚到下面卡片）**会在双击的第一下就触发**；它的解法是把 host
+    /// **及其所有上层**的单击手势都挂上 `requireGestureRecognizerToFail:`，而且因为
+    /// "Spotify 是后加手势的、顺序不受我们控制"，还要在每次布局时按计数**重挂一遍**。
+    /// 我们这一版**没有**那一步，所以这里先把事实打出来：
+    ///
+    ///   · `singleTapsAbove` = host 及其上层一共挂着几个**单击**手势；
+    ///   · **0 就说明不存在"漏"这回事**（例如全屏歌词页可能就没有）⇒ 不值得为它花一轮；
+    ///   · \> 0 就说明 pw 那条坑在我们这儿是**活的**。
+    ///
+    /// ⚠️ 刻意**不去查**"有没有已经让位"：`requireGestureRecognizerToFail` 没有公开的
+    /// 查询 API，绕路去读 `gestureRecognizers` 得赌它的语义 —— 而我们本来就没调用过，
+    /// 结论是恒定的（没让位）。探针要的是**便宜且不赌**。
+    private static func reportDiagnosticOnce(for view: UIView, surface: String) {
+        guard !reportedSurfaces.contains(surface) else { return }
+        reportedSurfaces.insert(surface)
+
+        var singleTaps = 0
+        var node: UIView? = view
+        var hops = 0
+        while let current = node, hops < 12 {
+            for other in current.gestureRecognizers ?? [] {
+                guard let tap = other as? UITapGestureRecognizer else { continue }
+                if tap.numberOfTapsRequired == 1 { singleTaps += 1 }
+            }
+            node = current.superview
+            hops += 1
+        }
+
+        let verdict = singleTaps > 0
+            ? " — ⚠️ 双击的第一下会漏给它们（pw 用 requireGestureRecognizerToFail 挡）"
+            : " — 上层没有单击手势，不存在「漏一下」的问题"
+        writeDebugLog(
+            "[Gestures] diag surface=\(surface) host=\(type(of: view))"
+                + " singleTapsAbove=\(singleTaps)" + verdict
+        )
     }
 }
 

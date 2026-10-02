@@ -262,6 +262,13 @@ enum DeclutterChrome {
         //   值没漂就一个字节都不写，没在听歌页时只是两次 weak 读。
         onMainThreadSync { _ = NowPlayingOneScreen.reconcile() }
 
+        // ★ 2026-10-03 夜：**只读播放器状态探针**（`PlayerStateProbe`）—— 给「突然无法播放
+        //   任何歌曲」那条线补现场判据（它至今零判据：31 份日志里 drm/license/unplayable
+        //   全零命中，分不开"服务端按地区判不可播"和"账号风控"）。
+        //   它自己先看「启用日志记录」，开关关着 = 一眼都不看；只在**换曲 / 卡住 / 恢复**
+        //   时打，所以不刷屏。同一条纪律：**不新开定时器**。
+        onMainThreadSync { PlayerStateProbe.tick() }
+
         // ★ v4.9：标签栏那一行的**纵向复核**。点开「创建」时那一颗处于暂时态，
         //   而**菜单关掉时这条栏不一定再布局** —— 日志 29 里我们的 transform 就停在
         //   `+2.5`，创建那颗一直比另外三颗高 8pt（16 秒没回来）。

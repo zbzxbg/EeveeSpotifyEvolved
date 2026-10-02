@@ -63,6 +63,7 @@ enum NowPlayingOneScreen {
     private static var didLogPin = false
     private static var didLogGiveUp = false
     private static var didLogNotNeeded = false
+    private static var didLogDiag = false
     /// 合并用的占位：一次布局里几十张卡只排一枪（本仓库纪律：短促重试不叠加）。
     private static var repinScheduled = false
 
@@ -195,6 +196,7 @@ enum NowPlayingOneScreen {
                         + "（卡片还没到货时就会这样）"
                 )
             }
+            logDiagnosticOnce(list)
             return false
         }
         guard abs(want - own.bottom) > slack else { return false }
@@ -212,7 +214,36 @@ enum NowPlayingOneScreen {
                     + "（上拉只回弹，下拉关闭不受影响）"
             )
         }
+        logDiagnosticOnce(list)
         return true
+    }
+
+    /// ★ 一次性诊断行：把「**为什么还能往下滑**」一次问清楚。
+    ///
+    /// 2026-10-03 夜用户实测："卡片全没了，但还能往下滑"。当时能猜的原因有四个
+    /// （没找到列表 / 没到该压的时候 / 压了但值不对 / 剩下的只是**橡皮筋回弹**），
+    /// 而日志里一条都分不开。这一行把四个数一次打出来：
+    ///   · `inset.bottom` —— 我们到底压了多少（0 = 一个字都没压）；
+    ///   · `content.h` vs `bounds.h` —— 内容比一屏高多少（高多少就该压多少）；
+    ///   · `adj.top/bottom` —— 安全区那块（公式里必须留着的）；
+    ///   · `bounce` —— **`alwaysBounceVertical`**：即使钉得完美，它开着就仍然能往下拽一把
+    ///     （内容不满一屏时那只是回弹，不是滚动 —— 要彻底去掉得关它，而关它有风险，
+    ///     见 `NowPlayingOneScreen` 文件头）；
+    ///   · `panRecs` —— 那条列表上有几个 pan 手势（pw 说**下拉关闭**就骑在其中一个上）。
+    private static func logDiagnosticOnce(_ list: UIScrollView) {
+        guard !didLogDiag else { return }
+        didLogDiag = true
+
+        let own = list.contentInset
+        let adjusted = list.adjustedContentInset
+        let pans = (list.gestureRecognizers ?? []).filter { $0 is UIPanGestureRecognizer }.count
+
+        writeDebugLog(
+            "[\(logTag)] diag inset.bottom=\(Int(own.bottom))"
+                + " content.h=\(Int(list.contentSize.height)) bounds.h=\(Int(list.bounds.height))"
+                + " adj.top=\(Int(adjusted.top)) adj.bottom=\(Int(adjusted.bottom))"
+                + " bounce=\(list.alwaysBounceVertical ? "on" : "off") panRecs=\(pans)"
+        )
     }
 
     private static func rememberOriginalInset(of list: UIScrollView) {

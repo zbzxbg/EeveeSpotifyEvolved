@@ -410,6 +410,11 @@ struct EeveeSpotify: Tweak {
         // `applyEnabledState()`）；这里只是让重启后能自动续上。
         ViewTreeDumper.applyEnabledState()
 
+        // ★ 2026-10-03 夜：一次性「**探针包**」（`ProbePack`）—— 把"只有装一次机才知道"的
+        //   只读事实一次问完（pw v0.21.1 那些目标类在 9.1.88 上还在不在…）。
+        //   **只读、只打日志**，查完整块删。它走 `writeDebugLog` ⇒「启用日志记录」关着时零动作。
+        ProbePack.runOnce()
+
         // 屏蔽艺人：1 秒一次的只读轮询，发现换歌就判一次（名单空着时它什么都不做）。
         // 不用新增 hook 的原因写在 `BlockedArtistSkip` 顶部。
         BlockedArtistSkip.start()
