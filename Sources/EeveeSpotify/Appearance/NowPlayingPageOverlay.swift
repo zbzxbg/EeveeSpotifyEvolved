@@ -169,7 +169,7 @@ enum NowPlayingPageOverlay {
         let bottomLimit = page.bounds.height - page.safeAreaInsets.bottom - 4
 
         var y: CGFloat
-        if let anchor = findBottomAnchor(in: page) {
+        if let anchor = locateBottomAnchor(in: page) {
             let frame = anchor.convert(anchor.bounds, to: overlay)
             y = frame.maxY + gapBelowAnchor
         } else {
@@ -195,6 +195,17 @@ enum NowPlayingPageOverlay {
         slider.isUserInteractionEnabled = true
         overlay.addSubview(slider)
         return slider
+    }
+
+    /// 先在这一页的子树里找底部锚；找不到再退到**窗口**里按 id 找。
+    ///
+    /// 为什么要这条兜底：日志 40 的现场 —— `npv.bottomStackView` **在这一页的子树里没找到**
+    /// （退回了安全区底；落点本身没问题：音量条落在 `8,860,398,32`，没压到原生控件）。
+    /// 那个 id 在整棵窗口树里只有一处，认错页的风险可以忽略；走查仍然有界（`maxNodes`）。
+    private static func locateBottomAnchor(in page: UIView) -> UIView? {
+        if let anchor = findBottomAnchor(in: page) { return anchor }
+        guard let window = page.window else { return nil }
+        return findBottomAnchor(in: window)
     }
 
     /// 按 `accessibilityIdentifier` 找播放器底部那一坨（有界广度优先）。

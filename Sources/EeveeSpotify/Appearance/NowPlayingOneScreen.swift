@@ -56,6 +56,8 @@ enum NowPlayingOneScreen {
 
     /// 我们改过的列表上记着**它原来的** bottom inset —— 关开关要原样写回。
     private static var originalInsetKey: UInt8 = 0
+    /// 列表**原来的** `alwaysBounceVertical` —— "禁止回弹"那个开关要能还原。
+    private static var originalBounceKey: UInt8 = 0
 
     private static weak var lastPage: UIView?
     private static weak var lastList: UIScrollView?
@@ -149,19 +151,36 @@ enum NowPlayingOneScreen {
         pin(list)
     }
 
-    /// 关掉开关时把 bottom inset 写回原值（我们只改过这一处）。
+    /// 关掉开关时把 bottom inset 与**回弹设置**都写回原值 —— 我们只改过这两处。
     static func restore() {
         guard let list = lastList else { return }
-        guard let boxed = objc_getAssociatedObject(list, &originalInsetKey) as? NSNumber else { return }
 
-        let original = CGFloat(boxed.doubleValue)
-        var inset = list.contentInset
-        guard abs(inset.bottom - original) > slack else { return }
+        if let boxed = objc_getAssociatedObject(list, &originalInsetKey) as? NSNumber {
+            let original = CGFloat(boxed.doubleValue)
+            var inset = list.contentInset
+            if abs(inset.bottom - original) > slack {
+                inset.bottom = original
+                list.contentInset = inset
+                objc_setAssociatedObject(list, &originalInsetKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                writeDebugLog(
+                    "[\(logTag)] 列表 inset.bottom 已写回原值 \(Int(original)) — 滚动范围还原（reason=switch off）"
+                )
+            }
+        }
 
-        inset.bottom = original
-        list.contentInset = inset
-        objc_setAssociatedObject(list, &originalInsetKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        writeDebugLog("[\(logTag)] 列表 inset 已写回原值 — 滚动范围还原（reason=switch off）")
+        restoreBounce()
+    }
+
+    /// 只把**回弹设置**写回原值（「禁止回弹」那个开关单独关掉时用）。
+    static func restoreBounce() {
+        guard let list = lastList else { return }
+        guard let boxed = objc_getAssociatedObject(list, &originalBounceKey) as? NSNumber else { return }
+
+        list.alwaysBounceVertical = boxed.boolValue
+        objc_setAssociatedObject(list, &originalBounceKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        writeDebugLog(
+            "[\(logTag)] 回弹设置已写回 \(boxed.boolValue ? "on" : "off")（reason=switch off）"
+        )
     }
 
     // MARK: - 钉住
@@ -184,35 +203,37 @@ enum NowPlayingOneScreen {
         let over: CGFloat = list.contentSize.height - bounds.height
         let want: CGFloat = -adjusted.top - over - safeArea
 
-        // 正数表示"内容还没铺满一屏"（**卡片还没到货、或者已经全折完了**）⇒ 不该压。
-        // ⚠️ 这里**必须把 inset 退回原值**，不能只是"什么都不做"：
-        // 真机日志 39 的现场 —— 卡片还在时先按 `content.h=2132` 压了 `-1236pt`；
-        // 卡片一折起来内容就只剩一屏（`want=+0`），而上一版在这里直接 return ⇒
-        // 那 -1236 留在列表上 ⇒ **往下能滑 1236pt 的空白**（用户报的就是这个）。
-        if want >= 0 {
-            if !didLogNotNeeded {
-                didLogNotNeeded = true
-                writeDebugLog(
-                    "[\(logTag)] 内容还没到一屏高（want=+\(Int(want))pt）— 不该压"
-                        + "（卡片还没到货、或已经全折完时就是这样）"
-                )
-            }
-            revertInsetIfNeeded(list)
-            logDiagnosticOnce(list)
-            return false
+        // ★ 目标值**不是"压 / 不压"的二选一** —— 目标永远是"让列表最多只能滚到它自己的顶"。
+        //
+        // 日志 40 的现场把这件事说清了：内容**刚好一屏**时 `want = +0`，而 Spotify 自己把
+        // `contentInset.bottom` 留了 **34**（安全区那一档）⇒ 那 34pt 就是用户还能往下滑的距离。
+        // 早先两版都栽在这一支上：先按"卡片还在时"的内容压了 -1236（留下 1236pt 空白）；
+        // 改成"`want >= 0` 就退回原值"之后，又把 Spotify 那 34 原样留着（还是能滑 34pt）。
+        // 统一成 `min(want, 0)`：该压就压，不该压就把自带的那截**归零**（不做无谓的正 inset）。
+        let target: CGFloat = min(want, 0)
+
+        applyNoBounceIfWanted(list)
+
+        guard abs(target - own.bottom) > slack else { return false }
+
+        if target == 0, own.bottom > slack, !didLogNotNeeded {
+            didLogNotNeeded = true
+            writeDebugLog(
+                "[\(logTag)] 把列表自带的 inset.bottom=\(Int(own.bottom))pt 归零"
+                    + "（内容刚好一屏时，那正是还能往下滑的距离）"
+            )
         }
-        guard abs(want - own.bottom) > slack else { return false }
 
         rememberOriginalInset(of: list)
 
         var next = own
-        next.bottom = want
+        next.bottom = target
         list.contentInset = next
 
         if !didLogPin {
             didLogPin = true
             writeDebugLog(
-                "[\(logTag)] 列表已钉在顶部 — 折掉 \(Int(-want))pt 的卡片范围"
+                "[\(logTag)] 列表已钉在顶部 — 折掉 \(Int(max(0, -want)))pt 的卡片范围"
                     + "（上拉只回弹，下拉关闭不受影响）"
             )
         }
@@ -248,26 +269,25 @@ enum NowPlayingOneScreen {
         )
     }
 
-    /// 把 inset **退回我们记下的原值**（幂等；没记过就什么都不做）。
+    /// 「禁止回弹」开关：钉住之后**唯一还可能让页面动**的就是它。
     ///
-    /// 与 `restore()`（关开关用）的区别：那个是不管怎样都退；这个是**每一拍的自纠**，
-    /// 用在"内容缩回一屏内、不该再压"的时候 —— 见 `pin` 里那个分支的注释（日志 39 的现场）。
-    @discardableResult
-    private static func revertInsetIfNeeded(_ list: UIScrollView) -> Bool {
-        guard let boxed = objc_getAssociatedObject(list, &originalInsetKey) as? NSNumber else { return false }
+    /// ⚠️ 为什么单开一个开关、而且**默认关**：这是**唯一有可能影响"下拉关闭播放器"**的一步。
+    /// pw 的注释说"下拉关闭骑在这条列表的 pan recogniser 上"，但**那个类在 9.1.88 上并不存在**
+    /// （ProbePack 实测：`SPTBarInteractivePresentationController` 缺失）⇒ 它那条结论在我们的
+    /// 基线上**不能照抄**，只能实测。单独一个开关 ⇒ 万一关闭手势坏了，用户只关它，「一屏」照常。
+    private static func applyNoBounceIfWanted(_ list: UIScrollView) {
+        guard UserDefaults.nowPlayingNoBounce else { return }
+        guard list.alwaysBounceVertical else { return }
 
-        let original = CGFloat(boxed.doubleValue)
-        var inset = list.contentInset
-        let pressed = inset.bottom
-        guard abs(pressed - original) > slack else { return false }
-
-        inset.bottom = original
-        list.contentInset = inset
+        if objc_getAssociatedObject(list, &originalBounceKey) == nil {
+            let value = NSNumber(value: list.alwaysBounceVertical)
+            objc_setAssociatedObject(list, &originalBounceKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        list.alwaysBounceVertical = false
         writeDebugLog(
-            "[\(logTag)] 内容缩回一屏内 ⇒ inset.bottom 由 \(Int(pressed)) 退回 \(Int(original))"
-                + "（不该再压着了）"
+            "[\(logTag)] 已关掉列表的回弹（alwaysBounceVertical=false）"
+                + " — 若下拉关闭坏了，把这个开关关掉就是"
         )
-        return true
     }
 
     private static func rememberOriginalInset(of list: UIScrollView) {

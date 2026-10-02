@@ -532,3 +532,4 @@ now_playing_backdrop_description = "Paints the now-playing page with a gradient 
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
 now_playing_one_screen = "One screen (no scrolling)";
 now_playing_volume = "Volume slider at the bottom";
+now_playing_no_bounce = "No bouncing (then try swipe-to-dismiss)";

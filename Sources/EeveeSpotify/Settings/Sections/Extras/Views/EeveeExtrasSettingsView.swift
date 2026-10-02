@@ -46,6 +46,7 @@ struct EeveeExtrasSettingsView: View {
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
+        var nowPlayingNoBounce = UserDefaults.nowPlayingNoBounce
     }
 
     var body: some View {
@@ -236,6 +237,24 @@ struct EeveeExtrasSettingsView: View {
                                 NowPlayingPageOverlay.reapply()
                             } else {
                                 NowPlayingPageOverlay.remove(reason: "switch off")
+                            }
+                        }
+                    )
+                )
+
+                // 禁止回弹：钉住之后**唯一还能让页面动**的只剩它。
+                // ⚠️ 也是唯一可能影响**下拉关闭**的一步 —— pw 那条结论在 9.1.88 上不能照抄
+                //    （它说的那个类在这版里不存在），所以单独一个开关：坏了只关它，「一屏」照常。
+                Toggle(
+                    "now_playing_no_bounce".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingNoBounce,
+                        persist: { value in
+                            UserDefaults.nowPlayingNoBounce = value
+                            if value {
+                                NowPlayingOneScreen.reapply()
+                            } else {
+                                NowPlayingOneScreen.restoreBounce()
                             }
                         }
                     )

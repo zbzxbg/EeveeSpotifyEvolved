@@ -42,6 +42,7 @@ extension UserDefaults {
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
     private static let nowPlayingVolumeKey = "nowPlayingVolume"
+    private static let nowPlayingNoBounceKey = "nowPlayingNoBounce"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -91,6 +92,7 @@ extension UserDefaults {
         nowPlayingBackdropKey,
         nowPlayingOneScreenKey,
         nowPlayingVolumeKey,
+        nowPlayingNoBounceKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -553,6 +555,20 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingVolumeKey)
+        }
+    }
+
+    /// 听歌页「**禁止回弹**」：把列表的 `alwaysBounceVertical` 关掉 —— 钉住之后**唯一还能让
+    /// 页面动**的只剩它。**默认关**：它是唯一有可能影响"下拉关闭播放器"的一步，而 pw 那条
+    /// 结论（下拉关闭骑在列表的 pan recogniser 上）**在 9.1.88 上不能照抄** ——
+    /// 那个类 `SPTBarInteractivePresentationController` 在 9.1.88 上**不存在**（ProbePack 实测）。
+    /// 单独一个开关 ⇒ 万一关闭手势坏了，只关它，「一屏」照常。
+    static var nowPlayingNoBounce: Bool {
+        get {
+            container.object(forKey: nowPlayingNoBounceKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingNoBounceKey)
         }
     }
 
