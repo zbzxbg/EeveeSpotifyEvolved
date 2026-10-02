@@ -184,18 +184,20 @@ enum NowPlayingOneScreen {
         let over: CGFloat = list.contentSize.height - bounds.height
         let want: CGFloat = -adjusted.top - over - safeArea
 
-        // 正数表示"内容还没铺满一屏"（**卡片还没到货时就是这样**）⇒ 不需要压。
-        // ⚠️ 这一行是 2026-10-03 夜补的：用户实测"卡片全没了，但还能往下滑"，
-        //    而当时分不清是"压根没找到列表"还是"找到了、但没到该压的时候"。
-        //    静默分支不报，下一次就还得靠猜。
+        // 正数表示"内容还没铺满一屏"（**卡片还没到货、或者已经全折完了**）⇒ 不该压。
+        // ⚠️ 这里**必须把 inset 退回原值**，不能只是"什么都不做"：
+        // 真机日志 39 的现场 —— 卡片还在时先按 `content.h=2132` 压了 `-1236pt`；
+        // 卡片一折起来内容就只剩一屏（`want=+0`），而上一版在这里直接 return ⇒
+        // 那 -1236 留在列表上 ⇒ **往下能滑 1236pt 的空白**（用户报的就是这个）。
         if want >= 0 {
             if !didLogNotNeeded {
                 didLogNotNeeded = true
                 writeDebugLog(
-                    "[\(logTag)] 内容还没到一屏高（want=+\(Int(want))pt）— 不压"
-                        + "（卡片还没到货时就会这样）"
+                    "[\(logTag)] 内容还没到一屏高（want=+\(Int(want))pt）— 不该压"
+                        + "（卡片还没到货、或已经全折完时就是这样）"
                 )
             }
+            revertInsetIfNeeded(list)
             logDiagnosticOnce(list)
             return false
         }
@@ -244,6 +246,28 @@ enum NowPlayingOneScreen {
                 + " adj.top=\(Int(adjusted.top)) adj.bottom=\(Int(adjusted.bottom))"
                 + " bounce=\(list.alwaysBounceVertical ? "on" : "off") panRecs=\(pans)"
         )
+    }
+
+    /// 把 inset **退回我们记下的原值**（幂等；没记过就什么都不做）。
+    ///
+    /// 与 `restore()`（关开关用）的区别：那个是不管怎样都退；这个是**每一拍的自纠**，
+    /// 用在"内容缩回一屏内、不该再压"的时候 —— 见 `pin` 里那个分支的注释（日志 39 的现场）。
+    @discardableResult
+    private static func revertInsetIfNeeded(_ list: UIScrollView) -> Bool {
+        guard let boxed = objc_getAssociatedObject(list, &originalInsetKey) as? NSNumber else { return false }
+
+        let original = CGFloat(boxed.doubleValue)
+        var inset = list.contentInset
+        let pressed = inset.bottom
+        guard abs(pressed - original) > slack else { return false }
+
+        inset.bottom = original
+        list.contentInset = inset
+        writeDebugLog(
+            "[\(logTag)] 内容缩回一屏内 ⇒ inset.bottom 由 \(Int(pressed)) 退回 \(Int(original))"
+                + "（不该再压着了）"
+        )
+        return true
     }
 
     private static func rememberOriginalInset(of list: UIScrollView) {

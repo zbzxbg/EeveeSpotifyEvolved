@@ -336,4 +336,59 @@
 | **`lastHex == hex` 就早退** | 早退 = 自愈永远来不了；幂等要做成"确保状态"，不是"什么都不做" |
 | ★ **Orion hook 方法里写 `self`** | 钩到的对象是 **`self.target`**（`self` 是 hook 类自己）。写成 `self` **只有 CI 才炸**，报成 `has no member 'clipsToBounds'` / `cannot convert value of type 'XHook' to expected argument type 'UICollectionViewCell'`，一路冒泡到 `make` exit 2、**deb 没生成**（2026-10-03 夜真机踩到）。既有 hook 全是 `self.target`，照抄那个写法。**`orion_hook_guard.py` 已加规则 4 拦它**（允许 `self.target` / `self.orig` / 本类自己声明的成员；不算 `[self]` 闭包捕获）—— 两向验证过：322 文件 0 误报、假错恰好抓两条 |
 
+---
+
+## 8.7 ★ 日志 39 + 照片 42–44 的裁决（2026-10-03 深夜，构建 = 带探针包那份）
+
+### A. 探针一次答完的问题
+
+| 问题 | 答案 |
+|---|---|
+| pw v0.21.1 的 **14 个播放页目标**在 9.1.88 上还在吗 | ✅ **14/14 全在** ⇒ AM 视图（头部 / footer / 控件 / 封面场 / 歌词进播放器）**全部可搬** |
+| morph 那个类呢 | ❌ `SPTBarOverlayPresentationTransition` **不存在** ⇒ **正式划掉 morph** |
+| pw 注释里"下拉关闭挂在列表 pan 上"的那个类 | ❌ `SPTBarInteractivePresentationController` **不存在** ⇒ 9.1.88 的关闭机制换了（我们是**绕开它**做的，不受影响；但"下拉还能不能关"仍以实测为准） |
+| pw 手势层要的播放控制器 | ✅ `SPTNowPlayingPlaybackControllerImplementation` **在** ⇒ 将来想要 pw 那种分区手势是可行的 |
+| 双击那条坑在我们这儿活不活 | ✅ **活的**：`[Gestures] diag … singleTapsAbove=2` ⇒ 值得花那一轮修 |
+
+### B. 取色底：✅ **成功**（日志 + 截图双证）
+
+```
+[NPVStyle] backdrop 414x896 ← 封面取色 E03038，垫在 UIView 0,0,414,896 之下
+           （那层底色 E03038，subviews=2，layer.sublayers=2，手插子层=0）
+[NPVStyle] 跟到换色 → C84098（第 2 次）→ E030B8（第 3 次）→ C00000（第 4 次）
+```
+
+* **`手插子层=0`** ⇒ 那层自己没有手插 layer ⇒ 我们插在**最下面也不会被压住**（照片 42/43/44 整页的红 / 粉 / 紫就是它）；
+* **`跟到换色` ×3** ⇒ 换歌跟着换；
+* 顺带证实了旧版为什么失败：`有 1~2 个满页着色层是 hidden / 透明 / 不在窗口里 — 已排除`
+  —— **可见性闸门真的挡掉了旧版会误选的那些层**。
+
+### C. 一屏：卡片 ✅、钉住 ❌ → **根因已抓到并修掉**
+
+```
+14:30:36 [OneScreen] 列表已钉在顶部 — 折掉 1236pt    ← 按"卡片还在时"的 content.h=2132 算的
+14:30:37 [OneScreen] 内容还没到一屏高（want=+0pt）— 不压   ← 卡片折完，内容只剩一屏
+```
+
+⇒ 上一版那条 `want >= 0` 分支**只 return、不把 inset 退回去** ⇒ `-1236` 留在列表上 ⇒
+**往下能滑 1236pt 空白**（用户原话："往下划也没东西了"）。
+修法：那一支改成 `revertInsetIfNeeded(list)` —— 内容缩回一屏内就把 inset 退回原值。
+
+**还剩一件（单独一轮、有风险，先不动）**：`bounce=on`（`panRecs=3`）。钉好之后若还有**一点点**
+回弹，那是 `alwaysBounceVertical`；关它才能真正一动不动，而关它**有可能弄坏下拉关闭**
+⇒ 必须以"下拉还能关吗"为验收判据。
+
+### D. 「无法播放任何歌曲」：第一个候选现场
+
+```
+14:29:31 [PLAYER] track changed — pos=27.4s dur=114.0s
+14:29:36 [PLAYER] ⚠️ position stalled at 27.4s for ~3s (dur=114.0s)
+（之后直到 14:30:08 换曲，都没有 `position resumed`）
+```
+
+⚠️ **探针分不清"暂停"和"卡住"**（没有 paused 源）。而 ProbePack 证明
+`SPTNowPlayingPlaybackControllerImplementation` **在 9.1.88 上存在** ⇒ 下一版可以补一个
+**只读 `isPaused`**，这条线就能定性了。
+
+
 
