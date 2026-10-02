@@ -111,12 +111,44 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 if SpotifyResponsePatcher.isLyricsFeatureDisabled {
                     let blocked = SpotifyResponsePatcher.disabledLyricsPayload(original: originalLyrics)
                     writeDebugLog("[DL] lyrics feature disabled — blocking Spotify's own lyrics")
+                    // 顺手清掉结果备忘：重新打开歌词功能后不该再拿旧 payload 顶上。
+                    LyricsResponseCache.shared.reset()
                     DispatchQueue.main.async { [self] in
                         orig.URLSession(session, dataTask: task, didReceiveData: blocked)
                         orig.URLSession(session, task: task, didCompleteWithError: nil)
                     }
                     return
                 }
+
+                // ── 分档预算 + 结果备忘（v4.11）─────────────────────────────────────
+                //
+                // 真机四档实测（2026-10-02 日志 34，同一首"全网没词"的歌，Spotify 9.1.88）：
+                //   不回退 ≤1s → 卡片在；＋Genius 回退 4s → 开始丢；＋AMLL 优先 6s → 更差；
+                //   多级回退（4 源串行）13s → 最差。
+                // ⇒ NPV 的模块列表是"组件加载完之后"才建的（`…WithDidLoadComponents…`），
+                //   响应晚于约 1~4s 就赶不上这一轮；"退出重进就好"= 让列表重建一次。
+                //
+                // 对策（完整理由写在 `LyricsResponseCache` 的注释里）：
+                //   · 刚产出过且曲目/设置都没变 → 直接交（0 等待）；
+                //   · 这首歌的**第一次**请求 → 只等 1.5s，先交占位把卡片建出来；
+                //   · **后续**请求（Spotify 交完占位后会立刻再来一次 —— 日志 34 里 4/4）
+                //     → 用长预算，把真词带上去。
+                let cache = LyricsResponseCache.shared
+                let cacheSignature = LyricsResponseCache.currentSignature
+                let requestPlan = cache.plan(forPath: url.path, signature: cacheSignature)
+
+                if case let .cached(payload) = requestPlan {
+                    writeDebugLog("[DL] lyrics from our memo — \(payload.count) bytes, 0 等待")
+                    DispatchQueue.main.async { [self] in
+                        orig.URLSession(session, dataTask: task, didReceiveData: payload)
+                        orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    }
+                    return
+                }
+
+                let budget = requestPlan == .firstAttempt
+                    ? LyricsResponseCache.firstAttemptBudget
+                    : LyricsResponseCache.followUpBudget
 
                 let semaphore = DispatchSemaphore(value: 0)
                 var customLyricsData: Data?
@@ -126,16 +158,24 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     semaphore.signal()
                 }
 
-                let waitResult = semaphore.wait(timeout: .now() + .milliseconds(18000))
+                let waitResult = semaphore.wait(timeout: .now() + budget)
                 // ⚠️ 超时以前只是"退回 Spotify 原始响应"，这里必须补一层兜底：
                 // 取词没能在预算内完成时（`customLyricsData` 仍是 nil），仍然交一份
                 // 可解析的占位。原因是 NPV 的歌词卡片**等数据到达才创建** —— 一个字节
                 // 都不投递就等于"这首歌没有歌词模块"，比内容不完美严重得多。
+                //
+                // ⚠️ v4.11：占位**不进备忘** —— 它是"还不知道"，不是"查完了没有"；
+                // 紧接着那次请求要照旧耐心等，把真结果拿回来。
                 let lyricsPayload: Data
                 if let customLyricsData {
                     lyricsPayload = customLyricsData
+                    cache.store(customLyricsData, forPath: url.path, signature: cacheSignature)
                 } else if waitResult == .timedOut {
-                    writeDebugLog("[DL] lyrics fetch exceeded the 18s budget — serving fallback payload")
+                    writeDebugLog(
+                        "[DL] 取词超过 \(budget)s 预算（"
+                            + (requestPlan == .firstAttempt ? "首次" : "后续")
+                            + "请求）— 先交占位把卡片建出来"
+                    )
                     lyricsPayload = unavailableLyricsBytes(original: originalLyrics) ?? buffer
                 } else {
                     lyricsPayload = buffer
