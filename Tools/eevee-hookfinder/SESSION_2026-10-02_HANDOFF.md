@@ -1,5 +1,9 @@
 # 交接：底部两条玻璃胶囊 + 第一批功能补齐（2026-10-02 深夜）
 
+> 🆕 **2026-10-03 第一轮：先看 §15** —— 那一节回答了用户三个问题（①"上轮说修了歌词但看不出"
+> ②"突然无法播放任何歌曲" ③"要的视图树"），并落地了 **v4.11.1**（歌词调度对齐到
+> `HttpClientURLSession` 那条路）。**在那之前**的现状/下一步仍以 §0–§14 为准。
+>
 > **新会话先读这一份**。它讲的是"上一份入口文档（`SESSION_2026-10-02_SUMMARY.md`）之后发生的事"：
 > 底部两条玻璃胶囊做到 v4.7.1、以及按 `SPOTIPW_GAP.md` 的估算开工的**第一批功能**。
 >
@@ -683,3 +687,123 @@ CFBundleAlternateIcons = { … }
 > 真正的原因是**那个年代的 Spotify 自己会先把预览歌词框画出来**（响应多慢都不丢模块），
 > 所以它连 `semaphore.wait()` 都不带超时也没出事。9.1.88 改成"响应驱动创建"之后，
 > 链长才第一次变成问题。
+
+---
+
+## 15. 2026-10-03 第一轮：三个问题的回答 + **v4.11.1**（歌词调度对齐到真机那条路）
+
+> 输入：**日志 35**（`C:\dsh\ipa\eeveespotify_debug_shared 35.log`）、
+> `dump-9.1.88.txt`、`Spotify-9.1.88.ipa`、照片 36/37/38。
+> 三条结论各自的证据都在本节，**代码改动只有一处**（见 §15.2）。
+
+### 15.1 ★ 问题①「上轮说修了歌词，但看不出」—— 两个独立原因，缺一不可
+
+**原因 A：v4.11 的修复长在一条这台设备根本不走的路上。**
+
+| 事实 | 证据 |
+|---|---|
+| 两条传输层各有一份**歌词派发**逻辑：`DataLoaderServiceHooks.x.swift`（`SPTDataLoaderService`）与 `HttpClientURLSessionHooks.x.swift`（`Connectivity_HttpClientKit.HttpClientURLSession`） | 两份文件各自有 `url.isLyrics` 分支 |
+| v4.11（分档预算 + 结果备忘）**只加在了 `DataLoaderServiceHooks`** | `git show --stat ffe3e69`：只动 `DataLoaderServiceHooks.x.swift` + 新增 `LyricsResponseCache.swift` |
+| 真机日志 28→35 **每一份都是 `[DL]` 0 行、`[HCUS]` 若干行** | `28:HCUS=2 DL=0`、`29:7/0`、`30:3/0`、`31:5/0`、`32:6/0`、`34:26/0`、`35:17/0` |
+| ⇒ 这台设备上歌词响应走的是 **HttpClientURLSession** ⇒ 那套装**一次都没生效** | 日志 35 里 `[HCUS] Patched LyricsCardElement` / `[HCUS] customize 304 …`，而 `[DL]` 零行 |
+
+**原因 B：用户测的是一个**根本没有 v4.11** 的构建。**
+`ffe3e69`（v4.11）提交于 **2026-10-02 14:19（+0800）**；日志 35 的时间戳是 **06:40–06:41 UTC = 14:40 本地**，
+但它的 `[TabBarPlate]` 行带 `基=图标`（v4.10 新增）⇒ 装着的是 **704f92c（12:13）** 那一版，
+**v4.11 从未上过机器**。日志 34 更早（05:42 UTC），同样不含。
+
+**原因 C（顺带纠正文档）：v4.11 的两条判据行在真机上从未出现过。**
+日志 34/35 里搜不到 `memo` / `1.5s` / `[DL]` 任何一行 —— 不是"没触发"，而是**那条路不在跑**。
+
+**⇒ 所以"看不出"是必然的：修的东西没被执行到，测试的构建里也没有它。**
+
+### 15.2 v4.11.1：把同一套调度对齐到两条路（3 个文件）
+
+| 文件 | 改动 |
+|---|---|
+| `Lyrics/LyricsResponseCache.swift` | 新增 **`BudgetPlan`**（`plan` + `attempt` + `budget`，两条路共用同一个共享实例与同一套计数）与 **`Outcome`/`recordOutcome(route:)`**（统一结果行，前缀 `[DL]` / `[HCUS]` 区分路）；`plan(forPath:signature:)` → `budgetPlan(forPath:signature:)` |
+| `HttpClientURLSessionHooks.x.swift` | 歌词 200 分支改用 `budgetPlan` + 备忘复用 + `recordOutcome`；**首次请求 1.5s / 后续 18s**（原来是写死 18s）。**真结果仍进备忘**（与 DL 路共用一个） |
+| `DataLoaderServiceHooks.x.swift` | 改用 `budgetPlan` 与统一的 `recordOutcome`（行为不变，只是计数与日志与另一条路合并） |
+
+**唯一的行为变化（要真机验的）**：HttpClient 路的**首次**请求到 1.5s 还没结论时，交**占位**（"未找到歌词"）
+而不是放行 Spotify 原始响应 —— 理由是"卡片必须先建出来"（见 §14 的四档实测）。
+**风险**：若 Spotify 对该曲**不再重请求**，占位会留到重进页面。日志 34/35 里 4/4 都在 4~6s 内来了第二次请求，
+所以判据就是下一份日志里的 `第 N 次请求`（见 §15.5）。
+
+**为什么没有采用"同一 task 再投一次真词"**：`didReceiveData` 的多次投递会被消费端**拼接**，
+而 payload 是 protobuf —— 拼接等于把两份消息合成一份（行数变多、字段串味），风险远大于收益。
+
+### 15.3 ★ 问题②「突然无法播放任何歌曲」：日志 35 **没有**这个现场，且旧结论 H2 站不住
+
+**A. 症状前情（仓库里早就有）**：`common_issues.md:60-68` 写的就是这句话
+（"a song stops as soon as you play it"），归因是**地区**（"You can only use Spotify abroad for 14 days"），
+而且**明确写着 "Do not enable Overwrite Configuration unless you've also tried the region fix"** ——
+这与此前"开覆盖配置就好 ⇒ H2"的结论**相反**，那一轮从未评估过上游这段。
+
+**B. `[REVERT_WATCH][init]` 这行不能当 H2 的铁证**（此前文档写错了）：它的
+`subscription-enddate` / `product-expiry` 是**我们自己**写的 `now+1 年`
+（`EeveePremiumForce.x.swift:4-8,45-46`、`DynamicPremium+ModifyingFunctions.swift:768-782`）；
+数值自证：日志 34 `INIT@05:42:34` 打出 `05:42:13`、日志 35 `INIT@06:40:39` 打出 `06:40:05`
+——**恰好是上一次启动的时刻**。而其余字段全在强制表/`seedAlways` 里。
+唯一能分开 H2 与 H1/H3 的字段是 `country`（不强制、不 seed），**四份实测行里都没有 `country=`**。
+
+**C. 全部 31 份日志（2–35，缺 4/13/22/33）里播放失败证据为零**：
+任何 `drm|widevine|license|unplayable|restricted|playback error` 都只命中
+`[Flags] lyrics_offline_enabled` 与 `[REVERT_WATCH] … player-license=premium`；
+`missing` 只有 `[HCUS] Missing buffered body … customize` 与 SponsorBlock 两类；
+`ORION ERROR` 只有 `provideStatefulPlayer`（旧入口，与播放无关）与 `addPlayerObserver:`（SB 只读 observer，`enabled=N`）。
+
+**D. 日志 35 那 81 秒**：进度带左边缘单调右移（`@11 → @35`，10 秒 24pt），
+与该曲 `5MWIHwOUzHnBgnn2XNMDQu` 159s / 385pt ⇒ 期望 **2.42 pt/s** 吻合（实测 2.40）⇒
+**播放头在走**（只能证明播放器时钟，不能证明有声音：日志没有音频遥测）。
+4 首/81 秒被换了 3 次 ⇒ 用户当时在连续切歌。出口 IP 从 `23.132.124.130`（日志 34）变成
+`38.181.82.183`（日志 35）⇒ 那段时间在**换网络/代理**（正是 H1 的场景）。
+日志 34 结束到日志 35 开始之间有 **~56 分钟空档**，症状很可能落在那里。
+
+**E. 我们这边两个"放大器"（复核过、确实存在）**：
+1. `DynamicPremium+ModifyingFunctions.swift:60-62` 把 Spotify 自己的 **播放超时服务与超时错误 UI 关掉**、
+   `playback_timeout_action = "Nothing"` ⇒ 放不出来时**不报错、不自愈**，观感就是"点了没反应"；
+2. `EeveePremiumForce.x.swift:38-40` 置空 `streaming-rules` + `high-bitrate=1`，
+   而同文件 `:797` 自己写着 `audio-quality left unforced: Very High fails to stream on a free entitlement.`
+   ⇒ 音质/流规则**自相矛盾**是"整库变灰"的已知类型（作者注释 `:88`）。
+
+**⇒ 下一次不能再靠"开覆盖配置"下结论**：要按 §15.5 的判据补 `country=` 与播放器状态，
+并按上游 FAQ 先试**地区修复**（并把「覆盖配置」关掉做对照 —— 它现在**是开着的**）。
+
+### 15.4 ★ 问题③「要的视图树」：日志 35 里已经有 36 份（20+16），并已清点成逐屏清单
+
+| 东西 | 位置 |
+|---|---|
+| 逐屏类名清单（**新生成**） | `.spotify-ipa/view-inventory-35.txt`（109 KB）、`.spotify-ipa/view-inventory-34.txt`；生成命令见 `summarize_view_trees.py` |
+| 日志 35 覆盖的屏 | `RootViewController` 18 份、`>NowPlayingOverlayContainer` 13 份、`ContainerViewController` 2 份、`MusicAppPageHostingViewController` 2 份、`NowPlaying…>MusicAppPage…` 1 份 |
+| 播放页（NPV）去重类名 | **154 个**（`Select-String 'IdentifiableElementBox<TabBarItemElement>'` 那类脚本可复现），含 `CardContentView` / `CardHeaderView` / `ChipToolbarView` / `CreatorBiographyCardLayout` / `FreshFindsForwardBadgeView` / `MixingBackgroundView` / `NPVGradientView` / `VISREFTouchForwardingView` … |
+| ⚠️ 还缺的屏 | **搜索 / 歌单 / 专辑 / 首页之外的四屏取证**（§12 第 11 步要的那四屏）在日志 35 里**没有** —— 转储器一次启动 20 份，这次被首页 + 播放页吃掉了 |
+
+### 15.5 ★ 下一份日志（日志 36）的判据 —— 只验 v4.11.1
+
+**① workflow / 开关**：`.github/workflows/build-ipa-with-orion-patched.yml`，`liquid_glass` 默认开。
+**② 设置**：调试 →「日志记录」+「转储视图树」都开；歌词来源保持 **NetEase + Genius 回退 + AMLL 优先**
+（与日志 35 同配置，才能对比）。
+**③ 点哪些地方**：冷启动 → 放一首**有词**的歌（等 8 秒）→ 切下一首（再等 8 秒）→ 停首页 2 秒 →
+**顺手把搜索页/歌单页各停 2 秒**（补 §15.4 缺的两屏）→ 导日志。
+**④ 发什么**：`eeveespotify_debug_shared 36.log` + 一张"预览歌词卡片"存在的截图。
+**⑤ 我看哪几行**（这一版**必然**出现，因为两条路都打了）：
+
+```
+[HCUS] lyrics fetched — N bytes, X.Xs（第 1 次请求・首次・预算 1.5s）        ← 1.5s 内拿到真词
+[HCUS] 取词超过 1.5s 预算（首次请求）— 先交占位把卡片建出来｜经过 X.Xs・第 1 次请求
+[HCUS] lyrics memo hit — N bytes, 0 等待（第 2 次请求）                      ← ★ 关键：第二次请求秒回
+[HCUS] lyrics fetched — …（第 2 次请求・后续・预算 18.0s）                    ← 若备忘没命中，是否把真词带上
+[DL] …（同族，只有走 SPTDataLoaderService 的曲子才会出现）
+```
+
+**通过判据**：① 出现 `第 2 次请求` → 证明"占位之后 Spotify 会重请求"这个前提在**这条路上**也成立；
+② 第二次请求那一行是 `memo hit` 或 `fetched`（**不能**又是 `取词超过 18.0s 预算`）；
+③ 卡片不是一直停在"未找到歌词"。
+**不该出现**：`第 1 次请求` 之后**再也没有** `第 2 次请求`（那说明这条路不重试 ⇒ 回退成"放行原始响应"，见 §15.2）。
+
+### 15.6 本轮自检（改完就跑，全过）
+
+`orion_hook_guard` 317 / `swift_brace_check` 317 / `swift_member_check` 262 / `l10n_lint` en+zh-CN 无输出。
+**未提交**（连同 `Sources` 三个文件与文档）。⚠️ 本机没有 Swift 工具链 ⇒ 编译只能靠 CI。
+

@@ -133,12 +133,16 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 //   · 这首歌的**第一次**请求 → 只等 1.5s，先交占位把卡片建出来；
                 //   · **后续**请求（Spotify 交完占位后会立刻再来一次 —— 日志 34 里 4/4）
                 //     → 用长预算，把真词带上去。
+                // ⚠️ 2026-10-02（v4.11.1）：改用 `budgetPlan` —— 与 `HttpClientURLSessionHooks`
+                // **共用同一个 `LyricsResponseCache` 实例与同一套计数**（原先两边各算各的，
+                // 而真机日志 28→35 里只有 `[HCUS]` 一条路在跑，这套调度等于没生效）。
                 let cache = LyricsResponseCache.shared
                 let cacheSignature = LyricsResponseCache.currentSignature
-                let requestPlan = cache.plan(forPath: url.path, signature: cacheSignature)
+                let requestPlan = cache.budgetPlan(forPath: url.path, signature: cacheSignature)
+                let startedAt = Date()
 
-                if case let .cached(payload) = requestPlan {
-                    writeDebugLog("[DL] lyrics from our memo — \(payload.count) bytes, 0 等待")
+                if case let .cached(payload) = requestPlan.plan {
+                    cache.recordOutcome(.memoHit(bytes: payload.count), route: "DL", plan: requestPlan)
                     DispatchQueue.main.async { [self] in
                         orig.URLSession(session, dataTask: task, didReceiveData: payload)
                         orig.URLSession(session, task: task, didCompleteWithError: nil)
@@ -146,10 +150,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     return
                 }
 
-                let budget = requestPlan == .firstAttempt
-                    ? LyricsResponseCache.firstAttemptBudget
-                    : LyricsResponseCache.followUpBudget
-
+                let budget = requestPlan.budget
                 let semaphore = DispatchSemaphore(value: 0)
                 var customLyricsData: Data?
 
@@ -170,15 +171,23 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 if let customLyricsData {
                     lyricsPayload = customLyricsData
                     cache.store(customLyricsData, forPath: url.path, signature: cacheSignature)
-                } else if waitResult == .timedOut {
-                    writeDebugLog(
-                        "[DL] 取词超过 \(budget)s 预算（"
-                            + (requestPlan == .firstAttempt ? "首次" : "后续")
-                            + "请求）— 先交占位把卡片建出来"
+                    cache.recordOutcome(
+                        .fetched(bytes: customLyricsData.count, elapsed: Date().timeIntervalSince(startedAt)),
+                        route: "DL", plan: requestPlan
                     )
+                } else if waitResult == .timedOut {
                     lyricsPayload = unavailableLyricsBytes(original: originalLyrics) ?? buffer
+                    cache.recordOutcome(
+                        .placeholder(dueToTimeout: true, elapsed: Date().timeIntervalSince(startedAt)),
+                        route: "DL", plan: requestPlan
+                    )
                 } else {
-                    lyricsPayload = buffer
+                    // 取词在预算内失败（报错/没有词）→ 仍要交一份占位，否则卡片不建。
+                    lyricsPayload = unavailableLyricsBytes(original: originalLyrics) ?? buffer
+                    cache.recordOutcome(
+                        .placeholder(dueToTimeout: false, elapsed: Date().timeIntervalSince(startedAt)),
+                        route: "DL", plan: requestPlan
+                    )
                 }
                 DispatchQueue.main.async { [self] in
                     orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)

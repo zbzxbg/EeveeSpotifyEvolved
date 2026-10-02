@@ -1,5 +1,9 @@
 # 2026-10-02 会话总结（**新入口**）
 
+> 🆕 **2026-10-02 下半场（10:16→14:20，日志 29→34）已续写在 §9** ——
+> v4.9 / v4.10 / v4.11、恢复「AMLL 优先」、RTL 贴右、应用图标接线、两条诊断日志，
+> 以及**当前权威的"状态 / 下一步 / 规矩"**都在那一章。看现状请直接跳 §9。
+
 > ⚠️ **2026-10-02 深夜又推进了一轮**：底部两条玻璃胶囊做到 v4.7.1（等宽、同高、修掉首帧盖不住）
 > 并做完了第一批功能补齐（28 条 flag + 备份/重置 + 更新日志 + 许可）。
 > **新会话请先读 [`SESSION_2026-10-02_HANDOFF.md`](SESSION_2026-10-02_HANDOFF.md)**，
@@ -210,3 +214,138 @@
 | `[TabBarDump]` / `[TabBarSel]` | 一次性只读探针：标签栏结构 + "哪一颗被选中"的信号（**日志关着时连树都不走**） |
 | `[TabBarPlate] …` | 玻璃胶囊自报：插在哪、摆在哪、**有文字带 / 图标带 / dy**、文字藏了几个（v4.6 起的行格式见 §19.2） |
 | 照片逐像素量尺寸（PIL） | 没有 Mac、也拿不到真机读数时，**用 `PIL` 扫一列像素**就能把"胶囊多高、图标偏上几 pt"量出来（照片 29 就是这么定位的：白色描边 = 胶囊上下边，2px = 1pt） |
+
+---
+
+# 9. 下半场（10:16 → 14:20，日志 29 → 34）：外观收尾 + 歌词模块线
+
+> ⚠️ **本章是当前权威入口**：状态、下一步、规矩以这里为准；§0–§8 是上半场（08:51 之前）。
+> 细节流水：外观 → [`SESSION_2026-10-02_APPEARANCE.md`](SESSION_2026-10-02_APPEARANCE.md)（§23–§25）；
+> 歌词 → [`LYRICS_MODULE_NEXT_STEPS.md`](LYRICS_MODULE_NEXT_STEPS.md)（§20）；
+> 交接 → [`SESSION_2026-10-02_HANDOFF.md`](SESSION_2026-10-02_HANDOFF.md)（§12–§14）。
+
+## 9.1 干了什么（按轮次，7 项）
+
+| 轮 | 交付 | 文件 | 状态 |
+|---|---|---|---|
+| **v4.9** | 「创建」取消后**上移 8pt**（日志 29 的真机病：那一颗 `ElementContentView@279,2` 卡了 16 秒）→ 改成"整行共用一个位移"+ **复核机制**（短促重试 0.2/0.5/1/2/3.5s + `DeclutterChrome` 的 0.5s 节拍，**不等布局回合**） | `Appearance/TabBarGlass.x.swift`、`Appearance/DeclutterChrome.x.swift` | 日志 30 验收：**上移好了**（`[Tree]` 不再卡 2）；代价 = 菜单开着时那颗**往下偏 ~7pt**（照片 38）→ 见 v4.10 |
+| **v4.10** | 照片 38 的**下偏**：回到"一颗一个数"（v4.8 的 `iconShifts`）+ 保留 v4.9 复核；删掉 v4.9 的 `rowShift(from:)` / `iconPreferredShifts` | `Appearance/TabBarGlass.x.swift` | ⏳ **未验**（要再点一次「创建」：开着时 `dy=+2.5` 是对的，**取消后必须回到全 `+10`**） |
+| **恢复「AMLL 优先」** | 把历史里那整块 `if amllPreferred {}` 搬回（原 `durationMs` 参数已删 → 按 `makeLyrics(from:source:)` 改写）+ 设置页开关 + 2 条 l10n（**只加在 en / zh-CN**，因为这两条历史上只存在这两处） | `Lyrics/CustomLyrics.x.swift`、`Settings/ngzhwm/ngzhwmSettingsViewModel.swift`、`Settings/Sections/Lyrics/**`（3 个）、en/zh-CN `Localizable.strings` | ✅ 日志 30/31 验收：`AMLL preferred — trying AMLL first` → `AMLL succeeded (65 line(s))` |
+| **RTL 贴右** | 新增 `String.prefersRightToLeftLayout`（UAX#9 P2/P3 首强字符；故意跳过数字/标点/emoji，并排除阿拉伯数字）；AM 页按**每行内容**给 `\.layoutDirection`；逐词层 3 处 `textAlignment = .left` → `.natural` | `Shared/Models/Extensions/String+ScriptDirection.swift`（**新增**）、`Lyrics/AppleMusic/AppleMusicLyricsPage.swift`、`Lyrics/LyricsWordByWord.x.swift` | ⏳ **未验**（要一首**有逐词数据**的阿拉伯语歌 + 两张截图：开关开/关） |
+| **应用图标接线** | 两个 IPA workflow 在**打包前**调 `Tools/alt-icons.sh`，并打印 `CFBundleAlternateIcons`（失败只 `::warning::` 不中断） | `.github/workflows/build-ipa-with-orion.yml`、`...-patched.yml` | ✅ 用户实测「**功能可用**」 |
+| **诊断补口** | `[REVERT_WATCH][init] …`（初始字典也打 —— 原先只挂在 setOriginal/setOverrides 上，导致"整库变黑"的会话 0 行、判不出来）+ `[INIT] patching: overwriteConfig=ON/OFF` | `EeveePremiumForce.x.swift`、`Tweak.x.swift` | ✅ 日志 31 验收：两行都出来了（当时 `overwriteConfig=ON`、产品状态**满档 premium**、`subscription-enddate=2027-10-02`） |
+| **v4.11** | 歌词模块**首帧丢失**：**分档预算**（首轮 **1.5s** / 后续 **18s**）+ **单条结果备忘**（曲目 id + 设置签名都对得上才复用）+"第几次"按**本轮播放**计数 + 占位不进备忘 | `Lyrics/LyricsResponseCache.swift`（**新增**）、`DataLoaderServiceHooks.x.swift` | ⏳ **未验**（本轮改动，验收见 §9.3-2） |
+
+## 9.2 这一场"原来如此"（三个硬事实，都由真机日志钉死）
+
+1. **窗口只有 1~4 秒**：NPV 的模块列表是**"组件加载完之后"**才建的
+   （`…nowPlayingScrollViewModelWithDidLoadComponentsFor…`），而那张预览歌词卡片就是**这次响应**喂出来的。
+   日志 34 四档实测（同一首"全网没词"的歌）：不回退 **≤1s → 卡片在**；＋Genius 回退 4s → 开始丢；
+   ＋AMLL 优先 6s → 更差；多级回退（4 源串行）**13s → 最差**。⇒ "退出重进就好" = 让列表重建一次。
+2. **Spotify 自己按曲目缓存我们交回去的 payload**（服务端响应头 `Cache-Control: public, max-age=3600`，
+   而我们是**伪装成那次响应**交回去的、**没改任何缓存头**）⇒ 用户实测"**改了来源，回到听过的歌还是旧来源、
+   而且秒加载**"——**这不是 bug，是它的缓存**，我们清不掉，只能重启 App（**该写进设置页提示**）。
+   反证：日志 34 那首没词的歌，**四次重启每次都把整条链重跑一遍**（空 payload 不会被留下）。
+3. **"座位"是我们自己注入的**：四档里每次都出现
+   `[Scrollsita] … body=368B has5=false` → `injected lyrics-card element — 368B -> 453B`
+   ⇒ 服务端**没给**这首歌放卡片元素（它知道没词），是我们补的。**丢的不是座位，是"人没赶上"。**
+   另外两条只有读代码才知道的：`getLyricsDataForCurrentTrack` 开头有**最多 3 秒**"等播放器元数据跟上"的循环；
+   而**超出预算交占位 ≠ 丢词** —— 后台那条链会继续跑完并把 dto 写进 `currentLyricsDto`（逐词层/自绘页照常可用）。
+
+> ⚠️ **顺带更正上一轮的判断**：whoeevee 上游"没有链所以快"**只对了一半** —— 真正原因是
+> **那个年代的 Spotify 自己会先把预览歌词框画出来**（响应多慢都不丢模块），所以它连
+> `semaphore.wait()` 不带超时都没出事。9.1.88 改成"响应驱动创建"之后，**链长才第一次变成问题**。
+> （上游仓库已在本地：`C:\Users\ngzhwm\Documents\GitHub\EeveeSpotifyReborn`，v6.2.2，最后一条提交是
+> `discontinuation notice` —— 已停更，**只借它的"快"，别退回它的架构**。）
+
+## 9.3 接下来做什么（按优先级）
+
+**① 用户侧补验（不用重新编译，欠着的）**
+| 项 | 怎么做 |
+|---|---|
+| v4.10 的「创建」 | 点开「创建」→ 等 2 秒 → 取消 → 再等 2 秒。判据：开着时 `dy=[+10,+10,+10,+2.5] 基=图标`、`[Tree]` 那颗 `@279,2` **都是对的**；**取消后必须回到全 `+10` 与 `@279,10`** |
+| **四屏取证** | 调试里打开「**转储视图树**」（日志 31 里它是 `[Tree] off`），再去 搜索 / 歌单 / 播放 / 首页 各停 2 秒 → 下一批"页面级清理开关"靠它 |
+| RTL | 一首**有逐词**的阿拉伯语歌，全屏歌词页两张截图（「更好的逐词歌词」开/关） |
+
+**② v4.11 的四条实验（本轮改动的验收）**
+1. 无词歌 + 多级回退（montagem）→ 卡片**必须出现**（写"未找到"），**不是**上一首的内容；
+2. 有词歌 + 多级回退 → 卡片出现、内容对、明显短于 13 秒；
+3. 同一首来回切 3 次 → 第一次之后**秒开**；
+4. 切歌后立刻看日志里 `[Lyrics] Request for /color-lyrics/v2/track/<id>` **有没有第二次**。
+   该看到的新行：`[DL] 取词超过 1.5s 预算（首次请求）— 先交占位把卡片建出来` /
+   `[DL] lyrics from our memo — N bytes, 0 等待`。
+
+**③ 代码线（都零取证或已取证）**
+| 优先 | 项 | 说明 |
+|---|---|---|
+| ★ | **预热** | 切歌即取词 → 首轮直接给真词（正反馈：成功一次就进 Spotify 那份缓存，之后永远秒开）。挂点 `SPTPlayerTrackHook.metadata()`，但它在**热路径**上 → 必须按 track id 去重 + 节流，**单独一轮** |
+| ★ | **削链 A+B** | AMLL 那跳去掉 Genius 兜底（省 ~3s）；同一次请求 Genius **只查一次**；多级回退的 `for` 串行 → **真并发**（13s → ~5s） |
+| | **设置页提示** | "换了歌词来源，**已听过的歌**要重启 App 才会重取" → 要动 **27 个 locale**，单独一轮 |
+| | **effect 路线**（最高一档） | 要连"Spotify 不再重请求"也兜住 → 找 `Lyrics_CardElementImpl.40ReloadLyricsWithTranslationEffectHandler` 那族的派发入口，需要**方法级转储**（多一轮取证；现有 `dump-9.1.88.txt` 是**纯类名**，0 条方法） |
+| | **页面级清理 8~10 条** | 复用 `DeclutterChrome` 的可撤销隐藏 + 复查；**等四屏 dump** |
+| | 状态反馈小项 / 两个探针 | 下载三态 / Add-to-library 与 Follow 变勾 / `?` 菜单 / 队列角标；Sleep timer、变速（`playbackSpeed` 已能读） |
+| | 顺手三个小缺陷 | ① LRCLIB 84 字节响应触发 `DecodingError: keyNotFound 'instrumental'` → 该按"未找到"处理；② Musixmatch 首轮打满 5s 超时（它 7 秒后才回，第二轮 1s 就有）；③ Genius 在"AMLL 优先"下被查两次 |
+
+**④ 明确不做**：整套 10 屏自绘（我们已经在 Spotify 自己的新设计语言上，收益被稀释、成本 15~30 轮；要做只做**1 屏样品**）；
+morph 转场（要 hook 私有转场类）；Tab 拖动排序（撞"不动别人布局"红线）；手动重建 Spotify 的私有模块列表。
+
+## 9.4 要求与规矩（本会话新增 / 强化）
+
+**工程纪律**
+* **编译只能走 CI**（本机**没有 Swift 工具链**）⇒ 一轮编译很贵：**批量写、一次验**；新代码的编译风险只能靠 CI 兜。
+* 改完**必跑四条自检**（全过才算完）：
+  ```
+  python Tools/eevee-hookfinder/orion_hook_guard.py      # 317 文件
+  python Tools/eevee-hookfinder/swift_brace_check.py     # 317
+  python Tools/eevee-hookfinder/swift_member_check.py    # 262
+  python Tools/l10n_lint.py --locale en  --quiet
+  python Tools/l10n_lint.py --locale zh-CN --quiet
+  ```
+  新增 `.swift` 会被编译（`Makefile`：`find Sources/EeveeSpotify -name '*.swift'`，`.x.swift` 只是命名惯例）。
+* **文档即交付**：每轮都要把「结论 + 证据 + 判据」写进 `Tools/eevee-hookfinder/**`，否则下个会话只能重推。
+* **验收清单用"五件事"格式**：① workflow/开关 ② 设置里开哪几个 ③ 按顺序点哪些（含"等几秒"）
+  ④ 发什么（日志 + 截图）⑤ 我看哪几行（预期行 + **"不该出现"清单**）。
+* **证据驱动**：真机 `[Tree]`/日志是唯一仲裁者；自己的推测要标明"推断"，别写成结论（本会话就靠这条纠正过两次判断）。
+* **红线**：不动别人的布局（只做 transform/dy 之类的写入）；不新增没证据的 hook（Orion 注册期解析不到会 **SIGTRAP** 崩注入工具）；
+  不碰 Spotify 私有转场/私有列表重建；`spoti.pw` 是 PolyForm **只读它的 .md**，**绝不读它的代码**。
+
+**本机操作要点（容易踩，照抄）**
+* `pwsh` 工具**必须**带 `sandbox_permissions: "danger-full-access"`，否则 exit `3221225794`（STATUS_DLL_INIT_FAILED）。
+* 只读文件策略下 `write`/`edit` 会被拒 → **用同一个操作**重试并带 `sandbox_permissions: "workspace-write"` + 中文理由。
+* 控制台是 **GBK**：中文报告**写进 UTF-8 文件再用 read 读**，别指望 stdout；`Python` 可用，**没有 `bash`**（`bash -n` 不可用，WSL 没装发行版）。
+* 只读分析脚本用完**即删**（`%TEMP%`），别提交。
+* 素材路径：日志 `C:\dsh\ipa\eeveespotify_debug_shared <N>.log`；照片 `C:\dsh\else\<N>.jpg`；
+  类名转储 `C:\dsh\ipa\dump-9.1.88.txt`（**只有类名**，17047 条）。日志时间戳是**秒级**（算耗时只能到秒）。
+
+## 9.5 本会话新增的资产
+
+| 资产 | 用途 |
+|---|---|
+| `Sources/EeveeSpotify/Lyrics/LyricsResponseCache.swift` | 歌词响应**分档预算 + 单条结果备忘**（v4.11）；注释里写着四档实测数据与"为什么不做按曲目缓存" |
+| `Sources/EeveeSpotify/Shared/Models/Extensions/String+ScriptDirection.swift` | `String.prefersRightToLeftLayout`（UAX#9 P2/P3 首强字符）——RTL 贴边用 |
+| `[DL] lyrics from our memo — N bytes, 0 等待` / `[DL] 取词超过 …s 预算（首次/后续请求）` | v4.11 的两条新日志：一眼看出"这次是缓存命中还是占位" |
+| `[REVERT_WATCH][init] …` / `[INIT] patching: overwriteConfig=…` | "整库变黑"的判据（H2 vs H1/H3）+ 覆盖配置开关状态 |
+| `Tools/alt-icons.sh`（已有）+ 两个 workflow 的调用 | 应用图标注册（`CFBundleAlternateIcons`），打包前跑、失败只告警 |
+
+## 9.6 工作区状态（写完本章时）
+
+未提交：`DataLoaderServiceHooks.x.swift`（v4.11）、**新增** `Lyrics/LyricsResponseCache.swift`、
+`LYRICS_MODULE_NEXT_STEPS.md`（§20）、`SESSION_2026-10-02_HANDOFF.md`（§13/§14）、`SPOTIPW_GAP.md`（纠偏一条）、
+`SESSION_2026-10-02_SUMMARY.md`（本章）。已提交并编译过的：`9be72fb`(v4.9) / `464f031` / `fa0bbe7`(AMLL+RTL+图标) / `704f92c`(v4.10+诊断)。
+**提交后走同一个 workflow 编译**，然后按 §9.3-① ② 验。
+
+---
+
+## 9.7 2026-10-03 追加：**v4.11 没生效的真实原因** + 「无法播放」结论 + 视图树交付
+
+> 完整版在 [`SESSION_2026-10-02_HANDOFF.md`](SESSION_2026-10-02_HANDOFF.md) **§15**（先读那一节）。三句话：
+
+1. **v4.11 只写在 `SPTDataLoaderService` 那条路上**，而真机日志 28→35 **每一份都是 `[DL]` 0 行**（走的是 `HttpClientURLSession`）⇒
+   分档预算/结果备忘**一次都没执行**；且用户测的构建（`704f92c`，12:13）**早于** v4.11 的提交（14:19）。
+   → 本轮 **v4.11.1**：两条路共用 `LyricsResponseCache`（新增 `BudgetPlan` / `Outcome` 与统一结果行）。
+2. **「突然无法播放任何歌曲」在 31 份日志里零证据**；而且此前"开覆盖配置就好 ⇒ H2"的结论**站不住** ——
+   `[REVERT_WATCH][init]` 的 `subscription-enddate` 是**我们自己**写的 `now+1年`，那行分不开 H2 与 H1/H3。
+   上游 `common_issues.md:60-68` 把**地区**列为第一顺位，并明确"别先开覆盖配置"（它现在**是开着的**）。
+3. **视图树在日志 35 里**（36 份：首页 18 + 播放页 13 + 各 1~2），已清点成
+   `.spotify-ipa/view-inventory-35.txt`；**还缺搜索/歌单两屏**（转储器配额被前两屏吃掉），下一份日志顺手抓。
+

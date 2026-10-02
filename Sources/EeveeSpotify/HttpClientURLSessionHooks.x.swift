@@ -88,24 +88,63 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     return
                 }
 
+                // ── 分档预算 + 结果备忘（与 `SPTDataLoaderService` 那条路**对齐**）──────
+                //
+                // ⚠️ 2026-10-02（v4.11.1）：v4.11 把这套调度只写在了
+                // `DataLoaderServiceHooks`（`SPTDataLoaderService`）那一条路上，
+                // 但真机日志 28→35 **每一份**都是 `[DL]` 零行、`[HCUS]` 若干行 ——
+                // 这台设备上歌词响应走的是 `Connectivity_HttpClientKit.HttpClientURLSession`
+                // ⇒ 分档预算与结果备忘**一次都没真正生效**（用户"看不出修了什么"的直接原因）。
+                //
+                // 现在两条路共用 `LyricsResponseCache`（同一个共享实例、同一套计数），
+                // 各自打自己的 `[DL]` / `[HCUS]` 结果行。语义与理由见
+                // `LyricsResponseCache` 的文件头（含真机四档实测数据）。
+                let cache = LyricsResponseCache.shared
+                let cacheSignature = LyricsResponseCache.currentSignature
+                let plan = cache.budgetPlan(forPath: url.path, signature: cacheSignature)
+
+                if case let .cached(payload) = plan.plan {
+                    // 备忘命中 = 刚产出过、曲目与设置都没变 → 一个字节都不用等。
+                    cache.recordOutcome(.memoHit(bytes: payload.count), route: "HCUS", plan: plan)
+                    orig.URLSession(session, dataTask: task, didReceiveData: payload)
+                    orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    return
+                }
+
+                let budget = plan.budget
+                let startedAt = Date()
                 let semaphore = DispatchSemaphore(value: 0)
                 var customLyricsData: Data?
                 DispatchQueue.global(qos: .userInitiated).async {
                     customLyricsData = try? getLyricsDataForCurrentTrack(url.path, originalLyrics: originalLyrics)
                     semaphore.signal()
                 }
-                let waitResult = semaphore.wait(timeout: .now() + .milliseconds(18000))
+                let waitResult = semaphore.wait(timeout: .now() + budget)
                 // 同 SPTDataLoaderService：预算内没拿到词也要给一份可解析的占位，
                 // 否则这次歌词请求等于"没有响应"，NPV 不会创建歌词卡片。
                 // 见 `unavailableLyricsBytes`（CustomLyrics.x.swift 文件作用域函数）。
                 let lyricsPayload: Data
                 if let customLyricsData {
                     lyricsPayload = customLyricsData
+                    // 真结果才进备忘（占位不进 —— 那是"还不知道"，不是结论）。
+                    cache.store(customLyricsData, forPath: url.path, signature: cacheSignature)
+                    cache.recordOutcome(
+                        .fetched(bytes: customLyricsData.count, elapsed: Date().timeIntervalSince(startedAt)),
+                        route: "HCUS", plan: plan
+                    )
                 } else if waitResult == .timedOut {
-                    writeDebugLog("[HCUS] lyrics fetch exceeded the 18s budget — serving fallback payload")
                     lyricsPayload = unavailableLyricsBytes(original: originalLyrics) ?? buffer
+                    cache.recordOutcome(
+                        .placeholder(dueToTimeout: true, elapsed: Date().timeIntervalSince(startedAt)),
+                        route: "HCUS", plan: plan
+                    )
                 } else {
-                    lyricsPayload = buffer
+                    // 取词在预算内失败（报错/没有词）→ 仍要交一份占位，否则卡片不建。
+                    lyricsPayload = unavailableLyricsBytes(original: originalLyrics) ?? buffer
+                    cache.recordOutcome(
+                        .placeholder(dueToTimeout: false, elapsed: Date().timeIntervalSince(startedAt)),
+                        route: "HCUS", plan: plan
+                    )
                 }
                 orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
