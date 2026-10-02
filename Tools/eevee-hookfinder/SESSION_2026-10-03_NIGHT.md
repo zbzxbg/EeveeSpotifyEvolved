@@ -412,3 +412,24 @@
 `HeaderElementsUnit` / `PlaybackControlsElementsUnit` / `FooterElementsUnit`
 （或者它们的 9.1.88 真名）—— 这就是"头部排版 / 控件行"那一刀的原料。
 ⚠️ "结构没变就不重复打"照旧（共用同一个 `lastSkeleton`），所以停着不动只有一份；换歌 / 折卡片会各来一份。
+
+### ★ 10.4.2 老日志在**另一个目录**：`C:\dsh\readlog`（2026-10-04 用户问起"有没有专门测名字的日志"）
+
+**有。** 但它在 `C:\dsh\readlog\eeveespotify_debug {2…19}.log`（**09-26/27** 那批，tweak 还叫
+`eeveespotify_debug` 的时期）——**不在** `C:\dsh\ipa\`。
+
+⚠️ **这个坑本仓库已经踩过一次**：`SESSION_2026-10-01.md:39` 原话 ——
+*"09-26 之后那批在 `C:\dsh\readlog\`，不在 `C:\dsh\ipa\` —— 只查后者就会得出'从来没有'的错误结论。"*
+**今天又踩了一次**（我第一轮找 `[Artwork]` / `[ShellDump]` 时也是只翻了 `ipa`）。⇒ **以后查历史证据，
+两个目录一起查。**
+
+**那份日志里现成能用的两样**（都只到 9.1.86 兼容外观，9.1.88 新设计要复核，但**名字**通常照旧）：
+
+| 想要什么 | 在哪份 | 长什么样 |
+|---|---|---|
+| **播放页控件的名字 + 无障碍标签 + frame** | `readlog 17/18/19.log`（`[ShellDump]`，`dumpControlCandidates` 打的） | `expand _TtCCE16Encore_ButtonKit…6Button8Tertiary label="展开“当前播放”视图" frame=(-36,-195 48x48)` / `share … label="分享歌词" frame=(290,600 44x44)` / `expand _TtC19LegacyUI_ECMCoreKit…12EncoreButton label="将歌词界面扩展至全屏" frame=(334,600 44x44)` |
+| **曲目元数据字段全清单**（歌名 / 艺人 / 取色…） | `readlog 2/3/4/8/17/18/19.log`（`[Artwork] metadata keys`） | `["…","album_title","artist_name","artist_name:1","artist_uri","collection.can_add","duration","entity_uri","extracted_color","has_lyrics","image_*_url","title","track_player","view_index"]`（35 个 key，只打 key 不打值） |
+| **播放页可见文字**（标题 / 艺人 / 歌词行） | `readlog 11/12/13/14.log`（`[ShellText]`，轮询版） | `[ShellText] [card] SPTEncoreLabel text="…" frame=(267,121 78x18)` |
+
+⇒ 所以"头部 / 控件 / footer"那一刀**不是零原料**：控件名与元数据字段**已有**；
+缺的是**新设计（Plastic/Platter）下的层级与 frame** —— 那正是 §10.4.1 那份 `[NPVTree]` 要补的。
