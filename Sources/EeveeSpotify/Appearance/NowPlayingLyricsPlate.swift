@@ -78,6 +78,10 @@ private final class NowPlayingLyricsHost {
             showsProviderFooter: false,
             sideInset: 20,
             previewHeaderInset: 0,
+            // ★ 只有歌词，**不要那层模糊封面背景**：播放器这一档底下铺的是整页取色底，
+            // 再叠一块 414×240 的模糊封面就是用户说的"糊在上面的一层"
+            // （2026-10-05 日志 47 的树：容器里挂着 `LyricsBackdropRepresentable`）。
+            transparentBackdrop: true,
             onSeek: onSeek,
             trackTitle: "",
             trackArtist: "",

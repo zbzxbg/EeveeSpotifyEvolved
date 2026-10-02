@@ -76,6 +76,17 @@ struct AppleMusicLyricsOverlayView: View {
     var trackTitle: String
     var trackArtist: String
 
+    /// 背景是否**透明**（不画模糊封面、不铺暗化）。
+    ///
+    /// 为什么需要（2026-10-05 真机日志 47）：这一层原本只有两种用法 —— 全屏页与**卡片内嵌**，
+    /// 两者都需要"自己把底下的原生内容盖掉"（`isBackdropOpaque = true`）。
+    /// 但"歌词进播放器"把它摆在了**取色底之上**，那块 414×240 的模糊封面就成了
+    /// 用户看到的"糊在屏幕上的一层"（日志 47 的树：
+    /// `_UIHostingView<AppleMusicLyricsOverlayView>@0,0,414,240` 里挂着
+    /// `UIKitPlatformViewHost<…LyricsBackdropRepresentable>`）。
+    /// 播放器那一档要的是"只有歌词"，所以给它一个显式的透明开关。
+    var transparentBackdrop: Bool = false
+
     @ObservedObject var clock: AppleMusicLyricsClock
     /// 播放状态投影（当前时间 / 总时长 / 是否在播放），自绘壳的进度条与播放键用它。
     @ObservedObject var projection: AppleMusicLyricsPlaybackProjection
@@ -98,10 +109,15 @@ struct AppleMusicLyricsOverlayView: View {
 
     var body: some View {
         ZStack {
-            AppleMusicLyricsBackdrop.makeBackground(
-                style: backdropStyle,
-                solid: solidBackdrop
-            )
+            if transparentBackdrop {
+                // 只有歌词：背景完全让给别人（播放器那一档铺的是整页取色底）。
+                Color.clear
+            } else {
+                AppleMusicLyricsBackdrop.makeBackground(
+                    style: backdropStyle,
+                    solid: solidBackdrop
+                )
+            }
 
             if lines.isEmpty {
                 // 没有可用行时保持完全透明：让下面的 Spotify 原生歌词透出来，
