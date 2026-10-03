@@ -62,10 +62,70 @@ import ObjectiveC.runtime
 //   2. 原生内容被写回时排一轮**短促重试**（`armRehide`，与 `MiniBarGlass.armColorGuard` 同一套
 //      纪律：只排一轮、不叠加）。日志 48 里同一项在 `0/1` 之间反复横跳就是这个"写回"，
 //      而重试原来只靠 0.5s 的复查节拍 ⇒ 最坏 ~0.5s 能看到原生图形闪回来。
+//
+// ## ★ 2026-10-05 补：把 pw 那边**我们漏掉的三处**补上（读 `PlayerControls.x` 得来，GPL-3.0）
+//
+// 先纠正一个容易记反的点：**pw 并没有"隐藏原生按钮、自己画一个按钮"**。它文件头原话是
+// *"The glyphs are drawn **over** Spotify's controls **rather than instead of them**: each button
+// keeps its action, its enabled state, its accessibility and the Gestures zones around it, and the
+// glyph **takes no touches**."* —— 原生按钮一直留着、能收触摸，被抑制的只是它**画出来的东西**
+// （prev/next 抑制 `SPTEncoreIconView`；play 抑制那颗"和按钮等大的 `UIImageView` 圆盘"）。
+// **"调度依然走原生"这半你记对了** —— 而且 pw 正是靠 hook 原生按钮自己的动作方法来对齐时机。
+//
+// 它比我们多打的三处补丁（本轮全部补上）：
+//
+//   ① ★ **点击那一刻就翻字形**（`playTapped` + `kTapTrust = 1.2`）。它的原话：
+//      *"The player's state reaches the glyph **a beat after the tap** …, which read as a
+//      **slow button**. Spotify's own disc turns at the touch."*
+//      我们这边量得到的滞后：投影的 `pauseThreshold = 0.35s` **加**一个 0.3~0.5s 节拍
+//      ⇒ 点一下暂停，字形最坏 **~0.85s** 才翻过来。现在由 `notePlayTapped()` 当场接管。
+//   ② **crossfade 快照**：*"The holder Spotify crossfades a snapshot of the disc in when play
+//      turns to pause."* —— 换状态时 Spotify 会**交叉淡入一张圆盘快照**，装在一个**恰好是纯
+//      `UIView`** 的容器里。常规走查的 `1.2×` 尺寸闸**可能**放过它（pw 那段就**没有**尺寸闸）
+//      ⇒ 对播放键的那类容器取消尺寸闸。
+//   ③ **缓冲 spinner 立着时把我们的字形 alpha 压 0**（`spinnerShowing`）—— 否则"缓冲中"
+//      会显示一个假的播放/暂停字形。
+//
+// ⚠️ **它的"认圆盘"判据不能照抄**：pw 是按**几何**认的（"按钮里那颗与按钮等大的 `UIImageView`"），
+// 因为它的树（9.1.78）是 `PlayButtonView > CondensedButton(UIButton) > UIImageView 64x64`；
+// 而 **9.1.88 的树里圆盘是 `MixedPlayButtonDecorationView`，和 `CondensedButton` 是兄弟**
+// （日志 42/48 的 `[NPVTree]`）⇒ 照抄过去大概率就是它自己那句
+// `logMissing(@"the play button's disc")`。所以我们仍按**自己的真机树**用类名判。
 
 // MARK: - Hook（可选的加速落点）
 
 struct NowPlayingControlsGroup: HookGroup {}
+/// **单独一组**：这一组是"探测到才挂"的，不能和上面那组共用 —— 否则探测失败会把
+/// 已经能跑的 `PlaybackControlsElementsUnit` 钩子一起关掉。
+struct NowPlayingTapGroup: HookGroup {}
+
+/// 探测/日志共用的选择器。放在**文件作用域**，让 hook 类里只留 Orion 认的那几样
+/// （`typealias Group` / `targetName` / 覆写方法）—— 与仓库其它 hook 保持同一形状。
+private let playButtonTapSelector = NSSelectorFromString("uiButtonTapped")
+
+/// 播放键**被点的那一下** —— pw 的 `playTapped()` 靠它把字形"在触摸那一刻就翻过去"。
+///
+/// ⚠️ 这个选择器的来源是 **pw v0.21.1 的 `PlayerControls.x`**
+/// （`%hook _TtC28EncoreConsumerMobile_BaseKit14PlayButtonView` + `- (void)uiButtonTapped`）。
+/// 本仓库**没有在 9.1.88 上验证过它**（符号表查不到方法名），所以：
+///   · 激活前用 `class_getInstanceMethod` 探测（见 `activateNowPlayingControls`）；
+///   · 探测不到就整组不挂，绝不留给 Orion 报非致命错误；
+///   · 那个类同时挂在迷你条 / 吸顶头 / 全屏歌词页上，所以**必须**在门面里按对象比对。
+class PlayButtonTapHook: ClassHook<UIView> {
+    typealias Group = NowPlayingTapGroup
+    static var targetName = "_TtC28EncoreConsumerMobile_BaseKit14PlayButtonView"
+
+    /// ⚠️ hook 方法**不能**标 `@MainActor`（Orion 的代码生成器按源码文本拼接，会拼出
+    /// `@MainActoroverride`）—— 成文规矩见 `LyricsChromeVisibility.swift`。
+    func uiButtonTapped() {
+        orig.uiButtonTapped()
+        let hooked = self.target
+        onMainThreadSync {
+            guard NowPlayingControlsPlate.isEnabled else { return }
+            NowPlayingControlsPlate.notePlayTapped(from: hooked)
+        }
+    }
+}
 
 /// 这一排的容器。**只做一件事**：每次它布局完，把字形摆正 + 跟着播放状态换播放/暂停字形。
 ///
@@ -228,8 +288,20 @@ enum NowPlayingControlsPlate {
         }
         if let play {
             touchedButtons.add(play)
-            hiddenLeaves += hideNativeContent(of: play, discClassFragment: playDiscClassFragment)
-            placeGlyph(in: play, systemName: playGlyphName(), size: playGlyphSize)
+            lastPlayButton = play
+            hiddenLeaves += hideNativeContent(
+                of: play,
+                discClassFragment: playDiscClassFragment,
+                snapshotHostsUnlimitedSize: true
+            )
+            // pw 的同款补丁：缓冲 spinner 还立着时**把我们的字形藏起来** —— 否则"缓冲中"
+            // 会显示一个假的播放/暂停字形，用户点完看到的就是"字形自己跳"。
+            placeGlyph(
+                in: play,
+                systemName: playGlyphName(),
+                size: playGlyphSize,
+                hidden: spinnerShowing(in: play)
+            )
             found += 1
         }
 
@@ -304,8 +376,12 @@ enum NowPlayingControlsPlate {
         }
         touchedButtons.removeAllObjects()
         lastUnit = nil
+        lastPlayButton = nil
         lastReportedSignature = ""
         rehideBurstUntil = 0
+        tapOverrideSymbol = nil
+        tapOverrideUntil = 0
+        displayedPlaySymbol = ""
         writeDebugLog("[\(logTag)] 已还原（原生图标透明度写回、我们的字形已拿走）")
     }
 
@@ -330,7 +406,11 @@ enum NowPlayingControlsPlate {
     /// * 记下改过的视图**与它当时的 alpha**（`HiddenView`），`restore()` 逐个写回**原值**
     ///   —— 不是一律写 1（理由见 `HiddenView` 的注释）。
     @discardableResult
-    private static func hideNativeContent(of button: UIView, discClassFragment: String?) -> Int {
+    private static func hideNativeContent(
+        of button: UIView,
+        discClassFragment: String?,
+        snapshotHostsUnlimitedSize: Bool = false
+    ) -> Int {
         let size = button.bounds.size
         guard size.width > 1, size.height > 1 else { return 0 }
 
@@ -342,7 +422,7 @@ enum NowPlayingControlsPlate {
             if !changed.contains(where: { $0.view === view }) { changed.append(HiddenView(view)) }
         }
 
-        func visit(_ view: UIView, depth: Int) {
+        func visit(_ view: UIView, depth: Int, unlimitedSize: Bool) {
             guard depth <= 8 else { return }
             let className = NSStringFromClass(type(of: view))
 
@@ -357,14 +437,17 @@ enum NowPlayingControlsPlate {
                     view.alpha = 0
                     hidden += 1
                 }
-                for sub in view.subviews { visit(sub, depth: depth + 1) }
+                for sub in view.subviews { visit(sub, depth: depth + 1, unlimitedSize: unlimitedSize) }
                 return
             }
 
             if view.subviews.isEmpty {
                 // 叶子：这才是真正画东西的那些。
                 if view.alpha == 0 { return }
-                if view.bounds.width > size.width * 1.2 || view.bounds.height > size.height * 1.2 { return }
+                if !unlimitedSize,
+                   view.bounds.width > size.width * 1.2 || view.bounds.height > size.height * 1.2 {
+                    return
+                }
                 // ⚠️ 只动"看起来是图形"的叶子类。2026-10-05 加这条：用户报"自定义的暂停键
                 // 点了没反应"，而在拿到日志之前，**能自己排除的风险就要排除** ——
                 // 递归到底可能顺手把某个非图形的内部件（命中层/装饰层的子件）也透明掉。
@@ -379,13 +462,40 @@ enum NowPlayingControlsPlate {
                 return
             }
 
-            for sub in view.subviews { visit(sub, depth: depth + 1) }
+            // ★ pw 的同款补丁（`PlayerControls.x` 原文）：*"The holder Spotify crossfades a snapshot
+            //   of the disc in when play turns to pause."* —— 换播放状态时 Spotify 会**交叉淡入一张
+            //   圆盘快照**，它装在一个**恰好是纯 `UIView`** 的直接子视图里。常规走查有 `1.2×` 的
+            //   尺寸闸，而那张快照**可能比按钮大** ⇒ 在它下面**取消尺寸闸**（只对播放键开）。
+            //   判据照 pw：**直接子视图**且类**恰好**是 `UIView`
+            //   （圆盘 / `CondensedButton` / 我们的字形都不在射程内）。
+            let childUnlimited = unlimitedSize
+                || (snapshotHostsUnlimitedSize && depth == 0 && object_getClass(view) == UIView.self)
+            for sub in view.subviews { visit(sub, depth: depth + 1, unlimitedSize: childUnlimited) }
         }
 
-        for sub in button.subviews { visit(sub, depth: 0) }
+        for sub in button.subviews { visit(sub, depth: 0, unlimitedSize: false) }
 
         objc_setAssociatedObject(button, &alphaKey, changed, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return hidden
+    }
+
+    /// Spotify 自己的缓冲 spinner 还立着吗（pw 的 `spinnerShowing`）。
+    ///
+    /// pw 原文：*"A spinner that is still up this long after a state change is buffering,
+    /// not a track starting."* 走查有界（深度 4）。
+    private static func spinnerShowing(in play: UIView) -> Bool {
+        var showing = false
+        func visit(_ view: UIView, depth: Int) {
+            guard depth <= 4, !showing else { return }
+            if !view.isHidden, view.alpha > 0.01,
+               NSStringFromClass(type(of: view)).contains("SpinnerView") {
+                showing = true
+                return
+            }
+            for sub in view.subviews { visit(sub, depth: depth + 1) }
+        }
+        visit(play, depth: 0)
+        return showing
     }
 
     /// 在按钮上叠一个我们自己的字形（**不吃触摸** —— 按钮的动作原样生效）。
@@ -394,7 +504,8 @@ enum NowPlayingControlsPlate {
     private static func placeGlyph(
         in button: UIView,
         systemName: String,
-        size: CGFloat
+        size: CGFloat,
+        hidden: Bool = false
     ) {
         let configuration = UIImage.SymbolConfiguration(pointSize: size, weight: .medium)
         guard let image = UIImage(systemName: systemName, withConfiguration: configuration) else { return }
@@ -424,6 +535,9 @@ enum NowPlayingControlsPlate {
             glyph.frame = target
             glyph.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         }
+        // Spotify 的缓冲 spinner 立着时把我们的字形藏起来（pw 的做法）—— 见 `spinnerShowing`。
+        let wantedAlpha: CGFloat = hidden ? 0 : 1
+        if glyph.alpha != wantedAlpha { glyph.alpha = wantedAlpha }
         // 每帧置于最上（Spotify 换帧会重排 subviews）。
         if button.subviews.last !== glyph {
             button.bringSubviewToFront(glyph)
@@ -439,13 +553,62 @@ enum NowPlayingControlsPlate {
     /// （`advanceAnchor` 为空时只记锚点、不给 `isPlaying = true`）—— 每次新建一个实例的话
     /// 它永远停在"暂停"，字形就永远画成 play。这个坑 `AppleMusicLyricsOverlayHost` 那边
     /// 也是靠缓存同一个 projection 避开的。
+    ///
+    /// ⚠️ 但**光靠它是慢的**：投影的 `pauseThreshold = 0.35s`（连续 0.35s 没前进才算暂停）
+    /// 再加一个 0.3~0.5s 的节拍 ⇒ 点一下暂停后，字形最坏要 **~0.85s** 才翻过来。
+    /// pw 的原话就是这一条：*"The player's state reaches the glyph a beat after the tap …, which
+    /// read as a **slow button**. Spotify's own disc turns at the touch."*
+    /// ⇒ 所以点击那一拍由 `notePlayTapped()` 直接接管（pw 的 `playTapped`），见 `playGlyphName`。
     private static let projection = AppleMusicLyricsPlaybackProjection {
         WordByWordPositionResolver.shared.currentPositionSeconds()
     }
 
+    /// 点击后"先信用户"的窗口（pw 的 `kTapTrust = 1.2` 秒）。
+    private static let tapTrust: CFAbsoluteTime = 1.2
+    /// 点击后接管字形的目标符号；播放器状态跟上（或超时）即交还。
+    private static var tapOverrideSymbol: String?
+    private static var tapOverrideUntil: CFAbsoluteTime = 0
+    /// 当前画在屏幕上的播放键符号（判决"这一下的目标态"要用它，不能用投影的值）。
+    private static var displayedPlaySymbol: String = ""
+    /// 听歌页那一颗播放键（迷你条 / 吸顶头 / 全屏歌词页挂的是同一个类，不能一起管）。
+    private static weak var lastPlayButton: UIView?
+
     private static func playGlyphName() -> String {
         projection.refresh()
-        return projection.isPlaying ? "pause.fill" : "play.fill"
+        let fromState = projection.isPlaying ? "pause.fill" : "play.fill"
+
+        // ★ 点击那一刻已经把字形翻过去了（pw 的 `playTapped`）：播放器状态晚 ~0.35s + 一个节拍
+        //   才跟上来，那段时间**以点击为准**（最多 1.2s）；一旦状态跟上、或窗口过期，就交还。
+        if let override = tapOverrideSymbol {
+            if CFAbsoluteTimeGetCurrent() >= tapOverrideUntil || fromState == override {
+                tapOverrideSymbol = nil
+            } else {
+                displayedPlaySymbol = override
+                return override
+            }
+        }
+        displayedPlaySymbol = fromState
+        return fromState
+    }
+
+    /// 那颗播放键**被点了**（`PlayButtonView.uiButtonTapped`，只认听歌页那一颗）。
+    ///
+    /// pw v0.21.1 `PlayerControls.x` 的做法逐字照搬其思路（代码自己写）：
+    /// 把字形翻到"这一下的目标态"（当前显示的反面），当场落地，不等下一个布局回合；
+    /// 之后由 `playGlyphName()` 在状态跟上时交还。
+    static func notePlayTapped(from button: UIView) {
+        guard isEnabled else { return }
+        // 同一个类还挂在迷你条 / 吸顶头 / 全屏歌词页上 —— 只有我们记住的那一颗算数。
+        guard let play = lastPlayButton, button === play else { return }
+
+        let current = displayedPlaySymbol.isEmpty ? playGlyphName() : displayedPlaySymbol
+        let target = (current == "play.fill") ? "pause.fill" : "play.fill"
+        tapOverrideSymbol = target
+        tapOverrideUntil = CFAbsoluteTimeGetCurrent() + tapTrust
+        displayedPlaySymbol = target
+
+        // 当场画上去（`reconcile` 找不到那一排时下一个节拍也会补上，最坏退回"慢一拍"）。
+        _ = reconcile()
     }
 
     // MARK: - 查找
@@ -472,6 +635,13 @@ enum NowPlayingControlsPlate {
 /// `layoutSubviews` 是 UIView **一定会被调用**的方法（不是可选方法），所以这里不存在
 /// "类没覆写就 `Failed to hook method`"那条风险；但**类本身在不在**仍要先问一句
 /// （`NSClassFromString`），不在就只打一行日志、不留给 Orion 报非致命错误 —— 仓库惯例。
+///
+/// ★ **第二条钩子走"探测再挂"**（`uiButtonTapped`）：那个选择器只出现在 pw 自己的
+/// `objc-methods.txt` 里（pw 基线 9.1.78），而**我们的 `dump-9.1.88.txt` 证明不了它在不在**
+/// —— 它的 `[selectors]` 桶连 `layoutSubviews` / `viewDidAppear:` 都没有，不是完整清单。
+/// 所以先用 `class_getInstanceMethod` 探一次：探到才激活；探不到只打一行，
+/// **功能不消失**，只是字形退回"跟布局回合 + 0.3s 节拍"（慢一拍）。
+/// 这正是仓库里 SponsorBlock 探测 `addPlayerObserver:` 的同一套写法。
 func activateNowPlayingControls() {
     if NSClassFromString(PlaybackControlsUnitHook.targetName) != nil {
         NowPlayingControlsGroup().activate()
@@ -480,6 +650,20 @@ func activateNowPlayingControls() {
         writeDebugLog(
             "[NPVControls] missing \(PlaybackControlsUnitHook.targetName)"
                 + " — 走「进页面时 apply」那条兜底路（判据是按钮 id，与类名无关）"
+        )
+    }
+
+    if let cls = NSClassFromString(PlayButtonTapHook.targetName),
+       class_getInstanceMethod(cls, playButtonTapSelector) != nil {
+        NowPlayingTapGroup().activate()
+        writeDebugLog(
+            "[NPVControls] 点击钩子已装（\(PlayButtonTapHook.targetName).uiButtonTapped）"
+                + " — 字形在点击那一刻就翻，不等播放器状态"
+        )
+    } else {
+        writeDebugLog(
+            "[NPVControls] 没有 \(PlayButtonTapHook.targetName).uiButtonTapped"
+                + " — 字形只在布局回合/节拍上更新（慢一拍，功能不受影响）"
         )
     }
 }
