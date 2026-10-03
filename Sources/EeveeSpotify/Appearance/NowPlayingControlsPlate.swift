@@ -212,6 +212,73 @@ enum NowPlayingControlsPlate {
         }
     }
 
+    // MARK: - 「不可见钉」：把 alpha 写一次是不够的（日志 49 的判决）
+
+    /// 我们那条"钉住不可见"动画的 key。
+    static let pinAnimationKey = "eevee-pin-invisible"
+
+    /// 这个视图是不是已经被我们钉住了。
+    static func isPinned(_ view: UIView) -> Bool {
+        view.layer.animation(forKey: pinAnimationKey) != nil
+    }
+
+    /// 把视图**钉成不可见** —— 在它的 layer 上加一条 duration 极长、`isRemovedOnCompletion = false`
+    /// 的 `opacity` 动画，把**呈现层**钉在 0。
+    ///
+    /// ## 为什么不能只写 `alpha = 0`（日志 49 的现场）
+    ///
+    /// 日志 49（02:59:31–02:59:38，**用户什么都没做**，前后只有两条网络 token 日志）：
+    ///
+    /// ```
+    /// [NPVControls] … 本拍把 1 处原生内容按回透明
+    /// [NPVControls] … 本拍把 0 处原生内容按回透明
+    /// [NPVControls] … 本拍把 1 处原生内容按回透明     ← 1/0/1/0 交替 20+ 次、持续 7 秒
+    /// ```
+    ///
+    /// 也就是说：我们把 `alpha` 写成 0，**Spotify 每 ~0.25s 写回来一次**，我们再写回去 ——
+    /// 那颗白圆盘就以 ~4Hz 在人眼前闪。**写模型值这条路注定打不赢。**
+    ///
+    /// ## pw 的解法与我们的替代
+    ///
+    /// pw 用 `SGRSuppress`：把实例换成**运行时子类**、覆写 `setAlpha:` 一律转发 0
+    /// （它 `PlayerControls.x` 的原文：*"Play loses its white disc, a plain `UIImageView` the size of
+    /// the button, **which SGRSuppress keeps transparent**"* —— 注意它说的是"keeps"，因为写一次不够）。
+    ///
+    /// 我们改用**更便宜也更稳的等价物**，理由三条：
+    /// 1. **纯公开 API**（`CABasicAnimation`）：本机没有编译器，能少一处类型陷阱就少一处
+    ///    （那套要 `objc_allocateClassPair` + `imp_implementationWithBlock` + 手工 `objc_super`）；
+    /// 2. ★ **对 Swift 类也有效**：pw 那套**明确不支持** Swift 类 —— 它的 `subclassable()` 是
+    ///    `strncmp(name, "_Tt", 3) != 0 && !strchr(name, '.')`，而我们的
+    ///    `MixedPlayButtonDecorationView` 真名是 `_TtC28EncoreConsumerMobile_BaseKit29…`（**`_Tt` 开头**）
+    ///    ⇒ 照抄过去只会得到它那句 `cannot keep being suppressed, set once per call`；
+    /// 3. **模型值是谁写的都无所谓**：呈现层被钉住，Spotify 写回 `alpha`、或者跑它自己的动画，
+    ///    都改不了这一层渲出来的样子 ⇒ 闪烁从机制上消失，而不是"再快一点按回去"。
+    ///
+    /// 还原 = `removeAnimation(forKey:)` + 写回记录的 alpha（一行，见 `restore()`）。
+    /// 视图被销毁时动画随之消失，不欠清理。
+    static func pinInvisible(_ view: UIView) {
+        if !isPinned(view) {
+            let pin = CABasicAnimation(keyPath: "opacity")
+            pin.fromValue = 0
+            pin.toValue = 0
+            pin.duration = 1_000_000_000
+            pin.isRemovedOnCompletion = false
+            pin.fillMode = .forwards
+            view.layer.add(pin, forKey: pinAnimationKey)
+        }
+        if view.alpha != 0 { view.alpha = 0 }
+    }
+
+    /// 我们自己钉过的类名（只报一次，免得刷屏）。给下一份日志当判据用。
+    private static var loggedPinnedClasses: Set<String> = []
+
+    private static func notePinnedClass(_ view: UIView) {
+        let name = NSStringFromClass(type(of: view))
+        guard !loggedPinnedClasses.contains(name) else { return }
+        loggedPinnedClasses.insert(name)
+        writeDebugLog("[\(logTag)] 钉住 \(name)（模型 alpha 被写回也不会再亮）")
+    }
+
     private static weak var lastUnit: UIView?
     /// 我们动过的按钮（**弱引用**）。
     ///
@@ -377,7 +444,11 @@ enum NowPlayingControlsPlate {
             objc_setAssociatedObject(button, &glyphKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
             let restored = (objc_getAssociatedObject(button, &alphaKey) as? [HiddenView]) ?? []
-            for item in restored { item.view.alpha = item.alpha }
+            for item in restored {
+                // 先撤"钉"（撤掉动画之后模型值才说得上话），再写回**它原来看起来的样子**。
+                item.view.layer.removeAnimation(forKey: pinAnimationKey)
+                item.view.alpha = item.alpha
+            }
             objc_setAssociatedObject(button, &alphaKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             objc_setAssociatedObject(button, &playStateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
@@ -389,6 +460,7 @@ enum NowPlayingControlsPlate {
         tapOverrideSymbol = nil
         tapOverrideUntil = 0
         displayedPlaySymbol = ""
+        loggedPinnedClasses.removeAll()
         writeDebugLog("[\(logTag)] 已还原（原生图标透明度写回、我们的字形已拿走）")
     }
 
@@ -436,27 +508,35 @@ enum NowPlayingControlsPlate {
             return true
         }
 
+        /// 钉住（幂等）。**已经钉住的直接返回 false** —— 这一条是"不再打架"的关键：
+        /// 钉住之后模型值被谁写回来都不影响渲染，所以**不要再数它、不要再排重试**，
+        /// 日志也就不会再 1/0/1/0 地刷（日志 49 那个现场就是这么来的）。
+        func pinIfNeeded(_ view: UIView) -> Bool {
+            guard !isPinned(view) else { return false }
+            _ = note(view)
+            notePinnedClass(view)
+            pinInvisible(view)
+            return true
+        }
+
         func visit(_ view: UIView, depth: Int, noSizeLimit: Bool) {
             guard depth <= 8 else { return }
             let className = NSStringFromClass(type(of: view))
 
             if view === glyph || className.contains("eevee-npv-transport-glyph") { return }
 
-            // ★ 白圆盘：它自己是容器（白色由它自己画）⇒ 整层透明，**然后继续往下**把里面
-            //   那个原生 play/pause 图形也透明掉（双保险）。`alpha = 0` 不影响按钮的命中判定：
+            // ★ 白圆盘：它自己是容器（白色由它自己画）⇒ 整层钉住，**然后继续往下**把里面
+            //   那个原生 play/pause 图形也钉住（双保险）。不影响按钮的命中判定：
             //   命中的是 `PlayButtonView` 自己，子视图全透明时它照样收得到触摸。
             if let fragment = discClassFragment, className.contains(fragment) {
-                if view.alpha > 0 {
-                    _ = note(view)
-                    view.alpha = 0
-                    hidden += 1
-                }
+                if pinIfNeeded(view) { hidden += 1 }
                 for sub in view.subviews { visit(sub, depth: depth + 1, noSizeLimit: noSizeLimit) }
                 return
             }
 
             if view.subviews.isEmpty {
                 // 叶子：这才是真正画东西的那些。
+                if isPinned(view) { return }
                 if !noSizeLimit,
                    view.bounds.width > size.width * 1.2 || view.bounds.height > size.height * 1.2 {
                     return
@@ -470,18 +550,12 @@ enum NowPlayingControlsPlate {
                     || className.contains("IconView")
                 if !visual { return }
 
-                // 播放键（`noSizeLimit`）：**连 alpha 已经是 0 的也按住**。用户 2026-10-05 纠正：
-                // 照片 49 那颗白圆盘是**连点暂停时截到的过渡帧**，原生稳态本来就是裸字形 ——
-                // 也就是说那张 crossfade 快照是"**alpha 0 起步、淡入到 1**"。
-                // 只在它可见时才动手 ⇒ 必然漏掉开头几帧 ⇒ 每点一次闪一下白圆盘。
+                // 播放键（`noSizeLimit`）：**连 alpha 已经是 0 的也钉住** —— crossfade 快照
+                // 就是"alpha 0 起步、淡入到 1"，只在它可见时才动手必然漏掉开头几帧。
                 // 上一个/下一个维持老行为（已经透明的不再记一笔），少动别人的东西。
                 if view.alpha == 0, !noSizeLimit { return }
 
-                let wasVisible = view.alpha != 0
-                let first = note(view)
-                if wasVisible { view.alpha = 0 }
-                // `first` 也算一次"按住"：新登记的快照要**立刻**排上短促重试盯着它。
-                if first || wasVisible { hidden += 1 }
+                if pinIfNeeded(view) { hidden += 1 }
                 return
             }
 

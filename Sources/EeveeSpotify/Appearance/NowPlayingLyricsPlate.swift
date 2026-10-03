@@ -243,7 +243,8 @@ enum NowPlayingLyricsPlate {
 
         // ⚠️ 顺序要紧：先铺歌词（封面 / 标题 / 容器都会 `bringSubviewToFront`），
         // **再**摆那枚键 —— 后写的赢，否则键会被我们自己的容器压住。
-        if isOpen { layoutAndMount(in: pageView) }
+        // 铺不上（拿不到封面图等）就**不认"已展开"**，别留半成品。
+        if isOpen, !layoutAndMount(in: pageView) { isOpen = false }
         ensureToggleZone(in: pageView)
     }
 
@@ -262,9 +263,10 @@ enum NowPlayingLyricsPlate {
         guard #available(iOS 26.0, *) else { return false }
 
         if isOpen {
-            layoutAndMount(in: page)
+            // 可能因为"封面还没布局好"铺不上 —— 那时退回去（下一拍还会再试，直到成功）。
+            if !layoutAndMount(in: page) { isOpen = false }
             ensureToggleZone(in: page)
-            return true
+            return isOpen
         }
         // 关着的时候只保证那枚键还在、还画得对（Spotify 换帧会重排 subviews）。
         ensureToggleZone(in: page)
@@ -298,7 +300,8 @@ enum NowPlayingLyricsPlate {
             return
         }
         isOpen = true
-        layoutAndMount(in: page)
+        // 铺不上就当场认输（`noteSkip` 已经写清了原因），别把开关停在"展开但什么都没变"上。
+        if !layoutAndMount(in: page) { isOpen = false }
         // ⚠️ 必须在铺完之后再摆一次：容器会 `bringSubviewToFront`，键会被压到它下面。
         ensureToggleZone(in: page)
     }
@@ -306,15 +309,24 @@ enum NowPlayingLyricsPlate {
     // MARK: - 开关与几何
 
     /// 进场：把封面缩成缩略图、标题行上移贴边、歌词淡入到"标题之下、进度条之上"。
-    private static func layoutAndMount(in page: UIView) {
-        guard #available(iOS 26.0, *) else { return }
+    ///
+    /// **返回这一拍到底铺上了没有**。铺不上就**不认"已展开"**（`isOpen` 由调用方回退）——
+    /// 否则会出现照片 51 那种"标题已经上移、歌词已经画出来、而原生封面还整张露着"的半成品。
+    @discardableResult
+    private static func layoutAndMount(in page: UIView) -> Bool {
+        guard #available(iOS 26.0, *) else { return false }
         guard let geometry = measure(in: page) else {
             noteSkip("量不到封面区/标题行（还没布局完？）")
-            return
+            return false
         }
 
         // ① 我们自己画的那张封面（同一张图，所以"换"看不出来）。
-        let cover = ensureCover(in: page, geometry: geometry)
+        //    ⚠️ **它必须成功**：失败时原生封面就还露着，而下面两步会照样跑
+        //    ⇒ 歌词与上移后的标题会被画在封面图上（照片 51 就是现场）。所以这里直接不展开。
+        guard let cover = ensureCover(in: page, geometry: geometry) else {
+            noteSkip("拿不到那张封面（缩略图与"藏起原生封面"都做不了）—— 不展开")
+            return false
+        }
 
         // ② 标题行上移 + 右移（transform —— 改约束会被 stack view 布局写回）。
         applyTitleTransform(geometry: geometry, page: page)
@@ -323,13 +335,13 @@ enum NowPlayingLyricsPlate {
         let frame = geometry.stage
         guard frame.height > livingHeight / 2 else {
             noteSkip("标题与进度条之间没有位置（\(Int(frame.height))pt）")
-            return
+            return false
         }
 
         let container = ensureContainer(in: page, frame: frame)
         applyEdgeFade(to: container)
 
-        guard let lines = currentLines(), let trackId = currentTrackId() else { return }
+        guard let lines = currentLines(), let trackId = currentTrackId() else { return false }
 
         if let host = currentHost(for: page) {
             let version = currentLyricsVersion
@@ -356,9 +368,10 @@ enum NowPlayingLyricsPlate {
             writeDebugLog(
                 "[\(logTag)] 展开 — 缩略图 \(Int(geometry.thumb.width))pt、"
                     + "歌词区 \(frameText(frame))、封面从 \(frameText(geometry.cover)) 缩过来"
+                    + "（藏起来的是 \(NSStringFromClass(type(of: cover)))@\(frameText(geometry.cover))）"
             )
         }
-        _ = cover
+        return true
     }
 
     /// 全部还原：标题与封面的 transform/alpha 写回、我们的层拿走。
@@ -493,8 +506,22 @@ enum NowPlayingLyricsPlate {
     /// 我们自己画的那张缩略图封面（同图 ⇒ 看不出"换"），并**把 Spotify 那条藏起来**。
     private static func ensureCover(in page: UIView, geometry: Geometry) -> UIImageView? {
         // 图片从 Spotify 那个 `Encore.ImageView` 里取（它下面挂着真正的 UIImageView）。
-        guard let source = findByIdentifier(coverImageIdentifier, in: page),
-              let image = firstImage(in: source) else { return nil }
+        //
+        // ⚠️ **判据必须和 `measure()` 用的是同一个**（`visibleCover`）。上一版这里用的是
+        // `findByIdentifier(coverImageIdentifier, …)` —— 那是**有界 BFS 的第一个匹配**，
+        // 而页面上 `Encore.ImageView` 有一堆（48×48 的图标、64×64 的…），取到的往往**不是那张封面**
+        // ⇒ 我们藏错了一个小图标、缩略图拿到的是别人的图，而 **Spotify 的封面一直整张露着**：
+        // 上移后的标题与歌词就画在封面图上。**照片 51 就是这个现场**（标题上去了、歌词出来了、
+        // 封面还全屏）。
+        guard let list = findByIdentifier(listIdentifier, in: page),
+              let source = visibleCover(in: list) else { return nil }
+        // 壳里没有图就退一步：在列表里找**任意一张够大、真带图的** `UIImageView`
+        // （封面图有时挂在壳的兄弟上 —— 真机树里 `Encore.ImageView` 下面就是
+        //  `UIImageView(alpha=0.00)` + `PlaceholderView` 各一层，谁先拿到图不保证）。
+        guard let image = firstImage(in: source) ?? anyCoverImage(in: list) else {
+            noteSkip("那张封面里取不到图（\(NSStringFromClass(type(of: source)))）")
+            return nil
+        }
 
         let cover: UIImageView
         if let existing = lastCover {
@@ -530,18 +557,19 @@ enum NowPlayingLyricsPlate {
         }
 
         // Spotify 那条封面**透明掉**（不是 hidden：Encore 的布局会因 hidden 重排）。
-        hideSpotifyCover(in: page)
+        hideSpotifyCover(source, in: page)
         return cover
     }
 
     private static var hiddenCoverKey: UInt8 = 0
 
-    private static func hideSpotifyCover(in page: UIView) {
-        guard let source = findByIdentifier(coverImageIdentifier, in: page) else { return }
+    /// ⚠️ 收的是**已经认准的那一个**（由 `visibleCover` 挑出来），不再自己按 id 找一遍 ——
+    /// 上一版这里又 `findByIdentifier` 了一次，于是"挑封面"与"藏封面"用的是两个不同的视图。
+    private static func hideSpotifyCover(_ source: UIView, in page: UIView) {
         var hidden = (objc_getAssociatedObject(page, &hiddenCoverKey) as? [UIView]) ?? []
         if !hidden.contains(where: { $0 === source }) { hidden.append(source) }
         source.alpha = 0
-        // 它下面那层真正画图的 `UIImageView` 也一起（`Encode.ImageView` 只是壳）。
+        // 它下面那层真正画图的 `UIImageView` 也一起（`Encore.ImageView` 只是壳）。
         for sub in source.subviews where sub.alpha > 0.01 && sub.bounds.width >= 200 {
             if !hidden.contains(where: { $0 === sub }) { hidden.append(sub) }
             sub.alpha = 0
@@ -561,6 +589,29 @@ enum NowPlayingLyricsPlate {
         if let imageView = view as? UIImageView, let image = imageView.image { return image }
         for sub in view.subviews {
             if let image = firstImage(in: sub) { return image }
+        }
+        return nil
+    }
+
+    /// 兜底：在整条列表子树里找**任意一张够大、看得见、真带图的** `UIImageView`。
+    /// 判据与 `visibleCover` 同一个量级（≥200pt），走查有界（本仓库纪律）。
+    private static func anyCoverImage(in list: UIView) -> UIImage? {
+        var visited = 0
+        var queue: [UIView] = [list]
+
+        while !queue.isEmpty, visited < maxNodes {
+            let view = queue.removeFirst()
+            visited += 1
+
+            if let imageView = view as? UIImageView,
+               let image = imageView.image,
+               imageView.bounds.width >= 200,
+               !imageView.isHidden,
+               imageView.alpha > 0.01 {
+                return image
+            }
+            if view.isHidden { continue }
+            queue.append(contentsOf: view.subviews)
         }
         return nil
     }
