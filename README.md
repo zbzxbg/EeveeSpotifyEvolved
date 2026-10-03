@@ -1,4 +1,4 @@
-A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
+## A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
 > [!IMPORTANT]
 > After testing, this modified version can reliably display lyrics for every song on Spotify 9.1.88, including when the Genius fallback is enabled.
@@ -62,3 +62,29 @@ This project interoperates with Spotify's iOS client, which means parts of it we
 - Thanks to the [MeloX](https://github.com/youshen2/MeloX) project for the inspiration behind this project's karaoke lyrics feature.
 - Thanks to [spoti.pw](https://spoti.pw) for providing reference ideas for implementing the liquid glass pages in this repository. The referenced versions are v0.21.1 and earlier. (Because v0.21.1 and earlier are GPL-3.0, the same license as this repository, those versions have been read and their ideas reused; v0.22.0 and later are PolyForm Strict 1.0.0, and no source code from them has been read, disassembled, or reused.)
 - [kumone](https://github.com/missuo/kumone) — source of layout ideas for the Now Playing page and main pages.
+
+Building an IPA with this tweak
+ 
+You do not need this to use the tweak — take a release. This section is for building a Spotify IPA with the tweak baked in. You supply your own decrypted Spotify IPA; this repository never ships one or says where to get one (see Reverse-engineered Data and Takedowns above).
+ 
+Which artifact?
+ 
+Both pipelines build the same tweak; the difference is whether zxPluginsInject.dylib is LC-injected. That dylib is a sideload shim — keychain access-group rebind, iCloud entitlement neutering, app-group group.* stubs — all of which only break when an app is re-signed by a different team.
+
+| Install method | Artifact | Why |
+| --- | --- | --- |
+| TrollStore | `-patched.ipa` | Not re-signed, entitlements intact; the shim is harmless and the Safari appex stays |
+| Paid certificate (1 year) | `-patched.ipa` | The profile covers the extra bundles, and the shim covers what re-signing breaks |
+| SideStore / AltStore / Sideloadly / free enterprise certificate | `.ipa` (no patch) | Those profiles usually have no wildcard, so the Watch app and native appex have to be stripped (`Tools/strip-ipa.sh`) |
+| LiveContainer | `.ipa` (no patch) | LiveContainer virtualises keychain, app groups and preferences itself; the shim on top conflicts |
+| Jailbroken | the `.deb` | `make package FINALPACKAGE=1` |
+
+If a sideloaded build misbehaves around login or keychain, try the patched one — that is what the shim is for.
+ 
+CI (nothing installed locally)
+ 
+Actions → Build IPA — patched or Build IPA — no patch → Run workflow: put the URL of your decrypted IPA in ipa_url (leave it empty to compile the tweak only). Note: The URL must be a direct download link to an .ipa file — opening or requesting the link returns the .ipa file directly, e.g. https://example.com/abc.ipa. Do not use cloud-drive share pages, login-gated links, or links that redirect to a preview page. Leave liquid_glass on unless you want Spotify's original look back — it removes UIDesignRequiresCompatibility, which is what puts iOS 26+ into compatibility mode.
+ 
+Locally (macOS)
+
+./setup-build-ipa.sh /path/to/Spotify-vanilla.ipa
