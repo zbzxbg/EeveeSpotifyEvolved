@@ -45,6 +45,10 @@ struct EeveeExtrasSettingsView: View {
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
         var nowPlayingLyricsInPlayer = UserDefaults.nowPlayingLyricsInPlayer
         var nowPlayingSingleLyric = UserDefaults.nowPlayingSingleLyric
+        // ★ 2026-10-12（用户）：下面这两颗是**歌词那两档的总开关**（见 `body` 里那一段），
+        //   读的是**同一批 UserDefaults 键** ⇒ 与 设置 → 歌词 里那几颗两面同步。
+        var showRomanizedLyrics = NgzhwmSettingsViewModel.anyRomanizationEnabled
+        var showLyricsTranslation = !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled
         var nowPlayingControlGlyphs = UserDefaults.nowPlayingControlGlyphs
     }
 
@@ -256,6 +260,34 @@ struct EeveeExtrasSettingsView: View {
                         persist: { value in
                             UserDefaults.nowPlayingSingleLyric = value
                             // 开/关都当场生效（页面还挂着的话）：关掉就是当场把它收起来。
+                            NowPlayingLyricsPlate.reapply()
+                        }
+                    )
+                )
+
+                // ★ 2026-10-12（用户）：「我觉得有人不会用这个东西，去用正常的去了」——
+                // 所以把歌词那两档也在这里给一颗**总开关**，不用先去歌词页翻逐语言那三颗。
+                // ⚠️ 与 设置 → 歌词 里那几颗**是同一批键**（不是新造的一套）：两面永远同步。
+                //   · 罗马化：日/中/韩三颗里**有一颗开着**就算开；关掉则三颗全关；
+                //   · 译文：与歌词页那颗「隐藏译文」互为反相（键只有一个）。
+                Toggle(
+                    "show_romanized_lyrics".localized,
+                    isOn: shadowBinding(
+                        \.showRomanizedLyrics,
+                        persist: { value in
+                            NgzhwmSettingsViewModel.setAllRomanization(value)
+                            // 这个指纹进过宿主的 `isCurrent` ⇒ 下一拍就重建，不用等换歌。
+                            NowPlayingLyricsPlate.reapply()
+                        }
+                    )
+                )
+
+                Toggle(
+                    "show_lyrics_translation".localized,
+                    isOn: shadowBinding(
+                        \.showLyricsTranslation,
+                        persist: { value in
+                            NgzhwmSettingsViewModel.setHideTranslation(!value)
                             NowPlayingLyricsPlate.reapply()
                         }
                     )

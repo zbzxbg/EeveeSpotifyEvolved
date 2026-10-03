@@ -22,6 +22,12 @@ func romanizationSwitchesFingerprint() -> Int {
     if UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization") { bits |= 1 }
     if UserDefaults.standard.bool(forKey: "ngzhwm_chineseRomanization") { bits |= 2 }
     if UserDefaults.standard.bool(forKey: "ngzhwm_koreanRomanization") { bits |= 4 }
+    // ★ 2026-10-12（用户新加的"展示歌词翻译/罗马化歌词"两颗总开关）：
+    //   **译文那一档也进指纹** —— 理由与罗马字那三个完全一样：它只写 `UserDefaults`、
+    //   不会让 `currentLyricsVersion` 变，而播放器那一层的宿主是按这个指纹决定要不要重建的
+    //   （`NowPlayingLyricsHost.isCurrent`）⇒ 不进来的话，用户一拨开关要**等换歌**才看到效果
+    //   （那就是一颗"哑开关"，正是用户这次要解决的那种体验）。
+    if !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled { bits |= 8 }
     return bits
 }
 
