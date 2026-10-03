@@ -240,12 +240,16 @@ enum NowPlayingLyricsPlate {
     /// 键上那个字形记的符号名（用来判断"要不要换图"）。
     private static var toggleSymbolKey: UInt8 = 0
 
-    // 判据（全部来自真机树，日志 42/47）
+    // 判据（全部来自真机树，日志 42/47/51）
     private static let listIdentifier = "scrolling_npv_collection_view_accessibility_identifier"
     private static let bottomStackIdentifier = "npv.bottomStackView"
     private static let coverImageIdentifier = "Encore.ImageView"
     private static let titleLabelIdentifier = "now-playing-title-label"
     private static let playButtonIdentifier = "SPTNowPlayingPlayButton"
+    /// 播放器**自己**那份视图。★ 2026-10-07：它是"我们要的封面"最硬的那条判据 ——
+    /// 播放器的每一件都在它里面（`npv.bottomStackView` 8 / 进度条 13 / 三颗按钮 14 / 标题行 15），
+    /// 而**卡片自己的封面在它外面**（与它平级）。从 2026-09-30 起每份日志都有。
+    private static let nowPlayingViewIdentifier = "SPTNowPlayingView"
 
     // 关联对象
     private static var containerKey: UInt8 = 0
@@ -563,6 +567,10 @@ enum NowPlayingLyricsPlate {
         let hadSomethingVisible = isOpen || lastContainer != nil || coverHost != nil
         isOpen = false
         pendingOpenUntil = 0
+        // 封面判据的日志预算**按"一次开合"重置** —— 否则开合三次就把 12 行用光，
+        // 正好在下一个 bug 出现时看不见了（独立复核指出）。
+        chosenCoverLogs = 0
+        lastLoggedCover = nil
         guard hadSomethingVisible else { return }
 
         // 封面：先让它**动回原位**（同图，所以这就是"飞回去"），动画走完再撤 + 把 Spotify 那条写回。
@@ -645,7 +653,7 @@ enum NowPlayingLyricsPlate {
 
         // 封面：列表子树里第一个**看得见**的 `Encore.ImageView`，且宽度像封面（>=200）。
         // ⚠️ 这一条**必须**在列表里找：封面是列表里那些格子的内容。
-        guard let coverView = visibleCover(in: list) else {
+        guard let coverView = visibleCover(in: list, page: page) else {
             return .failed("cannot find a visible artwork wide enough (>=200pt) inside the player list")
         }
         let cover = coverView.convert(coverView.bounds, to: page)
@@ -742,8 +750,41 @@ enum NowPlayingLyricsPlate {
         ))
     }
 
-    /// 列表里那个"看得见的封面"（队列是一格一张封面，离屏的是 hidden —— pw 同判据）。
-    private static func visibleCover(in list: UIView) -> UIView? {
+    /// 列表里那个"看得见的封面"。**三趟**，一趟比一趟宽。
+    ///
+    /// **第一趟（最硬）**：必须**在 `SPTNowPlayingView` 里面**，且祖先里没有被折成 0 的。
+    ///
+    /// `id=SPTNowPlayingView` 是**结构性身份**，不是几何猜的：真机 `[NPVTree]` 里
+    /// 播放器的每一件都在它里面 —— 底部那一坨（level 8）、进度条（13）、三颗按钮（14）、
+    /// 标题行（15）；而**卡片自己的封面**（`7.ImageView@0,-62,374,374`）在 level 7、
+    /// 与它**平级**，**不在它里面**。这个 id 从 2026-09-30 起每一份日志都有。
+    ///
+    /// **第二趟**：只要"祖先里没有被折成 0 的"（= 上一版的做法）。
+    /// **第三趟**：旧判据（**宁可回到老行为，也不要一张都挑不出来**）。
+    private static func visibleCover(in list: UIView, page: UIView) -> UIView? {
+        if let owner = findByIdentifier(nowPlayingViewIdentifier, in: page),
+           let inside = firstVisibleCover(in: list, skippingCollapsedAncestors: true, inside: owner) {
+            noteChosenCover(inside, tier: "inside SPTNowPlayingView")
+            return inside
+        }
+        if let strict = firstVisibleCover(in: list, skippingCollapsedAncestors: true) {
+            noteChosenCover(strict, tier: "no collapsed ancestor")
+            return strict
+        }
+        guard let fallback = firstVisibleCover(in: list, skippingCollapsedAncestors: false) else {
+            return nil
+        }
+        noteChosenCover(fallback, tier: "legacy predicate")
+        return fallback
+    }
+
+    /// 一趟有界 BFS。`skippingCollapsedAncestors = true` 时跳过"祖先里被折成 0 的"那些；
+    /// `inside` 非空时只认它的后代。
+    private static func firstVisibleCover(
+        in list: UIView,
+        skippingCollapsedAncestors: Bool,
+        inside owner: UIView? = nil
+    ) -> UIView? {
         var visited = 0
         var queue: [UIView] = [list]
 
@@ -752,8 +793,12 @@ enum NowPlayingLyricsPlate {
             visited += 1
 
             if view.accessibilityIdentifier == coverImageIdentifier,
-               !view.isHidden, view.alpha > 0.01, view.window != nil,
-               view.bounds.width >= 200 {
+               !view.isHidden,
+               view.alpha > 0.01 || isHiddenByUs(view),
+               view.window != nil,
+               view.bounds.width >= 200,
+               isInsideOwner(owner, view),
+               !(skippingCollapsedAncestors && hasCollapsedAncestor(view, root: list)) {
                 return view
             }
             // hidden 的子树不往下走（离屏的那些封面一格一个，不必要）。
@@ -761,6 +806,78 @@ enum NowPlayingLyricsPlate {
             queue.append(contentsOf: view.subviews)
         }
         return nil
+    }
+
+    /// `owner` 为空 ⇒ 不设限；否则要求 `view` 是它的后代（`isDescendant(of:)` 含"就是自己"）。
+    private static func isInsideOwner(_ owner: UIView?, _ view: UIView) -> Bool {
+        guard let owner else { return true }
+        return view.isDescendant(of: owner)
+    }
+
+    /// 这个视图**在祖先里有没有被"折没"**：任一祖先 `hidden`，或者 `bounds` 退化到 0。
+    ///
+    /// ⚠️ **不看 `alpha`**：`hideSpotifyCover` 会把**已经被我们藏起来的那张**写成 `alpha = 0`，
+    ///    而下一拍 `measure()` 还得能再认出它来（隐藏名单在 `hiddenCoverKey` 里）。
+    ///    这里只判"几何上被折没了"，那是「一屏」留下的唯一痕迹。
+    ///
+    /// 走查有界（32 跳，本仓库纪律），到 `root` 为止。
+    private static func hasCollapsedAncestor(_ view: UIView, root: UIView) -> Bool {
+        var node: UIView? = view
+        var hops = 0
+        while let current = node, hops < 32 {
+            if current !== root {
+                if current.isHidden { return true }
+                if current.bounds.height < 1 || current.bounds.width < 1 { return true }
+            }
+            if current === root { break }
+            node = current.superview
+            hops += 1
+        }
+        return false
+    }
+
+    /// ★ **被我们自己藏起来的那张也算合格** —— 这是上面那条判据能活过第二拍的**前置条件**。
+    ///
+    /// `ensureCover` 在展开的那一刻就把 Spotify 那张主封面的 `alpha` 写成 0
+    /// （`hideSpotifyCover`，同图所以看不出"换"），而 **`layoutAndMount` 每一拍都要重跑**
+    /// ⇒ 下一拍 `visibleCover` 必须还能再认出它来。不认它的话：
+    /// 严格那一趟一张都挑不到 → 退回旧判据 → 又去挑那张**卡的**封面 → `lift` 又变正数
+    /// ⇒ **展开撑不过半秒**。（独立只读复核点出来的，本轮修法的前置条件。）
+    private static func isHiddenByUs(_ view: UIView) -> Bool {
+        guard let page = lastPage else { return false }
+        let hidden = (objc_getAssociatedObject(page, &hiddenCoverKey) as? [UIView]) ?? []
+        return hidden.contains { $0 === view }
+    }
+
+    /// 挑中的封面**换了就报一行**（上限 `chosenCoverLogLimit` 行）。
+    ///
+    /// 为什么不是"整个会话只报一次"：`visibleCover` 有两个调用时机 ——
+    /// 页面开着时 `rememberArtworkIfNeeded` 顺手认一次、点的那一刻 `measure()` 再量一次。
+    /// **这两次挑中的可能不是同一个**，而"挑错了"正是日志 50/51 的病根 ⇒
+    /// 必须看得见"换了"。有限次，不会刷屏。
+    private static weak var lastLoggedCover: UIView?
+    private static var chosenCoverLogs = 0
+    private static let chosenCoverLogLimit = 12
+
+    private static func noteChosenCover(_ view: UIView, tier: String) {
+        guard lastLoggedCover !== view else { return }
+        lastLoggedCover = view
+        guard chosenCoverLogs < chosenCoverLogLimit else { return }
+        chosenCoverLogs += 1
+        // ⚠️ 不要写 `rect.map(frameText)`：那是把一个 `@MainActor` 静态方法当函数值传，
+        //    本仓库的编译器版本只保证"最多一个警告"，没必要冒这个险（独立复核指出）。
+        let where_: String
+        if let page = lastPage {
+            where_ = frameText(view.convert(view.bounds, to: page))
+        } else {
+            where_ = "?"
+        }
+        writeDebugLog(
+            "[\(logTag)] artwork picked \(NSStringFromClass(type(of: view)))"
+                + " \(Int(view.bounds.width))×\(Int(view.bounds.height))"
+                + " at \(where_)"
+                + " (tier=\(tier))"
+        )
     }
 
     /// 底部那一坨的顶边（页面坐标系）。
@@ -824,7 +941,7 @@ enum NowPlayingLyricsPlate {
         // 上移后的标题与歌词就画在封面图上。**照片 51 就是这个现场**（标题上去了、歌词出来了、
         // 封面还全屏）。
         guard let list = findByIdentifier(listIdentifier, in: page),
-              let source = visibleCover(in: list) else { return nil }
+              let source = visibleCover(in: list, page: page) else { return nil }
         // ★ **先吃缓存**（页面开着的时候就已经认下来的那张），再退回"现在去抓树"。
         //   后者在真机树里经常还没就绪（`UIImageView(alpha=0.00)`），那正是"点了没反应"的来源。
         guard let image = rememberArtworkIfNeeded(in: page)
@@ -997,7 +1114,7 @@ enum NowPlayingLyricsPlate {
         if let cached = artworkCache[trackId] { return cached }
 
         guard let list = findByIdentifier(listIdentifier, in: page),
-              let source = visibleCover(in: list),
+              let source = visibleCover(in: list, page: page),
               let image = firstImage(in: source) ?? anyCoverImage(in: list) else { return nil }
 
         artworkCache[trackId] = image
@@ -1044,7 +1161,19 @@ enum NowPlayingLyricsPlate {
 
     /// 兜底：在整条列表子树里找**任意一张够大、看得见、真带图的** `UIImageView`。
     /// 判据与 `visibleCover` 同一个量级（≥200pt），走查有界（本仓库纪律）。
+    ///
+    /// ⚠️ 2026-10-07：**同样要跳过"被「一屏」折掉的卡"里的图**，而且**同样是两趟**
+    /// （严格找不到就退回旧判据）—— 这一层只负责"好歹给张图"，不许因为新判据而
+    /// 从"有图但可能是卡的"变成"一张都没有"（那会让展开直接失败）。
     private static func anyCoverImage(in list: UIView) -> UIImage? {
+        if let strict = firstCoverImage(in: list, skippingCollapsedAncestors: true) { return strict }
+        return firstCoverImage(in: list, skippingCollapsedAncestors: false)
+    }
+
+    private static func firstCoverImage(
+        in list: UIView,
+        skippingCollapsedAncestors: Bool
+    ) -> UIImage? {
         var visited = 0
         var queue: [UIView] = [list]
 
@@ -1056,7 +1185,8 @@ enum NowPlayingLyricsPlate {
                let image = imageView.image,
                imageView.bounds.width >= 200,
                !imageView.isHidden,
-               imageView.alpha > 0.01 {
+               imageView.alpha > 0.01,
+               !(skippingCollapsedAncestors && hasCollapsedAncestor(imageView, root: list)) {
                 return image
             }
             if view.isHidden { continue }

@@ -140,6 +140,12 @@ class PlayButtonTapHook: ClassHook<UIView> {
         let hooked = self.target
         onMainThreadSync {
             guard NowPlayingControlsPlate.isEnabled else { return }
+            // ★ 2026-10-07：**这一行在身份判断之前**。
+            //   日志 51 里 `play button tapped —` **一行都没有**，而那一条只能证明
+            //   "门面没收到"，分不出"用户没点"与"钩子根本没被调用"。
+            //   这一行把两者分开：**有它、没有下面那条 = 钩子在跑、只是没认下这颗按钮**；
+            //   **两条都没有 = 钩子没被调用**（那就要换落点，见 §3.4 ④）。
+            NowPlayingControlsPlate.noteTapHookFired(from: hooked)
             NowPlayingControlsPlate.notePlayTapped(from: hooked)
         }
     }
@@ -609,6 +615,10 @@ enum NowPlayingControlsPlate {
         tapOverrideSymbol = nil
         tapOverrideUntil = 0
         displayedPlaySymbol = ""
+        candidateSymbol = ""
+        candidateCount = 0
+        candidateSince = 0
+        disagreeSince = 0
         pinnedClassCounts.removeAll()
         foreignOpacityClasses.removeAll()
         diagCounts.removeAll()
@@ -753,8 +763,119 @@ enum NowPlayingControlsPlate {
                 return override
             }
         }
-        displayedPlaySymbol = fromState
-        return fromState
+        return settled(fromState)
+    }
+
+    // MARK: - ★ 2026-10-07：字形的**粘滞判决**（日志 51 抓到的"暂停键一卡一卡的"）
+
+    /// 投影说换，不代表**现在**就该换。
+    ///
+    /// ## 日志 51 的现场（同一秒内翻了两次，三对一模一样）
+    ///
+    /// ```
+    /// glyph SPTNowPlayingPlayButton symbol pause.fill -> play.fill (via projection, isPlaying=false, pos=28.91s)
+    /// glyph SPTNowPlayingPlayButton symbol play.fill -> pause.fill (via projection, isPlaying=true,  pos=29.38s)
+    /// glyph … pause.fill -> play.fill (via projection, isPlaying=false, pos=32.34s)
+    /// glyph … play.fill -> pause.fill (via projection, isPlaying=true,  pos=32.68s)
+    /// ```
+    ///
+    /// 三对的位置差是 **0.47 / 0.34 / 0.48 秒**，而每一对的**前一半**都是
+    /// `isPlaying=false` ⇒ **位置提供者在两次采样之间没有前进**。
+    /// 采样来自 `DeclutterChrome` 那条 ≈0.5s 的节拍（外加 `layoutSubviews`），
+    /// 而投影的 `pauseThreshold` 只有 **0.35s**：**采样间隔比阈值还长** ⇒
+    /// **一次"没前进"就直接判暂停** ⇒ 字形闪一下，下一次采样又翻回来。
+    /// 这就是"一卡一卡的"。
+    ///
+    /// ⚠️ 同理也**证伪了 H1**（钉被 Spotify 的 `opacity` 写回盖掉）：
+    ///    日志 51 里 `has a foreign 'opacity' animation` **一行都没有**。
+    ///
+    /// ## 判据
+    ///
+    /// 新状态要**连续 `stableSamples` 次、并且持续 ≥ `stableSeconds`** 才允许换符号。
+    /// 用户自己点的那一下**不受影响** —— `notePlayTapped` 的接管窗口是**立刻生效**的
+    /// （`playGlyphName` 在它前面就 return 了）。
+    private static let stableSamples = 2
+    private static let stableSeconds: CFAbsoluteTime = 1.2
+
+    /// ★ **分歧上限**（独立只读复核抓到的漏洞）：日志 51 那种"一直来回翻"的形态下，
+    /// 每隔一次采样 `wanted` 就恰好等于**当前已画**的那个 ⇒ 候选被反复清零
+    /// ⇒ `settled` **永远不提交**，字形会**无限期冻在**上一次提交的值上。
+    /// 那等于把"闪"换成"错"，更糟。所以再加一条兜底：**分歧持续超过 `disagreeLimit`
+    /// 就无条件采纳** —— 到那时"玩家真实状态"这件事已经不是粘滞能解决的了，
+    /// 站在最新读数这一边比冻着强。
+    private static let disagreeLimit: CFAbsoluteTime = 2.5
+    private static var disagreeSince: CFAbsoluteTime = 0
+
+    private static var candidateSymbol = ""
+    private static var candidateSince: CFAbsoluteTime = 0
+    private static var candidateCount = 0
+
+    private static func settled(_ wanted: String) -> String {
+        let now = CFAbsoluteTimeGetCurrent()
+
+        // 还没画过任何符号（刚进页面）⇒ 直接采用，别让用户先看到一个空按钮。
+        if displayedPlaySymbol.isEmpty {
+            displayedPlaySymbol = wanted
+            candidateSymbol = wanted
+            candidateCount = 0
+            disagreeSince = 0
+            return wanted
+        }
+
+        // 和现在画的一样 ⇒ 什么都不用做，把候选与分歧计时都清掉。
+        if wanted == displayedPlaySymbol {
+            candidateSymbol = wanted
+            candidateCount = 0
+            disagreeSince = 0
+            return displayedPlaySymbol
+        }
+
+        // 从这里往下：`wanted` 与屏幕上那个**不一致**。
+        if disagreeSince == 0 { disagreeSince = now }
+        if now - disagreeSince >= disagreeLimit {
+            // 兜底：分歧太久了，站到最新读数这一边（别再冻着）。
+            displayedPlaySymbol = wanted
+            candidateSymbol = wanted
+            candidateCount = 0
+            disagreeSince = 0
+            return wanted
+        }
+
+        // 换了一个新的候选 ⇒ 重新起算。
+        if candidateSymbol != wanted {
+            candidateSymbol = wanted
+            candidateCount = 1
+            candidateSince = now
+            return displayedPlaySymbol
+        }
+
+        candidateCount += 1
+        // `candidateSince > 0` 是防呆：万一候选与计时不同步，也绝不用一个陈旧的起点提前提交。
+        guard candidateCount >= stableSamples,
+              candidateSince > 0,
+              now - candidateSince >= stableSeconds else {
+            return displayedPlaySymbol
+        }
+        displayedPlaySymbol = wanted
+        candidateSymbol = wanted
+        candidateCount = 0
+        disagreeSince = 0
+        return wanted
+    }
+
+    /// `uiButtonTapped` 钩子**被调用了**（在"认不认这颗按钮"之前就报）。
+    ///
+    /// 为什么必须单独一条：日志 51 里 `play button tapped —` 一行都没有，而那一条只能证明
+    /// "门面没收到"，分不出"用户没点"与"钩子没被调用"。这一条在身份判断**之前**打 ⇒
+    /// 日志 52 里：**有它、没有 `play button tapped` = 钩子在跑、只是没认下这颗按钮**；
+    /// **两条都没有 = 钩子根本没被调用**（`uiButtonTapped` 在 9.1.88 上"存在但不走这条路"）。
+    static func noteTapHookFired(from button: UIView) {
+        guard isEnabled else { return }
+        noteDiagnostic(
+            .tap,
+            "uiButtonTapped fired on \(identifier(of: button))"
+                + " (isOurPlayerButton=\(button.isDescendant(of: lastPlayButton ?? button)))"
+        )
     }
 
     /// 那颗播放键**被点了**（`PlayButtonView.uiButtonTapped`，只认听歌页那一颗）。
@@ -765,7 +886,12 @@ enum NowPlayingControlsPlate {
     static func notePlayTapped(from button: UIView) {
         guard isEnabled else { return }
         // 同一个类还挂在迷你条 / 吸顶头 / 全屏歌词页上 —— 只有我们记住的那一颗算数。
-        guard let play = lastPlayButton, button === play else { return }
+        // ⚠️ 2026-10-07：判据从**严格同一实例**放宽到"**互为祖先/后代**"。
+        //    严格同一实例有个风险：万一 id 挂在子树里、而我们 hook 到的是外壳，
+        //    接管窗口就会**永远不生效**（独立复核指出）。放宽之后仍然只认听歌页那一颗
+        //    （迷你条那颗与它不是一条链），而 `isDescendant(of:)` 本来就包含"就是自己"。
+        guard let play = lastPlayButton,
+              button.isDescendant(of: play) || play.isDescendant(of: button) else { return }
 
         let current = displayedPlaySymbol.isEmpty ? playGlyphName() : displayedPlaySymbol
         let target = (current == "play.fill") ? "pause.fill" : "play.fill"
