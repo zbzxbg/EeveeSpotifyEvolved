@@ -35,51 +35,62 @@ import ObjectiveC.runtime
 // ## 纪律
 //
 // * 只改**透明度**、只**加自己的子视图** ⇒ 关掉开关 = 把字形拿走 + 把透明度写回，天然可还原；
-// * 三个 key 分工：`alphaKey`（我们透明掉的原生图标）/ `glyphKey`（我们叠的字形）/ `playStateKey`（上次画的是哪个字形）；
+// * 三个 key 分工：`glyphKey`（我们叠的字形）/ `playStateKey`（上次画的是哪个字形）；
 // * 字形尺寸照照片：跳过键 22pt、播放键 30pt（与歌词壳那三个键同一套，见 `AppleMusicLyricsPlaybackControl`）。
 //
 // 开关：扩展功能 → 听歌页 →「**播放键换成本地字形**」，**默认关**。日志 tag：`[NPVControls]`。
 //
-// ## ★ 2026-10-03 修（日志 48 + 照片 49/50 判读）：播放键"点一下暂停就闪一下白圆盘"
+// ## ★ 2026-10-05 最终形状（日志 49 + 用户澄清）：**钉整颗按钮**，字形搬到按钮的兄弟层
 //
-// **用户报**：「点击暂停键会有闪烁」。
+// **用户报**：「点击暂停键会有闪烁」，日志 49 里仍然如此。
 //
-// **照片取证**（同一台机、同一首 `Starboy`；两张的时区换算见 SESSION_2026-10-05 §8）
-//   * 照片 50（**暂停**，10:47 = 01:47 UTC，与日志 48 第一行 `pos=99.9s` 同一拍）：
-//     按钮 = **一个裸白三角（≈24×27pt），没有圆盘** —— 这是**原生稳态**的样子；
-//   * 照片 49（10:46 = 01:46 UTC，**在日志 48 的 `[INIT]` 之前**）：
-//     按钮 = 纯白圆盘（Ø≈62pt）+ 残缺的深色横条 + 一个小点。
+// **照片 52/53（用户提供的"Spotify 自己的暂停按钮"）**：暂停 = **白圆盘 + 深色三角**，
+// 播放 = **白圆盘 + 深色两根竖条** ⇒ ★ **原生稳态一直是"白圆盘 + 深色字形"，两个状态都有**。
+// （上一轮我按一句纠正推出的"原生稳态本来就是裸字形"**作废**。）
 //
-// ⚠️ **2026-10-05 用户纠正**：照片 49 是**"快速连点暂停键时截到的"** —— 那是**过渡帧**，
-// **原生的稳态不长这样**。所以那颗白圆盘**不是**"原生播放中"的样子，而是 Spotify 在换播放状态时
-// **交叉淡入的那张圆盘快照**（pw `PlayerControls.x` 原话：*"The holder Spotify crossfades
-// a snapshot of the disc in when play turns to pause."*）。
-// （横条"残缺"+ 旁边那个小点，正是"淡入到一半"的痕迹 —— 一开始把它读成原生暂停字形是**读错了**。）
+// **日志 49 的现场**（02:59:31–02:59:38）：
 //
-// ⇒ **真正要修的是**：每点一次播放/暂停，Spotify 就合成一张圆盘快照并**从 alpha 0 淡入到 1**，
-//    而上一版走查**只在"它已经可见"时才动手**（`if view.alpha == 0 { return }`）且**带 1.2× 尺寸闸**
-//    ⇒ 开头几帧必然漏掉 ⇒ 用户看到的就是"每点一次闪一下白圆盘"。
+// ```
+// [NPVControls] … 本拍把 1 处原生内容按回透明
+// [NPVControls] … 本拍把 0 处原生内容按回透明
+// [NPVControls] … 本拍把 1 处原生内容按回透明     ← 1/0/1/0 交替 20+ 次、持续 7 秒
+// ```
 //
-// **修法三条**：
-//   1. 播放键那一支**取消尺寸闸**，并且**连 alpha 已经是 0 的图形叶子也按住**（快照就起于 alpha 0）
-//      —— 让它**没有机会淡进来**，而不是等它亮了再去按；
-//   2. 白圆盘（`MixedPlayButtonDecorationView`）仍然**整层 `alpha = 0` 并继续往下走**
-//      （上一版在这里 `return`，整棵跳过；那是个独立的缺陷，一并修掉）；
-//   3. 原生内容被写回时排一轮**短促重试**（`armRehide`，与 `MiniBarGlass.armColorGuard` 同一套
-//      纪律：只排一轮、不叠加）—— 日志 48 里同一项在 `0/1` 之间反复横跳就是这个"写回"。
-//   4. 我们的字形加 `layer.zPosition = 1000`：快照是**后插**进来的，一后插就压在字形上面，
-//      而 `bringSubviewToFront` 只在我们跑到的那一拍生效 —— 持续生效的只有 zPosition。
+// ⚠️ **用户 2026-10-05 澄清**：**那 7 秒他一直在快速按暂停键**。
+// ⇒ 那不是"Spotify 自己每 0.25s 写回来一次"（我先前那条推论**作废**），
+// 而是**每按一次就多出一层新图形**（pw：*"The holder Spotify crossfades a snapshot of the disc in
+// when play turns to pause."*）。**我们永远追不上"它出生到我们钉住之间那一帧"** ——
+// 逐叶子去"按回去"的打法，**天生慢一拍**。
 //
-// ## ★ 2026-10-05 补：把 pw 那边**我们漏掉的三处**补上（读 `PlayerControls.x` 得来，GPL-3.0）
+// ### 现在的做法（结构性，不再追）
+//
+// | 步骤 | 做法 | 为什么 |
+// |---|---|---|
+// | ① | 把 `SPTNowPlayingPlayButton` / `Previous` / `Next` **三颗按钮整个 layer 钉住**（`pinInvisible`） | 之后 Spotify 往它们里面塞多少新图形（圆盘 / 原生字形 / 每按一次新建的快照 / 缓冲 spinner）**出生即不可见** ⇒ 那一帧的窗口从根上没有了 |
+// | ② | 钉**只动 layer、不写 `alpha`** | 渲染看**呈现层**（被钉在 0 ⇒ 看不见）；命中判定看**模型值** `alpha`（一点没变 ⇒ 按钮照样收得到触摸）。这是播放/暂停还活着的前提 |
+// | ③ | 我们的字形挂到**按钮的兄弟层**（`button.superview`），每拍按按钮的框重算 | 字形若还是按钮的子视图，会**跟着被钉没**。pw 把字形放进按钮内部是为了跟"按下回弹"，而按钮整层钉住之后那份回弹本来就看不见了 ⇒ 搬出来不损失任何可见的东西 |
+// | ④ | 字形 `layer.zPosition = 1000` | 快照是**后插**进来的，`bringSubviewToFront` 只在我们跑到的那一拍生效；持续生效的只有 zPosition |
+// | ⑤ | 新钉住一颗按钮时补一串位置复核（`armRehide`，0.05/0.15/0.35/0.6s） | 只为了让字形跟上按钮前几拍还没稳定的坐标；**不是**"把 alpha 按回去" |
+//
+// **还原**：撤钉（`removeAnimation`）+ 拿走字形。**原生一个字节都没改过**（我们从没写过 `alpha`）。
+//
+// ### 走过的弯路（留档，别再回去）
+//
+// * **按类名片段 `MixedPlayButtonDecorationView` 去透明"白圆盘"**：那是 `_TtC28EncoreConsumerMobile_BaseKit29…`，
+//   是**容器**（没有"图形叶子"），`alpha` 写一次会被写回，而且**圆盘只是稳态那一半**；
+// * **逐叶子递归 + `1.2×` 尺寸闸 + "alpha 已是 0 的也钉"**：逻辑越来越细，但**每一版都还是慢一拍**，
+//   因为新图形不是同一批实例；
+// * **"写 `alpha = 0` + 复查节拍硬按回去"**：日志 49 的 `1/0/1/0` 就是这么来的。
+//
+// ## pw 的对照（读 `PlayerControls.x` 得来，GPL-3.0 隔离副本）
 //
 // 先纠正一个容易记反的点：**pw 并没有"隐藏原生按钮、自己画一个按钮"**。它文件头原话是
 // *"The glyphs are drawn **over** Spotify's controls **rather than instead of them**: each button
 // keeps its action, its enabled state, its accessibility and the Gestures zones around it, and the
-// glyph **takes no touches**."* —— 原生按钮一直留着、能收触摸，被抑制的只是它**画出来的东西**
-// （prev/next 抑制 `SPTEncoreIconView`；play 抑制那颗"和按钮等大的 `UIImageView` 圆盘"）。
+// glyph **takes no touches**."* —— 原生按钮一直留着、能收触摸，被抑制的只是它**画出来的东西**。
 // **"调度依然走原生"这半你记对了** —— 而且 pw 正是靠 hook 原生按钮自己的动作方法来对齐时机。
 //
-// 它比我们多打的三处补丁（本轮全部补上）：
+// 它比我们多打的三处补丁（都已补上）：
 //
 //   ① ★ **点击那一刻就翻字形**（`playTapped` + `kTapTrust = 1.2`）。它的原话：
 //      *"The player's state reaches the glyph **a beat after the tap** …, which read as a
@@ -175,12 +186,10 @@ enum NowPlayingControlsPlate {
 
     static let logTag = "NPVControls"
 
-    /// 三个按钮与"白圆盘"的 id（判据只有这一处）。`internal` 是因为上面那个 hook 也要用。
+    /// 三个按钮的 id（判据只有这一处）。`internal` 是因为上面那个 hook 也要用。
     static let previousButtonID = "SPTNowPlayingPreviousTrackButton"
     static let playButtonID = "SPTNowPlayingPlayButton"
     static let nextButtonID = "SPTNowPlayingNextTrackButton"
-    /// 播放键底下那圈白色。**它必须一起透明掉** —— 理由见文件头"2026-10-03 修"那一段。
-    private static let playDiscClassFragment = "MixedPlayButtonDecorationView"
 
     /// 字形尺寸（照照片 40/41 的比例；与歌词壳那三键一致）。
     private static let skipGlyphSize: CGFloat = 22
@@ -189,30 +198,16 @@ enum NowPlayingControlsPlate {
     /// 走查上限（本仓库纪律）。
     private static let maxNodes = 800
 
-    /// 原生内容被写回之后的短促重试（与 `MiniBarGlass.guardBurstDelays` 同一档）。
+    /// 新钉住一颗按钮之后的**位置复核**（与 `MiniBarGlass.guardBurstDelays` 同一档）。
+    /// ⚠️ 它现在**不是"把 alpha 按回去"**：钉是一次性的，此后不需要再碰；
+    /// 这一串只是把我们的字形摆到那颗按钮的框上（按钮的坐标头几拍可能还没稳定）。
     private static let rehideBurstDelays: [Double] = [0.05, 0.15, 0.35, 0.6]
     private static var rehideBurstUntil: CFAbsoluteTime = 0
 
-    private static var alphaKey: UInt8 = 0
     private static var glyphKey: UInt8 = 0
     private static var playStateKey: UInt8 = 0
 
-    /// 我们透明掉的那一层 + **它当时的 alpha**。
-    ///
-    /// ⚠️ 为什么要连原值一起记（独立复核点出来的）：`restore()` 原来一律写 `alpha = 1`，
-    /// 而这一版**把白圆盘也纳入了透明范围** —— 圆盘在"暂停那一档"本来可能就不是 1
-    ///（照片 50 里它根本没画）。一律写 1 等于**把一颗本来不该亮的装饰层强行点亮**。
-    /// 记原值 ⇒ 关开关时写回它自己的样子。
-    private final class HiddenView {
-        let view: UIView
-        let alpha: CGFloat
-        init(_ view: UIView) {
-            self.view = view
-            self.alpha = view.alpha
-        }
-    }
-
-    // MARK: - 「不可见钉」：把 alpha 写一次是不够的（日志 49 的判决）
+    // MARK: - 「不可见钉」
 
     /// 我们那条"钉住不可见"动画的 key。
     static let pinAnimationKey = "eevee-pin-invisible"
@@ -222,61 +217,70 @@ enum NowPlayingControlsPlate {
         view.layer.animation(forKey: pinAnimationKey) != nil
     }
 
-    /// 把视图**钉成不可见** —— 在它的 layer 上加一条 duration 极长、`isRemovedOnCompletion = false`
+    /// 把视图**钉成不可见**：在它的 layer 上加一条 duration 极长、`isRemovedOnCompletion = false`
     /// 的 `opacity` 动画，把**呈现层**钉在 0。
     ///
-    /// ## 为什么不能只写 `alpha = 0`（日志 49 的现场）
+    /// ## ★ 关键：**只动 layer，不写 `alpha`**
     ///
-    /// 日志 49（02:59:31–02:59:38，**用户什么都没做**，前后只有两条网络 token 日志）：
+    /// | | 看的是哪一份 | 结果 |
+    /// |---|---|---|
+    /// | **渲染** | **呈现层**（被这条动画钉在 0） | 看不见 ✅ |
+    /// | **命中判定** | **模型值** `alpha`（`hitTest` 读属性） | **一点没变** ✅ |
     ///
-    /// ```
-    /// [NPVControls] … 本拍把 1 处原生内容按回透明
-    /// [NPVControls] … 本拍把 0 处原生内容按回透明
-    /// [NPVControls] … 本拍把 1 处原生内容按回透明     ← 1/0/1/0 交替 20+ 次、持续 7 秒
-    /// ```
+    /// ⇒ 既"看不见"又"碰得到"，而且**不需要记账还原 `alpha`**（撤掉动画就完全复原）。
+    /// 这一条对播放键是必须的：那颗 `CondensedButton` **必须还能收触摸** ——
+    /// pw 的 `PlayButtonView.uiButtonTapped` 就是由它发出去的；把它的 `alpha` 写成 0
+    /// 会让 UIKit 的 hit-test 直接跳过它 ⇒ 播放/暂停就死了。
     ///
-    /// 也就是说：我们把 `alpha` 写成 0，**Spotify 每 ~0.25s 写回来一次**，我们再写回去 ——
-    /// 那颗白圆盘就以 ~4Hz 在人眼前闪。**写模型值这条路注定打不赢。**
+    /// ## 为什么不用"写 `alpha = 0` + 复查节拍硬按回去"
     ///
-    /// ## pw 的解法与我们的替代
+    /// 日志 49（02:59:31–02:59:38）里 `本拍把 1 处 / 0 处 …` 交替 20+ 次 ——
+    /// 用户 2026-10-05 澄清：**那段时间他一直在快速按暂停键**。
+    /// ⇒ 那不是"Spotify 自己每 0.25s 写回来一次"，而是**每按一次多出一层新的东西**：
+    /// `1` = 这一拍新出现了一个要钉的，`0` = 没有。**病根是"它出生到我们钉住之间那一帧"**
+    /// ~~"写模型值打不赢"~~（那条推论已作废）。
+    ///
+    /// 所以修法是两条一起：
+    /// 1. **整颗按钮一起钉**（见 `refreshGlyphs`）：按钮的 layer 一旦钉住，
+    ///    之后 Spotify 往里面塞多少新图形都**出生即不可见** ⇒ 那一帧的窗口从根上关掉；
+    /// 2. **不写 `alpha`**：不去喂那场拉锯，也不破坏命中判定。
+    ///
+    /// ## pw 的解法（供对照）
     ///
     /// pw 用 `SGRSuppress`：把实例换成**运行时子类**、覆写 `setAlpha:` 一律转发 0
-    /// （它 `PlayerControls.x` 的原文：*"Play loses its white disc, a plain `UIImageView` the size of
-    /// the button, **which SGRSuppress keeps transparent**"* —— 注意它说的是"keeps"，因为写一次不够）。
+    /// （`PlayerControls.x` 原文：*"Play loses its white disc, a plain `UIImageView` the size of
+    /// the button, **which SGRSuppress keeps transparent**"*）。我们不用它的三个理由：
+    /// ① 纯公开 API，本机没有编译器，能少一处类型陷阱就少一处；
+    /// ② ★ 它的 `subclassable()` 是 `strncmp(name,"_Tt",3) != 0 && !strchr(name,'.')`，
+    ///    而我们的 `MixedPlayButtonDecorationView` 真名是 `_TtC28EncoreConsumerMobile_BaseKit29…`
+    ///    （**`_Tt` 开头**）⇒ 照抄只会得到它那句 `cannot keep being suppressed, set once per call`；
+    /// ③ 覆写 `setAlpha:` 会**连带改掉命中判定**（我们最不想要的那个副作用）。
     ///
-    /// 我们改用**更便宜也更稳的等价物**，理由三条：
-    /// 1. **纯公开 API**（`CABasicAnimation`）：本机没有编译器，能少一处类型陷阱就少一处
-    ///    （那套要 `objc_allocateClassPair` + `imp_implementationWithBlock` + 手工 `objc_super`）；
-    /// 2. ★ **对 Swift 类也有效**：pw 那套**明确不支持** Swift 类 —— 它的 `subclassable()` 是
-    ///    `strncmp(name, "_Tt", 3) != 0 && !strchr(name, '.')`，而我们的
-    ///    `MixedPlayButtonDecorationView` 真名是 `_TtC28EncoreConsumerMobile_BaseKit29…`（**`_Tt` 开头**）
-    ///    ⇒ 照抄过去只会得到它那句 `cannot keep being suppressed, set once per call`；
-    /// 3. **模型值是谁写的都无所谓**：呈现层被钉住，Spotify 写回 `alpha`、或者跑它自己的动画，
-    ///    都改不了这一层渲出来的样子 ⇒ 闪烁从机制上消失，而不是"再快一点按回去"。
-    ///
-    /// 还原 = `removeAnimation(forKey:)` + 写回记录的 alpha（一行，见 `restore()`）。
-    /// 视图被销毁时动画随之消失，不欠清理。
+    /// 还原 = `removeAnimation(forKey:)`（一行，见 `restore()`）。视图被销毁时动画随之消失。
     static func pinInvisible(_ view: UIView) {
-        if !isPinned(view) {
-            let pin = CABasicAnimation(keyPath: "opacity")
-            pin.fromValue = 0
-            pin.toValue = 0
-            pin.duration = 1_000_000_000
-            pin.isRemovedOnCompletion = false
-            pin.fillMode = .forwards
-            view.layer.add(pin, forKey: pinAnimationKey)
-        }
-        if view.alpha != 0 { view.alpha = 0 }
+        guard !isPinned(view) else { return }
+        let pin = CABasicAnimation(keyPath: "opacity")
+        pin.fromValue = 0
+        pin.toValue = 0
+        pin.duration = 1_000_000_000
+        pin.isRemovedOnCompletion = false
+        pin.fillMode = .forwards
+        view.layer.add(pin, forKey: pinAnimationKey)
     }
 
-    /// 我们自己钉过的类名（只报一次，免得刷屏）。给下一份日志当判据用。
-    private static var loggedPinnedClasses: Set<String> = []
+    /// 每个被钉过的类名各报几次（第 1 / 2 / 10 / 100 次）。
+    ///
+    /// **为什么要报"第几次"**：日志 49 的 `1/0/1/0` 就是"每按一次多出一层"——
+    /// 如果同一个类名被反复钉，说明它**每次都在被重建**，那就是还在闪的源头；
+    /// 只报一次的话，这条判据就看不见。
+    private static var pinnedClassCounts: [String: Int] = [:]
 
     private static func notePinnedClass(_ view: UIView) {
         let name = NSStringFromClass(type(of: view))
-        guard !loggedPinnedClasses.contains(name) else { return }
-        loggedPinnedClasses.insert(name)
-        writeDebugLog("[\(logTag)] 钉住 \(name)（模型 alpha 被写回也不会再亮）")
+        let count = (pinnedClassCounts[name] ?? 0) + 1
+        pinnedClassCounts[name] = count
+        guard count == 1 || count == 2 || count == 10 || count == 100 else { return }
+        writeDebugLog("[\(logTag)] 钉住 \(name)（第 \(count) 次）")
     }
 
     private static weak var lastUnit: UIView?
@@ -342,34 +346,52 @@ enum NowPlayingControlsPlate {
     }
 
     /// 把三个按钮的字形摆正（幂等）。hook 与节拍共用这一份。
+    ///
+    /// ## ★ 2026-10-05 重做：**钉整颗按钮**，字形搬到按钮的**兄弟层**
+    ///
+    /// 用户澄清（日志 49 的 `1/0/1/0` 那 7 秒）：**那段时间他一直在快速按暂停键**。
+    /// ⇒ 那不是"Spotify 自己每 0.25s 写回一次"，而是**每按一次就多出一层新图形**
+    /// （pw 说的那张 crossfade 快照），而我们**追不上"它出生到我们钉住之间那一帧"**
+    /// —— 所以每按一次闪一下。
+    ///
+    /// 上一版是"逐个叶子/圆盘去钉"：**永远慢一拍**，因为新图形不是同一批实例。
+    /// 现在改成**结构性的**：把 `SPTNowPlayingPlayButton` / `Previous` / `Next` 这**三颗按钮
+    /// 整个 layer 钉住** —— 之后 Spotify 往它们里面塞多少新图形（圆盘 / 原生字形 / 每按一次
+    /// 新建的快照 / 缓冲 spinner）**出生即不可见**。那一帧的窗口从根上没有了，不需要再"追"。
+    ///
+    /// 代价只有一个：我们的字形**不能再当按钮的子视图**（会跟着被钉没）⇒ 它挂到
+    /// **按钮的兄弟层**上，每一拍照按钮的框重算位置（见 `placeGlyph`）。
+    /// pw 把字形放进按钮内部是为了跟"按下回弹"，但按钮整层钉住之后那份回弹本来也看不见了
+    /// —— 搬出来**不损失任何可见的东西**。
+    ///
+    /// ⚠️ `pinInvisible` **只动 layer、不写 `alpha`** ⇒ 三颗按钮**照样收得到触摸**
+    /// （这是播放/暂停还活着的前提：pw 的 `PlayButtonView.uiButtonTapped` 是由按钮内部那颗
+    /// `CondensedButton` 发出去的）。
     static func refreshGlyphs(previous: UIView?, play: UIView?, next: UIView?) {
         guard isEnabled else { return }
 
-        var hiddenLeaves = 0
+        var pinnedNow = 0
         var found = 0
 
         if let previous {
             touchedButtons.add(previous)
-            hiddenLeaves += hideNativeContent(of: previous, discClassFragment: nil)
+            if pinButton(previous) { pinnedNow += 1 }
             placeGlyph(in: previous, systemName: "backward.fill", size: skipGlyphSize)
             found += 1
         }
         if let next {
             touchedButtons.add(next)
-            hiddenLeaves += hideNativeContent(of: next, discClassFragment: nil)
+            if pinButton(next) { pinnedNow += 1 }
             placeGlyph(in: next, systemName: "forward.fill", size: skipGlyphSize)
             found += 1
         }
         if let play {
             touchedButtons.add(play)
             lastPlayButton = play
-            hiddenLeaves += hideNativeContent(
-                of: play,
-                discClassFragment: playDiscClassFragment,
-                noSizeGateForWholeSubtree: true
-            )
+            if pinButton(play) { pinnedNow += 1 }
             // pw 的同款补丁：缓冲 spinner 还立着时**把我们的字形藏起来** —— 否则"缓冲中"
             // 会显示一个假的播放/暂停字形，用户点完看到的就是"字形自己跳"。
+            // （我们不动 spinner 的 `alpha`，所以 `spinnerShowing` 读到的还是原生值。）
             placeGlyph(
                 in: play,
                 systemName: playGlyphName(),
@@ -381,19 +403,27 @@ enum NowPlayingControlsPlate {
 
         guard found > 0 else { return }
 
-        // ★ 有东西被写回来了 ⇒ 排一轮短促重试把它幂等地按回去。
-        //   没有这一条时，重试只靠 `DeclutterChrome` 的 0.5s 复查节拍 ⇒ 最坏约 0.5s
-        //   能看到原生图形闪回来（用户报的"闪烁"里就有这一半）。
-        //   没有东西要按（`hiddenLeaves == 0`）时**一个 deadline 都不排**。
-        if hiddenLeaves > 0 { armRehide() }
+        // 有新按钮被钉住（进页面 / 换页）⇒ 补一串位置复核，把字形摆到它的框上。
+        // ⚠️ 这里**不再是"按回 alpha"**了：钉是一次性的，此后不需要再碰。
+        if pinnedNow > 0 { armRehide() }
 
-        let signature = "\(found)/\(hiddenLeaves)"
+        let signature = "\(found)/\(pinnedNow)"
         guard lastReportedSignature != signature else { return }
         lastReportedSignature = signature
         writeDebugLog(
             "[\(logTag)] 三个控制键已换成本地字形 — 找到 \(found) 个按钮、"
-                + "本拍把 \(hiddenLeaves) 处原生内容按回透明（按钮的动作/状态/无障碍保留）"
+                + "本拍新钉住 \(pinnedNow) 颗（原生内容出生即不可见；按钮的动作/状态/无障碍原样保留）"
         )
+    }
+
+    /// 钉住一颗按钮（幂等）。返回"这一拍是不是新钉的"。
+    ///
+    /// 钉住之后**再也不碰它**：Spotify 往里面塞什么都不会亮，我们也不需要再复查。
+    private static func pinButton(_ button: UIView) -> Bool {
+        guard !isPinned(button) else { return false }
+        notePinnedClass(button)
+        pinInvisible(button)
+        return true
     }
 
     /// 原生内容被写回之后的**短促重试**：排几次"幂等按回去"，**没人再写回就自然停下**。
@@ -442,15 +472,10 @@ enum NowPlayingControlsPlate {
         for button in targets {
             (objc_getAssociatedObject(button, &glyphKey) as? UIView)?.removeFromSuperview()
             objc_setAssociatedObject(button, &glyphKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-
-            let restored = (objc_getAssociatedObject(button, &alphaKey) as? [HiddenView]) ?? []
-            for item in restored {
-                // 先撤"钉"（撤掉动画之后模型值才说得上话），再写回**它原来看起来的样子**。
-                item.view.layer.removeAnimation(forKey: pinAnimationKey)
-                item.view.alpha = item.alpha
-            }
-            objc_setAssociatedObject(button, &alphaKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             objc_setAssociatedObject(button, &playStateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            // ★ 撤钉 = 完全复原。我们**从来没写过 alpha**（钉只动 layer），
+            //   所以撤掉动画之后那颗按钮就是原样，不需要写回任何值。
+            button.layer.removeAnimation(forKey: pinAnimationKey)
         }
         touchedButtons.removeAllObjects()
         lastUnit = nil
@@ -460,119 +485,17 @@ enum NowPlayingControlsPlate {
         tapOverrideSymbol = nil
         tapOverrideUntil = 0
         displayedPlaySymbol = ""
-        loggedPinnedClasses.removeAll()
-        writeDebugLog("[\(logTag)] 已还原（原生图标透明度写回、我们的字形已拿走）")
+        pinnedClassCounts.removeAll()
+        writeDebugLog("[\(logTag)] 已还原（撤钉、我们的字形已拿走；原生一个字节都没改过）")
     }
 
-    // MARK: - 我们"换字形"的那两手
-
-    /// 把按钮里**原来画图标的那一层**设成透明（pw 的同款做法：透明而不是 hidden ——
-    /// hidden 会让某些 Encore 布局把它当成"没有内容"而重排）。
-    ///
-    /// ⚠️ **必须递归到底**（2026-10-04 真机教训）：第一版只透明了按钮的**直接子视图**，
-    /// 而 Spotify 的图标画在**更深几层**（`Tertiary > UIView > StackView > StackView > SPTEncoreIconView`
-    /// —— pw 的注释里就写着这个形状），结果我们的字形虽然装上了（日志 44 的树里三个
-    /// `id=eevee-npv-transport-glyph` 都在），**原生图标照样显示在最上面**：
-    /// 我们透明掉的是中间那几层容器，图标自己在更下面、完全不受影响。
-    ///
-    /// 规则：
-    /// * **只动叶子**（没有子视图的视图）—— 容器留着，免得把布局/触摸的骨架也弄没；
-    /// * 叶子必须**比自己小**（≥ 按钮 1.2 倍的跳过：那是命中区/背景，不是图标）
-    ///   —— ⚠️ **播放键整棵子树取消这条闸**（`noSizeGateForWholeSubtree`），理由见下"快照"；
-    /// * 跳过我们自己的字形；
-    /// * ★ **"白圆盘"（`discClassFragment`）要整层透明掉，并且继续往下走**——
-    ///   见文件头"2026-10-03 修"：它自己就是那圈白色（是**容器**，没有"图形叶子"），
-    ///   上一版在这里 `return` 把它整棵跳过了，正是"点一下暂停就换一张脸"的病根；
-    /// * ★ **crossfade 快照**：pw `PlayerControls.x` 原文 —— *"The holder Spotify crossfades a
-    ///   snapshot of the disc in when play turns to pause."* ⇒ 换状态时 Spotify 会合成一张圆盘快照
-    ///   并**淡入**它。所以播放键那一支要**连 alpha 已经是 0 的图形叶子也按住**（它就起于 alpha 0），
-    ///   并且**不设尺寸闸**（那张快照可能比按钮大）。只在"它已经可见"时才动手，必然漏掉开头几帧；
-    /// * 记下改过的视图**与它当时的 alpha**（`HiddenView`），`restore()` 逐个写回**原值**
-    ///   —— 不是一律写 1（理由见 `HiddenView` 的注释）。
-    @discardableResult
-    private static func hideNativeContent(
-        of button: UIView,
-        discClassFragment: String?,
-        noSizeGateForWholeSubtree: Bool = false
-    ) -> Int {
-        let size = button.bounds.size
-        guard size.width > 1, size.height > 1 else { return 0 }
-
-        var changed = (objc_getAssociatedObject(button, &alphaKey) as? [HiddenView]) ?? []
-        let glyph = objc_getAssociatedObject(button, &glyphKey) as? UIView
-        var hidden = 0
-
-        func note(_ view: UIView) -> Bool {
-            if changed.contains(where: { $0.view === view }) { return false }
-            changed.append(HiddenView(view))
-            return true
-        }
-
-        /// 钉住（幂等）。**已经钉住的直接返回 false** —— 这一条是"不再打架"的关键：
-        /// 钉住之后模型值被谁写回来都不影响渲染，所以**不要再数它、不要再排重试**，
-        /// 日志也就不会再 1/0/1/0 地刷（日志 49 那个现场就是这么来的）。
-        func pinIfNeeded(_ view: UIView) -> Bool {
-            guard !isPinned(view) else { return false }
-            _ = note(view)
-            notePinnedClass(view)
-            pinInvisible(view)
-            return true
-        }
-
-        func visit(_ view: UIView, depth: Int, noSizeLimit: Bool) {
-            guard depth <= 8 else { return }
-            let className = NSStringFromClass(type(of: view))
-
-            if view === glyph || className.contains("eevee-npv-transport-glyph") { return }
-
-            // ★ 白圆盘：它自己是容器（白色由它自己画）⇒ 整层钉住，**然后继续往下**把里面
-            //   那个原生 play/pause 图形也钉住（双保险）。不影响按钮的命中判定：
-            //   命中的是 `PlayButtonView` 自己，子视图全透明时它照样收得到触摸。
-            if let fragment = discClassFragment, className.contains(fragment) {
-                if pinIfNeeded(view) { hidden += 1 }
-                for sub in view.subviews { visit(sub, depth: depth + 1, noSizeLimit: noSizeLimit) }
-                return
-            }
-
-            if view.subviews.isEmpty {
-                // 叶子：这才是真正画东西的那些。
-                if isPinned(view) { return }
-                if !noSizeLimit,
-                   view.bounds.width > size.width * 1.2 || view.bounds.height > size.height * 1.2 {
-                    return
-                }
-                // ⚠️ 只动"看起来是图形"的叶子类。2026-10-05 加这条：用户报"自定义的暂停键
-                // 点了没反应"，而在拿到日志之前，**能自己排除的风险就要排除** ——
-                // 递归到底可能顺手把某个非图形的内部件（命中层/装饰层的子件）也透明掉。
-                // 白名单只放 UILabel / UIImage / *ImageView / *IconView，其它一律不碰。
-                let visual = className.contains("Label")
-                    || className.contains("Image")
-                    || className.contains("IconView")
-                if !visual { return }
-
-                // 播放键（`noSizeLimit`）：**连 alpha 已经是 0 的也钉住** —— crossfade 快照
-                // 就是"alpha 0 起步、淡入到 1"，只在它可见时才动手必然漏掉开头几帧。
-                // 上一个/下一个维持老行为（已经透明的不再记一笔），少动别人的东西。
-                if view.alpha == 0, !noSizeLimit { return }
-
-                if pinIfNeeded(view) { hidden += 1 }
-                return
-            }
-
-            for sub in view.subviews { visit(sub, depth: depth + 1, noSizeLimit: noSizeLimit) }
-        }
-
-        let rootNoSizeLimit = noSizeGateForWholeSubtree
-        for sub in button.subviews { visit(sub, depth: 0, noSizeLimit: rootNoSizeLimit) }
-
-        objc_setAssociatedObject(button, &alphaKey, changed, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        return hidden
-    }
+    // MARK: - 字形与"缓冲中"
 
     /// Spotify 自己的缓冲 spinner 还立着吗（pw 的 `spinnerShowing`）。
     ///
     /// pw 原文：*"A spinner that is still up this long after a state change is buffering,
     /// not a track starting."* 走查有界（深度 4）。
+    /// ⚠️ 我们**不写** spinner 自己的 `alpha`（钉只动 layer），所以这里读到的还是原生的值。
     private static func spinnerShowing(in play: UIView) -> Bool {
         var showing = false
         func visit(_ view: UIView, depth: Int) {
@@ -588,9 +511,15 @@ enum NowPlayingControlsPlate {
         return showing
     }
 
-    /// 在按钮上叠一个我们自己的字形（**不吃触摸** —— 按钮的动作原样生效）。
+    /// 在**按钮的兄弟层**上叠一个我们自己的字形（**不吃触摸** —— 按钮的动作原样生效）。
     ///
-    /// 幂等：字形已经在、而且画的是对的符号 → 只对齐尺寸；否则换图。
+    /// ★ **为什么不再是按钮的子视图**（2026-10-05 重做）：整颗按钮的 layer 被钉住了
+    /// （见 `refreshGlyphs`），子视图会**跟着一起不可见**。所以字形挂在
+    /// **`button.superview`**（那一排 `AutoLayoutStackView`）上，每一拍照按钮的框重算位置。
+    /// 它是**非 arranged** 子视图（`addSubview` 而不是 `addArrangedSubview`），
+    /// 所以 stack view 不会去布局它，`frame` 由我们说了算。
+    ///
+    /// 幂等：字形已经在、而且画的是对的符号 → 只对齐位置；否则换图。
     private static func placeGlyph(
         in button: UIView,
         systemName: String,
@@ -599,6 +528,7 @@ enum NowPlayingControlsPlate {
     ) {
         let configuration = UIImage.SymbolConfiguration(pointSize: size, weight: .medium)
         guard let image = UIImage(systemName: systemName, withConfiguration: configuration) else { return }
+        guard let host = button.superview else { return }
 
         let glyph: UIImageView
         if let existing = objc_getAssociatedObject(button, &glyphKey) as? UIImageView {
@@ -609,12 +539,10 @@ enum NowPlayingControlsPlate {
             glyph.isUserInteractionEnabled = false
             glyph.accessibilityIdentifier = "eevee-npv-transport-glyph"
             glyph.tintColor = .white
-            // ★ **z 序不要靠 subview 顺序**：Spotify 换播放状态时会把那张圆盘快照**后插**进来，
-            //   一后插就压在我们的字形上面 ⇒ 用户看到"字形被白圆盘盖住一下"。
-            //   `bringSubviewToFront` 只能在我们跑到的那一拍生效，`zPosition` 是**持续生效**的。
+            // ★ **z 序不要靠 subview 顺序**：Spotify 换帧会重排 subviews，而
+            //   `bringSubviewToFront` 只在我们跑到的那一拍生效，`zPosition` 是**持续生效**的。
             //   这是我们自己视图的属性，关开关时随字形一起消失，不欠还原。
             glyph.layer.zPosition = 1000
-            button.addSubview(glyph)
             objc_setAssociatedObject(button, &glyphKey, glyph, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
 
@@ -624,18 +552,19 @@ enum NowPlayingControlsPlate {
             objc_setAssociatedObject(button, &playStateKey, systemName, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
 
-        // 铺满按钮并居中：用 autoresizing 跟着按钮走，不碰它自己的约束。
-        let target = CGRect(origin: .zero, size: button.bounds.size)
+        if glyph.superview !== host { host.addSubview(glyph) }
+        // 位置 = 按钮的框（换算到 host 坐标，**用 convert 而不是 frame**：
+        // 按钮可能正被 Spotify 按着做缩放/位移，那时 `frame` 未定义 —— 仓库纪律）。
+        let target = button.convert(button.bounds, to: host)
         if glyph.frame != target {
+            glyph.autoresizingMask = []
             glyph.frame = target
-            glyph.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         }
         // Spotify 的缓冲 spinner 立着时把我们的字形藏起来（pw 的做法）—— 见 `spinnerShowing`。
         let wantedAlpha: CGFloat = hidden ? 0 : 1
         if glyph.alpha != wantedAlpha { glyph.alpha = wantedAlpha }
-        // 每帧置于最上（Spotify 换帧会重排 subviews）。
-        if button.subviews.last !== glyph {
-            button.bringSubviewToFront(glyph)
+        if host.subviews.last !== glyph {
+            host.bringSubviewToFront(glyph)
         }
     }
 
