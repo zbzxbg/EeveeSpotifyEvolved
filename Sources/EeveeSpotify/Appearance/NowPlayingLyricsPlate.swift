@@ -263,6 +263,26 @@ enum NowPlayingLyricsPlate {
     /// 进度条单元的判据（id）：真机树里是
     /// `AutoLayoutStackView@0,0,358,41,id=Components.UI.ProgressBarUnitNowPlaying`。
     private static let progressUnitIdentifier = "Components.UI.ProgressBarUnitNowPlaying"
+
+    // MARK: 收藏键（绿色 ✓）搬进 header —— 2026-10-11，kumone 的 ♥ 位
+
+    /// 收藏键的判据（id）：`UIButton@0,0,48,48,id=Components.UI.AddToButton`（日志 54 的 `[NPVTree]`）。
+    ///
+    /// ★ 用户 2026-10-11 亲手点名：**那颗绿色的 ✓ 就是"收藏歌曲"**（Spotify 自己的真控件）。
+    /// ⇒ "像 kumone"的正解是把它**搬到 kumone 放 ♥ 的地方**，而不是画一个假图标。
+    ///
+    /// ⚠️ 页里有**两份**（日志 54 逐字：`13.UIButton@0,0,48,48,hidden,id=…` 与
+    /// `14.UIButton@0,0,48,48,id=…`），同一时刻只有一份看得见 ⇒ **判据必须是"看得见的那一份"**，
+    /// 不能是"按 id 找到的第一份"（`findByIdentifier` 走 BFS，会把 `hidden` 那份先挑出来）。
+    private static let addToButtonIdentifier = "Components.UI.AddToButton"
+
+    /// 收藏键目标中心**距页面右边**多少 pt。
+    ///
+    /// kumone 照片 40/41 实测（591px → 414pt，×0.7005）：♥ 中心 x ≈ 452px ≈ **317pt**
+    /// ⇒ 右边距 = 414 − 317 = **97**。y 用**缩略图的中线**（我们自己的 header 中线）——
+    /// 照片里 ♥ 正是与缩略图同一条中线。
+    private static let headerActionTrailingInset: CGFloat = 97
+
     /// 歌词区进场时从 0.96 放大到 1（pw 的 `kLyricsEnterScale`）。
     /// ⚠️ **本轮没做**：那要把容器也改成"只动 transform + bounds/center"（同封面那一套），
     /// 否则 `ensureContainer` 每拍写 `frame` 会和 transform 打架。留到下一轮。
@@ -337,6 +357,15 @@ enum NowPlayingLyricsPlate {
     private static weak var lastToggleZone: UIControl?
     private static weak var lastUnit: UIView?
     private static weak var lastTitleElement: UIView?
+
+    /// ★ 2026-10-11：被我们搬进 header 的**那一份**收藏键（收尾时只撤它的位移）。
+    private static weak var headerAction: UIView?
+    /// 接管它之前它自己的 `transform`（收尾时**原样写回**，不假设它一定是 identity）。
+    private static var headerActionOriginalTransform: CGAffineTransform?
+    /// 一次开合只报一行（搬到哪里 / 有没有被裁）——按 `closeEverything` 重置。
+    private static var didLogHeaderAction = false
+    /// "这一页现在没有看得见的收藏键"也只报一次（它可能在页面还没铺完时问一次）。
+    private static var didLogHeaderActionMissing = false
 
     private static var host: AnyObject?
     private static weak var hostPage: UIView?
@@ -896,6 +925,11 @@ enum NowPlayingLyricsPlate {
         // ② 标题行上移 + 右移（transform —— 改约束会被 stack view 布局写回）。
         applyTitleTransform(geometry: geometry, page: page)
 
+        // ②b ★ 2026-10-11：收藏键（绿色 ✓）搬进 header 行的右侧（kumone 的 ♥ 位）。
+        //     放在这里而不是 `apply`：目标位置要等 `measure()` 量出缩略图的中线才知道。
+        //     它**不是**必须成功的（找不到就保持原样），所以不参与下面那道 `guard`。
+        applyHeaderActionTransform(geometry: geometry, page: page)
+
         // ③ 歌词区：标题之下、进度条之上。
         let frame = geometry.stage
         guard frame.height > livingHeight / 2 else {
@@ -968,6 +1002,10 @@ enum NowPlayingLyricsPlate {
         wantsOpen = false
         pendingOpenUntil = 0
         pageLeaving = false
+        // ★ 2026-10-11：收藏键的位移写在**别人的控件**上 ⇒ **无条件**还回去（见
+        //   `restoreHeaderActionTransform`）；放在下面那条 `guard` 之前，是因为
+        //   "找到了却没搬成别的"这种半成品也要能回到原位。
+        restoreHeaderActionTransform()
         // 封面判据的日志预算**按"一次开合"重置** —— 否则开合三次就把 12 行用光，
         // 正好在下一个 bug 出现时看不见了（独立复核指出）。
         chosenCoverLogs = 0
@@ -1790,6 +1828,183 @@ enum NowPlayingLyricsPlate {
         return limit
     }
 
+    // MARK: - 收藏键搬进 header（2026-10-11：kumone 的 ♥ 位）
+
+    /// 把 Spotify 自己的**收藏键**（绿色 ✓）搬到 header 行的右侧 —— 也就是 kumone 放 ♥ 的地方。
+    ///
+    /// ## 为什么是"搬"而不是"画一个图标"
+    /// 用户 2026-10-11 亲手点名：**那颗绿色的 ✓ 就是"收藏歌曲"**（Spotify 的真控件，
+    /// `Components.UI.AddToButton`）。所以"像 kumone"的正解是**把它搬到 kumone 放 ♥ 的位置**
+    /// （照片 40/41：中心 ≈317pt、与缩略图同一条中线），而不是画一个假图标。
+    ///
+    /// ## ⚠️ 这是**视觉**搬运：点仍然点不动（**已知，且符合用户当下的要求**）
+    /// UIKit 的 hit-test 在祖先那一层就问 `point(inside:)` —— 这一颗被搬到 header（≈140pt）之后
+    /// 已经在它父视图的边界之外，所以**触摸到不了它**（`transform` 只改绘制与坐标换算，
+    /// 不改父视图的命中范围）。要变成"真能点"得再写一套转发（本仓库 2026-10-10 刚把
+    /// `sendActions` 那类"替用户按"整块删掉，见 `DeclutterChrome` 里那段注释），
+    /// 而用户 2026-10-11 的原话是「**只要求像，暂时不做点击功能**」⇒ 本轮就停在"像"。
+    ///
+    /// ## 为什么位移只写 `transform`
+    /// 它的位置由父视图的 Auto Layout 决定，改 `frame` 会被下一拍写回（本仓库的老教训 ——
+    /// 见 `applyTitleTransform` 那句"改约束会被 stack view 布局写回"）。所以照封面 / 标题行
+    /// 同一套手法：**只写平移分量**，它自己的缩放 / 旋转（如果有）原样保留。每拍重算一次
+    /// 平移量（`untransformed` 拿的是"去掉我们那段位移"的模型 frame），所以父视图重排也能跟上。
+    ///
+    /// ## 收尾
+    /// 这是写在**别人的控件**上的位移 ⇒ `closeEverything` 必须**无条件**把它撤掉
+    /// （`restoreHeaderActionTransform()`），否则这一颗从此永远偏在 header 上。
+    ///
+    /// 返回"这一拍有没有找到那一份看得见的收藏键"。
+    @discardableResult
+    private static func applyHeaderActionTransform(geometry: Geometry, page: UIView) -> Bool {
+        guard let button = visibleAddToButton(in: page) else {
+            if !didLogHeaderActionMissing {
+                didLogHeaderActionMissing = true
+                writeDebugLog(
+                    "[\(logTag)] no visible add-to button in this page yet — "
+                        + "leaving the favourites tick where Spotify put it"
+                )
+            }
+            return false
+        }
+
+        // 换了一颗（换歌会重建这一排）⇒ 先把上一颗还回去，免得两处位移叠在同一颗上。
+        if headerAction !== button {
+            restoreHeaderActionTransform()
+            headerAction = button
+            headerActionOriginalTransform = button.transform
+        }
+
+        let current = untransformed(button, in: page)
+        let target = CGPoint(
+            x: page.bounds.maxX - headerActionTrailingInset,
+            y: geometry.thumb.midY
+        )
+        let dx = (target.x - current.midX).rounded()
+        let dy = (target.y - current.midY).rounded()
+
+        let existing = button.transform
+        let moved = CGAffineTransform(
+            a: existing.a, b: existing.b, c: existing.c, d: existing.d,
+            tx: dx, ty: dy
+        )
+        if button.transform != moved { button.transform = moved }
+
+        if !didLogHeaderAction {
+            didLogHeaderAction = true
+            let landed = CGRect(
+                x: (target.x - current.width / 2).rounded(),
+                y: (target.y - current.height / 2).rounded(),
+                width: current.width,
+                height: current.height
+            )
+            let clipNote = clippingNote(for: button, landing: landed, page: page)
+            writeDebugLog(
+                "[\(logTag)] add-to button moved into the header — "
+                    + "\(Int(current.width))×\(Int(current.height)) from \(frameText(current))"
+                    + " to \(frameText(landed))" + clipNote
+                    + " (visual only: taps still land at the old spot)"
+            )
+        }
+        return true
+    }
+
+    /// 撤掉我们写给收藏键的那一段平移，并把它自己的 `transform` **原样写回**。
+    ///
+    /// ⚠️ 位置写在**别人的控件**上 —— 漏一次它就永远留在 header 上了，
+    /// 所以 `closeEverything` 里这一句放在那条 `guard` **之前**（无条件清账）。
+    private static func restoreHeaderActionTransform() {
+        guard let button = headerAction else { return }
+        let original = headerActionOriginalTransform ?? .identity
+        if button.transform != original { button.transform = original }
+        headerAction = nil
+        headerActionOriginalTransform = nil
+        didLogHeaderAction = false
+        didLogHeaderActionMissing = false
+    }
+
+    /// 页里**看得见的那一份**收藏键。
+    ///
+    /// ⚠️ 不能用 `findByIdentifier`：它返回 BFS 里**第一份**，而页里有两份且**隐藏那份排在前面**
+    /// （日志 54 逐字：`13.UIButton@0,0,48,48,hidden,id=…` 与 `14.UIButton@0,0,48,48,id=…`）
+    /// ⇒ 位移会写在一个看不见的按钮上，屏幕上一点变化都没有（而且日志还会说"成了"）。
+    ///
+    /// 走查的**起点从小到大**，跟 `progressUnitTop` 同一套思路（整页 BFS 要先趟过列表里那些格子，
+    /// 800 的预算可能不够）：
+    ///   ① `npv.bottomStackView`（底部那一坨 —— `DeclutterChrome` 的
+    ///      `TransportChromeHideHook` 就是从 `ConnectButtonView` 的**兄弟**里按同一个 id 找它的）；
+    ///   ② `SPTNowPlayingView`（播放器自己那一份，几百个节点）；
+    ///   ③ `page` 兜底。
+    private static func visibleAddToButton(in page: UIView) -> UIView? {
+        if let cached = headerAction,
+           cached.window != nil,
+           !cached.isHidden,
+           cached.alpha > 0.01,
+           cached.isDescendant(of: page) {
+            return cached
+        }
+
+        var roots: [UIView] = []
+        if let stack = findByIdentifier(bottomStackIdentifier, in: page) { roots.append(stack) }
+        if let player = findByIdentifier(nowPlayingViewIdentifier, in: page) { roots.append(player) }
+        roots.append(page)
+
+        for root in roots {
+            if let found = firstVisibleAddToButton(in: root) { return found }
+        }
+        return nil
+    }
+
+    /// 一趟有界 BFS：按 **id + 看得见** 挑收藏键（判据风格与 `firstVisibleCover` 一致）。
+    private static func firstVisibleAddToButton(in root: UIView) -> UIView? {
+        var visited = 0
+        var queue: [UIView] = [root]
+
+        while !queue.isEmpty, visited < maxNodes {
+            let view = queue.removeFirst()
+            visited += 1
+
+            if view.accessibilityIdentifier == addToButtonIdentifier,
+               !view.isHidden,
+               view.alpha > 0.01,
+               view.window != nil,
+               view.bounds.width >= 1,
+               view.bounds.height >= 1 {
+                return view
+            }
+            // hidden 的子树不往下走。
+            if view.isHidden { continue }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    /// 搬到 header 之后"会不会被谁裁掉"那一行注脚（**只报，不自动改**）。
+    ///
+    /// 我们要把它从底部那一排往上搬 ≈460pt —— 中间任何一层 `clipsToBounds` 都会让
+    /// 屏幕上"✓ 直接不见了"。**不自动清**：清掉别人的裁剪可能把别的被裁内容一起放出来，
+    /// 那是比"少一颗 ✓"更大的破坏。所以只留一行日志，下一份日志一眼就能读出是谁干的。
+    /// 祖先的裁剪框**装得下**落点的不算（那种裁剪是安全的）。
+    private static func clippingNote(for view: UIView, landing: CGRect, page: UIView) -> String {
+        var node = view.superview
+        var hops = 0
+
+        while let current = node, hops < 32 {
+            if current.clipsToBounds,
+               current.bounds.width > 1,
+               current.bounds.height > 1,
+               !untransformed(current, in: page).contains(landing) {
+                let name = NSStringFromClass(type(of: current))
+                return " — WARNING: \(name) clips to bounds and does not contain the landing spot,"
+                    + " so the tick may be cut off"
+            }
+            if current === page { break }
+            node = current.superview
+            hops += 1
+        }
+        return " (header row — kumone's heart spot)"
+    }
+
     // MARK: - 歌词键（pw 把 glyph 放在 footer；我们照做 —— 而且**要看得见**）
 
     /// 那枚键的落点。三级判据。
@@ -2014,18 +2229,32 @@ enum NowPlayingLyricsPlate {
 
     /// 打开之后写在歌词**正中间**的那句话。`nil` = 有歌词可画（不写）。
     ///
-    /// 三种"没词"必须分开说（这正是用户要的）：
+    /// 四种"没词"必须分开说（这正是用户要的）：
     ///   · 源**明确**说是纯音乐 ⇒ 「此歌曲为纯音乐。」（`song_is_instrumental`，键早就有了）；
+    ///   · ★ **有行、但一行时间都没有** ⇒ 「这首歌的歌词没有时间轴」（`lyrics_no_timeline`，本轮新增）；
     ///   · 查完了没有 ⇒ 「未找到歌词」（`ngzhwm_lyrics_unavailable`，键也早就有了）；
-    ///   · 还在查 ⇒ 「正在查找歌词…」（`lyrics_looking_up`，本轮新增的键）。
+    ///   · 还在查 ⇒ 「正在查找歌词…」（`lyrics_looking_up`，上一轮新增的键）。
     /// ⚠️ "查无此歌"**不许**冒充纯音乐 —— 判据是 `LyricsDto.isInstrumental`（只有源明确判定时才置位）。
+    /// ⚠️ ★ 2026-10-11（S1）：也**不许**把"这一首没有时间轴"说成"未找到歌词" —— 见下面第 ③ 段。
     private static func noticeText() -> String? {
         // ① 有行而且画得出来 ⇒ 正常画歌词。
         if currentLyricsDto?.lines.isEmpty == false, currentLines() != nil { return nil }
         // ② 源明确说了这是纯音乐。
         if currentLyricsDto?.isInstrumental == true { return "song_is_instrumental".localized }
-        // ③ 有行却画不出来（转换异常）：按"没找到"给一句话，**别做成死键**。
-        if currentLyricsDto?.lines.isEmpty == false { return "ngzhwm_lyrics_unavailable".localized }
+        // ③ 有行、却画不出来。★ 先说清是**哪一档**"画不出来"，别一律报"没找到"。
+        if let dto = currentLyricsDto, !dto.lines.isEmpty {
+            // ★ 这一档是**误报**的源头（S1）：
+            //   `LyricLinesAdapter.toAppleMusicLyricLines()` 第 21 行的 `.filter { $0.offsetMs != nil }`
+            //   会把"一行时间都没有"的整首歌滤成空 ⇒ 我们这层没有行模型；
+            //   而**注入给 Spotify 的那份 payload 是带这些行的**（Spotify 自己的歌词卡能列全文）
+            //   ⇒ 用户看到的是"歌词明明有、我们却说未找到"。数据在，只是没有时间轴。
+            //   （渲染层要吃时间轴，静态列出全文是另一件事 —— 见 handoff 里的"还没做"。）
+            if !dto.lines.contains(where: { $0.offsetMs != nil }) {
+                return "lyrics_no_timeline".localized
+            }
+            // 有行、也有至少一行带时间，却还是画不出来 ⇒ 这是转换异常，按"没找到"说，**别做成死键**。
+            return "ngzhwm_lyrics_unavailable".localized
+        }
         // ④ 数据还没到：正在查 vs 查完了没有。
         switch currentLyricsLookupState {
         case .idle, .loading:

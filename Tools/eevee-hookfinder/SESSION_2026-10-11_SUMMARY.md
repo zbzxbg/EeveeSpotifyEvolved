@@ -9,6 +9,7 @@
 > | 日志 54 / 照片 63–64（胶囊的 id、封面的 pw 手法、页面记忆） | [`SESSION_2026-10-10_HANDOFF.md`](SESSION_2026-10-10_HANDOFF.md) |
 > | 日志 55 / 照片 65–69（进出转场、几何量测、音量条、元素清单） | [`SESSION_2026-10-11_HANDOFF.md`](SESSION_2026-10-11_HANDOFF.md) |
 > | 照片 67/68 逐区块量测 + 与 kumone 的差距 + 元素身份清单 | [`KUMONE_REFERENCE.md`](KUMONE_REFERENCE.md) §6 |
+> | ★ **这一场之后的那一轮**（照片 40/41/70：绿 ✓ 搬进 header + 无时间轴不再误报） | [`SESSION_2026-10-11_HANDOFF_2.md`](SESSION_2026-10-11_HANDOFF_2.md) |
 > | 更早的历史（歌词线、pw 移植评估、过时目标审计） | `LYRICS_MODULE_NEXT_STEPS.md` / `SPOTIPW_0211_PORT_ASSESSMENT.md` / `STALE_AUDIT.md` |
 >
 > 写作时的仓库状态：**HEAD = `5541023`**（`b9e250b` 那批功能 + 一行编译修正 + 新自检规则）。

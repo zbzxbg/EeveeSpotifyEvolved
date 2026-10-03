@@ -150,6 +150,7 @@ ngzhwm_remove_interlude_symbol = "Delete Interlude Symbol \"♪\"";
 ngzhwm_remove_interlude_symbol_description = "When this option is enabled, the interlude symbol \"♪\" is removed from lyrics, and lines containing \"♪\" are displayed as blank.";
 ngzhwm_lyrics_unavailable = "No lyrics found";
 lyrics_looking_up = "Looking for lyrics…";
+lyrics_no_timeline = "These lyrics have no timing";
 track_mismatch = "The track changed while lyrics were loading. Play it again to fetch lyrics.";
 // Debug
 
