@@ -568,6 +568,64 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 
 ---
 
+## 4.17 ★ 本地化政策改为「英文只由 en.lproj 单点提供」（用户选 B）
+
+用户判断（**完全正确**）：「其他语言如果没有对应翻译就回退英文（我不知道 zh-TW 是回退简中还是英文），
+所以其实除了简体中文和英文，其他本地化文件不用补英文吧」。
+
+**机制查证**（`BundleHelper.swift:52` + bundle `Info.plist`）：
+
+```
+① bundle（设备语言那份表）里查 —— 哨兵值 "No translation" 判"没查到"
+② 查不到 ⇒ 显式再查 **en.lproj**（`enBundle`）
+③ 再没有 ⇒ 返回**键名本身**
+CFBundleDevelopmentRegion = English（系统自己那道回落也是英文）
+```
+
+* ⇒ **zh-TW 缺键回落到英文**，**不是**简体中文；
+* ⚠️ 唯一例外：CFBundle 按**设备语言偏好列表**顺序找"下一个有这份表的 .lproj" ——
+  若某用户的列表里**同时有简中**（`[zh-Hant-TW, zh-Hans-CN, …]`），缺的键可能先被 `zh-CN` 接住
+  （系统行为，不是我们的代码）✓ 已写进 `TRANSLATING.md`。
+
+**实测冗余**：25 个语言里**逐字等于 en 的行共 4623 条**（占全部条目的 63%）⇒ 删掉**不改变任何显示**。
+（上一轮我给 24 个语言补 `lyrics_looking_up`/`lyrics_no_timeline` 的英文，就是这个政策下的无用功 ——
+用户点破得对。）
+
+**这一轮做了什么**：
+
+| 动作 | 结果 |
+|---|---|
+| 删掉 25 个语言里**逐字等于 en** 的条目 | **4623 行**（en 不动；`it` 保留 2 个 en 里没有的键） |
+| `Tools/l10n_lint.py` 政策 | ① 缺键：**error → informational**（只报数量，`--list-untranslated` 才列全）；② **新增重复键检查 = error**（`.strings` 后写生效，重复会静默盖掉前一条 —— 就是 §4.15 那两个 bug 的根因）；③ **新增"逐字英文副本 = warning"**；④ 格式参数不一致 **error → warning**（见下）；⑤ `--quiet` 只留真错误 |
+| `TRANSLATING.md` | 新增「回退怎么落的」一节；"复制基线"后**要求删掉没翻的行**；规则 2 的错误示例改掉；规则 6 重写（缺键 ok / 重复 error / extra error / 副本 warning）；检查表与 `--list-untranslated` 用法同步 |
+
+★ **格式参数那条为什么必须降级**：`patching_description` 的调用点是
+`"patching_description".localizeWithFormat("restart_is_required_description".localized)`
+（`EeveePatchingSettingsView.swift:14-16`），而 **en（以及 bg / de-CH / ko / pt-BR / zh-CN）
+把"需要重启"那句写死在正文里**（0 个占位符），另 21 个语言用 `\n\n%@` 代入 ⇒ **两种都正确**，
+但基线数 0 vs 1 会被判成不一致 ⇒ 全语言假红。真正的危险方向（占位符多于调用点实参 ⇒
+`String(format:)` 读到不存在的参数）本脚本量不出来，**宁可漏不误报**。
+
+**顺带修掉 lint 照出来的三处真问题**（以前被 148 个 missing 淹没）：
+
+1. ★ **"完全重置"确认框文案是错的**（跨所有语言）：`EeveeSettingsView.swift:326` 用
+   `resetSubtitle`，而那个键是 **SponsorBlock「重置」ActionSheet 的 message**
+   （en「Each is independent.」/ 中文「各项互不影响。」）⇒ 每种语言的破坏性确认框都在说"各项互不影响。"
+   ⇒ 改用 `resetFooter`（同一条 Section 下面那段擦除说明，各语言都已翻）+ 删掉 `it` 里为此写的那条重复
+   `resetSubtitle`；
+2. ★ **`user_id_copied` 用的是 `NSLocalizedString`**（`SponsorBlockPendingListView.swift:24`）——
+   那查的是 **Bundle.main = Spotify.app**，我们的 bundle 不在那儿 ⇒ 永远显示键名本身
+   （`it` 里那条意译一直没被用上也是这个原因）⇒ 改走 `"user_id_copied".localized`，
+   并把它补进 **en + zh-CN**（en 里本来就没有这个键）；
+3. `it` 的孤儿键 `draftsEpisodeLoc`（en 没有、代码 0 引用）删掉。
+
+**校验**：`l10n_lint` **全 27 语言 exit 0**（只剩 informational + warning）；
+`en 413 keys` / `zh-CN 408 keys, 5 untranslated`（那 5 条就是原先是英文副本的：
+`haptics_surface_keywords_placeholder` / `let_the_music_play` / `licenses_kumone` /
+`reduce_interventions_scope_connectnotifications` / `urlText`）；六条自检全绿。
+
+---
+
 ## 5. 本机自检（六条全绿）
 
 ```

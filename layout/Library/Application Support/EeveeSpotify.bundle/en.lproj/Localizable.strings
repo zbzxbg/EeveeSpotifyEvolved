@@ -226,6 +226,7 @@ sponsorblock_reports_title = "SponsorBlock Reports";
 sponsorblockIDTitle = "Your SponsorBlock ID";
 sponsorblockIDFooter = "Used to attribute your submissions and votes. Treat as a private password — don't share it.";
 copyButton = "Copy";
+user_id_copied = "User ID copied";
 regenerateButton = "Regenerate";
 draftsTitleSB = "Drafts";
 draftsEmpty = "No drafts. Long-press the podcast progress bar to start marking a segment.";

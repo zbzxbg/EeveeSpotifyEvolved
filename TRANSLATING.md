@@ -34,9 +34,29 @@ The `<locale>` folder name is a standard Apple language ID: a language code, opt
 
 2. Translate the **value** on the right of each `=`. **Never change the key** on the left.
 
-3. Run the linter (see below) and fix anything it reports.
+3. **Delete the rows you left in English.** English lives in `en.lproj` only — an untranslated
+   key falls back to it automatically, so a copied English row is pure duplication (the linter
+   warns about it). Your file should end up containing *only the strings you actually translated*.
 
-4. Open a PR with your locale code in the title, e.g. `Add xx-XX localization`.
+4. Run the linter (see below) and fix anything it reports.
+
+5. Open a PR with your locale code in the title, e.g. `Add xx-XX localization`.
+
+---
+
+## How the fallback works (why "missing" is fine)
+
+`BundleHelper.localizedString` looks a key up in the bundle's **device-language table** first and
+then in **`en.lproj`**; only if neither has it does the app show the raw key. The bundle's
+`CFBundleDevelopmentRegion` is `English` as well, so iOS itself falls back the same way.
+
+Consequences:
+
+- A locale file with **only your translations** is complete. Partial locales are first-class.
+- The fallback is **English**, not "the nearest related language". A Traditional Chinese device
+  whose language list is `[zh-Hant-TW, en-US]` gets English for anything untranslated; if the list
+  also contains Simplified Chinese (`[zh-Hant-TW, zh-Hans-CN, …]`), iOS may serve a missing key
+  from `zh-CN` **before** English — that is system behaviour, not something the files control.
 
 ---
 
@@ -52,16 +72,30 @@ reset_data = "Скинути дані";      ✅ correct
 reset_dataDescription = "...";    ❌ no — key renamed
 ```
 
-### 2. Keep format placeholders intact
+### 2. Keep format placeholders working
 
-Strings used with `.localizeWithFormat(...)` contain placeholders like `%@`, `%d`, or positional `%1$@`. These are substituted at runtime — **a missing placeholder will garble the sentence for users of that language** (this exact bug shipped at least once, which is why the linter checks it).
+Strings used with `.localizeWithFormat(...)` contain placeholders like `%@`, `%d`, or positional
+`%1$@`. Two styles are both correct, and English itself mixes them:
 
 ```
-patching_description = "...";                        ❌ no — the English version ends with %@
-patching_description = "... \n\n%@";                 ✅ correct — same number of %@ as English
+# style A — let the placeholder carry the sentence (what most locales do)
+patching_description = "… und ändert die Parameter in Echtzeit.\n\n%@";
+
+# style B — inline the sentence and ignore the argument (what en.lproj and zh-CN do)
+patching_description = "… and modifies the parameters in real-time.\n\nApp restart is required after changing.";
 ```
 
-Keep the placeholder in the position that reads naturally in your language; for multiple placeholders, keep the same order (or use positional ones like `%1$@` / `%2$@` if the grammar requires reordering).
+✅ Either is fine. ❌ What is **not** fine is inventing a placeholder the call site does not supply:
+`String(format:)` with a placeholder and no matching argument reads garbage (and can crash). So
+never add a `%@`/`%d` that isn't in the English string *unless* you know the call site passes it —
+safest is to match English's count, or inline like English does.
+
+The linter reports a placeholder-count difference from English as a **warning** for review, not an
+error — because (as `patching_description` shows) a difference can be entirely legitimate.
+
+Keep the placeholder in the position that reads naturally in your language; for multiple
+placeholders, keep the same order (or use positional ones like `%1$@` / `%2$@` if the grammar
+requires reordering).
 
 ### 3. Escape quotes and keep newlines
 
@@ -79,11 +113,16 @@ If the English value contains `\n`, `\t`, or similar, your translation must too.
 
 Keep these as-is: `EeveeSpotify`, `Spotify`, `Musixmatch`, `PetitLyrics`, `LRCLIB`, `Genius`, `SponsorBlock`, `TrollStore`, `SideStore`, `CarPlay`, `Siri`, `Jam`, `AI DJ`.
 
-### 6. Delete nothing, reorder nothing
+### 6. Rules about keys
 
-- Missing keys are reported as **errors** — the app falls back to English for missing keys, and it makes the locale look broken in reports.
-- Extra keys that don't exist in `en.lproj` are also **errors** (they're stale leftovers).
+- **A key defined twice in one file is an error.** `.strings` keeps the **last** one, so the earlier
+  entry is silently dead — this has already hidden a finished translation and a maintainer's rewrite.
+- **Missing keys are fine** (informational): they fall back to English, so a partial file is valid.
+- **Extra keys are errors**: a key that isn't in `en.lproj` can never be reached (stale leftover).
+- **Verbatim English rows are warnings**: they do nothing (English already comes from `en.lproj`)
+  and they mean every future English edit has to touch your file too. Delete them.
 - Key order doesn't matter to the app, but keeping the same order as `en.lproj` makes diffs reviewable.
+- Renaming or "fixing" a key is never right: the key is what the code looks up.
 
 ### 7. Content style
 
@@ -101,19 +140,24 @@ A linter ships in this repo; it compares your locale against the English baselin
 ```bash
 python3 Tools/l10n_lint.py --locale xx      # only your locale
 python3 Tools/l10n_lint.py                  # all locales (full report)
-python3 Tools/l10n_lint.py --quiet          # only locales with problems
+python3 Tools/l10n_lint.py --quiet          # only locales with real errors
+python3 Tools/l10n_lint.py --locale xx --list-untranslated   # list what's still untranslated
 ```
 
 What it reports:
 
 | Check | Severity | Meaning |
 |---|---|---|
-| Missing keys | **error** | Key exists in `en.lproj` but not yours — app shows English |
-| Extra keys | **error** | Key not in `en.lproj` — stale/renamed leftover |
-| Format-arg mismatch | **error** | Placeholder count differs from English — will break at runtime |
+| Untranslated | informational | Key exists in `en.lproj` but not yours — the app shows English |
+| Extra keys | **error** | Key not in `en.lproj` — stale/renamed leftover, unreachable |
+| Duplicate keys | **error** | Same key twice in one file — the last one silently wins |
+| Verbatim English copies | warning | Redundant rows; delete them (English comes from `en.lproj`) |
+| Format-arg count differs from en | warning | Both styles can be correct — see rule 2 |
 | Unused keys | warning | Defined but never referenced in Swift — ask before removing |
 
-Your PR should introduce **zero new errors** for your locale. If the linter reports pre-existing errors in other locales, ignore them — those are not yours to fix (unless you want to!).
+Your PR should introduce **zero new errors** for your locale. Warnings are for review, and the
+untranslated count is just information — a file with 40 translated strings and 370 untranslated
+ones is perfectly valid and welcome.
 
 No local Python? Note in your PR that you couldn't run it, and a maintainer will run it for you.
 
@@ -123,9 +167,11 @@ No local Python? Note in your PR that you couldn't run it, and a maintainer will
 
 New strings appear whenever features are added; locales drift behind the baseline over time. To catch up:
 
-1. Run `python3 Tools/l10n_lint.py --locale xx` to get the exact missing-key list.
-2. Find each key in `en.lproj` and add a translated entry in the same spot in your file.
-3. Re-run the linter until your locale is clean.
+1. Run `python3 Tools/l10n_lint.py --locale xx --list-untranslated` to get the exact list of keys
+   that still fall back to English (without the flag you only get the count).
+2. Find each key in `en.lproj` and add a translated entry (English rows are not copied over — see
+   the fallback section above).
+3. Re-run the linter until your locale has **no errors** (warnings are fine to leave).
 4. Partial updates are welcome — even a PR that fills in one section (e.g. all SponsorBlock strings) helps.
 
 ---

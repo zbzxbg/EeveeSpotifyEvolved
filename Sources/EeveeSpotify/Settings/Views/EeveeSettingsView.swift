@@ -323,7 +323,14 @@ struct EeveeSettingsView: View {
                 Button {
                     confirmDestructive(
                         title: "resetButtonTitle".localized,
-                        message: "resetSubtitle".localized,
+                        // ★ 2026-10-11 修：这里原来是 `resetSubtitle` —— 那个键是
+                        // **SponsorBlock「重置」ActionSheet 的 message**（en：「Each is independent.」
+                        // / 中文「各项互不影响。」），于是**每一种语言的"完全重置"确认框都在说
+                        // "各项互不影响。"**（真机反馈 + 审计发现，`it` 里甚至因此出现了同一个键
+                        // 的两条不同意译）。
+                        // 改用 `resetFooter`：它就是这条 Section 下面那段**擦除说明**
+                        // （"会强制重新登录…清除钥匙串/沙盒/应用组容器…"），各语言都已翻，语义正确。
+                        message: "resetFooter".localized,
                         confirmTitle: "resetButtonTitle".localized
                     ) {
                         isClearingData = true

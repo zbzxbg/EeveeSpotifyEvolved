@@ -96,7 +96,6 @@ musixmatch_restricted_popup = "由于受到限制，该插件无法加载 Musixm
 // Instrumental Titles
 
 song_is_instrumental = "此歌曲为纯音乐。";
-let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 liked_songs = "喜欢的歌曲";
@@ -219,6 +218,7 @@ sponsorblock_reports_title = "SponsorBlock 上报";
 sponsorblockIDTitle = "你的 SponsorBlock ID";
 sponsorblockIDFooter = "用于关联你的提交和投票，请将其视为私人密码 —— 不要分享给他人。";
 copyButton = "复制";
+user_id_copied = "已复制用户 ID";
 regenerateButton = "重新生成";
 draftsTitleSB = "草稿";
 draftsEmpty = "暂无草稿。长按播客进度条以开始标记片段。";
@@ -239,7 +239,6 @@ skipBehaviourTitle = "跳过行为";
 autoSkipSubmissionsTitle = "自动跳过我自己提交的内容";
 logOnlyToggle = "仅记录日志（不实际跳转）";
 serverHeader = "服务器";
-urlText = "URL";
 tuningTitle = "微调";
 minSegmentDuration = "最短片段时长：%.1f 秒";
 toastDuration = "提示时长：%.1f 秒";
@@ -307,7 +306,6 @@ haptics_strength = "强度";
 haptics_test = "试一下";
 haptics_surface_keywords_section = "控件类名关键词";
 haptics_surface_keywords_description = "用逗号分隔，匹配控件自身及其祖先的类名、以及 accessibility 标识。如果一个都不震，打开下面的记录开关（并在「调试」里打开日志记录），从日志里把真实类名抄进来。";
-haptics_surface_keywords_placeholder = "player, nowplaying, npv";
 haptics_log_controls = "记录被点控件的类名";
 flag_override_title = "Flag 覆盖";
 flag_override_add_section = "新增覆盖";
@@ -440,7 +438,6 @@ licenses_bundled = "内置的第三方源码";
 licenses_bundled_detail = "仓库内置了第三方源码（SwiftProtobuf、XMLCoder、fishhook 等）；仓库里没有随附它们各自的许可文件，需要时请看它们自己的项目。";
 licenses_inspiration = "借鉴思路";
 licenses_inspiration_detail = "借鉴了spoti.pw v0.21.1版本之前的代码思路。";
-licenses_kumone = "kumone";
 licenses_kumone_detail = "「整页取色底」的配方来自 kumone—— LGPL-3.0（库）/ GPL-3.0（应用）";
 
 // ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
@@ -483,7 +480,6 @@ reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card = "音�
 reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card_description = "提醒你关注的节目有新单集的那张卡。";
 reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled = "「置顶更多」横幅";
 reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled_description = "建议你在音乐库里置顶更多内容的横幅。";
-reduce_interventions_scope_connectnotifications = "Connect";
 reduce_interventions_scope_connectnotifications_footer = "连接其它设备相关的提示。";
 reduce_interventions_scope_sleeptimer = "睡眠定时器";
 reduce_interventions_scope_sleeptimer_footer = "睡眠定时器功能自己弹的提示。";

@@ -287,44 +287,10 @@ categoriesSectionDeps1 = "關閉 = 忽略，顯示 = 僅在進度列上顯示片
    locale. Values are the English originals (copied verbatim), so runtime behaviour is
    English rather than a raw key name. Translate one, then move it into the matching
    section above and delete it from this block. */
-do_not_replace_lyrics_description = "When this option is enabled, the custom lyrics feature is disabled, but Spotify is not prevented from returning its own lyrics.";
-spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
-netease_description = "NetEase: Most lyrics come with timestamps. However, support for users outside mainland China is weaker, and timestamps may be misaligned.";
-amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
-ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
-ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
-ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";
-ngzhwm_word_by_word_lyrics_description = "Musixmatch, PetitLyrics, SpicyLyrics, NetEase, and AMLL provide word-by-word lyrics services.";
-ngzhwm_better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
-ngzhwm_better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum. Lyric translations are not shown when enabled.";
-word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
-ngzhwm_multi_level_fallback = "Multi-level Fallback";
-ngzhwm_multi_level_fallback_description = "Multi-level Fallback: lyrics are searched through multiple providers in this order: Musixmatch → PetitLyrics → LRCLIB → Genius. Musixmatch and PetitLyrics are given up to 5 seconds each, while LRCLIB and Genius are given up to 3 seconds each; if a provider has not returned lyrics within its time limit, the next provider is queried.";
-ngzhwm_netease_romaji_local = "Modify How NetEase Japanese Romaji Is Displayed";
-ngzhwm_netease_romaji_local_description = "For this option to take effect, \"Romanize Japanese Lyrics\" must be enabled. When this option is enabled, NetEase's Japanese romaji is handled by local Japanese romanization instead of being handed to NetEase. If NetEase returns word-by-word lyrics, this option has no effect.";
-ngzhwm_netease_hide_translation = "Hide NetEase Translation Button";
-ngzhwm_netease_hide_translation_description = "When enabled, the NetEase lyrics source will not display the lyrics translation button.";
-ngzhwm_romanization_description = "Configure romanization separately for each language. If romanization is not enabled for a language, its lyrics are displayed as-is without romanization.";
-ngzhwm_chinese_romanization = "Romanize Chinese Lyrics";
-ngzhwm_japanese_romanization = "Romanize Japanese Lyrics";
-ngzhwm_korean_romanization = "Romanize Korean Lyrics";
-ngzhwm_remove_interlude_symbol = "Delete Interlude Symbol \"♪\"";
-ngzhwm_remove_interlude_symbol_description = "When this option is enabled, the interlude symbol \"♪\" is removed from lyrics, and lines containing \"♪\" are displayed as blank.";
 ngzhwm_lyrics_unavailable = "未找到歌詞";
 lyrics_no_timeline = "這首歌的歌詞沒有時間軸";
 lyrics_looking_up = "正在尋找歌詞…";
-track_mismatch = "The track changed while lyrics were loading. Play it again to fetch lyrics.";
-enable_log_recording = "Enable Log Recording";
-enable_log_recording_description = "There's no need to enable log recording for normal use.";
-dump_customize_body = "Dump customize response";
 dump_customize_body_description = "Diagnostic only. Writes the raw configuration response into the debug log so the bundled snapshot can be replaced with your own.";
-no_log_to_clear = "There's no log to clear.";
-no_log_to_clear_ok = "OK";
-OK = "OK";
-Cancel = "Cancel";
-Done = "Done";
-Loading = "Loading";
-episode_header = "Episode %@";
 tab_bar_hide_labels = "隱藏標籤文字";
 
 mini_bar_glass_section = "迷你播放條";
