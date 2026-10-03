@@ -11,11 +11,12 @@
 
 | | |
 |---|---|
-| 提交 | `257016e`（歌词数据层）→ `934d7ff`（末行贴底）→ `e9efc63`（听歌页版式六项 + 两条建议），**已推到 `origin/main`** |
+| 提交 | `257016e`（歌词数据层）→ `934d7ff`（末行贴底）→ `e9efc63`（听歌页版式六项 + 两条建议）→ `e6b00c4`（两处自查发现的地雷，见 §2.4），**已推到 `origin/main`** |
+| **要编译的就是 `e6b00c4`** | 点 `Build IPA — patched` 时先确认 `Use workflow from` 是 `main`；跑完之后 `head_sha` 应该是 `e6b00c4`（不是的话说明用了旧的 revision） |
 | 自检 | ✅ 六条全绿（orion 327 / brace 327 / member 272 / string 276 / l10n en / l10n zh-CN 全 exit 0） |
-| CI | ✅ **Logic tests 已自动跑**（push 触发，`sha=e9efc63`）；⏳ **`Build IPA — patched` 要手动点一次**（本机没有 `gh`，我点不了）—— 它才会把 Swift 编一遍 |
+| CI | ✅ **Logic tests 已自动跑**（push 触发）；⏳ **`Build IPA — patched` 要手动点一次**（本机没有 `gh`，我点不了）—— 它才会把 Swift 编一遍 |
 | 装机 | ❌ **一轮都没上过机器**：下面 §3 那 12 条全是"看一眼" |
-| 一句话 | **代码改完、自检过、推上去了；接下来是"点一次 Build IPA → 装 → 拍照片 + 存日志 58"** |
+| 一句话 | **代码改完、自检过、推上去了；接下来是"点一次 Build IPA（`e6b00c4`）→ 装 → 拍照片 + 存日志 58"** |
 
 ---
 
@@ -73,6 +74,13 @@
 | 9 | 歌词块顶边 242、淡出带只占顶部 8%–12% | `lyricsTop 66 → 24`（缩略图 64 之后 header 下沿 168 ⇒ 块顶 ≈**192**，整块上移 ≈50pt，一屏多 1–2 行），`lyricFadeStops[1] 0.12 → 0.10` 保证第一行仍在淡出带外 |
 | 10a | 收起态那张大封面是 **Spotify 自己的**（我们那份只在展开时存在），尺寸完全由它的 frame 决定（366pt @ 24,146） | **只写一个 transform** 把它缩到 **242pt**（`restingCoverSide`）：与它**原有** transform 复合、按对象记住原值、离开页面/关开关**精确还原**（仓库规矩 14）。因为 `measure()` 用的是 `convert`（含 transform），`geometry.cover` 自动变成 242 ⇒ 缩略图比、动画起点全部跟着对；封面顶边同时落到 ≈208（顺手把 #3 也解决了） |
 | 10b | 没有现成的单行歌词可复用（Spotify 自己那条 `singalong-lyrics-view` 被我们**关掉了**） | 新增一行居中 `UILabel`（22pt semibold、投影、不吃触摸、id `eevee-npv-single-lyric`），**y = 封面底边与控件条上沿的中点**；判据**一处都不新写**：行模型 `currentLines()`、当前行 `LyricPlaybackTimeline.position()`（本仓库唯一入口）、位置 `WordByWordPositionResolver`、节拍蹭 0.3s（**不抢**共享 CADisplayLink）；新开关 `nowPlayingSingleLyric`（默认开）+ 设置页一行 + en/zh-CN 文案 |
+
+### 2.4 自查发现的两处地雷（提交 `e6b00c4`，**在 e9efc63 之后补的**）
+
+| 地雷 | 为什么危险 | 改法 |
+|---|---|---|
+| 封面缩放只盯**一个**对象 | 日志 57 证明**同一页会挑出不同的封面候选**（`-369264,147,366,366` 与 `24,147,366,366` 都出现过）。只盯一个的话，"这一拍挑中另一个"会把上一个**还原成 366pt** —— 而屏幕上正显示的很可能就是它 ⇒ 封面在大小之间来回跳 | 改成**记名册**：凡是被缩过的都进 `NSHashTable`（弱引用，仓库里 `DeclutterChrome` / `NowPlayingControlsPlate` 同款），各自记原 transform，还原时逐个写回；出册条目会清掉（`ObjectIdentifier` 是地址、可能被复用） |
+| 单行歌词没问"这份行模型是不是这一首的" | 切歌**不一定**伴随歌词请求（客户端缓存命中 / 离线歌词），`currentLyricsDto` 可能还是上一首的 ⇒ 封面下面那行会显示**上一首的歌词** | 用两层早就有的**同一个口径**（`LyricsWordByWordOverlayView.belongsToAnotherTrack` / `WordByWordHost.lineModelIsForeign`：`currentLyricsDtoTrackId` vs 实时 `trackIdentifier`）；不一致就**这一拍不画** |
 
 ---
 
