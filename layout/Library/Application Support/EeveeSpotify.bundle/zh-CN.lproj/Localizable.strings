@@ -397,12 +397,12 @@ tab_bar_hide_labels = "隐藏标签文字";
 
 mini_bar_glass_section = "迷你播放条";
 mini_bar_glass = "迷你播放条用液态玻璃";
-mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃胶囊：**与标签栏那条等宽（真机 360pt）、同高（60pt）、同圆角、同材质**，两条之间保留原来的小间隙。迷你条自己的内容（封面 + 歌名 + 按钮 + 进度线）会**等比缩到胶囊里**（约 86%）。开着的时候那条实心封面色底会被清掉 —— 包括刚出现 / 刚切歌时 Spotify 又写回来的那一次；关掉开关完全还原：玻璃撤掉、内容回原始大小、底色与裁剪都还回去。";
+mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃。";
 
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";
 flag_group_interventions = "提示与推广";
-flag_group_interventions_footer = "证据来自 IPA 字面量表（`.spotify-ipa/flag-table.txt`，从 9.1.86 主二进制抽出的 2485 条 scope.name）—— **没在设备日志里出现过**。点一下会写一条覆盖，命中与否看日志里的 `[Flags] override … N match(es)`（0 命中时我们会自己追加一条）。Spotify 管这个模块叫「减少打扰」（`ios-messaging-reduceinterventions-impl`），一条提示一个开关。";
+flag_group_interventions_footer = "证据来自 IPA 字面量表。";
 flag_group_chrome = "界面元素与彩蛋";
 flag_group_chrome_footer = "播放条上的元素开关 + 封面。这些是「关掉元素」而不是「藏掉视图」—— 比我们的清爽开关更省事，也不会跟我们自己的隐藏打架。";
 flag_note_interventions_master = "总闸：关掉它，下面这一批提示由 Spotify 自己统一收手";
@@ -413,7 +413,7 @@ flag_note_snake_on = "打开它 = Spotify 自己藏着的「封面贪吃蛇」�
 maintenance_section = "设置与关于";
 backup_title = "备份与重置";
 backup_export_section = "导出";
-backup_export_footer = "只导**本仓库自己的键**（UserDefaults.ownedKeys）—— Spotify 自己的偏好就躺在同一个UserDefaults 里，这里刻意不带出去。";
+backup_export_footer = "只导本仓库自己的键。";
 backup_regenerate = "重新生成";
 backup_regenerated = "已重新生成。";
 backup_copy = "复制到剪贴板";
@@ -429,7 +429,7 @@ backup_import_empty = "没有可导入的内容。";
 backup_import_not_a_backup = "这段 JSON 里没有 values 对象 —— 不是备份文件。";
 backup_import_unreadable = "这不是能读的 JSON。";
 backup_reset = "重置本仓库的设置";
-backup_reset_footer = "只删本仓库自己的键，Spotify 自己的偏好一个都不碰（根页那个「重置 Spotify 状态」才是核弹）。";
+backup_reset_footer = "只删本仓库自己的键。";
 backup_reset_confirm_title = "要重置吗？";
 backup_reset_confirm_message = "会把本仓库存下来的设置全部删掉；Spotify 自己的偏好不受影响。";
 backup_reset_done = "已重置 %ld 条。";
@@ -442,22 +442,22 @@ updates_open = "在 GitHub 上打开";
 updates_retry = "重试";
 updates_error_rate_limit = "GitHub 的接口额度用完了。未登录时每小时 60 次、按出口 IP 算（运营商大内网是很多人共用）。过一会儿再试。";
 updates_error_rate_limit_reset = "GitHub 的接口额度用完了。未登录时每小时 60 次、按出口 IP 算（运营商大内网是很多人共用）。大约 %d 分钟后恢复。";
-updates_error_not_found = "本仓库还没有 release（GitHub 接口回了 404）。这是预期内的，不影响任何功能。";
+updates_error_not_found = "本仓库还没有 release（GitHub 接口回了 404）。";
 updates_error_network = "连不上 GitHub，检查网络后重试。";
 updates_error_format = "GitHub 返回的数据这一页读不出来：";
 updates_error_status = "GitHub 接口回了 HTTP %d。";
 licenses_title = "开源许可";
-licenses_footer = "这一页只写仓库里查得到的事实；没有随附许可文件的组件就照实说没有，不猜 SPDX 名字。";
+licenses_footer = "这一页只写仓库里查得到的事实。";
 licenses_this_repo = "本仓库";
-licenses_this_repo_detail = "GPL-3.0 —— 完整文本在仓库根目录的 LICENSE。";
+licenses_this_repo_detail = "GPL-3.0 —— 完整文本在仓库根目录的LICENSE。";
 licenses_upstream = "上游";
-licenses_upstream_detail = "本仓库是 EeveeSpotify 的 fork（出处见 README.md）；上游的许可与署名以它自己的仓库为准。";
+licenses_upstream_detail = "本仓库是EeveeSpotify的fork（出处见README.md）；上游的许可与署名以它自己的仓库为准。";
 licenses_bundled = "内置的第三方源码";
-licenses_bundled_detail = "仓库内置了第三方源码（SwiftProtobuf、XMLCoder、fishhook 等）；仓库里**没有**随附它们各自的许可文件，需要时请看它们自己的项目。";
-licenses_inspiration = "只借鉴了思路的";
-licenses_inspiration_detail = "部分功能只借鉴思路（spoti.pw，PolyForm Strict 1.0.0）—— 没有复用任何一行代码，全部自己写。";
+licenses_bundled_detail = "仓库内置了第三方源码（SwiftProtobuf、XMLCoder、fishhook 等）；仓库里没有随附它们各自的许可文件，需要时请看它们自己的项目。";
+licenses_inspiration = "借鉴思路";
+licenses_inspiration_detail = "借鉴了spoti.pw v0.21.1版本之前的代码思路。";
 licenses_kumone = "kumone";
-licenses_kumone_detail = "听歌页那层「整页取色底」（用封面取色调一层渐变铺满整页）的配方来自 kumone（独立网易云客户端）—— LGPL-3.0（库）/ GPL-3.0（应用），与本仓库 GPL-3.0 兼容。只借了数值、曲线与图层做法，这里的视图代码是我们自己的 UIKit。";
+licenses_kumone_detail = "「整页取色底」的配方来自 kumone—— LGPL-3.0（库）/ GPL-3.0（应用）";
 
 // ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
 // 这些开关写的是 Spotify 的 **flag 覆盖**（`ios-messaging-reduceinterventions-impl` 那批），
@@ -511,14 +511,14 @@ reduce_interventions_scope_yourlibaryx_footer = "音乐库里出现的提示、�
 // ── 听歌页取色底（2026-10-03）────────────────────────────────────────────────
 // 配方（取色渐变，不是模糊）借鉴 kumone（LGPL-3.0 / GPL-3.0），
 // 见 Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift。
-now_playing_backdrop_section = "听歌页";
+now_playing_backdrop_section = "歌曲播放页";
 now_playing_backdrop = "整页封面取色底";
-now_playing_backdrop_description = "用封面取色调出一层渐变铺满听歌页（Apple Music 那种观感）。会接管 Spotify 自己那层封面底色；关掉即把它原样写回。下面那个开关把播放器下面的卡片全部折起来、并把列表钉在顶部，让播放器就是一屏、滚不动。它**会连歌词卡一起折掉** —— 除非你从别处打开歌词，否则别开它。";
+now_playing_backdrop_description = "用封面取色调出一层渐变铺满听歌页。";
 // ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
 // Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift。
-now_playing_one_screen = "一屏（卡片折起来，不可滚动）";
-now_playing_volume = "底部音量条";
+now_playing_one_screen = "隐藏Spotify歌曲播放页模块";
+now_playing_volume = "展示音量条";
 now_playing_lyrics_in_player = "歌词进播放器";
 now_playing_control_glyphs = "控制键换成本地字形";
