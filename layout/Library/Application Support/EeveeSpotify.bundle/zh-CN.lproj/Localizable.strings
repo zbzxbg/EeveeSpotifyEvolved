@@ -315,12 +315,12 @@ haptics_surface_keywords_placeholder = "player, nowplaying, npv";
 haptics_log_controls = "记录被点控件的类名";
 flag_override_title = "Flag 覆盖";
 flag_override_add_section = "新增覆盖";
-flag_override_add_description = "强制 Spotify 远端配置里的某一条 flag。名称与 scope 就是调试日志里 [Flags] 行打出来的那两个（需在「调试」里打开日志记录），所以不需要维护一份离线清单。";
+flag_override_add_description = "强制修改 Spotify 远端配置里的某一条 flag。";
 flag_override_name_placeholder = "flag 名称，例如 enable_video_ads";
 flag_override_scope_placeholder = "scope，留空 = 不限";
 flag_override_mode = "取值";
-flag_override_mode_on = "强制开";
-flag_override_mode_off = "强制关";
+flag_override_mode_on = "强制开启";
+flag_override_mode_off = "强制关闭";
 flag_override_mode_remove = "删除";
 flag_override_add = "添加";
 flag_override_active_section = "已生效的覆盖";
@@ -342,14 +342,14 @@ flag_note_lyrics_v2 = "Spotify 的歌词 v2 服务 —— 本项目的歌词依�
 flag_note_canvas_lyrics = "把歌词画在 Canvas 视频上。";
 flag_catalog_unsupported = "暂不支持";
 dump_view_tree = "转储视图树";
-dump_view_tree_description = "把当前屏幕的视图结构每 2 秒写一行进调试日志（每次启动最多 20 行，且结构没变就不重复写）。只读：不改任何视图、不注册手势、不在运行期枚举类。打开即生效，并且需要先在「调试」里打开日志记录。用途是给还没写的界面 hook 收集类名。";
+dump_view_tree_description = "把当前屏幕的视图结构每 2 秒写一行进调试日志。";
 
 /* MARK: 外观 */
 amoled = "深色栏底色（仿 Apple Music）";
 amoled_description = "仿 Apple Music 的深色栏：导航栏保持透明，封面与内容从标题下面透出来；当 Spotify 自己要画底色时，把原来那层灰色渐变遮罩换成深色材质。打开立即生效。它不会强行把栏变成不透明，所以不会破坏封面透出的效果。";
 
 extras_title = "扩展功能";
-extras_description = "在 EeveeSpotify 之上加的这一批功能，集中放一页，根页才不会再变长。思路来自 spoti.pw，代码是本项目自己写的。上面几个开关就在本页，其余各进自己的页。";
+extras_description = "功能思路来自 spoti.pw。";
 
 declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自你设备的视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
 hide_mini_player_bar = "隐藏迷你播放条";
