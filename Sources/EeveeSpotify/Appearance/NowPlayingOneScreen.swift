@@ -50,6 +50,47 @@ import ObjectiveC.runtime
 /// 但结论足够硬：**唯一动过那个属性的那次构建，就是关闭坏掉的那次。**
 ///
 /// ⇒ 所以：**在这一页上 `alwaysBounceVertical` 不是"观感调参"，它是关闭手势链条的一环。**
+///
+/// ## ★ 2026-10-05：用户再问「开启"一屏"还是能和橡皮筋一样往下滑，pw 不是解决了吗」
+///
+/// **答案：pw 没有解决，它是刻意保留的。** 它 `PlayerScroll.x` 的文件头原话（v0.21.1，GPL-3.0）：
+///
+/// > *"So the range is closed instead: the bottom inset is set to whatever makes the furthest the
+/// > list can scroll its own top. **A drag upward then only stretches and springs back**, a drag
+/// > downward still carries the offset below zero, and the dismissal is untouched."*
+///
+/// 逐句对到我们这边：
+/// * *"the range is closed instead"* = 我们做的**就是**这一件事（`inset.bottom` → `min(want, 0)`）；
+/// * *"**A drag upward then only stretches and springs back**"* = ★ **pw 明确承认那条橡皮筋还在**
+///   （上拉/下拉都只"拉伸并弹回"）；
+/// * *"a drag downward still carries the offset below zero, **and the dismissal is untouched**"*
+///   —— ★ 这两句是**同一件事的两面**：**那个负的 `contentOffset` 就是下拉关闭的输入**。
+///   去掉回弹 = 去掉负偏移 = **关闭手势没有输入**。
+///
+/// **真机已经证明过这一条**：日志 41（全量 37 份里唯一一份 `bounce=off`）—— 那次就是把
+/// `alwaysBounceVertical` 关掉去追这最后一点橡皮筋，结果**播放器再也划不掉**，
+/// 开关当天就删了。而 pw 也写明**连滚动都不能关**：
+/// *"Turning scrolling off takes that recogniser out with it and the player can no longer be swiped away."*
+///
+/// **日志 49 的现状**（用户这次报的现场）：
+/// `inset.bottom=0 content.h=896 bounds.h=896 adj.top=0 adj.bottom=0 bounce=on panRecs=3`
+/// ⇒ ★ `content.h == bounds.h`：**一点可滚范围都不剩了**。用户感到的那点位移**纯粹是回弹**，
+/// 不是"还有内容能滚上去"。—— 也就是说「一屏」这一半是**做对了**的。
+///
+/// **所以只有一条路能同时要"拉不动"与"还能划掉"**：**自己接管下拉关闭**
+/// （把列表在顶部的下拉读成"关闭进度"，自己驱动 dismiss），拿到之后才敢关 `bounces`。
+/// 这条路的两个已知障碍：
+///   1. pw 的挂点（`SPTBarInteractivePresentationController` / `SPTBarOverlayPresentationTransition`）
+///      在 **9.1.88 上不存在**（探针实测缺这 2 个）⇒ **没有现成可抄的挂点**；
+///   2. 本仓库在"自己加手势"上有前车之鉴（双击手势整块删掉）。
+///
+/// 三档选择（等用户拍板，**不擅自做**）：
+///   * **A. 接受它**（pw 同款，成本 0）：只在设置页文案里说清"下拉那一下就是关闭手势本身"；
+///   * **B. 自己接管关闭手势**（独立一轮，风险中高）：hook 列表的 pan → 顶部下拉给阈值 → 我们驱动
+///     `dismiss`；成了才能把 `bounces` 关掉。**需要上面那条 diag 先回答"delegate 是谁"**；
+///   * **C. 只关一端**：`UIScrollView` **没有**"只关顶部回弹"的公开开关（`bounces` 是两端总闸，
+///     `alwaysBounceVertical` 在内容不满一屏时等于关掉顶部）—— **所以 C 不存在**。
+///
 /// 代价（说清楚）：列表拖拽时仍会有橡皮筋 —— 那是"一屏"目前**无法消除**的残留：
 /// 想去掉它就得碰上面那个属性，一碰关闭手势就坏。
 /// 开关与它的 UI 行、UserDefaults 键、en / zh-CN 的文案**全部删除**，不留"按了会坏"的入口
@@ -185,6 +226,9 @@ enum NowPlayingOneScreen {
     static func restore() {
         guard let list = lastList else { return }
 
+        // 开关关掉之后再看一次诊断（下次开起来时那一行会重新打一遍，不靠"整场只报一次"）。
+        didLogDiag = false
+
         if let boxed = objc_getAssociatedObject(list, &originalInsetKey) as? NSNumber {
             let original = CGFloat(boxed.doubleValue)
             var inset = list.contentInset
@@ -259,28 +303,42 @@ enum NowPlayingOneScreen {
     ///
     /// 2026-10-03 夜用户实测："卡片全没了，但还能往下滑"。当时能猜的原因有四个
     /// （没找到列表 / 没到该压的时候 / 压了但值不对 / 剩下的只是**橡皮筋回弹**），
-    /// 而日志里一条都分不开。这一行把四个数一次打出来：
+    /// 而日志里一条都分不开。这一行把几个数一次打出来：
     ///   · `inset.bottom` —— 我们到底压了多少（0 = 一个字都没压）；
     ///   · `content.h` vs `bounds.h` —— 内容比一屏高多少（高多少就该压多少）；
+    ///     ★ **两者相等 ⇒ 一点可滚范围都没有了，剩下的只可能是"回弹"**；
     ///   · `adj.top/bottom` —— 安全区那块（公式里必须留着的）；
     ///   · `bounce` —— **`alwaysBounceVertical`，只读**：它必须一直是 `on`。
     ///     ⚠️ 这一格是**回归判据**：曾经我们把它写成 `false`（「禁止回弹」），
     ///     结果**下拉关闭播放器直接坏掉**（日志 41）。它现在是只读的哨兵 ——
     ///     `bounce=off` 再出现，就说明有人又把关闭手势链条碰断了。
-    ///   · `panRecs` —— 那条列表上有几个 pan 手势（下拉关闭就骑在其中一个上）。
+    ///   · `bounces` —— `UIScrollView.bounces`（**两端**回弹的总闸）。日志 49 里用户报
+    ///     "一屏开着还能像橡皮筋一样往下滑"，那时 `content.h==bounds.h` 已经成立
+    ///     ⇒ 剩下的就是它。**要动它必须先有"自己接管下拉关闭"的办法**（见文件头）。
+    ///   · `panRecs` / `pan=<delegate>` —— 那条列表上有几个 pan 手势，以及**第一个 pan 的
+    ///     delegate 是谁**。下拉关闭就骑在其中一个 pan 上，而 pw 说窗口那侧会让自己的
+    ///     dismiss recogniser **等它失败** ⇒ 如果我们将来要"让列表在顶部主动让位"，
+    ///     要不要接管 delegate、能不能接管，就看这一格（只读，不碰）。
     private static func logDiagnosticOnce(_ list: UIScrollView) {
         guard !didLogDiag else { return }
         didLogDiag = true
 
         let own = list.contentInset
         let adjusted = list.adjustedContentInset
-        let pans = (list.gestureRecognizers ?? []).filter { $0 is UIPanGestureRecognizer }.count
+        let pans = (list.gestureRecognizers ?? []).compactMap { $0 as? UIPanGestureRecognizer }
+
+        var panDelegate = "nil"
+        if let pan = pans.first, let delegate = pan.delegate {
+            panDelegate = String(describing: type(of: delegate))
+        }
 
         writeDebugLog(
             "[\(logTag)] diag inset.bottom=\(Int(own.bottom))"
                 + " content.h=\(Int(list.contentSize.height)) bounds.h=\(Int(list.bounds.height))"
                 + " adj.top=\(Int(adjusted.top)) adj.bottom=\(Int(adjusted.bottom))"
-                + " bounce=\(list.alwaysBounceVertical ? "on" : "off") panRecs=\(pans)"
+                + " bounce=\(list.alwaysBounceVertical ? "on" : "off")"
+                + " bounces=\(list.bounces ? "on" : "off")"
+                + " panRecs=\(pans.count) pan=\(panDelegate)"
         )
     }
 
