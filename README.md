@@ -89,7 +89,9 @@ Actions → Build IPA — patched or Build IPA — no patch → Run workflow: pu
  
 ### Locally (macOS)
 
-```bash
+```
 ./setup-build-ipa.sh /path/to/Spotify-vanilla.ipa
+
+```
 
 </details>
