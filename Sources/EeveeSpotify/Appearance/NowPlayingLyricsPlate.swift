@@ -101,6 +101,8 @@ private final class NowPlayingLyricsHost {
     private var hostingController: UIHostingController<AppleMusicLyricsOverlayView>?
     private var renderedVersion: Int = -1
     private var renderedTrackId: String = ""
+    /// ★ 2026-10-11：这一份挂上去的是**静态档**（没有时间轴）吗 —— 换档要重挂。
+    private var renderedStatic = false
 
     private let clock = AppleMusicLyricsClock()
     private let projection = AppleMusicLyricsPlaybackProjection {
@@ -109,8 +111,9 @@ private final class NowPlayingLyricsHost {
 
     var isAttached: Bool { hostingController != nil }
 
-    func isCurrent(version: Int, trackId: String) -> Bool {
+    func isCurrent(version: Int, trackId: String, isStatic: Bool) -> Bool {
         isAttached && renderedVersion == version && renderedTrackId == trackId
+            && renderedStatic == isStatic
     }
 
     func mount(
@@ -118,6 +121,7 @@ private final class NowPlayingLyricsHost {
         lines: [LyricLine],
         version: Int,
         trackId: String,
+        isStatic: Bool,
         onSeek: ((TimeInterval) -> Void)?
     ) {
         let root = AppleMusicLyricsOverlayView(
@@ -145,7 +149,9 @@ private final class NowPlayingLyricsHost {
             // 后面，编译器报 "argument labels do not match"）。
             transparentBackdrop: true,
             clock: clock,
-            projection: projection
+            projection: projection,
+            // ★ 2026-10-11：「没有时间轴」那一档 —— 见 `AppleMusicLyricsPage.isStatic`。
+            isStatic: isStatic
         )
 
         let hosting = UIHostingController(rootView: root)
@@ -167,13 +173,16 @@ private final class NowPlayingLyricsHost {
         hostingController = hosting
         renderedVersion = version
         renderedTrackId = trackId
+        renderedStatic = isStatic
     }
 
-    func updateLines(_ lines: [LyricLine], version: Int, trackId: String) {
+    func updateLines(_ lines: [LyricLine], version: Int, trackId: String, isStatic: Bool) {
         guard let hosting = hostingController else { return }
         hosting.rootView.lines = lines
+        hosting.rootView.isStatic = isStatic
         renderedVersion = version
         renderedTrackId = trackId
+        renderedStatic = isStatic
     }
 
     func tick(seconds: TimeInterval?) {
@@ -990,11 +999,15 @@ enum NowPlayingLyricsPlate {
             noteSkip("no track id yet (the player has not reported one)")
             return false
         }
-        let lines = currentLines() ?? []
-        // ★ 2026-10-11（用户问的「歌词呢」）：**没有时间轴**的那一档不算"没词" ——
-        //   数据在，我们把它**静态列出来**（见 `mountStaticLyrics`）。
-        let staticLines = currentUntimedLines()
-        if lines.isEmpty, notice == nil, staticLines == nil {
+        let timedLines = currentLines() ?? []
+        // ★ 2026-10-11（用户问的「歌词呢」+「不是复用有时间轴的逻辑吗」）：
+        //   **没有时间轴**那一档不再自己画——把文本包成**合成行**（时间全 0、无音节）
+        //   交给**同一个渲染层**，由 `isStatic` 告诉它"不高亮、不跟随、点行不跳"。
+        //   这样字号 / 行距 / 左右内边距 / 滚动 / 底部留白（120pt，正好躲开控件条）全部同一套。
+        let staticTexts = currentUntimedLines()
+        let isStatic = timedLines.isEmpty && staticTexts != nil
+        let lines = isStatic ? Self.staticLines(from: staticTexts ?? []) : timedLines
+        if lines.isEmpty, notice == nil {
             noteSkip("no lyric lines to draw right now (the line model is not ready)")
             return false
         }
@@ -1032,16 +1045,17 @@ enum NowPlayingLyricsPlate {
 
         if let host = currentHost(for: page) {
             let version = currentLyricsVersion
-            if host.isCurrent(version: version, trackId: trackId) {
+            if host.isCurrent(version: version, trackId: trackId, isStatic: isStatic) {
                 // 最新 → 这一拍只驱动时间轴。
             } else if host.isAttached {
-                host.updateLines(lines, version: version, trackId: trackId)
+                host.updateLines(lines, version: version, trackId: trackId, isStatic: isStatic)
             } else {
                 host.mount(
                     in: container,
                     lines: lines,
                     version: version,
                     trackId: trackId,
+                    isStatic: isStatic,
                     onSeek: { seconds in
                         WordByWordSeeker.seek(toMs: Int((seconds * 1000).rounded()))
                     }
@@ -1052,11 +1066,6 @@ enum NowPlayingLyricsPlate {
             //   占不到共享时钟就不抢，退回节拍（有日志）。
             host.usePerFrameClockIfAvailable()
         }
-
-        // ★ 2026-10-11（用户问的「歌词呢」）：没有时间轴 ⇒ **静态列出全文**。
-        //   放在渲染层**之后**：这一档渲染层没有行可画（`lines` 是空的，它只是被清空），
-        //   静态文本要压在最上面。
-        mountStaticLyrics(staticLines, in: container)
 
         if !didLogInstall {
             didLogInstall = true
@@ -1070,8 +1079,9 @@ enum NowPlayingLyricsPlate {
                 titleNote = "lifted \(Int(geometry.lift))pt / shifted \(Int(geometry.shift))pt"
             }
             let staticNote: String
-            if let staticLines {
-                staticNote = " static lyrics \(staticLines.count) line(s) (this track has no timeline)"
+            if isStatic {
+                staticNote = " static lyrics \(lines.count) line(s) (this track has no timeline;"
+                    + " same renderer, static mode)"
             } else {
                 staticNote = ""
             }
@@ -2650,7 +2660,7 @@ enum NowPlayingLyricsPlate {
             //   ⇒ 用户看到的是"歌词明明有、我们却说未找到"。数据在，只是没有时间轴。
             //
             // ★★ 2026-10-11（用户追了一句「**歌词呢**」）：这一档**不再只写一句话** ——
-            //   文本提得出来就 `nil`（去画静态歌词，见 `mountStaticLyrics`）；
+            //   文本提得出来就 `nil`（去画静态歌词，见 `staticLines(from:)`）；
             //   只有**连文本都提不出来**（全是空行）才退回那句话。
             if !dto.lines.contains(where: { $0.offsetMs != nil }) {
                 return currentUntimedLines() == nil ? "lyrics_no_timeline".localized : nil
@@ -2668,34 +2678,6 @@ enum NowPlayingLyricsPlate {
     }
 
     private static weak var lastNoticeLabel: UILabel?
-
-    /// ★ 2026-10-11：「没有时间轴」那一档的**静态全文**（见 `NowPlayingStaticLyricsView`）。
-    private static weak var staticLyricsView: NowPlayingStaticLyricsView?
-
-    /// 摆 / 撤那份静态歌词。`lines == nil` ⇒ 撤掉（有时间轴那一档走渲染层）。
-    private static func mountStaticLyrics(_ lines: [String]?, in container: UIView) {
-        guard let lines else {
-            staticLyricsView?.removeFromSuperview()
-            staticLyricsView = nil
-            return
-        }
-
-        let view: NowPlayingStaticLyricsView
-        if let existing = staticLyricsView, existing.superview === container {
-            view = existing
-        } else {
-            staticLyricsView?.removeFromSuperview()
-            let fresh = NowPlayingStaticLyricsView(frame: container.bounds)
-            fresh.accessibilityIdentifier = "eevee-npv-static-lyrics"
-            container.addSubview(fresh)
-            staticLyricsView = fresh
-            view = fresh
-        }
-
-        if view.frame != container.bounds { view.frame = container.bounds }
-        view.apply(lines: lines, width: container.bounds.width)
-        container.bringSubviewToFront(view)
-    }
 
     /// 摆 / 撤那句说明。`text == nil` ⇒ 撤掉（有歌词可画了）。
     private static func applyNoticeLabel(_ text: String?, in container: UIView) {
@@ -2739,6 +2721,27 @@ enum NowPlayingLyricsPlate {
         container.bringSubviewToFront(label)
     }
 
+    /// 把"没有时间轴的文本行"包成渲染层吃的 `LyricLine`（时间一律 0、无音节）。
+    ///
+    /// ★ 2026-10-11（用户：「这个没有时间轴的歌词的滚动，展示大小什么的**不是复用有时间轴的逻辑吗**」）——
+    /// 复用就是对的做法：**同一套**渲染层 + `AppleMusicLyricsPage.isStatic` 接管三件事
+    /// （不高亮、不跟随、点行不跳）。字号 / 行距 / 左右内边距 / 滚动容器 / 底部 120pt 留白
+    /// （正好让最后一行躲开控件条）全部自动一致。
+    ///
+    /// ⚠️ `time: 0` 只是**占位**：`isStatic` 那一档不读它。
+    private static func staticLines(from texts: [String]) -> [LyricLine] {
+        texts.enumerated().map { index, text in
+            LyricLine(
+                id: "eevee-static-\(index)",
+                time: 0,
+                duration: 0,
+                timingKind: .lineSynchronized,
+                text: text,
+                syllables: []
+            )
+        }
+    }
+
     private static func currentLines() -> [LyricLine]? {
         let lines = (currentLyricsDto?.toAppleMusicLyricLines()) ?? []
         return lines.isEmpty ? nil : lines
@@ -2748,7 +2751,7 @@ enum NowPlayingLyricsPlate {
     ///
     /// ★ 2026-10-11（用户问的「**歌词呢**」）：加载到没有时间轴的歌词时，
     /// 以前只写一句「这首歌的歌词没有时间轴」—— 数据明明在（Spotify 自己那张卡列得出全文）。
-    /// 现在把文本提出来**静态列出来**（见 `mountStaticLyrics`），这一档才算真的有内容。
+    /// 现在把文本提出来**静态列出来**（见 `staticLines(from:)` + `isStatic`），这一档才算真的有内容。
     ///
     /// ⚠️ 只认"**一行时间都没有**"这一档；只要有一行带 `offsetMs`，就交给时间轴那条路
     /// （`LyricLinesAdapter` 会把带时间的挑出来渲染）。
@@ -2822,59 +2825,6 @@ enum NowPlayingLyricsPlate {
             queue.append(contentsOf: view.subviews)
         }
         return nil
-    }
-}
-
-/// 没有时间轴时那份"**静态歌词**"：一个会滚的文本块，所有行一样亮（不高亮、不跟随、不跳转）。
-///
-/// 为什么不用现有的渲染层（用户 2026-10-11 问的「**歌词呢**」）：
-/// 时间轴那一档是靠 `LyricLine.time` 驱动高亮与滚动的，而"没有时间轴"的歌**一行时间都没有** ——
-/// 硬塞一个假时间进去，渲染层会自己高亮/滚到某一行（那是错的观感）。
-/// 所以这一档用最笨也最可控的一条：把全文拼进一个 `UILabel`，外面套一个 `UIScrollView`。
-///
-/// 字号/间距跟 `.player` 档对齐（主歌词 22pt、块距 26 —— 见 `AppleMusicLyricsTextProfiles`）。
-final class NowPlayingStaticLyricsView: UIScrollView {
-
-    private let label = UILabel()
-    private var drawnWidth: CGFloat = 0
-    private var drawnLines: [String] = []
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-        showsVerticalScrollIndicator = false
-        alwaysBounceVertical = true
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        addSubview(label)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    /// 摆一遍全文（幂等：内容没变就只调 frame）。
-    func apply(lines: [String], width: CGFloat) {
-        let inner = max(80, width - 32)
-        if drawnWidth != inner || drawnLines != lines {
-            drawnWidth = inner
-            drawnLines = lines
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.alignment = .center
-            paragraph.lineSpacing = 8
-            paragraph.paragraphSpacing = 18
-            label.attributedText = NSAttributedString(
-                string: lines.joined(separator: "\n"),
-                attributes: [
-                    .font: UIFont.systemFont(ofSize: 22, weight: .medium),
-                    .foregroundColor: UIColor.white.withAlphaComponent(0.88),
-                    .paragraphStyle: paragraph,
-                ]
-            )
-        }
-        let height = label.sizeThatFits(CGSize(width: inner, height: .greatestFiniteMagnitude)).height
-        let top = max(8, (bounds.height - height) / 2)
-        label.frame = CGRect(x: 16, y: top, width: inner, height: height)
-        contentSize = CGSize(width: width, height: max(bounds.height, height + top * 2))
     }
 }
 

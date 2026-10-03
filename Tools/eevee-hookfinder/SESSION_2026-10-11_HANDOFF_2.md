@@ -205,19 +205,33 @@ the landing spot`）。`transform` 改不了父视图的命中范围 ⇒ 加了�
 分享键和歌词键都用它对齐；量不到（那一颗被藏了 / 页面还没铺完）才退回常量 40 / 208。
 —— 这样换机型 / 换版式也不会错位（"和下面那颗对齐"本来就是**相对**判据）。
 
-### 4.7.2 没有时间轴 ⇒ **静态列出全文**（不再只写一句话）
+### 4.7.2 没有时间轴 ⇒ **复用同一个渲染层**（静态档）
 
-* 新增 `currentUntimedLines()`：只认"**一行 `offsetMs` 都没有**"那一档，把文本行提出来；
-* 新增 `NowPlayingStaticLyricsView`（`UIScrollView` + 一个 `UILabel`）：**会滚、不高亮、不跟随**
-  （22pt / 行距 8 / 段距 18，与 `.player` 档对齐）；挂进容器、压在最上面，容器那层渐隐照旧；
-* `noticeText()` 第 ③ 段：文本提得出来就返回 `nil`（去画静态歌词），**只有连文本都提不出来**才退回那句话；
-* `layoutAndMount` 的挂载门禁加 `staticLines == nil` 一项；渲染层那次 `mount(lines: [])` 照旧跑
-  （它负责把上一首的行清掉），静态文本压在它上面；
-* 判据同步更新：重试窗口用 `hasSomethingToShow()`（三档合一，会建数组，只在点开那几拍问），
-  歌词键的亮/灰用 `hasAnythingToDrawFast()`（**热路径版，不建数组** —— 每 0.3s 问一次）。
+> ⚠️ **第一版做错了，已推翻**：我当初为了省事写了一个 `NowPlayingStaticLyricsView`
+> （`UIScrollView` + 一个 label，`.center` 居中）。用户在照片 75 之后指出两件事：
+> 「**滚动、展示大小什么的不是复用有时间轴的逻辑吗**」（对 —— 时间轴那一档是
+> `alignment: .leading` 左对齐、走 `.player` 档字号/行距/内边距），以及
+> 「**最下面的歌词还会被自己画的功能挡住**」（对 —— 时间轴那一档的 `contentInsets.bottom = 120`
+> 正好让最后一行躲开控件条，我自己那版把 label 贴到容器底边，于是被 604…648 的控件条压住）。
+> 那个自绘视图**已整块删掉**。
 
-★ 为什么不用现有渲染层做静态：`LyricLine.time` 是必填的，塞假时间进去渲染层会自己高亮/滚到某一行 ——
-那不是"静态展示"。所以这一档用最笨也最可控的一条：一个 label + 一个 scroll view。
+现在的做法：**同一套渲染层**，只多一个 `isStatic` 开关。
+
+* `AppleMusicLyricsPlate.staticLines(from:)` 把文本包成**合成行**（`time: 0`、无音节、
+  `timingKind: .lineSynchronized`）—— 时间只是占位；
+* `AppleMusicLyricsOverlayView.isStatic` → `AppleMusicLyricsPage.isStatic`（都带默认值 `false`，
+  所以全屏页那一档调用点不用改）；
+* `AppleMusicLyricsPage` 里**只改三件事**：
+  1. 每一行按"焦点行"画（`focusStrength = 1`）—— 不高亮某一行、也不把别的行压暗/糊掉；
+  2. 两个自动跟随入口（`onAppear` / `onChange(of: highlightedLyricID)`）直接 `return`；
+  3. **点行不跳转**（合成行时间是 0，点了会把歌拉回开头）；
+* 宿主 `NowPlayingLyricsHost` 多带一个 `isStatic`（`mount` / `updateLines` / `isCurrent` 三处），
+  换档会重挂；
+* 判据同步：`layoutAndMount` 里 `isStatic = timedLines.isEmpty && staticTexts != nil`，
+  然后**走原来那条挂载路**（`host.mount(lines:)`）—— 于是字号 / 行距 / 左右内边距 /
+  滚动容器 / **底部 120pt 留白**全部自动一致。
+
+日志里那一行会带 `static lyrics N line(s) (this track has no timeline; same renderer, static mode)`。
 
 ---
 
@@ -342,7 +356,12 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 | ⑨ | ★ **收藏键（＋/绿 ✓，371,626）点得动**（能收藏/取消） |
 | ⑩ | ★ **动画**：展开/收起时歌名/歌手是**滑**过去；那颗键**永远是歌词气泡**（没有向下箭头） |
 | ⑪ | ★ **两条竖线**（照片 75）：分享键与下面那颗 **shuffle** 同一条竖线、歌词键与 **播放/暂停**同一条竖线 |
-| ⑫ | ★ **静态歌词**：放一首"没有时间轴"的歌 ⇒ 歌词页**列出全文**（会滚、不高亮），日志里有 `static lyrics N line(s)` |
+| ⑫ | ★ **静态歌词（复用渲染层）**：放一首"没有时间轴"的歌 ⇒ 歌词页**列出全文**：
+| | · **左对齐**（和时间轴那一档同一套 `LazyVStack(alignment: .leading)`）； |
+| | · 字号/行距/左右内边距与有时间轴时**完全一致**（同一页、同一档 `.player`）； |
+| | · **能滚**、**不自动跟随**、点行**不跳转**； |
+| | · **最下面一行不被控件条挡住**（那一页本来就留了 120pt 底部内边距）； |
+| | · 日志里有 `static lyrics N line(s) (this track has no timeline; same renderer, static mode)`。 |
 | ⑬ | S1：**连文本都提不出来**那一档才写「这首歌的歌词没有时间轴」 |
 | ⑭ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
 
@@ -406,10 +425,11 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
   * **两条竖线**：兜底常量 40 / 208 是照片 75 量出来的；真正生效的是 `transportColumnX()` 量的
     `midX`。**"量得到 / 量不到会退回常量"两条路都没在真机上验过** —— 下一份日志里
     `share button moved … to <x>,604,…` 的 x 应该 ≈40（±2），不是 58；`lyrics button in place <x>,604,…` 的 x 应该 ≈208。
-  * **静态歌词**：`NowPlayingStaticLyricsView` 是**新写的 UIKit 视图**（`UIScrollView` + 一个 label）——
-    字号/间距/居中/滚动**只在纸面上对齐** `.player` 档（22pt），真机观感（行距、上下留白、
-    会不会和渐隐打架）**没看过**；"会滚"也没验过（那首歌的歌词正好一屏放得下的话看不出来）。
-  * 另外 `hasSomethingToShow()` / `hasAnythingToDrawFast()` 是**新加的两条门禁**，
-    "没有时间轴的歌点得开、键不灰"这条链路**没在真机上走过**。
+  * **静态档（复用渲染层）**：三个开关点（`focusStrength = 1` 全亮 / 不跟随 / 点行不跳）
+    都**没有在真机上走过**；尤其"所有行都按焦点行画"会不会连**焦点行的额外效果**
+    （`SynchronizedLyricText` 里跟 `isFocused` 走的那部分）一起带上，只能看照片。
+    我是把 `isFocused` 传 **false**、只把 `focusStrength` 拉到 1 的 —— 如果照片上行看起来
+    "一半亮一半暗"，就是这一处要调。
+  * `hasSomethingToShow()` / `hasAnythingToDrawFast()` 两条新门禁也没在真机走过。
 * ★ **照片 74 是"过渡帧"**（用户明确说过：实际页面不长那样）⇒ 它证明的是**收尾顺序有问题**，
   **不能**当成"关着态的稳态长什么样"来读。

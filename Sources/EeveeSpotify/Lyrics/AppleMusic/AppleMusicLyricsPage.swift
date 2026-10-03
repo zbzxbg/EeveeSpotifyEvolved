@@ -115,6 +115,18 @@ struct AppleMusicLyricsPage: View {
     /// 再叠一层只会多一份要维护的坐标。
     let closeContent: AnyView?
 
+    /// ★ 2026-10-11：**静态档**（"这一首没有时间轴"那一档 —— 用户问的「歌词呢」）。
+    ///
+    /// 那一档的行是**合成**出来的（时间全是 0、没有音节），排版该和有时间轴的一模一样 ——
+    /// 用户原话：「这个没有时间轴的歌词的滚动，展示大小什么的**不是复用有时间轴的逻辑吗**」。
+    ///
+    /// 打开之后这一页只改三件事（其余全部照旧：同一套 `LazyVStack` / 字号 / 行距 / 左右内边距 /
+    /// 滚动容器）：
+    ///   1. **每一行都按"焦点行"画**（`focusStrength = 1`）—— 不高亮某一行、也不把别的行压暗糊掉；
+    ///   2. **不自动跟随**（不进 `scrollTo`）—— 用户自己滚；
+    ///   3. **点行不跳转** —— 合成行的时间是 0，点了会把歌拉回开头。
+    let isStatic: Bool
+
     init(
         lines: [LyricLine],
         playbackTime: TimeInterval,
@@ -136,8 +148,10 @@ struct AppleMusicLyricsPage: View {
         hidesShellOnScroll: Bool = true,
         fadeBottomOpaqueRatio: CGFloat = 0.86,
         footerHeight: CGFloat = 116,
-        fadeBottomBand: CGFloat = 40
+        fadeBottomBand: CGFloat = 40,
+        isStatic: Bool = false
     ) {
+        self.isStatic = isStatic
         self.lines = lines
         self.playbackTime = playbackTime
         self.background = background
@@ -341,6 +355,8 @@ struct AppleMusicLyricsPage: View {
                     // 旧 overlay 没这个问题：它首帧 `activeLineIndex = -1`，
                     // 必然走一次 `scrollToLine`。
                     .onAppear {
+                        // ★ 静态档（没有时间轴）不跟随：整页从**第一行**开始，用户自己滚。
+                        guard !isStatic else { return }
                         // 与 onChange 同理：首行之前高亮为 nil，这里要落到**第一行**上，
                         // 否则全屏打开时若歌曲还在前奏，歌词会停在列表顶部。
                         guard let id = position.highlightedLyricID ?? lines.first?.id else { return }
@@ -353,6 +369,8 @@ struct AppleMusicLyricsPage: View {
                         }
                     }
                     .onChange(of: position.highlightedLyricID) { _, newValue in
+                        // ★ 静态档不跟随（见 `isStatic`）。
+                        guard !isStatic else { return }
                         // ⚠️ `nil` 不是"没事发生"：它表示播放位置落在**第一行之前**
                         // （按上一首回到本曲开头、或把进度拖到 0，而首行要几秒后才开始）。
                         // 旧写法 `guard let newValue else { return }` 把这一路直接吞掉，
@@ -656,9 +674,10 @@ struct AppleMusicLyricsPage: View {
         availableWidth: CGFloat,
         proxy: ScrollViewProxy
     ) -> some View {
-        let isFocused = position.highlightedLyricID == line.id
-        let isActive = position.activeLyricIDs.contains(line.id)
-        let focusStrength = focusStrength(
+        let isFocused = !isStatic && position.highlightedLyricID == line.id
+        let isActive = !isStatic && position.activeLyricIDs.contains(line.id)
+        // ★ 静态档：每一行都按"焦点行"画（满亮度、不模糊、不缩放），只是没有焦点这一说。
+        let focusStrength = isStatic ? 1 : focusStrength(
             isFocused: isFocused,
             isActive: isActive
         )
@@ -711,6 +730,8 @@ struct AppleMusicLyricsPage: View {
         .blur(radius: blurRadius(focusStrength: focusStrength))
         .contentShape(Rectangle())
         .onTapGesture {
+            // ★ 静态档不做"点行跳转"：合成行的时间是 0，点了会把歌拉回开头。
+            guard !isStatic else { return }
             handleTap(on: line, proxy: proxy)
         }
         .animation(

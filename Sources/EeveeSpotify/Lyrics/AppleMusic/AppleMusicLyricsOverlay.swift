@@ -105,6 +105,12 @@ struct AppleMusicLyricsOverlayView: View {
     /// 播放状态投影（当前时间 / 总时长 / 是否在播放），自绘壳的进度条与播放键用它。
     @ObservedObject var projection: AppleMusicLyricsPlaybackProjection
 
+    /// ★ 2026-10-11：**静态档**（"这一首没有时间轴"）—— 透传给 `AppleMusicLyricsPage`，
+    /// 语义与理由写在那边的 `isStatic` 上（不高亮、不跟随、点行不跳）。
+    ///
+    /// ⚠️ 放在属性表**最后**：逐成员初始化器是位置敏感的，放最后就不会动到既有调用点。
+    var isStatic: Bool = false
+
     private static var profile: AppleMusicLyricsMotionProfile { .iOS26_6 }
 
     /// 预览标题栏那一行的自然高度（15pt 文字 / 32pt 按钮，取按钮高度）。
@@ -242,7 +248,9 @@ struct AppleMusicLyricsOverlayView: View {
                     // 预览的"底部淡出带"= 0：卡片底部 120pt 是**为了让内容可滚
                     // 而留的空白**（当前行才能居中），在那片空白上淡出等于白淡，
                     // 还会顺手把最后一行也压暗。让歌词一直清晰到卡片下缘即可。
-                    fadeBottomBand: showsProviderFooter ? 40 : 0
+                    fadeBottomBand: showsProviderFooter ? 40 : 0,
+                    // ★ 2026-10-11：把"静态档"透传下去（见 `AppleMusicLyricsPage.isStatic`）。
+                    isStatic: isStatic
                 )
             }
         }
