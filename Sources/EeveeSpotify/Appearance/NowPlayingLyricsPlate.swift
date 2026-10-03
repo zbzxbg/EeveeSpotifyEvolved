@@ -275,6 +275,32 @@ enum NowPlayingLyricsPlate {
 
     /// 歌词是否展开（pw 的 `sg_open`）。
     private static var isOpen = false
+
+    /// 「点开了但这一拍没铺上」的**重试窗口**。
+    ///
+    /// ★★ 这就是日志 50「点歌词键没反应」的**根因**，而且它是**本轮新引入的回归**。
+    ///
+    /// 取证：`measure()` 在 `f906512`（日志 49 那个构建）与 HEAD 上**逐字节相同**
+    /// （`git diff f906512..HEAD` 里那段没有一行改动）。差别在**调用方**：
+    ///
+    /// | | 旧（`f906512`，日志 49） | 新（`4215e8e` 之后，日志 50） |
+    /// |---|---|---|
+    /// | `toggle()` | `isOpen = true; layoutAndMount(...)` —— **不看返回值** | `if !layoutAndMount(...) { isOpen = false }` |
+    /// | `reconcile()` | `if isOpen { layoutAndMount(...) }` —— **每拍都重试** | 同上，但失败后 `isOpen` 已经是 `false` ⇒ **再也不进这一支** |
+    ///
+    /// ⇒ 旧代码"这一拍量不到就下一拍再量"，所以日志 49 里用户点得晚一点就成了
+    /// （02:58:44 `展开 — 缩略图 72pt、歌词区 20,204,374,346`，而且 02:58:46 收起、
+    /// 02:58:47 又展开，两次都成）。新代码**第一次量不到就永久认死**：日志 50 里用户
+    /// 在页面出现后 **1 秒**（04:34:54 出现、04:34:55 点）就点了，那一拍量不到
+    /// ⇒ 这枚键在整个会话里再也没活过来。
+    ///
+    /// `4215e8e` 的**本意是对的**（别留"标题已经上移、歌词已经画出来、封面还整张露着"的半成品，
+    /// 照片 51 就是那个现场），它只是**少了另一半**：失败之后要接着试。
+    /// 这一段就是把那另一半补回来 —— 窗口很短（2.5s ≈ 5 拍），
+    /// 而且**不新开定时器**（蹭 `DeclutterChrome` 既有那条节拍）。
+    private static var pendingOpenUntil: CFAbsoluteTime = 0
+    private static let pendingOpenWindow: CFAbsoluteTime = 2.5
+
     private static var didLogInstall = false
     private static var lastSkipReason = ""
 
@@ -295,8 +321,9 @@ enum NowPlayingLyricsPlate {
 
         // ⚠️ 顺序要紧：先铺歌词（封面 / 标题 / 容器都会 `bringSubviewToFront`），
         // **再**摆那枚键 —— 后写的赢，否则键会被我们自己的容器压住。
-        // 铺不上（拿不到封面图等）就**不认"已展开"**，别留半成品。
-        if isOpen, !layoutAndMount(in: pageView) { isOpen = false }
+        // 铺不上（拿不到封面图等）就**不认"已展开"**，别留半成品 —— 但会由 `openAndMount`
+        // 开一个 2.5s 的重试窗口，下一拍接着试。
+        if isOpen { openAndMount(in: pageView) }
         ensureToggleZone(in: pageView)
     }
 
@@ -315,15 +342,28 @@ enum NowPlayingLyricsPlate {
         guard #available(iOS 26.0, *) else { return false }
 
         if isOpen {
-            // 可能因为"封面还没布局好"铺不上 —— 那时退回去（下一拍还会再试，直到成功）。
-            if !layoutAndMount(in: page) { isOpen = false }
+            // 可能因为"封面还没布局好"铺不上 —— 那时退回去，并由 `openAndMount` 开重试窗口。
+            openAndMount(in: page)
+            ensureToggleZone(in: page)
+            return isOpen
+        }
+        // ★ 2026-10-06：「**点开了但没铺上**」的重试（见 `pendingOpenUntil` 的说明）。
+        //   没有这一段，日志 50 里那一次点击就是这枚键的**最后一次**机会。
+        //   ⚠️ 重试**也要过门禁**：`openAndMount` 里没有 `canShow`，而换歌之后
+        //   "这一首有没有词"是会变的 —— 没词了就把窗口清掉，别拿一首没词的歌空转五拍。
+        if CFAbsoluteTimeGetCurrent() < pendingOpenUntil {
+            if hasLyricsAvailable() {
+                openAndMount(in: page)
+            } else {
+                pendingOpenUntil = 0
+            }
             ensureToggleZone(in: page)
             return isOpen
         }
         // 关着的时候只保证那枚键还在、还画得对（Spotify 换帧会重排 subviews），
         // 并**顺手把这一首的封面认下来**：点的时候就不用"现抓"，而现抓经常抓不到
         // （树里那张图可能是 `UIImageView(alpha=0.00)`）。幂等 —— 这一首已经认下就只查一次字典。
-        if !isOpen { rememberArtworkIfNeeded(in: page) }
+        rememberArtworkIfNeeded(in: page)
         ensureToggleZone(in: page)
         return false
     }
@@ -344,7 +384,11 @@ enum NowPlayingLyricsPlate {
     static func toggle() {
         guard let page = lastPage, page.window != nil else { return }
 
-        if isOpen {
+        // ⚠️ 折叠的条件**不能只看 `isOpen`**：如果某一拍 `measure()` 失败而屏幕上还挂着
+        //    我们的封面（`isOpen` 已被回退），只看 `isOpen` 会让这一下变成"**再展开一次**"
+        //    ⇒ 用户**关不掉**（独立只读复核点出来的死角）。
+        //    "屏幕上有我们的东西"与 `closeEverything` 的守卫用的是同一组判据。
+        if isOpen || coverHost != nil || lastContainer != nil {
             // 用户自己点收起 ⇒ **放动画**（封面"飞回原位"）。
             closeEverything(reason: "tapped", animated: true)
             // 图标当场换回"歌词"，不等 0.5s 的复查节拍。
@@ -353,14 +397,51 @@ enum NowPlayingLyricsPlate {
         }
         guard canShow(for: page) else {
             noteSkip("no usable lyrics for this track")
+            // ⚠️ 用户刚被告知"这首没词" ⇒ 把可能还挂着的重试窗口**清掉**，
+            //    别让下一拍拿同一首歌再空转五回。
+            pendingOpenUntil = 0
             ensureToggleZone(in: page)
             return
         }
-        isOpen = true
         // 铺不上就当场认输（`noteSkip` 已经写清了原因），别把开关停在"展开但什么都没变"上。
-        if !layoutAndMount(in: page) { isOpen = false }
+        // ⚠️ 但**不认死** —— `openAndMount` 会顺手开一个 2.5s 的重试窗口。
+        openAndMount(in: page)
         // ⚠️ 必须在铺完之后再摆一次：容器会 `bringSubviewToFront`，键会被压到它下面。
         ensureToggleZone(in: page)
+    }
+
+    /// 铺一次；失败就退回"未展开"并**开重试窗口**。
+    ///
+    /// 所有"要展开"的入口都走这里（`apply` / `reconcile` / `toggle`）—— 免得像旧代码那样，
+    /// 只有 `toggle()` 那一条路会因为**一次**失败而永久认死。
+    @discardableResult
+    private static func openAndMount(in page: UIView) -> Bool {
+        // ★ 「屏幕上已经有我们的东西」时，这次量不到**不许改意图**。
+        //   否则会出现独立只读复核点出来的那个死角：歌词明明还开着、而 `isOpen` 已经是
+        //   `false` ⇒ 用户再点走的是"展开"那一支 ⇒ **关不掉**。
+        //   这种情况下保持 `isOpen = true`，让 `reconcile` 的 `isOpen` 那一支每拍接着试。
+        let wasLive = coverHost != nil || lastContainer != nil
+
+        isOpen = true
+        if layoutAndMount(in: page) {
+            pendingOpenUntil = 0
+            return true
+        }
+        if wasLive {
+            pendingOpenUntil = 0
+            return false
+        }
+        isOpen = false
+
+        // ⚠️ **只武装一次**，不往后推。
+        //
+        // 第一版这里是 `pendingOpenUntil = now + window` 无条件重写，而 `reconcile`
+        // 每 ~0.5s 就会再进来一次 ⇒ 每次失败都把 deadline 推远 ⇒ 这个"2.5s 窗口"
+        // **永远不会到期**，等于在听歌页上无限轮询（独立只读复核抓到的）。
+        // 真正想要的是"**从第一次失败起** 2.5s ≈ 5 拍"。
+        let now = CFAbsoluteTimeGetCurrent()
+        if now >= pendingOpenUntil { pendingOpenUntil = now + pendingOpenWindow }
+        return false
     }
 
     // MARK: - 开关与几何
@@ -372,8 +453,32 @@ enum NowPlayingLyricsPlate {
     @discardableResult
     private static func layoutAndMount(in page: UIView) -> Bool {
         guard #available(iOS 26.0, *) else { return false }
-        guard let geometry = measure(in: page) else {
-            noteSkip("cannot measure the artwork area / title row (layout not finished yet?)")
+
+        // ★ 2026-10-06：`measure()` 从"返回 `Geometry?`"改成"返回带原因的两种结局"。
+        //
+        // 为什么必须改：旧写法把**四种完全不同的失败**压成同一句话
+        // （`cannot measure the artwork area / title row (layout not finished yet?)`），
+        // 日志 50 里那唯一一次点击就只留下那一行 —— 事后**分不出**是封面没量到、
+        // 还是标题行没量到、还是歌词区太矮、还是"标题行已经在缩略图线上方"。
+        // 仓库规矩是「静默分支不许静默」，这里是它的变体：**一个分支不许盖住四种死法**。
+        let geometry: Geometry
+        switch measure(in: page) {
+        case .ok(let measured):
+            geometry = measured
+        case .failed(let reason):
+            noteSkip(reason)
+            return false
+        }
+
+        // ★ 2026-10-06：把"这一首有没有得画"这道门**提到所有副作用之前**。
+        //
+        // 它只读歌词模型与播放器状态，**不碰任何视图**；而下面 ①②③ 全是**副作用**
+        // （藏掉 Spotify 那条封面、位移标题行、建我们的容器）。旧顺序把这道门放在 ①②③
+        // **之后** ⇒ 那一步一旦失败就会留下"封面藏了、标题移了、而 `isOpen` 还是 false"
+        // 的半成品（只能等离页时 `closeEverything` 去收）。
+        // ⚠️ 本轮加了重试窗口之后这一点更要紧：这条路径一晚会走好几回。
+        guard let lines = currentLines(), let trackId = currentTrackId() else {
+            noteSkip("no lyric lines to draw right now (the line model is not ready)")
             return false
         }
 
@@ -406,8 +511,6 @@ enum NowPlayingLyricsPlate {
         let container = ensureContainer(in: page, frame: frame)
         applyEdgeFade(to: container)
 
-        guard let lines = currentLines(), let trackId = currentTrackId() else { return false }
-
         if let host = currentHost(for: page) {
             let version = currentLyricsVersion
             if host.isCurrent(version: version, trackId: trackId) {
@@ -430,9 +533,19 @@ enum NowPlayingLyricsPlate {
 
         if !didLogInstall {
             didLogInstall = true
+            // ⚠️ 不要用嵌套的双引号字面量（`\(a ? "x" : "y")` 那种）—— 本仓库第 6 条自检
+            //    `swift_string_check.py` 是按"闭合引号后面跟了什么字符"扫的，嵌套字面量会被它
+            //    当成"字符串被提前关掉"（2026-10-05 那次 CI 红就是这么来的）。先算成变量再插。
+            let titleNote: String
+            if geometry.titleRow == nil {
+                titleNote = "not found (no lift, expanding anyway)"
+            } else {
+                titleNote = "lifted \(Int(geometry.lift))pt / shifted \(Int(geometry.shift))pt"
+            }
             writeDebugLog(
-                "[\(logTag)] expanded — thumbnail \(Int(geometry.thumb.width))pt, "
-                    + "lyrics area \(frameText(frame)), cover shrunk in from \(frameText(geometry.cover))"
+                "[\(logTag)] expanded — thumbnail \(Int(geometry.thumb.width))pt at \(frameText(geometry.thumb)), "
+                    + "lyrics area \(frameText(frame)), cover shrunk in from \(frameText(geometry.cover)), "
+                    + "title row \(titleNote)"
             )
         }
         return true
@@ -445,9 +558,12 @@ enum NowPlayingLyricsPlate {
     ///   **切开关 / 页面消失 = `false`** —— 那两种情况下页面可能马上就不在了，
     ///   拖着 0.45s 的动画才把 Spotify 那条封面写回去，会在转场里露一个"没有封面"的帧。
     private static func closeEverything(reason: String, animated: Bool) {
-        guard isOpen || lastContainer != nil || coverHost != nil else { return }
-
+        // ⚠️ 这三行必须在那个 `guard` **之前**：重试窗口要在"关掉 / 离开页面"时**无条件**清掉，
+        //    否则页面都走了它还挂着一个 deadline（虽然 `page.window` 会挡住，但账要算清）。
+        let hadSomethingVisible = isOpen || lastContainer != nil || coverHost != nil
         isOpen = false
+        pendingOpenUntil = 0
+        guard hadSomethingVisible else { return }
 
         // 封面：先让它**动回原位**（同图，所以这就是"飞回去"），动画走完再撤 + 把 Spotify 那条写回。
         if let host = coverHost, let imageView = coverImage {
@@ -511,22 +627,67 @@ enum NowPlayingLyricsPlate {
         var titleElement: UIView?
     }
 
-    private static func measure(in page: UIView) -> Geometry? {
-        guard page.bounds.height >= livingHeight else { return nil }
-        guard let list = findByIdentifier(listIdentifier, in: page) else { return nil }
+    /// `measure()` 的两种结局（见 `layoutAndMount` 里那段说明）。
+    private enum MeasureOutcome {
+        case ok(Geometry)
+        case failed(String)
+    }
+
+    private static func measure(in page: UIView) -> MeasureOutcome {
+        guard page.bounds.height >= livingHeight else {
+            return .failed(
+                "the page is too short to hold lyrics (\(Int(page.bounds.height))pt < \(Int(livingHeight))pt)"
+            )
+        }
+        guard let list = findByIdentifier(listIdentifier, in: page) else {
+            return .failed("cannot find the player list (\(listIdentifier)) inside the page")
+        }
 
         // 封面：列表子树里第一个**看得见**的 `Encore.ImageView`，且宽度像封面（>=200）。
-        guard let coverView = visibleCover(in: list) else { return nil }
+        // ⚠️ 这一条**必须**在列表里找：封面是列表里那些格子的内容。
+        guard let coverView = visibleCover(in: list) else {
+            return .failed("cannot find a visible artwork wide enough (>=200pt) inside the player list")
+        }
         let cover = coverView.convert(coverView.bounds, to: page)
 
         // 标题行：`now-playing-title-label` 所在的那个 element 视图 + 它的父行。
+        //
+        // ★ 2026-10-06：改从 **`page`** 找（以前只从 `list` 找）。
+        //
+        // ⚠️ **先纠正一条我读错过、差点写进文档的结论**：
+        //    「那一行在 `npv.bottomStackView` 里，而那一坨是列表的兄弟 ⇒ 从 `list` 永远找不到」
+        //    —— **这是错的**。日志 49（旧代码）明明展开成功过：
+        //    `歌词区 20,204,374,346` ⇒ `barTop = 346 + 8 + 204 = 558`，
+        //    正好等于 `npv.bottomStackView` 的顶边 ⇒ `bottomStackTop(in: list)` 当时**找得到**它
+        //    ⇒ 那一坨**就在列表子树里**，标题行自然也找得到。
+        //    真正让日志 50 点不开的是 `isOpen` 被一次失败清掉之后**再也不重试**
+        //    （见 `openAndMount` 与 `pendingOpenUntil`）—— 那是一个**本轮新引入的回归**。
+        //
+        // 那为什么还是改？因为从 `page` 找是**严格超集**……**但只在预算够的时候才是**：
+        // `findByIdentifier` 有 `maxNodes = 800`，而 BFS 是**先宽后深** —— 从 `page` 起走
+        // 要先趟过整页的宽度（那些卡片）才轮到这一行的深度。所以顺序是
+        // **先 `list`（日志 49 已证明走得通、子树小得多），再 `page` 兜底**。
+        // （独立只读复核抓到的：反过来写有可能因为预算耗尽而**比原来更差**。）
         let titleLabel = findByIdentifier(titleLabelIdentifier, in: list)
+            ?? findByIdentifier(titleLabelIdentifier, in: page)
         let titleElement = titleLabel?.superview
         let titleRow = titleElement?.superview
 
         // 缩略图：贴"封面区"左上 —— 我们用封面自己的左上 + `thumbTop`（pw 用 `SGRPlayerArtworkAreaIn`，
         // 我们量不到那个 band，就用封面的顶；差别只是几 pt，且换歌会重算）。
-        let leading = titleElement.map { untransformed($0, in: page).minX } ?? (cover.minX + 20)
+        // ⚠️ **`leading` 必须夹住**：`titleElement` 现在**真的量得到**了（以前这条路几乎总是
+        //    走 `?? (cover.minX + 20)`），而它可能是个 marquee（`transform.tx` 是**模型值**、
+        //    `UIView.animate` 会立刻写上去）或者右对齐的行 ⇒ 量出来的 `minX` 可能是负的、
+        //    或者每拍都在跳。它直接喂给 `thumbTransform`，后果有两条：
+        //      ① 缩略图飞到画面外；② `applyCoverState` 的收敛判据是**精确比较**，
+        //      每拍一个新 `target` 就会每 0.5s 重启一次 0.45s 的动画
+        //      （看起来就是"封面永远停不下来"）。
+        //    （独立只读复核抓到的。）
+        let rawLeading = titleElement.map { untransformed($0, in: page).minX } ?? (cover.minX + 20)
+        let leading = min(
+            max(rawLeading, page.bounds.minX + stageSideInset),
+            page.bounds.maxX - thumbSide - stageSideInset
+        )
         let thumb = CGRect(
             x: leading,
             y: cover.minY + thumbTop,
@@ -550,9 +711,27 @@ enum NowPlayingLyricsPlate {
             height: barTop - lyricsBottom - stageTop
         )
 
-        guard stage.height > livingHeight / 2, lift < 0 else { return nil }
+        guard stage.height > livingHeight / 2 else {
+            return .failed("the lyrics area would be too short (\(Int(stage.height))pt)")
+        }
+        // ⚠️ ★ `lift` **只有量到标题行时**才配当判据。
+        //
+        // 量不到标题行时，上面那句 `let lift = top - (rowFrame?.minY ?? top)` 恒等于 **0**
+        // —— 旧代码写的是 `guard …, lift < 0`，于是这条判据**自己把自己否掉**，
+        // 报出来的还是"量不到封面/标题行"那句更含糊的话：一个 nil 合并表达式
+        // 悄悄变成了一条"永远失败"的判据。
+        // 量不到标题行 = 这一页没有要上移的东西 ⇒ **照常展开**，只是不做标题位移。
+        //
+        // ⚠️ 反过来，`rowFrame != nil && lift >= 0` 这条**必须留着**：日志 50 那次失败
+        // 极可能就是它 —— 那一拍 `npv.bottomStackView` **已经在树里但还没落位**
+        // （frame 还在 (0,0)）⇒ `rowFrame.minY ≈ 0` 而 `top ≈ 缩略图中线` > 0
+        // ⇒ `lift > 0` ⇒ 拒绝。这一条**不能放宽**（把一个还没落位的标题行"上移"到
+        // 错的地方比不展开更糟），要治的是"下一秒再试一次"—— 那正是 `openAndMount` 的窗口。
+        if rowFrame != nil, lift >= 0 {
+            return .failed("the title row has not settled yet (lift=\(Int(lift))pt) - will retry next tick")
+        }
 
-        return Geometry(
+        return .ok(Geometry(
             cover: cover,
             thumb: thumb,
             stage: stage,
@@ -560,7 +739,7 @@ enum NowPlayingLyricsPlate {
             shift: shift,
             titleRow: titleRow,
             titleElement: titleElement
-        )
+        ))
     }
 
     /// 列表里那个"看得见的封面"（队列是一格一张封面，离屏的是 hidden —— pw 同判据）。
@@ -584,8 +763,21 @@ enum NowPlayingLyricsPlate {
         return nil
     }
 
-    /// 底部那一坨的顶边（页面坐标系）——与上一版同一个判据（列表 + `layer.position`）。
+    /// 底部那一坨的顶边（页面坐标系）。
+    ///
+    /// ★ 2026-10-06：**先认"从 `page` 直接量"**（`convert` 出来就是页面坐标，最准），
+    /// 找不到才退回老那套"列表 + `layer.position`"的算法。
+    ///
+    /// ⚠️ 这不是"修 bug"，是**加固** —— 老算法在日志 49 是有效的
+    /// （`stage` 的底边 558 正好等于那一坨的顶边）。它的问题只在**找不到时的退路**：
+    /// `page.bounds.height - 240` 是个硬编码猜值（日志 50 里是 656），而那一坨的顶边是
+    /// `558` ⇒ 猜值比真值**低约 97pt**，歌词区会一路画到标题行 / 进度条 / 控件上。
+    /// 两个消费者（`toggleFrame` / 底部音量条）都是用 `page` 那一跳才稳的，这里跟它们对齐。
     private static func bottomStackTop(in list: UIView, page: UIView) -> CGFloat? {
+        if let stack = findByIdentifier(bottomStackIdentifier, in: page) {
+            let top = stack.convert(stack.bounds, to: page).minY
+            if top > 0, top < page.bounds.height { return top }
+        }
         guard let stack = findByIdentifier(bottomStackIdentifier, in: list) else { return nil }
         let listPosition = list.layer.position
         let listOriginY = listPosition.y - list.bounds.height / 2

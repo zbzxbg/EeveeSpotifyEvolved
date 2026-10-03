@@ -257,8 +257,29 @@ enum NowPlayingControlsPlate {
     /// ③ 覆写 `setAlpha:` 会**连带改掉命中判定**（我们最不想要的那个副作用）。
     ///
     /// 还原 = `removeAnimation(forKey:)`（一行，见 `restore()`）。视图被销毁时动画随之消失。
-    static func pinInvisible(_ view: UIView) {
-        guard !isPinned(view) else { return }
+    /// - Parameter force: 已经钉过时**要不要重申一次**（2026-10-06 新增，见下）。
+    ///
+    /// ## ★ 为什么必须能"重申"
+    ///
+    /// 旧代码是**一次性**的（`guard !isPinned(view) else { return }`，`pinButton` 也是），
+    /// 于是这条钉一旦被谁盖掉或被删掉，**就再也没有任何一拍照看它**。
+    ///
+    /// 而日志 50 证明 Spotify **确实会写这些按钮的 `alpha`**：同一个类
+    /// （`PlayButtonView`）在迷你条上的模型值是 `alpha=0.50`（`[Tree] #2..#5`，04:34:44–04:34:50）。
+    /// UIKit 写 `alpha` 会往这一层加一条隐式 `opacity` 动画，而**同 keyPath 的
+    /// `CABasicAnimation` 是"谁后加谁说话"** ⇒ 我们那条 `eevee-pin-invisible`
+    /// 会被压在下面，那一帧原生内容就漏回来了 —— 这正是「暂停键一卡一卡的 / 会闪」的
+    /// 头号嫌疑（H1）。重申 = 用同一个 key 再 `add` 一遍，把我们的动画重新排到最后。
+    ///
+    /// ⚠️ 重申**观感零影响**：`fromValue == toValue == 0`，呈现层一直是 0。
+    /// 这一条只动呈现层，**依然一个字节都不写 `alpha`** ⇒ 命中判定不受影响。
+    ///
+    /// ⚠️ 但**不要无条件每拍重申**：`refreshGlyphs` 也会从
+    /// `PlaybackControlsUnitHook.layoutSubviews` 跑，转场时那是**每帧 3 个**动画对象
+    /// （独立只读复核指出）。所以只在"钉没了"或"有别人的 `opacity` 动画"时重申
+    /// —— 两种情况都还盖得住：别人的动画只要还在，下一拍就一定看得见它。
+    static func pinInvisible(_ view: UIView, force: Bool = false) {
+        if !force, isPinned(view) { return }
         let pin = CABasicAnimation(keyPath: "opacity")
         pin.fromValue = 0
         pin.toValue = 0
@@ -280,7 +301,13 @@ enum NowPlayingControlsPlate {
         let count = (pinnedClassCounts[name] ?? 0) + 1
         pinnedClassCounts[name] = count
         guard count == 1 || count == 2 || count == 10 || count == 100 else { return }
-        writeDebugLog("[\(logTag)] pinned \(name) (time \(count))")
+        // ⚠️ ★ 这一行原来**只报类名**，于是 2026-10-06 那次判读把
+        // 「上一首 + 下一首」读成了"同一颗按钮被钉了两次 ⇒ 还有东西在每按一次重建"
+        // —— 而那两颗按钮**共用同一个类**（`Encore.Button.Tertiary`）。
+        // **类名不是身份，`accessibilityIdentifier` 才是。** 判据必须落在 id 上。
+        writeDebugLog(
+            "[\(logTag)] pinned \(name) id=\(view.accessibilityIdentifier ?? "-") (time \(count))"
+        )
     }
 
     private static weak var lastUnit: UIView?
@@ -416,14 +443,111 @@ enum NowPlayingControlsPlate {
         )
     }
 
-    /// 钉住一颗按钮（幂等）。返回"这一拍是不是新钉的"。
+    /// 钉住一颗按钮。返回"这一拍是不是新钉的"（`refreshGlyphs` 拿它决定要不要补位置复核）。
     ///
-    /// 钉住之后**再也不碰它**：Spotify 往里面塞什么都不会亮，我们也不需要再复查。
+    /// ★ 2026-10-06：不再"钉一次就再也不看"——**钉丢了、或者有别人的 `opacity` 动画压上来**
+    /// 时会重申（见 `pinInvisible` 的 `force` 参数说明）。重申之后那条钉才是**持续有效**的，
+    /// 而不是"曾经有效过"。
     private static func pinButton(_ button: UIView) -> Bool {
-        guard !isPinned(button) else { return false }
-        notePinnedClass(button)
-        pinInvisible(button)
-        return true
+        let isNew = !isPinned(button)
+        if isNew {
+            notePinnedClass(button)
+        } else {
+            // 已经钉过 ⇒ 顺手看一眼这颗按钮身上有没有**别人的** `opacity` 动画（H1 的判据）。
+            noteForeignOpacity(button)
+        }
+        // ★ 重申**只在能起作用的时候**做，见 `pinInvisible` 的 `force` 说明。
+        //   无条件每拍重申也能work，但 `refreshGlyphs` 也会从
+        //   `PlaybackControlsUnitHook.layoutSubviews` 跑 ⇒ 转场时是**每帧 3 个** `CABasicAnimation`，
+        //   属于白花的开销（独立只读复核指出）。只在"钉没了"或"有别人的 opacity 动画"时重申，
+        //   两种情况都还盖得住：别人的动画只要还在，我们下一拍就看得见它。
+        let hasForeignAnimation = !(button.layer.animationKeys() ?? [])
+            .filter { $0 != pinAnimationKey }
+            .isEmpty
+        if !isPinned(button) || hasForeignAnimation {
+            pinInvisible(button, force: true)
+        }
+        return isNew
+    }
+
+    /// 这一拍我们检查那颗按钮时，它身上有没有**别人的** `opacity` 动画。
+    ///
+    /// ⚠️ **这只是一个"提示"，不是判决**（独立只读复核的原话）：
+    ///   · 真阳性：UIStackView 增删 arranged subview / 有动画的布局回合都会加隐式
+    ///     `"opacity"` 动画 —— 那种时候我们的钉确实可能被压在下面；
+    ///   · 假阳性：一条**空转**的、或者早就加在我们之前的 `opacity` 动画也会命中；
+    ///   · 假阴性：`alpha` 的**模型值**写（`UIView` 在动画块外写 `alpha` 不产生动画）根本不加动画。
+    /// ⇒ 所以这一行只报**观察到的事实**，不替它下结论。
+    /// **每个类名只报一次**（不刷屏纪律）。
+    private static var foreignOpacityClasses = Set<String>()
+
+    private static func noteForeignOpacity(_ view: UIView) {
+        let foreign = view.layer.animationKeys()?.filter { $0 != pinAnimationKey } ?? []
+        guard foreign.contains("opacity") else { return }
+        let name = NSStringFromClass(type(of: view))
+        guard foreignOpacityClasses.insert(name).inserted else { return }
+        noteDiagnostic(
+            .foreign,
+            "\(name) has a foreign 'opacity' animation on its layer (alpha=\(String(format: "%.2f", view.alpha)), "
+                + "other keys: \(foreign.joined(separator: ","))) - the pin was re-asserted over it"
+        )
+    }
+
+    // MARK: - 判据日志（给"暂停键一卡一卡的"那条线取证用）
+
+    /// 日志 50 里这条线**一行判据都没有**：字形换符号不报、字形跳位置不报、
+    /// 钉被谁盖掉不报、`uiButtonTapped` 钩子有没有真的跑过也不报
+    /// ⇒ 事后只剩猜想，分不开下面三条机理：
+    ///
+    /// * **H1 钉被盖掉**：Spotify 写 `alpha` ⇒ 它的隐式 `opacity` 动画盖住我们的钉 ⇒ 原生内容漏回来一帧；
+    /// * **H2 硬切**：字形是 `glyph.image = …` 瞬时换图，整颗按钮又被钉成不可见 ⇒ 没有按下回弹、没有 crossfade；
+    /// * **H3 位置跳步**：字形只在节拍上重排 ⇒ 卡片折叠 / 换歌时是**跳着**追上按钮的。
+    ///
+    /// 所以这一轮补三行只读判据（换符号 / 跳位置 / 钉被盖掉）+ 一行点击判据
+    /// （后者同时是 §3.4 ④「三颗按钮还都能按」唯一能自动判的东西）。
+    ///
+    /// 判据通道。**每路一个预算**，不共用一个。
+    ///
+    /// ⚠️ 第一版是**一个共用预算**（120 行），独立只读复核指出它有个致命形状：
+    /// `move` 那一路是**帧级**的（翻页/滚动动画一来，1 秒就能烧掉整份预算），
+    /// 于是后面 `tap` 那一路**被静默丢掉** —— 而 `tap` 正是 §3.4 ④「三颗按钮还都能按」
+    /// 唯一的自动判据。判据被静默丢掉，比没有判据更坏（会得到一条假绿灯）。
+    /// 所以：`tap` 给足，`move` 收紧，并且**每一路用满时留一行自己的墓志铭**。
+    private enum Diag: String {
+        case tap, symbol, move, foreign
+
+        var limit: Int {
+            switch self {
+            case .tap: return 200      // §3.4 ④ 的唯一判据 —— 一次会话里点不了这么多次
+            case .symbol: return 120   // 换符号是我们要看的那条序列
+            case .move: return 40      // 帧级，收紧
+            case .foreign: return 8    // 每个类名最多一条，8 足够
+            }
+        }
+    }
+
+    private static var diagCounts: [Diag: Int] = [:]
+
+    private static func noteDiagnostic(_ channel: Diag, _ message: String) {
+        let used = diagCounts[channel] ?? 0
+        guard used < channel.limit else { return }
+        diagCounts[channel] = used + 1
+        if used + 1 == channel.limit {
+            writeDebugLog(
+                "[\(logTag)] '\(channel.rawValue)' diagnostics reached their limit "
+                    + "(\(channel.limit) lines) - further lines of this kind are suppressed"
+            )
+        }
+        writeDebugLog("[\(logTag)] \(message)")
+    }
+
+    /// 这颗按钮的身份：优先 id（类名会重复，见 `notePinnedClass`）。
+    private static func identifier(of view: UIView) -> String {
+        view.accessibilityIdentifier ?? NSStringFromClass(type(of: view))
+    }
+
+    private static func frameText(_ frame: CGRect) -> String {
+        "\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))"
     }
 
     /// 原生内容被写回之后的**短促重试**：排几次"幂等按回去"，**没人再写回就自然停下**。
@@ -486,6 +610,8 @@ enum NowPlayingControlsPlate {
         tapOverrideUntil = 0
         displayedPlaySymbol = ""
         pinnedClassCounts.removeAll()
+        foreignOpacityClasses.removeAll()
+        diagCounts.removeAll()
         writeDebugLog("[\(logTag)] restored (pins undone, our glyphs taken away; not a single byte of native was changed)")
     }
 
@@ -550,6 +676,18 @@ enum NowPlayingControlsPlate {
         if last != systemName {
             glyph.image = image.withRenderingMode(.alwaysTemplate)
             objc_setAssociatedObject(button, &playStateKey, systemName, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            // ★ 判据 ①（日志 50 里一行都没有）：字形**换符号**的每一次。
+            //   H2（硬切）与"投影抖动/点击接管到期后回弹"全靠这条序列才分得开。
+            //   ⚠️ 不写嵌套双引号字面量 —— 先算成变量（见 `NowPlayingLyricsPlate` 的说明）。
+            let via = (systemName == tapOverrideSymbol) ? "tap-override" : "projection"
+            let left = max(0, tapOverrideUntil - CFAbsoluteTimeGetCurrent())
+            noteDiagnostic(
+                .symbol,
+                "glyph \(identifier(of: button)) symbol \(last ?? "none") -> \(systemName)"
+                    + " (via \(via), isPlaying=\(projection.isPlaying),"
+                    + " pos=\(String(format: "%.2f", projection.time))s,"
+                    + " overrideLeft=\(String(format: "%.2f", left))s)"
+            )
         }
 
         if glyph.superview !== host { host.addSubview(glyph) }
@@ -557,8 +695,12 @@ enum NowPlayingControlsPlate {
         // 按钮可能正被 Spotify 按着做缩放/位移，那时 `frame` 未定义 —— 仓库纪律）。
         let target = button.convert(button.bounds, to: host)
         if glyph.frame != target {
+            let was = glyph.frame
             glyph.autoresizingMask = []
             glyph.frame = target
+            // ★ 判据 ②：字形**跳位置**的每一次（H3：只在节拍上重排 ⇒ 跳着追按钮）。
+            //   只读、只在真的动过帧时打一行；这一路是**帧级**的，所以预算收得最紧（40 行）。
+            noteDiagnostic(.move, "glyph \(identifier(of: button)) moved \(frameText(was)) -> \(frameText(target))")
         }
         // Spotify 的缓冲 spinner 立着时把我们的字形藏起来（pw 的做法）—— 见 `spinnerShowing`。
         let wantedAlpha: CGFloat = hidden ? 0 : 1
@@ -630,6 +772,15 @@ enum NowPlayingControlsPlate {
         tapOverrideSymbol = target
         tapOverrideUntil = CFAbsoluteTimeGetCurrent() + tapTrust
         displayedPlaySymbol = target
+
+        // ★ 判据 ③（`§3.4 ④` 至今无法验收就是因为没有这一行）：
+        //   **点击钩子真的在这颗键上跑过**。`uiButtonTapped` 在日志 49 只是"装上了"，
+        //   "有没有被调用"从来没有过证据；而它同时是"三颗按钮还都能按"的自动化判据。
+        noteDiagnostic(
+            .tap,
+            "play button tapped — glyph \(current) -> \(target)"
+                + " (trust \(String(format: "%.1f", tapTrust))s)"
+        )
 
         // 当场画上去（`reconcile` 找不到那一排时下一个节拍也会补上，最坏退回"慢一拍"）。
         _ = reconcile()
