@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | 提交 | `257016e`（歌词数据层）→ `934d7ff`（末行贴底）→ `e9efc63`（听歌页版式六项 + 两条建议）→ `e6b00c4`（两处自查发现的地雷，见 §2.4），**已推到 `origin/main`** |
-| **要编译的就是 `e6b00c4`** | 点 `Build IPA — patched` 时先确认 `Use workflow from` 是 `main`；跑完之后 `head_sha` 应该是 `e6b00c4`（不是的话说明用了旧的 revision） |
+| **要编译的就是 `main` 的最新提交** | 点 `Build IPA — patched` 时 `Use workflow from` 选 **`main`** 即可（Swift 内容 = `e6b00c4`；它之后只有文档提交）。跑完看 `head_sha`：应当是那一次的 HEAD |
 | 自检 | ✅ 六条全绿（orion 327 / brace 327 / member 272 / string 276 / l10n en / l10n zh-CN 全 exit 0） |
 | CI | ✅ **Logic tests 已自动跑**（push 触发）；⏳ **`Build IPA — patched` 要手动点一次**（本机没有 `gh`，我点不了）—— 它才会把 Swift 编一遍 |
 | 装机 | ❌ **一轮都没上过机器**：下面 §3 那 12 条全是"看一眼" |
