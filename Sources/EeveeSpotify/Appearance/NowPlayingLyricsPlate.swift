@@ -28,7 +28,34 @@ import ObjectiveC.runtime
 //   3. **位置是量出来的**：缩略图贴"封面区"左上，歌词区 = 标题之下、进度条之上那块。
 //
 // 它的常量（原样抄，单位 pt）：缩略图 72 / 缩略图—标题 16 / 标题—控件 12 / 标题尾渐隐 20 /
-// 缩略图离封面区顶 8 / 歌词离标题 20、离进度条 8 / 进场 0.3s（延迟 0.12）/ 退场 0.16 / 换歌宽限 3s。
+// 缩略图离封面区顶 8 / 歌词离标题 20、离进度条 8 / 换歌宽限 3s。
+// ⚠️ 上一版这里还写着"进场 0.3s（延迟 0.12）/ 退场 0.16"—— 那三个数在 2026-10-05 被
+// pw 的 `SGRMotionLayout`（0.45s 弹簧、阻尼 1）取代，见下一节。
+//
+// ## ★ 2026-10-05：「封面往左上变小跑」这个动画到底怎么做（照 pw `PlayerLyrics.x` 重写）
+//
+// 上一版是 **`UIView.animate` 动 `frame`** —— 那是**错的形状**，理由两条：
+//   1. `layoutAndMount` **每 0.3s 重跑一次**（`DeclutterChrome` 的复查节拍），
+//      每次都要重写封面的布局；动画画在 `frame` 上时，那一拍就会**打断/拽回**动画；
+//   2. 本仓库纪律：**`frame` 在 transform 非恒等时不可信**。
+//
+// pw 的形状（`place()` / `thumbTransform()` / `thumbRadius()` / `SGRMotionLayout`）：
+//
+// | 环节 | 做法 |
+// |---|---|
+// | 布局 | 容器**永远**按"Spotify 封面那个大小与位置"布局，用 **`bounds` + `center`**（不是 `frame`）—— pw 原话：*"moved by its transform alone, so a pass that runs while it is up **leaves it exactly where the eye has it**"* |
+// | 位移 | **只写在容器的 `transform` 上**，且是 `CGAffineTransformConcat(Scale, Move)` = **先缩放、后平移**（关于自己的中心） |
+// | 圆角 | ★ **缩放会把圆角一起缩放** ⇒ 想让缩略图"看起来"是 8pt，模型值要写 **8 / scale**（pw：*"divided by the shrink"*） |
+// | 阴影 | 挂在**容器**上（容器不裁剪）⇒ 跟着 transform 一起走，*"instead of a shadow redrawn on every frame"* |
+// | 动画 | pw 的 `SGRMotionLayout`：`0.45s + usingSpringWithDamping 1 + velocity 0`（**临界阻尼、不回弹**），options **`AllowUserInteraction` + `BeginFromCurrentState`**（后者是**连点两次不跳**的关键） |
+// | 无障碍 | **Reduce Motion 打开时整段不做动画**（pw 也是 `performWithoutAnimation`） |
+// | 换图那一刻 | *"Spotify's cover goes **the moment** the redesign's own takes its place"* —— 早一步露空档、晚一步两张同屏（一大一小） |
+// | 拿不到图 | *"the cover stays and the lyrics wait"* ⇒ **不展开**（我们 `layoutAndMount` 返回 false 就是这条） |
+//
+// 收起的收尾（撤掉我们那张 + 把 Spotify 那条写回）**必须挂在动画 completion 上**，
+// 而且要带一个令牌（`coverGeneration`）：动画没走完就又被点开时，这一次收尾要作废。
+// ⚠️ `completion` 在"已经在对的位置"与"Reduce Motion"两条路上**也必须被调用**，
+// 否则封面撤不掉、Spotify 那条永远停在 alpha 0。
 //
 // ## 与 pw 的两处不同（刻意的）
 //
@@ -172,10 +199,24 @@ enum NowPlayingLyricsPlate {
     private static let thumbTop: CGFloat = 8
     private static let lyricsTop: CGFloat = 20
     private static let lyricsBottom: CGFloat = 8
+    /// 歌词区进场时从 0.96 放大到 1（pw 的 `kLyricsEnterScale`）。
+    /// ⚠️ **本轮没做**：那要把容器也改成"只动 transform + bounds/center"（同封面那一套），
+    /// 否则 `ensureContainer` 每拍写 `frame` 会和 transform 打架。留到下一轮。
     private static let enterScale: CGFloat = 0.96
-    private static let enterDuration: TimeInterval = 0.3
-    private static let enterDelay: TimeInterval = 0.12
-    private static let exitDuration: TimeInterval = 0.16
+
+    // MARK: 封面那两个"画出来"的圆角 + 移动用的弹簧（pw `SGRTokens`）
+
+    /// 全尺寸封面时的圆角（pw：`SGRRadiusArtwork = 12`）。
+    private static let coverFullRadius: CGFloat = 12
+    /// ★ **缩略图在 72pt 下"看起来"的圆角**（pw：`SGRRadiusCover = 8`）。
+    /// 注意：`transform` 的缩放会把圆角**一起缩放**，所以模型值要**除以 scale**
+    /// —— pw 原话：*"a radius under a scale is drawn scaled, so the thumbnail asks for the radius
+    /// it wants **divided by the shrink**"*。
+    private static let thumbDrawnRadius: CGFloat = 8
+    /// 移动/缩放用的时长与阻尼：pw 的 `SGRMotionLayout` 是
+    /// `animateWithDuration:0.45 usingSpringWithDamping:1 initialSpringVelocity:0`
+    /// —— **阻尼 1 = 临界阻尼、不回弹**（"a spring with no overshoot"）。
+    private static let moveDuration: TimeInterval = 0.45
 
     /// 歌词区左右内缩。
     static let stageSideInset: CGFloat = 20
@@ -214,7 +255,17 @@ enum NowPlayingLyricsPlate {
 
     private static weak var lastPage: UIView?
     private static weak var lastContainer: UIView?
-    private static weak var lastCover: UIImageView?
+    /// 我们自己那份封面：**外层容器**（承载 transform 与阴影）+ **里面的 imageView**（承载圆角与裁剪）。
+    ///
+    /// ★ 分两层是照 pw 的 `PlayerLyrics.x`：容器**永远按"Spotify 封面那个大小与位置"布局**
+    /// （`bounds` + `center`），"缩小 + 往左上挪"**只写在容器的 `transform` 上**。
+    /// 这样 `layoutAndMount` 每 0.3s 重排一次也**不会打断动画**；阴影与圆角跟着 transform 一起走，
+    /// 不需要每帧重画。
+    private static weak var coverHost: UIView?
+    private static weak var coverImage: UIImageView?
+    /// 收/开交叉时的令牌：**关闭动画走完才做收尾**（撤封面、把 Spotify 那条写回），
+    /// 免得把紧接着又展开的那一次踢掉。
+    private static var coverGeneration = 0
     private static weak var lastToggleZone: UIControl?
     private static weak var lastUnit: UIView?
     private static weak var lastTitleElement: UIView?
@@ -235,7 +286,8 @@ enum NowPlayingLyricsPlate {
         lastPage = pageView
 
         guard isEnabled else {
-            closeEverything(reason: "switch off")
+            // 关开关：**不动画**（用户多半在设置页，而且页面上可能正有转场）。
+            closeEverything(reason: "switch off", animated: false)
             removeToggle()
             return
         }
@@ -280,7 +332,8 @@ enum NowPlayingLyricsPlate {
     /// `closeEverything` 自己有空守卫，没展开时不会打日志。
     /// 那枚键也要一起拿走 —— 否则下次进来会叠一枚在上面。
     static func remove(reason: String) {
-        closeEverything(reason: reason)
+        // 页面要走了 ⇒ **不动画**：拖着 0.45s 才把 Spotify 那条封面写回去，会在转场里露一个空档。
+        closeEverything(reason: reason, animated: false)
         removeToggle()
     }
 
@@ -289,7 +342,8 @@ enum NowPlayingLyricsPlate {
         guard let page = lastPage, page.window != nil else { return }
 
         if isOpen {
-            closeEverything(reason: "tapped")
+            // 用户自己点收起 ⇒ **放动画**（封面"飞回原位"）。
+            closeEverything(reason: "tapped", animated: true)
             // 图标当场换回"歌词"，不等 0.5s 的复查节拍。
             ensureToggleZone(in: page)
             return
@@ -320,13 +374,17 @@ enum NowPlayingLyricsPlate {
             return false
         }
 
-        // ① 我们自己画的那张封面（同一张图，所以"换"看不出来）。
+        // ① 我们自己那份封面（同一张图，所以"换"看不出来）+ **把它动画到缩略图**。
         //    ⚠️ **它必须成功**：失败时原生封面就还露着，而下面两步会照样跑
         //    ⇒ 歌词与上移后的标题会被画在封面图上（照片 51 就是现场）。所以这里直接不展开。
-        guard let cover = ensureCover(in: page, geometry: geometry) else {
+        //    pw 也是这个取舍：*"without a picture there would be a hole where the cover was,
+        //    so the cover stays and the lyrics wait."*
+        guard let coverHostView = ensureCover(in: page, geometry: geometry),
+              let coverImageView = coverImage else {
             noteSkip("拿不到那张封面（缩略图与"藏起原生封面"都做不了）—— 不展开")
             return false
         }
+        applyCoverState(open: true, host: coverHostView, imageView: coverImageView, geometry: geometry)
 
         // ② 标题行上移 + 右移（transform —— 改约束会被 stack view 布局写回）。
         applyTitleTransform(geometry: geometry, page: page)
@@ -368,24 +426,57 @@ enum NowPlayingLyricsPlate {
             writeDebugLog(
                 "[\(logTag)] 展开 — 缩略图 \(Int(geometry.thumb.width))pt、"
                     + "歌词区 \(frameText(frame))、封面从 \(frameText(geometry.cover)) 缩过来"
-                    + "（藏起来的是 \(NSStringFromClass(type(of: cover)))@\(frameText(geometry.cover))）"
             )
         }
         return true
     }
 
-    /// 全部还原：标题与封面的 transform/alpha 写回、我们的层拿走。
-    private static func closeEverything(reason: String) {
-        guard isOpen || lastContainer != nil || lastCover != nil else { return }
+    /// 全部还原：封面动画回原位后拿走、标题位移撤销、我们自己的层拿走。
+    ///
+    /// - Parameter animated: 收起封面时**要不要放动画**。
+    ///   `toggle()`（用户再点一下）= `true`，会看到封面"飞回原位"；
+    ///   **切开关 / 页面消失 = `false`** —— 那两种情况下页面可能马上就不在了，
+    ///   拖着 0.45s 的动画才把 Spotify 那条封面写回去，会在转场里露一个"没有封面"的帧。
+    private static func closeEverything(reason: String, animated: Bool) {
+        guard isOpen || lastContainer != nil || coverHost != nil else { return }
 
         isOpen = false
 
-        if let cover = lastCover {
-            cover.removeFromSuperview()
-            lastCover = nil
+        // 封面：先让它**动回原位**（同图，所以这就是"飞回去"），动画走完再撤 + 把 Spotify 那条写回。
+        if let host = coverHost, let imageView = coverImage {
+            coverGeneration += 1
+            let token = coverGeneration
+
+            let cleanup = {
+                // ⚠️ 收尾里要碰 `@MainActor` 的静态成员 ⇒ 走 `onMainThreadSync`（仓库成文规矩）。
+                onMainThreadSync {
+                    // 这中间用户又点开了 ⇒ 这一次的收尾作废（别把刚摆好的封面撤掉）。
+                    guard token == coverGeneration else { return }
+                    host.removeFromSuperview()
+                    coverHost = nil
+                    coverImage = nil
+                    restoreSpotifyCover()
+                }
+            }
+
+            if animated {
+                applyCoverState(
+                    open: false,
+                    host: host,
+                    imageView: imageView,
+                    geometry: nil,
+                    completion: cleanup
+                )
+            } else {
+                host.layer.removeAllAnimations()
+                host.transform = .identity
+                imageView.layer.cornerRadius = coverFullRadius
+                cleanup()
+            }
+        } else {
+            restoreSpotifyCover()
         }
-        // Spotify 那条封面写回可见。
-        restoreSpotifyCover()
+
         // 标题行的位移撤销。
         lastUnit?.transform = .identity
         lastTitleElement?.transform = .identity
@@ -503,8 +594,28 @@ enum NowPlayingLyricsPlate {
 
     // MARK: - 封面与标题
 
-    /// 我们自己画的那张缩略图封面（同图 ⇒ 看不出"换"），并**把 Spotify 那条藏起来**。
-    private static func ensureCover(in page: UIView, geometry: Geometry) -> UIImageView? {
+    /// 我们自己那份封面：**建/复用容器 + 里面的 imageView**，并**把 Spotify 那条藏起来**。
+    ///
+    /// ## ★ 动画的关键：容器永远按"Spotify 封面那个大小与位置"布局，位移只写在 `transform` 上
+    ///
+    /// 这是照 pw `PlayerLyrics.x` 的 `place()` 与 `thumbTransform()` 的做法（GPL-3.0）：
+    ///
+    /// > *"The thumbnail is laid out **at the size and place Spotify draws its cover at** and moved by
+    /// > its transform alone, so a pass that runs while it is up **leaves it exactly where the eye has
+    /// > it** … **Bounds and a centre, not a frame**, since both views can be under a transform."*
+    ///
+    /// 为什么不能像上一版那样动画 `frame`（上一版就是这么写的、而且**一次都没跑起来**）：
+    ///   · `layoutAndMount` **每 0.3s 会重跑一次**（`DeclutterChrome` 的复查节拍），它要重写封面布局
+    ///     —— 动画画在 `frame` 上时那一拍就会**打断/拽回**动画；画在 `transform` 上则改
+    ///     `bounds`/`center` **完全不打扰动画**；
+    ///   · 本仓库纪律：**`frame` 在 transform 非恒等时不可信** ⇒ 一律 `bounds` + `center`。
+    ///
+    /// ## 阴影放在**容器**上
+    ///
+    /// pw 原话：*"the **shadow and the corners travel with it** that way, instead of a shadow redrawn
+    /// on every frame."* —— 容器带着 transform 走，阴影与圆角自动跟着，不用每帧重画。
+    /// （所以：容器**不裁剪**（否则阴影没了），裁剪与圆角放在里面那层 imageView 上。）
+    private static func ensureCover(in page: UIView, geometry: Geometry) -> UIView? {
         // 图片从 Spotify 那个 `Encore.ImageView` 里取（它下面挂着真正的 UIImageView）。
         //
         // ⚠️ **判据必须和 `measure()` 用的是同一个**（`visibleCover`）。上一版这里用的是
@@ -523,42 +634,135 @@ enum NowPlayingLyricsPlate {
             return nil
         }
 
-        let cover: UIImageView
-        if let existing = lastCover {
-            cover = existing
+        let host: UIView
+        let imageView: UIImageView
+        if let existing = coverHost, let existingImage = coverImage {
+            host = existing
+            imageView = existingImage
         } else {
-            cover = UIImageView()
-            cover.contentMode = .scaleAspectFill
-            cover.clipsToBounds = true
-            cover.layer.cornerCurve = .continuous
-            cover.layer.cornerRadius = 10
-            cover.isUserInteractionEnabled = false
-            cover.accessibilityIdentifier = "eevee-npv-cover-thumb"
-            page.addSubview(cover)
-            lastCover = cover
-        }
-        cover.image = image
-        if cover.superview !== page { page.addSubview(cover) }
-        page.bringSubviewToFront(cover)
+            host = UIView()
+            host.isUserInteractionEnabled = false
+            host.accessibilityIdentifier = "eevee-npv-cover-host"
+            // 阴影挂在**容器**上（容器不裁剪）；跟着 transform 一起缩放/移动，不用每帧重画。
+            host.layer.shadowColor = UIColor.black.cgColor
+            host.layer.shadowOpacity = 0.35
+            host.layer.shadowRadius = 20
+            host.layer.shadowOffset = CGSize(width: 0, height: 12)
+            host.layer.masksToBounds = false
 
-        // 进场动画：从封面的位置缩到缩略图（pw 是"飞过去"，我们做帧动画，效果同源）。
-        let target = geometry.thumb
-        if cover.frame != target {
-            let first = cover.frame == .zero
-            if first {
-                cover.frame = geometry.cover
-                cover.layer.cornerRadius = 10
-                UIView.animate(withDuration: enterDuration, delay: enterDelay, options: [.curveEaseOut]) {
-                    cover.frame = target
-                }
-            } else {
-                UIView.animate(withDuration: exitDuration) { cover.frame = target }
-            }
+            imageView = UIImageView(frame: host.bounds)
+            imageView.contentMode = .scaleAspectFill
+            imageView.clipsToBounds = true
+            imageView.layer.cornerCurve = .continuous
+            imageView.layer.cornerRadius = coverFullRadius
+            imageView.isUserInteractionEnabled = false
+            imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            imageView.accessibilityIdentifier = "eevee-npv-cover-thumb"
+            host.addSubview(imageView)
+
+            coverHost = host
+            coverImage = imageView
         }
 
-        // Spotify 那条封面**透明掉**（不是 hidden：Encore 的布局会因 hidden 重排）。
+        imageView.image = image
+
+        // ★ 布局：**按 Spotify 封面那个大小与位置**（`bounds` + `center`，不用 `frame`）。
+        //   注意这**不是**每拍把封面"摆回去"——动画在 transform 上，所以这里随便重写都不打扰它。
+        let coverFrame = geometry.cover
+        host.bounds = CGRect(origin: .zero, size: coverFrame.size)
+        host.center = CGPoint(x: coverFrame.midX, y: coverFrame.midY)
+        host.layer.shadowPath = UIBezierPath(rect: host.bounds).cgPath
+
+        if host.superview !== page { page.addSubview(host) }
+        page.bringSubviewToFront(host)
+
+        // Spotify 那条封面**在我们这张出现的同一瞬间隐去**（两张同图，所以看不出"换"）。
+        // pw：*"Spotify's cover goes the moment the redesign's own takes its place"* ——
+        // 早一步会露一个空档，晚一步会两张同屏（一大一小）。
         hideSpotifyCover(source, in: page)
-        return cover
+        return host
+    }
+
+    /// 缩略图该有的 `transform`：**关于自己的中心**先等比缩小、再平移到目标中心。
+    ///
+    /// ⚠️ 顺序照 pw：`CGAffineTransformConcat(Scale, Move)` = **先 Scale 后 Move**
+    /// （Swift 里是 `scale.concatenating(move)`；写成 `move.scaledBy(…)` 顺序就反了）。
+    private static func thumbTransform(cover: CGRect, thumb: CGRect) -> CGAffineTransform {
+        let scale = cover.width > 0 ? thumb.width / cover.width : 1
+        let move = CGAffineTransform(
+            translationX: (thumb.midX - cover.midX).rounded(),
+            y: (thumb.midY - cover.midY).rounded()
+        )
+        return CGAffineTransform(scaleX: scale, y: scale).concatenating(move)
+    }
+
+    /// 圆角：**缩放会把圆角一起缩放**，所以想让它在缩略图尺寸下"看起来"是 `drawn`，
+    /// 模型值就得**除以 scale**（pw：*"asks for the radius it wants divided by the shrink"*）。
+    private static func radiusDrawnAs(_ drawn: CGFloat, coverWidth: CGFloat, thumbWidth: CGFloat) -> CGFloat {
+        let scale = coverWidth > 0 ? thumbWidth / coverWidth : 1
+        return scale > 0.01 ? drawn / scale : drawn
+    }
+
+    /// 把封面**动画地**放到"展开 / 收起"两个状态之一（两个状态都只改 `transform` + 圆角）。
+    ///
+    /// 动画参数照 pw 的 `SGRMotionLayout`：
+    /// `duration 0.45 / usingSpringWithDamping 1（临界阻尼、不回弹）/ velocity 0`，
+    /// options = **`AllowUserInteraction` + `BeginFromCurrentState`**
+    /// —— `.beginFromCurrentState` 是**连点两次不跳**的关键（从当前呈现位置接着走）。
+    /// 另外 pw 在 **Reduce Motion** 打开时整段不做动画（`performWithoutAnimation`），这里也照做。
+    ///
+    /// - Parameter completion: **保证会被调用**（动画结束 / 已经在对的位置 / Reduce Motion 三条路都调）。
+    ///   收起那一路靠它做收尾（撤封面 + 把 Spotify 那条写回）—— 漏调就会永远留着一张封面。
+    private static func applyCoverState(
+        open: Bool,
+        host: UIView,
+        imageView: UIImageView,
+        geometry: Geometry?,
+        completion: (() -> Void)? = nil
+    ) {
+        if open { coverGeneration += 1 }
+
+        let target: CGAffineTransform
+        let radius: CGFloat
+        if open, let geometry {
+            target = thumbTransform(cover: geometry.cover, thumb: geometry.thumb)
+            radius = radiusDrawnAs(
+                thumbDrawnRadius,
+                coverWidth: geometry.cover.width,
+                thumbWidth: geometry.thumb.width
+            )
+        } else {
+            target = .identity
+            radius = coverFullRadius
+        }
+
+        let change = {
+            host.transform = target
+            imageView.layer.cornerRadius = radius
+        }
+
+        // 已经在对的位置（含"上一次动画已经把模型值设成终点"）⇒ 一个字节都不写。
+        // `UIView.animate` 会把模型值**立刻**设成终点值，所以 0.3s 的复查节拍天然不会打断动画。
+        guard host.transform != target || abs(imageView.layer.cornerRadius - radius) > 0.01 else {
+            completion?()
+            return
+        }
+
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            UIView.performWithoutAnimation(change)
+            completion?()
+            return
+        }
+
+        UIView.animate(
+            withDuration: moveDuration,
+            delay: 0,
+            usingSpringWithDamping: 1,
+            initialSpringVelocity: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState],
+            animations: change,
+            completion: { _ in completion?() }
+        )
     }
 
     private static var hiddenCoverKey: UInt8 = 0
