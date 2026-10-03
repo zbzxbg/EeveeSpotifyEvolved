@@ -209,7 +209,30 @@ struct AppleMusicLyricsOverlayView: View {
                         //    这里留 24pt（加上 `scrollInsets` 里那次同样的加法 ⇒ 实际 48pt）保持同样的"干净起点"。
                         top: showsProviderFooter ? 8 : (showsPreviewHeader ? 6 : 24),
                         leading: sideInset,
-                        bottom: showsProviderFooter ? 46 : 120,
+                        // ★ 2026-10-11：**底边距也要分档** —— 三档共用 120 就是用户报的那条。
+                        //
+                        // 用户原话：「当歌词已经划到最后一行时，此歌词行不会停留在歌词视图的底部，
+                        // 而是可以划动到歌词视图的中间行」。
+                        //
+                        // 算术（`scrollInsets` 把这个值**加了两次**，见 `AppleMusicLyricsPage`
+                        // 的 `footerContent == nil` 那一条）：播放器这一档改动前拿到的是
+                        // 120 × 2 = **240pt**，而它的歌词容器只有 399pt
+                        // （`lyrics area 20,242,374,399`）⇒ 滚到底时最后一行下方空 240pt，
+                        // 那**比容器中线（399/2 ≈ 200）还多** ⇒ 最后一行底边落在容器 y = 399 − 240
+                        // = **159**，在中线以上。这就是"最后一行能划到中间去"。
+                        //
+                        // 这一档取 **24**（与上面 `top:` 同一个数，无壳这一档对称为 24 / 24）：
+                        //   · 滚到底 ⇒ 最后一行下方 2 × 24 = **48pt**；
+                        //   · 容器下沿 641（它锚在进度条上：`stageBottom = progressTop − 19`，
+                        //     所以顶边往上移不改这条算术），控件条占 604…648
+                        //     （`controlBandMidY 626 ± 22`，容器在 604 以下放行触摸）
+                        //     ⇒ 最后一行落在 641 − 48 = **593**，离控件条上沿还有 11pt；
+                        //   · 48pt 相对 399～441pt 的容器是"贴底"，不再够得着中线。
+                        //
+                        // ⚠️ 预览那一档的 **120 一个字都不改**：卡片只有 320pt、歌词常常只有三四行，
+                        //    那 120 是**为了让内容比视口高**（否则 `scrollTo(anchor: .center)`
+                        //    无从生效、当前行居不了中）—— 理由见上面 `top:` 那段；全屏的 46 同样不动。
+                        bottom: showsProviderFooter ? 46 : (showsPreviewHeader ? 120 : 24),
                         trailing: sideInset
                     ),
                     // 分档按「是不是全屏」决定：
