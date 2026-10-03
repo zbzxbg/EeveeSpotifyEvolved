@@ -320,7 +320,10 @@ enum NowPlayingLyricsPlate {
             ensureToggleZone(in: page)
             return isOpen
         }
-        // 关着的时候只保证那枚键还在、还画得对（Spotify 换帧会重排 subviews）。
+        // 关着的时候只保证那枚键还在、还画得对（Spotify 换帧会重排 subviews），
+        // 并**顺手把这一首的封面认下来**：点的时候就不用"现抓"，而现抓经常抓不到
+        // （树里那张图可能是 `UIImageView(alpha=0.00)`）。幂等 —— 这一首已经认下就只查一次字典。
+        if !isOpen { rememberArtworkIfNeeded(in: page) }
         ensureToggleZone(in: page)
         return false
     }
@@ -626,10 +629,11 @@ enum NowPlayingLyricsPlate {
         // 封面还全屏）。
         guard let list = findByIdentifier(listIdentifier, in: page),
               let source = visibleCover(in: list) else { return nil }
-        // 壳里没有图就退一步：在列表里找**任意一张够大、真带图的** `UIImageView`
-        // （封面图有时挂在壳的兄弟上 —— 真机树里 `Encore.ImageView` 下面就是
-        //  `UIImageView(alpha=0.00)` + `PlaceholderView` 各一层，谁先拿到图不保证）。
-        guard let image = firstImage(in: source) ?? anyCoverImage(in: list) else {
+        // ★ **先吃缓存**（页面开着的时候就已经认下来的那张），再退回"现在去抓树"。
+        //   后者在真机树里经常还没就绪（`UIImageView(alpha=0.00)`），那正是"点了没反应"的来源。
+        guard let image = rememberArtworkIfNeeded(in: page)
+                ?? firstImage(in: source)
+                ?? anyCoverImage(in: list) else {
             noteSkip("那张封面里取不到图（\(NSStringFromClass(type(of: source)))）")
             return nil
         }
@@ -766,6 +770,51 @@ enum NowPlayingLyricsPlate {
     }
 
     private static var hiddenCoverKey: UInt8 = 0
+
+    // MARK: - 封面图缓存（**不依赖"点的那一瞬间"**）
+
+    /// 我们按曲目 id 认下来的封面图（最多留 `artworkCacheLimit` 张）。
+    ///
+    /// **为什么要它**：`ensureCover` 原来是在**点"歌词"那一刻**才去 Spotify 的视图树里抓
+    /// `UIImageView.image`；而真机树里那张图常常是 `alpha=0.00` 的壳 + `PlaceholderView`
+    /// （日志 42/48 的 `[NPVTree]`：`15.ImageView@0,0,366,366,id=Encore.ImageView` 下面是
+    /// `16.UIImageView@0,0,366,366,alpha=0.00` + `16.PlaceholderView`），那一刻 `image`
+    /// 可能还是 nil ⇒ 我们只能**拒绝展开**（有日志、不留半成品，但功能会"有时候点了没反应"）。
+    ///
+    /// 现在改成：**页面开着的时候**每次复查（`DeclutterChrome` 的 0.3s 节拍，本来就在跑）
+    /// 顺手把当前这首的封面认下来、按曲目 id 存住；点的时候**先用缓存**，树只当兜底。
+    /// **不新增定时器、不新增取景时机。**
+    ///
+    /// ⚠️ 与 pw 还有距离：pw 是**完全自己持有**那张图（`SGRNowPlayingArtwork`：按 metadata 里的
+    /// URL 下载 + 让屏幕把自己画的那张发布给它 + `…ArtworkDidChangeNotification` 通知重画）。
+    /// 要再稳一档就复用仓库既有的 `LyricsArtworkResolver`（它已经把
+    /// `spotify:image:<hex>` → `https://i.scdn.co/image/<hex>` 这条链走通了），
+    /// 但那是**异步**的，要塞进一个同步返回 `Bool` 的 `layoutAndMount` 得先改结构 —— 本轮没做。
+    private static let artworkCacheLimit = 8
+    private static var artworkCache: [String: UIImage] = [:]
+    private static var artworkCacheOrder: [String] = []
+
+    /// 顺手认下当前这一首的封面（幂等：这一首已经有了就直接返回，不再走树）。
+    @discardableResult
+    private static func rememberArtworkIfNeeded(in page: UIView) -> UIImage? {
+        guard let trackId = currentTrackId() else { return nil }
+        if let cached = artworkCache[trackId] { return cached }
+
+        guard let list = findByIdentifier(listIdentifier, in: page),
+              let source = visibleCover(in: list),
+              let image = firstImage(in: source) ?? anyCoverImage(in: list) else { return nil }
+
+        artworkCache[trackId] = image
+        artworkCacheOrder.append(trackId)
+        while artworkCacheOrder.count > artworkCacheLimit {
+            artworkCache.removeValue(forKey: artworkCacheOrder.removeFirst())
+        }
+        writeDebugLog(
+            "[\(logTag)] 记下这一首的封面 \(Int(image.size.width))×\(Int(image.size.height))"
+                + "（缓存 \(artworkCacheOrder.count)/\(artworkCacheLimit)）"
+        )
+        return image
+    }
 
     /// ⚠️ 收的是**已经认准的那一个**（由 `visibleCover` 挑出来），不再自己按 id 找一遍 ——
     /// 上一版这里又 `findByIdentifier` 了一次，于是"挑封面"与"藏封面"用的是两个不同的视图。
