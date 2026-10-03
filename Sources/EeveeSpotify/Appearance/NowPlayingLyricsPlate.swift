@@ -128,6 +128,15 @@ private final class NowPlayingLyricsHost {
             showsProviderFooter: false,
             sideInset: NowPlayingLyricsPlate.stageSideInset,
             previewHeaderInset: 0,
+            // ★ 2026-10-09（照片 60）：**不画**预览标题栏那一行。
+            //
+            // 用户报"「歌词 · 分享 · 打开全屏歌词」这几个按钮还在" —— 那一行是
+            // `AppleMusicLyricsOverlayView.previewHeader`（我们自己画的），不是 Spotify 的原生入口。
+            // 上一次我判成了原生（`lyrics-share-button` 那一批）并去藏它，于是日志里有了
+            // `hid 1 native lyrics affordance(s)` 而屏幕上那一行纹丝不动。
+            // 实测几何定案：容器 20,210,374,378 + 内边距 14 + 两个 40×32 的按钮 ⇒
+            // 分享键中心 319pt / 全屏键中心 364pt，照片 60 里量的就是 319 / 364。
+            showsPreviewHeader: false,
             onSeek: onSeek,
             trackTitle: "",
             trackArtist: "",
@@ -361,8 +370,6 @@ enum NowPlayingLyricsPlate {
             // 关开关：**不动画**（用户多半在设置页，而且页面上可能正有转场）。
             closeEverything(reason: "switch off", animated: false)
             removeToggle()
-            // 关开关 ⇒ 把 Spotify 自己那套歌词入口**写回去**（我们不该再占着它们）。
-            restoreNativeLyricsAffordances()
             return
         }
         guard pageView.bounds.width > 1, pageView.bounds.height > 1 else { return }
@@ -388,10 +395,6 @@ enum NowPlayingLyricsPlate {
         guard isEnabled else { return false }
         guard let page = lastPage, page.window != nil else { return false }
         guard #available(iOS 26.0, *) else { return false }
-
-        // ★ 每拍按住 Spotify 自己那套歌词入口（照片 58 的「歌词 · 分享 · 全屏」那一行 + 底部「显示歌词」）。
-        //   换歌会重建这些视图 ⇒ 必须每拍复查，不能只做一次。
-        hideNativeLyricsAffordances(in: page)
 
         if isOpen {
             // 可能因为"封面还没布局好"铺不上 —— 那时退回去，并由 `openAndMount` 开重试窗口。
@@ -442,8 +445,6 @@ enum NowPlayingLyricsPlate {
         // 页面要走了 ⇒ **不动画**：拖着 0.45s 才把 Spotify 那条封面写回去，会在转场里露一个空档。
         closeEverything(reason: reason, animated: false)
         removeToggle()
-        // 把 Spotify 自己那套歌词入口写回去（我们不该带着别人的视图离场）。
-        restoreNativeLyricsAffordances()
     }
 
     /// 那枚"歌词键"被点了。
@@ -503,92 +504,72 @@ enum NowPlayingLyricsPlate {
         return true
     }
 
-    /// ★ 2026-10-08（照片 58）：**把 Spotify 自己那套歌词入口藏掉** —— 我们已经有自己的歌词层了。
-    ///
-    /// 用户原话：「照片 58 那个叫『显示歌词』的东西，是控制封面底下那一行歌词是否展示的。
-    /// 但是这个按键也应该是不允许出现的」「在封面那底下有 歌词 和 分享，打开全屏歌词这三个按钮，
-    /// 这玩意也应该是不应该出现的」。
-    ///
-    /// **它们是谁**（真机 `[NPVTree]` + 类名表）：
-    ///   · 歌词卡顶部那一行「歌词 · 分享 · 全屏」=
-    ///     `lyrics-expand-button` / `lyrics-share-button` / `lyrics-translations-button`
-    ///     （三个 `EncoreButton@0,0,44,44`，翻译那颗只在有翻译时出现）；
-    ///   · 底部那颗「显示歌词 / 隐藏歌词」胶囊 = `Lyrics_CardElementImpl.ShowLyricsButtonElementUI`
-    ///     （`dump-9.1.88.txt:3570`）—— ★ **它归 `DeclutterChrome.turnOffSpotifySingalong` 管，
-    ///     不在这里**：那颗要**按下去**才能把 Spotify 自己的单行歌词连"抬高封面"一起关掉，
-    ///     我们若在这里先把它 `alpha = 0`，两处就抢同一个视图了。
-    ///
-    /// ⚠️ **藏的是那一行的容器，不是三个按钮各自** —— 否则「歌词」那个标题会孤零零留着。
-    ///    容器判据：从「全屏」那颗按钮往上走，第一个**和卡片一样宽**（≥350）的祖先。
-    /// ⚠️ 用 **`alpha = 0`** 而不是 `hidden`：这一带的 Encore 容器会因 `hidden` 重排布局。
-    ///    `alpha = 0` 保住那一格 ⇒ 布局不动、看不见，`hitTest` 也照样跳过它。
-    ///    代价是 `DeclutterChrome` 那套"写回"不认它 ⇒ 由我们自己记还原表
-    ///    （`hiddenNativeAffordances`），在**关开关 / 离页**时写回；
-    ///    **收起歌词时不写回**（下一拍又会藏，只会闪）。
-    private static let nativeLyricsAffordanceIDs = [
-        "lyrics-expand-button",
-        "lyrics-share-button",
-        "lyrics-translations-button",
-    ]
+    // ★★ 2026-10-09：**`hideNativeLyricsAffordances` 整块已删**（照片 60 定案）。
+    //
+    // 它当初要藏的是「歌词 · 分享 · 全屏」那一行，理由是"那是 Spotify 的原生入口
+    // （`lyrics-expand-button` / `lyrics-share-button` / `lyrics-translations-button`）"。
+    // 日志 53 证明**这个判断是错的**，而且做法本身有害：
+    //
+    //   ① **屏幕上那一行是我们自己画的**（`AppleMusicLyricsOverlayView.previewHeader`）。
+    //      几何对得上：容器 20,210,374,378 + 内边距 14 + 两个 40×32 的按钮
+    //      ⇒ 分享键中心 319pt、全屏键中心 364pt；照片 60 量出来正是 319 / 364。
+    //      所以藏原生那一批**屏幕上什么都不会变**——日志里 `hid 1 native lyrics affordance(s)`
+    //      与"那一行还在"同时成立，就是这个原因。
+    //   ② 原生那三颗按钮所在的卡在**列表里**、而且被「一屏」折成了 0 高：
+    //      日志 53 的 `[NPVTree]` 是 `2.CollectionViewCell@20,838,374,0` →
+    //      `5.CardView@0,0,374,0,alpha=0.00,id=lyrics-card-view` → `7.CardHeaderView@0,0,342,38`。
+    //      它们本来就不在屏上，**根本不需要藏**。
+    //   ③ 而 `widestRowAncestor`（≥350pt 宽）从那三颗按钮往上走，第一个够宽的是
+    //      **`CardView` 本身**（374 宽）⇒ 我们实际藏的是**整张歌词卡的根**。
+    //      那张卡正是 `WordByWordHost` 内嵌预览的宿主
+    //      （日志里的 `[PreviewShell] card container (card)=Lyrics_CardElementImpl.CardView`）
+    //      ⇒ 一旦「一屏」没折它、或用户关掉「一屏」，我们就会把**自己的**预览歌词
+    //      一起 `alpha = 0` 掉。这是本轮**顺手拆掉的隐患**。
+    //
+    // 结论：不对别人的入口下手。真正要消失的那一行，去改**我们自己**的画法
+    // （`AppleMusicLyricsOverlayView.showsPreviewHeader`）。
 
-    private static let hiddenNativeAffordances = NSHashTable<UIView>.weakObjects()
-    private static var didLogNativeAffordances = false
+    /// ★ 2026-10-09（照片 61）：**封面自己重排的那一刻**立刻按住它。
+    ///
+    /// 换歌时 Spotify 会**新建**一个封面（contentlayer 换 cell：日志 53 的
+    /// `cell-5000 hidden` → `cell-5001` 可见），而我们只藏了**上一个对象**
+    /// ⇒ 新封面整张露在屏幕上，直到下一次复查节拍（≤0.3s）才被按掉。
+    /// 照片 61 就是这个空档：`24,163,366,366` 那张原生封面（当时还是 loading 占位）
+    /// 大剌剌地铺在歌词底下，而我们的缩略图 / 上移的标题都还在。
+    ///
+    /// 轮询改不了这件事（0.3s 就是空档本身），所以挂 `CoverArtTiltView.layoutSubviews`
+    /// （见 `CoverFlashGuard.x.swift`）——**它一布局就按，不等下一拍**。
+    ///
+    /// ## 门禁与成本（独立复核提的：这条路可能很热）
+    ///
+    /// * 只认**够大、在窗口里**的那个 tilt（`bounds.width >= 200` + `window != nil`）——
+    ///   列表里那张被折成 0 高的卡上行不行都不必试；
+    /// * **新对象立刻走一次**（`tilt !== lastGuardedTilt`）—— 这正是"换歌"的那一下；
+    ///   同一个对象连着布局则按 50ms 节流（≈20 次/秒上限，且每次都是有界走查）；
+    /// * 只在**我们确实铺着**（`isOpen` 或我们的层还在屏上）时动手；
+    /// * **不改任何别人的布局**，只把当前那张主封面写成 `alpha = 0`（与每拍那条同一条路）。
+    static func coverDidLayOut(from tilt: UIView) {
+        guard isEnabled, #available(iOS 26.0, *) else { return }
+        guard isOpen || coverHost != nil || lastContainer != nil else { return }
+        guard tilt.window != nil, tilt.bounds.width >= 200 else { return }
+        guard let page = lastPage, page.window != nil else { return }
 
-    static func hideNativeLyricsAffordances(in page: UIView) {
-        // **一趟 BFS 收全部**（三个 id）：原来是三次独立走查，
-        // 而这条每 0.5s 就要跑一次 —— 一次走查够了。
-        //
-        // ⚠️ 底部那颗「显示歌词 / 隐藏歌词」胶囊**不在这里管** —— 它归 `DeclutterChrome`
-        //    （见 `turnOffSpotifySingalong`）：那边要**按它**才能把 Spotify 自己的单行歌词
-        //    连"抬高封面"一起关掉，而我们如果在别处先把它 `alpha = 0`，两处就抢同一个视图了。
-        var buttons: [UIView] = []
-        var visited = 0
-        var queue: [UIView] = [page]
-        while !queue.isEmpty, visited < maxNodes {
-            let view = queue.removeFirst()
-            visited += 1
-            if let id = view.accessibilityIdentifier, nativeLyricsAffordanceIDs.contains(id) {
-                buttons.append(view)
-            }
-            queue.append(contentsOf: view.subviews)
-        }
+        let isNewCoverObject = tilt !== lastGuardedTilt
+        let now = CFAbsoluteTimeGetCurrent()
+        guard isNewCoverObject || now >= nextCoverGuardAt else { return }
 
-        for button in buttons {
-            let row = widestRowAncestor(of: button) ?? button
-            // ★★ 用 **`alpha = 0`**，不用 `hidden`：这一带的 Encore 容器会因 `hidden`
-            //    **重排**，把它那一格的高度收掉，于是整块内容会位移。
-            //    `alpha = 0` 保住那一格 ⇒ 布局不动、看不见，`hitTest` 也照样跳过它。
-            if row.alpha > 0.01 {
-                row.alpha = 0
-                hiddenNativeAffordances.add(row)
-            }
-        }
-        guard !didLogNativeAffordances, hiddenNativeAffordances.count > 0 else { return }
-        didLogNativeAffordances = true
-        writeDebugLog(
-            "[\(logTag)] hid \(hiddenNativeAffordances.count) native lyrics affordance(s)"
-                + " (the card's header row with the share/full-screen buttons)"
-        )
+        lastGuardedTilt = tilt
+        nextCoverGuardAt = now + coverGuardInterval
+
+        keepNativeCoverHidden(in: page)
     }
 
-    /// 从一颗按钮往上走，第一个"和卡片一样宽"的祖先 —— 就是那一行的容器。
-    private static func widestRowAncestor(of view: UIView) -> UIView? {
-        var node: UIView? = view
-        var hops = 0
-        while let current = node, hops < 8 {
-            if current.bounds.width >= 350 { return current }
-            node = current.superview
-            hops += 1
-        }
-        return nil
-    }
-
-    /// 写回我们藏过的那几个原生入口（**只在关开关 / 离页时**调）。
-    private static func restoreNativeLyricsAffordances() {
-        for view in hiddenNativeAffordances.allObjects { view.alpha = 1 }
-        hiddenNativeAffordances.removeAllObjects()
-        didLogNativeAffordances = false
-    }
+    /// 事件驱动那条路的自节流（见 `coverDidLayOut`）。
+    private static var nextCoverGuardAt: CFAbsoluteTime = 0
+    private static let coverGuardInterval: CFAbsoluteTime = 0.05
+    /// 上一次"事件驱动"按住的是哪一个 tilt：**换了新对象就立刻再走一遍**（换歌那一下必须零延迟），
+    /// 同一个对象则受节流（见 `coverDidLayOut`）。
+    private static weak var lastGuardedTilt: UIView?
 
     /// 铺一次；失败就退回"未展开"并**开重试窗口**。
     ///
@@ -1307,6 +1288,10 @@ enum NowPlayingLyricsPlate {
         // 那时图也换过来了。这一拍 `ensureCover` 会退回 `firstImage(in: source)`，
         // 也就是**当前树里真实那张**，不会比原来差。
         if lastArtworkTrackId != trackId {
+            // ★ 2026-10-09：把**上一首**那张图记下来 —— 下一次真的去抓树时要用它判"树换过来了没有"。
+            previousArtworkImage = artworkCache[lastArtworkTrackId]
+            staleArtworkTrackId = ""
+            artworkTrackChangedAt = CFAbsoluteTimeGetCurrent()
             lastArtworkTrackId = trackId
             writeDebugLog(
                 "[\(logTag)] track just changed — not caching the artwork this tick"
@@ -1318,6 +1303,39 @@ enum NowPlayingLyricsPlate {
         guard let list = findByIdentifier(listIdentifier, in: page),
               let source = visibleCover(in: list, page: page),
               let image = firstImage(in: source) ?? anyCoverImage(in: list) else { return nil }
+
+        // ★ 2026-10-09（照片 61）：**"下一拍树就换过来了"这个假设不成立。**
+        //
+        // 日志 53 的换歌现场（同一秒）：
+        // ```
+        // 08:08:35  [NPVLyrics] artwork picked … ImageView 366×366 at 24,163,366,366
+        // 08:08:35  [PLAYER] track changed — pos=0.3s dur=225.0s
+        // 08:08:36  [NPVLyrics] remembered this track's artwork 366×366 (cache 2/8)   ← 抓到的还是旧那张
+        // ```
+        // 于是**上一首的图被写进新曲目的缓存**，而 `ensureCover` 优先吃缓存 ⇒ 缩略图一直显示上一首
+        // （照片 61 的缩略图就是上一首那张橙色封面，标题却已经是新歌）。
+        //
+        // 判据：抓到的图**和上一首缓存里那张是同一个对象** ⇒ 树还没换过来 ⇒ 这一拍不写缓存。
+        // 这一拍 `ensureCover` 会退回 `firstImage(in: source)`（同一张，画面对齐）；
+        // 树真的换过来之后，对象不同 ⇒ 正常写缓存。
+        //
+        // ⚠️ **只在换歌那一小段窗口里判**（独立复核指出的死角）：同一个对象也可能是
+        //    Spotify 自己的图缓存把**同一张专辑**的图复用了（连听两首同专辑），
+        //    那时这条判据会**永久**不让缓存写进去 —— 画面不会错（兜底拿的是同一张真图），
+        //    但"点开之前就先认下这张图"这个收益没了。所以给它一个 1.5s 的窗口：
+        //    够覆盖"树晚一拍到一秒"（日志 53 是 ≤1s），之后照常缓存。
+        if let previous = previousArtworkImage,
+           image === previous,
+           CFAbsoluteTimeGetCurrent() - artworkTrackChangedAt < staleArtworkWindow {
+            if staleArtworkTrackId != trackId {
+                staleArtworkTrackId = trackId
+                writeDebugLog(
+                    "[\(logTag)] the tree still shows the previous cover — not caching it for this track"
+                        + " (falling back to the live image, will retry next tick)"
+                )
+            }
+            return nil
+        }
 
         artworkCache[trackId] = image
         artworkCacheOrder.append(trackId)
@@ -1333,6 +1351,17 @@ enum NowPlayingLyricsPlate {
 
     /// 上一次认图时的曲目 id。用来识别"刚换歌那一拍"（见 `rememberArtworkIfNeeded`）。
     private static var lastArtworkTrackId = ""
+
+    /// 「曲目刚变」那一刻，**上一首**缓存里那张图（见 `rememberArtworkIfNeeded` 的换歌判据）。
+    private static var previousArtworkImage: UIImage?
+
+    /// 已经为哪一首报过"树里还是上一首的图"（只报一次，别每拍刷屏）。
+    private static var staleArtworkTrackId = ""
+
+    /// 这一次"曲目刚变"发生的时刻 —— 那条"图还是上一首的"判据只在这个窗口里生效
+    /// （见 `rememberArtworkIfNeeded`：同专辑连播时图可能真的是同一个对象，不能永久拦）。
+    private static var artworkTrackChangedAt: CFAbsoluteTime = 0
+    private static let staleArtworkWindow: CFAbsoluteTime = 1.5
 
     /// ⚠️ 收的是**已经认准的那一个**（由 `visibleCover` 挑出来），不再自己按 id 找一遍 ——
     /// 上一版这里又 `findByIdentifier` 了一次，于是"挑封面"与"藏封面"用的是两个不同的视图。

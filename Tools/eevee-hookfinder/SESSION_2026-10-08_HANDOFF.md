@@ -141,6 +141,10 @@
 [NPVLyrics] expanded — thumbnail 72pt at …, lyrics area …, title row lifted …     ← 展开要成
 [NPVLyrics] track just changed — not caching the artwork this tick (…)            ← 换歌那拍
 [NPVLyrics] hid 1 native lyrics affordance(s) (the card's header row with the share/full-screen buttons)
+             ⛔ **这一行已作废**：2026-10-09（日志 53 + 照片 60）查明那一行「歌词 · 分享 · 全屏」
+                是我们自己画的（`AppleMusicLyricsOverlayView.previewHeader`），藏 Spotify 的原生入口
+                屏幕上不会有任何变化；整块 `hideNativeLyricsAffordances` 已删。
+                见 `SESSION_2026-10-09_HANDOFF.md` §2 / §4.1。
 [NPVLyrics] word-by-word lyrics are now driven per frame (shared CADisplayLink)    ← 逐词流畅度
 
 [Declutter] turned Spotify's own singalong line off through its pill (…)

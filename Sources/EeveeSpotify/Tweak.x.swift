@@ -407,6 +407,10 @@ struct EeveeSpotify: Tweak {
         // 做法照 spoti.pw v0.21.1 的 `PlayerControls.x`（GPL-3.0），见 `NowPlayingControlsPlate` 文件头。
         activateNowPlayingControls()
 
+        // ★ 2026-10-09：换歌那一瞬间的"大封面闪一下"（照片 61）—— **事件驱动**地按住封面。
+        //   那条每 0.3s 的复查节拍永远追不上"新封面刚建好"的那一帧（见 `CoverFlashGuard.x.swift`）。
+        activateCoverFlashGuard()
+
         // ⛔「播放器双击手势」已于 2026-10-04 删除（用户拍板：先删掉，之后再搞）。
         //   原因（都在日志里）：① 手势挂在**页面根视图**上 ⇒ 在播放键上方双击也会跳歌
         //   （`[Gestures] diag … singleTapsAbove=2`，日志 39/40/41）；② 它最该起作用的那一面

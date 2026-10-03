@@ -63,6 +63,20 @@ struct AppleMusicLyricsOverlayView: View {
     /// 现在由我们自己画（`previewHeader`），所以歌词内容要让出同样多的高度，
     /// 否则会被顶进我们画的标题栏里。
     var previewHeaderInset: CGFloat = 0
+
+    /// 预览那一行「歌词 · 分享 · 全屏」**要不要自己画**。
+    ///
+    /// 默认 `true`（卡片内嵌那一档要它：Spotify 那块 39pt 的面板是父视图自己刷的色，
+    /// 子视图盖不住，标题栏只能我们自己出）。
+    ///
+    /// ★ 2026-10-09：**"歌词进播放器"这一档要 `false`。**
+    /// 用户照片 60 报"「歌词 · 分享 · 打开全屏歌词」这几个按钮还在"，而那一行**是我们自己画的**：
+    /// 实测几何对得上 —— 容器 20,210,374,378、内边距 14、两个 40×32 的按钮 ⇒ 分享键中心
+    /// 319pt、全屏键中心 364pt，照片里量的正是 319 / 364。原生那一行（`lyrics-share-button`
+    /// 那三颗）在**列表里那张被折成 0 高的卡**上（日志 53 的 `2.CollectionViewCell@20,838,374,0`），
+    /// 根本不在屏上 —— 所以藏原生入口永远是白费力气（见 `NowPlayingLyricsPlate` 里那段）。
+    var showsPreviewHeader: Bool = true
+
     /// 点行跳转。
     let onSeek: ((TimeInterval) -> Void)?
     /// 曲名 / 歌手 —— 自绘壳的标题栏用。
@@ -141,7 +155,12 @@ struct AppleMusicLyricsOverlayView: View {
                         //
                         // 120 这个值是按最坏情况倒推的：单行歌词也要让内容高过视口，
                         // 这样任何一首歌的当前行都能居中。
-                        top: showsProviderFooter ? 8 : 6,
+                        // ⚠️ 关掉预览标题栏那一档（"歌词进播放器"）给 **24pt**：
+                        //    没有标题栏之后内容直接顶到容器上沿，而**无壳兜底那条淡出**
+                        //    （`legacyFadeStops` 的 `fadeTopRatio = 0.08`，容器 378pt ⇒ 约 30pt）
+                        //    会把第一行压暗。原来有标题栏时内容从 45pt 开始、正好在淡出带之下 ——
+                        //    这里留 24pt（加上 `scrollInsets` 里那次同样的加法 ⇒ 实际 48pt）保持同样的"干净起点"。
+                        top: showsProviderFooter ? 8 : (showsPreviewHeader ? 6 : 24),
                         leading: sideInset,
                         bottom: showsProviderFooter ? 46 : 120,
                         trailing: sideInset
@@ -166,7 +185,14 @@ struct AppleMusicLyricsOverlayView: View {
                     // `AnyView(cond ? a : b)`：`a`/`b` 虽然都是 `some View`，
                     // 但是两个不同的具体类型，三元表达式本身没法统一它们
                     // （`AnyView` 是在外面套的，救不了里面）。
-                    headerContent: showsProviderFooter ? AnyView(shellHeader) : AnyView(previewHeader),
+                    // ★ 2026-10-09：预览标题栏可以被**关掉**（"歌词进播放器"那一档要关，
+                    //    见 `showsPreviewHeader`）；关掉时传 `nil` —— 这一页自己的排版
+                    //    会从 `safeArea.top + headerHeight` 那一档退回 `contentInsets.top`
+                    //    （`AppleMusicLyricsPage` 里 `headerContent == nil` 那一条；
+                    //    注意它在 `scrollInsets` 里会被加两次 ⇒ 实际让出 2×`contentInsets.top`）。
+                    headerContent: showsProviderFooter
+                        ? AnyView(shellHeader)
+                        : (showsPreviewHeader ? AnyView(previewHeader) : Optional<AnyView>.none),
                     footerContent: showsShell ? AnyView(shellFooter) : nil,
                     closeContent: showsShell ? AnyView(shellClose) : nil,
                     // 全屏：曲名 + 歌手两行（62）；预览：一行「歌词」+ 两个按钮（39，
@@ -175,9 +201,9 @@ struct AppleMusicLyricsOverlayView: View {
                     // 预览的兜底值刻意是 39 而不是 62：量不到卡片容器时（退化挂到歌词
                     // 视图上）用全屏那两行的高度会让标题栏占掉卡片 1/5 的高度，
                     // 把歌词整体往下推一截；预览标题栏本来就只有一行。
-                    headerHeight: previewHeaderInset > 0
-                        ? previewHeaderInset
-                        : (showsProviderFooter ? 62 : 39),
+                    headerHeight: showsProviderFooter
+                        ? 62
+                        : (showsPreviewHeader ? (previewHeaderInset > 0 ? previewHeaderInset : 39) : 0),
                     // ⚠️ 预览必须传 0：卡片里 `safeArea.top == 0`，再用全屏那套 -30
                     // 会把整条标题栏推到卡片外面 —— 表现就是"预览一个按钮都没有"。
                     //
@@ -195,7 +221,14 @@ struct AppleMusicLyricsOverlayView: View {
                     // 卡片只有 320pt，按比例算（0.86）会得到 45pt 的大淡出带；
                     // 而底边距是 120pt（为了让内容可滚、当前行能居中），
                     // 那片空白本来就不该参与淡出 —— 所以起点要落在最后一个可见行附近。
-                    fadeBottomOpaqueRatio: showsProviderFooter ? 0.86 : 0.62,
+                    // ⚠️ 关掉预览标题栏的那一档（"歌词进播放器"）**必须传 1.0**：
+                    //    `headerContent == nil` 会让 `AppleMusicLyricsPage` 退回 `legacyFadeStops`
+                    //    （整屏比例口径），而 0.62 会给这一块**加一条本来没有的底部淡出带**
+                    //    （照片 60 里最下面那几行是清楚的）。原来有标题栏时走的是"按壳占位算"
+                    //    那条路、底部本来全不透明 ⇒ `1.0` 才是**保持原样**。
+                    fadeBottomOpaqueRatio: showsProviderFooter
+                        ? 0.86
+                        : (showsPreviewHeader ? 0.62 : 1.0),
                     // ⚠️ 预览必须传 0：它**没有控件栏**，而淡出遮罩是按
                     // `高度 − footerHeight` 算起点的。写死 116 会让 320pt 高的卡片
                     // 从 y≈204 就开始淡出 —— 这才是"下淡出太高"的真正原因

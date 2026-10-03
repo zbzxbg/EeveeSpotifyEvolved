@@ -343,9 +343,15 @@ extension UserDefaults {
     ///
     /// ⇒ **藏视图只去得掉内容，Spotify 的"抬高封面"那个功能还在**。用户要的是 **59**
     /// （= 功能真的关掉）。
-    /// ⇒ 机制已改成 **替用户按下 Spotify 自己那颗「显示/隐藏歌词」胶囊**
-    /// （`DeclutterChrome.turnOffSpotifySingalong`）：内容没了、封面也回到正常位置。
-    /// 只有**真的关掉了**才会把胶囊一起按住（否则用户会卡在被抬的状态里出不来）。
+    ///
+    /// ★ 2026-10-09（照片 60 之后定案，现在是**三层**）：
+    ///   ① `DeclutterChrome.applySingalongPreference` 当场把那一行的视图 `hidden`
+    ///      （屏幕上立刻没有那一行 —— 上一轮把这一层删掉、只留②，于是②一失败就什么都没发生）；
+    ///   ② 同一条路里替用户按下 Spotify 自己那颗胶囊（判据：类名子串 **或** 无障碍标签
+    ///      「显示歌词 / 隐藏歌词」——日志 53 证明只靠类名子串是**零命中**的）；
+    ///   ③ **`lyrics_under_cover_art_enabled=false`** 的远端配置替换
+    ///      （`DynamicPremium+ModifyingFunctions`）—— 连"封面被抬起来"的布局后果与那颗胶囊
+    ///      一起从根上关掉，**下次启动**生效。
     static var hideSingalongLine: Bool {
         get {
             container.object(forKey: hideSingalongLineKey) as? Bool ?? true

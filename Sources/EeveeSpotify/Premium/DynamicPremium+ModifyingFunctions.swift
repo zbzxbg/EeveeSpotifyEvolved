@@ -430,11 +430,37 @@ private let propertyReplacements = [
     // 而"与「关于艺人」并列的歌词卡片"正是这个词的字面意思（入口：点了才进全屏歌词）。
     // scope/name 都来自服务端实际下发的内容（不是猜的）→ `setBool` 是"钉已存在的值"，
     // 不存在命中 0 条的空枪风险；服务端要是本来就是 true，这一行等于没写。
-    EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .setBool(true))
+    EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .setBool(true)),
+
+    // ─────────────────────────────────────────────────────────────────────
+    // ★ 2026-10-09：「封面下单行歌词」（跟唱那一行）—— **用户那个开关的第三层**。
+    // ─────────────────────────────────────────────────────────────────────
+    //
+    // 它由远端配置控制，真机日志 53 里逐字可见（`[Flags] lyrics flag`）：
+    //
+    //     scope=ios-nowplaying-contentlayers-impl name=lyrics_under_cover_art_enabled bool=true
+    //
+    // **这个名字就是用户那句话**（设置页里那行开关叫「隐藏封面下单行歌词」）：
+    // 关掉它 ⇒ 那一行、以及"把封面抬起来"的布局后果、底部那颗「显示/隐藏歌词」胶囊
+    // 一起消失。为什么必须做到这一层：前两层（`DeclutterChrome` 藏那一行 / 按那颗胶囊）
+    // 都只解决"看得见的那部分"——照片 58 与 60 两次现场都是这么来的。
+    //
+    // ⚠️ 只用 `setBool`（**只改服务端已下发的值，绝不新增**）：scope 与 name 都来自真机日志，
+    //    不存在"凭空插一条 AssignedValue"的风险；服务端真没下发这条时这一枪是空的，
+    //    日志里的 `[Flags] replacement … — 0 match(es)` 能一眼看出来。
+    // ⚠️ **开关关着时整条跳过**（门禁在 `modifyAssignedValues`）：用户要回 Spotify 的原样。
+    EeveePropertyReplacement(
+        name: "lyrics_under_cover_art_enabled",
+        scope: "ios-nowplaying-contentlayers-impl",
+        modification: .setBool(false)
+    )
 ]
 
 /// 上面那条 flag 的名字（开关判定用，避免再抄一遍字面量）。
 private let lyricsEntryPointFlagName = "lyrics_entry_point_enabled"
+
+/// 「封面下单行歌词」那条 flag 的名字（同上）。
+private let singalongLineFlagName = "lyrics_under_cover_art_enabled"
 
 /// 「歌词入口 flag 已按开关跳过」只打一次 —— `modifyAssignedValues` 每次 customize
 /// 响应都会跑，重复打只会刷屏。
@@ -444,6 +470,18 @@ private func reportEntryPointFlagSkippedOnce() {
     guard !entryPointFlagSkippedReported else { return }
     entryPointFlagSkippedReported = true
     writeDebugLog("[Flags] lyrics_entry_point_enabled — SKIPPED (switch off, A/B)")
+}
+
+/// 「封面下单行歌词」那条被跳过时也打一行（同上，只打一次）。
+private var singalongFlagSkippedReported = false
+
+private func reportSingalongFlagSkippedOnce() {
+    guard !singalongFlagSkippedReported else { return }
+    singalongFlagSkippedReported = true
+    writeDebugLog(
+        "[Flags] \(singalongLineFlagName) — SKIPPED (the hide-the-singalong-line switch is off;"
+            + " Spotify's own behaviour is left alone)"
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -551,8 +589,9 @@ private func reportLyricsReplacementOutcome(_ values: [AssignedValue]) {
 
         // 关掉开关时 `hits` 照样是 1（服务端确实下发了这条），但**我们没改**。
         // 不标出来，日志就会读成"改了"，判读 A/B 时会直接得出相反结论。
-        let skipped = name == lyricsEntryPointFlagName
-            && !NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced
+        let skipped = (name == lyricsEntryPointFlagName
+                        && !NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced)
+            || (name == singalongLineFlagName && !UserDefaults.hideSingalongLine)
 
         writeDebugLog(
             "[Flags] replacement \(key) — \(hits) match(es)"
@@ -617,6 +656,15 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
            replacement.name == lyricsEntryPointFlagName,
            !NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced {
             reportEntryPointFlagSkippedOnce()
+            continue
+        }
+
+        // ★ 2026-10-09：同一条纪律给「封面下单行歌词」——用户把那个开关关掉时，
+        //   这一条内置替换**整条跳过**，让 Spotify 的行为原样保留（他没有要求我们改它）。
+        if index < builtInReplacementCount,
+           replacement.name == singalongLineFlagName,
+           !UserDefaults.hideSingalongLine {
+            reportSingalongFlagSkippedOnce()
             continue
         }
 
