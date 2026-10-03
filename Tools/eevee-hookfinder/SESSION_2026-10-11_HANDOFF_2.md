@@ -1,11 +1,10 @@
-# SESSION_2026-10-11_HANDOFF_2 — 收藏键（绿色 ✓）搬进 header + 无时间轴歌词不再误报「未找到」
+# SESSION_2026-10-11_HANDOFF_2 — 控件条（照片 71 圈的两处）+ 关歌词时标题去左上角（照片 72/73）+ 无时间轴歌词不再误报
 
 > **读的顺序**：先 [`SESSION_2026-10-11_SUMMARY.md`](SESSION_2026-10-11_SUMMARY.md)（整场汇总：照片 60–70 / 日志 53–55），
-> 再看本文件（它是那之后的一轮）。上一轮的交接在
-> [`SESSION_2026-10-11_HANDOFF.md`](SESSION_2026-10-11_HANDOFF.md)（进出转场 / 胶囊 / 几何）。
+> 再看本文件。上一轮的交接在 [`SESSION_2026-10-11_HANDOFF.md`](SESSION_2026-10-11_HANDOFF.md)。
 >
-> **这一轮的输入**：用户点名的四类参考件 —— `C:\dsh\ipa` 里的日志、`Spotify-9.1.88.ipa`、
-> `dump-9.1.88.txt`、`C:\dsh\else\{40,41}.jpg`（**kumone 听歌页**）与 `70.jpg`（我们）。
+> **这一轮的输入**：用户点名的参考件 —— `C:\dsh\ipa` 里的日志（最新仍是 **55**）、`Spotify-9.1.88.ipa`、
+> `dump-9.1.88.txt`、`C:\dsh\else\{40,41}.jpg`（kumone）、`70.jpg`（我们）、以及**新给的 71/72/73**。
 > **输出**：2 个源码文件 + 2 个 l10n 文件（**未编译、未装机**）。
 
 ---
@@ -14,39 +13,44 @@
 
 | | |
 |---|---|
-| **仓库起点** | `c8f766e`（= 功能批 `b9e250b` + 修正 `5541023` + 汇总文档）；工作区干净 |
-| **★ 先纠正一条**：真机上跑的**已经是 `b9e250b`** | 照片 70（20:21）晚于 `b9e250b` 的提交（19:27），而它显示的正是那一批的几何（缩略图贴导航条下沿）+ 新音量条 ⇒ **几何 / 排版 / 音量 / 胶囊这几项已在照片 70 上确认落地** |
-| **❌ 但 `C:\dsh\ipa` 里最新日志仍是 55**（18:29，**改前**那一版） | 55 里**没有** `(anchors: …)`、**没有**胶囊的 `hide #N`、**没有**三种说明文案 ⇒ `b9e250b` 的**行为面一份日志都没有**（§6 那张单子还挂着） |
-| **这一轮改了两件** | ★ **S1**：无时间轴歌词不再冒充「未找到歌词」（新键 `lyrics_no_timeline`）★ **S3a**：Spotify 自己的**收藏键（绿色 ✓）搬进 header 行的右侧** —— kumone 的 ♥ 位 |
-| **下一个动作** | CI → 装机 → **日志 56 + 照片**，按 §6 收口 |
-| **本机没有 Swift 工具链** | 六条自检全绿（§5），但类型检查只能靠 CI |
+| **仓库起点** | `c8f766e`，之后这一场有两笔：`f2dc707`（S1 + 当时那版"✓ 搬 header"）、本轮的这一笔 |
+| **★ 用户改了方案** | 上一轮点头的「绿 ✓ 搬进 header」**已按第二版方案撤掉**（用户原话：「那个绿色勾就**让它呆在那里**」）⇒ 换成 **控件条**方案（§2） |
+| **S1 保留** | 无时间轴歌词不再冒充「未找到歌词」（§3）—— 这一条不受方案变化影响 |
+| **❌ 日志仍停在 55** | `C:\dsh\ipa` 里**没有** `b9e250b` 之后的日志 ⇒ 上一轮那张验收单（转场 / 锚点 / 三种文案 / 胶囊计数）**仍然挂着** |
+| **这一轮改了两件事** | ★ **控件条**：[分享 58] [歌词键 215] [绿 ✓ 371（不动）] ★ **关着歌词时标题/歌手贴左上角**（给控件条腾地方） |
+| **下一个动作** | CI → 装机 → **日志 56 + 照片 74+**，按 §6 收口 |
+| **本机没有 Swift 工具链** | 六条自检全绿（§5），类型检查只能靠 CI |
 
 ---
 
-## 1. 照片 40 / 41 / 70 的实测（这一轮**重新裁图量过**，不是照抄文档）
+## 1. 照片 71/72/73 的实测（这一轮**重新裁图量过**）
 
-### 1.1 kumone（40 = 无歌词、41 = 有封面；都是 591×1280px，按 ×0.7005 换成 414pt 宽）
+### 1.1 用户的原话（**照这句做**）
 
-| 区块 | 实测 |
-|---|---|
-| header | 缩略图 67–125（40 有、41 没有）；标题粗体 + 艺人；**右侧 ♥ 中心 ≈ (449px→314.5pt, 138px→96.5pt)**、**⋯ 中心 ≈ (509px→356.6pt)** |
-| 中间那块 | 40：音符 + 「纯音乐，请欣赏」；41：居中大圆角封面 |
-| 进度条 / 三键 / 音量条 / 三圆钮 | 647 / 722 / 783 / 833 |
+> 照片 71 我圈的两个，一放分享按钮，二放歌词开关，然后那个绿色勾就让它呆在那里。
+> 其他的按键也不用改了。但是这个方案要解决一个问题（照片 72）：一这个位置会占用
+> 不开歌词进入播放器这个功能不开启时，歌手/歌曲名字会挡住。所以（照片 73）：可以和
+> kumone 一样，在不开展示歌词的情况下，就把歌曲/歌手放到左上角，在开启展示歌词之后，
+> 封面再到左上角，然后歌曲/歌手往右让位。
 
-⇒ **♥ 的中心距页面右边 = 414 − 314.5 ≈ 99.5pt**（本仓库取 **97**，见 §4.1）。
+### 1.2 量出来的数（591×1280px → 414pt 宽，×0.7005）
 
-### 1.2 我们（照片 70）
+| 东西 | 照片里的位置 | 换算 |
+|---|---|---|
+| 圈 ①（放**分享键**） | 中心 ≈(83, 906)px | **(58, 635)pt** |
+| 圈 ②（放**歌词键**） | 中心 ≈(317, 892)px | **(222, 625)pt** |
+| 绿色 ✓（**不动**） | 中心 ≈(531, 894)px | **(371, 626)pt** |
+| 进度条 | y ≈969px | **679pt** |
+| 照片 72：原生**歌名** | x 48px、y ≈882px | x **34pt**、y **618pt** |
+| 照片 72：原生**歌手** | y ≈914px | **640pt** |
+| 照片 72：**原生大封面顶边** | y ≈207px | **145pt** |
+| 照片 72：导航条下沿（`v` 那颗 48pt） | 46…94px | **96pt** |
+| 照片 73（kumone）：歌名 / 歌手 | 124 / 158px | **87 / 111pt**（x 都是 34） |
 
-| 区块 | 实测 |
-|---|---|
-| 导航条 | `v`(≈73pt) / 歌单名 `1` / `⋯`(≈380pt) —— Spotify 自己的，不动 |
-| header | 缩略图 **104–175**（= 导航条下沿 + 8）、标题 119 / 艺人 148 |
-| 歌词 | 242 → ~660（当前行居中 ≈440） |
-| ★ **收藏键（绿色 ✓）** | **中心 ≈ (529.5px→371pt, 894px→626pt)，直径 ≈33pt** —— 浮在歌词区右下、进度条（677）上方 ≈50pt |
-| 进度条 / 五键 / 底部四格 / 音量条 | 677 / 752 / 815 / 844 |
-
-⇒ 与 kumone 的差距里，**唯一"能立刻补上、而且用户已经点名"的一项**就是：
-**kumone 的 ♥ 在 header 行右侧（97pt 边距、与缩略图同一条中线），我们的 ✓ 浮在歌词区右下**。
+⇒ 两条结论：
+1. **控件条 = y 626 那一条**（绿色 ✓ 本来就在那儿），三颗按 **58 / 215 / 371** 排（等距 ≈157；
+   ② 用户量的是 222，取 215 纯粹为了等距 —— 不满意就改 `toggleCenterX`）；
+2. **关着歌词时标题行只有 96…145 这 49pt 可用**（标题 24 + 歌手 22 = 46pt）⇒ 落点取 `navBottom + 2 = 98`。
 
 ---
 
@@ -54,94 +58,59 @@
 
 | 文件 | 改动 |
 |---|---|
-| `Sources/EeveeSpotify/Lyrics/…`（**未改**，只读证据） | —— |
-| `Sources/EeveeSpotify/Appearance/NowPlayingLyricsPlate.swift` | ★ **S1**：`noticeText()` 第 ③ 段拆开（"有行但一行时间都没有" ≠ "没找到"）；★ **S3a**：新增 `applyHeaderActionTransform` / `restoreHeaderActionTransform` / `visibleAddToButton` / `firstVisibleAddToButton` / `clippingNote`，常量 `addToButtonIdentifier` / `headerActionTrailingInset = 97`，状态 `headerAction` / `headerActionOriginalTransform` / 两条日志闸；`layoutAndMount` 里 ②b 调用；`closeEverything` 里**无条件**还原 |
-| `layout/…/EeveeSpotify.bundle/{en,zh-CN}.lproj/Localizable.strings` | 新键 `lyrics_no_timeline`（en: "These lyrics have no timing" / zh-CN:「这首歌的歌词没有时间轴」） |
+| `Sources/EeveeSpotify/Appearance/NowPlayingLyricsPlate.swift` | ★ **控件条**：新增 `applyControlBand` / `clearControlBand` / `visibleShareButton` / `firstVisibleShareButton` / `isOnScreen` / `bandNote` + 常量 `controlBandMidY=626` / `shareButtonCenterX=58` / `toggleCenterX=215`；`toggleFrame` 改成"**先控件条**，量不出来才退回老的三级判据（`fallbackToggleFrame`）"；★ **关着歌词时标题行去左上角**：新增 `applyClosedTitleTransform` / `clearClosedTitleTransform`（落点 `navBarBottom + 2`）；调用点：`apply` / `reconcile`（每拍）/ `closeEverything`（收起那一刻）/ `remove`（关开关） |
+| `layout/…/EeveeSpotify.bundle/{en,zh-CN}.lproj/Localizable.strings` | 新键 `lyrics_no_timeline`（en: "These lyrics have no timing" / zh-CN:「这首歌的歌词没有时间轴」）—— **S1，保留** |
 | `Tools/eevee-hookfinder/SESSION_2026-10-11_HANDOFF_2.md` | 本文件 |
+
+### 2.1 时序（改完之后）
+
+```
+进播放器（功能开着、没展开歌词）
+  viewWillAppear → apply → applyControlBand（分享键 → 58,626）
+                        → applyClosedTitleTransform（标题行 → 98，x 不变）
+  之后每拍：reconcile 先 applyControlBand，再 applyClosedTitleTransform（幂等）
+
+点歌词键展开
+  toggle → rememberExpanded(true) → openAndMount → layoutAndMount
+        → applyTitleTransform（标题行 → 缩略图右边；**覆盖**刚才那条"去左上角"）
+        → 歌词铺上；控件条不动（分享键仍在 58,626）
+
+再点收起
+  closeEverything（isEnabled 且页面还在窗口里）→ 立刻摆回"关着的样子"（标题回左上角）
+  页面真的走了（page.window == nil）→ clearControlBand + clearClosedTitleTransform（屏幕外）
+```
 
 ---
 
-## 3. S1 ★ 无时间轴歌词被误报成「未找到歌词」——判据拆开了
+## 3. S1 ★ 无时间轴歌词被误报成「未找到歌词」——判据拆开了（**保留**）
 
-### 3.1 事实链（**两行代码就能对上**）
+事实链（两行代码就能对上）：
 
 | # | 事实 | 出处 |
 |---|---|---|
 | ① | `LyricLinesAdapter.toAppleMusicLyricLines()` 第一件事就是 `.filter { $0.offsetMs != nil }`；**一行时间都没有 ⇒ 返回空** | `Sources/EeveeSpotify/Lyrics/AppleMusic/LyricLinesAdapter.swift:21` |
 | ② | `currentLines()` 把"空"翻成 `nil` ⇒ 我们这层没有行模型可画 | `NowPlayingLyricsPlate.swift`（`currentLines()`） |
-| ③ | 而注入给 Spotify 的那份 payload **是带这些行的**（`offsetMs` 全 0 / `timeSynchronized=false`）⇒ **Spotify 自己的歌词卡列得出全文**，只有我们这层列不出 | 上一轮文档 §5·S1 |
-| ④ | 旧 `noticeText()` 的第 ③ 条把"有行却画不出来"**一律**写成「未找到歌词」 | 改动前的 `noticeText()` |
+| ③ | 注入给 Spotify 的那份 payload **是带这些行的** ⇒ Spotify 自己的歌词卡列得出全文 | 上一轮文档 §5·S1 |
+| ④ | 旧 `noticeText()` 第 ③ 条把"有行却画不出来"**一律**写成「未找到歌词」 | 改动前 |
 
-⇒ 用户看到的是「**歌词明明有，插件说未找到**」——这是**误报**，不是"没词"。
+改法：第 ③ 条先问"**有没有一行带 `offsetMs`**"，没有 ⇒ 新键 `lyrics_no_timeline`；有 ⇒ 才按"转换异常/没找到"说。
+四档现在各说各的：纯音乐 / **没有时间轴** / 查完了没有 / 还在查。
 
-### 3.2 改法（最小、只动一句话的判据）
-
-```swift
-if let dto = currentLyricsDto, !dto.lines.isEmpty {
-    // 一行时间都没有 ⇒ 数据在，只是没有时间轴。
-    if !dto.lines.contains(where: { $0.offsetMs != nil }) {
-        return "lyrics_no_timeline".localized
-    }
-    // 有行、也有至少一行带时间，却还是画不出来 ⇒ 转换异常，按"没找到"说（别做死键）。
-    return "ngzhwm_lyrics_unavailable".localized
-}
-```
-
-**四档现在各说各的**：纯音乐 / **没有时间轴** / 查完了没有 / 还在查。
-
-> ⚠️ 判据的**为什么**必须留在这条注释里：`currentLines()` 返回 `nil` 有三种原因，而"没有时间轴"
-> 与"真的没找到"在 UI 上给用户的承诺完全不同（前者是"你这首歌的数据就这样"，后者是"我没查到"）。
-
-### 3.3 还没做（**用户没点，先别做**）
-
-**静态列出全文**（不走时间轴、不高亮、不滚动）——那正是 kumone 照片 41「有封面、没有歌词排版」那一档的样子。
-它比"一句话"体验更好，但要动渲染层（`LyricLine` 目前**必须有 `time`**），属于另一件事。
+> 还没做（用户没点）：**静态列出全文**（不高亮不滚动）—— kumone 照片 41「有封面、没有歌词排版」那一档。
+> 它要动渲染层（`LyricLine.time` 是必填），属于另一件事。
 
 ---
 
-## 4. S3a ★ 收藏键（绿色 ✓）搬进 header 行的右侧
+## 4. 控件条与"标题去左上角"的三条设计取舍
 
-### 4.1 目标坐标是怎么来的（可复核）
+| # | 取舍 | 为什么这么定 |
+|---|---|---|
+| ① | **分享键是"视觉"搬运：搬过去之后点不到** | UIKit 的 hit-test 在祖先那层就问 `point(inside:)`；它被抬到 626 之后已经在 footer 那一行（≈792…836）之外。**用户 2026-10-11 明确选了"只搬，不要点击"**（「像就行」）⇒ 要分享走右上角 `⋯` 菜单里的 Share。`bandNote` 会把"到底被谁挡住"写进日志 |
+| ② | **绿 ✓ 一颗都不动** | 它本来就在 626 那一条（371），是控件条的天然参照物；用户原话「让它呆在那里」 |
+| ③ | **标题行只在"关着歌词"时才去左上角** | 展开时标题的位置由 `applyTitleTransform` 管（缩略图右边），两者写的是**同一行的 transform**，后者赢；`apply` 里因此先判 `isOpen` |
 
-* kumone 照片 40/41 的 ♥：中心 ≈ **314.5pt**、与缩略图**同一条中线** ⇒ 我们取
-  **中心 x = 页面右沿 − 97pt**（`headerActionTrailingInset`），**y = 缩略图的中线**（`geometry.thumb.midY`，照片 70 上是 ≈140）。
-* 为什么不用 kumone 的绝对 y（96.5）：**我们的 header 比它低 37pt** —— 上面那根 96pt 的 Spotify 导航条
-  （`v`/`1`/`⋯`）躲不开（§6.3 已定案）。所以"跟着我们自己的 header 中线"才是对的。
-
-### 4.2 ★ 判据必须是"**看得见的那一份**"（页里有**两份**）
-
-日志 54 的 `[NPVTree]` 逐字：
-
-```
-13.UIButton@0,0,48,48,hidden,id=Components.UI.AddToButton      ← 隐藏那份，BFS 里排在前面
-14.UIButton@0,0,48,48,id=Components.UI.AddToButton             ← 看得见那份
-15.StateMicroInteractionView<AddToButtonState>@-4,-4,56,56     ← 它的子视图（绿色圆圈的动画在这里）
-```
-
-⇒ **不能用 `findByIdentifier`**（它返回 BFS 第一份 = 那份 `hidden` 的）——那样位移会写在一个看不见的按钮上，
-**屏幕零变化，而日志还会说"成了"**（这正是本仓库规矩 1/11 的老坑）。
-所以 `firstVisibleAddToButton(in:)` 的判据是 `id + !isHidden + alpha > 0.01 + window != nil + 有尺寸`。
-
-走查起点**从小到大**（同 `progressUnitTop` 的思路，整页 BFS 会被列表的格子吃掉 800 的预算）：
-`npv.bottomStackView` → `SPTNowPlayingView` → `page`。
-
-### 4.3 手法：只写 `transform` 的平移分量
-
-* 位置由父视图的 Auto Layout 决定，**改 `frame` 会被下一拍写回**（本仓库老教训）；
-* 每拍用 `untransformed(button, in: page)` 拿"去掉我们那段位移"的模型 frame，再算 `dx/dy`
-  ⇒ 父视图重排 / 换歌重建都能跟上；
-* 只写平移，`a,b,c,d` **原样保留**（不假设它一定是 identity）；
-* **接管前先记下它自己的 `transform`**（`headerActionOriginalTransform`），收尾**原样写回**；
-* 收尾放在 `closeEverything` 那条 `guard` **之前**（无条件清账）—— 位移写在**别人的控件**上，漏一次它
-  就永远留在 header 上了。
-
-### 4.4 ⚠️ 三条**已知限制**（下一份照片要专门看这三条）
-
-| # | 限制 | 为什么会这样 | 现在怎么办 |
-|---|---|---|---|
-| ① | **只是"视觉"搬运，点不到** | UIKit 的 hit-test 在**祖先**那层就问 `point(inside:)` —— 搬到 header（≈140pt）之后它已经在父视图边界之外（`transform` 只改绘制与坐标换算，不改父视图命中范围） | **符合用户当下的要求**（原话「只要求像，暂时不做点击功能」）。要变成能点得另写转发，而本仓库 2026-10-10 刚把 `sendActions` 那类"替用户按"整块删掉 |
-| ② | **长标题会从 ✓ 底下滚过去** | 标题行被我们右移了 88pt（宽 308 ⇒ 116…424），而 ✓ 落在 293…341；kumone 是把标题**截断**在 ♥ 左边 | **不动**：现有的 `applyTitleMask` 有个坐标口径问题（`room = limit − titleGap` 没算标题自己的 page-x），贸然接上去会把标题**淡错位置**。列为下一轮候选（§7） |
-| ③ | **祖先若 `clipsToBounds`，✓ 可能被裁掉** | 它要从底部那一排往上搬 ≈486pt | 代码里**不自动清**别人的裁剪（清掉可能把别的被裁内容一起放出来），只**留一行日志**点名是谁：`WARNING: <类名> clips to bounds and does not contain the landing spot`。**反证**：标题行同样搬了 −421pt 而且照片 70 里好好的 ⇒ 大概率不裁 |
+★ 还有一条**没动**的：`now-playing-toggle-button`（`Tertiary@0,0,48,48`）**至今没定位**（不在照片 70/71/72
+的任何可见位上）—— 下一份 `[NPVTree]` 里能看出它在哪儿，**先别动它**。
 
 ---
 
@@ -151,50 +120,73 @@ if let dto = currentLyricsDto, !dto.lines.isEmpty {
 python Tools/eevee-hookfinder/orion_hook_guard.py      # OK 327 文件
 python Tools/eevee-hookfinder/swift_brace_check.py     # OK 327 文件
 python Tools/eevee-hookfinder/swift_member_check.py    # OK 272 文件
-python Tools/eevee-hookfinder/swift_string_check.py    # OK 276 文件 / 47884 行
+python Tools/eevee-hookfinder/swift_string_check.py    # OK 276 文件 / 48047 行
 python Tools/l10n_lint.py --locale en                  # exit 0
 python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 extra
 ```
 
 ⚠️ 六条都**不做类型检查**（`CGAffineTransform(a:b:c:d:tx:ty:)` 的逐参数、`@discardableResult` 的调用点、
-`NSStringFromClass(type(of:))` 这类只能靠 CI）。
+`flatMap` 那两处 Optional 链只能靠 CI）。
 
 ---
 
-## 6. 下一轮：CI → 装机 → **日志 56 + 照片 71+**
+## 6. 下一轮：CI → 装机 → **日志 56 + 照片 74+**
 
 ### 6.1 操作顺序
 
-1. 进播放器（记忆里应是"展开"）→ 看 header 右侧：**绿色 ✓ 应该在缩略图右边、和缩略图同一条中线**（≈317, 140）；
-2. 底下那一排（进度条上方）**不该**再有那颗 ✓；
-3. 反复进出 5 次 → ✓ 每次都跟着回来，**不许**留在 header 上、也不许两颗同时在；
-4. **换一首没收藏的歌** → 那一颗应变成"加号"（而不是绿 ✓）—— 位置不变；
-5. 收起歌词 → ✓ 必须**回到原位**（进度条上方）；再展开 → 又上去；
-6. 顺便把上一轮那张单子一起拍了（进出转场不闪、三种说明文案、胶囊不在）。
+1. **不开歌词**进播放器 → 看照片 72 那一版式：
+   * 歌名/歌手应在**左上角**（≈y 98，x 不变 ≈34），**不压**大封面（封面顶 145）；
+   * **分享键**应在 (58, 626) 那一格；**歌词键**在 (215, 626)；**绿 ✓** 还在 (371, 626)；
+   * 底部那两排（shuffle/prev/play/next/repeat、Connect/收起/队列）**一颗都不该变**；
+2. **点歌词键**展开 → 缩略图回左上角、歌名/歌手**右移**（现在就是这样）、歌词铺上；
+   那一条里三颗**位置不变**；
+3. **收起** → 立刻回到第 1 步的样子（标题回左上角，不留残影）；
+4. 来回 5 次，并**换一首歌**（标题行/分享键都是新对象，看会不会有半拍错位）；
+5. 顺便把上一轮那张单子一起拍了（进出转场不闪、三种说明文案、胶囊不在）。
 
 ### 6.2 预期日志（**逐字**）
 
 ```
-[NPVLyrics] add-to button moved into the header — 48×48 from …,626,48,48 to 293,116,48,48
-            (header row — kumone's heart spot) (visual only: taps still land at the old spot)
+[NPVLyrics] share button moved into the control band — 44×44 from …,815,44,44 to 36,604,44,44 (…)
+[NPVLyrics] expanded — thumbnail 72pt at …, lyrics area …, cover shrunk in from …, title row lifted … (anchors: …)
+[NPVLyrics] collapsed (reason=page disappeared)
 ```
 
-* 出现 `to 293,116`（≈ 317±24 / 140±24）⇒ **成了**；
-* 出现 `WARNING: <类名> clips to bounds …` ⇒ **会被裁掉**（§4.4 ③）—— 把类名抄下来，下一轮只清那一层；
-* 出现 `no visible add-to button in this page yet` ⇒ 走查起点没覆盖到它（把新的 `[NPVTree]` 里带
-  `id=Components.UI.AddToButton` 的那几行发过来，按**父链**改起点）；
-* ★ 顺便确认 `[Declutter] installed (… addToButton=OFF)` —— **关着**才有那颗 ✓ 可搬。
+`bandNote` 三种尾巴，看到哪种就知道是什么情况：
+
+| 尾巴 | 意思是 |
+|---|---|
+| `(visual only: <类名> does not contain the landing spot, so taps stay dead)` | 正常预期（祖先边界挡住）——**功能上就是"只像"** |
+| `(visual only: our own lyrics container is in front of it, so taps stay dead)` | 我们的歌词容器在前面吃掉了触摸（展开态必然如此） |
+| `— WARNING: <类名> clips to bounds …` | ★ **会被裁掉** ⇒ 屏幕上可能看不到那颗分享键；把类名抄下来，下一轮只清那一层 |
+| `(inside every ancestor — it should still take taps)` | 意外之喜：它其实还点得到 |
+
+另外两条要看的：
+
+* `no visible share button in this page yet — leaving it in the footer row` ⇒ 分享键没找到（走查起点要改）；
+* `cannot find the title row — leaving it where Spotify put it` ⇒ 标题行没找到（关着态的左上角不会生效）。
 
 ### 6.3 通过判据
 
 | # | 判据 |
 |---|---|
-| ① | header 右侧出现绿 ✓，位置 ≈ (317, 140)，与缩略图同中线 |
-| ② | 进度条上方**没有**第二颗 ✓（不是"多了一颗"） |
-| ③ | 收起 / 退出后 ✓ **回到原位**（不留残影） |
-| ④ | 日志里那行 `add-to button moved into the header — …` 出现**且没有 WARNING** |
-| ⑤ | S1：放一首**没有时间轴**的歌，说明文案是**「这首歌的歌词没有时间轴」**（不再是「未找到歌词」） |
-| ⑥ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是**数字**、进出转场不闪、胶囊 `hide #N` |
+| ① | **关着歌词**时：歌名/歌手在左上角（≈98），封面顶(145)没被压 |
+| ② | 分享键出现在 (58, 626)，歌词键在 (215, 626)，绿 ✓ 仍在原位 |
+| ③ | **展开**时：缩略图 + 歌名/歌手在左上角那一行（现状不变），歌词块起于 242 |
+| ④ | 收起/离开后**没有残影**（标题回原位、分享键回 footer） |
+| ⑤ | 底部两排**一颗都没变**（这正是这一版的取舍） |
+| ⑥ | S1：无时间轴的歌说明文案是**「这首歌的歌词没有时间轴」** |
+| ⑦ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
+
+### 6.4 ⚠️ 已知风险（照片上专门看这几条）
+
+| # | 风险 | 判据 / 对策 |
+|---|---|---|
+| ① | **关着态标题行 98…144，而封面顶 145** —— 只差 1pt。标题行实际高度若比 46 大（不同字号/多语言），就会**压到封面** | 照片一看就知道；真压了就把 `closedTitleTopInset` 从 2 调到 0（或让行贴 96） |
+| ② | **展开态：控件条那三颗落在歌词块的下缘**（歌词块 242…658，三颗在 604…648）⇒ 长歌词的**最后 1–2 行**会被压住 | 现在的歌（照片 71）那一段本来就是空的。真压住了就把歌词块底边抬到 ≈586（`stageBottom` 那条锚点）——**一次只改一片** |
+| ③ | **分享键被祖先裁掉**（§6.2 的 WARNING） | 抄类名，下一轮只清那一层；不清的原因写在 `bandNote` 注释里 |
+| ④ | **同一行有两个"写 transform"的人**（展开时 `applyTitleTransform`、关着时 `applyClosedTitleTransform`） | 都是**每拍重算 + 覆盖**，且 `untransformed()` 会先减掉 tx/ty ⇒ 不会叠加。若照片上出现"标题在两处之间跳"，就是这一条 |
+| ⑤ | 长标题在**展开态**会从绿 ✓ 底下滚过去 | 上一轮就记着：`applyTitleMask` 的坐标口径没算标题自己的 page-x，**不敢贸然接**（下一轮候选） |
 
 ---
 
@@ -203,12 +195,12 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 | 序 | 做什么 | 前置 / 备注 |
 |---|---|---|
 | 1 | 按日志 56 收口 §6 那张单子（含上一轮的转场 / 锚点 / 文案 / 胶囊计数） | 日志 56 |
-| 2 | **① 让 ✓ 真的能点**（现在只是视觉） | 要一套转发；用户当下说"不做点击" ⇒ **等他开口** |
-| 3 | **② 标题与 ✓ 的让位**：把 `applyTitleMask` 的坐标口径修对（`room` 要减掉标题自己的 page-x），再把 ✓ 的左沿当成新的 limit | 一次只改一片、装一次机看一次 |
-| 4 | 非当前歌词行**太暗**（照片 70 几乎看不清）——抬一点不透明度 | 一个常量，风险最低 |
-| 5 | 可选：`⋯`（`Context menu`）也搬进 header（kumone 在 ≈357pt） | 用户没点，先问 |
-| 6 | 可选：藏歌单名 `1` / 藏 shuffle+repeat（kumone 只有三键） | 功能取舍，先问 |
-| 7 | **S1 的升级档**：无时间轴歌词**静态列出全文**（kumone 照片 41 那一档） | 要动渲染层（`LyricLine.time` 是必填） |
+| 2 | **控件条那三颗要不要"真能点"**（分享键现在只是像） | 用户当下选的是"只搬"；要真能点得加转发 |
+| 3 | 「歌词块底边让位给控件条」（§6.4 ②） | 只看照片：压住了才改 |
+| 4 | 标题与 ✓ 的让位（`applyTitleMask` 坐标口径） | §6.4 ⑤ |
+| 5 | 非当前歌词行**太暗**（照片 70 几乎看不清）——抬一点不透明度 | 一个常量 |
+| 6 | 可选：`⋯`（`Context menu`）搬进 header；藏歌单名 `1`；藏 shuffle+repeat | 用户没点，先问 |
+| 7 | S1 的升级档：无时间轴歌词**静态列出全文** | 要动渲染层 |
 | 8 | 译文 / 罗马字 | 用户说「之后再说」 |
 | 9 | 老账：音频密钥探针 / `NowPlayingPageOverlay` 重试 / 封面自持 / customize 种子 9.1.76→9.1.88 / 六条自检接进 CI | —— |
 
@@ -217,15 +209,15 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 ## 8. 未验证声明（**不要去掉这一段**）
 
 * **本轮 2 个源码文件 + 2 个 l10n 文件全部没有编译过、没有装机过。**
-* **最后一版真机数据仍是日志 55 + 照片 70**；`C:\dsh\ipa` 里**没有** `b9e250b` 之后的日志。
-* ★ **"照片 70 = `b9e250b` 那一版"是据时间戳推的**（照片 20:21 > 提交 19:27，且几何/音量条对得上），
-  **没有日志直接证明**（用户那一程的日志没导出）。若它其实是更早的构建，"几何已落地"这条就要重判。
-* ★ **"✓ 搬进 header 之后看得见"没有验证过**：③ 的裁剪风险、② 的标题重叠都只能靠照片 71 判。
-* ★ **"点击点不到"是据 UIKit hit-test 规则推的**（父视图边界），**没有在真机上试过**；
-  万一它其实点得到（父视图很大 / 有人重写过 `point(inside:)`），那更好，但别当成已实现。
-* `dump-9.1.88.txt` 是**符号 dump**（`[classes]` 17047 / `[rpc]` 316 / `[flags]` 543 / `[methods]` 1855 /
-  `[selectors]` 12376，**没有字符串字面量**）⇒ **accessibility id 在里面查不到**
-  （试过：`Components.UI.AddToButton` 0、`now-playing-minimize-button` 0、`Context menu` 0）
-  —— id 只能靠真机 `[NPVTree]` 证明，**别指望这份 dump**。
-* 本轮**没有派独立只读复核**（改动集中在一处新增 + 一处判据拆分，两个文件）；
-  若照片 71 显示 ✓ 不见了 / 位置不对，**下一轮第一件事就是派复核**。
+* **最后一版真机数据仍是日志 55 + 照片 70/71/72/73**；`C:\dsh\ipa` 里**没有** `b9e250b` 之后的日志。
+* ★ **"分享键搬过去之后点不到"是据 UIKit hit-test 规则 + footer 行的估算高度推的**
+  （`UIView@0,231,406,44` 那条老证据 ⇒ ≈792…836），**没有在真机上试过**；
+  万一它其实点得到（父视图很大 / 有人重写过 `point(inside:)`），`bandNote` 会写
+  `(inside every ancestor — it should still take taps)`。
+* ★ **"关着态标题行 98…144 不压封面"用的是照片 72 量出来的封面顶边 145**；行高 46 是从真机树
+  （`MarqueeLabel 24` + `22`）推的，**没有在真机上量过"行"的整体高度**（背景透明，树里也没有那个 frame）。
+* ★ **上半场那版"绿 ✓ 搬进 header"（`f2dc707`）已经作废并撤掉**：代码里**没有**留开关或死代码；
+  要回那一版就照 §2 里同一套手法（`transform` + 收尾还原）重写一遍即可，那份说明在
+  `git show f2dc707` 里。
+* 本轮**没有派独立只读复核**（改动集中在两处新增 + 两个常量）；若照片 74 显示位置不对 / 有残影，
+  **下一轮第一件事就是派复核**。

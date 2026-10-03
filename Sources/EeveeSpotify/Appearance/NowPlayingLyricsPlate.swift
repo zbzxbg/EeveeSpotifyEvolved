@@ -264,24 +264,40 @@ enum NowPlayingLyricsPlate {
     /// `AutoLayoutStackView@0,0,358,41,id=Components.UI.ProgressBarUnitNowPlaying`。
     private static let progressUnitIdentifier = "Components.UI.ProgressBarUnitNowPlaying"
 
-    // MARK: 收藏键（绿色 ✓）搬进 header —— 2026-10-11，kumone 的 ♥ 位
+    // MARK: ★ 控件条（2026-10-11 第二轮：照片 71/72/73 的方案）
 
-    /// 收藏键的判据（id）：`UIButton@0,0,48,48,id=Components.UI.AddToButton`（日志 54 的 `[NPVTree]`）。
-    ///
-    /// ★ 用户 2026-10-11 亲手点名：**那颗绿色的 ✓ 就是"收藏歌曲"**（Spotify 自己的真控件）。
-    /// ⇒ "像 kumone"的正解是把它**搬到 kumone 放 ♥ 的地方**，而不是画一个假图标。
-    ///
-    /// ⚠️ 页里有**两份**（日志 54 逐字：`13.UIButton@0,0,48,48,hidden,id=…` 与
-    /// `14.UIButton@0,0,48,48,id=…`），同一时刻只有一份看得见 ⇒ **判据必须是"看得见的那一份"**，
-    /// 不能是"按 id 找到的第一份"（`findByIdentifier` 走 BFS，会把 `hidden` 那份先挑出来）。
-    private static let addToButtonIdentifier = "Components.UI.AddToButton"
+    // 用户 2026-10-11 的第二版方案（原话）：
+    //   > 照片 71 我圈的两个，一放分享按钮，二放歌词开关，然后那个绿色勾就让它呆在那里。
+    //   > 其他的按键也不用改了。但是这个方案要解决一个问题（照片 72）：一这个位置会占用
+    //   > 不开歌词进入播放器这个功能不开启时，歌手/歌曲名字会挡住。所以（照片 73）：可以和
+    //   > kumone 一样，在不开展示歌词的情况下，就把歌曲/歌手放到左上角，在开启展示歌词之后，
+    //   > 封面再到左上角，然后歌曲/歌手往右让位。
+    //
+    // ⇒ 这一条空带（进度条上方、绿色 ✓ 本来就在的那一条）变成**控件条**：
+    //     [分享 58]   [我们的歌词键 215]   [绿色 ✓ 371 —— 不动]
+    //   而"关着歌词时标题/歌手要挪走"那件事见 `applyClosedTitleTransform`。
 
-    /// 收藏键目标中心**距页面右边**多少 pt。
+    /// 控件条的**中线**（页面坐标 y）。来源：照片 71/72 里绿色 ✓ 的中心 ≈626pt
+    /// （那是 Spotify 自己的位置，**我们不动它**）—— 另外两颗对齐到同一条线。
+    private static let controlBandMidY: CGFloat = 626
+
+    /// 分享键的目标中心 x（照片 71 里用户圈的**第 ① 处** ≈58pt）。
+    private static let shareButtonCenterX: CGFloat = 58
+
+    /// 歌词键的目标中心 x（照片 71 里用户圈的**第 ② 处** ≈222pt；取 215 ⇒ 三颗等距 ≈157）。
+    private static let toggleCenterX: CGFloat = 215
+
+    /// 分享键的判据（id）：`EncoreButton@0,0,44,44,id=ShareButtonNowPlayingView`（日志 54 的 `[NPVTree]`）。
     ///
-    /// kumone 照片 40/41 实测（591px → 414pt，×0.7005）：♥ 中心 x ≈ 452px ≈ **317pt**
-    /// ⇒ 右边距 = 414 − 317 = **97**。y 用**缩略图的中线**（我们自己的 header 中线）——
-    /// 照片里 ♥ 正是与缩略图同一条中线。
-    private static let headerActionTrailingInset: CGFloat = 97
+    /// ⚠️ 页里也有**两份**（日志 54 逐字：一份 `alpha=0.50`、一份全亮）⇒ 和收藏键同一条纪律：
+    /// 判据是"**看得见、而且在屏上**的那一份"，不是"按 id 找到的第一份"。
+    private static let shareButtonIdentifier = "ShareButtonNowPlayingView"
+
+    /// 关着歌词时，标题行放在导航条下沿**下面多少 pt**（照片 73 的 kumone 位）。
+    ///
+    /// 照片 72 实测：导航条下沿 ≈96、**原生大封面顶边 = 145** ⇒ 标题行（24 + 22 = 46pt）只有
+    /// 96…145 这 49pt 可用。取 2 ⇒ 行占 **98…144**，正好卡在中间，不压封面。
+    private static let closedTitleTopInset: CGFloat = 2
 
     /// 歌词区进场时从 0.96 放大到 1（pw 的 `kLyricsEnterScale`）。
     /// ⚠️ **本轮没做**：那要把容器也改成"只动 transform + bounds/center"（同封面那一套），
@@ -358,14 +374,18 @@ enum NowPlayingLyricsPlate {
     private static weak var lastUnit: UIView?
     private static weak var lastTitleElement: UIView?
 
-    /// ★ 2026-10-11：被我们搬进 header 的**那一份**收藏键（收尾时只撤它的位移）。
-    private static weak var headerAction: UIView?
-    /// 接管它之前它自己的 `transform`（收尾时**原样写回**，不假设它一定是 identity）。
-    private static var headerActionOriginalTransform: CGAffineTransform?
-    /// 一次开合只报一行（搬到哪里 / 有没有被裁）——按 `closeEverything` 重置。
-    private static var didLogHeaderAction = false
-    /// "这一页现在没有看得见的收藏键"也只报一次（它可能在页面还没铺完时问一次）。
-    private static var didLogHeaderActionMissing = false
+    /// ★ 2026-10-11 第二轮：被我们搬进**控件条**的那一份分享键（离开页面时只撤它的位移）。
+    private static weak var bandShareButton: UIView?
+    /// 接管它之前它自己的 `transform`（还原时**原样写回**，不假设它一定是 identity）。
+    private static var bandShareOriginalTransform: CGAffineTransform?
+    /// 一次开合只报一行（搬到哪里 / 会不会被裁 / 点不点得到）——按 `clearControlBand` 重置。
+    private static var didLogBandShare = false
+    /// "这一页现在没有看得见的分享键"也只报一次（页面还没铺完时会问一次）。
+    private static var didLogBandShareMissing = false
+    /// ★ 关着歌词时被我们挪到左上角的那一行（离开页面 / 关开关时撤回来）。
+    private static weak var closedTitleRow: UIView?
+    /// "找不到标题行"只报一次（进页面的头几拍可能还量不到）。
+    private static var didLogClosedTitleMissing = false
 
     private static var host: AnyObject?
     private static weak var hostPage: UIView?
@@ -443,6 +463,9 @@ enum NowPlayingLyricsPlate {
             // 关开关：**不动画**（用户多半在设置页，而且页面上可能正有转场）。
             closeEverything(reason: "switch off", animated: false)
             removeToggle()
+            // ★ 关掉功能 = **页面回到 Spotify 原样**：控件条与"标题行去左上角"都要撤。
+            clearControlBand()
+            clearClosedTitleTransform()
             return
         }
         guard pageView.bounds.width > 1, pageView.bounds.height > 1 else { return }
@@ -467,6 +490,13 @@ enum NowPlayingLyricsPlate {
             // ★ 2026-10-10：**页面记忆** —— 上次离开这一页时是"展开"状态，这次进来就还铺上。
             //   见 `reopenIfRemembered`。顺序同样要在 `ensureToggleZone` 之前（后写的赢）。
             reopenIfRemembered(in: pageView)
+        }
+        // ★ 2026-10-11 第二轮：控件条**两个状态都摆**；"标题行贴左上角"只在**关着**时摆
+        //   （展开时标题行的位置由 `applyTitleTransform` 管，两者写的是同一行的 `transform`，
+        //    后面那个赢 —— 所以这里必须先判 `isOpen`）。
+        applyControlBand(in: pageView)
+        if !isOpen {
+            applyClosedTitleTransform(in: pageView)
         }
         ensureToggleZone(in: pageView)
     }
@@ -543,10 +573,15 @@ enum NowPlayingLyricsPlate {
         // 标题行的位移就全留在那一页上了）。
         guard let leavingPage = lastPage else { return false }
         if leavingPage.window == nil {
-            guard pageLeaving || isOpen || coverHost != nil || lastContainer != nil else { return false }
+            guard pageLeaving || isOpen || coverHost != nil || lastContainer != nil
+                || bandShareButton != nil || closedTitleRow != nil else { return false }
             // 页面已经不在屏幕上了 ⇒ 现在写回封面 / 撤销几何 / 摘掉我们的层与那枚键，什么都看不见。
             closeEverything(reason: "page disappeared", animated: false)
             removeToggle()
+            // ★ 2026-10-11 第二轮：写在**别人的控件**上的那两处位移也要还回去
+            //   （分享键的平移、标题行的左上角）。
+            clearControlBand()
+            clearClosedTitleTransform()
             return false
         }
 
@@ -560,6 +595,9 @@ enum NowPlayingLyricsPlate {
             return isOpen
         }
 
+        // ★ 2026-10-11 第二轮：控件条**两个状态都摆**（它和 `isOpen` 无关）。
+        applyControlBand(in: page)
+
         if isOpen {
             // 可能因为"封面还没布局好"铺不上 —— 那时退回去，并由 `openAndMount` 开重试窗口。
             openAndMount(in: page)
@@ -569,6 +607,10 @@ enum NowPlayingLyricsPlate {
             ensureToggleZone(in: page)
             return isOpen
         }
+
+        // ★ 2026-10-11 第二轮（照片 72/73）：**关着歌词时，标题行贴左上角** ——
+        //   给控件条让地方（否则分享键会压在歌名/歌手上面）。
+        applyClosedTitleTransform(in: page)
 
         // ★ 2026-10-10（照片 66）：**"打算铺但还没铺上"**的那段窗口里也要按住原生封面 ——
         //   否则进入播放器的转场里就是原生大封面在动（这一拍 `isOpen` 还是 false）。
@@ -627,6 +669,12 @@ enum NowPlayingLyricsPlate {
         // 页面要走了 ⇒ **不动画**：拖着 0.45s 才把 Spotify 那条封面写回去，会在转场里露一个空档。
         closeEverything(reason: reason, animated: false)
         removeToggle()
+        // ★ 2026-10-11 第二轮：这条路现在只服务"设置页把开关关掉" ⇒ 关掉功能 = **页面回到
+        //   Spotify 原样**：分享键还回 footer、标题行还回它的位置。
+        //   （上面那句 `closeEverything` 里的"摆回关着的样子"会被 `isEnabled` 挡掉，所以这里必须
+        //    显式清 —— 否则关掉开关之后，分享键还留在控件条上、标题行还贴在左上角。）
+        clearControlBand()
+        clearClosedTitleTransform()
     }
 
     /// 那枚"歌词键"被点了。
@@ -925,11 +973,6 @@ enum NowPlayingLyricsPlate {
         // ② 标题行上移 + 右移（transform —— 改约束会被 stack view 布局写回）。
         applyTitleTransform(geometry: geometry, page: page)
 
-        // ②b ★ 2026-10-11：收藏键（绿色 ✓）搬进 header 行的右侧（kumone 的 ♥ 位）。
-        //     放在这里而不是 `apply`：目标位置要等 `measure()` 量出缩略图的中线才知道。
-        //     它**不是**必须成功的（找不到就保持原样），所以不参与下面那道 `guard`。
-        applyHeaderActionTransform(geometry: geometry, page: page)
-
         // ③ 歌词区：标题之下、进度条之上。
         let frame = geometry.stage
         guard frame.height > livingHeight / 2 else {
@@ -1002,10 +1045,15 @@ enum NowPlayingLyricsPlate {
         wantsOpen = false
         pendingOpenUntil = 0
         pageLeaving = false
-        // ★ 2026-10-11：收藏键的位移写在**别人的控件**上 ⇒ **无条件**还回去（见
-        //   `restoreHeaderActionTransform`）；放在下面那条 `guard` 之前，是因为
-        //   "找到了却没搬成别的"这种半成品也要能回到原位。
-        restoreHeaderActionTransform()
+        // ★ 2026-10-11 第二轮：**关掉歌词 ≠ 页面还原**。
+        //   控件条（分享键搬去 626 那一条）与"标题行贴左上角"都属于**关着时的样子**
+        //   —— 页面还在窗口里就立刻摆回去（用户收起歌词那一刻就能看到正确版式，不用等 0.3s 那一拍）。
+        //   真的离开页面时，才由 `reconcile` 里那两条 `clear…` 收干净。
+        //   ⚠️ 这里**不能**无条件跑：`closeEverything` 也会在"页面已经不在窗口里"时被调用。
+        if isEnabled, let page = lastPage, page.window != nil {
+            applyControlBand(in: page)
+            applyClosedTitleTransform(in: page)
+        }
         // 封面判据的日志预算**按"一次开合"重置** —— 否则开合三次就把 12 行用光，
         // 正好在下一个 bug 出现时看不见了（独立复核指出）。
         chosenCoverLogs = 0
@@ -1828,58 +1876,50 @@ enum NowPlayingLyricsPlate {
         return limit
     }
 
-    // MARK: - 收藏键搬进 header（2026-10-11：kumone 的 ♥ 位）
+    // MARK: - 控件条：分享键搬进来 / 关歌词时标题行去左上角（2026-10-11 第二轮）
 
-    /// 把 Spotify 自己的**收藏键**（绿色 ✓）搬到 header 行的右侧 —— 也就是 kumone 放 ♥ 的地方。
+    /// 把 Spotify 自己的**分享键**搬进"控件条"（进度条上方那一条空带 —— 绿色 ✓ 本来就在那儿）。
     ///
-    /// ## 为什么是"搬"而不是"画一个图标"
-    /// 用户 2026-10-11 亲手点名：**那颗绿色的 ✓ 就是"收藏歌曲"**（Spotify 的真控件，
-    /// `Components.UI.AddToButton`）。所以"像 kumone"的正解是**把它搬到 kumone 放 ♥ 的位置**
-    /// （照片 40/41：中心 ≈317pt、与缩略图同一条中线），而不是画一个假图标。
+    /// ## 用户 2026-10-11 的第二版方案（照片 71/72/73）
+    /// 那一条放 **[分享 58] [我们的歌词键 215] [绿色 ✓ 371（不动）]**，于是底部那两排
+    /// 一颗都不用改；**收藏键不搬**（用户原话：「那个绿色勾就让它呆在那里」）。
+    /// 开头那段常量注释里有原话与逐条坐标。
     ///
-    /// ## ⚠️ 这是**视觉**搬运：点仍然点不动（**已知，且符合用户当下的要求**）
-    /// UIKit 的 hit-test 在祖先那一层就问 `point(inside:)` —— 这一颗被搬到 header（≈140pt）之后
-    /// 已经在它父视图的边界之外，所以**触摸到不了它**（`transform` 只改绘制与坐标换算，
-    /// 不改父视图的命中范围）。要变成"真能点"得再写一套转发（本仓库 2026-10-10 刚把
-    /// `sendActions` 那类"替用户按"整块删掉，见 `DeclutterChrome` 里那段注释），
-    /// 而用户 2026-10-11 的原话是「**只要求像，暂时不做点击功能**」⇒ 本轮就停在"像"。
+    /// ## ⚠️ 这是**视觉**搬运：搬过去之后**点不到**（用户已知并选了这一档）
+    /// UIKit 的 hit-test 在祖先那一层就问 `point(inside:)`：分享键被抬到 626pt 之后，已经在它
+    /// **父视图（footer 那一行，≈792…836）的边界之外** ⇒ 触摸到不了它，要分享得走右上角
+    /// `⋯` 菜单里的 Share。`bandNote` 会把"到底是不是点不到、被谁挡住"写进日志。
+    ///
+    /// ## 两个状态都摆，和 `isOpen` 无关
+    /// 这一条在**开着**和**关着**歌词时都是空的（关着时标题/歌手已被
+    /// `applyClosedTitleTransform` 挪去左上角）⇒ 每拍都摆。
     ///
     /// ## 为什么位移只写 `transform`
-    /// 它的位置由父视图的 Auto Layout 决定，改 `frame` 会被下一拍写回（本仓库的老教训 ——
-    /// 见 `applyTitleTransform` 那句"改约束会被 stack view 布局写回"）。所以照封面 / 标题行
-    /// 同一套手法：**只写平移分量**，它自己的缩放 / 旋转（如果有）原样保留。每拍重算一次
-    /// 平移量（`untransformed` 拿的是"去掉我们那段位移"的模型 frame），所以父视图重排也能跟上。
-    ///
-    /// ## 收尾
-    /// 这是写在**别人的控件**上的位移 ⇒ `closeEverything` 必须**无条件**把它撤掉
-    /// （`restoreHeaderActionTransform()`），否则这一颗从此永远偏在 header 上。
-    ///
-    /// 返回"这一拍有没有找到那一份看得见的收藏键"。
+    /// 位置由父视图的 Auto Layout 决定，改 `frame` 会被下一拍写回（本仓库老教训 ——
+    /// 见 `applyTitleTransform` 那句"改约束会被 stack view 布局写回"）。只写平移分量，
+    /// `a,b,c,d` 原样保留；每拍用 `untransformed` 重算平移量，父视图重排也能跟上。
     @discardableResult
-    private static func applyHeaderActionTransform(geometry: Geometry, page: UIView) -> Bool {
-        guard let button = visibleAddToButton(in: page) else {
-            if !didLogHeaderActionMissing {
-                didLogHeaderActionMissing = true
+    private static func applyControlBand(in page: UIView) -> Bool {
+        guard let button = visibleShareButton(in: page) else {
+            if !didLogBandShareMissing {
+                didLogBandShareMissing = true
                 writeDebugLog(
-                    "[\(logTag)] no visible add-to button in this page yet — "
-                        + "leaving the favourites tick where Spotify put it"
+                    "[\(logTag)] no visible share button in this page yet — "
+                        + "leaving it in the footer row"
                 )
             }
             return false
         }
 
         // 换了一颗（换歌会重建这一排）⇒ 先把上一颗还回去，免得两处位移叠在同一颗上。
-        if headerAction !== button {
-            restoreHeaderActionTransform()
-            headerAction = button
-            headerActionOriginalTransform = button.transform
+        if bandShareButton !== button {
+            clearControlBand()
+            bandShareButton = button
+            bandShareOriginalTransform = button.transform
         }
 
         let current = untransformed(button, in: page)
-        let target = CGPoint(
-            x: page.bounds.maxX - headerActionTrailingInset,
-            y: geometry.thumb.midY
-        )
+        let target = CGPoint(x: shareButtonCenterX, y: controlBandMidY)
         let dx = (target.x - current.midX).rounded()
         let dy = (target.y - current.midY).rounded()
 
@@ -1890,53 +1930,102 @@ enum NowPlayingLyricsPlate {
         )
         if button.transform != moved { button.transform = moved }
 
-        if !didLogHeaderAction {
-            didLogHeaderAction = true
+        if !didLogBandShare {
+            didLogBandShare = true
             let landed = CGRect(
                 x: (target.x - current.width / 2).rounded(),
                 y: (target.y - current.height / 2).rounded(),
                 width: current.width,
                 height: current.height
             )
-            let clipNote = clippingNote(for: button, landing: landed, page: page)
             writeDebugLog(
-                "[\(logTag)] add-to button moved into the header — "
+                "[\(logTag)] share button moved into the control band — "
                     + "\(Int(current.width))×\(Int(current.height)) from \(frameText(current))"
-                    + " to \(frameText(landed))" + clipNote
-                    + " (visual only: taps still land at the old spot)"
+                    + " to \(frameText(landed))" + bandNote(for: button, landing: landed, page: page)
             )
         }
         return true
     }
 
-    /// 撤掉我们写给收藏键的那一段平移，并把它自己的 `transform` **原样写回**。
+    /// 关着歌词时：把**标题行**搬到左上角（照片 73 的 kumone 位）—— 给控件条腾地方。
     ///
-    /// ⚠️ 位置写在**别人的控件**上 —— 漏一次它就永远留在 header 上了，
-    /// 所以 `closeEverything` 里这一句放在那条 `guard` **之前**（无条件清账）。
-    private static func restoreHeaderActionTransform() {
-        guard let button = headerAction else { return }
-        let original = headerActionOriginalTransform ?? .identity
-        if button.transform != original { button.transform = original }
-        headerAction = nil
-        headerActionOriginalTransform = nil
-        didLogHeaderAction = false
-        didLogHeaderActionMissing = false
+    /// ## 为什么必须搬（照片 72 那个"会挡住"）
+    /// 控件条的**第 ① 处**（分享键 58pt）正好压在**原生歌名/歌手**上：照片 72 里歌名在 618、
+    /// 歌手在 640，而分享键要去 626。用户给的解法就是照片 73：
+    /// **不展开歌词**时歌名/歌手贴左上角；**展开歌词以后**封面占左上角、歌名/歌手往右让位
+    /// （后者正是现在的做法，见 `applyTitleTransform`）。
+    ///
+    /// ## 落点
+    /// `navBarBottom + closedTitleTopInset` ⇒ 照片 72 上是 **98**（行高 46 ⇒ 98…144），
+    /// 而**原生大封面顶边 = 145** —— 正好卡在导航条与封面之间，一行都不压。
+    /// **x 不动**：照片 72 的原生歌名本来就在 34pt（和 kumone 照片 73 的 34 一样），
+    /// 只有 y 要抬（618 → 98，约 −520pt）。
+    ///
+    /// 返回"这一拍有没有找到标题行"。
+    @discardableResult
+    private static func applyClosedTitleTransform(in page: UIView) -> Bool {
+        let list = findByIdentifier(listIdentifier, in: page)
+        let label = (list.flatMap { findByIdentifier(titleLabelIdentifier, in: $0) })
+            ?? findByIdentifier(titleLabelIdentifier, in: page)
+        guard let element = label?.superview, let row = element.superview,
+              let navBottom = navBarBottom(in: page) else {
+            // 找不到就**什么都不做** —— 宁可保持 Spotify 原样，也不要瞎移一行。
+            if !didLogClosedTitleMissing {
+                didLogClosedTitleMissing = true
+                writeDebugLog(
+                    "[\(logTag)] cannot find the title row — leaving it where Spotify put it"
+                )
+            }
+            return false
+        }
+
+        // 上一程"展开时"的位移若还留着（`closeEverything` 会撤，这里再兜一层）：先清掉。
+        if element.transform != .identity { element.transform = .identity }
+
+        let current = untransformed(row, in: page)
+        guard current.height > 1 else { return false }
+
+        let dy = ((navBottom + closedTitleTopInset) - current.minY).rounded()
+        let move = CGAffineTransform(translationX: 0, y: dy)
+        if row.transform != move { row.transform = move }
+        closedTitleRow = row
+        return true
     }
 
-    /// 页里**看得见的那一份**收藏键。
+    /// 把分享键还回原处（关开关 / 离开页面）。**只撤我们写的那段平移**：
+    /// 接管前它自己的 `transform` 原样写回（不假设它一定是 identity）。
+    private static func clearControlBand() {
+        if let button = bandShareButton {
+            let original = bandShareOriginalTransform ?? .identity
+            if button.transform != original { button.transform = original }
+        }
+        bandShareButton = nil
+        bandShareOriginalTransform = nil
+        didLogBandShare = false
+        didLogBandShareMissing = false
+    }
+
+    /// 把我们写给标题行的那段"去左上角"撤掉（关开关 / 离开页面）。
+    private static func clearClosedTitleTransform() {
+        if let row = closedTitleRow, row.transform != .identity { row.transform = .identity }
+        closedTitleRow = nil
+        didLogClosedTitleMissing = false
+    }
+
+    /// 页里**看得见、而且在屏上**的那一份分享键。
     ///
-    /// ⚠️ 不能用 `findByIdentifier`：它返回 BFS 里**第一份**，而页里有两份且**隐藏那份排在前面**
-    /// （日志 54 逐字：`13.UIButton@0,0,48,48,hidden,id=…` 与 `14.UIButton@0,0,48,48,id=…`）
-    /// ⇒ 位移会写在一个看不见的按钮上，屏幕上一点变化都没有（而且日志还会说"成了"）。
+    /// ⚠️ 不能用 `findByIdentifier`：它返回 BFS 里**第一份**，而页里有**两份**分享键
+    /// （日志 54 逐字：`12.EncoreButton@0,0,44,44,alpha=0.50,id=ShareButtonNowPlayingView`
+    /// 与 `12.EncoreButton@0,0,44,44,id=ShareButtonNowPlayingView`）
+    /// ⇒ 位移会写在一份看不见（或不在屏上）的按钮上，屏幕上一点变化都没有，
+    /// 而日志还会说"成了"（规矩 1/11 的老坑）。
     ///
-    /// 走查的**起点从小到大**，跟 `progressUnitTop` 同一套思路（整页 BFS 要先趟过列表里那些格子，
-    /// 800 的预算可能不够）：
-    ///   ① `npv.bottomStackView`（底部那一坨 —— `DeclutterChrome` 的
-    ///      `TransportChromeHideHook` 就是从 `ConnectButtonView` 的**兄弟**里按同一个 id 找它的）；
+    /// 走查**起点从小到大**（同 `progressUnitTop` 的思路；整页 BFS 会被列表里那些格子吃掉预算）：
+    ///   ① `npv.bottomStackView`（分享键的家 —— 底部那一坨的 footer 行）；
     ///   ② `SPTNowPlayingView`（播放器自己那一份，几百个节点）；
     ///   ③ `page` 兜底。
-    private static func visibleAddToButton(in page: UIView) -> UIView? {
-        if let cached = headerAction,
+    private static func visibleShareButton(in page: UIView) -> UIView? {
+        if let cached = bandShareButton,
            cached.window != nil,
            !cached.isHidden,
            cached.alpha > 0.01,
@@ -1950,13 +2039,13 @@ enum NowPlayingLyricsPlate {
         roots.append(page)
 
         for root in roots {
-            if let found = firstVisibleAddToButton(in: root) { return found }
+            if let found = firstVisibleShareButton(in: root, page: page) { return found }
         }
         return nil
     }
 
-    /// 一趟有界 BFS：按 **id + 看得见** 挑收藏键（判据风格与 `firstVisibleCover` 一致）。
-    private static func firstVisibleAddToButton(in root: UIView) -> UIView? {
+    /// 一趟有界 BFS：按 **id + 看得见 + 在屏上** 挑分享键（判据风格与 `firstVisibleCover` 一致）。
+    private static func firstVisibleShareButton(in root: UIView, page: UIView) -> UIView? {
         var visited = 0
         var queue: [UIView] = [root]
 
@@ -1964,12 +2053,13 @@ enum NowPlayingLyricsPlate {
             let view = queue.removeFirst()
             visited += 1
 
-            if view.accessibilityIdentifier == addToButtonIdentifier,
+            if view.accessibilityIdentifier == shareButtonIdentifier,
                !view.isHidden,
                view.alpha > 0.01,
                view.window != nil,
                view.bounds.width >= 1,
-               view.bounds.height >= 1 {
+               view.bounds.height >= 1,
+               isOnScreen(view, in: page) {
                 return view
             }
             // hidden 的子树不往下走。
@@ -1979,37 +2069,102 @@ enum NowPlayingLyricsPlate {
         return nil
     }
 
-    /// 搬到 header 之后"会不会被谁裁掉"那一行注脚（**只报，不自动改**）。
+    /// 这一份是不是**真的在屏上**。照片 71 里那颗分享键在 815pt 那一排；
+    /// "另外那一份"（`alpha=0.50`）通常在别的卡里 / 被折起来了 ⇒ 用它把那一份筛掉。
+    private static func isOnScreen(_ view: UIView, in page: UIView) -> Bool {
+        let frame = untransformed(view, in: page)
+        return frame.width >= 1
+            && frame.height >= 1
+            && frame.midY > 0
+            && frame.midY < page.bounds.height
+            && frame.intersects(page.bounds)
+    }
+
+    /// 搬进控件条之后的一行注脚：**会不会被裁** / **点不点得到**（只报，**不自动改**）。
     ///
-    /// 我们要把它从底部那一排往上搬 ≈460pt —— 中间任何一层 `clipsToBounds` 都会让
-    /// 屏幕上"✓ 直接不见了"。**不自动清**：清掉别人的裁剪可能把别的被裁内容一起放出来，
-    /// 那是比"少一颗 ✓"更大的破坏。所以只留一行日志，下一份日志一眼就能读出是谁干的。
-    /// 祖先的裁剪框**装得下**落点的不算（那种裁剪是安全的）。
-    private static func clippingNote(for view: UIView, landing: CGRect, page: UIView) -> String {
+    /// 三条判据都从"落点还在不在祖先的框里"推出来，正好回答下一份日志最想知道的三个问题：
+    ///   · 有祖先 `clipsToBounds` 且框装不下落点 ⇒ 屏幕上可能**缺一块**（不自动清：清掉别人的
+    ///     裁剪可能把别的被裁内容一起放出来，那是更大的破坏）；
+    ///   · ★ **我们自己那个歌词容器**在它前面（`bringSubviewToFront`，而且铺满歌词区）⇒
+    ///     触摸会被我们先吃掉 —— 这一条比父视图的边界更容易被忘掉；
+    ///   · 有祖先（**没开裁剪也一样**）框装不下落点 ⇒ hit-test 在那一层就断了。
+    private static func bandNote(for view: UIView, landing: CGRect, page: UIView) -> String {
         var node = view.superview
         var hops = 0
+        var clipper: String?
+        var blocker: String?
 
         while let current = node, hops < 32 {
-            if current.clipsToBounds,
-               current.bounds.width > 1,
-               current.bounds.height > 1,
+            if current.bounds.width > 1, current.bounds.height > 1,
                !untransformed(current, in: page).contains(landing) {
-                let name = NSStringFromClass(type(of: current))
-                return " — WARNING: \(name) clips to bounds and does not contain the landing spot,"
-                    + " so the tick may be cut off"
+                if blocker == nil { blocker = NSStringFromClass(type(of: current)) }
+                if current.clipsToBounds, clipper == nil {
+                    clipper = NSStringFromClass(type(of: current))
+                }
             }
             if current === page { break }
             node = current.superview
             hops += 1
         }
-        return " (header row — kumone's heart spot)"
+
+        if let clipper {
+            return " — WARNING: \(clipper) clips to bounds and does not contain the landing spot,"
+                + " so it may be cut off"
+        }
+        if let container = lastContainer, container.window != nil,
+           container.convert(container.bounds, to: page).contains(landing) {
+            return " (visual only: our own lyrics container is in front of it, so taps stay dead)"
+        }
+        if let blocker {
+            return " (visual only: \(blocker) does not contain the landing spot, so taps stay dead)"
+        }
+        return " (inside every ancestor — it should still take taps)"
     }
 
-    // MARK: - 歌词键（pw 把 glyph 放在 footer；我们照做 —— 而且**要看得见**）
+    // MARK: - 歌词键（2026-10-11 第二轮：搬进**控件条**）
 
-    /// 那枚键的落点。三级判据。
+    /// 那枚键的落点。
     ///
-    /// * **① 首选**：`npv.bottomStackView` 的**最后一行**（footer）的 frame、水平居中。
+    /// ★★ 2026-10-11 第二轮（照片 71）：**首选控件条**那一格（与绿色 ✓ / 分享键同一条线），
+    /// 也就是 `toggleCenterX` × `controlBandMidY`。用户圈的第 ② 处就是它。
+    /// 控件条**量不出来**（没有进度条锚点 / 页面太矮 / 该位置已经被导航条吃掉）时才退回
+    /// 下面那套老的三级判据 —— 宁可回到旧行为，也不要摆一个压在进度条或歌词上的键。
+    private static func toggleFrame(in page: UIView) -> CGRect? {
+        if let band = controlBandFrame(in: page, side: toggleSide, centerX: toggleCenterX) {
+            return band
+        }
+        return fallbackToggleFrame(in: page)
+    }
+
+    /// 控件条上的一格（给定中心 x，y 恒为 `controlBandMidY`）。
+    ///
+    /// 两条健全性检查（任一不过就返回 `nil`，交给 `fallbackToggleFrame`）：
+    ///   · 这一格必须在**导航条下沿之下**（否则会压在那三个导航控件上）；
+    ///   · 必须在**进度条顶边之上**（否则会压住进度条的拖动）。
+    private static func controlBandFrame(
+        in page: UIView,
+        side: CGFloat,
+        centerX: CGFloat
+    ) -> CGRect? {
+        guard page.bounds.height >= livingHeight else { return nil }
+
+        if let nav = navBarBottom(in: page), controlBandMidY - side / 2 <= nav { return nil }
+        if let list = findByIdentifier(listIdentifier, in: page),
+           let progressTop = progressUnitTop(in: list, page: page),
+           controlBandMidY + side / 2 >= progressTop {
+            return nil
+        }
+        return CGRect(
+            x: (centerX - side / 2).rounded(),
+            y: (controlBandMidY - side / 2).rounded(),
+            width: side,
+            height: side
+        )
+    }
+
+    /// 老的三级判据（2026-10-03 起用的）。**只在控件条量不出来时兜底**。
+    ///
+    /// * **①**：`npv.bottomStackView` 的**最后一行**（footer）的 frame、水平居中。
     ///   真机树（日志 42/48）里那一坨的子视图依次是「标题 / 进度 / 控件 / footer」，footer 恒为
     ///   **最后一个**（`UIView@0,231,406,44`；那一行只有两侧原生控件 —— Connect / 分享 / 队列 ——
     ///   中间是空的）。pw 也是把歌词字形放 footer 那一排。
@@ -2022,7 +2177,7 @@ enum NowPlayingLyricsPlate {
     ///
     /// ⚠️ **绝不放在"播放键正上方 44pt"**（上一版的落点）：那里是**标题行与进度条**，
     /// 既压住 Spotify 的内容（进度条的拖动会被抢），也看不出是个按钮。
-    private static func toggleFrame(in page: UIView) -> CGRect? {
+    private static func fallbackToggleFrame(in page: UIView) -> CGRect? {
         let side = toggleSide
         let centeredX = ((page.bounds.width - side) / 2).rounded()
 
