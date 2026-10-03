@@ -5,8 +5,11 @@ extension Array where Element == String {
     var canBeRomanized: Bool {
         // 含假名的行直接算日语：与 dominantCJKLanguageAbove / romanizationLanguageCode
         // 用同一套判定。否则逐行识别可能把日文判成非 CJK，使状态退化成 .original，
-        // 而 .original 会让 toSpotifyLyricsData 的总闸 canRomanize = false ——
-        // 三个罗马化开关会一起失效（日志里的 `romanization=original` 就是这个）。
+        // 而 .original 会让**罗马化那三个开关**一起失效（日志里的 `romanization=original` 就是这个）。
+        //
+        // ⚠️ 2026-10-04：这里原来写的是"`.original` 会让 `toSpotifyLyricsData` 的总闸
+        //    `canRomanize = false`" —— 那个总闸已经删掉了（原生 payload 不再罗马化，
+        //    见 `LyricsDto.toSpotifyLyricsData`）。这个属性现在只服务**我们自己的渲染层**。
         if contains(where: { $0.containsJapaneseKanaForRomanization }) {
             return true
         }

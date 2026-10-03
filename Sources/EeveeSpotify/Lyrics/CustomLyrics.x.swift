@@ -665,8 +665,21 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         //    `NowPlayingLyricsPlate.applyProviderToArtistLine`。）
         dto.providerName = source.description
 
-        let overlayDto = dto.romanizedForWordByWordIfEnabled()
-        currentLyricsDto = overlayDto
+        // ★ 2026-10-11（用户）：「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，
+        //   不是在原文的上面展示罗马字」。
+        //
+        // 以前这里存的是 `dto.romanizedForWordByWordIfEnabled()` 的副本 —— 那个副本会把
+        // `lines[i].content` **和词级 token** 一起改写成罗马字（见 `LyricsDto` 里那段
+        // "整行罗马化 + 首字母大写"）。于是后面每一个读 `currentLyricsDto` 的人都以为
+        // 自己拿到的是原文，实际上已经是罗马字：
+        //   · `LyricLinesAdapter.toAppleMusicLyricLines` 的 `romanization(original:romanized:)`
+        //     拿罗马字和罗马字比 ⇒ 判定"这行没有罗马字可显示" ⇒ **上方那一行永远不出现**；
+        //   · 主歌词那一行画的也是罗马字 ⇒ 用户看到的就是"原文被替换掉了"。
+        //
+        // 罗马字是**显示层**的事：`LyricLinesAdapter.romanizedContentsForDisplay()` 自己会
+        // 从这份原文现算一份罗马字（带缓存、跟 `currentLyricsVersion` + 三个开关走），
+        // 主歌词仍用 `line.content` ⇒ 原文在、罗马字画在它上方。所以这里必须存**原样**的 dto。
+        currentLyricsDto = dto
         // ★ 2026-10-11：数据到了（哪怕是纯音乐那种"空行 + isInstrumental"）⇒ 取词这一步=found。
         currentLyricsLookupState = .found
         // 这份数据**属于哪一首**：切歌不一定伴随歌词请求（客户端命中自己的歌词存储 /
@@ -680,9 +693,9 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             ?? ""
         // ⚠️ 提供者要在**版本号自增之前**写好：观察者（两个 overlay 层）都是
         // 盯着版本号决定要不要重建的，版本一变它们就会立刻读 `currentLyricsProvider`。
-        currentLyricsProvider = overlayDto.providerName
+        currentLyricsProvider = dto.providerName
         currentLyricsVersion += 1
-        writeDebugLog("[Lyrics] provider: \(overlayDto.providerName)")
+        writeDebugLog("[Lyrics] provider: \(dto.providerName)")
 
         // 数据到达即刷新逐词 overlay：9.1.x 上内嵌宿主是 NPV，
         // 它只在进入正在播放页时出现一次，不会因为这首歌词到了再来一次。

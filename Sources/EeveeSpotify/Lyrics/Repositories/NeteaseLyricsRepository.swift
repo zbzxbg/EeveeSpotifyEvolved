@@ -740,6 +740,69 @@ class NeteaseLyricsRepository: LyricsRepository {
         return LyricsTranslationDto(languageCode: languageCode, lines: translatedLines)
     }
 
+    /// 逐字（yrc）路径的译文：**ytlrc** → 逐行译文。
+    ///
+    /// 两条路，按可信度排序：
+    ///
+    ///   ① `buildTranslation` —— 按 **offset 对齐**（与行级 tlyric 完全同一条管线）。
+    ///      网易 ytlrc 的行头时间戳与 yrc 行头一一对应，`parseLrc` 侧也早已为这套对齐
+    ///      修过精度（见 `parseLrc` 里 "Float32 会把 34.010 算成 34009.998 … 与 yrc 行头的
+    ///      精确毫秒 34010 对不上" 那段），所以这是首选路径。
+    ///
+    ///   ② 兜底：offset 一条都没命中时（`buildTranslation` 返回 nil —— 两份文本的时间戳
+    ///      不是同一套时就会这样），**按行序配对**：ytlrc 解析出来的第 i 行 → 主歌词第 i 行。
+    ///      理由：这两份文本本来就是同一条流水线按同一顺序产出的，**顺序可信、时间戳不一定**；
+    ///      宁可错位一格，也不要整首没有翻译（用户要的就是"逐词歌词也要有翻译"）。
+    ///      配对的基准是**最终要交出去的 `originalLines`**，而不是 `yrcParsed`：
+    ///      中间还隔着 `LyricsMarkerFilter` 的丢行与"删开头间奏空行"，只有对着最终数组
+    ///      才能保证 `translation.lines[i]` 与 `lines[i]` 同源同行
+    ///      （渲染层就是按行号取译文的，见 `LyricLinesAdapter` 的 `translationLines[index]`）。
+    ///
+    /// 返回 nil = 这份 ytlrc 真的没有可用译文（解析不出行 / 配对后全空）。
+    private func buildWordByWordTranslation(
+        _ ytlrc: String,
+        originalLines: [LyricsLineDto]
+    ) -> LyricsTranslationDto? {
+        if let aligned = buildTranslation(ytlrc, originalLines: originalLines) {
+            let filled = aligned.lines.filter { !$0.isEmpty }.count
+            if filled > 0 {
+                writeDebugLog("[NetEase] word-by-word — translation built from ytlrc (\(filled) line(s))")
+                return aligned
+            }
+        }
+
+        let parsed = parseLrc(ytlrc)
+        guard !parsed.isEmpty else {
+            writeDebugLog("[NetEase] word-by-word — ytlrc had no usable line")
+            return nil
+        }
+
+        var lines: [String] = []
+        var filled = 0
+        for index in originalLines.indices {
+            let text = index < parsed.count ? parsed[index].content : ""
+            // 与 buildTranslation 同一条 ♪ 规则：删间奏开关开启时，整行只有 ♪ 的译文
+            // 清成空白（保持行数与主歌词一致，不能把行挤掉）。
+            if shouldRemoveInterludeSymbol,
+               text.trimmingCharacters(in: .whitespaces) == "♪" {
+                lines.append("")
+                continue
+            }
+            lines.append(text)
+            if !text.isEmpty { filled += 1 }
+        }
+
+        guard filled > 0 else {
+            writeDebugLog("[NetEase] word-by-word — ytlrc had no usable line")
+            return nil
+        }
+        writeDebugLog("[NetEase] word-by-word — translation paired by line index (\(filled) line(s))")
+        return LyricsTranslationDto(
+            languageCode: lines.romanizationLanguageCode ?? "zh",
+            lines: lines
+        )
+    }
+
     // MARK: - 官方罗马音
 
     /// 用网易官方 romalrc（日语罗马音）按时间戳替换主歌词行。
@@ -941,10 +1004,23 @@ class NeteaseLyricsRepository: LyricsRepository {
             // 逐字歌词：开关开启且网易下发 yrc 时，优先用词级（逐字）时间轴；
             // yrc 缺失/解析为空时回退到 lrc 行级时间轴（下面原逻辑不变）。
             let preferWordByWord = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
+            // ★ 2026-10-11：yrc 与 **ytlrc** 必须从同一次 eapi 响应里一起取出（元组解构）。
+            //
+            // 以前这里写的是 `yrcText = try fetchYrcRaw(songId: songId).yrc` —— 取 `.yrc`
+            // 这一个成员就等于把元组里的 `ytlrc` 当场丢掉。而 ytlrc 是逐字歌词配套的
+            // 翻译（`fetchYrcRaw` 自己那行日志 `yrc … chars, ytlrc … chars` 就写着它一直在
+            // 下发），丢了它，下面的逐字分支就永远没有译文可取 ——
+            // 用户 2026-10-11 的原话：「当返回逐词歌词的时候，不展示歌词翻译」。
+            // 真机日志里 `[NetEase] word-by-word — skipping translation layer` 与
+            // `[NPVLyrics] expanded … translation 0/29` 成对出现，就是这条路径。
+            // ⚠️ **不能**为了拿 ytlrc 再调一次 `fetchYrcRaw`：那是一次额外的网络请求。
             var yrcText: String? = nil
+            var ytlrcText: String? = nil
             if preferWordByWord {
                 do {
-                    yrcText = try fetchYrcRaw(songId: songId).yrc
+                    let yrcRaw = try fetchYrcRaw(songId: songId)
+                    yrcText = yrcRaw.yrc
+                    ytlrcText = yrcRaw.ytlrc
                 } catch {
                     writeDebugLog("[NetEase] yrc (eapi) fetch failed: \(error)")
                 }
@@ -1032,8 +1108,20 @@ class NeteaseLyricsRepository: LyricsRepository {
         if hideNetEaseTranslation {
             writeDebugLog("[NetEase] Hide translation enabled — skipping translation layer")
         } else if !yrcParsed.isEmpty {
-            // 逐字路径：不展示翻译层（网易逐字歌词不显示翻译）
-            writeDebugLog("[NetEase] word-by-word — skipping translation layer")
+            // ★ 2026-10-11（用户）：「当返回逐词歌词的时候，不展示歌词翻译」。
+            //
+            // 逐字路径的译文来自 **ytlrc**（与 yrc 同一次 eapi 下发、行头一一对应），
+            // 不是 `raw.tlyric` —— 后者与行级 lrc 同源，和 yrc 行头不是一套时间轴。
+            // 这里以前只有一句 `[NetEase] word-by-word — skipping translation layer`
+            // 就结束了：从不给 `translation` 赋值，于是逐字歌永远没有翻译层
+            // （真机日志 `[NPVLyrics] expanded … translation 0/29` 的那条路）。
+            if let ytlrc = ytlrcText, !ytlrc.isEmpty {
+                translation = buildWordByWordTranslation(ytlrc, originalLines: lines)
+            } else {
+                // ytlrc 真的没下发（`fetchYrcRaw` 的日志会写着 `ytlrc absent`）——
+                // 这种情况下确实没有译文可用，如实记账，不再假装"逐字歌词不显示翻译"。
+                writeDebugLog("[NetEase] word-by-word — ytlrc absent")
+            }
         } else if let tlyric = raw.tlyric, !tlyric.isEmpty {
             translation = buildTranslation(tlyric, originalLines: lines)
         }

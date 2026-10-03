@@ -495,7 +495,9 @@ class MusixmatchLyricsRepository: LyricsRepository {
                     }
                 } else if !requestedLanguage.isEmpty {
                     // 用户选择了真实翻译语言：按 offset 对齐附加为翻译层（显示翻译按钮），
-                    // 行内容保持原文，交给 toSpotifyLyricsData 做本地罗马化。
+                    // 行内容保持原文 —— ⚠️ 2026-10-04 起 `toSpotifyLyricsData` **不再**做本地罗马化
+                    // （用户要求原生那页回到原文、罗马字只由我们自己的渲染层画，
+                    // 见 `LyricsDto.toSpotifyLyricsData` 里那段说明）。
                     translation = LyricsTranslationDto(
                         languageCode: requestedLanguage,
                         lines: lyricsLines.map { line -> String in

@@ -84,8 +84,6 @@ struct LyricsDto {
             $0.providedBy = "\(source)"
         }
         
-        let canRomanize = romanization == .canBeRomanized
-        
         if effectiveLines.isEmpty {
             // 没有行可画（且未启用纯音乐占位）—— 保持空 payload。
         }
@@ -93,22 +91,28 @@ struct LyricsDto {
             let sortedLines = effectiveLines.sorted { 
                 ($0.offsetMs ?? 0) < ($1.offsetMs ?? 0)
             }
-            // 整首歌语言占比检测（所有源统一）：占比最高的 CJK 语言 > 阈值时，
-            // 作为整首歌的统一路由语言，避免逐行识别把孤立汉字行误判。
-            let songLanguage: NLLanguage? = canRomanize
-                ? effectiveLines.map(\.content).dominantCJKLanguageAbove(threshold: romajiLanguageThreshold)
-                : nil
+            // ★ 2026-10-11（用户）：**注入给 Spotify 的正文一律保持原文，不再罗马化**。
+            //
+            // 用户原话：「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，不是在原文的
+            // 上面展示罗马字」。以前这里在 `canRomanize` 时把每行交给
+            // `romanizedIfEnabled(languageHint:songLanguage:)`，于是 Spotify 原生歌词页 /
+            // 卡片拿到的正文就是罗马字 —— 日文原文在原生那页上等于被删掉了，而罗马字本该
+            // 由**我们自己的渲染层**画在原文**上方**（`LyricLinesAdapter` 的
+            // `LyricLine.romanization` → `SynchronizedLyricText` 上方那一行）。
+            //
+            // 现在的口径（用户定的）：原生那页回到原文，罗马字只由我们这层画。
+            // 数据来源没有变少：`LyricsDto` 里仍是无损原文，显示层照旧自己算罗马字
+            // （`romanizedForWordByWordIfEnabled()` / `romanizedContentsForDisplay()`）。
+            //
+            // ⚠️ 随之删掉的是这里的整首歌语言占比检测（`dominantCJKLanguageAbove`）：
+            // 它此前**只**用于给罗马化选语言，留着就是一段没有消费者的计算。
             lyricsData.lines = sortedLines.map { line in
                 LyricsLine.with {
-                    let content: String
-                    if canRomanize {
-                        content = line.content.romanizedIfEnabled(languageHint: languageCode, songLanguage: songLanguage)
-                    } else {
-                        content = line.content
-                    }
                     // 统一行首大写：无论来源/设置，行首第一个字母都大写；
                     // 仍会跳过「「 " ・ 空格」等装饰/隐形前缀，只大写其后的第一个字母。
-                    $0.content = content.capitalizingFirstLetterIfAlphabetic()
+                    // （这不是罗马化：日文/中文正文里没有可大写的拉丁字母时它是恒等变换，
+                    //   而 `romanizedForWordByWordIfEnabled()` 对罗马字自己也会做同一步。）
+                    $0.content = line.content.capitalizingFirstLetterIfAlphabetic()
                     $0.offsetMs = Int32(line.offsetMs ?? 0)
                 }
             }
@@ -661,8 +665,16 @@ extension String {
 // MARK: - 逐字 overlay 的罗马化
 
 extension LyricsDto {
-    /// 逐字歌词 + 对应语言罗马化开关都开启时，返回词/行文本罗马化的副本（供逐字 overlay 显示）。
-    /// 只改 overlay 读的这份；喂给原生 protobuf 的仍用原始 dto（toSpotifyLyricsData 自己会罗马化 content）。
+    /// 逐字歌词 + 对应语言罗马化开关都开启时，返回词/行文本罗马化的副本（供显示层取罗马字）。
+    ///
+    /// ⚠️ 2026-10-11 起：**这份副本只用来"取罗马字那一行"**，谁都不许把它当主歌词。
+    ///   · `LyricLinesAdapter.toAppleMusicLyricLines` 只读它的 `content` 去和**原文**比，
+    ///     不同才把罗马字挂到 `LyricLine.romanization`（画在原文上方）；
+    ///   · `CustomLyrics.storeLyricsDto` 存的是**原样 dto**，不是这份副本 ——
+    ///     以前存的是它，于是"原文"在渲染前就已经变成罗马字，用户看到的是
+    ///     「直接替换原日文」而不是「原文上面一行罗马字」。
+    ///   · 喂给 Spotify 原生那页的 payload（`toSpotifyLyricsData`）同样**不再**罗马化，
+    ///     原生页回到原文（以前那句"toSpotifyLyricsData 自己会罗马化 content"已经作废）。
     func romanizedForWordByWordIfEnabled() -> LyricsDto {
         guard NgzhwmSettingsViewModel.isWordByWordLyricsEnabled,
               romanization == .canBeRomanized else { return self }

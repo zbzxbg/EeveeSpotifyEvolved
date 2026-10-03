@@ -152,11 +152,22 @@ extension LyricsDto {
     /// 为什么要这条判据：`romanizedForWordByWordIfEnabled()` 会把整首歌都过一遍 ——
     /// 一首日文歌里的英文行（或本来就是拉丁字母的行）罗马化后就是它自己，
     /// 那种行再显示一遍罗马字纯属噪声、还白占一行高度。
+    ///
+    /// ★ 2026-10-04：比较改成**忽略大小写**。
+    ///
+    /// 为什么：`romanizedForWordByWordIfEnabled()` 顺手会把行首字母大写
+    /// （`capitalizingFirstLetterIfAlphabetic()`，那是仓库的显示约定），而**原文**没有那一步。
+    /// 于是 "i love you" 这种全小写的拉丁行会算成"罗马字与原文不同"⇒ 上面多出一行
+    /// 只差一个字母大小写的"罗马字"（用户报的罗马化那一条修完之后才会露出来 ——
+    /// 以前原文早就被整行替换成罗马字了，这一支根本走不到）。
     private static func romanization(original: String, romanized: String?) -> String? {
         guard let romanized else { return nil }
         let trimmedOriginal = original.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedRomanized = romanized.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedRomanized.isEmpty, trimmedRomanized != trimmedOriginal else { return nil }
+        guard !trimmedRomanized.isEmpty else { return nil }
+        guard trimmedRomanized.compare(trimmedOriginal, options: .caseInsensitive) != .orderedSame else {
+            return nil
+        }
         return trimmedRomanized
     }
 
