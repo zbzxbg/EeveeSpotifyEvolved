@@ -11,12 +11,12 @@
 
 | | |
 |---|---|
-| 提交 | `257016e`（歌词数据层）→ `934d7ff`（末行贴底）→ `e9efc63`（听歌页版式六项 + 两条建议）→ `e6b00c4`（两处自查发现的地雷，见 §2.4），**已推到 `origin/main`** |
-| **要编译的就是 `main` 的最新提交** | 点 `Build IPA — patched` 时 `Use workflow from` 选 **`main`** 即可（Swift 内容 = `c66d72b`；其后两笔是独立复核抓出来的编译错与三处「页面走了没收尾」的修）。跑完看 `head_sha`：应当是那一次的 HEAD |
+| 提交 | `a9e1095`（歌词数据层）→ `1397b5f`（末行贴底）→ `cac4d6e`（听歌页版式六项 + 两条建议）→ `6460c77`（两处自查发现的地雷，见 §2.4），**已推到 `origin/main`** |
+| **要编译的就是 `main` 的最新提交** | 点 `Build IPA — patched` 时 `Use workflow from` 选 **`main`** 即可（Swift 内容 = `a7af811`；其后两笔是独立复核抓出来的编译错与三处「页面走了没收尾」的修）。跑完看 `head_sha`：应当是那一次的 HEAD |
 | 自检 | ✅ 六条全绿（orion 327 / brace 327 / member 272 / string 276 / l10n en / l10n zh-CN 全 exit 0） |
 | CI | ✅ **Logic tests 已自动跑**（push 触发）；⏳ **`Build IPA — patched` 要手动点一次**（本机没有 `gh`，我点不了）—— 它才会把 Swift 编一遍 |
 | 装机 | ❌ **一轮都没上过机器**：下面 §3 那 12 条全是"看一眼" |
-| 一句话 | **代码改完、自检过、推上去了；接下来是"点一次 Build IPA（`e6b00c4`）→ 装 → 拍照片 + 存日志 58"** |
+| 一句话 | **代码改完、自检过、推上去了；接下来是"点一次 Build IPA（`6460c77`）→ 装 → 拍照片 + 存日志 58"** |
 
 ---
 
@@ -49,20 +49,20 @@
 
 ## 2. 逐条：根因 → 改法（**都有文件:行**）
 
-### 2.1 数据层（提交 `257016e`）
+### 2.1 数据层（提交 `a9e1095`）
 
 | # | 根因（代码实证） | 改法 |
 |---|---|---|
 | 5 | `NeteaseLyricsRepository` 里 `yrcText = try fetchYrcRaw(songId:).yrc` —— **只取 `.yrc` 成员，把元组里的 `ytlrc` 当场丢掉**（而它自己的日志 `yrc … chars, ytlrc … chars` 证明一直在下发）；逐字分支只写一句 `word-by-word — skipping translation layer`，**从不给 `translation` 赋值** ⇒ 日志 57 的 `translation 0/29` | 保留元组 → 新增 `buildWordByWordTranslation()`：先按 offset 对齐（与行级 tlyric 同一条管线），**一条都没命中时按行序配对**（对着**最终** `lines` 数组，保证 `translation.lines[i]` 与 `lines[i]` 同行） |
 | 4 | `storeLyricsDto` 存的是 `dto.romanizedForWordByWordIfEnabled()` —— 那份副本会把 `lines[i].content`（和词级 token）**改写成罗马字** ⇒ 适配器的"罗马字≠原文才显示"判据拿罗马字比罗马字，永远返回 nil ⇒ 上方那行永远不出现、主歌词却是罗马字；`toSpotifyLyricsData` 另外还给原生 payload 罗马化 | 存**原样 dto**；`toSpotifyLyricsData` 不再改写 content（原生页回原文）；`romanization(original:romanized:)` 改成**忽略大小写**比较（否则"只差首字母大写"的行会多出一行假罗马字） |
 
-### 2.2 末行贴底（提交 `934d7ff`）
+### 2.2 末行贴底（提交 `1397b5f`）
 
 | # | 根因 | 改法 |
 |---|---|---|
 | 7 | `AppleMusicLyricsPage` 在**没有页脚时把 `contentInsets.bottom` 加两次**，而三档共用 120 ⇒ 播放器这一档拿到 **240pt** 空白，而容器只有 ≈400pt ⇒ **比容器中线还多** ⇒ 末行能停在容器 y=159（中线以上） | 底边距**分档**：全屏 46（不动）/ 预览卡 120（**不动**，它靠这个才让 `scrollTo(.center)` 生效）/ 播放器 **24** ⇒ 空白 48pt，末行落在 641−48=**593**，离控件条上沿（604）还有 11pt |
 
-### 2.3 听歌页（提交 `e9efc63`，全在 `NowPlayingLyricsPlate.swift`）
+### 2.3 听歌页（提交 `cac4d6e`，全在 `NowPlayingLyricsPlate.swift`）
 
 | # | 根因 | 改法 |
 |---|---|---|
@@ -75,7 +75,7 @@
 | 10a | 收起态那张大封面是 **Spotify 自己的**（我们那份只在展开时存在），尺寸完全由它的 frame 决定（366pt @ 24,146） | **只写一个 transform** 把它缩到 **242pt**（`restingCoverSide`）：与它**原有** transform 复合、按对象记住原值、离开页面/关开关**精确还原**（仓库规矩 14）。因为 `measure()` 用的是 `convert`（含 transform），`geometry.cover` 自动变成 242 ⇒ 缩略图比、动画起点全部跟着对；封面顶边同时落到 ≈208（顺手把 #3 也解决了） |
 | 10b | 没有现成的单行歌词可复用（Spotify 自己那条 `singalong-lyrics-view` 被我们**关掉了**） | 新增一行居中 `UILabel`（22pt semibold、投影、不吃触摸、id `eevee-npv-single-lyric`），**y = 封面底边与控件条上沿的中点**；判据**一处都不新写**：行模型 `currentLines()`、当前行 `LyricPlaybackTimeline.position()`（本仓库唯一入口）、位置 `WordByWordPositionResolver`、节拍蹭 0.3s（**不抢**共享 CADisplayLink）；新开关 `nowPlayingSingleLyric`（默认开）+ 设置页一行 + en/zh-CN 文案 |
 
-### 2.3b ★ 扩展功能页的三颗"总开关"（提交 `a637a78`，用户 2026-10-12 新提的）
+### 2.3b ★ 扩展功能页的三颗"总开关"（提交 `cc1feac`，用户 2026-10-12 新提的）
 
 用户原话：「**我觉得有人不会用这个东西，去用正常的去了**。所以我在想，要不要写三个开关在扩展页面里，
 就是 **展示罗马化歌词** 和 **展示歌词翻译**，以及 **展示单行歌词（自制作）**」。
@@ -97,7 +97,7 @@
 `NeteaseLyricsRepository` / `MusixmatchLyricsRepository` 里（现在 `NgzhwmSettingsViewModel`
 里也有一份常量）—— 收敛成一处是另一次改动，别混在这一轮里。
 
-### 2.4 自查发现的两处地雷（提交 `e6b00c4`，**在 e9efc63 之后补的**）
+### 2.4 自查发现的两处地雷（提交 `6460c77`，**在 cac4d6e 之后补的**）
 
 | 地雷 | 为什么危险 | 改法 |
 |---|---|---|
