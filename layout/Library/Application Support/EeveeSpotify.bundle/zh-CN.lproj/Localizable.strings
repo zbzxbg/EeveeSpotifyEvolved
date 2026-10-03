@@ -353,19 +353,19 @@ extras_description = "在 EeveeSpotify 之上加的这一批功能，集中放�
 
 declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自你设备的视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
 hide_mini_player_bar = "隐藏迷你播放条";
-hide_singalong_line = "隐藏封面下的一行歌词";
-hide_npv_pills = "隐藏播放器里的胶囊（切换至视频 / 显示歌词）";
+hide_singalong_line = "隐藏单行歌词";
+hide_npv_pills = "隐藏播放器里的切换至视频 / 显示歌词胶囊";
 declutter_home_player_section = "首页与播放器";
-declutter_home_player_description = "再藏掉 Spotify 自己的三处东西，类名/标识都来自本机的视图树转储。设备按钮在迷你条和播放器里共用，所以关掉是每条传输条上都不显示。";
+declutter_home_player_description = "类名/标识都来自本机的视图树转储。";
 hide_home_header = "隐藏首页顶部条";
 hide_connect_button = "隐藏设备按钮";
-hide_add_to_button = "隐藏加号按钮";
+hide_add_to_button = "隐藏喜欢按钮";
 
 /* MARK: 屏蔽的艺人 */
-blocked_artists_title = "屏蔽的艺人";
-blocked_artists_enabled = "自动跳过被屏蔽的艺人";
-blocked_artists_description = "名单里艺人的歌一开始播就跳到下一首 —— 不管它来自你自己的歌单、别人的歌单、电台还是分享链接。只跳播放：不会从 Spotify 的界面里删掉或藏起任何东西（歌单、搜索、首页都照旧）。名字按不区分大小写、按包含来匹配，所以屏蔽 MIMI 也会命中 MIMI、可不，名字相近的艺人会被一起牵连。只在曲目开头几秒判定；连续跳过 5 首就先停下，免得整张队列都是被屏蔽的艺人时一直闪。";
-blocked_artists_list_header = "已屏蔽";
+blocked_artists_title = "屏蔽艺人";
+blocked_artists_enabled = "自动跳过屏蔽艺人";
+blocked_artists_description = "若填写了屏蔽某位艺人的歌曲，则播放到此艺人参与的歌曲时，会自动跳过该歌曲。";
+blocked_artists_list_header = "已屏蔽艺人";
 blocked_artists_empty = "还没有屏蔽任何艺人";
 blocked_artists_add_placeholder = "艺人名";
 blocked_artists_add = "添加";
@@ -383,14 +383,14 @@ now_playing_shell_glass_description = "用系统的液态玻璃（iOS 26 起才�
 library_section = "音乐库";
 tab_bar_glass_section = "标签栏";
 tab_bar_glass = "标签用液态玻璃";
-tab_bar_glass_description = "给底部四颗标签（主页 / 搜索 / 音乐库 / 创建）后面垫一层系统的液态玻璃（iOS 26 起；拿不到就退成材质），并把四颗往中间收一点、玻璃贴着它们走（更紧凑）。图标在玻璃**之上**，点击照常。关掉即完全恢复原样。";
+tab_bar_glass_description = "给底部四颗标签（主页 / 搜索 / 音乐库 / 创建）后面垫一层系统的液态玻璃。";
 library_large_title = "Apple Music 式头部";
-library_large_title_description = "改的是 Spotify 自己的资料库头部：标题改成左对齐、和头像之间多一点呼吸，并收掉它画在顶部的那层灰色渐隐。关掉即把两处都写回原样。";
+library_large_title_description = "此功能可能看起来不太明显。观感上来看就是音乐库这几个字大了几个字号。";
 now_playing_shell_description = "自己接管听歌页，而不是往 Spotify 的视图里插层：整页底色跟着封面走，歌名/艺人由我们画，Spotify 自己那道会渐显的吸顶头再也盖不住它。Spotify 的控件（传输键、进度条、菜单）全部留在原地、照常可用。关掉开关即完全还原，包括 Spotify 自己的吸顶头。";
 music_style_nowplaying = "背景跟封面取色 + 顶部大标题";
 music_style_nowplaying_description = "Apple Music 风格的第一个样品：整页背景取封面的主色，歌名与艺人压在顶部。它只加不删——不隐藏 Spotify 自己的任何播放器控件，所以关掉开关即完全还原。播放页下次布局时生效，不用重启。";
 
-flag_catalog_description = "这些名字与 scope 都来自本机自己的调试日志，没有一条是猜的。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
+flag_catalog_description = "这些名字与 scope 都来自调试日志。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
 flag_catalog_empty_result = "没有匹配的 flag";
 tab_bar_hide_labels = "隐藏标签文字";
