@@ -101,10 +101,129 @@ enum DeclutterChrome {
         writeDebugLog("[Declutter] \(message)")
     }
 
+    /// ★★ 2026-10-08：**把 Spotify 自己的「单行歌词」整个关掉** ——
+    /// **替用户按下它自己那颗胶囊**，而不是把那一行的视图藏起来。
+    ///
+    /// ## 用户给的现场（照片 58 / 59，逐字）
+    ///
+    /// > 图片 58 是胶囊显示「显示歌词」（**此时单行功能生效**）的时候截屏的
+    /// > （但是这个功能似乎是**只隐藏歌词内容，不隐藏功能，所以封面被抬上去了**）；
+    /// > 图片 59 是胶囊显示「隐藏歌词」的时候截屏的（**此时单行功能关闭，封面还是原来的正常的样子**）。
+    /// > **我想要的高度效果是图片 59 的效果。**
+    ///
+    /// ⇒ 我先后猜过两次、两次都反了：
+    ///   · `hidden` 只去得掉**内容**，Spotify 的**功能**还在 ⇒ **封面照样被抬着**（= 用户看到的 58）；
+    ///   · `alpha = 0` 更糟 —— 它把那一格**留着**，等于把那个后果保下来。
+    ///
+    /// ⇒ 唯一对的做法：**按它自己的开关**。用户手动按一下就是照片 59，我们替他按。
+    ///
+    /// ## 判据：那一行的高度就是"功能开没开"
+    ///
+    /// 日志 51（功能开）：`15.LyricsView@0,0,366,120,id=singalong-lyrics-view`；
+    /// 日志 52（功能关）：`15.LyricsView@0,0,366,0,id=singalong-lyrics-view`。
+    /// ⇒ `bounds.height > 1` 就是"开着"。**本来就是关的 ⇒ 一个字节都不碰**（也省掉每拍的走查）。
+    @discardableResult
+    static func turnOffSpotifySingalong(singalong: UIView, in root: UIView) -> Bool {
+        guard singalong.bounds.height > 1 else { return true }   // 本来就是关的：算成功
+        guard let control = showLyricsPillControl(in: root) else {
+            reportOnce(
+                "singalongPillMissing",
+                "singalong is on but the show/hide-lyrics pill was not found - leaving it alone"
+                    + " (you can still switch it off by hand; the default stays recoverable)"
+            )
+            return false
+        }
+        control.sendActions(for: .touchUpInside)
+        reportOnce(
+            "singalongOff",
+            "turned Spotify's own singalong line off through its pill"
+                + " (hiding the view was not enough: it removed the text but left the cover lifted)"
+        )
+        return true
+    }
+
+    /// 那行被抬起来之后要写回的东西：`.singalong` 视图本身（旧版本可能给它写过 `hidden`）
+    /// 和我们按住过的那颗胶囊。
+    private static weak var pillWeHid: UIView?
+
+    /// 关掉开关时写回 —— 用户要回 Spotify 自己的行为，我们就一个字节都不留。
+    private static func restoreSingalongIfNeeded(_ view: UIView) {
+        // 旧机制（藏视图）留下的痕迹也要清掉，否则升级上来的用户会一直看不到那一行。
+        if wasHiddenByUs(view) {
+            view.isHidden = false
+            clearHiddenByUs(view)
+            writeDebugLog("[Declutter] singalongLine restored")
+        }
+        guard let pill = pillWeHid else { return }
+        pill.alpha = 1
+        pillWeHid = nil
+    }
+
+    /// 那颗「显示歌词 / 隐藏歌词」胶囊（`Lyrics_CardElementImpl.ShowLyricsButtonElementUI`，
+    /// `dump-9.1.88.txt:3570`）—— **它没有 id**，只能按类名子串找；找到后要拿到它**能点的那个 `UIControl`**。
+    ///
+    /// ⚠️ 只在"功能开着"时才走这一趟（调用点已经先判了高度），所以常态下零成本。
+    private static func showLyricsPillControl(in root: UIView) -> UIControl? {
+        guard let pill = showLyricsPillView(in: root) else { return nil }
+        return firstControl(in: pill)
+    }
+
+    private static func showLyricsPillView(in root: UIView) -> UIView? {
+        var visited = 0
+        var queue: [UIView] = [root]
+        while !queue.isEmpty, visited < 2000 {
+            let view = queue.removeFirst()
+            visited += 1
+            if NSStringFromClass(type(of: view)).contains("ShowLyricsButton") { return view }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    private static func firstControl(in view: UIView) -> UIControl? {
+        if let control = view as? UIControl { return control }
+        var visited = 0
+        var queue: [UIView] = view.subviews
+        while !queue.isEmpty, visited < 64 {
+            let node = queue.removeFirst()
+            visited += 1
+            if let control = node as? UIControl { return control }
+            queue.append(contentsOf: node.subviews)
+        }
+        return nil
+    }
+
+    /// ★ **只在"真的把功能关掉了"之后**才按那颗胶囊（调用点就是这么串的）。
+    ///
+    /// 否则用户就再也没法自己把它关掉 —— 会卡在"封面被抬着"的状态里，而那正是我们要修的东西。
+    /// ⚠️ 用 **`alpha = 0`**，不用 `hidden`：这一带的 Encore 容器会因 `hidden` 重排布局。
+    private static func hideShowLyricsPill(in root: UIView) {
+        guard let pill = showLyricsPillView(in: root), pill.alpha > 0.01 else { return }
+        pill.alpha = 0
+        pillWeHid = pill
+        reportOnce(
+            "singalongPillHidden",
+            "hid the show/hide-lyrics pill (the singalong is off, so it has nothing left to toggle)"
+        )
+    }
+
     /// 藏 / 撤销，两个方向都幂等。
     ///
     /// 关键区别在"谁藏的"：`isHidden == true` 可能是 Spotify 自己写的（没在播放时
     /// 迷你条本来就不显示）。所以撤销只针对被我们打过标的那些视图。
+    ///
+    /// ## ⚠️ 2026-10-08：**这里曾经试过 `soft: true`（用 `alpha` 代替 `hidden`），已撤回**
+    ///
+    /// 经过：用户照片 58（隐藏开）/ 59（隐藏关）对照显示封面高度不同，我先判成
+    /// "`hidden` 让 Encore 重排 ⇒ 用 `alpha` 就不会动"。**用户随后纠正了**：
+    ///
+    /// > 那个功能确实会隐藏单行歌词，但是**不会阻止封面上抬**。所以在用户的视角来看是：
+    /// > 这个单行歌词里面没有单行歌词滚过，但**把封面往上抬的功能没有阻止**。
+    ///
+    /// ⇒ 真正的问题是"**只藏了文字、没有撤销布局后果**"，而 `alpha` 恰好**把那一格留着**，
+    /// 等于把那个后果**保下来** —— 方向反了。所以回到 `hidden`（它至少让 Encore 重排一次），
+    /// 并且**默认值保持「关」**、不改这一块的行为。
+    /// **下一步必须先问清"开着的时候你到底想让封面去哪"，再动这里**（见交接文档 §13）。
     static func apply(
         wantHidden: Bool,
         to view: UIView,
@@ -205,12 +324,16 @@ enum DeclutterChrome {
             )
         }
         if let view = targets.singalong {
-            apply(
-                wantHidden: hideSingalongLine,
-                to: view,
-                reportKey: "singalongLine",
-                reportMessage: "singalong single-line lyrics hidden (id=singalong-lyrics-view)"
-            )
+            if hideSingalongLine {
+                // ★★ 2026-10-08：**不藏它的视图，改成把 Spotify 自己的单行歌词整个关掉。**
+                //    见 `turnOffSpotifySingalong` —— 藏视图只去得掉内容、去不掉"封面被抬起来"。
+                //    只有真关掉了才把胶囊也按住，否则用户会卡在被抬的状态里出不来。
+                if turnOffSpotifySingalong(singalong: view, in: root) {
+                    hideShowLyricsPill(in: root)
+                }
+            } else {
+                restoreSingalongIfNeeded(view)
+            }
         }
         if let view = targets.homeHeader {
             apply(
@@ -442,14 +565,9 @@ class SingalongLyricsLineHideHook: ClassHook<UIView> {
 
         guard self.target.accessibilityIdentifier == "singalong-lyrics-view" else { return }
 
+        // 只登记；**真正关掉它的是 `reconcile` 那条节拍里的 `turnOffSpotifySingalong`**
+        // —— 那条路手上有页面根（要找得到那颗胶囊），而这里只有这一行自己。
         DeclutterChrome.note(self.target, as: .singalong)
-
-        DeclutterChrome.apply(
-            wantHidden: DeclutterChrome.hideSingalongLine,
-            to: self.target,
-            reportKey: "singalongLine",
-            reportMessage: "singalong single-line lyrics hidden (id=singalong-lyrics-view)"
-        )
     }
 }
 

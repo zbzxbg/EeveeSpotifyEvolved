@@ -141,11 +141,11 @@ class PlayButtonTapHook: ClassHook<UIView> {
         onMainThreadSync {
             guard NowPlayingControlsPlate.isEnabled else { return }
             // ★ 2026-10-07：**这一行在身份判断之前**。
-            //   日志 51 里 `play button tapped —` **一行都没有**，而那一条只能证明
-            //   "门面没收到"，分不出"用户没点"与"钩子根本没被调用"。
-            //   这一行把两者分开：**有它、没有下面那条 = 钩子在跑、只是没认下这颗按钮**；
-            //   **两条都没有 = 钩子没被调用**（那就要换落点，见 §3.4 ④）。
-            NowPlayingControlsPlate.noteTapHookFired(from: hooked)
+            //   日志 51/52 里 `play button tapped —` **一行都没有**，而那一条只能证明
+            //   "门面没收到"。这一行把"看到了但没认下"与"根本没看到"分开。
+            //   ⚠️ 实测：这条路（`uiButtonTapped`）在 9.1.88 上**从不触发** ——
+            //   真正生效的是 `installTapTargetIfNeeded` 挂在内部 `UIControl` 上的那条。
+            NowPlayingControlsPlate.noteTapSeen(from: hooked)
             NowPlayingControlsPlate.notePlayTapped(from: hooked)
         }
     }
@@ -422,6 +422,10 @@ enum NowPlayingControlsPlate {
             touchedButtons.add(play)
             lastPlayButton = play
             if pinButton(play) { pinnedNow += 1 }
+            // ★ 2026-10-07：给播放键**内部那颗真正收触摸的 `UIControl`** 挂我们自己的
+            //   target/action —— 这是"点击那一刻就翻字形"在 9.1.88 上**唯一真正生效**的路
+            //   （那条 `uiButtonTapped` 钩子从来没被调用过，见 `installTapTargetIfNeeded`）。
+            installTapTargetIfNeeded(on: play)
             // pw 的同款补丁：缓冲 spinner 还立着时**把我们的字形藏起来** —— 否则"缓冲中"
             // 会显示一个假的播放/暂停字形，用户点完看到的就是"字形自己跳"。
             // （我们不动 spinner 的 `alpha`，所以 `spinnerShowing` 读到的还是原生值。）
@@ -751,7 +755,7 @@ enum NowPlayingControlsPlate {
 
     private static func playGlyphName() -> String {
         projection.refresh()
-        let fromState = projection.isPlaying ? "pause.fill" : "play.fill"
+        let fromState = projection.isPlaying ? playingSymbol : pausedSymbol
 
         // ★ 点击那一刻已经把字形翻过去了（pw 的 `playTapped`）：播放器状态晚 ~0.35s + 一个节拍
         //   才跟上来，那段时间**以点击为准**（最多 1.2s）；一旦状态跟上、或窗口过期，就交还。
@@ -797,6 +801,10 @@ enum NowPlayingControlsPlate {
     private static let stableSamples = 2
     private static let stableSeconds: CFAbsoluteTime = 1.2
 
+    /// 两个符号名（只在这里定义一次，免得散落的字符串字面量对不上）。
+    private static let playingSymbol = "pause.fill"
+    private static let pausedSymbol = "play.fill"
+
     /// ★ **分歧上限**（独立只读复核抓到的漏洞）：日志 51 那种"一直来回翻"的形态下，
     /// 每隔一次采样 `wanted` 就恰好等于**当前已画**的那个 ⇒ 候选被反复清零
     /// ⇒ `settled` **永远不提交**，字形会**无限期冻在**上一次提交的值上。
@@ -830,7 +838,22 @@ enum NowPlayingControlsPlate {
             return displayedPlaySymbol
         }
 
-        // 从这里往下：`wanted` 与屏幕上那个**不一致**。
+        // ★★ **不对称**：「在播」立刻采纳，「暂停」才要等窗口。
+        //
+        // 要压的就是"一次采样没前进 ⇒ 假暂停"那**一个**方向；反方向（位置确实前进了）
+        // 没有假阳性的余地，而且它是假暂停的**恢复** —— 压它只会让错的那一帧留得更久。
+        // 这一条同时消掉"用户点了暂停之后还要等 1.2s"的观感：用户点的那一下由
+        // `notePlayTapped` 的接管窗口**当场**翻过去（那条路在这之前就 return 了），
+        // 而投影这边一旦说"在播"，也是立刻采纳。
+        if wanted == playingSymbol {
+            displayedPlaySymbol = wanted
+            candidateSymbol = wanted
+            candidateCount = 0
+            disagreeSince = 0
+            return wanted
+        }
+
+        // 从这里往下：`wanted` 与屏幕上那个不一致，且方向是"**声明暂停**"。
         if disagreeSince == 0 { disagreeSince = now }
         if now - disagreeSince >= disagreeLimit {
             // 兜底：分歧太久了，站到最新读数这一边（别再冻着）。
@@ -863,18 +886,73 @@ enum NowPlayingControlsPlate {
         return wanted
     }
 
-    /// `uiButtonTapped` 钩子**被调用了**（在"认不认这颗按钮"之前就报）。
+    /// 播放键**内部那颗真正收触摸的 `UIControl`**。
+    /// 真机树：`PlaybackControlsUnit > … > PlayButtonView > CondensedButton(UIButton)`。
+    private static func transportControl(in button: UIView) -> UIControl? {
+        if let control = button as? UIControl { return control }
+        var visited = 0
+        var queue: [UIView] = button.subviews
+        while !queue.isEmpty, visited < 64 {
+            let view = queue.removeFirst()
+            visited += 1
+            if let control = view as? UIControl { return control }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    /// ★★ 2026-10-07：**给那颗 `UIControl` 挂我们自己的 target/action。**
     ///
-    /// 为什么必须单独一条：日志 51 里 `play button tapped —` 一行都没有，而那一条只能证明
-    /// "门面没收到"，分不出"用户没点"与"钩子没被调用"。这一条在身份判断**之前**打 ⇒
-    /// 日志 52 里：**有它、没有 `play button tapped` = 钩子在跑、只是没认下这颗按钮**；
-    /// **两条都没有 = 钩子根本没被调用**（`uiButtonTapped` 在 9.1.88 上"存在但不走这条路"）。
-    static func noteTapHookFired(from button: UIView) {
+    /// ## 为什么必须补这一条（用户报的"暂停键反应比以前更慢了"）
+    ///
+    /// 日志 51/52 里新增的判据 `uiButtonTapped fired on …` **一行都没有**
+    /// ⇒ `PlayButtonView.uiButtonTapped` 那个钩子（pw 在 9.1.78 上的落点）
+    /// **在 9.1.88 上根本不会被调用** —— 类里"有这个方法"≠"这条路会被走"。
+    /// 它一失效，"点击那一刻就翻字形"就永远不生效 ⇒ **所有翻转都退回投影**
+    /// ⇒ 再叠上我 2026-10-07 加的 1.2s 粘滞窗口 ⇒ 用户看到的就是"反应更慢了"。
+    ///
+    /// 挂在 `UIControl` 的 `.touchUpInside` 上是**纯公开 API**：不赌任何私有选择器、
+    /// 不依赖 pw 的 `uiButtonTapped`。我们只**读**这一下（翻我们自己的字形），
+    /// 不吞事件、不改状态 —— 按钮原本的动作照常发出去。
+    ///
+    /// ⚠️ **装过就不再装**（`tapTargets` 表），而且**`restore()` 也不清这个表** ——
+    /// 清掉会让我们有机会对同一颗控件 `addTarget` 两次 ⇒ 一下就翻两下。
+    /// 开关关掉后那个 target 还在，但它进函数第一句就 `guard isEnabled` ⇒ 空转。
+    private static let tapTargets = NSHashTable<UIControl>.weakObjects()
+
+    private static func installTapTargetIfNeeded(on button: UIView) {
+        guard let control = transportControl(in: button) else { return }
+        guard !tapTargets.contains(control) else { return }
+        control.addTarget(
+            NowPlayingPlayTapTarget.shared,
+            action: #selector(NowPlayingPlayTapTarget.tapped),
+            for: .touchUpInside
+        )
+        tapTargets.add(control)
+        noteDiagnostic(.tap, "tap target installed on \(identifier(of: control))")
+    }
+
+    /// 那颗 `UIControl` 被点了（见 `installTapTargetIfNeeded`）—— **这是真正生效的那条路**。
+    static func notePlayTappedFromControl() {
+        guard isEnabled, let play = lastPlayButton else { return }
+        noteTapSeen(from: play)
+        notePlayTapped(from: play)
+    }
+
+    /// 播放键那一下**被我们看到了**（在"认不认这颗按钮"之前就报）。
+    ///
+    /// 两条来源都会走到这里：
+    ///   ① `uiButtonTapped` 钩子 —— **9.1.88 上实测从不触发**（日志 51/52 零命中）；
+    ///   ② 我们挂在内部那颗 `UIControl` 上的 target/action —— **真正生效的那条**。
+    ///
+    /// 这一行在身份判断**之前**打 ⇒ 日志里"**有它、没有 `play button tapped`**"
+    /// 就说明"看到了但没认下这颗按钮"（比如 id 挂的位置和我们记的不是一条链）。
+    static func noteTapSeen(from button: UIView) {
         guard isEnabled else { return }
+        let isOurs = lastPlayButton.map { button.isDescendant(of: $0) } ?? false
         noteDiagnostic(
             .tap,
-            "uiButtonTapped fired on \(identifier(of: button))"
-                + " (isOurPlayerButton=\(button.isDescendant(of: lastPlayButton ?? button)))"
+            "tap seen on \(identifier(of: button)) (isOurPlayerButton=\(isOurs))"
         )
     }
 
@@ -894,7 +972,7 @@ enum NowPlayingControlsPlate {
               button.isDescendant(of: play) || play.isDescendant(of: button) else { return }
 
         let current = displayedPlaySymbol.isEmpty ? playGlyphName() : displayedPlaySymbol
-        let target = (current == "play.fill") ? "pause.fill" : "play.fill"
+        let target = (current == pausedSymbol) ? playingSymbol : pausedSymbol
         tapOverrideSymbol = target
         tapOverrideUntil = CFAbsoluteTimeGetCurrent() + tapTrust
         displayedPlaySymbol = target
@@ -926,6 +1004,21 @@ enum NowPlayingControlsPlate {
             queue.append(contentsOf: view.subviews)
         }
         return nil
+    }
+}
+
+// MARK: - 手势目标
+
+/// 播放键**内部那颗 `UIControl`** 的 target（`UIControl` 的 target 必须是 ObjC 对象）。
+///
+/// 见 `installTapTargetIfNeeded`：这是"点击那一刻就翻字形"在 9.1.88 上唯一真正生效的路
+/// —— `PlayButtonView.uiButtonTapped` 那个钩子（pw 在 9.1.78 上的落点）实测从不触发。
+final class NowPlayingPlayTapTarget: NSObject {
+
+    static let shared = NowPlayingPlayTapTarget()
+
+    @objc func tapped() {
+        onMainThreadSync { NowPlayingControlsPlate.notePlayTappedFromControl() }
     }
 }
 

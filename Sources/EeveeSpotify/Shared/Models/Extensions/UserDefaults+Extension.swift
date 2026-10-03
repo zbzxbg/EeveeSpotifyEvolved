@@ -333,12 +333,22 @@ extension UserDefaults {
 
     /// 隐藏封面与歌名之间那行跟唱单行歌词（`id=singalong-lyrics-view`）。
     ///
-    /// **默认关**：用户明确说过那一行本身**不是**问题 —— 他反馈的是"逐词歌词开、更好的
-    /// 逐词歌词关"时逐行歌词挂错地方，那个已经修在 `InlineLyricsHostLocator` 里。
-    /// 这个开关只是留个选择，想要更干净的封面再打开。
+    /// ★ **2026-10-08：默认值改回「开」，但机制换了**（用户拍板："我想要的高度效果是图片 59 的效果"）。
+    ///
+    /// **踩过的坑（两次判反）**：这个开关原来是"把那一行的视图 `hidden` 掉"，而用户给的现场是——
+    ///
+    /// > 图片 58 是胶囊显示「显示歌词」（**此时单行功能生效**）的时候截屏的
+    /// > （但是这个功能似乎是**只隐藏歌词内容，不隐藏功能，所以封面被抬上去了**）；
+    /// > 图片 59 是胶囊显示「隐藏歌词」的时候截屏的（**此时单行功能关闭，封面还是原来的正常的样子**）。
+    ///
+    /// ⇒ **藏视图只去得掉内容，Spotify 的"抬高封面"那个功能还在**。用户要的是 **59**
+    /// （= 功能真的关掉）。
+    /// ⇒ 机制已改成 **替用户按下 Spotify 自己那颗「显示/隐藏歌词」胶囊**
+    /// （`DeclutterChrome.turnOffSpotifySingalong`）：内容没了、封面也回到正常位置。
+    /// 只有**真的关掉了**才会把胶囊一起按住（否则用户会卡在被抬的状态里出不来）。
     static var hideSingalongLine: Bool {
         get {
-            container.object(forKey: hideSingalongLineKey) as? Bool ?? false
+            container.object(forKey: hideSingalongLineKey) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: hideSingalongLineKey)
