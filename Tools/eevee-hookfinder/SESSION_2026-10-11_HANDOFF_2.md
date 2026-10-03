@@ -17,7 +17,7 @@
 | **★ 用户改了方案** | 上一轮点头的「绿 ✓ 搬进 header」**已按第二版方案撤掉**（用户原话：「那个绿色勾就**让它呆在那里**」）⇒ 换成 **控件条**方案（§2） |
 | **S1 保留** | 无时间轴歌词不再冒充「未找到歌词」（§3）—— 这一条不受方案变化影响 |
 | **❌ 日志仍停在 55** | `C:\dsh\ipa` 里**没有** `b9e250b` 之后的日志 ⇒ 上一轮那张验收单（转场 / 锚点 / 三种文案 / 胶囊计数）**仍然挂着** |
-| **这一轮改了两件事** | ★ **控件条**：[分享 58] [歌词键 215] [绿 ✓ 371（不动）] ★ **关着歌词时标题/歌手贴左上角**（给控件条腾地方） |
+| **这一轮改了三件事** | ★ **控件条**：[分享 58] [歌词键 215] [绿 ✓ 371（不动）] ★ **关着歌词时标题/歌手贴左上角**（给控件条腾地方）★ **音量条的两端小喇叭抬 5pt**（用户报的"和那条轨不一样高"） |
 | **下一个动作** | CI → 装机 → **日志 56 + 照片 74+**，按 §6 收口 |
 | **本机没有 Swift 工具链** | 六条自检全绿（§5），类型检查只能靠 CI |
 
@@ -59,6 +59,7 @@
 | 文件 | 改动 |
 |---|---|
 | `Sources/EeveeSpotify/Appearance/NowPlayingLyricsPlate.swift` | ★ **控件条**：新增 `applyControlBand` / `clearControlBand` / `visibleShareButton` / `firstVisibleShareButton` / `isOnScreen` / `bandNote` + 常量 `controlBandMidY=626` / `shareButtonCenterX=58` / `toggleCenterX=215`；`toggleFrame` 改成"**先控件条**，量不出来才退回老的三级判据（`fallbackToggleFrame`）"；★ **关着歌词时标题行去左上角**：新增 `applyClosedTitleTransform` / `clearClosedTitleTransform`（落点 `navBarBottom + 2`）；调用点：`apply` / `reconcile`（每拍）/ `closeEverything`（收起那一刻）/ `remove`（关开关） |
+| `Sources/EeveeSpotify/Appearance/NowPlayingPageOverlay.swift` | ★ **音量条两端小喇叭抬 5pt**（新常量 `volumeGlyphLift`）：用户报「那两个扬声器的高度没有和那个调整音量的行一样高」。逐像素量过（见 §4.5），偏差**不在我们这边** —— iOS 26 的 `MPVolumeView` 把轨画在它自己 frame 中线上方 ≈5pt；只补偿我们自己的两个装饰字形，并把实测几何打进安装日志（`volumeRowInternals`） |
 | `layout/…/EeveeSpotify.bundle/{en,zh-CN}.lproj/Localizable.strings` | 新键 `lyrics_no_timeline`（en: "These lyrics have no timing" / zh-CN:「这首歌的歌词没有时间轴」）—— **S1，保留** |
 | `Tools/eevee-hookfinder/SESSION_2026-10-11_HANDOFF_2.md` | 本文件 |
 
@@ -112,6 +113,26 @@
 ★ 还有一条**没动**的：`now-playing-toggle-button`（`Tertiary@0,0,48,48`）**至今没定位**（不在照片 70/71/72
 的任何可见位上）—— 下一份 `[NPVTree]` 里能看出它在哪儿，**先别动它**。
 
+### 4.5 音量条：两个小喇叭为什么低了 5pt（照片 71 逐像素）
+
+用户原话：**「那两个扬声器的高度没有和那个调整音量的行一样高」** —— 对的。
+
+| 东西 | 像素行（照片 71） | 中线 |
+|---|---|---|
+| 音量**轨**（那 5 行实心像素，宽 201px） | y 1196…1200 | **839.3pt** |
+| **圆钮**（白色 19 行，直径 13.3 ≈ 14pt） | y 1189…1207 | **839.2pt** |
+| **左**喇叭字形 | y 1196…1214 | **844.1pt** |
+| **右**喇叭字形 | y 1200…1211 | **844.4pt** |
+
+⇒ **轨与圆钮同心**，只有两个字形低 ≈4.9pt。而代码里两者都按"行中线"摆
+（`slider.y = (28−28)/2 = 0`、`glyphY = (28−16)/2 = 6`）⇒ 偏差**不在我们这边**：
+**iOS 26 的 `MPVolumeView` 把轨（和钮）画在它自己 frame 中线上方 ≈5pt**（行内局部：轨 ≈9.2，中线 14）。
+
+处理：新增 `volumeGlyphLift = 5`，只把**我们自己的**两个装饰字形抬上去 —— **不动**系统那条音量条的位置
+（它的触控区照旧），也**不去猜**它内部的 `UISlider`（那是私有层级，本文件早就定过这条纪律）。
+为什么抬字形而不是把 slider 下移 5pt：slider 下移会把触控区一起推到更靠屏幕底边；
+抬字形是零触控影响的等价观感（kumone 照片 40/41 那条也是"三样在一条线上"）。
+
 ---
 
 ## 5. 本机自检（六条全绿）
@@ -142,15 +163,24 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
    那一条里三颗**位置不变**；
 3. **收起** → 立刻回到第 1 步的样子（标题回左上角，不留残影）；
 4. 来回 5 次，并**换一首歌**（标题行/分享键都是新对象，看会不会有半拍错位）；
-5. 顺便把上一轮那张单子一起拍了（进出转场不闪、三种说明文案、胶囊不在）。
+5. **音量条**：两个小喇叭要和**那条轨（和圆钮）在同一条线**上（照片 71 里它们低了 5pt，见 §4.5）；
+6. 顺便把上一轮那张单子一起拍了（进出转场不闪、三种说明文案、胶囊不在）。
 
 ### 6.2 预期日志（**逐字**）
 
 ```
+[NPVPage] overlay installed 0,0,414,896; bottom anchor … = …; volume slider 24,830,366,28;
+          volume row 24,830,366,28 slider 26,0,314,28 glyphLow 0,1,16,16 glyphHigh 350,1,16,16
+          (glyphs lifted 5pt to meet the track)
 [NPVLyrics] share button moved into the control band — 44×44 from …,815,44,44 to 36,604,44,44 (…)
 [NPVLyrics] expanded — thumbnail 72pt at …, lyrics area …, cover shrunk in from …, title row lifted … (anchors: …)
 [NPVLyrics] collapsed (reason=page disappeared)
 ```
+
+★ 音量那两行的读法：`volume row 24,830,366,28` 是那一行的 frame，`slider 26,0,314,28` 是系统那条
+音量条**在行内**的 frame（28 高、铺满行），`glyphLow 0,1,16,16` 是左喇叭（行内 y=1 ⇒ 中线 9）。
+**判据**：喇叭的中线（9）要落在系统那条轨的中线上 —— 那条轨在行内 ≈9.2（§4.5 量的），
+所以 `glyphLow` 的 y 应该是 **1**；如果日志里是 6（= 没抬），说明这一版没生效。
 
 `bandNote` 三种尾巴，看到哪种就知道是什么情况：
 
@@ -175,8 +205,9 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 | ③ | **展开**时：缩略图 + 歌名/歌手在左上角那一行（现状不变），歌词块起于 242 |
 | ④ | 收起/离开后**没有残影**（标题回原位、分享键回 footer） |
 | ⑤ | 底部两排**一颗都没变**（这正是这一版的取舍） |
-| ⑥ | S1：无时间轴的歌说明文案是**「这首歌的歌词没有时间轴」** |
-| ⑦ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
+| ⑥ | **音量条**：两个小喇叭与那条轨（和圆钮）**在同一条线**上 —— 照片里对一下 §4.5 那三行数 |
+| ⑦ | S1：无时间轴的歌说明文案是**「这首歌的歌词没有时间轴」** |
+| ⑧ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
 
 ### 6.4 ⚠️ 已知风险（照片上专门看这几条）
 
@@ -216,6 +247,9 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
   `(inside every ancestor — it should still take taps)`。
 * ★ **"关着态标题行 98…144 不压封面"用的是照片 72 量出来的封面顶边 145**；行高 46 是从真机树
   （`MarqueeLabel 24` + `22`）推的，**没有在真机上量过"行"的整体高度**（背景透明，树里也没有那个 frame）。
+* ★ **音量条那 5pt 是"照片逐像素量出来的偏差"**（§4.5），**不是**"改完之后量过"——
+  抬 5pt 之后两者应该在 839 那一条线上；下一张照片请对着 §4.5 那三行数复核
+  （日志里 `glyphLow … ,1,16,16` 是"我们摆的"，照片才是"系统画在哪"）。
 * ★ **上半场那版"绿 ✓ 搬进 header"（`f2dc707`）已经作废并撤掉**：代码里**没有**留开关或死代码；
   要回那一版就照 §2 里同一套手法（`transform` + 收尾还原）重写一遍即可，那份说明在
   `git show f2dc707` 里。

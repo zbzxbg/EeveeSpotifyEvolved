@@ -54,6 +54,32 @@ enum NowPlayingPageOverlay {
     private static let volumeTrackHeight: CGFloat = 4
     private static let volumeThumbDiameter: CGFloat = 14
     private static let volumeRowIdentifier = "eevee-npv-volume-row"
+
+    /// ★ 2026-10-11（用户报的）：两端小喇叭要**比行中线高多少 pt**。
+    ///
+    /// 用户原话：**「那两个扬声器的高度没有和那个调整音量的行一样高」** —— 对的。
+    /// 照片 71 逐像素量（591px → 414pt，×0.7005）：
+    ///
+    /// | 东西 | 像素行 | 中线 |
+    /// |---|---|---|
+    /// | 音量**轨**（那 5 行实心像素） | y 1196…1200 | **839.3pt** |
+    /// | **圆钮**（白色那 19 行，直径 13.3 ≈ 14pt） | y 1189…1207 | **839.2pt** |
+    /// | **左**喇叭字形 | y 1196…1214 | **844.1pt** |
+    /// | **右**喇叭字形 | y 1200…1211 | **844.4pt** |
+    ///
+    /// ⇒ 轨与圆钮**同心**（839.2 / 839.3），只有两个喇叭字形**低 ≈4.9pt**。
+    /// 而代码里两者都是"按行中线居中"摆的
+    /// （`slider.y = (28−28)/2 = 0`、`glyphY = (28−16)/2 = 6`）—— 所以偏差**不在我们这边**：
+    /// **iOS 26 的 `MPVolumeView` 把那条轨画在它自己 frame 中线上方 ≈5pt**
+    /// （行内局部坐标：轨在 ≈9.2，中线是 14）。
+    ///
+    /// 为什么用常量补偿而不是去问它的内部 `UISlider`：那枚 slider 是**私有层级**
+    /// （本文件下方 `styleVolumeSlider` 那段注释里已经定过纪律：不猜内部结构）。
+    /// ⇒ 只补偿我们**自己的**两个装饰字形（不吃触摸、不动系统那条音量条的位置），
+    ///   并且把这一行的实际 frame 打进安装日志 —— 下一份日志 + 照片一对就能判。
+    ///
+    /// ⚠️ 这个数是**为 iOS 26 量的**；哪天系统把轨画回中线（或换了版式），把它改成 0 即可。
+    private static let volumeGlyphLift: CGFloat = 5
     private static let gapBelowAnchor: CGFloat = 4
 
     private static var overlayKey: UInt8 = 0
@@ -168,9 +194,30 @@ enum NowPlayingPageOverlay {
                 "[\(logTag)] overlay installed \(frameText(overlay.frame))"
                     + "; bottom anchor \(bottomAnchorIdentifier) = \(anchorText)"
                     + "; volume slider \(frameText(target))"
+                    // ★ 2026-10-11：这一行的**实测**内部几何（系统那条 slider + 两个字形 + 抬了多少）——
+                    //   用户报的"喇叭和轨不一样高"就是靠这一行 + 下一张照片对出来的。
+                    + volumeRowInternals(in: overlay)
             )
         }
         return changed
+    }
+
+    /// 音量那一行的**实测**内部几何（只给安装日志用）。
+    private static func volumeRowInternals(in overlay: UIView) -> String {
+        guard let row = overlay.subviews.first(where: {
+            $0.accessibilityIdentifier == volumeRowIdentifier
+        }) else { return "; volume row not found" }
+
+        let slider = row.subviews.compactMap { $0 as? MPVolumeView }.first
+        let low = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-low" }
+        let high = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-high" }
+
+        let sliderText = slider.map { frameText($0.frame) } ?? "not found"
+        let lowText = low.map { frameText($0.frame) } ?? "not found"
+        let highText = high.map { frameText($0.frame) } ?? "not found"
+        return "; volume row \(frameText(row.frame)) slider \(sliderText)"
+            + " glyphLow \(lowText) glyphHigh \(highText)"
+            + " (glyphs lifted \(Int(volumeGlyphLift))pt to meet the track)"
     }
 
     /// 把音量那一行摆好 + 给系统那条音量条**换皮**。
@@ -200,7 +247,9 @@ enum NowPlayingPageOverlay {
 
         let left = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-low" }
         let right = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-high" }
-        let glyphY = (frame.height - glyph) / 2
+        // ★ 2026-10-11：两个字形要**抬到轨那条线**上（见 `volumeGlyphLift`：iOS 26 的
+        //   `MPVolumeView` 把轨画在它自己 frame 中线上方 ≈5pt，直接按行中线摆会低一颗）。
+        let glyphY = (frame.height - glyph) / 2 - volumeGlyphLift
         left?.frame = CGRect(x: 0, y: glyphY, width: glyph, height: glyph)
         right?.frame = CGRect(x: frame.width - glyph, y: glyphY, width: glyph, height: glyph)
     }
