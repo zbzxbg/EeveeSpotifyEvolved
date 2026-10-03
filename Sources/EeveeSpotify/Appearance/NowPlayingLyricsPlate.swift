@@ -38,6 +38,32 @@ import ObjectiveC.runtime
 // | 封面缩略图 | 它自己再画一张封面并飞过去 | 一样（`Encode.ImageView` 的那张图） |
 //
 // 日志 tag：`[NPVLyrics]`。开关：扩展功能 → 听歌页 →「歌词进播放器」。
+//
+// ## ★ 2026-10-03 修（日志 48 判读）：那枚"歌词键"是**看不见的**，所以从来没人点到过
+//
+// **日志 48 的判决**（13008 行，01:47:41–01:49:03）：`[NPVLyrics]` 只有**两行** ——
+// `不展开（找不到播放键…）`（第一次布局太早）与 `歌词键已就位 147,673,120,44`。
+// **一次 `展开` 都没有**，连一条 `不展开（这首歌没有可用的歌词）` 都没有
+// ⇒ `toggle()` 根本没被调用过 ⇒ 那枚键**从来没被点到**。
+//
+// **为什么**：上一版把它做成 `UIControl` + `.clear` 背景 + 无任何内容 —— 一块 120×44 的
+// **完全透明热区**，位于播放键正上方；而它顺便还压在**进度条**（`SPTNowPlayingSliderV2`）
+// 与**播放键上沿**上，会抢走拖动手势。用户找不到它，只能去点旁边那枚看得见的暂停键
+//（顺手报了"点暂停键会闪烁"，那是另一处缺陷，见 `NowPlayingControlsPlate` 的文件头）。
+//
+// **修法**（用户 2026-10-03 拍板："做成看得见的按钮，仍然点了才展开"）：
+//   1. **看得见**：44pt 圆角键 + 半透明白底 + `quote.bubble.fill` 字形（展开时换成 `chevron.down`）；
+//   2. **让开**：挪到 `npv.bottomStackView` 的**最后一行（footer）**、水平居中 —— 那是 pw
+//      放歌词字形的地方，也与原生控件（Connect / 分享 / 队列）不重叠；找不到 footer 才退回
+//      "贴那一坨上面"（展开时靠右）再退回"由播放键反推同一条空带"。
+//      ⚠️ **只借 footer 的 frame，键挂在 `page` 上** —— 塞进 Spotify 的 stack 会让它变成
+//      `stack.subviews.last`，把"认 footer"这件事本身弄坏（复核时点出来的）。
+//   3. **没词变灰**（pw：*"greyed out when the track has none"*）：`alpha = 0.35`，
+//      点下去仍然会打一行说明为什么没反应（不留"按了没反应"的入口）。
+//
+// ⚠️ **顺序**：`apply` / `reconcile` 里必须先铺歌词（封面 / 标题 / 容器都会 `bringSubviewToFront`）
+// **再**摆那枚键 —— 后写的赢，否则键会被我们自己的容器压住。
+// ⚠️ 关掉开关 / 离开页面时那枚键**也要拿走**（上一版 `closeEverything` 的守卫会早退 ⇒ 键留在屏上）。
 
 // MARK: - 宿主（只属于这一层，不抢全屏页/卡片那个单例）
 
@@ -158,6 +184,21 @@ enum NowPlayingLyricsPlate {
     /// 走查上限（本仓库纪律）。
     private static let maxNodes = 800
 
+    // MARK: 「歌词键」那一枚（2026-10-03 从"隐形热区"改成"看得见的按钮"）
+
+    /// 圆形键的边长（与 Spotify 自己的图标键同尺）。
+    private static let toggleSide: CGFloat = 44
+    /// 与"底部那一坨"的间距。
+    private static let toggleGap: CGFloat = 6
+    /// 播放键顶边到"底部那一坨"顶边的距离（真机树：控件行顶 701 − 那一坨顶 558 = 143，
+    /// 而 64pt 的播放键在该行内居中 ⇒ 播放键顶 713，713 − 558 = **155**）。
+    /// 兜底落点靠它把键放回"封面与那一坨之间那条空带"，而不是压在标题/进度条上。
+    private static let playToBandTop: CGFloat = 155
+    /// 这一首没歌词时那枚键的透明度（pw：没词变灰）。
+    private static let toggleDisabledAlpha: CGFloat = 0.35
+    /// 键上那个字形记的符号名（用来判断"要不要换图"）。
+    private static var toggleSymbolKey: UInt8 = 0
+
     // 判据（全部来自真机树，日志 42/47）
     private static let listIdentifier = "scrolling_npv_collection_view_accessibility_identifier"
     private static let bottomStackIdentifier = "npv.bottomStackView"
@@ -195,15 +236,15 @@ enum NowPlayingLyricsPlate {
 
         guard isEnabled else {
             closeEverything(reason: "switch off")
+            removeToggle()
             return
         }
         guard pageView.bounds.width > 1, pageView.bounds.height > 1 else { return }
 
-        // 挂那枚"歌词键"（在播放键上方）：**只有它被点才会展开** —— pw 的形状。
+        // ⚠️ 顺序要紧：先铺歌词（封面 / 标题 / 容器都会 `bringSubviewToFront`），
+        // **再**摆那枚键 —— 后写的赢，否则键会被我们自己的容器压住。
+        if isOpen { layoutAndMount(in: pageView) }
         ensureToggleZone(in: pageView)
-
-        guard isOpen else { return }
-        layoutAndMount(in: pageView)
     }
 
     /// 设置页切开关时叫一次。
@@ -222,9 +263,10 @@ enum NowPlayingLyricsPlate {
 
         if isOpen {
             layoutAndMount(in: page)
+            ensureToggleZone(in: page)
             return true
         }
-        // 关着的时候只保证那枚键还在（Spotify 换帧会重排 subviews）。
+        // 关着的时候只保证那枚键还在、还画得对（Spotify 换帧会重排 subviews）。
         ensureToggleZone(in: page)
         return false
     }
@@ -234,8 +276,10 @@ enum NowPlayingLyricsPlate {
     /// ⚠️ **必须无条件走 `closeEverything`**（哪怕看起来"没展开"）：标题行的位移是我们用
     /// `transform` 写上去的，**不撤销就会留在 Spotify 的元素上**（那一行此后永远偏上一截）。
     /// `closeEverything` 自己有空守卫，没展开时不会打日志。
+    /// 那枚键也要一起拿走 —— 否则下次进来会叠一枚在上面。
     static func remove(reason: String) {
         closeEverything(reason: reason)
+        removeToggle()
     }
 
     /// 那枚"歌词键"被点了。
@@ -244,14 +288,19 @@ enum NowPlayingLyricsPlate {
 
         if isOpen {
             closeEverything(reason: "tapped")
+            // 图标当场换回"歌词"，不等 0.5s 的复查节拍。
+            ensureToggleZone(in: page)
             return
         }
         guard canShow(for: page) else {
             noteSkip("这首歌没有可用的歌词")
+            ensureToggleZone(in: page)
             return
         }
         isOpen = true
         layoutAndMount(in: page)
+        // ⚠️ 必须在铺完之后再摆一次：容器会 `bringSubviewToFront`，键会被压到它下面。
+        ensureToggleZone(in: page)
     }
 
     // MARK: - 开关与几何
@@ -582,38 +631,142 @@ enum NowPlayingLyricsPlate {
         return limit
     }
 
-    // MARK: - 歌词键（pw 把 glyph 放在 footer；我们放在播放键上方 —— 那里既稳又不挡进度条）
+    // MARK: - 歌词键（pw 把 glyph 放在 footer；我们照做 —— 而且**要看得见**）
 
+    /// 那枚键的落点。三级判据。
+    ///
+    /// * **① 首选**：`npv.bottomStackView` 的**最后一行**（footer）的 frame、水平居中。
+    ///   真机树（日志 42/48）里那一坨的子视图依次是「标题 / 进度 / 控件 / footer」，footer 恒为
+    ///   **最后一个**（`UIView@0,231,406,44`；那一行只有两侧原生控件 —— Connect / 分享 / 队列 ——
+    ///   中间是空的）。pw 也是把歌词字形放 footer 那一排。
+    ///   ⚠️ 我们只**借它的 frame**，键本身挂在 `page` 上（不塞进 Spotify 的 stack ——
+    ///   塞进去它会变成 `stack.subviews.last`，把"认 footer"这件事本身弄坏）。
+    ///   ⇒ 代价：那一行自己重排时要等下一拍（≤0.3s）才跟上。
+    /// * **② footer 不能用**（版式变了 / 它被藏了）：贴那一坨**上面**。展开时**靠右**
+    ///   （歌词正文是居中排的，靠右能把"挡住歌词区、抢走点行跳转"的面积压到最小）。
+    /// * **③ 那一坨都找不到**（进页面极早期）：由播放键反推同一条空带（`playToBandTop`）。
+    ///
+    /// ⚠️ **绝不放在"播放键正上方 44pt"**（上一版的落点）：那里是**标题行与进度条**，
+    /// 既压住 Spotify 的内容（进度条的拖动会被抢），也看不出是个按钮。
+    private static func toggleFrame(in page: UIView) -> CGRect? {
+        let side = toggleSide
+        let centeredX = ((page.bounds.width - side) / 2).rounded()
+
+        if let stack = findByIdentifier(bottomStackIdentifier, in: page) {
+            let stackFrame = stack.convert(stack.bounds, to: page)
+
+            if let footer = stack.subviews.last, !footer.isHidden, footer.alpha > 0.01 {
+                let row = footer.convert(footer.bounds, to: page)
+                if row.height >= side, row.width >= side, row.maxY <= page.bounds.maxY + 1 {
+                    return CGRect(
+                        x: centeredX,
+                        y: (row.midY - side / 2).rounded(),
+                        width: side,
+                        height: side
+                    )
+                }
+            }
+
+            let above = stackFrame.minY - toggleGap - side
+            if above > page.bounds.minY + 8 {
+                // 展开时我们的歌词区底边就在 stackTop−8：靠右摆，少挡正文、少抢点行跳转。
+                let x = isOpen ? (page.bounds.maxX - side - 12).rounded() : centeredX
+                return CGRect(x: x, y: above.rounded(), width: side, height: side)
+            }
+        }
+
+        guard let play = findByIdentifier(playButtonIdentifier, in: page) else { return nil }
+        let playFrame = play.convert(play.bounds, to: page)
+        let y = max(page.bounds.minY + 8, playFrame.minY - playToBandTop - toggleGap - side)
+        return CGRect(x: centeredX, y: y.rounded(), width: side, height: side)
+    }
+
+    /// 摆那枚键（幂等）。**看得见**：半透明圆底 + 歌词字形；展开中换成 `chevron.down`。
+    ///
+    /// ⚠️ **必须自己判 `#available(iOS 26.0, *)`**：这一整条链（渲染层 / `canShow` /
+    /// `layoutAndMount`）都是 iOS 26 起的，而 `apply` 那条路**没有再包一层版本判断** ——
+    /// 少这一道，iOS 14–25 上会摆出一枚**看得见但点了必然无效**的键
+    ///（`canShow` 直接 false，还会打出误导人的"这首歌没有可用的歌词"）。独立复核抓到的。
     private static func ensureToggleZone(in page: UIView) {
-        // 位置：播放键上方 40pt，宽 120、高 44（一个看得见提示都没有的"热区"）。
-        guard let play = findByIdentifier(playButtonIdentifier, in: page) else {
+        guard #available(iOS 26.0, *) else { return }
+        guard let wanted = toggleFrame(in: page) else {
             noteSkip("找不到播放键，歌词键没处放")
             return
         }
-        let playFrame = play.convert(play.bounds, to: page)
-        let wanted = CGRect(
-            x: playFrame.midX - 60,
-            y: playFrame.minY - 44,
-            width: 120,
-            height: 44
-        )
 
         if let zone = lastToggleZone {
             if zone.frame != wanted { zone.frame = wanted }
             if zone.superview !== page { page.addSubview(zone) }
+            applyToggleAppearance(to: zone)
             page.bringSubviewToFront(zone)
             return
         }
 
         let zone = UIControl(frame: wanted)
-        zone.backgroundColor = .clear
+        zone.backgroundColor = UIColor.white.withAlphaComponent(0.12)
+        zone.layer.cornerRadius = toggleSide / 2
+        zone.layer.cornerCurve = .continuous
+        zone.clipsToBounds = true
         zone.accessibilityIdentifier = "eevee-npv-lyrics-toggle"
         zone.accessibilityLabel = "歌词"
-        zone.addTarget(NowPlayingLyricsToggleTarget.shared, action: #selector(NowPlayingLyricsToggleTarget.tapped), for: .touchUpInside)
+        zone.addTarget(
+            NowPlayingLyricsToggleTarget.shared,
+            action: #selector(NowPlayingLyricsToggleTarget.tapped),
+            for: .touchUpInside
+        )
+
+        let glyph = UIImageView(frame: zone.bounds)
+        glyph.contentMode = .center
+        glyph.isUserInteractionEnabled = false
+        glyph.tintColor = .white
+        glyph.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        glyph.accessibilityIdentifier = "eevee-npv-lyrics-toggle-glyph"
+        zone.addSubview(glyph)
+
         page.addSubview(zone)
+        applyToggleAppearance(to: zone)
         page.bringSubviewToFront(zone)
         lastToggleZone = zone
-        writeDebugLog("[\(logTag)] 歌词键已就位 \(frameText(wanted))（点它展开/收起）")
+        let words = hasLyricsAvailable() ? "这一首有词" : "这一首没词 — 已变灰"
+        writeDebugLog(
+            "[\(logTag)] 歌词键已就位 \(frameText(wanted))（看得见的圆键；点它展开/收起；\(words)）"
+        )
+    }
+
+    /// 那枚键长什么样：展开中换图标；这一首没词就变灰（**但仍然可点** —— 点了会说明原因）。
+    private static func applyToggleAppearance(to zone: UIControl) {
+        let symbol = isOpen ? "chevron.down" : "quote.bubble.fill"
+
+        let glyph = zone.subviews
+            .compactMap { $0 as? UIImageView }
+            .first { $0.accessibilityIdentifier == "eevee-npv-lyrics-toggle-glyph" }
+
+        if let glyph {
+            if glyph.frame != zone.bounds { glyph.frame = zone.bounds }
+            let drawn = objc_getAssociatedObject(glyph, &toggleSymbolKey) as? String
+            if drawn != symbol {
+                objc_setAssociatedObject(glyph, &toggleSymbolKey, symbol, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                // 兜底链：万一某个符号名在目标 iOS 上不存在，`UIImage(systemName:)` 会返回 nil
+                // ⇒ 那枚键就变成"看得见但什么都没有"的空圆。本机没有运行时，只能这样防。
+                let configuration = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+                let candidates = isOpen
+                    ? ["chevron.down", "chevron.compact.down"]
+                    : ["quote.bubble.fill", "quote.bubble", "text.alignleft"]
+                let image = candidates
+                    .compactMap { UIImage(systemName: $0, withConfiguration: configuration) }
+                    .first
+                glyph.image = image?.withRenderingMode(.alwaysTemplate)
+            }
+        }
+
+        zone.alpha = hasLyricsAvailable() ? 1 : toggleDisabledAlpha
+    }
+
+    /// 把那枚键拿走（关开关 / 离开页面）。
+    private static func removeToggle() {
+        guard let zone = lastToggleZone else { return }
+        zone.removeFromSuperview()
+        lastToggleZone = nil
     }
 
     // MARK: - 我们自己的容器
@@ -674,6 +827,14 @@ enum NowPlayingLyricsPlate {
         host = fresh
         hostPage = page
         return fresh
+    }
+
+    /// 这一首**有没有能画的东西**（行级即可）—— 与 `canShow` 前两道门同一条判据，
+    /// 但**不打日志**：那枚歌词键每 0.3s 复查一次都要问它，所以只能是几个 bool 读
+    /// （`currentLines()` 会建整个数组，不能放在这条热路径上）。
+    private static func hasLyricsAvailable() -> Bool {
+        guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else { return false }
+        return hasUsableWordLevelData(currentLyricsDto) || hasUsableLineLevelData(currentLyricsDto)
     }
 
     /// 这一首有没有能画的东西（行级即可 —— 与上一版放宽后的门禁一致）。

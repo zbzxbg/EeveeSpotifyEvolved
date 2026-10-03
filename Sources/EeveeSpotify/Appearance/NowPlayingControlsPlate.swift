@@ -39,6 +39,29 @@ import ObjectiveC.runtime
 // * 字形尺寸照照片：跳过键 22pt、播放键 30pt（与歌词壳那三个键同一套，见 `AppleMusicLyricsPlaybackControl`）。
 //
 // 开关：扩展功能 → 听歌页 →「**播放键换成本地字形**」，**默认关**。日志 tag：`[NPVControls]`。
+//
+// ## ★ 2026-10-03 修（日志 48 + 照片 49/50 判读）：播放键"点一下暂停就换一张脸"
+//
+// **用户报**：「点击暂停键会有闪烁」。
+//
+// **照片取证**（同一台机、同一首 `Starboy`）：
+//   * 照片 49（播放中）：按钮 = **纯白圆盘（Ø≈63pt）+ 深色暂停横条** —— 这是**原生**的样子；
+//   * 照片 50（暂停）：按钮 = **一个裸白三角（≈24×27pt），没有圆盘** —— 这是**我们的字形**。
+//   ⇒ 点一下暂停，整颗按钮在白圆盘与裸三角之间**整个换脸**。
+//
+// **病根（本文件里的一处自相矛盾）**：`hideNativeContent(of: play, excludingClassFragment:)`
+// 传的是 `playDiscClassFragment`，而 `visit` 命中那个片段时是 **`return`（整棵子树跳过）** ——
+// 于是：播放中，原生白圆盘**和**圆盘里的原生暂停横条一直没被透明掉（我们的白字形画在白圆盘上
+// = 看不见）⇒ 与原生一模一样；暂停时圆盘不画 ⇒ 露出我们的白三角。
+// （文件上面那段注释写的却是"白圆盘也一并透明掉"——**注释与实现不一致**，这就是那个 bug。）
+//
+// **修法两条**：
+//   1. 白圆盘改成**自己 `alpha = 0`（记账，关开关时写回）**，然后**继续往下走**把里面的
+//      原生图形也透明掉 ⇒ 三个键在两种状态下都画成同一套裸字形，换脸这条路从根上断掉。
+//      （`alpha = 0` 不会让按钮失去触摸：命中判定落在 `PlayButtonView` 自己身上。）
+//   2. 原生内容被写回时排一轮**短促重试**（`armRehide`，与 `MiniBarGlass.armColorGuard` 同一套
+//      纪律：只排一轮、不叠加）。日志 48 里同一项在 `0/1` 之间反复横跳就是这个"写回"，
+//      而重试原来只靠 0.5s 的复查节拍 ⇒ 最坏 ~0.5s 能看到原生图形闪回来。
 
 // MARK: - Hook（可选的加速落点）
 
@@ -89,6 +112,7 @@ enum NowPlayingControlsPlate {
     static let previousButtonID = "SPTNowPlayingPreviousTrackButton"
     static let playButtonID = "SPTNowPlayingPlayButton"
     static let nextButtonID = "SPTNowPlayingNextTrackButton"
+    /// 播放键底下那圈白色。**它必须一起透明掉** —— 理由见文件头"2026-10-03 修"那一段。
     private static let playDiscClassFragment = "MixedPlayButtonDecorationView"
 
     /// 字形尺寸（照照片 40/41 的比例；与歌词壳那三键一致）。
@@ -98,11 +122,36 @@ enum NowPlayingControlsPlate {
     /// 走查上限（本仓库纪律）。
     private static let maxNodes = 800
 
+    /// 原生内容被写回之后的短促重试（与 `MiniBarGlass.guardBurstDelays` 同一档）。
+    private static let rehideBurstDelays: [Double] = [0.05, 0.15, 0.35, 0.6]
+    private static var rehideBurstUntil: CFAbsoluteTime = 0
+
     private static var alphaKey: UInt8 = 0
     private static var glyphKey: UInt8 = 0
     private static var playStateKey: UInt8 = 0
 
+    /// 我们透明掉的那一层 + **它当时的 alpha**。
+    ///
+    /// ⚠️ 为什么要连原值一起记（独立复核点出来的）：`restore()` 原来一律写 `alpha = 1`，
+    /// 而这一版**把白圆盘也纳入了透明范围** —— 圆盘在"暂停那一档"本来可能就不是 1
+    ///（照片 50 里它根本没画）。一律写 1 等于**把一颗本来不该亮的装饰层强行点亮**。
+    /// 记原值 ⇒ 关开关时写回它自己的样子。
+    private final class HiddenView {
+        let view: UIView
+        let alpha: CGFloat
+        init(_ view: UIView) {
+            self.view = view
+            self.alpha = view.alpha
+        }
+    }
+
     private static weak var lastUnit: UIView?
+    /// 我们动过的按钮（**弱引用**）。
+    ///
+    /// ⚠️ 为什么要单独记：`restore()` 只认 `lastUnit` 的话，**关开关时用户多半在设置页**，
+    /// 那一刻 `lastUnit` 可能已经是 nil ⇒ 播放键的 `alpha` 就永远停在我们写的 0
+    ///（上一版只透明"图标叶子"，代价还小；这一版连**白圆盘**一起透明，漏还原就是"播放键没有圆底"）。
+    private static let touchedButtons = NSHashTable<UIView>.weakObjects()
     /// 上一次上报的"找到几个按钮 / 隐掉几个叶子"——只在这两个数变了时才打日志
     /// （`refreshGlyphs` 在 hook 的每个布局回合都会跑，不能每次都打）。
     private static var lastReportedSignature: String = ""
@@ -166,30 +215,61 @@ enum NowPlayingControlsPlate {
         var found = 0
 
         if let previous {
-            hiddenLeaves += hideNativeContent(of: previous, excludingClassFragment: nil)
+            touchedButtons.add(previous)
+            hiddenLeaves += hideNativeContent(of: previous, discClassFragment: nil)
             placeGlyph(in: previous, systemName: "backward.fill", size: skipGlyphSize)
             found += 1
         }
         if let next {
-            hiddenLeaves += hideNativeContent(of: next, excludingClassFragment: nil)
+            touchedButtons.add(next)
+            hiddenLeaves += hideNativeContent(of: next, discClassFragment: nil)
             placeGlyph(in: next, systemName: "forward.fill", size: skipGlyphSize)
             found += 1
         }
         if let play {
-            // 白圆盘要留一条命：它是播放键的"装饰层"，透明掉它、字形照旧叠在上面。
-            hiddenLeaves += hideNativeContent(of: play, excludingClassFragment: playDiscClassFragment)
+            touchedButtons.add(play)
+            hiddenLeaves += hideNativeContent(of: play, discClassFragment: playDiscClassFragment)
             placeGlyph(in: play, systemName: playGlyphName(), size: playGlyphSize)
             found += 1
         }
 
         guard found > 0 else { return }
+
+        // ★ 有东西被写回来了 ⇒ 排一轮短促重试把它幂等地按回去。
+        //   没有这一条时，重试只靠 `DeclutterChrome` 的 0.5s 复查节拍 ⇒ 最坏约 0.5s
+        //   能看到原生图形闪回来（用户报的"闪烁"里就有这一半）。
+        //   没有东西要按（`hiddenLeaves == 0`）时**一个 deadline 都不排**。
+        if hiddenLeaves > 0 { armRehide() }
+
         let signature = "\(found)/\(hiddenLeaves)"
         guard lastReportedSignature != signature else { return }
         lastReportedSignature = signature
         writeDebugLog(
             "[\(logTag)] 三个控制键已换成本地字形 — 找到 \(found) 个按钮、"
-                + "把 \(hiddenLeaves) 个原生图标叶子设成透明（按钮的动作/状态/无障碍保留）"
+                + "本拍把 \(hiddenLeaves) 处原生内容按回透明（按钮的动作/状态/无障碍保留）"
         )
+    }
+
+    /// 原生内容被写回之后的**短促重试**：排几次"幂等按回去"，**没人再写回就自然停下**。
+    ///
+    /// 与 `MiniBarGlass.armColorGuard()` 完全同一套纪律：**一次只排一轮、不叠加**
+    /// （`rehideBurstUntil` 占位）—— 否则每次布局都排一次，就成了仓库纪律里禁止的变相轮询。
+    ///
+    /// ⚠️ 窗口取的是"最后一个 deadline"（0.6s），判定是 `>=` ⇒ **只要那一轮里还有东西被写回，
+    /// 就会再排下一轮**（一轮 4 次 `asyncAfter`，最坏 0.6s 一轮）。这是**有意的**：
+    /// Spotify 每换一次播放状态就重建那颗图形，"继续按"才对；真正停下来的条件是
+    /// **没有东西可按**（`hiddenLeaves == 0` 那一拍一个 deadline 都不排）。
+    /// `MiniBarGlass.armColorGuard()` 是同一个形状、同一个取舍（独立复核也确认了这一点）。
+    private static func armRehide() {
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now >= rehideBurstUntil else { return }
+        rehideBurstUntil = now + (rehideBurstDelays.last ?? 0.6)
+
+        for delay in rehideBurstDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                onMainThreadSync { _ = reconcile() }
+            }
+        }
     }
 
     /// 那个 id 的按钮（给 hook 用；走查有界）。
@@ -198,20 +278,34 @@ enum NowPlayingControlsPlate {
     }
 
     /// 关掉开关 / 离开页面：把字形拿走、把被我们透明掉的原生视图写回。
+    ///
+    /// ⚠️ **不依赖 `lastUnit` 还在**：它只在"听歌页还在"时才有值，而关开关时用户在设置页。
+    /// 所以先按 `lastUnit` 找一遍，再把 `touchedButtons` 里其余的都收进来（去重）。
     static func restore() {
-        guard let unit = lastUnit else { return }
-        for id in [previousButtonID, playButtonID, nextButtonID] {
-            guard let button = findByIdentifier(id, in: unit) else { continue }
+        var targets: [UIView] = []
+        if let unit = lastUnit {
+            for id in [previousButtonID, playButtonID, nextButtonID] {
+                if let button = findByIdentifier(id, in: unit) { targets.append(button) }
+            }
+        }
+        for button in touchedButtons.allObjects where !targets.contains(where: { $0 === button }) {
+            targets.append(button)
+        }
+        guard !targets.isEmpty else { return }
+
+        for button in targets {
             (objc_getAssociatedObject(button, &glyphKey) as? UIView)?.removeFromSuperview()
             objc_setAssociatedObject(button, &glyphKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
-            let restored = (objc_getAssociatedObject(button, &alphaKey) as? [UIView]) ?? []
-            for view in restored { view.alpha = 1 }
+            let restored = (objc_getAssociatedObject(button, &alphaKey) as? [HiddenView]) ?? []
+            for item in restored { item.view.alpha = item.alpha }
             objc_setAssociatedObject(button, &alphaKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             objc_setAssociatedObject(button, &playStateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
+        touchedButtons.removeAllObjects()
         lastUnit = nil
         lastReportedSignature = ""
+        rehideBurstUntil = 0
         writeDebugLog("[\(logTag)] 已还原（原生图标透明度写回、我们的字形已拿走）")
     }
 
@@ -230,23 +324,42 @@ enum NowPlayingControlsPlate {
     /// * **只动叶子**（没有子视图的视图）—— 容器留着，免得把布局/触摸的骨架也弄没；
     /// * 叶子必须**比自己小**（≥ 按钮 1.2 倍的跳过：那是命中区/背景，不是图标）；
     /// * 跳过我们自己的字形；
-    /// * 跳过"白圆盘"（`excludingClassFragment`）—— 它由调用方决定要不要留；
-    /// * 记下改过的视图，`restore()` 要逐个写回。
+    /// * ★ **"白圆盘"（`discClassFragment`）要整层透明掉，并且继续往下走**——
+    ///   见文件头"2026-10-03 修"：它自己就是那圈白色（是**容器**，没有"图形叶子"），
+    ///   上一版在这里 `return` 把它整棵跳过了，正是"点一下暂停就换一张脸"的病根；
+    /// * 记下改过的视图**与它当时的 alpha**（`HiddenView`），`restore()` 逐个写回**原值**
+    ///   —— 不是一律写 1（理由见 `HiddenView` 的注释）。
     @discardableResult
-    private static func hideNativeContent(of button: UIView, excludingClassFragment: String?) -> Int {
+    private static func hideNativeContent(of button: UIView, discClassFragment: String?) -> Int {
         let size = button.bounds.size
         guard size.width > 1, size.height > 1 else { return 0 }
 
-        var changed = (objc_getAssociatedObject(button, &alphaKey) as? [UIView]) ?? []
+        var changed = (objc_getAssociatedObject(button, &alphaKey) as? [HiddenView]) ?? []
         let glyph = objc_getAssociatedObject(button, &glyphKey) as? UIView
         var hidden = 0
+
+        func note(_ view: UIView) {
+            if !changed.contains(where: { $0.view === view }) { changed.append(HiddenView(view)) }
+        }
 
         func visit(_ view: UIView, depth: Int) {
             guard depth <= 8 else { return }
             let className = NSStringFromClass(type(of: view))
 
-            if let fragment = excludingClassFragment, className.contains(fragment) { return }
             if view === glyph || className.contains("eevee-npv-transport-glyph") { return }
+
+            // ★ 白圆盘：它自己是容器（白色由它自己画）⇒ 整层透明，**然后继续往下**把里面
+            //   那个原生 play/pause 图形也透明掉（双保险）。`alpha = 0` 不影响按钮的命中判定：
+            //   命中的是 `PlayButtonView` 自己，子视图全透明时它照样收得到触摸。
+            if let fragment = discClassFragment, className.contains(fragment) {
+                if view.alpha > 0 {
+                    note(view)
+                    view.alpha = 0
+                    hidden += 1
+                }
+                for sub in view.subviews { visit(sub, depth: depth + 1) }
+                return
+            }
 
             if view.subviews.isEmpty {
                 // 叶子：这才是真正画东西的那些。
@@ -260,7 +373,7 @@ enum NowPlayingControlsPlate {
                     || className.contains("Image")
                     || className.contains("IconView")
                 if !visual { return }
-                if !changed.contains(where: { $0 === view }) { changed.append(view) }
+                note(view)
                 view.alpha = 0
                 hidden += 1
                 return
