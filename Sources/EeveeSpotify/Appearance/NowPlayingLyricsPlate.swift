@@ -103,6 +103,12 @@ private final class NowPlayingLyricsHost {
     private var renderedTrackId: String = ""
     /// ★ 2026-10-11：这一份挂上去的是**静态档**（没有时间轴）吗 —— 换档要重挂。
     private var renderedStatic = false
+    /// ★ 2026-10-11：挂上去那一份的**罗马化开关指纹** —— 变了要就地重写行模型。
+    ///
+    /// 为什么需要：罗马字是在 `LyricLinesAdapter` 里算进 `LyricLine` 的（按版本缓存），
+    /// 而"日文/中文/韩文罗马化"三个开关只写 `UserDefaults`、**不会让版本号变**
+    /// ⇒ 不做这件事的话，用户在设置里一开，得等下一次取词（换歌）才看得到。
+    private var renderedRomanization = -1
 
     private let clock = AppleMusicLyricsClock()
     private let projection = AppleMusicLyricsPlaybackProjection {
@@ -111,9 +117,21 @@ private final class NowPlayingLyricsHost {
 
     var isAttached: Bool { hostingController != nil }
 
+    /// 罗马化那三个开关的**指纹**（逐语言，就是"歌词页面里的选择"）。
+    ///
+    /// ⚠️ 实现**只有一份**：`romanizationSwitchesFingerprint()`（`LyricLinesAdapter.swift` 开头）——
+    /// 同一个判据抄两份，迟早只修一份（2026-10-11 那个 `seekToTappedLyricLine` 就是教训）。
+    ///
+    /// 它进 `isCurrent` ⇒ 用户一改开关，下一拍（≤0.3s）就会走 `updateLines` 把行模型重写一遍，
+    /// 罗马字立刻出现/消失，不用等换歌。
+    static func romanizationFingerprint() -> Int {
+        romanizationSwitchesFingerprint()
+    }
+
     func isCurrent(version: Int, trackId: String, isStatic: Bool) -> Bool {
         isAttached && renderedVersion == version && renderedTrackId == trackId
             && renderedStatic == isStatic
+            && renderedRomanization == Self.romanizationFingerprint()
     }
 
     func mount(
@@ -174,6 +192,7 @@ private final class NowPlayingLyricsHost {
         renderedVersion = version
         renderedTrackId = trackId
         renderedStatic = isStatic
+        renderedRomanization = Self.romanizationFingerprint()
     }
 
     func updateLines(_ lines: [LyricLine], version: Int, trackId: String, isStatic: Bool) {
@@ -183,6 +202,7 @@ private final class NowPlayingLyricsHost {
         renderedVersion = version
         renderedTrackId = trackId
         renderedStatic = isStatic
+        renderedRomanization = Self.romanizationFingerprint()
     }
 
     func tick(seconds: TimeInterval?) {
@@ -1103,11 +1123,18 @@ enum NowPlayingLyricsPlate {
             } else {
                 staticNote = ""
             }
+            // ★ 2026-10-11（用户：「把罗马字和歌词翻译接上去吧」）：这两档各写了多少行也打进日志 ——
+            //   否则下一次又是"接了没生效、不知道卡在哪"（译文要过设置那道门、罗马字要过语言那道门）。
+            let translationCount = lines.filter { $0.translation?.isEmpty == false }.count
+            let romanizationCount = lines.filter { $0.romanization?.isEmpty == false }.count
+            let supplementalNote = " translation \(translationCount)/\(lines.count)"
+                + " romanization \(romanizationCount)/\(lines.count)"
             writeDebugLog(
                 "[\(logTag)] expanded — thumbnail \(Int(geometry.thumb.width))pt at \(frameText(geometry.thumb)), "
                     + "lyrics area \(frameText(frame)), cover shrunk in from \(frameText(geometry.cover)), "
                     + "title row \(titleNote)"
                     + staticNote
+                    + supplementalNote
                     // ★ 2026-10-11：三个锚点的**实测值**（`measure()` 里算的，这里只管打印）——
                     //   照片 67→68 那两片几何全靠它对齐，下一份日志一眼就能看出量到没有。
                     + " " + lastAnchorText
@@ -2841,15 +2868,33 @@ enum NowPlayingLyricsPlate {
     /// （正好让最后一行躲开控件条）全部自动一致。
     ///
     /// ⚠️ `time: 0` 只是**占位**：`isStatic` 那一档不读它。
-    private static func staticLines(from texts: [String]) -> [LyricLine] {
-        texts.enumerated().map { index, text in
-            LyricLine(
-                id: "eevee-static-\(index)",
+    ///
+    /// ★★ 2026-10-11（用户：「把罗马字和歌词翻译接上去吧」）：这一档也**照样带译文与罗马字**，
+    /// 都按**原数组下标**配对（所以入参带下标）；罗马字仍走仓库那条既有罗马化管线。
+    private static func staticLines(from items: [(index: Int, text: String)]) -> [LyricLine] {
+        let translationLines = currentLyricsDto?.translation?.lines ?? []
+        // ⚠️ 走带缓存的 `romanizedContentsForDisplay()`（这个函数也在 0.3s 那条节拍上）。
+        let romanizedContents = currentLyricsDto?.romanizedContentsForDisplay() ?? []
+
+        return items.enumerated().map { order, item in
+            let translation: String? = item.index < translationLines.count
+                ? translationLines[item.index]
+                : nil
+            let trimmedText = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let romanized = item.index < romanizedContents.count
+                ? romanizedContents[item.index].trimmingCharacters(in: .whitespacesAndNewlines)
+                : ""
+
+            return LyricLine(
+                id: "eevee-static-\(order)",
                 time: 0,
                 duration: 0,
                 timingKind: .lineSynchronized,
-                text: text,
-                syllables: []
+                text: item.text,
+                syllables: [],
+                // 与原文相同 ⇒ 不显示（同 `LyricLinesAdapter.romanization(original:romanized:)`）。
+                romanization: (romanized.isEmpty || romanized == trimmedText) ? nil : romanized,
+                translation: translation
             )
         }
     }
@@ -2867,13 +2912,17 @@ enum NowPlayingLyricsPlate {
     ///
     /// ⚠️ 只认"**一行时间都没有**"这一档；只要有一行带 `offsetMs`，就交给时间轴那条路
     /// （`LyricLinesAdapter` 会把带时间的挑出来渲染）。
-    private static func currentUntimedLines() -> [String]? {
+    ///
+    /// ★ 2026-10-11：返回的是 `(原数组下标, 文本)` —— 下标要**一直带着**，因为译文与罗马字
+    /// 都按同一个下标配对（空行被滤掉之后下标会错位，这正是本函数不返回 `[String]` 的原因）。
+    private static func currentUntimedLines() -> [(index: Int, text: String)]? {
         guard let dto = currentLyricsDto, !dto.lines.isEmpty else { return nil }
         guard !dto.lines.contains(where: { $0.offsetMs != nil }) else { return nil }
-        let texts = dto.lines
-            .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return texts.isEmpty ? nil : texts
+        let items = dto.lines.enumerated().compactMap { index, line -> (index: Int, text: String)? in
+            let text = line.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : (index, text)
+        }
+        return items.isEmpty ? nil : items
     }
 
     /// 这一首**有没有东西可画**：画歌词 / 画静态歌词 / 写一句话 —— 三占其一。

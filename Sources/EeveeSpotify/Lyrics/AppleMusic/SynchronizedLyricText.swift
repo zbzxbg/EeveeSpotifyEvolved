@@ -110,6 +110,18 @@ struct SynchronizedLyricText: View {
             alignment: alignment.stackAlignment,
             spacing: 0
         ) {
+            // ★★ 2026-10-11（用户）：「**罗马字在歌词上方**」（翻译在下方 —— 那一行本来就在下面）。
+            //
+            // 排版是我定的（用户把大小交给我）：
+            //   · 字号 = `supplementalFontSize × 0.85` —— 译文 17pt 时它是 ≈14.5pt：
+            //     罗马字是"读音提示"，比译文再小一档，不该和正文抢注意力；
+            //   · 与主歌词的间距用 Apple Music 自己的 `transliterationSpacing = 5`
+            //     （`AppleMusicLyricsSupplementalTextProfile` 里那个常量本来就写着"音译"）；
+            //   · 颜色/焦点跟随与译文同一条公式，再淡一档。
+            if let romanization, !romanization.isEmpty {
+                romanizationText(romanization)
+            }
+
             // 副唱画在主歌的**上方或下方**，取决于它在 TTML 里的位置；
             // 它是独立的一小行，而不是拼进主歌文本（那样会把"同时演唱"
             // 退化成"先唱完主歌再唱副唱"）。预览模式下整块不显示。
@@ -251,6 +263,37 @@ struct SynchronizedLyricText: View {
             lineFinishProgressAnimationDuration: profile.lineFinishProgressAnimationDuration,
             liftMode: .character
         )
+    }
+
+    // MARK: 罗马字（主歌词**上方**那一行）
+
+    /// 罗马字/音译行。数值的选择与理由见 `body` 里那段注释。
+    private func romanizationText(_ romanization: String) -> some View {
+        Text(romanization)
+            .font(
+                .system(
+                    size: typography.supplementalFontSize * 0.85,
+                    weight: .regular
+                )
+            )
+            .foregroundStyle(
+                primaryColor.opacity(
+                    // 与译文同一条"跟随焦点"的公式，但整体再淡一档（它是读音提示）。
+                    (
+                        Self.profile.deselectedTextOpacity
+                            + (Self.profile.selectedTextOpacity
+                                - Self.profile.deselectedTextOpacity)
+                                * clamped(focusStrength)
+                    ) * 0.85
+                )
+            )
+            .multilineTextAlignment(alignment.textAlignment)
+            .padding(.bottom, AppleMusicLyricsSupplementalTextProfile.iOS26_6.transliterationSpacing)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(
+                maxWidth: .infinity,
+                alignment: alignment.frameAlignment
+            )
     }
 
     // MARK: 译文

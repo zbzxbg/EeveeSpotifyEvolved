@@ -1,5 +1,3 @@
-import Foundation
-
 // 本项目新增（非 MeloX 移植件）：把仓库层现有的 `LyricsDto` 转成 MeloX 渲染层
 // 消费的 `[LyricLine]`。
 //
@@ -7,6 +5,56 @@ import Foundation
 // `LyricSourceMerger` 绑定它自己的取词与缓存体系，而本项目的 Repository 层已经
 // 覆盖更多来源（网易 yrc / Musixmatch richsync / Spicy / AMLL / Petit / LRCLIB /
 // Genius），没必要替换。这里只做模型适配。
+
+import Foundation
+
+// MARK: - 逐语言罗马化开关（"歌词页面里的选择"）
+
+/// 三个逐语言罗马化开关的指纹。
+///
+/// **只此一份**：两处要用它 ——
+///   · `LyricsDto.romanizedContentsForDisplay()` 的缓存键；
+///   · `NowPlayingLyricsPlate` 判断"要不要把行模型重写一遍"（用户在设置里一改就该立刻生效）。
+///
+/// ⚠️ 2026-10-11 的教训就在隔壁（`seekToTappedLyricLine`）：**同一个判据抄两份 = 迟早只修一份**。
+func romanizationSwitchesFingerprint() -> Int {
+    var bits = 0
+    if UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization") { bits |= 1 }
+    if UserDefaults.standard.bool(forKey: "ngzhwm_chineseRomanization") { bits |= 2 }
+    if UserDefaults.standard.bool(forKey: "ngzhwm_koreanRomanization") { bits |= 4 }
+    return bits
+}
+
+// MARK: - 罗马化结果的小缓存
+
+/// 缓存键：**歌词版本 + 三个开关**（换歌 / 改开关才会重算，见 `romanizedContentsForDisplay()`）。
+private var romanizationCacheKey = ""
+private var romanizationCache: [String] = []
+
+extension LyricsDto {
+
+    /// 给**显示层**用的逐行罗马化文本（与 `lines` 同序、同长度）。
+    ///
+    /// ⚠️ 这个函数每 0.3s 会被叫一次（`NowPlayingLyricsPlate.currentLines()` 那条复查节拍），
+    /// 而罗马化（日文还要走分词）不便宜 ⇒ **带缓存**：
+    ///   · 键 = `currentLyricsVersion` + `romanizationSwitchesFingerprint()`；
+    ///   · 命中还要 `count == lines.count`（防串行）。
+    func romanizedContentsForDisplay() -> [String] {
+        // 键里除了版本与开关，还带上"行数 + 首行内容"：两个调用点（播放器那一层、全屏页）
+        // 现在都用 `currentLyricsDto`，但**万一**将来有人拿一份别的 dto 进来，
+        // 这两项能挡住"命中同一份缓存但内容不是它"的那种串行（`hashValue` 只在本进程内稳定，
+        // 做缓存键足够）。
+        let key = "\(currentLyricsVersion)-\(romanizationSwitchesFingerprint())"
+            + "-\(lines.count)-\(lines.first?.content.hashValue ?? 0)"
+        if key == romanizationCacheKey, romanizationCache.count == lines.count {
+            return romanizationCache
+        }
+        let fresh = romanizedForWordByWordIfEnabled().lines.map(\.content)
+        romanizationCacheKey = key
+        romanizationCache = fresh
+        return fresh
+    }
+}
 
 extension LyricsDto {
 
@@ -17,21 +65,34 @@ extension LyricsDto {
     ///   - 只有行级时间的行 → `.lineSynchronized`，`duration` 取「下一行起始 − 本行起始」
     ///     （末行用 `LyricVocalDurationEstimator` 估算），供渲染层按需拆「伪逐字」
     func toAppleMusicLyricLines() -> [LyricLine] {
-        let sorted = lines
-            .filter { $0.offsetMs != nil }
-            .sorted { ($0.offsetMs ?? 0) < ($1.offsetMs ?? 0) }
+        // ★ 2026-10-11：**罗马字**（用户要的"主歌词上方那一行"）。
+        //
+        // 数据**不新造**：`romanizedForWordByWordIfEnabled()` 就是仓库里那条既有的罗马化管线 ——
+        // 整首语言判定（`dominantCJKLanguageAbove`）+ 逐语言开关
+        // （`ngzhwm_japaneseRomanization` / `_chineseRomanization` / `_koreanRomanization`，
+        // 也就是"歌词页面里的选择"）+ 首字母大写。它返回的副本里 `content` 已是罗马化文本。
+        //
+        // ⚠️ 我们**只读它的 `content`**，主歌词仍用原文 ⇒ 两行都在（原文 + 上方罗马字）。
+        // ⚠️ 索引要按**原数组**取：下面要按 offset 重排，用排序后的下标会串行。
+        // ⚠️ 走 `romanizedContentsForDisplay()`（带缓存）—— 这个函数每 0.3s 会被叫一次。
+        let romanizedContents = romanizedContentsForDisplay()
 
-        guard !sorted.isEmpty else { return [] }
+        let indexed = lines.enumerated()
+            .filter { $0.element.offsetMs != nil }
+            .sorted { ($0.element.offsetMs ?? 0) < ($1.element.offsetMs ?? 0) }
+
+        guard !indexed.isEmpty else { return [] }
 
         let translationLines = translation?.lines ?? []
 
-        return sorted.enumerated().map { index, line in
+        return indexed.enumerated().map { index, pair in
+            let line = pair.element
             let startMs = line.offsetMs ?? 0
             let startTime = TimeInterval(startMs) / 1000
 
             // 下一行的起点 → 本行的显示时长。末行没有下一行可用，退回估算。
-            let nextStartTime: TimeInterval? = index + 1 < sorted.count
-                ? TimeInterval(sorted[index + 1].offsetMs ?? startMs) / 1000
+            let nextStartTime: TimeInterval? = index + 1 < indexed.count
+                ? TimeInterval(indexed[index + 1].element.offsetMs ?? startMs) / 1000
                 : nil
 
             let syllables = Self.syllables(
@@ -55,6 +116,14 @@ extension LyricsDto {
                 ? translationLines[index]
                 : nil
 
+            // 罗马字：和原文**不一样**才有（见 `romanization(original:romanized:)`）。
+            let romanization = Self.romanization(
+                original: line.content,
+                romanized: pair.offset < romanizedContents.count
+                    ? romanizedContents[pair.offset]
+                    : nil
+            )
+
             return LyricLine(
                 id: Self.lineID(index: index, startMs: startMs),
                 time: startTime,
@@ -69,13 +138,26 @@ extension LyricsDto {
                 // 用 content 才能保证「文本」与「音节时间轴」严格对应。
                 text: line.content,
                 syllables: syllables,
-                romanization: nil,
+                romanization: romanization,
                 romanizationSyllables: [],
                 translation: Self.normalized(translationText),
                 agent: nil,
                 backgroundVocal: Self.backgroundVocal(for: line)
             )
         }
+    }
+
+    /// 罗马字那一行：和原文**不一样**才算有。
+    ///
+    /// 为什么要这条判据：`romanizedForWordByWordIfEnabled()` 会把整首歌都过一遍 ——
+    /// 一首日文歌里的英文行（或本来就是拉丁字母的行）罗马化后就是它自己，
+    /// 那种行再显示一遍罗马字纯属噪声、还白占一行高度。
+    private static func romanization(original: String, romanized: String?) -> String? {
+        guard let romanized else { return nil }
+        let trimmedOriginal = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRomanized = romanized.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRomanized.isEmpty, trimmedRomanized != trimmedOriginal else { return nil }
+        return trimmedRomanized
     }
 
     /// 背景人声/副唱 → MeloX 的背景人声模型。

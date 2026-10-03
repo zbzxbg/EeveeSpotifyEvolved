@@ -356,6 +356,63 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 
 ---
 
+## 4.11 ★ 译文与罗马字接上（用户：把罗马字和歌词翻译接上去）
+
+用户原话：
+
+> 把罗马字和歌词翻译接上去吧，要求：翻译/罗马化**尊重歌词页面的选择**，
+> 翻译在歌词下方，**罗马字在歌词上方**（这字的高度和大小你自己想吧）
+
+**三件事、四份数据源都查过之后的落法**：
+
+| 档 | 数据从哪来 | 开关（"歌词页面的选择"） | 画在哪 |
+|---|---|---|---|
+| **译文** | `LyricLine.translation` ← `LyricsDto.translation.lines`（适配器早就在映射） | `!NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled`（默认随设备语言；旧 overlay 同一条判据） | 主歌词**下方**（`SynchronizedLyricText` 里本来就有那一行，只是以前 `showsTranslation=false`） |
+| **罗马字** | ★ **复用仓库既有管线** `LyricsDto.romanizedForWordByWordIfEnabled()` —— 整首语言判定 + 三个逐语言开关 + 首字母大写；**只读它的 `content`**，主歌词仍用原文 | `ngzhwm_{japanese,chinese,korean}Romanization`（就是设置页那三个） | 主歌词**上方**（新增 `romanizationText`，放在 `VStack` 最顶） |
+
+**几个关键决定**：
+
+* **罗马字与原文相同就不显示**（`LyricLinesAdapter.romanization(original:romanized:)`）——
+  一首日文歌里的英文行罗马化后就是它自己，再显示一遍纯噪声、还白占一行；
+* **排版数值**（用户把大小交给我）：字号 = `supplementalFontSize × 0.85`
+  （`.player` 档 17pt ⇒ ≈14.5pt，比译文再小一档）；与主歌词的间距用 **Apple Music 自己的
+  `transliterationSpacing = 5`**（`AppleMusicLyricsSupplementalTextProfile`，那个常量本来就写着"音译"）；
+  颜色/焦点跟随与译文同一条公式、整体再淡一档；
+* **开关即时生效**：罗马化那三个开关只写 `UserDefaults`、**不会让 `currentLyricsVersion` 变**
+  ⇒ 把开关**指纹**放进 `NowPlayingLyricsHost.isCurrent`，一改下一拍（≤0.3s）就重写行模型，
+  不用等换歌；
+* ★ **同一个判据只留一份**：指纹函数 `romanizationSwitchesFingerprint()` 定义在
+  `LyricLinesAdapter.swift` 开头，播放器那一层直接调它（§4.9 刚因为"抄两份"踩过坑，这里不再犯）；
+* **性能**：`toAppleMusicLyricLines()` 在**每 0.3s 那条节拍**上被调（`currentLines()`），
+  而罗马化不便宜（日文还要分词）⇒ 新增 `romanizedContentsForDisplay()`，按
+  「歌词版本 + 三个开关 + 行数 + 首行内容」缓存；
+* **没有时间轴那一档也带上**：`currentUntimedLines()` 改成返回 `(原数组下标, 文本)`，
+  译文/罗马字都按同一个下标配对（空行被滤掉之后下标会错位，这正是它不返回 `[String]` 的原因）；
+* **日志判据**：`expanded — … translation N/M romanization N/M`（各自命中多少行）——
+  下一次不用靠猜"是不是没接上"。
+
+---
+
+## 5. 本机自检（六条全绿）
+
+```
+python Tools/eevee-hookfinder/orion_hook_guard.py      # OK 327 文件
+python Tools/eevee-hookfinder/swift_brace_check.py     # OK 327 文件
+python Tools/eevee-hookfinder/swift_member_check.py    # OK 272 文件（含本场新增的规则 ④）
+python Tools/eevee-hookfinder/swift_string_check.py    # OK 276 文件 / 48824 行
+python Tools/l10n_lint.py --locale en                  # exit 0
+python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 extra
+```
+
+* **规则 ④（本场新增，见 §4.8）**：`UIControl` 专有方法被调在 `UIView` 类型的变量上 ⇒ 必然编译错
+  （那次 CI 红就是它）。两向验证过；**只认"声明成 `UIView` + 纯标识符赋值传播"**，
+  同名遮蔽 / 参数传入的一律跳过 —— 宁可漏，也不误报（与规则 ③ 同一条纪律）。
+
+⚠️ 六条都**不做类型检查**（`CGAffineTransform(a:b:c:d:tx:ty:)` 的逐参数、`@discardableResult` 的调用点、
+`flatMap` 那两处 Optional 链、`NSMutableParagraphStyle` 那几行、SwiftUI 的 `some View` 链只能靠 CI）。
+
+---
+
 ## 6. 下一轮：CI → 装机 → **日志 56 + 照片 74+**
 
 ### 6.1 操作顺序
@@ -438,7 +495,9 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 | ⑭ | S1：**连文本都提不出来**那一档才写「这首歌的歌词没有时间轴」 |
 | ⑭ | ★ **提供商在歌手右边**：展开歌词时那一行读作 `歌手（NetEase）`；收起后**还原**成纯歌手名（见 §4.10） |
 | ⑮ | ★ **没有 `(EeveeSpotify)` 字样**了：Spotify 原生歌词卡/全屏页底部那行只写源名（`歌词提供者：NetEase`），不再出现品牌 |
-| ⑯ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
+| ⑯ | ★ **罗马字在主歌词上方、译文在下方**（见 §4.11）：放一首日文歌、在设置里开「日语罗马化」⇒ 罗马字**下一拍就出现**（不用换歌）；日志里 `romanization N/M` 的 N ≠ 0 |
+| ⑰ | ★ **译文**：中文设备默认就该有（`隐藏译文` 默认关）；日志里 `translation N/M` 的 N ≠ 0 |
+| ⑱ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
 
 ### 6.4 ⚠️ 已知风险（照片上专门看这几条）
 
@@ -517,5 +576,14 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
     （例如只用源的缩写）或改成不上 marquee 的写法。
   · 另外 `(EeveeSpotify)` 水印是**注入 payload 的 `providedBy`** 去掉的 ⇒ 也要看一眼
     Spotify **原生**那行（歌词卡 / 全屏页底部）现在只有源名。
+* ★ **译文 / 罗马字**（§4.11）**没在真机验过**，而且是这一批里"看得见"的成分最多的一档：
+  · **排版数值是我定的**（罗马字 = 译文 × 0.85、间距用 Apple Music 的 5、颜色再淡一档）——
+    照片上要看的就三件：**罗马字是不是在主歌词上方**、**译文是不是在下方**、
+    **一块比原来高多少**（一屏会少半行到一行；若太挤就把罗马字再缩小或把块距从 26 调回 24）；
+  · **日文罗马字的质量**：走的是仓库既有那条管线（`toJapaneseRomaji()` + 分词对齐），
+    我们没改它的算法 —— 但"整行罗马化"和"逐词罗马化"是同一个函数的两条支路，
+    如果一行长得离谱（整句连成一串），下一轮就改用它的 `words` 那条支路；
+  · **开关即时生效那条路**（指纹进 `isCurrent`）**没验过**：在设置里开/关「日语罗马化」，
+    下一拍应该就变；没变的话，问题在这个判据而不是渲染层。
 * ★ **照片 74 是"过渡帧"**（用户明确说过：实际页面不长那样）⇒ 它证明的是**收尾顺序有问题**，
   **不能**当成"关着态的稳态长什么样"来读。

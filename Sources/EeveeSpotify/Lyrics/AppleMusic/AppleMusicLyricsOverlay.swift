@@ -142,6 +142,25 @@ struct AppleMusicLyricsOverlayView: View {
     /// 全屏（有壳）时才显示自绘标题栏与播放控制；内嵌预览那一小块不显示。
     private var showsShell: Bool { showsProviderFooter }
 
+    /// ★ 2026-10-11：**译文要不要画** —— 尊重"歌词页面"里的那套选择（用户要求）。
+    ///
+    /// 两个条件：
+    ///   · 这一首**有译文行**（`lines` 里至少一行带非空 `translation`）；
+    ///   · 用户没关掉「隐藏译文」（`NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled`，
+    ///     默认随设备语言：中文设备默认**显示**、其它默认隐藏 —— 那是仓库既有口径，
+    ///     旧 overlay 也是照它判的：`LyricsWordByWord.x.swift` 里
+    ///     `showsTranslation && !isNeteaseHideTranslationEnabled`）。
+    ///
+    /// ⚠️ 算在这里、而不是当参数从外面传：`body` 每一帧都会被时间轴重新求值，
+    /// 于是"在设置里一改、回到播放器立刻生效"，不用等下一次取词。
+    private var showsTranslationNow: Bool {
+        guard !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled else { return false }
+        return lines.contains { line in
+            guard let translation = line.translation else { return false }
+            return !translation.isEmpty
+        }
+    }
+
     /// 主色：**白色**。
     ///
     /// 与改动前一致（`AppleMusicLyricsPage` 的 `primaryColor` 参数此前没被传过，
@@ -204,6 +223,9 @@ struct AppleMusicLyricsOverlayView: View {
                     // 副唱只在全屏页显示：预览是 17pt 的小卡片，
                     // 副唱按 0.63 缩到约 11pt 看不清，还白占一行高度。
                     showsBackgroundVocals: showsProviderFooter,
+                    // ★ 2026-10-11（用户）：译文接上 —— 判据见 `showsTranslationNow`
+                    //   （有译文 + 用户没关掉「隐藏译文」）。译文由渲染层画在**主歌词下方**。
+                    showsTranslation: showsTranslationNow,
                     // 歌词提供者页脚：全屏显示，预览不显示（卡片太小）。
                     //
                     // 从全局读而不是做参数，是为了**避免一个能预报的 bug**：
