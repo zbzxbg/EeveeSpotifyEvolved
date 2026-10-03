@@ -659,6 +659,53 @@ LC 注入 + 产物名 / 上传与 filebin 命名）✓。
 
 ---
 
+## 4.19 ★ CI 抓到一个真编译错：`cannot find 'romanization' in scope`（并加自检规则 ⑤）
+
+用户跑 IPA 构建（= 唯一会编译 Swift 的那条流水线）后报回：
+
+```
+Sources/EeveeSpotify/Lyrics/AppleMusic/SynchronizedLyricText.swift:121:20:
+error: cannot find 'romanization' in scope
+```
+
+**【病根】** §4.11 那轮我把"罗马字画在主歌词上方"的那一行写进了 `body`：
+
+```swift
+if let romanization, !romanization.isEmpty { … }   // ← Swift 5.7 的**简写绑定**
+```
+
+而 **`SynchronizedLyricText` 这个视图根本没有 `romanization` 入参** ✗ ——
+它只有 `translation` ✓。有 `romanization` 的是**模型** `LyricLine`（`LyricModels.swift:104`）✓，
+所以"看着眼熟"就写了 ✗。简写绑定 `if let x` **不是**"新声明一个可选的 x"，
+它要求 `x` **已经在作用域里** ⇒ 编译器只能给一句 `cannot find in scope`。
+
+**【修法】三处（一个都不能少）**：
+
+| 位置 | 改动 |
+|---|---|
+| `SynchronizedLyricText` 属性表 | 加 `let romanization: String?`（在 `translation` 后面，注释里写明"必须存在，否则就是这次 CI 的错"） |
+| 它的 `init` | 加 `romanization: String? = nil` + `self.romanization = romanization`（默认值 ⇒ 背景人声那条递归调用、以及未来的调用点都不受影响 ✓） |
+| `AppleMusicLyricsPage.swift:704` | `romanization: line.romanization,` —— **不传的话属性永远是 nil，功能静默失效** ✗ |
+
+（`LyricBackgroundVocal` 没有罗马字 ⇒ 副唱那行保持默认 nil ✓；`SynchronizedLyricText(` 全仓库只有
+两个调用点 ✓ 另一个是副唱递归 ✓。）
+
+**【自检规则 ⑤】**（`Tools/eevee-hookfinder/swift_member_check.py`，本场新增，与 ③/④ 同一条纪律）：
+**SwiftUI `body` 里的简写绑定引用了本文件根本没有的名字** ⇒ 判错。只扫 `body`
+（它**没有参数** ⇒ 作用域可判定 = 本类型成员 + 全局 + 它自己的局部），
+而且**同文件里任何 `let/var NAME` 都算已声明** ⇒ 宁可漏、不误报。
+**两向验证过**：干净仓库 272 文件 **0 处 / exit 0** ✓；一个与 CI 同形的 fixture
+（`struct FixtureView` 里 `if let romanization` 而只声明了 `translation`）
+**精确报在第 7 行、exit 1**，且**没有**误报旁边那个合法的 `translation` ✓。
+
+> ★★ **这是本轮最值钱的一条经验**：上一轮我刚回答过"现在的编译没问题吗"——答案是
+> **"不知道，这 14 个提交从没编译过"** ✓，而这一个错**恰好就是那类肉眼 + 六个 Python 脚本
+> 都抓不到的类型错** ✗（跟之前 `maxNodes` / `sendActions` 同族）。所以：
+> **改完 Swift 一定要跑一次 IPA 构建**（`Build IPA — patched`，`ipa_url` 可留空），
+> 六条自检只覆盖括号/字符串/若干形态，**不做类型检查** ✗。
+
+---
+
 ## 5. 本机自检（六条全绿）
 
 ```

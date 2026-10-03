@@ -698,6 +698,10 @@ struct AppleMusicLyricsPage: View {
             isFocused: isFocused,
             focusStrength: focusStrength,
             translation: line.translation,
+            // ★ 2026-10-11（用户）：罗马字接上 —— 渲染层把它画在主歌词**上方**。
+            //   数据由 `LyricLinesAdapter` 用仓库既有罗马化管线填好（逐语言开关已过滤，
+            //   与原文相同的行是 nil）。
+            romanization: line.romanization,
             backgroundVocal: line.backgroundVocal,
             // 显式传真实宽度，不要再依赖 SwiftUI 推断（那正是文字溢出的原因）。
             constrainedWidth: availableWidth,

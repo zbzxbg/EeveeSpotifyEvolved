@@ -31,6 +31,17 @@ struct SynchronizedLyricText: View {
     let focusStrength: Double
     /// 行译文（可选），显示在原文下方。
     let translation: String?
+    /// 罗马字 / 音译（可选），显示在原文**上方**。
+    ///
+    /// ★ 2026-10-11（用户）：「罗马字在歌词上方，翻译在下方」。数据来自 `LyricLine.romanization`
+    /// （`LyricLinesAdapter` 用仓库既有的罗马化管线填的：整首语言判定 + 逐语言开关，
+    /// 且**与原文相同的行为 nil** ⇒ 那种行不会白占一行高度）。
+    ///
+    /// ⚠️ 这个属性是**必须**存在的：`body` 里那句 `if let romanization`（Swift 5.7 的简写绑定）
+    /// 只在**当前作用域里已有同名可选值**时才成立。2026-10-11 CI 就是这么红的 ——
+    /// `error: cannot find 'romanization' in scope`（当时我在 `body` 里写了这一行、
+    /// 却没有把它加成视图的入参）。自检规则 ⑤ 现在会提前抓这一形态。
+    let romanization: String?
     /// 副唱/背景人声（可选），按位置画在主歌上方或下方。
     let backgroundVocal: LyricBackgroundVocal?
     /// 文本最大宽度（决定折行）。
@@ -64,6 +75,7 @@ struct SynchronizedLyricText: View {
         isFocused: Bool,
         focusStrength: Double,
         translation: String? = nil,
+        romanization: String? = nil,
         backgroundVocal: LyricBackgroundVocal? = nil,
         constrainedWidth: CGFloat?,
         alignment: SynchronizedLyricTextAlignment = .leading,
@@ -80,6 +92,7 @@ struct SynchronizedLyricText: View {
         self.isFocused = isFocused
         self.focusStrength = focusStrength
         self.translation = translation
+        self.romanization = romanization
         self.backgroundVocal = backgroundVocal
         self.constrainedWidth = constrainedWidth
         self.alignment = alignment

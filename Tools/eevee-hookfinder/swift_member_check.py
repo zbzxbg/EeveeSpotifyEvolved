@@ -12,7 +12,7 @@
   同一批还有一条纯语法错：`guard let target = f()`，而 `f()` 返回**非 Optional**。
   这两类都**不需要编译器**就能查出来 —— 本脚本就干这个，省一次 CI。
 
-它检查四件事：
+它检查五件事：
   1. **静态成员是否存在**：`Type.member` 这种写法里，`Type` 若是本仓库声明的类型，
      那 `member` 必须在它（或它的 extension）里声明过；
   2. **`guard let x = expr` 里 expr 是不是明显非 Optional**：只查"本地声明的函数
@@ -24,6 +24,12 @@
      它会把"声明成 `UIView` 的名字"顺着 `guard let a = b` 这类**纯标识符赋值**传播两三跳，
      再看这些名字头上有没有 `sendActions` / `addTarget` / `removeTarget`；
      `… as? UIControl` 那种写法**不会**被算进来（那正是修好之后的样子）。
+  5. ★ 2026-10-11 新增：**SwiftUI `body` 里的简写绑定引用了本文件根本没有的名字**
+     （CI 实证：`error: cannot find 'romanization' in scope` —— 我在 `body` 里写了
+     `if let romanization`，却没把 `romanization` 加成视图的入参）。
+     `if let x` 是**简写**、并不声明 `x`，所以这类错只有编译器（或这条规则）会拦到。
+     只扫 `body`（它没有参数 ⇒ 作用域可判定），且**同文件里任何 `let/var NAME` 都算已声明**
+     ⇒ 宁可漏、不误报（与 ③/④ 同一条纪律）。
 
 用法：
     python Tools/eevee-hookfinder/swift_member_check.py            # 扫 Sources/EeveeSpotify
@@ -454,6 +460,57 @@ def main(argv: list[str]) -> int:
                         f"而 `{method}` 是 `UIControl` 的方法（编译期报 has no member）。"
                         "先用 `x as? UIControl` 接一下再调"
                     )
+
+    # ⑤ 简写绑定（`if let x` / `guard let x`）里，`x` 在本文件里根本没声明 —— 必然编译错。
+    #
+    # 2026-10-11 的 CI 实证（`SynchronizedLyricText.body`）：
+    #
+    #     var body: some View {
+    #         if let romanization, !romanization.isEmpty {   // ← romanization 不是这个视图的入参
+    #     …
+    #     error: cannot find 'romanization' in scope
+    #
+    # `if let x`（Swift 5.7 简写）**不是**"新声明一个可选的 x"，它要求 x **已经在作用域里**
+    # —— 所以"变量名写错 / 忘了把它加成本类型的属性"这类错，编译器只会给一句
+    # cannot find in scope，而本脚本能在本机提前抓到。
+    #
+    # 判据（只扫 SwiftUI `body`，因为 `body` 没有参数 ⇒ 它的作用域**可以判定**：
+    # 只能是本类型成员 + 本文件/跨文件的全局 + 它自己内部的局部）：
+    #   · 抓 `if/guard/while let|var NAME` 里 NAME **紧跟 `,` 或 `{`** 的那种（= 简写形态）；
+    #   · `NAME` 在本文件里任何位置有过 `let/var NAME`（属性/局部）或跨文件**行首**全局声明
+    #     ⇒ 算已声明。
+    #   ⚠️ 故意宽松（同文件别处的声明也认）⇒ **宁可漏，不误报**，与规则 ③/④ 同一条纪律。
+    SHORTHAND_BIND = re.compile(
+        r"\b(?:if|guard|while)\s+(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?=[,{])")
+    ANY_DECL = re.compile(r"\b(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::|=)")
+    TOP_DECL = re.compile(
+        r"^(?:@\w+(?:\([^)]*\))?\s+)*"
+        r"(?:(?:public|internal|private|fileprivate|final)\s+)*(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        re.M,
+    )
+    repo_globals: set[str] = set()
+    for _f, _src in per_file_src.items():
+        repo_globals.update(TOP_DECL.findall(_src))
+
+    for f, src in per_file_src.items():
+        file_decls = set(ANY_DECL.findall(src))
+        for body_match in re.finditer(r"\bvar\s+body\b[^{]*\{", src):
+            region_start = src.find("{", body_match.start())
+            if region_start < 0:
+                continue
+            region = type_body(src, body_match.start())
+            in_body_decls = set(ANY_DECL.findall(region))
+            for bind in SHORTHAND_BIND.finditer(region):
+                name = bind.group(1)
+                if name in in_body_decls or name in file_decls or name in repo_globals:
+                    continue
+                line = src[: region_start + bind.start()].count("\n") + 1
+                problems.append(
+                    f"{f}:{line}: `if/guard let {name}` 是**简写绑定**，但本文件里没有 "
+                    f"`let/var {name}` 的声明（编译期报 cannot find '{name}' in scope）。"
+                    "要么把它加成本类型的属性 / 入参，要么改成 `if let "
+                    f"{name} = <表达式>`"
+                )
 
     if problems:
         # 去重（同一处可能被两条规则各命中一次）
