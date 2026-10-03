@@ -44,6 +44,7 @@ struct EeveeExtrasSettingsView: View {
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
         var nowPlayingLyricsInPlayer = UserDefaults.nowPlayingLyricsInPlayer
+        var nowPlayingSingleLyric = UserDefaults.nowPlayingSingleLyric
         var nowPlayingControlGlyphs = UserDefaults.nowPlayingControlGlyphs
     }
 
@@ -241,6 +242,21 @@ struct EeveeExtrasSettingsView: View {
                             } else {
                                 NowPlayingLyricsPlate.remove(reason: "switch off")
                             }
+                        }
+                    )
+                )
+
+                // ★ 2026-10-04（用户建议的第二条）：收起歌词那一屏，在**大封面与歌词键之间**
+                // 画一行居中的当前歌词（"类似 Spotify 的单行歌词，但这行歌词我们自己画"）。
+                // 落点是封面底边与控件条上沿的中点，做法见 `NowPlayingLyricsPlate.applySingleLyric`。
+                Toggle(
+                    "now_playing_single_lyric".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingSingleLyric,
+                        persist: { value in
+                            UserDefaults.nowPlayingSingleLyric = value
+                            // 开/关都当场生效（页面还挂着的话）：关掉就是当场把它收起来。
+                            NowPlayingLyricsPlate.reapply()
                         }
                     )
                 )

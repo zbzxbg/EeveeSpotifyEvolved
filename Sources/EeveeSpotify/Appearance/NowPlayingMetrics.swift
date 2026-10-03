@@ -53,7 +53,12 @@ enum NowPlayingMetrics {
     /// 歌词行距 26pt（我们的逐词层目前偏紧）。
     static let lyricLineSpacing: CGFloat = 26
     /// 歌词列上下渐隐的停点（0 / 0.12 / 0.85 / 1）。
-    static let lyricFadeStops: [NSNumber] = [0, 0.12, 0.85, 1]
+    ///
+    /// ★ 2026-10-04：顶部那一档 **0.12 → 0.10**。用户要的是"往上淡出的部分再高点"，
+    /// 而歌词块顶边同时上移了 ≈50pt（`NowPlayingLyricsPlate.lyricsTop` 66 → 24）——
+    /// 块变高之后 0.12 会变成 ≈53pt，把"第一行"（块顶 + 48pt 内边距）卷进淡出带里；
+    /// 0.10 让这条带子仍是 ≈44pt 并且**跟着块一起上移**（它本来就是块高的比例）。
+    static let lyricFadeStops: [NSNumber] = [0, 0.10, 0.85, 1]
     /// 自动滚动跟随的 spring（0.8 / 0.85）—— UIKit 里对应
     /// `UIView.animate(withDuration:delay:usingSpringWithDamping:initialSpringVelocity:)`。
     static let lyricScrollFollowDuration: TimeInterval = 0.8

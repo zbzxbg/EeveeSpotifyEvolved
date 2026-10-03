@@ -42,6 +42,7 @@ extension UserDefaults {
     private static let nowPlayingVolumeKey = "nowPlayingVolume"
     private static let nowPlayingLyricsInPlayerKey = "nowPlayingLyricsInPlayer"
     private static let nowPlayingLyricsExpandedKey = "nowPlayingLyricsExpanded"
+    private static let nowPlayingSingleLyricKey = "nowPlayingSingleLyric"
     private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
@@ -92,6 +93,7 @@ extension UserDefaults {
         nowPlayingVolumeKey,
         nowPlayingLyricsInPlayerKey,
         nowPlayingLyricsExpandedKey,
+        nowPlayingSingleLyricKey,
         nowPlayingControlGlyphsKey,
 
         // 不在上面那批常量里、但同样属于我们的：
@@ -628,6 +630,28 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingLyricsExpandedKey)
+        }
+    }
+
+    /// 听歌页「**封面与歌词键之间那一行居中歌词**」。**默认开**。
+    ///
+    /// ★ 2026-10-04（用户建议的第二条，原话）：
+    /// > 把现在的大封面做小，不需要那么大（图片 41 的大小差不多）。然后，在封面和歌词按钮中间
+    /// > 做一行居中的歌词（类似于 Spotify 的单行歌词，但这行歌词现在是我们自己做）
+    ///
+    /// 它只在**收起歌词那一屏**出现（展开时整页歌词都在，再来一行就是重复），
+    /// 摆在封面底边与控件条上沿的**中点**。做法与判据见
+    /// `NowPlayingLyricsPlate.applySingleLyric`（行模型 / "唱到哪一行"都用现成的，
+    /// 一处判据都不新写）。
+    ///
+    /// ⚠️ 默认开：用户是**主动点名要**这个功能的，默认开才看得到效果；
+    ///    觉得多余就在 设置 → 扩展功能 里关掉（关掉当场拿走那一行，不用重启）。
+    static var nowPlayingSingleLyric: Bool {
+        get {
+            container.object(forKey: nowPlayingSingleLyricKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingSingleLyricKey)
         }
     }
 

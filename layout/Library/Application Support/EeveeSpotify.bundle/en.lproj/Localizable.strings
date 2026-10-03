@@ -514,4 +514,5 @@ now_playing_backdrop_description = "Paints the now-playing page with a gradient 
 now_playing_one_screen = "One screen (no scrolling)";
 now_playing_volume = "Volume slider at the bottom";
 now_playing_lyrics_in_player = "Lyrics in the player";
+now_playing_single_lyric = "One-line lyric between the cover and the lyrics button";
 now_playing_control_glyphs = "Music app style transport buttons";

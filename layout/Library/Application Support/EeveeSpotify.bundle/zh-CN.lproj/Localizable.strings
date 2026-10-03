@@ -501,4 +501,5 @@ now_playing_backdrop_description = "用封面取色调出一层渐变铺满听�
 now_playing_one_screen = "隐藏Spotify歌曲播放页模块";
 now_playing_volume = "展示音量条";
 now_playing_lyrics_in_player = "歌词进播放器";
+now_playing_single_lyric = "封面与歌词键之间显示一行歌词";
 now_playing_control_glyphs = "控制键换成本地字形";
