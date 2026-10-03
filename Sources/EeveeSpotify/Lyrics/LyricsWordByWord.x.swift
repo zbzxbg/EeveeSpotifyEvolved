@@ -66,7 +66,8 @@ var currentLyricsDtoTrackId: String = ""
 
 /// 最终生效的歌词背景色（ARGB），CustomLyrics 算完 colors 后写入，供 overlay 与原生模块同色。
 var currentLyricsBackgroundColorARGB: UInt32 = 0
-/// 歌词提供者文本（如 "PetitLyrics (EeveeSpotify)"），用于 overlay 底部展示。
+/// 歌词提供者文本（如 "PetitLyrics"；★ 2026-10-11 起不带 `(EeveeSpotify)` 后缀），
+/// 用于 overlay 页脚、以及**播放器页歌手那一行的右边**（`歌手（提供商）`）。
 var currentLyricsProvider: String = ""
 
 /// 当前曲目时长（毫秒），由 `getLyricsDataForCurrentTrack` 在处理这次歌词请求时写入。

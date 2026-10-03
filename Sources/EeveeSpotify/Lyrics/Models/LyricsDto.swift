@@ -23,7 +23,10 @@ struct LyricsDto {
     ///   · 网易云 lrc 里带「纯音乐」（`NeteaseLyricsRepository`）；
     ///   · LRCLIB 的 `song.instrumental == true`（`LrclibLyricsRepository`）。
     var isInstrumental: Bool = false
-    /// 这份歌词**实际**是谁给的（形如 `"PetitLyrics (EeveeSpotify)"`）。
+    /// 这份歌词**实际**是谁给的（形如 `"PetitLyrics"`）。
+    ///
+    /// ★ 2026-10-11：**不再带 `(EeveeSpotify)` 后缀**（用户：「这个就不需要写 eveespotify
+    /// 的水印了」）。这串会同时进我们自己的页脚 / 歌手那一行、以及注入 payload 的 `providedBy`。
     ///
     /// 由 `CustomLyrics.storeLyricsDto(_:source:)` 在拿到数据的同一刻写入，
     /// 也就是"提供者"与"正在渲染的那份 dto"永远同源。以前提供者是另一个全局
@@ -73,7 +76,12 @@ struct LyricsDto {
             // 有行、且每行都带 offset → 就是"同步歌词"，如实告诉 Spotify。
             $0.timeSynchronized = effectiveLines.contains { ($0.offsetMs ?? 0) > 0 }
             $0.restriction = .unrestricted
-            $0.providedBy = "\(source) (EeveeSpotify)"
+            // ★ 2026-10-11（用户）：「这个就不需要写 eveespotify 的水印了」。
+            //
+            // 以前这里写 `"\(source) (EeveeSpotify)"`，而 **Spotify 原生歌词页 / 卡片底部那一行
+            // 是直接照 payload 的 `providedBy` 显示的** ⇒ 屏幕上就是那个水印。
+            // 现在只写**源名**（`"NetEase"`）—— "词是哪来的"这条信息还在，品牌不写了。
+            $0.providedBy = "\(source)"
         }
         
         let canRomanize = romanization == .canBeRomanized

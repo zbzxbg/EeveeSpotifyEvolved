@@ -342,6 +342,10 @@ enum NowPlayingLyricsPlate {
     /// 96…145 这 49pt 可用。取 2 ⇒ 行占 **98…144**，正好卡在中间，不压封面。
     private static let closedTitleTopInset: CGFloat = 2
 
+    /// 歌手那一行的判据（id）：真机树里是
+    /// `MarqueeLabel@0,24,308,22,id=now-playing-subtitle-label`（标题是 `now-playing-title-label`）。
+    private static let subtitleLabelIdentifier = "now-playing-subtitle-label"
+
     /// 歌词区进场时从 0.96 放大到 1（pw 的 `kLyricsEnterScale`）。
     /// ⚠️ **本轮没做**：那要把容器也改成"只动 transform + bounds/center"（同封面那一套），
     /// 否则 `ensureContainer` 每拍写 `frame` 会和 transform 打架。留到下一轮。
@@ -433,6 +437,11 @@ enum NowPlayingLyricsPlate {
     private static var didLogClosedTitleMissing = false
     /// "关着态那一行摆上了"只报一次（一次一页一行，下一份日志靠它判）。
     private static var didLogClosedTitle = false
+    /// ★ 2026-10-11：我们贴到歌手那一行右边的那一段（`"（NetEase）"`），收尾时按它精确摘掉。
+    private static var lastArtistSuffix: String?
+    /// "贴了一次 / 被 binder 写回了一次"各留一行日志（免得变成"改了没生效"）。
+    private static var didLogArtistProvider = false
+    private static var didLogArtistReset = false
     /// ★ 2026-10-11：分享键的**替身热区**（那颗键自己点不到，见 `ensureShareRelay`）。
     private static weak var bandShareRelay: UIControl?
 
@@ -1031,6 +1040,10 @@ enum NowPlayingLyricsPlate {
         // ② 标题行上移 + 右移（transform —— 改约束会被 stack view 布局写回）。
         applyTitleTransform(geometry: geometry, page: page)
 
+        // ②b ★ 2026-10-11（用户）：**歌手右边写上歌词提供商**——`歌手（提供商）`。
+        //     只在这条"展开"的路上贴；收起时由 `settleAfterClosing` 还原。
+        applyProviderToArtistLine(in: page)
+
         // ③ 歌词区：标题之下、进度条之上。
         let frame = geometry.stage
         guard frame.height > livingHeight / 2 else {
@@ -1193,6 +1206,10 @@ enum NowPlayingLyricsPlate {
     ///   · **页面不在 / 功能关了** ⇒ 把写在别人视图上的两段位移**全部撤掉**
     ///     （这也是原来那句 `lastUnit?.transform = .identity` 的职责）。
     private static func settleAfterClosing() {
+        // ★ 2026-10-11（用户）：收起歌词 ⇒ 歌手那一行还原成**纯歌手名**
+        //   （「（提供商）」那一段只在展开歌词时贴）。
+        if let page = lastPage { restoreArtistLine(in: page) }
+
         if isEnabled, let page = lastPage, page.window != nil {
             applyControlBand(in: page)
             if applyClosedTitleTransform(in: page) {
@@ -2239,6 +2256,96 @@ enum NowPlayingLyricsPlate {
         }
         writeDebugLog("[\(logTag)] relaying a tap to the share button (\(name))")
         control.sendActions(for: .touchUpInside)
+    }
+
+    /// 把「歌词提供商」写到**歌手那一行的右边**：`歌手（提供商）`。
+    ///
+    /// ## 用户 2026-10-11 的想法（原话）
+    /// > 就是在歌手的右边，写上歌词提供商。即 **歌手名字（歌词提供商）** 这种。而这两行是等高的。
+    /// > 这个就不需要写 eveespotify 的水印了
+    ///
+    /// ## 为什么用"复查"而不是只写一次
+    /// 这一行是 **Spotify 自己的标签**（`now-playing-subtitle-label`），它的 binder 会在绑定/
+    /// 换歌时把文本写回 ⇒ 只写一次就是"过一会儿又变回去"。本仓库对"改原生标签"的既有手法
+    /// 就是**常驻复查节拍**（见 `LibraryAppearance` 那段：写一次、每拍比一次、被写回时留一行日志）。
+    /// 我们这条 0.3s 的节拍现成，直接蹭。
+    ///
+    /// ⚠️ **只在"展开歌词"时贴**；收起 / 离开页面由 `restoreArtistLine` 精确摘掉
+    /// （记住贴上去的那一段，不靠猜括号）。
+    ///
+    /// ⚠️ 两行的高度**不动**：标题与歌手各是 Spotify 自己的字号（真机树 24 / 22pt），
+    /// 我们只往歌手那行**追加文本**，不换行、不改字体 —— 用户要的"两行等高"就是"别把第二行撑高"。
+    private static func applyProviderToArtistLine(in page: UIView) {
+        guard let label = artistLabel(in: page) else { return }
+        guard let suffix = providerSuffix() else { return }
+
+        let current = label.text ?? ""
+        guard !current.isEmpty, !current.hasSuffix(suffix) else { return }
+
+        // 走到这里有两种情况：
+        //   · 第一次贴（文本就是 Spotify 给的纯歌手名）；
+        //   · binder 把文本写回成纯歌手名 ⇒ 再贴一次。
+        lastArtistSuffix = suffix
+        setLabelText(current + suffix, on: label)
+
+        if !didLogArtistProvider {
+            didLogArtistProvider = true
+            writeDebugLog(
+                "[\(logTag)] lyrics provider written next to the artist — \"\(current)\" + \"\(suffix)\""
+            )
+        } else if !didLogArtistReset, current == lastArtistBase {
+            // 同一行、同一个歌手名，却又走到这里 ⇒ 是 binder 写回，不是换歌。
+            didLogArtistReset = true
+            writeDebugLog(
+                "[\(logTag)] ⚠️ the artist line was written back by the binder -"
+                    + " the 0.3s reconcile will keep putting the provider back"
+            )
+        }
+        lastArtistBase = current
+    }
+
+    /// 把歌手那一行还原成纯歌手名（收起歌词 / 离开页面 / 关开关）。
+    private static func restoreArtistLine(in page: UIView) {
+        guard let suffix = lastArtistSuffix, let label = artistLabel(in: page) else { return }
+        let current = label.text ?? ""
+        guard current.hasSuffix(suffix) else {
+            lastArtistSuffix = nil
+            return
+        }
+        setLabelText(String(current.dropLast(suffix.count)), on: label)
+        lastArtistSuffix = nil
+    }
+
+    /// 上一次贴之前那一行的原文（用来分辨"换歌"与"被 binder 写回"，只给日志用）。
+    private static var lastArtistBase = ""
+
+    private static func artistLabel(in page: UIView) -> UILabel? {
+        let list = findByIdentifier(listIdentifier, in: page)
+        let label = (list.flatMap { findByIdentifier(subtitleLabelIdentifier, in: $0) })
+            ?? findByIdentifier(subtitleLabelIdentifier, in: page)
+        return label as? UILabel
+    }
+
+    /// `"歌手（提供商）"` 里那一段后缀；提供商为空 ⇒ `nil`（那就什么都不写，保持 Spotify 原样）。
+    private static func providerSuffix() -> String? {
+        let provider = currentLyricsProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !provider.isEmpty else { return nil }
+        return "（\(provider)）"
+    }
+
+    /// 改 Spotify 标签的文本时**保住它自己的字体/颜色**：有 `attributedText` 就在它上面改，
+    /// 没有才退回 `text`（直接写 `text` 会把 Spotify 设的属性字符串整段丢掉）。
+    private static func setLabelText(_ text: String, on label: UILabel) {
+        if let attributed = label.attributedText, attributed.length > 0 {
+            let mutable = NSMutableAttributedString(attributedString: attributed)
+            mutable.replaceCharacters(
+                in: NSRange(location: 0, length: mutable.length),
+                with: text
+            )
+            label.attributedText = mutable
+        } else {
+            label.text = text
+        }
     }
 
     /// 把我们写给标题行 / 标题元素的那两段位移撤掉（关开关 / 离开页面）。

@@ -318,6 +318,44 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 
 ---
 
+## 4.10 ★ 歌词提供商写进歌手那一行；`(EeveeSpotify)` 水印去掉
+
+用户原话：
+
+> 我还有个想法：就是在歌手的右边，写上歌词提供商。即 **歌手名字（歌词提供商）** 这种。
+> 而这两行是等高的。这个就不需要写 eveespotify 的水印了
+
+**水印是从哪来的**（代码实证）：`CustomLyrics.storeLyricsDto` 写
+`providerName = "\(source.description) (EeveeSpotify)"`，同一条字符串也进注入 payload 的
+`providedBy` —— 而 **Spotify 原生歌词页 / 卡片底部那一行是直接照 `providedBy` 显示的**
+（`CustomLyrics.x.swift` 开头那段注释就记着这事）⇒ 屏幕上就是那个水印；
+"所有源都失败"那条占位路更是回落到**裸的 `"EeveeSpotify"`**。
+
+**这一轮的改动**：
+
+| 改哪 | 怎么改 |
+|---|---|
+| `LyricsDto.toSpotifyLyricsData` 的 `providedBy` | `"\(source) (EeveeSpotify)"` → **`"\(source)"`**（只留源名） |
+| `CustomLyrics.storeLyricsDto` 的 `providerName` | 同上（这串是 `currentLyricsProvider` 的来源） |
+| 占位路的 `providedBy` | 回落到**裸的 `"EeveeSpotify"`** → 改成"没问过就留空" |
+| `NowPlayingLyricsPlate` | ★ 新增 `applyProviderToArtistLine` / `restoreArtistLine` / `artistLabel` / `providerSuffix` / `setLabelText`：把 `歌手（提供商）` 写到 **Spotify 自己的** `now-playing-subtitle-label` 上 |
+
+**写法上的三个要点**（照本仓库既有手法）：
+
+* 这一行是 **Spotify 的标签**，binder 会写回 ⇒ 走**复查节拍**（0.3s 那一拍里比一次、不等才写一次），
+  并且"第一次贴上"和"第一次被写回"各留一行日志（同 `LibraryAppearance` 那套；不然就是"改了没生效"）；
+* 改文本时**保住它自己的属性字符串**（有 `attributedText` 就在它上面改，否则退回 `text`）——
+  直接写 `text` 会把 Spotify 设的字体/颜色整段丢掉；
+* **只在展开歌词时贴**；收起 / 离开页面 / 关开关由 `settleAfterClosing` 调 `restoreArtistLine`
+  精确摘掉（记住贴上去的那一段，不靠猜括号）。
+
+**"这两行是等高的"怎么落的**：标题与歌手各是 Spotify 自己的字号（真机树 24 / 22pt），
+我们**只往歌手那行追加文本**、不换行不改字体 ⇒ 两行高度与原来一致。
+（若用户的意思其实是"把两行字号调成一样"，那是另一件事 —— 要在 `label.font` 上做、
+照 `LibraryAppearance` 那条路，**先问**。）
+
+---
+
 ## 6. 下一轮：CI → 装机 → **日志 56 + 照片 74+**
 
 ### 6.1 操作顺序
@@ -398,7 +436,9 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 | | · 日志里有 `static lyrics N line(s) (this track has no timeline; same renderer, static mode)`。 |
 | ⑬ | ★ **点行跳转落在被点的那一行**（不是上一行）—— 见 §4.9 |
 | ⑭ | S1：**连文本都提不出来**那一档才写「这首歌的歌词没有时间轴」 |
-| ⑮ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
+| ⑭ | ★ **提供商在歌手右边**：展开歌词时那一行读作 `歌手（NetEase）`；收起后**还原**成纯歌手名（见 §4.10） |
+| ⑮ | ★ **没有 `(EeveeSpotify)` 字样**了：Spotify 原生歌词卡/全屏页底部那行只写源名（`歌词提供者：NetEase`），不再出现品牌 |
+| ⑯ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
 
 ### 6.4 ⚠️ 已知风险（照片上专门看这几条）
 
@@ -470,5 +510,12 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
   这一档第一次带上它 ⇒ **没在真机验过**。若照片上还是"点这一行、跳到上一行"，
   就只改 `seekToTappedLyricLine` 里那一个数（先试 30ms）——
   它就是"往这一行里面多走一点"的安全余量，没有别的副作用。
+* ★ **歌手那一行的提供商**（§4.10）**没在真机验过**，而且有两处只能看照片：
+  · **binder 会不会每拍都写回** ⇒ 若那一行在"有（NetEase）/ 没有"之间闪，就是它 ——
+    对策是改成 hook 它的 layout 事件（像 `CoverFlashGuard` 那样）而不是 0.3s 复查；
+  · **贴上去之后会不会触发 marquee 滚动**（行变长了）——若文字开始来回跑，就把提供商改短
+    （例如只用源的缩写）或改成不上 marquee 的写法。
+  · 另外 `(EeveeSpotify)` 水印是**注入 payload 的 `providedBy`** 去掉的 ⇒ 也要看一眼
+    Spotify **原生**那行（歌词卡 / 全屏页底部）现在只有源名。
 * ★ **照片 74 是"过渡帧"**（用户明确说过：实际页面不长那样）⇒ 它证明的是**收尾顺序有问题**，
   **不能**当成"关着态的稳态长什么样"来读。
