@@ -721,8 +721,16 @@ enum NowPlayingLyricsPlate {
         // 标题行的位移就全留在那一页上了）。
         guard let leavingPage = lastPage else { return false }
         if leavingPage.window == nil {
+            // ★ 2026-10-12（独立复核）：**这一段的条件必须把"我们写过的每一处"都算上**。
+            //   它原来只认展开态那几样（封面 / 容器 / 分享键 / 标题行），而这一轮新增了三处
+            //   写在**别人的视图或页面上**的东西：封面缩放、歌手行的提供商、那一行单行歌词。
+            //   漏掉它们的后果很具体：页面走掉时该跑的那次收尾**整段被跳过**
+            //   ⇒ 封面缩着不回、歌手行永远挂着「（NetEase）」、我们的标签留在树上
+            //   （而 `singleLyric` 若还是强引用，连那一页的标签都一起钉住）。
             guard pageLeaving || isOpen || coverHost != nil || lastContainer != nil
-                || bandShareButton != nil || closedTitleRow != nil || wantsOpen else { return false }
+                || bandShareButton != nil || closedTitleRow != nil || wantsOpen
+                || !scaledCoverBase.isEmpty || lastArtistSuffix != nil || singleLyric != nil
+            else { return false }
             // 页面已经不在屏幕上了 ⇒ 现在写回封面 / 撤销几何 / 摘掉我们的层与那枚键，什么都看不见。
             closeEverything(reason: "page disappeared", animated: false)
             removeToggle()
@@ -939,7 +947,7 @@ enum NowPlayingLyricsPlate {
     private static func keepNativeCoverHidden(in page: UIView) -> Bool {
         guard let list = findByIdentifier(listIdentifier, in: page),
               let source = visibleCover(in: list, page: page) else { return false }
-        hideSpotifyCover(source, in: page)
+        hideSpotifyCover(source)
         return true
     }
 
@@ -1009,7 +1017,7 @@ enum NowPlayingLyricsPlate {
         }
         guard let page = lastPage, page.window != nil else { return noteCoverGuardReject() }
 
-        hideSpotifyCover(cover, in: page)
+        hideSpotifyCover(cover)
 
         coverLocalHides += 1
         guard coverLocalHides == 1 || coverLocalHides % 20 == 0 else { return }
@@ -1641,7 +1649,7 @@ enum NowPlayingLyricsPlate {
     /// 这个视图**在祖先里有没有被"折没"**：任一祖先 `hidden`，或者 `bounds` 退化到 0。
     ///
     /// ⚠️ **不看 `alpha`**：`hideSpotifyCover` 会把**已经被我们藏起来的那张**写成 `alpha = 0`，
-    ///    而下一拍 `measure()` 还得能再认出它来（隐藏名单在 `hiddenCoverKey` 里）。
+    ///    而下一拍 `measure()` 还得能再认出它来（隐藏名册在 `hiddenCovers` 里）。
     ///    这里只判"几何上被折没了"，那是「一屏」留下的唯一痕迹。
     ///
     /// 走查有界（32 跳，本仓库纪律），到 `root` 为止。
@@ -1668,9 +1676,10 @@ enum NowPlayingLyricsPlate {
     /// 严格那一趟一张都挑不到 → 退回旧判据 → 又去挑那张**卡的**封面 → `lift` 又变正数
     /// ⇒ **展开撑不过半秒**。（独立只读复核点出来的，本轮修法的前置条件。）
     private static func isHiddenByUs(_ view: UIView) -> Bool {
-        guard let page = lastPage else { return false }
-        let hidden = (objc_getAssociatedObject(page, &hiddenCoverKey) as? [UIView]) ?? []
-        return hidden.contains { $0 === view }
+        // ★ 2026-10-12：问**静态名册**（`hiddenCovers`），不再问页面 ——
+        //   `lastPage` 是 weak，页面一没这里就会答"不是我们藏的"，于是展开撑不过半秒；
+        //   名册本身也不该依赖"哪一页"（见名册那段的两条理由）。
+        hiddenCovers.contains(view)
     }
 
     /// 挑中的封面**换了就报一行**（上限 `chosenCoverLogLimit` 行）。
@@ -1934,7 +1943,7 @@ enum NowPlayingLyricsPlate {
         // Spotify 那条封面**在我们这张出现的同一瞬间隐去**（两张同图，所以看不出"换"）。
         // pw：*"Spotify's cover goes the moment the redesign's own takes its place"* ——
         // 早一步会露一个空档，晚一步会两张同屏（一大一小）。
-        hideSpotifyCover(source, in: page)
+        hideSpotifyCover(source)
         return host
     }
 
@@ -2020,7 +2029,19 @@ enum NowPlayingLyricsPlate {
         )
     }
 
-    private static var hiddenCoverKey: UInt8 = 0
+    /// 被我们按下 `alpha` 的**别人那些视图**（`Encore.ImageView` 壳 + 真正画图的那一层）—— 弱引用名册。
+    ///
+    /// ★ 2026-10-12（独立复核点出来的两个死角都在这一段）：
+    ///
+    ///   ① 原来这份名单挂在**页面对象**上（`objc_setAssociatedObject(page, …)`），而还原那段是
+    ///      `guard let page = lastPage else { return }` —— `lastPage` 是 **weak**：页面先被释放
+    ///      （或已经换成新的一页）时，还原**整段跑不到**；而封面的视图住在**会被复用的 cell** 里
+    ///      ⇒ 复用到下一页时它还是 `alpha = 0` ⇒ **永久空白封面**（本仓库最不能接受的那种失败）。
+    ///      名册改成**静态**之后，"藏"与"还原"也不再依赖页面身份。
+    ///   ② 原来还原写死 `alpha = 1`：可壳原本可能是 0、或是 0.5（日志 54 里就有 `alpha=0.50`
+    ///      的重复件）⇒ 我们等于**把别人的值永久改坏**。现在**逐视图记下原值**、按原值写回。
+    private static let hiddenCovers = NSHashTable<UIView>.weakObjects()
+    private static var hiddenCoverAlphas: [ObjectIdentifier: CGFloat] = [:]
 
     // MARK: - 封面图缓存（**不依赖"点的那一瞬间"**）
 
@@ -2163,23 +2184,30 @@ enum NowPlayingLyricsPlate {
 
     /// ⚠️ 收的是**已经认准的那一个**（由 `visibleCover` 挑出来），不再自己按 id 找一遍 ——
     /// 上一版这里又 `findByIdentifier` 了一次，于是"挑封面"与"藏封面"用的是两个不同的视图。
-    private static func hideSpotifyCover(_ source: UIView, in page: UIView) {
-        var hidden = (objc_getAssociatedObject(page, &hiddenCoverKey) as? [UIView]) ?? []
-        if !hidden.contains(where: { $0 === source }) { hidden.append(source) }
-        source.alpha = 0
+    private static func hideSpotifyCover(_ source: UIView) {
+        hideCoverView(source)
         // 它下面那层真正画图的 `UIImageView` 也一起（`Encore.ImageView` 只是壳）。
         for sub in source.subviews where sub.alpha > 0.01 && sub.bounds.width >= 200 {
-            if !hidden.contains(where: { $0 === sub }) { hidden.append(sub) }
-            sub.alpha = 0
+            hideCoverView(sub)
         }
-        objc_setAssociatedObject(page, &hiddenCoverKey, hidden, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
+    /// 按下某个视图的 `alpha`，并**只在第一次**记下它自己的原值（还原时按原值写回，见名册那段）。
+    private static func hideCoverView(_ view: UIView) {
+        let key = ObjectIdentifier(view)
+        if hiddenCoverAlphas[key] == nil { hiddenCoverAlphas[key] = view.alpha }
+        hiddenCovers.add(view)
+        view.alpha = 0
+    }
+
+    /// 把被我们按下去的视图**按各自的原值**还回去。**不依赖页面**（见名册那段：页面可能已经没了）。
     private static func restoreSpotifyCover() {
-        guard let page = lastPage else { return }
-        let hidden = (objc_getAssociatedObject(page, &hiddenCoverKey) as? [UIView]) ?? []
-        for view in hidden { view.alpha = 1 }
-        objc_setAssociatedObject(page, &hiddenCoverKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        for view in hiddenCovers.allObjects {
+            guard let original = hiddenCoverAlphas[ObjectIdentifier(view)] else { continue }
+            if view.alpha != original { view.alpha = original }
+        }
+        hiddenCovers.removeAllObjects()
+        hiddenCoverAlphas.removeAll()
     }
 
     /// 在壳里找真正的 `UIImageView`（`Encore.ImageView` 自己不画图）。
@@ -3143,7 +3171,9 @@ enum NowPlayingLyricsPlate {
     /// ## 什么时候**不**显示
     /// 开关关 / 歌词展开着（整页歌词都在，再来一行就是重复）/ 页面要走 / 还没词 /
     /// **一行带时间轴的都没有**（那就没有"当前行"这回事 —— 静态歌词那一档不适用）。
-    private static var singleLyric: UILabel?
+    /// ⚠️ `weak`（独立复核）：页面归它所有；万一有哪条路没走到 `removeSingleLyric`，
+    ///   也不该由这个静态变量**钉住上一页的标签**。
+    private static weak var singleLyric: UILabel?
     private static var singleLyricShownText = ""
     private static var singleLyricLines: [LyricLine] = []
     private static var singleLyricCacheKey = ""
@@ -3242,7 +3272,9 @@ enum NowPlayingLyricsPlate {
         let bandTop = controlBandMidY - controlBandHalfHeight
         let coverBottom = visibleCoverBottom(in: page) ?? page.bounds.midY
         let height: CGFloat = 30
-        let centerY = (coverBottom + bandTop) / 2
+        // ⚠️ 夹一道上限（独立复核）：`visibleCoverBottom` 拿不到主封面时会退回**卡片**那张的底边
+        //    （≈878）⇒ 中点会落到进度条上。宁可让它贴着控件条上沿，也不要压住进度条。
+        let centerY = min((coverBottom + bandTop) / 2, bandTop - height / 2)
         let frame = CGRect(
             x: stageSideInset,
             y: (centerY - height / 2).rounded(),
