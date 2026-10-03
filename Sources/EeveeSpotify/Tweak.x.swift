@@ -535,7 +535,7 @@ struct EeveeSpotify: Tweak {
         writeDebugLog(
             "[INIT] patching: overwriteConfig="
                 + "\(UserDefaults.overwriteConfiguration ? "ON" : "OFF")"
-                + "（ON = 用随包的 Premium 配置快照整体替换服务端下发的那份）"
+                + " (ON = the bundled Premium config snapshot fully replaces the one the server sends)"
         )
 
         // CarPlay crash fix (Issue #16) — safe-gated
@@ -580,7 +580,7 @@ struct EeveeSpotify: Tweak {
             let hasURI = class_getInstanceMethod(trackCls, Selector(("URI"))) != nil
             writeDebugLog("[INIT] SPTPlayerTrack: metadata=\(hasMetadata) URI=\(hasURI)")
         } else {
-            writeDebugLog("[INIT] MISSING SPTPlayerTrack — has_lyrics 覆写必然无效")
+            writeDebugLog("[INIT] MISSING SPTPlayerTrack — the has_lyrics override cannot possibly work")
         }
 
         // For 9.1.x, activate premium patching and lyrics

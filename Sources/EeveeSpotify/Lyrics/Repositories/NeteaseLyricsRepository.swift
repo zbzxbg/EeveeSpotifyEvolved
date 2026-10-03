@@ -876,19 +876,19 @@ class NeteaseLyricsRepository: LyricsRepository {
             chosen = songs[index]
             chosenIndex = index
             writeDebugLog(
-                "[NetEase] 没有「歌手+时长都对得上」的候选，退回仅时长匹配的第 \(index) 位"
-                    + "（搜到 \(songs.count) 条）"
+                "[NetEase] no candidate matched both artist and duration, falling back to index \(index) (duration-only match)"
+                    + " (\(songs.count) results)"
             )
         }
 
         guard let chosen else {
             if let spotifyDurationMs {
                 writeDebugLog(
-                    "[NetEase] 没有任何候选的时长与 Spotify 对得上"
-                        + "（spotify=\(spotifyDurationMs)ms，搜到 \(songs.count) 条）— noSuchSong"
+                    "[NetEase] no candidate duration matches Spotify"
+                        + " (spotify=\(spotifyDurationMs)ms, \(songs.count) results) — noSuchSong"
                 )
             } else {
-                writeDebugLog("[NetEase] 没有可用候选（搜到 \(songs.count) 条）— noSuchSong")
+                writeDebugLog("[NetEase] no usable candidate (\(songs.count) results) — noSuchSong")
             }
             throw LyricsError.noSuchSong
         }
@@ -899,7 +899,7 @@ class NeteaseLyricsRepository: LyricsRepository {
             "[NetEase] Chosen[\(chosenIndex)]: \(chosen["name"] as? String ?? "?")"
                 + " — \(chosenArtists.isEmpty ? "?" : chosenArtists)"
                 + " \(chosenDuration)"
-                + " (我们: \(query.primaryArtist) \(spotifyDurationMs.map { "\($0)ms" } ?? "?"))"
+                + " (ours: \(query.primaryArtist) \(spotifyDurationMs.map { "\($0)ms" } ?? "?"))"
         )
 
         // 旧版这里还有一道"第一位时长不符就 noSuchSong"的闸门 —— 现在选歌本身已经要求

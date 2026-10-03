@@ -576,7 +576,7 @@ enum WordByWordPlaybackControl {
         guard !isForwardingTap else {
             writeDebugLog(
                 "[Shell] ⚠️ sendTap re-entry blocked on \(kind(control))"
-                    + " label=\"\(control.accessibilityLabel ?? "")\" — 防止递归卡死"
+                    + " label=\"\(control.accessibilityLabel ?? "")\" - guarding against a recursive lock-up"
             )
             return
         }

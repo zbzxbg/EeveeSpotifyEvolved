@@ -280,7 +280,7 @@ enum NowPlayingControlsPlate {
         let count = (pinnedClassCounts[name] ?? 0) + 1
         pinnedClassCounts[name] = count
         guard count == 1 || count == 2 || count == 10 || count == 100 else { return }
-        writeDebugLog("[\(logTag)] 钉住 \(name)（第 \(count) 次）")
+        writeDebugLog("[\(logTag)] pinned \(name) (time \(count))")
     }
 
     private static weak var lastUnit: UIView?
@@ -411,8 +411,8 @@ enum NowPlayingControlsPlate {
         guard lastReportedSignature != signature else { return }
         lastReportedSignature = signature
         writeDebugLog(
-            "[\(logTag)] 三个控制键已换成本地字形 — 找到 \(found) 个按钮、"
-                + "本拍新钉住 \(pinnedNow) 颗（原生内容出生即不可见；按钮的动作/状态/无障碍原样保留）"
+            "[\(logTag)] the three transport buttons now use local glyphs - found \(found) button(s), "
+                + "newly pinned \(pinnedNow) this pass (native content is invisible from birth; button action/state/accessibility preserved)"
         )
     }
 
@@ -486,7 +486,7 @@ enum NowPlayingControlsPlate {
         tapOverrideUntil = 0
         displayedPlaySymbol = ""
         pinnedClassCounts.removeAll()
-        writeDebugLog("[\(logTag)] 已还原（撤钉、我们的字形已拿走；原生一个字节都没改过）")
+        writeDebugLog("[\(logTag)] restored (pins undone, our glyphs taken away; not a single byte of native was changed)")
     }
 
     // MARK: - 字形与"缓冲中"
@@ -669,11 +669,11 @@ enum NowPlayingControlsPlate {
 func activateNowPlayingControls() {
     if NSClassFromString(PlaybackControlsUnitHook.targetName) != nil {
         NowPlayingControlsGroup().activate()
-        writeDebugLog("[NPVControls] hook 已装（\(PlaybackControlsUnitHook.targetName)）")
+        writeDebugLog("[NPVControls] hook installed (\(PlaybackControlsUnitHook.targetName))")
     } else {
         writeDebugLog(
             "[NPVControls] missing \(PlaybackControlsUnitHook.targetName)"
-                + " — 走「进页面时 apply」那条兜底路（判据是按钮 id，与类名无关）"
+                + " - falling back to 'apply on page entry' (matched by button id, not class name)"
         )
     }
 
@@ -681,13 +681,13 @@ func activateNowPlayingControls() {
        class_getInstanceMethod(cls, playButtonTapSelector) != nil {
         NowPlayingTapGroup().activate()
         writeDebugLog(
-            "[NPVControls] 点击钩子已装（\(PlayButtonTapHook.targetName).uiButtonTapped）"
-                + " — 字形在点击那一刻就翻，不等播放器状态"
+            "[NPVControls] tap hook installed (\(PlayButtonTapHook.targetName).uiButtonTapped)"
+                + " - the glyph flips right at the tap, without waiting for player state"
         )
     } else {
         writeDebugLog(
-            "[NPVControls] 没有 \(PlayButtonTapHook.targetName).uiButtonTapped"
-                + " — 字形只在布局回合/节拍上更新（慢一拍，功能不受影响）"
+            "[NPVControls] no \(PlayButtonTapHook.targetName).uiButtonTapped"
+                + " - glyphs only update on layout passes/ticks (one beat behind, functionality unaffected)"
         )
     }
 }

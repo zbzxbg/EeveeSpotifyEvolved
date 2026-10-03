@@ -149,7 +149,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
                 // 交付时刻自报：**这是肉眼唯一看不见、却决定"卡片这一帧建不建得出来"的量**
                 // （NPV 的模块列表在组件加载完之后才建）。和 `[Lyrics] Request for …` 配对读。
-                writeDebugLog("[HCUS] lyrics 交付给 Spotify — \(lyricsPayload.count) bytes（请求起算 \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s）")
+                writeDebugLog("[HCUS] lyrics delivered to Spotify - \(lyricsPayload.count) bytes (\(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s since the request)")
                 return
             }
 
@@ -181,7 +181,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 return
             }
             // ⚠️ 这行不是装饰：它是"种子真的被回放了"的**唯一**直接证据。
-            writeDebugLog("[HCUS] customize 304 → 回放种子 \(cached.count) 字节")
+            writeDebugLog("[HCUS] customize 304 -> replaying the seed, \(cached.count) bytes")
             orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: cached)
             SpotifyResponsePatcher.markCustomizeTaskHandled(task.taskIdentifier)
@@ -233,7 +233,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
             orig.URLSession(session, task: task, didCompleteWithError: nil)
             // 404 分支的交付时刻（与上面 200 分支同族；`hasData=` 区分"取到了词"还是"只有占位"）。
-            writeDebugLog("[HCUS] lyrics 交付给 Spotify（404 合成 200）— \(lyricsData.count) bytes, hasData=\(data != nil)，服务端 404 起算 \(String(format: "%.1f", Date().timeIntervalSince(responseStartedAt)))s")
+            writeDebugLog("[HCUS] lyrics delivered to Spotify (404 synthesized as 200) - \(lyricsData.count) bytes, hasData=\(data != nil), \(String(format: "%.1f", Date().timeIntervalSince(responseStartedAt)))s since the server 404")
         }
     }
 

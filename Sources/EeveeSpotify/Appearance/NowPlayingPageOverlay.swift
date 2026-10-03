@@ -97,7 +97,7 @@ enum NowPlayingPageOverlay {
         overlay.removeFromSuperview()
         lastOverlay = nil
         didLogInstall = false
-        writeDebugLog("[\(logTag)] 覆盖层已拿走（reason=\(reason)）")
+        writeDebugLog("[\(logTag)] overlay removed (reason=\(reason))")
     }
 
     // MARK: - 建层
@@ -150,11 +150,11 @@ enum NowPlayingPageOverlay {
         if !didLogInstall {
             didLogInstall = true
             let anchor = findBottomAnchor(in: page)
-            let anchorText = anchor.map { frameText($0.convert($0.bounds, to: page)) } ?? "没找到（退回安全区底）"
+            let anchorText = anchor.map { frameText($0.convert($0.bounds, to: page)) } ?? "not found (falling back to the safe-area bottom)"
             writeDebugLog(
-                "[\(logTag)] 覆盖层已装 \(frameText(overlay.frame))"
-                    + "；底部锚 \(bottomAnchorIdentifier) = \(anchorText)"
-                    + "；音量条 \(frameText(target))"
+                "[\(logTag)] overlay installed \(frameText(overlay.frame))"
+                    + "; bottom anchor \(bottomAnchorIdentifier) = \(anchorText)"
+                    + "; volume slider \(frameText(target))"
             )
         }
         return changed

@@ -352,7 +352,7 @@ enum NowPlayingLyricsPlate {
             return
         }
         guard canShow(for: page) else {
-            noteSkip("这首歌没有可用的歌词")
+            noteSkip("no usable lyrics for this track")
             ensureToggleZone(in: page)
             return
         }
@@ -373,7 +373,7 @@ enum NowPlayingLyricsPlate {
     private static func layoutAndMount(in page: UIView) -> Bool {
         guard #available(iOS 26.0, *) else { return false }
         guard let geometry = measure(in: page) else {
-            noteSkip("量不到封面区/标题行（还没布局完？）")
+            noteSkip("cannot measure the artwork area / title row (layout not finished yet?)")
             return false
         }
 
@@ -384,7 +384,11 @@ enum NowPlayingLyricsPlate {
         //    so the cover stays and the lyrics wait."*
         guard let coverHostView = ensureCover(in: page, geometry: geometry),
               let coverImageView = coverImage else {
-            noteSkip("拿不到那张封面（缩略图与"藏起原生封面"都做不了）—— 不展开")
+            // ⚠️ 这行原来是中文 + **ASCII 双引号**做强调（`与"藏起原生封面"都做不了`），
+            //    字面量被那两个引号提前截断 ⇒ CI 报 `expected ',' separator` /
+            //    `cannot find '藏起原生封面' in scope` / `extra argument in call`。
+            //    **日志文案一律用英文**（用户 2026-10-05 定下的规矩），中文强调改用「」也不会再踩这个坑。
+            noteSkip("no artwork for this track (cannot build the thumbnail or hide Spotify's cover) - not opening")
             return false
         }
         applyCoverState(open: true, host: coverHostView, imageView: coverImageView, geometry: geometry)
@@ -395,7 +399,7 @@ enum NowPlayingLyricsPlate {
         // ③ 歌词区：标题之下、进度条之上。
         let frame = geometry.stage
         guard frame.height > livingHeight / 2 else {
-            noteSkip("标题与进度条之间没有位置（\(Int(frame.height))pt）")
+            noteSkip("no room between the title and the progress bar (\(Int(frame.height))pt)")
             return false
         }
 
@@ -427,8 +431,8 @@ enum NowPlayingLyricsPlate {
         if !didLogInstall {
             didLogInstall = true
             writeDebugLog(
-                "[\(logTag)] 展开 — 缩略图 \(Int(geometry.thumb.width))pt、"
-                    + "歌词区 \(frameText(frame))、封面从 \(frameText(geometry.cover)) 缩过来"
+                "[\(logTag)] expanded — thumbnail \(Int(geometry.thumb.width))pt, "
+                    + "lyrics area \(frameText(frame)), cover shrunk in from \(frameText(geometry.cover))"
             )
         }
         return true
@@ -492,7 +496,7 @@ enum NowPlayingLyricsPlate {
         lastContainer?.removeFromSuperview()
         lastContainer = nil
         didLogInstall = false
-        writeDebugLog("[\(logTag)] 收起（reason=\(reason)）")
+        writeDebugLog("[\(logTag)] collapsed (reason=\(reason))")
     }
 
     // MARK: - 量几何（pw 的 `layoutIn`）
@@ -634,7 +638,7 @@ enum NowPlayingLyricsPlate {
         guard let image = rememberArtworkIfNeeded(in: page)
                 ?? firstImage(in: source)
                 ?? anyCoverImage(in: list) else {
-            noteSkip("那张封面里取不到图（\(NSStringFromClass(type(of: source)))）")
+            noteSkip("no image inside that cover view (\(NSStringFromClass(type(of: source))))")
             return nil
         }
 
@@ -810,8 +814,8 @@ enum NowPlayingLyricsPlate {
             artworkCache.removeValue(forKey: artworkCacheOrder.removeFirst())
         }
         writeDebugLog(
-            "[\(logTag)] 记下这一首的封面 \(Int(image.size.width))×\(Int(image.size.height))"
-                + "（缓存 \(artworkCacheOrder.count)/\(artworkCacheLimit)）"
+            "[\(logTag)] remembered this track's artwork \(Int(image.size.width))×\(Int(image.size.height))"
+                + " (cache \(artworkCacheOrder.count)/\(artworkCacheLimit))"
         )
         return image
     }
@@ -994,7 +998,7 @@ enum NowPlayingLyricsPlate {
     private static func ensureToggleZone(in page: UIView) {
         guard #available(iOS 26.0, *) else { return }
         guard let wanted = toggleFrame(in: page) else {
-            noteSkip("找不到播放键，歌词键没处放")
+            noteSkip("cannot find the play button, so there is nowhere to put the lyrics button")
             return
         }
 
@@ -1031,9 +1035,9 @@ enum NowPlayingLyricsPlate {
         applyToggleAppearance(to: zone)
         page.bringSubviewToFront(zone)
         lastToggleZone = zone
-        let words = hasLyricsAvailable() ? "这一首有词" : "这一首没词 — 已变灰"
+        let words = hasLyricsAvailable() ? "this track has lyrics" : "no lyrics for this track — greyed out"
         writeDebugLog(
-            "[\(logTag)] 歌词键已就位 \(frameText(wanted))（看得见的圆键；点它展开/收起；\(words)）"
+            "[\(logTag)] lyrics button in place \(frameText(wanted)) (visible round button; tap to expand/collapse; \(words))"
         )
     }
 
@@ -1145,11 +1149,11 @@ enum NowPlayingLyricsPlate {
     private static func canShow(for page: UIView) -> Bool {
         if #available(iOS 26.0, *) {} else { return false }
         guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else {
-            noteSkip("「更好的逐词歌词」是关的")
+            noteSkip("'Better word-by-word lyrics' is off")
             return false
         }
         guard hasUsableWordLevelData(currentLyricsDto) || hasUsableLineLevelData(currentLyricsDto) else {
-            noteSkip("这首歌没有可用的歌词")
+            noteSkip("no usable lyrics for this track")
             return false
         }
         return currentLines() != nil
@@ -1171,7 +1175,7 @@ enum NowPlayingLyricsPlate {
     private static func noteSkip(_ reason: String) {
         guard lastSkipReason != reason else { return }
         lastSkipReason = reason
-        writeDebugLog("[\(logTag)] 不展开（\(reason)）")
+        writeDebugLog("[\(logTag)] not expanding (\(reason))")
     }
 
     private static func frameText(_ frame: CGRect) -> String {

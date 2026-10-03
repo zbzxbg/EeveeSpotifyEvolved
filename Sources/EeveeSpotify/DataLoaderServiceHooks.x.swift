@@ -193,7 +193,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                     orig.URLSession(session, task: task, didCompleteWithError: nil)
                     // 交付时刻自报（与 HttpClient 那条路同族）——决定"卡片这一帧建不建得出来"。
-                    writeDebugLog("[DL] lyrics 交付给 Spotify — \(lyricsPayload.count) bytes（请求起算 \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s）")
+                    writeDebugLog("[DL] lyrics delivered to Spotify - \(lyricsPayload.count) bytes (\(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s since the request)")
                 }
                 return
             }
@@ -228,7 +228,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 return
             }
             // ⚠️ 这行不是装饰：它是"种子真的被回放了"的**唯一**直接证据。
-            writeDebugLog("[DL] customize 304 → 回放种子 \(cached.count) 字节")
+            writeDebugLog("[DL] customize 304 -> replaying the seed, \(cached.count) bytes")
             orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: cached)
             SpotifyResponsePatcher.markCustomizeTaskHandled(task.taskIdentifier)

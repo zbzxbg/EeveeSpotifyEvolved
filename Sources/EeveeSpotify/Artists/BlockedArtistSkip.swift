@@ -60,7 +60,7 @@ enum BlockedArtistSkip {
             // 打一次就够了 —— 否则每秒一行会把日志刷爆。
             if !didWarnMissingPlayer {
                 didWarnMissingPlayer = true
-                writeDebugLog("[BlockArtist] statefulPlayer.currentTrack() 不可用 —— 屏蔽艺人暂时不工作（歌词模块关闭时会这样）")
+                writeDebugLog("[BlockArtist] statefulPlayer.currentTrack() unavailable - blocked artists are inactive for now (this happens when the lyrics module is off)")
             }
             return
         }
@@ -91,19 +91,19 @@ enum BlockedArtistSkip {
         // 只在**开头**跳：轮询晚到了、或者用户已经听进去了，就别动它。
         if let position = WordByWordPositionResolver.shared.currentPositionSeconds(),
            position > startWindow {
-            writeDebugLog("[BlockArtist] 命中 \"\(hit)\"，但已播 \(Int(position))s —— 不跳（只在开头跳）")
+            writeDebugLog("[BlockArtist] hit '\(hit)', but already \(Int(position))s in - not skipping (we only skip at the start)")
             consecutiveSkips = 0
             return
         }
 
         consecutiveSkips += 1
         guard consecutiveSkips <= maxConsecutiveSkips else {
-            writeDebugLog("[BlockArtist] 连续跳过 \(maxConsecutiveSkips) 首了，先停 —— 这个队列里可能全是被屏蔽的艺人")
+            writeDebugLog("[BlockArtist] skipped \(maxConsecutiveSkips) tracks in a row, stopping - this queue may be all blocked artists")
             consecutiveSkips = 0
             return
         }
 
-        writeDebugLog("[BlockArtist] 命中 \"\(hit)\" —— 跳过 \"\(track.string(ifResponding: "trackTitle") ?? "<unknown>")\"（艺人 \"\(artistTitle ?? artistName ?? "")\"）")
+        writeDebugLog("[BlockArtist] hit '\(hit)' - skipping '\(track.string(ifResponding: "trackTitle") ?? "<unknown>")' (artist '\(artistTitle ?? artistName ?? "")')")
         WordByWordPlaybackControl.skipToNext()
     }
 

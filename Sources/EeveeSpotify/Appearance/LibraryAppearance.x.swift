@@ -159,14 +159,14 @@ enum LibraryAppearance {
             if label.font.pointSize == original.pointSize, hasAppliedOnce {
                 fontResetCount += 1
                 if fontResetCount == 1 {
-                    writeDebugLog("[Library] ⚠️ 标题字体被写回（第 1 次）— 复查会再写一遍")
+                    writeDebugLog("[Library] ⚠️ title font was written back (1st time) - reconcile will write it again")
                 }
             }
             label.font = target
             if !hasAppliedOnce {
                 hasAppliedOnce = true
                 writeDebugLog(
-                    "[Library] 大标题已换成 AM 档：\(Int(original.pointSize))pt → \(Int(target.pointSize))pt"
+                    "[Library] large title switched to the AM tier: \(Int(original.pointSize))pt → \(Int(target.pointSize))pt"
                 )
             }
         } else if fontResetCount > 0, !didReportPersistentReset {
@@ -175,8 +175,8 @@ enum LibraryAppearance {
             if fontResetCount >= 5, !didReportPersistentReset {
                 didReportPersistentReset = true
                 writeDebugLog(
-                    "[Library] ⚠️ 标题字体已被写回 \(fontResetCount) 次 —— element 会持续覆盖它，"
-                        + "需要考虑自绘标题"
+                    "[Library] ⚠️ title font has been written back \(fontResetCount) times - the element keeps overriding it, "
+                        + "so drawing our own title needs to be considered"
                 )
             }
         }
@@ -253,7 +253,7 @@ enum LibraryAppearance {
         }
         RunLoop.main.add(timer, forMode: .common)
         reconcileTimer = timer
-        writeDebugLog("[Library] 复查节拍已启动 (0.5s) — 这是「改动会生效」的关键，不是可选")
+        writeDebugLog("[Library] reconcile timer started (0.5s) - this is what makes the changes stick, not optional")
     }
 
     // MARK: 还原
@@ -309,7 +309,7 @@ func activateLibraryAppearance() {
 
     LibraryAppearanceGroup().activate()
     writeDebugLog(
-        "[Library] 音乐库改原生 installed (header="
+        "[Library] library native restyle installed (header="
             + "\(UserDefaults.libraryLargeTitle ? "ON" : "OFF"))"
     )
 }

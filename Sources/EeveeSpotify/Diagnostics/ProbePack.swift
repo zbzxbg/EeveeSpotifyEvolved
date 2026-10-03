@@ -60,10 +60,10 @@ enum ProbePack {
 
     /// 每次启动跑一次。**只打日志，什么都不要改**。
     static func runOnce() {
-        writeDebugLog("[\(logTag)] \(marker) — 开始一次性自检")
+        writeDebugLog("[\(logTag)] \(marker) - running the one-shot probe")
 
-        report(pwPlayerTargets, label: "pw 播放页目标")
-        report(pwUnverifiedTargets, label: "pw 用到但 dump 里没查到的")
+        report(pwPlayerTargets, label: "pw player-page targets")
+        report(pwUnverifiedTargets, label: "used by pw but not found in the dump")
     }
 
     /// 一行说清"这批类里哪几个不在"。**清单为空也要打**（"全在"本身是结论）。
@@ -73,11 +73,11 @@ enum ProbePack {
             missing.append(name)
         }
 
-        let head = "[\(logTag)] \(label)：\(names.count) 个，在 \(names.count - missing.count) 个"
+        let head = "[\(logTag)] \(label): \(names.count) total, \(names.count - missing.count) present"
         guard !missing.isEmpty else {
-            writeDebugLog(head + "，缺 0 个 — 全部可搬")
+            writeDebugLog(head + ", 0 missing - all portable")
             return
         }
-        writeDebugLog(head + "，**缺 \(missing.count) 个** — " + missing.joined(separator: ", "))
+        writeDebugLog(head + ", **\(missing.count) missing** - " + missing.joined(separator: ", "))
     }
 }

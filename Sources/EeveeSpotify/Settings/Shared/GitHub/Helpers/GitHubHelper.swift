@@ -80,7 +80,7 @@ final class GitHubHelper {
 
     private func perform(_ path: String) async throws -> Data {
         if let entry = cachedEntry(path), Date().timeIntervalSince(entry.at) < freshInterval {
-            writeDebugLog("[GitHub] \(path) → 用缓存（\(entry.data.count) bytes，本次不发请求）")
+            writeDebugLog("[GitHub] \(path) → using the cache (\(entry.data.count) bytes, no request sent this time)")
             return entry.data
         }
 
@@ -101,7 +101,7 @@ final class GitHubHelper {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            writeDebugLog("[GitHub] ⚠️ \(path) 网络层失败：\(error.localizedDescription)")
+            writeDebugLog("[GitHub] ⚠️ \(path) transport failure: \(error.localizedDescription)")
             throw GitHubAPIError.transport(error.localizedDescription)
         }
 
@@ -111,7 +111,7 @@ final class GitHubHelper {
         // 304：缓存还有效，**这一次不烧额度**（GitHub 官方规则）。
         if status == 304, let entry = cachedEntry(path) {
             store(Entry(data: entry.data, etag: entry.etag, at: Date()), for: path)
-            writeDebugLog("[GitHub] \(path) → 304（缓存仍有效，不计额度）")
+            writeDebugLog("[GitHub] \(path) → 304 (cache still valid, no quota used)")
             return entry.data
         }
 
@@ -160,7 +160,7 @@ final class GitHubHelper {
 
     /// 日志用：响应体开头一小段（单行），够看清 `"message":"API rate limit exceeded…"`。
     private static func excerpt(_ data: Data) -> String {
-        let text = String(data: data.prefix(160), encoding: .utf8) ?? "<非 UTF-8，\(data.count) bytes>"
+        let text = String(data: data.prefix(160), encoding: .utf8) ?? "<not UTF-8, \(data.count) bytes>"
         return text
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
@@ -170,7 +170,7 @@ final class GitHubHelper {
         do {
             return try decoder.decode(type, from: data)
         } catch {
-            writeDebugLog("[GitHub] ⚠️ \(path) 解码失败：\(error)")
+            writeDebugLog("[GitHub] ⚠️ \(path) decode failed: \(error)")
             throw GitHubAPIError.decoding(error.localizedDescription)
         }
     }

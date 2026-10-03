@@ -506,7 +506,7 @@ func refreshNowPlayingBackdrop(page: UIViewController? = nil) {
 
     let view = controller.view
     guard let view, view.bounds.width > 1 else {
-        writeDebugLog("[NPVStyle] 听歌页 view 还没尺寸（\(type(of: controller))）— 本次不施加")
+        writeDebugLog("[NPVStyle] now-playing page view has no size yet (\(type(of: controller))) - not applied this time")
         return
     }
 
@@ -515,7 +515,7 @@ func refreshNowPlayingBackdrop(page: UIViewController? = nil) {
     if hex == nil {
         // 这一行是 2026-10-03 补的：日志 37 里 `[NPVStyle]` **零行**，而当时分不清
         // 是"没跑到"还是"跑到但没取色"。现在两种情况各有一条日志。
-        writeDebugLog("[NPVStyle] 这次没拿到封面取色（track=\(track == nil ? "nil" : "ok")）— 保留 Spotify 原始底")
+        writeDebugLog("[NPVStyle] no cover color extracted this time (track=\(track == nil ? "nil" : "ok")) - keeping Spotify's original backdrop")
     }
     NowPlayingBackdrop.apply(hex: hex, in: view)
 }

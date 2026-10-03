@@ -139,7 +139,7 @@ enum NowPlayingBackdrop {
         let pageBounds = pageView.bounds
         guard pageBounds.width > 1, pageBounds.height > 1 else {
             writeDebugLog(
-                "[\(logTag)] 页面视图还没有尺寸（\(Int(pageBounds.width))x\(Int(pageBounds.height))）— 本次不施加"
+                "[\(logTag)] page view has no size yet (\(Int(pageBounds.width))x\(Int(pageBounds.height))) — not applying this time"
             )
             return
         }
@@ -201,7 +201,7 @@ enum NowPlayingBackdrop {
         lastBackdrop = nil
         lastHex = nil
         didLogAttach = false
-        writeDebugLog("[\(logTag)] backdrop removed（1 层已拿走，reason=\(reason)）")
+        writeDebugLog("[\(logTag)] backdrop removed (1 layer taken away, reason=\(reason))")
     }
 
     // MARK: - 自愈（蹭既有节拍，不新开定时器）
@@ -234,7 +234,7 @@ enum NowPlayingBackdrop {
             lastVictim = nil
             lastBackdrop = nil
             reattaches += 1
-            writeDebugLog("[\(logTag)] 我们那层不在了 — 重挂（第 \(reattaches) 次）")
+            writeDebugLog("[\(logTag)] our layer is gone — re-attaching (time \(reattaches))")
             apply(hex: currentHex() ?? lastHex, in: page)
             return true
         }
@@ -253,8 +253,8 @@ enum NowPlayingBackdrop {
                 colorUpdates += 1
                 didSomething = true
                 writeDebugLog(
-                    "[\(logTag)] 跟到换色 → \(authoritative)（第 \(colorUpdates) 次；"
-                        + "那一层底色 \(spotifyHex)）"
+                    "[\(logTag)] followed the colour change → \(authoritative) (time \(colorUpdates); "
+                        + "that layer's background \(spotifyHex))"
                 )
             }
         }
@@ -330,7 +330,7 @@ enum NowPlayingBackdrop {
             lastHex = hex
             colorUpdates += 1
             if animated {
-                writeDebugLog("[\(logTag)] 跟到换色 → \(hex)（第 \(colorUpdates) 次；来源 metadata）")
+                writeDebugLog("[\(logTag)] followed the colour change → \(hex) (time \(colorUpdates); source metadata)")
             }
         }
 
@@ -477,11 +477,11 @@ enum NowPlayingBackdrop {
         }
 
         if visited >= maxNodes {
-            writeDebugLog("[\(logTag)] 走查到上限 \(maxNodes) 节点就停了（只接管已找到的 \(accepted.count) 层）")
+            writeDebugLog("[\(logTag)] tree walk stopped at the \(maxNodes)-node cap (taking only the \(accepted.count) layers found so far)")
         }
         if invisible > 0 {
             writeDebugLog(
-                "[\(logTag)] 有 \(invisible) 个满页着色层是 hidden / 透明 / 不在窗口里 — 已排除"
+                "[\(logTag)] \(invisible) full-page coloured layers are hidden / transparent / not in a window — excluded"
             )
         }
         return accepted.sorted { area($0) > area($1) }
@@ -540,18 +540,18 @@ enum NowPlayingBackdrop {
         let manualLayers = max(0, sublayers - victim.subviews.count)
 
         writeDebugLog(
-            "[\(logTag)] backdrop \(Int(backdrop.bounds.width))x\(Int(backdrop.bounds.height)) ← 封面取色 \(hex)"
-                + "，垫在 \(type(of: victim)) \(frameText(victim.frame)) 之下"
-                + "（那层底色 \(victimHex(victim) ?? "nil")，subviews=\(victim.subviews.count)，"
-                + "layer.sublayers=\(sublayers)，手插子层=\(manualLayers)）"
-                + "；三层：取色对角渐变、左上 12% 白光（r=700pt）、底部 35% 压黑，"
-                + "\(NowPlayingMetrics.backdropCrossfadeDuration)s 交叉淡入"
+            "[\(logTag)] backdrop \(Int(backdrop.bounds.width))x\(Int(backdrop.bounds.height)) ← extracted colour \(hex)"
+                + ", underlaid beneath \(type(of: victim)) \(frameText(victim.frame))"
+                + " (that layer's background \(victimHex(victim) ?? "nil"), subviews=\(victim.subviews.count), "
+                + "layer.sublayers=\(sublayers), hand-inserted sublayers=\(manualLayers))"
+                + "; three layers: extracted-colour diagonal gradient, top-left 12% white glow (r=700pt), bottom 35% black scrim, "
+                + "\(NowPlayingMetrics.backdropCrossfadeDuration)s crossfade"
         )
 
         if manualLayers > 0 {
             writeDebugLog(
-                "[\(logTag)] ⚠️ 那层自己还挂着 \(manualLayers) 个手插子层 — 万一截图仍无变化，"
-                    + "就是它们压着我们（下一版把 backdrop 提到最上面）"
+                "[\(logTag)] ⚠️ that layer still carries \(manualLayers) hand-inserted sublayers — if the screenshot still shows no change, "
+                    + "they are the ones covering us (next version will raise the backdrop to the top)"
             )
         }
     }

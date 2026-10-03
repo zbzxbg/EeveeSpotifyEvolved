@@ -104,6 +104,6 @@ class PlayerCardCollapseHook: ClassHook<UICollectionViewCell> {
         let name = NSStringFromClass(type(of: root))
         guard !loggedRoots.contains(name) else { return }
         loggedRoots.insert(name)
-        writeDebugLog("[OneScreen] collapsed card root \(name)（第 \(loggedRoots.count) 种）")
+        writeDebugLog("[OneScreen] collapsed card root \(name) (kind \(loggedRoots.count))")
     }
 }

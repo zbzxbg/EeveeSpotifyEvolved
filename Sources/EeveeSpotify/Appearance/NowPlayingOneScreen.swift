@@ -237,7 +237,7 @@ enum NowPlayingOneScreen {
                 list.contentInset = inset
                 objc_setAssociatedObject(list, &originalInsetKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                 writeDebugLog(
-                    "[\(logTag)] 列表 inset.bottom 已写回原值 \(Int(original)) — 滚动范围还原（reason=switch off）"
+                    "[\(logTag)] list inset.bottom written back to \(Int(original)) - scroll range restored (reason=switch off)"
                 )
             }
         }
@@ -277,8 +277,8 @@ enum NowPlayingOneScreen {
         if target == 0, own.bottom > slack, !didLogNotNeeded {
             didLogNotNeeded = true
             writeDebugLog(
-                "[\(logTag)] 把列表自带的 inset.bottom=\(Int(own.bottom))pt 归零"
-                    + "（内容刚好一屏时，那正是还能往下滑的距离）"
+                "[\(logTag)] zeroed the list's own inset.bottom=\(Int(own.bottom))pt"
+                    + " (with the content exactly one screen tall, that was the distance it could still scroll)"
             )
         }
 
@@ -291,8 +291,9 @@ enum NowPlayingOneScreen {
         if !didLogPin {
             didLogPin = true
             writeDebugLog(
-                "[\(logTag)] 列表已钉在顶部 — 折掉 \(Int(max(0, -want)))pt 的卡片范围"
-                    + "（上拉只回弹；下拉关闭靠列表自己在顶部让位，我们只改范围、不动回弹）"
+                "[\(logTag)] list pinned to its top - closed off \(Int(max(0, -want)))pt of card range"
+                    + " (a pull up only stretches; pull-to-dismiss is handled by the list yielding at its top," 
+                    + " we only change the range and never the bounce)"
             )
         }
         logDiagnosticOnce(list)

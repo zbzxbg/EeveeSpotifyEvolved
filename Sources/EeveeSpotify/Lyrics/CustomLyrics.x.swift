@@ -263,7 +263,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             // 把**实际**会走的链写死在一行里（判读用）：Genius 只在"用户源也失败"时才兜一次。
             writeDebugLog(
                 "[Lyrics] chain: AMLL → \(source.description)"
-                    + (options.geniusFallback && source != .genius ? " → Genius（仅当用户源也失败）" : "（无 Genius 兜底）")
+                    + (options.geniusFallback && source != .genius ? " -> Genius (only if the user's source fails too)" : " (no Genius fallback)")
             )
 
             // 走同一套单源错误处理：记录 fallbackError、弹 MxM 相关弹窗。

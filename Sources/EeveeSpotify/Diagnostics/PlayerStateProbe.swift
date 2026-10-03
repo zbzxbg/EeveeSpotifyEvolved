@@ -84,7 +84,7 @@ enum PlayerStateProbe {
         let stuckFor = Double(stallBeats) * beatSeconds
         writeDebugLog(
             String(
-                format: "[%@] ⚠️ position stalled at %.1fs for ~%.0fs (dur=%.1fs) — 无法播放的现场判据",
+                format: "[%@] ⚠️ position stalled at %.1fs for ~%.0fs (dur=%.1fs) - the unplayable evidence line",
                 logTag, position, stuckFor, duration
             )
         )

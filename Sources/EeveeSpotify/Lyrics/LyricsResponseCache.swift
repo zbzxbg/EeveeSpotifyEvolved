@@ -180,23 +180,23 @@ final class LyricsResponseCache {
     func recordOutcome(_ outcome: Outcome, route: String, plan: BudgetPlan) {
         switch outcome {
         case let .memoHit(bytes):
-            writeDebugLog("[\(route)] lyrics memo hit — \(bytes) bytes, 0 等待（第 \(plan.attempt) 次请求）")
+            writeDebugLog("[\(route)] lyrics memo hit — \(bytes) bytes, 0 wait (request \(plan.attempt))")
         case let .fetched(bytes, elapsed):
             writeDebugLog(
                 "[\(route)] lyrics fetched — \(bytes) bytes, \(Self.format(elapsed))s"
-                    + "（第 \(plan.attempt) 次请求・\(plan.isFirstAttempt ? "首次" : "后续")・预算 \(plan.budget)s）"
+                    + " (request \(plan.attempt), \(plan.isFirstAttempt ? "first" : "follow-up"), budget \(plan.budget)s)"
             )
         case let .placeholder(dueToTimeout, elapsed):
             writeDebugLog(
-                "[\(route)] ⚠️ 这次没取到真词（预算 \(plan.budget)s・\(plan.isFirstAttempt ? "首次" : "后续")请求）"
-                    + "— 该路**只交真结果**，本次放行 Spotify 原始响应"
-                    + (dueToTimeout ? "（超时）" : "（取词报错）")
-                    + "｜经过 \(Self.format(elapsed))s・第 \(plan.attempt) 次请求"
+                "[\(route)] ⚠️ no real lyrics this time (budget \(plan.budget)s, \(plan.isFirstAttempt ? "first" : "follow-up") request)"
+                    + " - this route **only delivers real results**, so Spotify's original response passes through"
+                    + (dueToTimeout ? " (timed out)" : " (fetch error)")
+                    + " | \(Self.format(elapsed))s elapsed, request \(plan.attempt)"
             )
         case let .passthrough(hadData, timedOut, elapsed):
             writeDebugLog(
-                "[\(route)] lyrics passthrough（原始响应放行）— hadData=\(hadData) timedOut=\(timedOut)"
-                    + "｜经过 \(Self.format(elapsed))s・第 \(plan.attempt) 次请求"
+                "[\(route)] lyrics passthrough (original response passed through) — hadData=\(hadData) timedOut=\(timedOut)"
+                    + " | \(Self.format(elapsed))s elapsed, request \(plan.attempt)"
             )
         }
     }

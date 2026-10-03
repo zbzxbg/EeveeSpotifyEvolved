@@ -246,7 +246,7 @@ enum TabBarGlassPlate {
         } else {
             plate = makeGlassView()
             objc_setAssociatedObject(bar, &plateKey, plate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            writeDebugLog("[TabBarPlate] 玻璃胶囊已铺在 \(className(bar)) 上")
+            writeDebugLog("[TabBarPlate] glass capsule laid on \(className(bar))")
         }
         layering(plate: plate, stack: stack, bar: bar)
 
@@ -278,15 +278,15 @@ enum TabBarGlassPlate {
             // 关掉后由 v4.9 那套复核在 ≤0.5s 内自己重算回 +10（**不需要等布局回合**，
             // 而"等不到布局"正是 v4.8 卡死的根因）。
             dy = iconShifts(bands: measured.itemIconBands, center: band.midY)
-            basis = "图标"
+            basis = "icon"
         } else if let measured {
             // 文字显示时仍按 v4.6.1 的"每颗自己看得见的内容"：那时必须让**文字**也留在
             // 胶囊里（拿图标当基准会把整颗往下推 10pt、文字被推出胶囊底）。
             dy = rowShifts(bands: measured.itemBands, center: band.midY)
-            basis = "可见内容"
+            basis = "visible content"
         } else {
             dy = []
-            basis = "可见内容"
+            basis = "visible content"
         }
 
         //  ② 安全网：只要这一行"明显不齐"（多半是「创建」菜单开着），就置位并排复核 ——
@@ -658,8 +658,8 @@ enum TabBarGlassPlate {
         if !didLogTransient {
             didLogTransient = true
             writeDebugLog(
-                "[TabBarPlate] 这一行暂时不齐（多半是「创建」菜单开着）— 会在 ~0.5s 内自己复核，"
-                    + "不需要再有布局回合（v4.9）"
+                "[TabBarPlate] this row is temporarily uneven (most likely the 'Create' menu is open) — "
+                    + "it will re-check itself within ~0.5s; no layout pass needed (v4.9)"
             )
         }
 
@@ -830,7 +830,7 @@ enum TabBarGlassPlate {
             if labelWriteBacks > labelWriteBackLimit, !didGiveUpLabels {
                 didGiveUpLabels = true
                 writeDebugLog(
-                    "[TabBarPlate] ⚠️ 标签文字被反复写回 \(labelWriteBacks) 次 — 不再与它抢（保持原生）"
+                    "[TabBarPlate] ⚠️ label text keeps being written back (\(labelWriteBacks) times) — no longer fighting it (keeping native)"
                 )
             }
         }
@@ -838,7 +838,7 @@ enum TabBarGlassPlate {
         guard !didLogLabelState, hid > 0 || restored > 0 else { return }
         didLogLabelState = true
         writeDebugLog(
-            "[TabBarPlate] 标签文字\(shouldHide ? "已隐藏" : "已恢复")（\(shouldHide ? hid : restored) 个）"
+            "[TabBarPlate] label text \(shouldHide ? "hidden" : "restored") (\(shouldHide ? hid : restored) label(s))"
         )
     }
 
@@ -936,7 +936,7 @@ enum TabBarGlassPlate {
             if !didReportGiveUp {
                 didReportGiveUp = true
                 writeDebugLog(
-                    "[TabBarPlate] ⚠️ 拿不到四颗的几何（栏还没进窗口？）— 这一轮先不画，等下一次布局"
+                    "[TabBarPlate] ⚠️ cannot get the geometry of the four items (bar not in a window yet?) — skipping this round, waiting for the next layout"
                 )
             }
             return
@@ -1021,8 +1021,8 @@ enum TabBarGlassPlate {
             : "[" + shifts.map { String(format: "%+.1f", $0) }.joined(separator: ",") + "]"
 
         writeDebugLog(String(
-            format: "[TabBarPlate] 胶囊 (%.0f,%.0f %.0fx%.0f) r=%.1f ← 有文字带 (%.0f,%.0f %.0fx%.0f)"
-                + " 图标带 %@ dy=%@ 基=%@ [栏 %.0fx%.0f] 插在 %@ 里",
+            format: "[TabBarPlate] capsule (%.0f,%.0f %.0fx%.0f) r=%.1f ← with-text band (%.0f,%.0f %.0fx%.0f)"
+                + " icon band %@ dy=%@ basis=%@ [bar %.0fx%.0f] inserted in %@",
             frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
             frame.size.height / 2,
             band.origin.x, band.origin.y, band.size.width, band.size.height,
@@ -1049,14 +1049,14 @@ enum TabBarGlassPlate {
         interactiveOn = made.isInteractive
 
         if GlassCapsule.hasSystemGlass {
-            writeDebugLog("[TabBarPlate] 用的是系统真玻璃 UIGlassEffect")
+            writeDebugLog("[TabBarPlate] using the real system glass UIGlassEffect")
             if made.isInteractive {
-                writeDebugLog("[TabBarPlate] UIGlassEffect.isInteractive = true（按下会回弹）")
+                writeDebugLog("[TabBarPlate] UIGlassEffect.isInteractive = true (bounces on press)")
             } else {
-                writeDebugLog("[TabBarPlate] 这版没有 isInteractive — 跳过按下回弹")
+                writeDebugLog("[TabBarPlate] no isInteractive in this version — skipping the press bounce")
             }
         } else {
-            writeDebugLog("[TabBarPlate] 系统没有 UIGlassEffect — 退回材质")
+            writeDebugLog("[TabBarPlate] no UIGlassEffect in the system — falling back to material")
         }
 
         return made.view
@@ -1092,13 +1092,13 @@ class TabBarPlateHook: ClassHook<UIView> {
 
 func activateTabBarGlass() {
     guard NSClassFromString(TabBarPlateHook.targetName) != nil else {
-        writeDebugLog("[TabBarPlate] missing \(TabBarPlateHook.targetName) — 未装")
+        writeDebugLog("[TabBarPlate] missing \(TabBarPlateHook.targetName) — not installed")
         return
     }
     TabBarGlassGroup().activate()
     writeDebugLog(
         "[TabBarPlate] installed (enabled=\(UserDefaults.tabBarGlass ? "ON" : "OFF"))"
-            + " — 一条玻璃胶囊，锚在图标那一行上，图标浮在它上面"
-            + "（v4.6：高度按「有文字」版式恒定、无拖动）"
+            + " — one glass capsule, anchored to the icon row, with the icons floating above it"
+            + " (v4.6: height constant per the 'with text' layout, no dragging)"
     )
 }

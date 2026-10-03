@@ -122,10 +122,10 @@ enum MiniBarGlassPlate {
             if !didReportInstall {
                 didReportInstall = true
                 writeDebugLog(
-                    "[MiniBarGlass] installed (enabled=ON) — 迷你播放条铺一层"
-                        + (GlassCapsule.hasSystemGlass ? "系统真玻璃" : "材质（这版没有 UIGlassEffect）")
-                        + "：与标签栏**等宽等高**（\(Int(width))x\(Int(GlassCapsule.height))）、"
-                        + "内容等比缩进去、无按下回弹（不吃点击）"
+                    "[MiniBarGlass] installed (enabled=ON) — one layer on the mini player: "
+                        + (GlassCapsule.hasSystemGlass ? "real system glass" : "material (no UIGlassEffect in this version)")
+                        + "; **same width and height** as the tab bar (\(Int(width))x\(Int(GlassCapsule.height))), "
+                        + "content scaled down to fit, no press bounce (does not eat taps)"
                 )
             }
         }
@@ -166,7 +166,7 @@ enum MiniBarGlassPlate {
         if let host, let plate = objc_getAssociatedObject(host, &plateKey) as? UIVisualEffectView {
             plate.removeFromSuperview()
             objc_setAssociatedObject(host, &plateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            writeDebugLog("[MiniBarGlass] 玻璃已撤（开关关掉）")
+            writeDebugLog("[MiniBarGlass] glass removed (switch off)")
         }
         if let host, objc_getAssociatedObject(host, &hostClipKey) != nil {
             host.clipsToBounds = true
@@ -175,12 +175,12 @@ enum MiniBarGlassPlate {
         guard let content else { return }
         if content.transform != .identity {
             content.transform = .identity
-            writeDebugLog("[MiniBarGlass] 内容缩放过 — 已还原成原始尺寸")
+            writeDebugLog("[MiniBarGlass] content had been scaled — restored to its original size")
         }
         if let stored = objc_getAssociatedObject(content, &originalColorKey) {
             content.backgroundColor = (stored as? UIColor)
             objc_setAssociatedObject(content, &originalColorKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            writeDebugLog("[MiniBarGlass] 封面色底已还原")
+            writeDebugLog("[MiniBarGlass] artwork-colour background restored")
         }
         if objc_getAssociatedObject(content, &originalClipKey) != nil {
             content.clipsToBounds = true
@@ -264,11 +264,11 @@ enum MiniBarGlassPlate {
             colorWriteBacks += 1
             if colorWriteBacks <= 5 {
                 writeDebugLog(
-                    "[MiniBarGlass] 封面色底写回第 \(colorWriteBacks) 次 — 已再清掉"
-                        + (colorWriteBacks == 1 ? "（首帧盖不住就是这个原因）" : "")
+                    "[MiniBarGlass] artwork-colour background written back (time \(colorWriteBacks)) — cleared again"
+                        + (colorWriteBacks == 1 ? " (this is why the first frame is not covered)" : "")
                 )
             } else if colorWriteBacks == 6 {
-                writeDebugLog("[MiniBarGlass] ⚠️ 封面色底被反复写回（>5 次）— 继续清，不再逐次打日志")
+                writeDebugLog("[MiniBarGlass] ⚠️ artwork-colour background written back repeatedly (>5 times) — still clearing, no per-write log lines any more")
             }
             return true
         }
@@ -334,7 +334,7 @@ enum MiniBarGlassPlate {
         view.clipsToBounds = false
         if !didLogClipRelease {
             didLogClipRelease = true
-            writeDebugLog("[MiniBarGlass] 有视图原本会裁剪 — 已放开（关掉开关会还原）")
+            writeDebugLog("[MiniBarGlass] a view was clipping — released (turning the switch off restores it)")
         }
     }
 
@@ -383,16 +383,16 @@ enum MiniBarGlassPlate {
 
         let inWindow = plate.window.map { plate.convert(plate.bounds, to: $0) }
         let windowText = inWindow.map {
-            String(format: "；窗口里 (%.0f,%.0f %.0fx%.0f)",
+            String(format: "; in window (%.0f,%.0f %.0fx%.0f)",
                    $0.origin.x, $0.origin.y, $0.size.width, $0.size.height)
-        } ?? "；还没进窗口"
+        } ?? "; not in a window yet"
         let source = TabBarGlassPlate.capsuleWidthRatio > 0.4
-            ? String(format: "标签栏那条的比例（它实测宽 %.0f）", TabBarGlassPlate.capsuleWidth)
-            : "兜底比例（标签栏还没摆过）"
+            ? String(format: "the tab bar capsule's ratio (its measured width %.0f)", TabBarGlassPlate.capsuleWidth)
+            : "fallback ratio (tab bar not laid out yet)"
 
         writeDebugLog(String(
-            format: "[MiniBarGlass] 胶囊 (%.0f,%.0f %.0fx%.0f) r=%.1f ← 迷你条内容 %.0fx%.0f 缩到 %.2f"
-                + "（与标签栏**等宽** %.0f、同高 %.0f；宽度取自 %@）%@",
+            format: "[MiniBarGlass] capsule (%.0f,%.0f %.0fx%.0f) r=%.1f ← mini bar content %.0fx%.0f scaled to %.2f"
+                + " (**same width** as the tab bar %.0f, same height %.0f; width taken from %@)%@",
             target.origin.x, target.origin.y, target.size.width, target.size.height,
             target.size.height / 2,
             content.bounds.width, content.bounds.height, scale,

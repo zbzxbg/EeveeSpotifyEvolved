@@ -51,7 +51,7 @@ enum TabBarGlassProbe {
         guard let window = bar.window else { return }
         let frame = bar.convert(bar.bounds, to: window)
         writeDebugLog(String(
-            format: "[TabBarDump] bar 在窗口里的位置 = (%.0f,%.0f %.0fx%.0f)  [窗口 %.0fx%.0f]",
+            format: "[TabBarDump] bar position in window = (%.0f,%.0f %.0fx%.0f)  [window %.0fx%.0f]",
             frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
             window.bounds.width, window.bounds.height
         ))
@@ -69,7 +69,7 @@ enum TabBarGlassProbe {
         guard UserDefaults.enableLogRecording else { return }
         didDump = true
 
-        writeDebugLog("[TabBarDump] ---- 标签栏内部结构 begin（bar \(Int(bar.bounds.width))x\(Int(bar.bounds.height))）----")
+        writeDebugLog("[TabBarDump] ---- tab bar internal structure begin (bar \(Int(bar.bounds.width))x\(Int(bar.bounds.height))) ----")
         dumpWindowFrame(of: bar)
         var index = 0
         walk(bar, depth: 0, index: &index)
@@ -92,7 +92,7 @@ enum TabBarGlassProbe {
     @MainActor
     static func dumpSelectionSignals(_ bar: UIView) {
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return }
-        writeDebugLog("[TabBarSel] ---- 选中信号 begin（4 颗对比着看）----")
+        writeDebugLog("[TabBarSel] ---- selection signals begin (comparing all 4) ----")
         for container in stack.subviews {
             var parts: [String] = []
             parts.append("item=\(firstIdentifier(below: container) ?? "?")")
@@ -184,7 +184,7 @@ enum TabBarGlassProbe {
             parts.append("★UIVisualEffectView")
         }
         if view.layer.sublayers?.contains(where: { $0 is CAGradientLayer }) == true {
-            parts.append("★有渐变层")
+            parts.append("★has gradient layer")
         }
 
         writeDebugLog("[TabBarDump] " + parts.joined(separator: " "))
@@ -247,9 +247,9 @@ func activateTabBarGlassProbe() {
         }
     }
     guard !targets.isEmpty else {
-        writeDebugLog("[TabBarDump] 两个目标都没有 — 探针未装")
+        writeDebugLog("[TabBarDump] neither target exists - probe not installed")
         return
     }
     TabBarGlassProbeGroup().activate()
-    writeDebugLog("[TabBarDump] 探针已装（等标签排好再 dump）：\(targets.joined(separator: " + "))")
+    writeDebugLog("[TabBarDump] probe installed (dumps once the tabs have laid out): \(targets.joined(separator: " + "))")
 }

@@ -131,7 +131,7 @@ struct EeveeUpdatesSettingsView: View {
             let releases = try await GitHubHelper.shared.getReleases()
             state = .loaded(releases)
         } catch {
-            writeDebugLog("[Updates] 取 release 失败：\(error)")
+            writeDebugLog("[Updates] fetching releases failed: \(error)")
             state = .failed(message(for: error))
         }
     }

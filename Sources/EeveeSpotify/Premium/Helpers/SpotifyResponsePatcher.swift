@@ -70,7 +70,7 @@ enum SpotifyResponsePatcher {
         let alreadySeeded = _cachedCustomizeData != nil
         lock.unlock()
         guard !alreadySeeded else {
-            eeveeSanitizedNSLog("[CustomizeSeed] already have a body — 种子不需要")
+            eeveeSanitizedNSLog("[CustomizeSeed] already have a body — no seed needed")
             return
         }
 
@@ -81,7 +81,7 @@ enum SpotifyResponsePatcher {
 
         guard let bundle = BundleHelper.shared.configurationBundle,
               let url = bundle.url(forResource: resourceName, withExtension: "bnk") else {
-            eeveeSanitizedNSLog("[CustomizeSeed] \u{26a0}\u{fe0f} \(resourceName).bnk 不在包里 — 种子缺席")
+            eeveeSanitizedNSLog("[CustomizeSeed] \u{26a0}\u{fe0f} \(resourceName).bnk is not in the bundle — seed absent")
             return
         }
 
@@ -116,8 +116,8 @@ enum SpotifyResponsePatcher {
                     + " — \(configuration.assignedValues.count) assignedValues (spotify \(spotifyVersion))"
             )
             writeDebugLog(
-                "[CustomizeSeed] 种子就绪 \(resourceName).bnk — \(configuration.assignedValues.count) 条 flag"
-                    + "（随包快照，非服务端当前下发）。下面那批 [Flags] 行就是**从这份种子**跑改写时打出来的。"
+                "[CustomizeSeed] seed ready \(resourceName).bnk — \(configuration.assignedValues.count) flags"
+                    + " (bundled snapshot, not what the server currently sends). The [Flags] lines below are printed when the rewrite runs **off this seed**."
             )
 
             modifyRemoteConfiguration(&message.response)
@@ -127,11 +127,11 @@ enum SpotifyResponsePatcher {
 
             eeveeSanitizedNSLog("[CustomizeSeed] seed assembled, \(data.count) bytes")
             writeDebugLog(
-                "[CustomizeSeed] 种子已改写好并入袋：\(data.count) 字节。"
-                    + " 无 body 的 304 会原样回放它；真 body 一到即被替换。"
+                "[CustomizeSeed] seed rewritten and stored: \(data.count) bytes."
+                    + " A body-less 304 replays it as-is; the real body replaces it as soon as it arrives."
             )
         } catch {
-            eeveeSanitizedNSLog("[CustomizeSeed] \u{26a0}\u{fe0f} 构造失败: \(error)")
+            eeveeSanitizedNSLog("[CustomizeSeed] \u{26a0}\u{fe0f} assembly failed: \(error)")
         }
     }
 
@@ -166,15 +166,15 @@ enum SpotifyResponsePatcher {
 
         guard buffer.count <= customizeDumpLimit else {
             writeDebugLog(
-                "[CustomizeBody] \u{26a0}\u{fe0f} 跳过：\(buffer.count) 字节超过上限"
-                    + " \(customizeDumpLimit)（结构可能变了，先人工看一眼）"
+                "[CustomizeBody] \u{26a0}\u{fe0f} skipped: \(buffer.count) bytes exceeds the limit"
+                    + " \(customizeDumpLimit) (the structure may have changed, check it by hand first)"
             )
             return
         }
 
         writeDebugLog(
-            "[CustomizeBody] 原始响应 \(buffer.count) 字节"
-                + " — 下面两行之间就是它（base64），复制出来即可替换种子"
+            "[CustomizeBody] raw response, \(buffer.count) bytes"
+                + " — it sits between the two lines below (base64); copy it out to replace the seed"
         )
         writeDebugLog("[CustomizeBody] base64-begin")
         writeDebugLog(buffer.base64EncodedString())
