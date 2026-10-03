@@ -71,6 +71,11 @@ on:
           - artifacts
           - filebin
           - both
+      liquid_glass:
+        description: "Remove UIDesignRequiresCompatibility from Info.plist so iOS 26+ gets the new design language (liquid glass). On by default - that is the current baseline; set it to false to keep Spotify's own compatibility-mode look."
+        default: true
+        required: false
+        type: boolean
 
 env:
   THEOS: ${{ github.workspace }}/theos
@@ -119,9 +124,9 @@ jobs:
           EXPECTED="6316e49d487c29aa1ea03767fb8a78b5ea5588b609bdeb8bf6f4528537766658"
           ACTUAL=$(shasum -a 256 "$RUNNER_TEMP/Orion.zip" | awk '{print $1}')
           if [ "$EXPECTED" = "$ACTUAL" ]; then
-            echo "Orion.zip sha256 校验通过"
+            echo "Orion.zip sha256 verified"
           else
-            echo "::warning::Orion.zip sha256 与预期不符（expected $EXPECTED, got $ACTUAL）——继续，但请确认来源"
+            echo "::warning::Orion.zip sha256 does not match (expected $EXPECTED, got $ACTUAL) - continuing, but please verify the source"
           fi
 
           unzip -q "$RUNNER_TEMP/Orion.zip" -d "$RUNNER_TEMP/orion"
@@ -135,13 +140,13 @@ jobs:
           FW=$(find "$RUNNER_TEMP/orion" -maxdepth 3 -type d -name 'Orion.framework' \
                  -not -path '*__MACOSX*' | head -1)
           [ -n "$FW" ] || {
-            echo "::error::Orion.zip 里找不到 Orion.framework。解出来的结构："
+            echo "::error::no Orion.framework inside Orion.zip. Extracted structure:"
             find "$RUNNER_TEMP/orion" -maxdepth 3 | sed 's|^|  |'
             exit 1
           }
 
           BIN="$FW/Orion"
-          [ -f "$BIN" ] || { echo "::error::$FW 里没有 Orion 这个二进制"; exit 1; }
+          [ -f "$BIN" ] || { echo "::error::$FW does not contain an Orion binary"; exit 1; }
 
           # ⚠️ 两道检查，缺一不可：
           #   · 大小：Theos 的 `make vendor` 会执行 `xcrun tapi stubify`，
@@ -149,15 +154,15 @@ jobs:
           #     dlopen 失败，而且报错更难懂。真二进制约 215 KB。
           #   · 架构：必须是 arm64，和 ARCHS = arm64 一致。
           SIZE=$(stat -f%z "$BIN")
-          echo "Orion 二进制大小: $SIZE bytes"
+          echo "Orion binary size: $SIZE bytes"
           [ "$SIZE" -gt 100000 ] || {
-            echo "::error::Orion 二进制只有 $SIZE 字节，像是 tapi stub 而不是真 framework"; exit 1; }
+            echo "::error::the Orion binary is only $SIZE bytes - that looks like a tapi stub, not a real framework"; exit 1; }
 
           file "$BIN"
           lipo -info "$BIN"
 
           echo "ORION_FW=$FW" >> $GITHUB_ENV
-          echo "Orion.framework 就绪: $FW"
+          echo "Orion.framework ready: $FW"
 
       # ── 2. 从源码构建 deb ────────────────────────────────────────────────
       - name: Build EeveeSwiftProtobuf.framework
@@ -202,7 +207,7 @@ jobs:
           DYLIB_SRC=$(find "$DEB_EXTRACT" -name 'EeveeSpotify.dylib' | head -1)
           BUNDLE_SRC=$(find "$DEB_EXTRACT" -type d -name 'EeveeSpotify.bundle' | head -1)
           FRAMEWORK_SRC=$(find "$DEB_EXTRACT" -type d -name 'EeveeSwiftProtobuf.framework' | head -1)
-          [ -n "$DYLIB_SRC" ] || { echo "::error::deb 里没有 EeveeSpotify.dylib"; exit 1; }
+          [ -n "$DYLIB_SRC" ] || { echo "::error::no EeveeSpotify.dylib inside the deb"; exit 1; }
 
           SPOT_VERSION=$(unzip -p ${{ github.workspace }}/spotify.ipa 'Payload/Spotify.app/Info.plist' \
               | plutil -extract CFBundleShortVersionString raw - 2>/dev/null || echo "unknown")
@@ -216,7 +221,7 @@ jobs:
           [ -n "$FRAMEWORK_SRC" ] && INJECT+=("$FRAMEWORK_SRC")
           [ -n "$BUNDLE_SRC" ]    && INJECT+=("$BUNDLE_SRC")
 
-          echo "注入清单:"
+          echo "Injection manifest:"
           printf '  - %s\n' "${INJECT[@]}"
 
           cyan -i ${{ github.workspace }}/spotify.ipa -o "$OUT" \
@@ -230,7 +235,7 @@ jobs:
           LISTING="$RUNNER_TEMP/ipa-listing.txt"
           unzip -l "$OUT_IPA" > "$LISTING"
 
-          echo "== Frameworks/ 下的内容 =="
+          echo "== contents of Frameworks/ =="
           grep -E 'Frameworks/[^/]+/?$' "$LISTING" || true
 
           TMPX="$RUNNER_TEMP/verify"; rm -rf "$TMPX"; mkdir -p "$TMPX"
@@ -240,17 +245,17 @@ jobs:
           DY="$TMPX/Payload/Spotify.app/Frameworks/EeveeSpotify.dylib"
 
           if otool -L "$DY" | grep -qi orion; then
-            echo "dylib 依赖: $(otool -L "$DY" | grep -i orion | head -1)"
+            echo "dylib dependency: $(otool -L "$DY" | grep -i orion | head -1)"
             if grep -q 'Frameworks/Orion.framework/Orion' "$LISTING"; then
-              echo "OK: IPA 里有 Frameworks/Orion.framework/Orion"
+              echo "OK: the IPA contains Frameworks/Orion.framework/Orion"
             else
-              echo "::error::dylib 依赖 @rpath/Orion.framework/Orion，但 IPA 的 Frameworks/ 里没有它。"
-              echo "::error::cyan 的自动补注入没有生效（它对此类失败带 stderr=DEVNULL，会静默通过）。"
-              echo "::error::请检查上面列出的 Frameworks/ 内容，以及 ORION_FW 是否真的有二进制。"
+              echo "::error::the dylib depends on @rpath/Orion.framework/Orion, but the IPA's Frameworks/ does not contain it."
+              echo "::error::cyan's automatic re-injection did not take effect (it silences this class of failure with stderr=DEVNULL and passes anyway)."
+              echo "::error::check the Frameworks/ listing above, and whether ORION_FW really holds a binary."
               exit 1
             fi
           else
-            echo "::warning::dylib 的 otool -L 里没有 orion 依赖 —— 说明编译期没链接到 Orion，hook 不会生效"
+            echo "::warning::otool -L on the dylib shows no orion dependency - it was not linked against Orion, so the hooks will not load"
           fi
 
           # ── 断言：不许有越狱路径依赖 ─────────────────────────────────────
@@ -261,12 +266,12 @@ jobs:
           # 构建已经带了 NO_JBROOT=1，这里再兜一层：谁把那个 flag 删了/漏传，
           # CI 立刻红，别等用户装上才发现。
           if otool -L "$DY" | grep -Ei 'libroot|roothide|/var/jb|\.jbroot'; then
-            echo "::error::注入的 dylib 仍然依赖越狱路径库（上面那行）。"
-            echo "::error::libroot / libroothide 是加载期依赖，TrollStore 与侧载设备上没有"
-            echo "::error::/var/jb，dyld 一失败 App 就起不来。请确认 Build .deb 那一步带上了 NO_JBROOT=1。"
+            echo "::error::the injected dylib still depends on a jailbreak-path library (the line above)."
+            echo "::error::libroot / libroothide are load-time dependencies and are absent on TrollStore and sideloaded devices,"
+            echo "::error::as is /var/jb: dyld fails and the app never launches. Make sure the Build .deb step passes NO_JBROOT=1."
             exit 1
           else
-            echo "OK: dylib 不依赖 libroot / libroothide / /var/jb"
+            echo "OK: the dylib has no libroot / libroothide / /var/jb dependency"
           fi
 
           # 同一个坑的第三方版本：Orion / EeveeSwiftProtobuf 也是注入进去的，
@@ -275,7 +280,7 @@ jobs:
           while IFS= read -r BIN; do
             HIT=$(otool -L "$BIN" 2>/dev/null | grep -Ei 'libroot|roothide|/var/jb|\.jbroot' || true)
             if [ -n "$HIT" ]; then
-              echo "::warning::${BIN#$TMPX/} 依赖越狱路径库，TrollStore 上可能加载失败：$HIT"
+              echo "::warning::${BIN#$TMPX/} depends on a jailbreak-path library and may fail to load on TrollStore: $HIT"
             fi
           done < <(find "$TMPX/Payload/Spotify.app/Frameworks" -maxdepth 2 -type f)
 
@@ -286,21 +291,36 @@ jobs:
           cd "$(dirname "$OUT_IPA")"
           rm -rf Payload
           unzip -q "$(basename "$OUT_IPA")"
-          touch Payload/Spotify.app Payload/Spotify.app/Frameworks   # zip 时间戳
+          touch Payload/Spotify.app Payload/Spotify.app/Frameworks   # zip timestamp
           APP="Payload/Spotify.app"
 
-          echo "== 当前 LC_RPATH =="
-          otool -l "$APP/Spotify" | grep -A2 LC_RPATH || echo "(没有 LC_RPATH)"
+          # Liquid glass switch (ON by default = the current baseline).
+          # See Tools/eevee-hookfinder/FLAGS_9186_DESIGN.md.
+          # Spotify itself ships UIDesignRequiresCompatibility=true in its Info.plist, which asks
+          # iOS 26 to run it in COMPATIBILITY MODE - so the whole app stays out of the new design
+          # language. Removing the key puts the UI into it (SwiftUI Platter navigation bar, system
+          # glass tab bar). Verified on device 2026-10-01, which is why it is the default now.
+          # To get Spotify's original look back: set the liquid_glass input to false and re-run.
+          if [ "${{ inputs.liquid_glass || 'true' }}" = "true" ]; then
+            plutil -remove UIDesignRequiresCompatibility "$APP/Info.plist" 2>/dev/null || true
+            echo "★ removed UIDesignRequiresCompatibility - the iOS 26 design language is now active"
+            plutil -p "$APP/Info.plist" | grep -i 'esign' || echo "(no Design key left in Info.plist)"
+          else
+            echo "liquid glass switch is off - keeping Spotify's own UIDesignRequiresCompatibility=true"
+          fi
+
+          echo "== current LC_RPATH =="
+          otool -l "$APP/Spotify" | grep -A2 LC_RPATH || echo "(no LC_RPATH)"
 
           if otool -l "$APP/Spotify" | grep -q '@executable_path/Frameworks'; then
-            echo "rpath 已存在，无需改动"
+            echo "rpath already present, nothing to change"
           else
-            echo "缺少 @executable_path/Frameworks —— 补上"
+            echo "@executable_path/Frameworks is missing - adding it"
             ENT="$RUNNER_TEMP/ent.plist"
             if ldid -e "$APP/Spotify" > "$ENT" 2>/dev/null && [ -s "$ENT" ]; then
-              echo "已导出原 entitlements ($(wc -c < "$ENT") 字节)"
+              echo "exported the original entitlements ($(wc -c < "$ENT") bytes)"
             else
-              ENT=""; echo "该二进制没有 entitlements"
+              ENT=""; echo "this binary has no entitlements"
             fi
 
             install_name_tool -add_rpath @executable_path/Frameworks "$APP/Spotify"
@@ -311,7 +331,7 @@ jobs:
             else
               ldid -S "$APP/Spotify"
             fi
-            echo "已重新签名"
+            echo "re-signed"
           fi
 
           mkdir -p "$APP/PlugIns"
@@ -321,9 +341,9 @@ jobs:
              [ -d "$RUNNER_TEMP/osp/OpenSpotifySafariExtension.appex" ]; then
             cp -R "$RUNNER_TEMP/osp/OpenSpotifySafariExtension.appex" \
                   "$APP/PlugIns/OpenSpotifySafariExtension.appex"
-            echo "OpenSpotifySafariExtension 已注入"
+            echo "OpenSpotifySafariExtension injected"
           else
-            echo "::warning::OpenSpotifySafariExtension 拉取失败，跳过（不影响 Orion）"
+            echo "::warning::could not fetch OpenSpotifySafariExtension, skipping (does not affect Orion)"
           fi
 
           # ★ 应用图标（CFBundleAlternateIcons）—— **不注册的话设置里的「应用图标」页是空的**。
@@ -339,13 +359,13 @@ jobs:
           # 所以这里只告警、不中断构建（本仓库没有 Mac，出问题靠 CI 日志定位）。
           # ⚠️ 另一个 workflow（build-ipa-with-orion-patched.yml）里有同一段，改这里记得同步。
           if [ -x /usr/libexec/PlistBuddy ]; then
-            echo "== 注册应用图标（CFBundleAlternateIcons）=="
+            echo "== registering app icons (CFBundleAlternateIcons) =="
             bash "${{ github.workspace }}/Tools/alt-icons.sh" "$APP" \
-              || echo "::warning::应用图标注册失败（不影响安装，只是那页是空的）"
+              || echo "::warning::app icon registration failed (the app still installs - that settings page is just empty)"
             plutil -p "$APP/Info.plist" | grep -A3 'CFBundleAlternateIcons' | head -12 \
-              || echo "(Info.plist 里没有 CFBundleAlternateIcons —— 图标没注册上)"
+              || echo "(no CFBundleAlternateIcons in Info.plist - the icons were not registered)"
           else
-            echo "::warning::没有 PlistBuddy，跳过应用图标注册"
+            echo "::warning::no PlistBuddy available - skipping app icon registration"
           fi
 
           rm -f "$(basename "$OUT_IPA")"
@@ -366,14 +386,14 @@ jobs:
         if: ${{ success() }}
         run: |
           {
-            echo "### 📱 本次产物：无 patch"
+            echo "### 📱 Artifact from this run: no patch"
             echo ""
-            echo "| 文件 | 内容 | 说明 |"
+            echo "| File | Contents | Notes |"
             echo "|---|---|---|"
-            echo "| \`$(basename "$OUT_IPA")\` | tweak 本体：Orion + EeveeSpotify.dylib + bundle + EeveeSwiftProtobuf | **没有** zxPluginsInject；TrollStore / 侧载请用 patched 那个工作流的产物 |"
+            echo "| \`$(basename "$OUT_IPA")\` | the tweak itself: Orion + EeveeSpotify.dylib + bundle + EeveeSwiftProtobuf | **no** zxPluginsInject - use the patched workflow's artifact for TrollStore / sideloading |"
             echo ""
-            echo "不依赖越狱路径（构建带 \`NO_JBROOT=1\`，CI 已断言 dylib 里没有 \`libroot\` / \`/var/jb\`）。"
-            echo "RootHide 越狱请用 roothide 那份 .deb。"
+            echo "No jailbreak-path dependency (the build passes \`NO_JBROOT=1\`, and CI asserts the dylib carries no \`libroot\` / \`/var/jb\`)."
+            echo "RootHide jailbreaks should use the roothide .deb instead."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload IPA to filebin.net
@@ -385,7 +405,7 @@ jobs:
                --data-binary "@${OUT_IPA}" \
                "https://filebin.net/${BIN}/${FILENAME}" >/dev/null
           {
-            echo "### 📦 filebin.net download（无 patch）"
+            echo "### 📦 filebin.net download (no patch)"
             echo ""
             echo "- **${FILENAME}:** https://filebin.net/${BIN}/${FILENAME}"
           } >> "$GITHUB_STEP_SUMMARY"

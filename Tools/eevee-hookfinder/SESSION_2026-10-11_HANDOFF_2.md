@@ -626,6 +626,39 @@ CFBundleDevelopmentRegion = English（系统自己那道回落也是英文）
 
 ---
 
+## 4.18 ★ 两份 IPA workflow：nopatch 补上液态玻璃开关 + 可见输出全部改英文
+
+用户原话：
+
+> 那个让 iOS26+ 生效的新设计语言只有在构建 patched 包上有，nopatched 包要加吗。
+> 而且这个是中文，build summary 也是中文。改成英文吧
+
+**(a) nopatch 补上开关 —— 加了**（用户问"要加吗"，答案是"该加"）：两份 workflow 的存在意义就是
+"**同一个 App，只差一个侧载垫片**"，而 `liquid_glass` 之前只在 patched 里
+⇒ **nopatch 那份 IPA 会保留 `UIDesignRequiresCompatibility=true`**（= iOS 26 上跑兼容模式、
+没有液态玻璃）✗，而 patched 是新外观 ⇒ 两份产物外观不一致，且没人知道。
+现在两份都有 `liquid_glass` 输入（默认 true）+ 同一段 `plutil -remove` ✓
+（`diff` 里已经看不到这处不对称 ✓）。
+
+**(b) 可见输出全部改英文**：把 4 个 workflow 里**非注释**的中文全部换成英文 ——
+`workflow_dispatch` 的 `description`、所有 `echo`（含 `::warning::` / `::error::`）、
+**`$GITHUB_STEP_SUMMARY` 里的表格与说明**、以及 `Scripts/diff-symbol-dumps.py` 里
+被 `binary-diff.yml` grep 的那行报告标题（`hook 目标覆盖` → `hook target coverage`，
+两边必须同时改，否则 grep 永远匹配不到）。
+
+**校验**：5 个 workflow **可见中文 0 行** ✓；`yaml.safe_load` 全部通过 ✓；
+两份 IPA workflow 的实质差异回到了文档说的那 4 处（ipapatch 安装 / Build zxPluginsInject /
+LC 注入 + 产物名 / 上传与 filebin 命名）✓。
+
+⚠️ **注释仍是中文**（patched 85 行 / nopatch 78 / binary-diff 33 / tests 20）——
+用户没点名，**没动**；要全英文化说一声。
+
+⚠️ 记一笔**流程教训**：这一轮我用的映射脚本**报告"替换 0 处"、实际却已经改了文件**
+（报告不可信）。所以脚本化改文件之后，**必须直接读文件核对**（这次是靠
+"每个文件还剩多少可见中文"这个独立统计发现的），不能信脚本自己的计数。
+
+---
+
 ## 5. 本机自检（六条全绿）
 
 ```

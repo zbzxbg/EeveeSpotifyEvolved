@@ -117,8 +117,8 @@ jobs:
           BASE=$(ls Symbols/baseline-*.txt 2>/dev/null | sort -V | tail -1)
           if [ -z "$BASE" ]; then
             # 原版在这里 exit 1。本仓库还没有基线，所以改成"这次只建档、不比对"。
-            echo "::warning::仓库里没有 Symbols/baseline-*.txt —— 本次只生成 dump，不做对比。"
-            echo "::warning::把本次的 dump-*.txt 存成 Symbols/baseline-<版本>.txt 之后，下次才会真正比对。"
+            echo "::warning::the repository has no Symbols/baseline-*.txt - this run only produces a dump, no comparison."
+            echo "::warning::save this run's dump-*.txt as Symbols/baseline-<version>.txt and the next run will actually compare."
             echo "path=" >> "$GITHUB_OUTPUT"
           else
             echo "path=$BASE" >> "$GITHUB_OUTPUT"
@@ -145,9 +145,9 @@ jobs:
       - name: Summarise hook target coverage
         if: ${{ steps.baseline.outputs.path != '' }}
         run: |
-          # 报告头两行会写出"mangled N 个，点号写法 M 个"，放在摘要里
-          # 让"这次到底检查了多少个目标"一眼可见 —— 全绿但覆盖为 0 是最危险的假安全。
-          grep -m1 'hook 目标覆盖' "report-${{ steps.ver.outputs.version }}.md" || true
+          # The report's first lines carry "mangled N, dotted M"; printing them in the summary
+          # makes "how many targets did this run actually check" visible - all-green with zero coverage
+          grep -m1 'hook target coverage' "report-${{ steps.ver.outputs.version }}.md" || true
 
       - name: Upload dump + report
         uses: actions/upload-artifact@v4
