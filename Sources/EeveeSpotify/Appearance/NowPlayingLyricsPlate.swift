@@ -1802,9 +1802,12 @@ enum NowPlayingLyricsPlate {
     ///   ③ **展开 / 收起两个状态都摆**：换歌会换一个新的封面对象（`-5000 → -5001`）。
     private static let restingCoverSide: CGFloat = 242
 
-    /// 我们写过缩放的那一张（weak：视图没了就算了）+ 它**自己的**原 transform。
-    private static weak var scaledCover: UIView?
-    private static var scaledCoverBase: CGAffineTransform = .identity
+    /// 我们缩过的那几张封面（**弱引用**：视图被回收就自动出册）+ 各自**自己的**原 transform。
+    ///
+    /// 为什么是"复数"：真机日志 57 里**同一页会挑出不同的封面候选**（见 `applyCoverRestingScale`），
+    /// 只盯一个对象会让被换下去的那张弹回 366pt。
+    private static let scaledCovers = NSHashTable<UIView>.weakObjects()
+    private static var scaledCoverBase: [ObjectIdentifier: CGAffineTransform] = [:]
 
     /// 每拍把当前那张主封面**缩到 `restingCoverSide`**（见上面那段）。
     ///
@@ -1815,22 +1818,33 @@ enum NowPlayingLyricsPlate {
               let list = findByIdentifier(listIdentifier, in: page),
               let cover = visibleCover(in: list, page: page) else { return }
 
-        // 换歌 / 换 cell ⇒ 手上这张作废：**先把它的原值还回去**，再接管新那张。
-        if let previous = scaledCover, previous !== cover {
-            previous.transform = scaledCoverBase
-            scaledCover = nil
-            scaledCoverBase = .identity
+        // ★ 2026-10-12：**按对象记账，而且记的不止一个。**
+        //
+        // 为什么不是"上一个 / 这一个"两个变量：真机日志 57 里**挑中的封面会换**
+        // （同一页里一会儿 `-369264,147,366,366`、一会儿 `24,147,366,366`）。
+        // 只盯一个对象的话，"这一拍挑中另一个"就会把上一个**还原成 366pt**
+        // —— 而屏幕上正显示的可能正是它 ⇒ 用户会看到封面在大小之间来回跳。
+        // 现在：凡是被我们缩过的都记在册（`NSHashTable` 弱引用，视图没了自动出册），
+        // 每拍把它们都摆到目标尺寸；离开页面 / 关开关时**逐个**还回各自的原值。
+        if scaledCoverBase.count > 2 {
+            // 出册的条目要清掉：`ObjectIdentifier` 是地址，视图释放后地址可能被新视图复用。
+            let live = Set(scaledCovers.allObjects.map { ObjectIdentifier($0) })
+            scaledCoverBase = scaledCoverBase.filter { live.contains($0.key) }
         }
-        if scaledCover == nil {
-            scaledCover = cover
-            scaledCoverBase = cover.transform
+
+        let key = ObjectIdentifier(cover)
+        if scaledCoverBase[key] == nil {
+            // **第一次**接管这一张：把它自己的 transform 记下来（还原用的就是它，不假设是恒等）。
+            scaledCoverBase[key] = cover.transform
         }
+        scaledCovers.add(cover)
+        let base = scaledCoverBase[key] ?? .identity
 
         let natural = cover.bounds.width
         guard natural > 1 else { return }
         let scale = min(1, restingCoverSide / natural)
         // 先让它自己那一套（多半是恒等）作用完，再叠我们的等比缩放 —— 两者都关于锚点（默认中心）。
-        let wanted = scaledCoverBase.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+        let wanted = base.concatenating(CGAffineTransform(scaleX: scale, y: scale))
         if cover.transform != wanted { cover.transform = wanted }
     }
 
@@ -1838,11 +1852,12 @@ enum NowPlayingLyricsPlate {
     ///
     /// ⚠️ 收起歌词时**不许**调它：那时我们要的正是"缩小的封面"。
     private static func restoreCoverScale() {
-        if let cover = scaledCover, cover.transform != scaledCoverBase {
-            cover.transform = scaledCoverBase
+        for cover in scaledCovers.allObjects {
+            guard let base = scaledCoverBase[ObjectIdentifier(cover)] else { continue }
+            if cover.transform != base { cover.transform = base }
         }
-        scaledCover = nil
-        scaledCoverBase = .identity
+        scaledCovers.removeAllObjects()
+        scaledCoverBase.removeAll()
     }
 
     private static func ensureCover(in page: UIView, geometry: Geometry) -> UIView? {
@@ -3110,7 +3125,16 @@ enum NowPlayingLyricsPlate {
     private static func singleLyricTextNow() -> String? {
         guard UserDefaults.nowPlayingSingleLyric else { return nil }
 
-        let key = "\(currentLyricsVersion)#\(currentTrackId() ?? "")"
+        // ⚠️ 行模型可能还是**上一首**的：切歌**不一定**伴随歌词请求（客户端缓存命中 / 离线歌词时
+        //    没有 `color-lyrics` 请求，`resetWordByWordLyrics` 就不会跑）。
+        //    两层早就有这条判据（`LyricsWordByWordOverlayView.belongsToAnotherTrack` /
+        //    `WordByWordHost.lineModelIsForeign`，口径见 `currentLyricsDtoTrackId` 的说明）；
+        //    这里用**同一个**口径：宁可这一行暂时空着，也绝不显示上一首的歌词。
+        let model = currentLyricsDtoTrackId
+        let live = currentTrackId() ?? ""
+        if !model.isEmpty, !live.isEmpty, model != live { return nil }
+
+        let key = "\(currentLyricsVersion)#\(live)"
         if key != singleLyricCacheKey {
             singleLyricCacheKey = key
             // ⚠️ `currentLines()` 会把**没有时间轴的行整首滤掉**（`LyricLinesAdapter` 里的 filter）
