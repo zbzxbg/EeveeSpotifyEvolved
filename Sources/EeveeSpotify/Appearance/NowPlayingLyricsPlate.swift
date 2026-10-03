@@ -384,8 +384,14 @@ enum NowPlayingLyricsPlate {
     private static var didLogBandShareMissing = false
     /// ★ 关着歌词时被我们挪到左上角的那一行（离开页面 / 关开关时撤回来）。
     private static weak var closedTitleRow: UIView?
+    /// 同一行里被横向挪开的那个元素（收尾时也要还回去，见 `clearClosedTitleTransform`）。
+    private static weak var closedTitleElement: UIView?
     /// "找不到标题行"只报一次（进页面的头几拍可能还量不到）。
     private static var didLogClosedTitleMissing = false
+    /// "关着态那一行摆上了"只报一次（一次一页一行，下一份日志靠它判）。
+    private static var didLogClosedTitle = false
+    /// ★ 2026-10-11：分享键的**替身热区**（那颗键自己点不到，见 `ensureShareRelay`）。
+    private static weak var bandShareRelay: UIControl?
 
     private static var host: AnyObject?
     private static weak var hostPage: UIView?
@@ -1045,15 +1051,17 @@ enum NowPlayingLyricsPlate {
         wantsOpen = false
         pendingOpenUntil = 0
         pageLeaving = false
-        // ★ 2026-10-11 第二轮：**关掉歌词 ≠ 页面还原**。
-        //   控件条（分享键搬去 626 那一条）与"标题行贴左上角"都属于**关着时的样子**
-        //   —— 页面还在窗口里就立刻摆回去（用户收起歌词那一刻就能看到正确版式，不用等 0.3s 那一拍）。
-        //   真的离开页面时，才由 `reconcile` 里那两条 `clear…` 收干净。
-        //   ⚠️ 这里**不能**无条件跑：`closeEverything` 也会在"页面已经不在窗口里"时被调用。
-        if isEnabled, let page = lastPage, page.window != nil {
-            applyControlBand(in: page)
-            applyClosedTitleTransform(in: page)
-        }
+        // ★★ 2026-10-11 第二轮（修用户报的「短暂重合」，照片 74 就是那一帧）：
+        //   "关着的样子"（控件条 + 标题行贴左上角）**必须最后摆**。
+        //
+        //   以前这一段放在这里（函数中段），而下面还有一句
+        //   `lastUnit?.transform = .identity`（撤销展开时那段位移）—— 它会把我们刚摆好的
+        //   "标题去左上角"**当场撤销** ⇒ 关掉之后的 0.3s 里标题回到**原生位置**（618），
+        //   正好压在控件条第 ① 处的分享键（58,626）上。用户拍的正是那一帧。
+        //
+        //   用 `defer`：无论从哪条路返回（含"没铺过东西"的提前 return）都在**最后**执行一次，
+        //   而且它自己会判断"页面还在不在"，见 `settleAfterClosing()`。
+        defer { settleAfterClosing() }
         // 封面判据的日志预算**按"一次开合"重置** —— 否则开合三次就把 12 行用光，
         // 正好在下一个 bug 出现时看不见了（独立复核指出）。
         chosenCoverLogs = 0
@@ -1095,9 +1103,9 @@ enum NowPlayingLyricsPlate {
             restoreSpotifyCover()
         }
 
-        // 标题行的位移撤销。
-        lastUnit?.transform = .identity
-        lastTitleElement?.transform = .identity
+        // 标题行的位移**不在这里撤** —— 见 `settleAfterClosing()`：
+        //   页面还在时要让那一行**从缩略图右边滑回左上角**（用户要的动画），
+        //   先在这儿撤成 identity 就会先跳一下（照片 74 那 0.3s 的重合就是这么来的）。
         clearTitleMask()
         lastTitleElement = nil
 
@@ -1108,6 +1116,34 @@ enum NowPlayingLyricsPlate {
         lastContainer = nil
         didLogInstall = false
         writeDebugLog("[\(logTag)] collapsed (reason=\(reason))")
+    }
+
+    /// `closeEverything` 的最后一步（`defer` 里跑）：决定"关掉之后屏幕上是哪一副样子"。
+    ///
+    /// 两种结局：
+    ///   · **页面还在窗口里**（功能也开着）⇒ 摆"关着的样子"：控件条就位、标题行回左上角。
+    ///     这里**故意不先撤**展开时那段位移 —— 让那一行直接从"缩略图右边"滑到左上角
+    ///     （用户 2026-10-11 要的动画；以前是先跳回原生位置再被下一拍挪走 = 照片 74 那 0.3s 的重合）。
+    ///   · **页面不在 / 功能关了** ⇒ 把写在别人视图上的两段位移**全部撤掉**
+    ///     （这也是原来那句 `lastUnit?.transform = .identity` 的职责）。
+    private static func settleAfterClosing() {
+        if isEnabled, let page = lastPage, page.window != nil {
+            applyControlBand(in: page)
+            if applyClosedTitleTransform(in: page) {
+                lastUnit = nil
+                lastTitleElement = nil
+                return
+            }
+        }
+        // 兜底：摆不上（量不到导航条 / 找不到那一行）或页面已经不在 ⇒ 把两段位移都撤掉，
+        // 别留在别人的视图上（"关着态"那两段由 `clearClosedTitleTransform` 管）。
+        if let row = lastUnit, row.transform != .identity { row.transform = .identity }
+        if let element = lastTitleElement, element.transform != .identity {
+            element.transform = .identity
+        }
+        lastUnit = nil
+        lastTitleElement = nil
+        clearClosedTitleTransform()
     }
 
     // MARK: - 量几何（pw 的 `layoutIn`）
@@ -1816,15 +1852,59 @@ enum NowPlayingLyricsPlate {
         lastUnit = row
 
         let rise = CGAffineTransform(translationX: 0, y: geometry.lift.rounded())
-        if row.transform != rise { row.transform = rise }
+        let title = geometry.titleElement
+        let slide = title.map { _ in
+            CGAffineTransform(translationX: geometry.shift.rounded(), y: 0)
+        }
+        moveTitleRow(row: row, rise: rise, element: title, slide: slide)
 
-        if let title = geometry.titleElement {
+        if let title {
             lastTitleElement = title
-            let slide = CGAffineTransform(translationX: geometry.shift.rounded(), y: 0)
-            if title.transform != slide { title.transform = slide }
             // 长标题向右会撞到"加号"：**用 mask 渐隐**，不改宽度（Spotify 的 marquee 会把宽度写回）。
             applyTitleMask(to: title, page: page)
         }
+    }
+
+    /// 标题行的两段位移（上移 + 右移）**只在这一处写**，而且**只在目标真的变了**时才放动画。
+    ///
+    /// ★ 2026-10-11（用户提的：「能不能给歌曲/歌手移动到右边的时候，加个动画」）。
+    ///
+    /// 为什么必须"变了才动"：本仓库的老教训（`applyCoverState` 旁边那条）—— 这一条链的节拍是
+    /// 0.3s、动画是 0.45s，**每拍无条件 `UIView.animate` 就等于每拍重开一次**，画面上是"永远在动"。
+    /// 目标 == 现值时直接不进这个分支，动画才播得完。
+    ///
+    /// 为什么第一程**不**加动画：那一程这一行还是 Spotify 的原生位置（`transform == .identity`）——
+    /// 进页面时它会从屏幕中间"跳"到左上角，滑过去反而更怪。只有"已经在我们的某个位置上"
+    /// （展开 ⇄ 收起）才滑。
+    private static func moveTitleRow(
+        row: UIView,
+        rise: CGAffineTransform,
+        element: UIView?,
+        slide: CGAffineTransform?
+    ) {
+        let rowNeedsMove = row.transform != rise
+        var elementNeedsMove = false
+        if let element, let slide { elementNeedsMove = element.transform != slide }
+        guard rowNeedsMove || elementNeedsMove else { return }
+
+        let change = {
+            if rowNeedsMove { row.transform = rise }
+            if let element, let slide, elementNeedsMove { element.transform = slide }
+        }
+        // pw 那一套：0.45s + 临界阻尼（`usingSpringWithDamping 1`）+ 允许用户交互 + 从当前状态开始
+        // （最后一条是"连点两次不跳"的关键）；开了「减弱动态效果」就不动。
+        guard !UIAccessibility.isReduceMotionEnabled, row.transform != .identity else {
+            UIView.performWithoutAnimation(change)
+            return
+        }
+        UIView.animate(
+            withDuration: moveDuration,
+            delay: 0,
+            usingSpringWithDamping: 1,
+            initialSpringVelocity: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState],
+            animations: change
+        )
     }
 
     /// 渐隐宽度 = 标题可用宽度（到右边那排控件为止）—— 量不到就整行不遮。
@@ -1922,6 +2002,12 @@ enum NowPlayingLyricsPlate {
         let target = CGPoint(x: shareButtonCenterX, y: controlBandMidY)
         let dx = (target.x - current.midX).rounded()
         let dy = (target.y - current.midY).rounded()
+        let landed = CGRect(
+            x: (target.x - current.width / 2).rounded(),
+            y: (target.y - current.height / 2).rounded(),
+            width: current.width,
+            height: current.height
+        )
 
         let existing = button.transform
         let moved = CGAffineTransform(
@@ -1930,21 +2016,55 @@ enum NowPlayingLyricsPlate {
         )
         if button.transform != moved { button.transform = moved }
 
+        // ★ 2026-10-11（用户报的「分享按键…用不了」）：它自己点不到 ⇒ **替它收点击**。
+        ensureShareRelay(in: page, frame: landed)
+
         if !didLogBandShare {
             didLogBandShare = true
-            let landed = CGRect(
-                x: (target.x - current.width / 2).rounded(),
-                y: (target.y - current.height / 2).rounded(),
-                width: current.width,
-                height: current.height
-            )
             writeDebugLog(
                 "[\(logTag)] share button moved into the control band — "
                     + "\(Int(current.width))×\(Int(current.height)) from \(frameText(current))"
                     + " to \(frameText(landed))" + bandNote(for: button, landing: landed, page: page)
+                    + " (a transparent relay covers that spot and forwards taps)"
             )
         }
         return true
+    }
+
+    /// 分享键的**替身热区**：一颗透明的 `UIControl`，点它 = 替用户按那颗真按钮。
+    ///
+    /// 为什么非它不可（日志 56 逐字）：
+    /// `share button moved … to 36,604,44,44 (visual only: _TtGC13Element_UIKit11ElementView… does not
+    /// contain the landing spot, so taps stay dead)` —— 搬过去之后它在**祖先的边界之外**，
+    /// hit-test 在那一层就断了（`transform` 只改绘制与坐标换算，改不了父视图的命中范围）。
+    /// 要根治只能"把视图搬进另一个父视图"，那会把 Spotify 的约束体系弄坏 —— 不做。
+    ///
+    /// 为什么这次可以用 `sendActions`（本仓库 2026-10-10 刚把"替用户按胶囊"整块删掉）：
+    /// 那一次删的理由是**切换类**动作（按两次回到原状 + 会落盘用户偏好）；分享是"打开一个面板"，
+    /// 幂等、没有状态，转发它是安全的。
+    private static func ensureShareRelay(in page: UIView, frame: CGRect) {
+        let relay: UIControl
+        if let existing = bandShareRelay, existing.superview === page {
+            relay = existing
+        } else {
+            let fresh = UIControl(frame: frame)
+            // ⚠️ 别用 `alpha = 0`：`hitTest` 会把 alpha ≤ 0.01 的视图当成不存在 —— 那就白做了。
+            fresh.backgroundColor = .clear
+            fresh.accessibilityIdentifier = "eevee-npv-share-relay"
+            fresh.isAccessibilityElement = false
+            fresh.addTarget(
+                NowPlayingShareRelayTarget.shared,
+                action: #selector(NowPlayingShareRelayTarget.tapped),
+                for: .touchUpInside
+            )
+            page.addSubview(fresh)
+            bandShareRelay = fresh
+            relay = fresh
+        }
+        if relay.frame != frame { relay.frame = frame }
+        // ⚠️ 必须压在**歌词容器之上**（容器铺满歌词区，只在控件条那一条放行；就算放行了，
+        //    也还是这颗热区先收到触摸 —— 它是页面最前面的一个子视图）。
+        page.bringSubviewToFront(relay)
     }
 
     /// 关着歌词时：把**标题行**搬到左上角（照片 73 的 kumone 位）—— 给控件条腾地方。
@@ -1979,16 +2099,35 @@ enum NowPlayingLyricsPlate {
             return false
         }
 
-        // 上一程"展开时"的位移若还留着（`closeEverything` 会撤，这里再兜一层）：先清掉。
-        if element.transform != .identity { element.transform = .identity }
-
+        // 上一程"展开时"的那两段位移**不在这里手撤** —— 交给 `moveTitleRow` 一起动画：
+        // 行往上滑回左上角的同时，字往左滑回原位（分开写会先"跳"一下）。
         let current = untransformed(row, in: page)
         guard current.height > 1 else { return false }
 
         let dy = ((navBottom + closedTitleTopInset) - current.minY).rounded()
-        let move = CGAffineTransform(translationX: 0, y: dy)
-        if row.transform != move { row.transform = move }
+        moveTitleRow(
+            row: row,
+            rise: CGAffineTransform(translationX: 0, y: dy),
+            element: element,
+            slide: .identity
+        )
         closedTitleRow = row
+        closedTitleElement = element
+
+        // 一次一页只报一行：下一份日志靠它判"关着态到底摆上了没有"。
+        if !didLogClosedTitle {
+            didLogClosedTitle = true
+            let landed = CGRect(
+                x: current.minX,
+                y: navBottom + closedTitleTopInset,
+                width: current.width,
+                height: current.height
+            )
+            writeDebugLog(
+                "[\(logTag)] title row moved to the top left for the closed state — "
+                    + "\(frameText(current)) to \(frameText(landed))"
+            )
+        }
         return true
     }
 
@@ -2003,13 +2142,31 @@ enum NowPlayingLyricsPlate {
         bandShareOriginalTransform = nil
         didLogBandShare = false
         didLogBandShareMissing = false
+        // 替身热区也要一起拿走（它挂在页面上，不拿走会一直吃那一块的触摸）。
+        bandShareRelay?.removeFromSuperview()
+        bandShareRelay = nil
     }
 
-    /// 把我们写给标题行的那段"去左上角"撤掉（关开关 / 离开页面）。
+    /// 热区被点了 ⇒ 把这一下**转给那颗真的分享键**。
+    fileprivate static func relayShareTap() {
+        guard let button = bandShareButton else { return }
+        writeDebugLog(
+            "[\(logTag)] relaying a tap to the share button "
+                + "(\(NSStringFromClass(type(of: button))))"
+        )
+        button.sendActions(for: .touchUpInside)
+    }
+
+    /// 把我们写给标题行 / 标题元素的那两段位移撤掉（关开关 / 离开页面）。
     private static func clearClosedTitleTransform() {
         if let row = closedTitleRow, row.transform != .identity { row.transform = .identity }
+        if let element = closedTitleElement, element.transform != .identity {
+            element.transform = .identity
+        }
         closedTitleRow = nil
+        closedTitleElement = nil
         didLogClosedTitleMissing = false
+        didLogClosedTitle = false
     }
 
     /// 页里**看得见、而且在屏上**的那一份分享键。
@@ -2262,9 +2419,14 @@ enum NowPlayingLyricsPlate {
         )
     }
 
-    /// 那枚键长什么样：展开中换图标；这一首没词就变灰（**但仍然可点** —— 点了会说明原因）。
+    /// 那枚键长什么样：**永远是那个歌词图标**；这一首没词就变灰（**但仍然可点** —— 点了会说明原因）。
+    ///
+    /// ★ 2026-10-11（用户提的）：展开时**不再**换成 `chevron.down`。
+    /// 用户原话：「现在点击歌词按钮之后会显示一个向下的箭头，能不能给这个箭头删了，
+    /// 然后就只有原本的歌词长相」+「**它原本就是歌词图标，就无论怎么点，它看起来都是那个歌词图标**」。
+    /// （收起仍然靠点这一颗 —— 图标不变，位置也不变。）
     private static func applyToggleAppearance(to zone: UIControl) {
-        let symbol = isOpen ? "chevron.down" : "quote.bubble.fill"
+        let symbol = "quote.bubble.fill"
 
         let glyph = zone.subviews
             .compactMap { $0 as? UIImageView }
@@ -2278,9 +2440,7 @@ enum NowPlayingLyricsPlate {
                 // 兜底链：万一某个符号名在目标 iOS 上不存在，`UIImage(systemName:)` 会返回 nil
                 // ⇒ 那枚键就变成"看得见但什么都没有"的空圆。本机没有运行时，只能这样防。
                 let configuration = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
-                let candidates = isOpen
-                    ? ["chevron.down", "chevron.compact.down"]
-                    : ["quote.bubble.fill", "quote.bubble", "text.alignleft"]
+                let candidates = ["quote.bubble.fill", "quote.bubble", "text.alignleft"]
                 let image = candidates
                     .compactMap { UIImage(systemName: $0, withConfiguration: configuration) }
                     .first
@@ -2306,21 +2466,33 @@ enum NowPlayingLyricsPlate {
             if existing.frame != frame { existing.frame = frame }
             // 歌词要能点（点行跳转），但**容器之外不吃触摸**；容器本身只占歌词区。
             existing.isUserInteractionEnabled = true
+            applyContainerPassThrough(to: existing, frame: frame)
             page.bringSubviewToFront(existing)
             lastContainer = existing
             return existing
         }
 
-        let container = UIView(frame: frame)
+        let container = NowPlayingLyricsContainerView(frame: frame)
         container.backgroundColor = .clear
         container.clipsToBounds = true
         container.accessibilityIdentifier = "eevee-npv-lyrics-container"
         container.isAccessibilityElement = false
+        applyContainerPassThrough(to: container, frame: frame)
         page.addSubview(container)
         page.bringSubviewToFront(container)
         objc_setAssociatedObject(page, &containerKey, container, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         lastContainer = container
         return container
+    }
+
+    /// 把"控件条那一条要放行触摸"告诉容器（见 `NowPlayingLyricsContainerView`）。
+    ///
+    /// 放行的范围：从 `controlBandMidY − 22`（≈604）起**到底边**。
+    /// 照片 71 + 日志 56 的实测：收藏键（＋/✓）在 604…648、我们搬过去的分享键同样在 604…648，
+    /// 而歌词容器的底边是 641（`lyrics area 20,242,374,399`）⇒ 那一片必须让开。
+    private static func applyContainerPassThrough(to container: UIView, frame: CGRect) {
+        guard let plate = container as? NowPlayingLyricsContainerView else { return }
+        plate.passThroughBottom = max(0, frame.maxY - (controlBandMidY - 22))
     }
 
     private static func applyEdgeFade(to container: UIView) {
@@ -2509,6 +2681,30 @@ enum NowPlayingLyricsPlate {
     }
 }
 
+/// 歌词容器。
+///
+/// **唯一特殊之处**：控件条那一条（底部 ≈40pt）**放行触摸**。
+///
+/// 为什么需要它（用户 2026-10-11 报的「为什么分享按键和收藏按键用不了」）：
+/// 这个容器铺满整个歌词区（日志 56：`lyrics area 20,242,374,399` ⇒ y 242…641）、
+/// `isUserInteractionEnabled = true`（歌词行要靠它收点击去跳转）、而且被
+/// `bringSubviewToFront` 顶到最上面 ⇒ **它把这一片的触摸全吃掉了** ——
+/// 包括 Spotify 自己的收藏键（＋/绿色 ✓，就坐在 371,626）。
+///
+/// 只让**那一条**（那一段本来就被上下渐隐遮着，少一点行点击没关系），
+/// 歌词正文那一片照旧吃触摸。
+final class NowPlayingLyricsContainerView: UIView {
+
+    /// 底部放行多少 pt（0 = 不放行）。
+    var passThroughBottom: CGFloat = 0
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard super.point(inside: point, with: event) else { return false }
+        guard passThroughBottom > 0 else { return true }
+        return point.y < bounds.height - passThroughBottom
+    }
+}
+
 /// 歌词键的手势目标（`UIControl` 的 target 必须是 ObjC 对象）。
 final class NowPlayingLyricsToggleTarget: NSObject {
 
@@ -2516,5 +2712,15 @@ final class NowPlayingLyricsToggleTarget: NSObject {
 
     @objc func tapped() {
         onMainThreadSync { NowPlayingLyricsPlate.toggle() }
+    }
+}
+
+/// 分享键**替身热区**的点击目标（同上，target 必须是 ObjC 对象）。
+final class NowPlayingShareRelayTarget: NSObject {
+
+    static let shared = NowPlayingShareRelayTarget()
+
+    @objc func tapped() {
+        onMainThreadSync { NowPlayingLyricsPlate.relayShareTap() }
     }
 }

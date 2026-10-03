@@ -17,7 +17,7 @@
 | **★ 用户改了方案** | 上一轮点头的「绿 ✓ 搬进 header」**已按第二版方案撤掉**（用户原话：「那个绿色勾就**让它呆在那里**」）⇒ 换成 **控件条**方案（§2） |
 | **S1 保留** | 无时间轴歌词不再冒充「未找到歌词」（§3）—— 这一条不受方案变化影响 |
 | **❌ 日志仍停在 55** | `C:\dsh\ipa` 里**没有** `b9e250b` 之后的日志 ⇒ 上一轮那张验收单（转场 / 锚点 / 三种文案 / 胶囊计数）**仍然挂着** |
-| **这一轮改了三件事** | ★ **控件条**：[分享 58] [歌词键 215] [绿 ✓ 371（不动）] ★ **关着歌词时标题/歌手贴左上角**（给控件条腾地方）★ **音量条的两端小喇叭抬 5pt**（用户报的"和那条轨不一样高"） |
+| **这一轮改了七件事** | ★ **控件条**：[分享 58] [歌词键 215] [绿 ✓ 371（不动）] ★ **关着歌词时标题/歌手贴左上角** ★ **音量条小喇叭抬 5pt** ★ 再修四处（照片 74 + 日志 56）：**收尾顺序**（不再"短暂重合"）、**分享键改用替身热区**（能点了）、**歌词容器放行触摸**（收藏键能点了）、**标题加动画 + 图标恒定为歌词气泡** |
 | **下一个动作** | CI → 装机 → **日志 56 + 照片 74+**，按 §6 收口 |
 | **本机没有 Swift 工具链** | 六条自检全绿（§5），类型检查只能靠 CI |
 
@@ -58,8 +58,8 @@
 
 | 文件 | 改动 |
 |---|---|
-| `Sources/EeveeSpotify/Appearance/NowPlayingLyricsPlate.swift` | ★ **控件条**：新增 `applyControlBand` / `clearControlBand` / `visibleShareButton` / `firstVisibleShareButton` / `isOnScreen` / `bandNote` + 常量 `controlBandMidY=626` / `shareButtonCenterX=58` / `toggleCenterX=215`；`toggleFrame` 改成"**先控件条**，量不出来才退回老的三级判据（`fallbackToggleFrame`）"；★ **关着歌词时标题行去左上角**：新增 `applyClosedTitleTransform` / `clearClosedTitleTransform`（落点 `navBarBottom + 2`）；调用点：`apply` / `reconcile`（每拍）/ `closeEverything`（收起那一刻）/ `remove`（关开关） |
-| `Sources/EeveeSpotify/Appearance/NowPlayingPageOverlay.swift` | ★ **音量条两端小喇叭抬 5pt**（新常量 `volumeGlyphLift`）：用户报「那两个扬声器的高度没有和那个调整音量的行一样高」。逐像素量过（见 §4.5），偏差**不在我们这边** —— iOS 26 的 `MPVolumeView` 把轨画在它自己 frame 中线上方 ≈5pt；只补偿我们自己的两个装饰字形，并把实测几何打进安装日志（`volumeRowInternals`） |
+| `Sources/EeveeSpotify/Appearance/NowPlayingLyricsPlate.swift` | ★ **控件条**：新增 `applyControlBand` / `clearControlBand` / `visibleShareButton` / `firstVisibleShareButton` / `isOnScreen` / `bandNote` + 常量 `controlBandMidY=626` / `shareButtonCenterX=58` / `toggleCenterX=215`；`toggleFrame` 改成"**先控件条**，量不出来才退回老的三级判据（`fallbackToggleFrame`）"；★ **关着歌词时标题行去左上角**：`applyClosedTitleTransform` / `clearClosedTitleTransform`（落点 `navBarBottom + 2`）；调用点：`apply` / `reconcile`（每拍）/ `remove`（关开关）；★★ **第三批（照片 74 + 日志 56）**：`settleAfterClosing()`（`closeEverything` 的 `defer` —— 修"短暂重合"）、`ensureShareRelay` / `relayShareTap` / `NowPlayingShareRelayTarget`（**替身热区**）、`NowPlayingLyricsContainerView` + `applyContainerPassThrough`（**容器放行触摸**）、`moveTitleRow`（**动画**）、`applyToggleAppearance` 恒定歌词图标 |
+| `Sources/EeveeSpotify/Appearance/NowPlayingPageOverlay.swift` | ★ **音量条两端小喇叭抬 5pt**（新常量 `volumeGlyphLift`）：用户报「那两个扬声器的高度没有和那个调整音量的行一样高」。逐像素量过（见 §4.6），偏差**不在我们这边** —— iOS 26 的 `MPVolumeView` 把轨画在它自己 frame 中线上方 ≈5pt；只补偿我们自己的两个装饰字形，并把实测几何打进安装日志（`volumeRowInternals`） |
 | `layout/…/EeveeSpotify.bundle/{en,zh-CN}.lproj/Localizable.strings` | 新键 `lyrics_no_timeline`（en: "These lyrics have no timing" / zh-CN:「这首歌的歌词没有时间轴」）—— **S1，保留** |
 | `Tools/eevee-hookfinder/SESSION_2026-10-11_HANDOFF_2.md` | 本文件 |
 
@@ -77,8 +77,15 @@
         → 歌词铺上；控件条不动（分享键仍在 58,626）
 
 再点收起
-  closeEverything（isEnabled 且页面还在窗口里）→ 立刻摆回"关着的样子"（标题回左上角）
+  closeEverything（isEnabled 且页面还在窗口里）
+    ├ 封面飞回原位（0.45s）
+    └ defer → settleAfterClosing()：控件条就位 + **标题行从缩略图右边滑回左上角**（0.45s，同一个动画）
   页面真的走了（page.window == nil）→ clearControlBand + clearClosedTitleTransform（屏幕外）
+
+点分享键（58,626）
+  替身热区（透明 44×44，压在最前面）收到触摸
+    → sendActions(for: .touchUpInside) 转给那颗真的 ShareButtonNowPlayingView
+    → 日志：[NPVLyrics] relaying a tap to the share button (…)
 ```
 
 ---
@@ -113,7 +120,50 @@
 ★ 还有一条**没动**的：`now-playing-toggle-button`（`Tertiary@0,0,48,48`）**至今没定位**（不在照片 70/71/72
 的任何可见位上）—— 下一份 `[NPVTree]` 里能看出它在哪儿，**先别动它**。
 
-### 4.5 音量条：两个小喇叭为什么低了 5pt（照片 71 逐像素）
+### 4.5 ★ 第三批：照片 74 + 日志 56 之后的四处修复
+
+日志 56 是这一批的**真机判决**（`b9e250b` 之后的第一次行为面数据），先记它判了什么：
+
+| 项 | 日志 56 逐字 | 判定 |
+|---|---|---|
+| 三个锚点 | `(anchors: navBottom=96, progressTop=660, bottomStackTop=593)` | ✅ 全是数字 |
+| 歌词区 | `lyrics area 20,242,374,399`（242…641） | ✅ 与 kumone 对齐 |
+| 缩略图 | `thumbnail 72pt at 28,104,72,72` | ✅ 贴导航条下沿 |
+| 音量条 | `glyphLow 0,1,16,16 glyphHigh 350,1,16,16 (glyphs lifted 5pt to meet the track)` | ✅ 5pt 抬升生效 |
+| 胶囊 | `[Declutter] hid the Now Playing pill row (…) — hide #1` | ✅ 终于有结论了 |
+| 分享键 | `share button moved … to 36,604,44,44 (visual only: _TtGC13Element_UIKit11ElementView… does not contain the landing spot, so taps stay dead)` | ⚠️ 位置对了，但**点不到**（预测命中） |
+
+用户这一批报了四件，逐条：
+
+**① 点歌词键时"歌名/歌手和分享键短暂重合"（照片 74 就是那一帧）**
+根因在**我们自己的收尾顺序**：`closeEverything` 里先在函数中段摆了"关着的样子"（标题 → 左上角），
+而函数后段那句 `lastUnit?.transform = .identity`（撤销展开时的位移）**当场把它撤销** ⇒
+关掉之后的 **0.3s** 里标题回到原生位置（618），正好压在控件条第 ① 处的分享键（58,626）上。
+修法：把"关着的样子"挪到 **`defer`** 里（无论从哪条返回都在**最后**跑），见 `settleAfterClosing()`；
+并且**故意不先撤**展开时那段位移 —— 让标题直接从"缩略图右边"滑回左上角。
+
+**② 分享键点不动** —— 它被**自己祖先**的边界挡住（日志 56 那条 `…ElementView… does not contain
+the landing spot`）。`transform` 改不了父视图的命中范围 ⇒ 加了一颗**透明的替身热区**
+（`eevee-npv-share-relay`，44×44 盖在同一格，压在最前面），点它 = `sendActions(for: .touchUpInside)`
+转给那颗真按钮。为什么这次可以用 `sendActions`（上一轮刚删过"替用户按"）：那次删的是**切换类**
+动作（按两次回到原状 + 落盘偏好）；分享是"打开面板"，幂等无状态。
+
+**③ 收藏键（＋/绿 ✓）点不动** —— ★ 这个是我上一轮**漏掉**的：**我们自己的歌词容器**铺满
+242…641（`isUserInteractionEnabled = true` 且在最前面）⇒ 把那一整片触摸全吃了。
+修法：容器换成 `NowPlayingLyricsContainerView`，**只在那一条放行**
+（`point(inside:)` 里把 `controlBandMidY − 22` 以下让开），歌词正文照旧吃触摸。
+
+**④ 两件视觉**：
+* **动画**（用户：「能不能给歌曲/歌手移动到右边的时候，加个动画」）——
+  标题行的两段位移统一走 `moveTitleRow()`，**只在目标真的变了**时才动画
+  （0.45s + 临界阻尼 + `BeginFromCurrentState`，与封面同一套；"每拍重开动画"是本仓库的老坑）。
+  第一程（这一行还在原生位置）**不**动画 —— 那是进页面时从屏幕中间跳到左上角，滑过去更怪。
+* **箭头**（用户：「它原本就是歌词图标，就无论怎么点，它看起来都是那个歌词图标」）——
+  `applyToggleAppearance` 里展开时**不再**换 `chevron.down`，永远画 `quote.bubble.fill`。
+
+
+
+### 4.6 音量条：两个小喇叭为什么低了 5pt（照片 71 逐像素）
 
 用户原话：**「那两个扬声器的高度没有和那个调整音量的行一样高」** —— 对的。
 
@@ -163,8 +213,12 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
    那一条里三颗**位置不变**；
 3. **收起** → 立刻回到第 1 步的样子（标题回左上角，不留残影）；
 4. 来回 5 次，并**换一首歌**（标题行/分享键都是新对象，看会不会有半拍错位）；
-5. **音量条**：两个小喇叭要和**那条轨（和圆钮）在同一条线**上（照片 71 里它们低了 5pt，见 §4.5）；
-6. 顺便把上一轮那张单子一起拍了（进出转场不闪、三种说明文案、胶囊不在）。
+   ★ 重点：**收起的那一瞬间不许再出现"歌名压住分享键"**（照片 74 那一帧）——动画期间也不许；
+5. **点一下分享键**（58,626 那一颗）：应该弹出 Spotify 的分享面板（日志里会出现
+   `relaying a tap to the share button (…)`）；**再点一下绿 ✓/＋**（371,626）：应该能收藏/取消收藏；
+6. **音量条**：两个小喇叭要和**那条轨（和圆钮）在同一条线**上（照片 71 里它们低了 5pt，见 §4.6）；
+7. **展开/收起各看一次**：歌名/歌手是**滑**过去、不是跳过去；那颗键**始终是歌词气泡**（没有向下箭头）；
+8. 顺便把上一轮那张单子一起拍了（进出转场不闪、三种说明文案、胶囊不在）。
 
 ### 6.2 预期日志（**逐字**）
 
@@ -172,15 +226,21 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 [NPVPage] overlay installed 0,0,414,896; bottom anchor … = …; volume slider 24,830,366,28;
           volume row 24,830,366,28 slider 26,0,314,28 glyphLow 0,1,16,16 glyphHigh 350,1,16,16
           (glyphs lifted 5pt to meet the track)
-[NPVLyrics] share button moved into the control band — 44×44 from …,815,44,44 to 36,604,44,44 (…)
+[NPVLyrics] title row moved to the top left for the closed state — …,612,308,46 to …,98,308,46
+[NPVLyrics] share button moved into the control band — 44×44 from …,789,44,44 to 36,604,44,44 (…
+            (a transparent relay covers that spot and forwards taps)
+[NPVLyrics] relaying a tap to the share button (…)          ← 点分享键时才有
 [NPVLyrics] expanded — thumbnail 72pt at …, lyrics area …, cover shrunk in from …, title row lifted … (anchors: …)
 [NPVLyrics] collapsed (reason=page disappeared)
 ```
 
 ★ 音量那两行的读法：`volume row 24,830,366,28` 是那一行的 frame，`slider 26,0,314,28` 是系统那条
 音量条**在行内**的 frame（28 高、铺满行），`glyphLow 0,1,16,16` 是左喇叭（行内 y=1 ⇒ 中线 9）。
-**判据**：喇叭的中线（9）要落在系统那条轨的中线上 —— 那条轨在行内 ≈9.2（§4.5 量的），
+**判据**：喇叭的中线（9）要落在系统那条轨的中线上 —— 那条轨在行内 ≈9.2（§4.6 量的），
 所以 `glyphLow` 的 y 应该是 **1**；如果日志里是 6（= 没抬），说明这一版没生效。
+
+（中间那个 `title row moved to the top left … to …,98,…` 是**新增**的一行：关着态摆上了才打，
+一次一页一行 —— 上一份日志读不出"关着态到底有没有生效"，就是缺它。）
 
 `bandNote` 三种尾巴，看到哪种就知道是什么情况：
 
@@ -205,9 +265,13 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 | ③ | **展开**时：缩略图 + 歌名/歌手在左上角那一行（现状不变），歌词块起于 242 |
 | ④ | 收起/离开后**没有残影**（标题回原位、分享键回 footer） |
 | ⑤ | 底部两排**一颗都没变**（这正是这一版的取舍） |
-| ⑥ | **音量条**：两个小喇叭与那条轨（和圆钮）**在同一条线**上 —— 照片里对一下 §4.5 那三行数 |
-| ⑦ | S1：无时间轴的歌说明文案是**「这首歌的歌词没有时间轴」** |
-| ⑧ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
+| ⑥ | **音量条**：两个小喇叭与那条轨（和圆钮）**在同一条线**上 —— 照片里对一下 §4.6 那三行数 |
+| ⑦ | ★ **点歌词键收起的那一瞬间**：歌名/歌手**不压**分享键（照片 74 那一帧不复现） |
+| ⑧ | ★ **分享键点得动**（弹出分享面板；日志有 `relaying a tap to the share button`） |
+| ⑨ | ★ **收藏键（＋/绿 ✓，371,626）点得动**（能收藏/取消） |
+| ⑩ | ★ **动画**：展开/收起时歌名/歌手是**滑**过去；那颗键**永远是歌词气泡**（没有向下箭头） |
+| ⑪ | S1：无时间轴的歌说明文案是**「这首歌的歌词没有时间轴」** |
+| ⑫ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
 
 ### 6.4 ⚠️ 已知风险（照片上专门看这几条）
 
@@ -247,11 +311,23 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
   `(inside every ancestor — it should still take taps)`。
 * ★ **"关着态标题行 98…144 不压封面"用的是照片 72 量出来的封面顶边 145**；行高 46 是从真机树
   （`MarqueeLabel 24` + `22`）推的，**没有在真机上量过"行"的整体高度**（背景透明，树里也没有那个 frame）。
-* ★ **音量条那 5pt 是"照片逐像素量出来的偏差"**（§4.5），**不是**"改完之后量过"——
-  抬 5pt 之后两者应该在 839 那一条线上；下一张照片请对着 §4.5 那三行数复核
+* ★ **音量条那 5pt 是"照片逐像素量出来的偏差"**（§4.6），**不是**"改完之后量过"——
+  抬 5pt 之后两者应该在 839 那一条线上；下一张照片请对着 §4.6 那三行数复核
   （日志里 `glyphLow … ,1,16,16` 是"我们摆的"，照片才是"系统画在哪"）。
 * ★ **上半场那版"绿 ✓ 搬进 header"（`f2dc707`）已经作废并撤掉**：代码里**没有**留开关或死代码；
   要回那一版就照 §2 里同一套手法（`transform` + 收尾还原）重写一遍即可，那份说明在
   `git show f2dc707` 里。
 * 本轮**没有派独立只读复核**（改动集中在两处新增 + 两个常量）；若照片 74 显示位置不对 / 有残影，
   **下一轮第一件事就是派复核**。
+* ★ **第三批（照片 74 + 日志 56 之后的四处修复）同样没编译、没装机**，而且其中两处是**新的机制**：
+  * **替身热区**（`eevee-npv-share-relay` + `sendActions`）：**"转发能不能真的弹出分享面板"没有验证过** ——
+    本仓库上一次对胶囊用过同一招（那次是能按动的），但那是 `Primary` 按钮、这次是 `EncoreButton`。
+    日志会先打 `relaying a tap to the share button (…)` ⇒ 至少能分清"我们的转发发生了但对方没响应"
+    还是"热区没收到触摸"。
+  * **容器放行**（`NowPlayingLyricsContainerView.point(inside:)`）：**"收藏键因此变得能点"没有验证过** ——
+    我们只证明了"以前是它吃掉触摸"，没证明"让开之后那颗键自己接得住"（它自己的祖先链也可能挡）。
+    若照片显示 ✓ 仍点不动，下一轮就把 `bandNote` 那套判据也套到它身上（先量出是谁挡的）。
+  * **动画**：`0.45s + 临界阻尼`、且"只在目标变了时才动"；**没有在真机上量过时长/会不会抖**。
+  * **恒定的歌词图标**：`applyToggleAppearance` 里那句 `isOpen ? … : …` 已删，只剩 `quote.bubble.fill`。
+* ★ **照片 74 是"过渡帧"**（用户明确说过：实际页面不长那样）⇒ 它证明的是**收尾顺序有问题**，
+  **不能**当成"关着态的稳态长什么样"来读。
