@@ -75,6 +75,28 @@
 | 10a | 收起态那张大封面是 **Spotify 自己的**（我们那份只在展开时存在），尺寸完全由它的 frame 决定（366pt @ 24,146） | **只写一个 transform** 把它缩到 **242pt**（`restingCoverSide`）：与它**原有** transform 复合、按对象记住原值、离开页面/关开关**精确还原**（仓库规矩 14）。因为 `measure()` 用的是 `convert`（含 transform），`geometry.cover` 自动变成 242 ⇒ 缩略图比、动画起点全部跟着对；封面顶边同时落到 ≈208（顺手把 #3 也解决了） |
 | 10b | 没有现成的单行歌词可复用（Spotify 自己那条 `singalong-lyrics-view` 被我们**关掉了**） | 新增一行居中 `UILabel`（22pt semibold、投影、不吃触摸、id `eevee-npv-single-lyric`），**y = 封面底边与控件条上沿的中点**；判据**一处都不新写**：行模型 `currentLines()`、当前行 `LyricPlaybackTimeline.position()`（本仓库唯一入口）、位置 `WordByWordPositionResolver`、节拍蹭 0.3s（**不抢**共享 CADisplayLink）；新开关 `nowPlayingSingleLyric`（默认开）+ 设置页一行 + en/zh-CN 文案 |
 
+### 2.3b ★ 扩展功能页的三颗"总开关"（提交 `a637a78`，用户 2026-10-12 新提的）
+
+用户原话：「**我觉得有人不会用这个东西，去用正常的去了**。所以我在想，要不要写三个开关在扩展页面里，
+就是 **展示罗马化歌词** 和 **展示歌词翻译**，以及 **展示单行歌词（自制作）**」。
+
+三颗都在 **设置 → 扩展功能 →（听歌页那一段）**，而且**与既有开关共用同一批 `UserDefaults` 键**
+（不是新造一套 ⇒ 两面永远同步）：
+
+| 开关 | 读 | 写 |
+|---|---|---|
+| **展示罗马化歌词** | `NgzhwmSettingsViewModel.anyRomanizationEnabled`（日/中/韩三颗**有一颗开着**就算开） | `setAllRomanization(_:)`（三颗一起设） |
+| **展示歌词翻译** | `!isNeteaseHideTranslationEnabled` | `setHideTranslation(_:)`（与歌词页那颗「隐藏译文」互为反相，**键只有一个**） |
+| **封面与歌词键之间显示一行歌词** | `UserDefaults.nowPlayingSingleLyric` | 同名 setter（上一轮就有了） |
+
+★ 顺带修掉一个"哑开关"隐患：**译文那一档也进了 `romanizationSwitchesFingerprint()`** ——
+它只写 `UserDefaults`、不会让 `currentLyricsVersion` 变，而播放器那一层的宿主是按这个指纹
+决定要不要重建的（`NowPlayingLyricsHost.isCurrent`）⇒ 不进去的话用户拨了开关要**等换歌**才生效。
+
+⚠️ 遗留（没做）：三个罗马化键的字面量仍然散在 `LyricsDto` / `AmllLyricsMapper` /
+`NeteaseLyricsRepository` / `MusixmatchLyricsRepository` 里（现在 `NgzhwmSettingsViewModel`
+里也有一份常量）—— 收敛成一处是另一次改动，别混在这一轮里。
+
 ### 2.4 自查发现的两处地雷（提交 `e6b00c4`，**在 e9efc63 之后补的**）
 
 | 地雷 | 为什么危险 | 改法 |
