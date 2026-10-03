@@ -277,15 +277,49 @@ enum NowPlayingLyricsPlate {
     //     [分享 58]   [我们的歌词键 215]   [绿色 ✓ 371 —— 不动]
     //   而"关着歌词时标题/歌手要挪走"那件事见 `applyClosedTitleTransform`。
 
-    /// 控件条的**中线**（页面坐标 y）。来源：照片 71/72 里绿色 ✓ 的中心 ≈626pt
+    /// 控件条的**中线**（页面坐标 y）。来源：照片 71/72/75 里绿色 ✓ 的中心 ≈626pt
     /// （那是 Spotify 自己的位置，**我们不动它**）—— 另外两颗对齐到同一条线。
     private static let controlBandMidY: CGFloat = 626
 
-    /// 分享键的目标中心 x（照片 71 里用户圈的**第 ① 处** ≈58pt）。
-    private static let shareButtonCenterX: CGFloat = 58
+    /// 下面那一排里某一颗按钮的**中线 x**（页面坐标）—— 控件条要和它**同一条竖线**。
+    ///
+    /// 为什么不写死坐标：用户的判据是"和下面那颗对齐"（照片 75），而这排的位置是
+    /// Spotify 按屏宽排的（414pt 上 shuffle 39.9 / 播放 208）。量不到（那一颗被藏了 /
+    /// 页面还没铺完）才退回兜底常量 —— 宁可回到常量，也不要摆一个左右不齐的键。
+    private static func transportColumnX(_ identifier: String, in page: UIView) -> CGFloat? {
+        // 起点从小到大：整页 BFS 要先趟过列表里那些格子，800 的预算可能在到那儿之前就用完
+        // （`visibleShareButton` 上面记过同一件事）。
+        var roots: [UIView] = []
+        if let player = findByIdentifier(nowPlayingViewIdentifier, in: page) { roots.append(player) }
+        roots.append(page)
 
-    /// 歌词键的目标中心 x（照片 71 里用户圈的**第 ② 处** ≈222pt；取 215 ⇒ 三颗等距 ≈157）。
-    private static let toggleCenterX: CGFloat = 215
+        for root in roots {
+            guard let button = findByIdentifier(identifier, in: root) else { continue }
+            let frame = untransformed(button, in: page)
+            guard frame.width > 1, frame.midX > 0, frame.midX < page.bounds.width else { continue }
+            return frame.midX
+        }
+        return nil
+    }
+
+    /// 分享键的目标中心 x（**兜底值**）。运行时优先量下面那一颗（见 `transportColumnX`）。
+    ///
+    /// ★ 2026-10-11（用户，照片 75）：「分享按键并不和下面的**选择随机播放**按键同一条直线」——
+    /// 对的：照片 75 逐列量出来，分享键中心 **57.4pt**、下面那颗 shuffle 中心 **39.9pt**。
+    /// 所以这一格改成**和 shuffle 同一条竖线**；这个常量只是"量不到 shuffle 时"的兜底。
+    private static let shareButtonCenterX: CGFloat = 40
+
+    /// 歌词键的目标中心 x（**兜底值**）。运行时优先量 `SPTNowPlayingPlayButton`。
+    ///
+    /// ★ 同上（照片 75）：「歌词按键不和下面的**暂停键**同一条直线」——
+    /// 量出来歌词键 **214pt**、播放/暂停 **208pt** ⇒ 改成和它同一条竖线。
+    private static let toggleCenterX: CGFloat = 208
+
+    /// 控件条要和**下面那一排**对齐，这是那两颗的 id。
+    ///
+    /// shuffle：日志 54 的 `[NPVTree]` 里是 `EncoreButton@0,0,48,48,id=Components.UI.ShuffleButton`；
+    /// 播放键：`PlayButtonView@0,0,64,64,id=SPTNowPlayingPlayButton`（本文件早就在用它）。
+    private static let shuffleButtonIdentifier = "Components.UI.ShuffleButton"
 
     /// 分享键的判据（id）：`EncoreButton@0,0,44,44,id=ShareButtonNowPlayingView`（日志 54 的 `[NPVTree]`）。
     ///
@@ -635,7 +669,9 @@ enum NowPlayingLyricsPlate {
         if CFAbsoluteTimeGetCurrent() < pendingOpenUntil {
             // ★ 2026-10-11：`noticeText()` 也算"有东西可画"（用户要的是键随时能按）——
             //   否则一首没词的歌在"第一拍量不到封面"之后就再也没人重试了。
-            if hasLyricsAvailable() || noticeText() != nil {
+            //   ⚠️ 同一天又加了"没有时间轴 ⇒ 静态歌词"那一档 ⇒ 判据换成 `hasSomethingToShow()`
+            //   （它把三档都算进来：有时间轴 / 静态歌词 / 一句说明）。
+            if hasSomethingToShow() {
                 openAndMount(in: page)
                 keepNativeCoverHidden(in: page)
             } else {
@@ -955,7 +991,10 @@ enum NowPlayingLyricsPlate {
             return false
         }
         let lines = currentLines() ?? []
-        if lines.isEmpty, notice == nil {
+        // ★ 2026-10-11（用户问的「歌词呢」）：**没有时间轴**的那一档不算"没词" ——
+        //   数据在，我们把它**静态列出来**（见 `mountStaticLyrics`）。
+        let staticLines = currentUntimedLines()
+        if lines.isEmpty, notice == nil, staticLines == nil {
             noteSkip("no lyric lines to draw right now (the line model is not ready)")
             return false
         }
@@ -1014,6 +1053,11 @@ enum NowPlayingLyricsPlate {
             host.usePerFrameClockIfAvailable()
         }
 
+        // ★ 2026-10-11（用户问的「歌词呢」）：没有时间轴 ⇒ **静态列出全文**。
+        //   放在渲染层**之后**：这一档渲染层没有行可画（`lines` 是空的，它只是被清空），
+        //   静态文本要压在最上面。
+        mountStaticLyrics(staticLines, in: container)
+
         if !didLogInstall {
             didLogInstall = true
             // ⚠️ 不要用嵌套的双引号字面量（`\(a ? "x" : "y")` 那种）—— 本仓库第 6 条自检
@@ -1025,10 +1069,17 @@ enum NowPlayingLyricsPlate {
             } else {
                 titleNote = "lifted \(Int(geometry.lift))pt / shifted \(Int(geometry.shift))pt"
             }
+            let staticNote: String
+            if let staticLines {
+                staticNote = " static lyrics \(staticLines.count) line(s) (this track has no timeline)"
+            } else {
+                staticNote = ""
+            }
             writeDebugLog(
                 "[\(logTag)] expanded — thumbnail \(Int(geometry.thumb.width))pt at \(frameText(geometry.thumb)), "
                     + "lyrics area \(frameText(frame)), cover shrunk in from \(frameText(geometry.cover)), "
                     + "title row \(titleNote)"
+                    + staticNote
                     // ★ 2026-10-11：三个锚点的**实测值**（`measure()` 里算的，这里只管打印）——
                     //   照片 67→68 那两片几何全靠它对齐，下一份日志一眼就能看出量到没有。
                     + " " + lastAnchorText
@@ -1999,7 +2050,9 @@ enum NowPlayingLyricsPlate {
         }
 
         let current = untransformed(button, in: page)
-        let target = CGPoint(x: shareButtonCenterX, y: controlBandMidY)
+        // ★ 2026-10-11（照片 75）：和**下面那颗 shuffle 同一条竖线**（量不到才用常量）。
+        let columnX = transportColumnX(shuffleButtonIdentifier, in: page) ?? shareButtonCenterX
+        let target = CGPoint(x: columnX, y: controlBandMidY)
         let dx = (target.x - current.midX).rounded()
         let dy = (target.y - current.midY).rounded()
         let landed = CGRect(
@@ -2287,7 +2340,9 @@ enum NowPlayingLyricsPlate {
     /// 控件条**量不出来**（没有进度条锚点 / 页面太矮 / 该位置已经被导航条吃掉）时才退回
     /// 下面那套老的三级判据 —— 宁可回到旧行为，也不要摆一个压在进度条或歌词上的键。
     private static func toggleFrame(in page: UIView) -> CGRect? {
-        if let band = controlBandFrame(in: page, side: toggleSide, centerX: toggleCenterX) {
+        // ★ 2026-10-11（照片 75）：和**下面那颗播放/暂停键同一条竖线**（量不到才用常量）。
+        let centerX = transportColumnX(playButtonIdentifier, in: page) ?? toggleCenterX
+        if let band = controlBandFrame(in: page, side: toggleSide, centerX: centerX) {
             return band
         }
         return fallbackToggleFrame(in: page)
@@ -2413,7 +2468,7 @@ enum NowPlayingLyricsPlate {
         applyToggleAppearance(to: zone)
         page.bringSubviewToFront(zone)
         lastToggleZone = zone
-        let words = hasLyricsAvailable() ? "this track has lyrics" : "no lyrics for this track — greyed out"
+        let words = hasAnythingToDrawFast() ? "this track has lyrics" : "no lyrics for this track — greyed out"
         writeDebugLog(
             "[\(logTag)] lyrics button in place \(frameText(wanted)) (visible round button; tap to expand/collapse; \(words))"
         )
@@ -2448,7 +2503,9 @@ enum NowPlayingLyricsPlate {
             }
         }
 
-        zone.alpha = hasLyricsAvailable() ? 1 : toggleDisabledAlpha
+        // ★ 2026-10-11：判据从 `hasLyricsAvailable()`（只认"有时间轴的词级/行级"）换成热路径版的
+        //   `hasAnythingToDrawFast()` —— 否则"没有时间轴但能静态列出全文"那一档会被错误地变灰。
+        zone.alpha = hasAnythingToDrawFast() ? 1 : toggleDisabledAlpha
     }
 
     /// 把那枚键拿走（关开关 / 离开页面）。
@@ -2575,9 +2632,12 @@ enum NowPlayingLyricsPlate {
             //   会把"一行时间都没有"的整首歌滤成空 ⇒ 我们这层没有行模型；
             //   而**注入给 Spotify 的那份 payload 是带这些行的**（Spotify 自己的歌词卡能列全文）
             //   ⇒ 用户看到的是"歌词明明有、我们却说未找到"。数据在，只是没有时间轴。
-            //   （渲染层要吃时间轴，静态列出全文是另一件事 —— 见 handoff 里的"还没做"。）
+            //
+            // ★★ 2026-10-11（用户追了一句「**歌词呢**」）：这一档**不再只写一句话** ——
+            //   文本提得出来就 `nil`（去画静态歌词，见 `mountStaticLyrics`）；
+            //   只有**连文本都提不出来**（全是空行）才退回那句话。
             if !dto.lines.contains(where: { $0.offsetMs != nil }) {
-                return "lyrics_no_timeline".localized
+                return currentUntimedLines() == nil ? "lyrics_no_timeline".localized : nil
             }
             // 有行、也有至少一行带时间，却还是画不出来 ⇒ 这是转换异常，按"没找到"说，**别做成死键**。
             return "ngzhwm_lyrics_unavailable".localized
@@ -2592,6 +2652,34 @@ enum NowPlayingLyricsPlate {
     }
 
     private static weak var lastNoticeLabel: UILabel?
+
+    /// ★ 2026-10-11：「没有时间轴」那一档的**静态全文**（见 `NowPlayingStaticLyricsView`）。
+    private static weak var staticLyricsView: NowPlayingStaticLyricsView?
+
+    /// 摆 / 撤那份静态歌词。`lines == nil` ⇒ 撤掉（有时间轴那一档走渲染层）。
+    private static func mountStaticLyrics(_ lines: [String]?, in container: UIView) {
+        guard let lines else {
+            staticLyricsView?.removeFromSuperview()
+            staticLyricsView = nil
+            return
+        }
+
+        let view: NowPlayingStaticLyricsView
+        if let existing = staticLyricsView, existing.superview === container {
+            view = existing
+        } else {
+            staticLyricsView?.removeFromSuperview()
+            let fresh = NowPlayingStaticLyricsView(frame: container.bounds)
+            fresh.accessibilityIdentifier = "eevee-npv-static-lyrics"
+            container.addSubview(fresh)
+            staticLyricsView = fresh
+            view = fresh
+        }
+
+        if view.frame != container.bounds { view.frame = container.bounds }
+        view.apply(lines: lines, width: container.bounds.width)
+        container.bringSubviewToFront(view)
+    }
 
     /// 摆 / 撤那句说明。`text == nil` ⇒ 撤掉（有歌词可画了）。
     private static func applyNoticeLabel(_ text: String?, in container: UIView) {
@@ -2640,6 +2728,46 @@ enum NowPlayingLyricsPlate {
         return lines.isEmpty ? nil : lines
     }
 
+    /// 这一首"**没有时间轴、但有行**"的歌词文本（`nil` = 这一档不适用）。
+    ///
+    /// ★ 2026-10-11（用户问的「**歌词呢**」）：加载到没有时间轴的歌词时，
+    /// 以前只写一句「这首歌的歌词没有时间轴」—— 数据明明在（Spotify 自己那张卡列得出全文）。
+    /// 现在把文本提出来**静态列出来**（见 `mountStaticLyrics`），这一档才算真的有内容。
+    ///
+    /// ⚠️ 只认"**一行时间都没有**"这一档；只要有一行带 `offsetMs`，就交给时间轴那条路
+    /// （`LyricLinesAdapter` 会把带时间的挑出来渲染）。
+    private static func currentUntimedLines() -> [String]? {
+        guard let dto = currentLyricsDto, !dto.lines.isEmpty else { return nil }
+        guard !dto.lines.contains(where: { $0.offsetMs != nil }) else { return nil }
+        let texts = dto.lines
+            .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return texts.isEmpty ? nil : texts
+    }
+
+    /// 这一首**有没有东西可画**：画歌词 / 画静态歌词 / 写一句话 —— 三占其一。
+    ///
+    /// ⚠️ 它会建数组（`currentUntimedLines` / `noticeText`），**只能用在"点开的那几拍"**
+    /// （重试窗口 ≤5 拍）；每 0.3s 的复查节拍上要用 `hasAnythingToDrawFast()`。
+    private static func hasSomethingToShow() -> Bool {
+        if hasLyricsAvailable() { return true }
+        if currentUntimedLines() != nil { return true }
+        return noticeText() != nil
+    }
+
+    /// 热路径版（**不建数组**，只读几个 bool / 计数）：有没有东西可画。
+    ///
+    /// ⚠️ 不能在这里调 `noticeText()` / `currentLines()` —— 那是每 0.3s 一次的节拍
+    /// （`hasLyricsAvailable()` 上面那段注释记过同一件事）。
+    private static func hasAnythingToDrawFast() -> Bool {
+        if hasLyricsAvailable() { return true }
+        if currentLyricsDto?.lines.isEmpty == false { return true }
+        switch currentLyricsLookupState {
+        case .idle, .loading: return true      // 还在查 ⇒ 键也该是亮的（点了会说明"正在查找"）
+        case .failed, .found: return false
+        }
+    }
+
     private static func currentTrackId() -> String? {
         let id = (statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack)?
             .trackIdentifier ?? ""
@@ -2678,6 +2806,59 @@ enum NowPlayingLyricsPlate {
             queue.append(contentsOf: view.subviews)
         }
         return nil
+    }
+}
+
+/// 没有时间轴时那份"**静态歌词**"：一个会滚的文本块，所有行一样亮（不高亮、不跟随、不跳转）。
+///
+/// 为什么不用现有的渲染层（用户 2026-10-11 问的「**歌词呢**」）：
+/// 时间轴那一档是靠 `LyricLine.time` 驱动高亮与滚动的，而"没有时间轴"的歌**一行时间都没有** ——
+/// 硬塞一个假时间进去，渲染层会自己高亮/滚到某一行（那是错的观感）。
+/// 所以这一档用最笨也最可控的一条：把全文拼进一个 `UILabel`，外面套一个 `UIScrollView`。
+///
+/// 字号/间距跟 `.player` 档对齐（主歌词 22pt、块距 26 —— 见 `AppleMusicLyricsTextProfiles`）。
+final class NowPlayingStaticLyricsView: UIScrollView {
+
+    private let label = UILabel()
+    private var drawnWidth: CGFloat = 0
+    private var drawnLines: [String] = []
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        showsVerticalScrollIndicator = false
+        alwaysBounceVertical = true
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        addSubview(label)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// 摆一遍全文（幂等：内容没变就只调 frame）。
+    func apply(lines: [String], width: CGFloat) {
+        let inner = max(80, width - 32)
+        if drawnWidth != inner || drawnLines != lines {
+            drawnWidth = inner
+            drawnLines = lines
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            paragraph.lineSpacing = 8
+            paragraph.paragraphSpacing = 18
+            label.attributedText = NSAttributedString(
+                string: lines.joined(separator: "\n"),
+                attributes: [
+                    .font: UIFont.systemFont(ofSize: 22, weight: .medium),
+                    .foregroundColor: UIColor.white.withAlphaComponent(0.88),
+                    .paragraphStyle: paragraph,
+                ]
+            )
+        }
+        let height = label.sizeThatFits(CGSize(width: inner, height: .greatestFiniteMagnitude)).height
+        let top = max(8, (bounds.height - height) / 2)
+        label.frame = CGRect(x: 16, y: top, width: inner, height: height)
+        contentSize = CGSize(width: width, height: max(bounds.height, height + top * 2))
     }
 }
 
