@@ -361,6 +361,7 @@ extras_description = "Features added on top of EeveeSpotify, kept together here 
 declutter_description = "Hides Spotify's own non-content chrome by class name, taken from this device's view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
 hide_mini_player_bar = "Hide the mini player bar";
 hide_singalong_line = "Hide the one-line lyrics under the cover";
+hide_npv_pills = "Hide the Now Playing pills (switch to video / show lyrics)";
 declutter_home_player_section = "Home and player";
 declutter_home_player_description = "Hides three more of Spotify's own chrome, each taken from this device's view-tree dumps. The connect button is shared between the mini bar and the player, so hiding it removes it from every transport row.";
 hide_home_header = "Hide the Home header";

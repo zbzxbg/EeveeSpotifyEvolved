@@ -31,6 +31,7 @@ struct EeveeExtrasSettingsView: View {
     private struct Shadow {
         var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
         var hideSingalongLine = UserDefaults.hideSingalongLine
+        var hideNowPlayingPills = UserDefaults.hideNowPlayingPills
         var hideHomeHeader = UserDefaults.hideHomeHeader
         var hideConnectButton = UserDefaults.hideConnectButton
         var hideAddToButton = UserDefaults.hideAddToButton
@@ -65,6 +66,17 @@ struct EeveeExtrasSettingsView: View {
                     isOn: declutterBinding(
                         \.hideSingalongLine,
                         persist: { UserDefaults.hideSingalongLine = $0 }
+                    )
+                )
+
+                // ★ 2026-10-10（照片 63）：听歌页那排胶囊（「切换至视频」+「显示 / 隐藏歌词」）。
+                //   判据是**无障碍 id**（日志 54 的 `[NPVTree]`）：`lyrics-npv-switch-button` /
+                //   `nowplaying-npv-musicvideos-switch`；关掉开关即当场写回 `alpha`。
+                Toggle(
+                    "hide_npv_pills".localized,
+                    isOn: declutterBinding(
+                        \.hideNowPlayingPills,
+                        persist: { UserDefaults.hideNowPlayingPills = $0 }
                     )
                 )
             }

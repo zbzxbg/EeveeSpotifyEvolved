@@ -26,6 +26,7 @@ extension UserDefaults {
     private static let dumpViewTreeKey = "dumpViewTree"
     private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
     private static let hideSingalongLineKey = "hideSingalongLine"
+    private static let hideNowPlayingPillsKey = "hideNowPlayingPills"
     private static let hideHomeHeaderKey = "hideHomeHeader"
     private static let hideConnectButtonKey = "hideConnectButton"
     private static let hideAddToButtonKey = "hideAddToButton"
@@ -74,6 +75,7 @@ extension UserDefaults {
         dumpViewTreeKey,
         hideMiniPlayerBarKey,
         hideSingalongLineKey,
+        hideNowPlayingPillsKey,
         hideHomeHeaderKey,
         hideConnectButtonKey,
         hideAddToButtonKey,
@@ -344,20 +346,44 @@ extension UserDefaults {
     /// ⇒ **藏视图只去得掉内容，Spotify 的"抬高封面"那个功能还在**。用户要的是 **59**
     /// （= 功能真的关掉）。
     ///
-    /// ★ 2026-10-09（照片 60 之后定案，现在是**三层**）：
-    ///   ① `DeclutterChrome.applySingalongPreference` 当场把那一行的视图 `hidden`
-    ///      （屏幕上立刻没有那一行 —— 上一轮把这一层删掉、只留②，于是②一失败就什么都没发生）；
-    ///   ② 同一条路里替用户按下 Spotify 自己那颗胶囊（判据：类名子串 **或** 无障碍标签
-    ///      「显示歌词 / 隐藏歌词」——日志 53 证明只靠类名子串是**零命中**的）；
-    ///   ③ **`lyrics_under_cover_art_enabled=false`** 的远端配置替换
-    ///      （`DynamicPremium+ModifyingFunctions`）—— 连"封面被抬起来"的布局后果与那颗胶囊
-    ///      一起从根上关掉，**下次启动**生效。
+    /// ★ 2026-10-10（照片 63 之后定案，现在是**两层 + 一颗开关**）：
+    ///   ① `DeclutterChrome.applySingalongLine` 当场把那一行的视图 `hidden`
+    ///      （屏幕上立刻没有那一行）；
+    ///   ② **`lyrics_under_cover_art_enabled=false`** 的远端配置替换
+    ///      （`DynamicPremium+ModifyingFunctions`）—— 连"封面被抬起来"的布局后果一起从根上关掉，
+    ///      **下次启动**生效。★ 日志 54 已证第二层真的生效：整份日志里 `LyricsContainerView` /
+    ///      `singalong-lyrics-view` **一个都没有**。
+    ///   ③ 那两颗胶囊（「切换至视频」/「显示歌词」）**不归这个开关**，归
+    ///      `hideNowPlayingPills`（见下）。
     static var hideSingalongLine: Bool {
         get {
             container.object(forKey: hideSingalongLineKey) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: hideSingalongLineKey)
+        }
+    }
+
+    /// 隐藏听歌页底部那排**胶囊**：「切换至视频」+「显示/隐藏歌词」。默认**开**。
+    ///
+    /// ★ 2026-10-10（照片 63）：用户第二次报"这个隐藏歌词的胶囊还在"，并新发现旁边那颗
+    /// 「切换至视频」。日志 54 的 `[NPVTree]` 一次把两颗都点名了（**它们都有无障碍 id**，
+    /// 之前一直在按类名/标签猜，白绕了一圈）：
+    ///
+    /// ```
+    /// 13.Primary@0,0,26,32,hidden,id=nowplaying-npv-musicvideos-switch    ← 「切换至视频」（无视频时 hidden）
+    /// 13.Primary@0,0,104,32,id=lyrics-npv-switch-button                   ← 「显示/隐藏歌词」（104pt = 图标 + 文字）
+    /// ```
+    ///
+    /// 归属：两颗是**同一排**、同一类（`Encore.Button.Primary`），一起给一个开关最省事，
+    /// 也符合用户"这两个都不该出现"的说法。关掉开关 ⇒ 写回 `alpha`（**不用 `hidden`**：
+    /// pw 的文档明确写过 Encore/OverflowStack 那类栈里写 `hidden` 会崩）。
+    static var hideNowPlayingPills: Bool {
+        get {
+            container.object(forKey: hideNowPlayingPillsKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: hideNowPlayingPillsKey)
         }
     }
 

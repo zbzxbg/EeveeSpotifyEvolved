@@ -529,47 +529,109 @@ enum NowPlayingLyricsPlate {
     // 结论：不对别人的入口下手。真正要消失的那一行，去改**我们自己**的画法
     // （`AppleMusicLyricsOverlayView.showsPreviewHeader`）。
 
-    /// ★ 2026-10-09（照片 61）：**封面自己重排的那一刻**立刻按住它。
+    /// ★★ 2026-10-10（照片 64，pw 的手法）：**封面自己布局的那一刻，就地按住它自己的那张图。**
     ///
-    /// 换歌时 Spotify 会**新建**一个封面（contentlayer 换 cell：日志 53 的
-    /// `cell-5000 hidden` → `cell-5001` 可见），而我们只藏了**上一个对象**
-    /// ⇒ 新封面整张露在屏幕上，直到下一次复查节拍（≤0.3s）才被按掉。
-    /// 照片 61 就是这个空档：`24,163,366,366` 那张原生封面（当时还是 loading 占位）
-    /// 大剌剌地铺在歌词底下，而我们的缩略图 / 上移的标题都还在。
+    /// ## 为什么上一版还不够（照片 64 的现场）
     ///
-    /// 轮询改不了这件事（0.3s 就是空档本身），所以挂 `CoverArtTiltView.layoutSubviews`
-    /// （见 `CoverFlashGuard.x.swift`）——**它一布局就按，不等下一拍**。
+    /// 上一版挂的是同一个 hook，但动作是 **`keepNativeCoverHidden`** —— 也就是"在整棵树里
+    /// **再找一遍**哪张是当前封面"（`visibleCover` 那三趟判据：`Encore.ImageView` + 在
+    /// `SPTNowPlayingView` 里 + 祖先没被折成 0 ……）。换歌那一瞬间这**必然失手**：
+    /// 新封面可能还在淡入（`alpha` 还是 0）、或被 tier 判据排除 ⇒ `visibleCover` 挑中的
+    /// 是**上一张（已经 alpha=0 的）** ⇒ `alpha = 0` 写在旧对象上，**新封面整张露着**。
+    /// 照片 64 就是这一帧：原生大封面（新歌的图）+ 我们的缩略图（上一首的图）同屏。
     ///
-    /// ## 门禁与成本（独立复核提的：这条路可能很热）
+    /// ## pw 怎么做（`.spotify-ipa/spotipw-v0.21.1/.../PlayerArtwork.x`）
     ///
-    /// * 只认**够大、在窗口里**的那个 tilt（`bounds.width >= 200` + `window != nil`）——
-    ///   列表里那张被折成 0 高的卡上行不行都不必试；
-    /// * **新对象立刻走一次**（`tilt !== lastGuardedTilt`）—— 这正是"换歌"的那一下；
-    ///   同一个对象连着布局则按 50ms 节流（≈20 次/秒上限，且每次都是有界走查）；
-    /// * 只在**我们确实铺着**（`isOpen` 或我们的层还在屏上）时动手；
-    /// * **不改任何别人的布局**，只把当前那张主封面写成 `alpha = 0`（与每拍那条同一条路）。
+    /// 它**不搜索**：`%hook CoverArtTiltView` 的 `layoutSubviews` 里
+    /// ① `bounds.width >= 200` 且 ② `inCoverCell(tilt)`（祖先里有 `CoverArtCellImpl`），
+    /// 然后 `coverIn(tilt)` = **它自己那个和 tilt 等大的直接子视图**，对它下手。
+    /// 局部、无竞态、不依赖"哪一张现在可见"。
+    ///
+    /// ⇒ 这里照抄同一套（许可证：v0.21.1 是 GPL-3.0，与本仓库一致；思路复用、代码自己写）：
+    ///   · 门禁：开关开 + **我们确实铺着** + tilt 在窗口里且够大 + **祖先里有 `CoverArtCellImpl`**
+    ///     （这一条把迷你条/卡片里那些 tilt 一次滤掉 —— pw 同款）；
+    ///   · 动作：把"和 tilt 等大的那个直接子视图"写成 `alpha = 0`（**同一个 `hideSpotifyCover`
+    ///     的还原表**，关开关/离页时照旧写回）；
+    ///   · **不做节流**：动作是局部的（几次子视图比较），比走查便宜一个量级，
+    ///     而且节流正是"闪一下"的来源。
     static func coverDidLayOut(from tilt: UIView) {
         guard isEnabled, #available(iOS 26.0, *) else { return }
         guard isOpen || coverHost != nil || lastContainer != nil else { return }
-        guard tilt.window != nil, tilt.bounds.width >= 200 else { return }
-        guard let page = lastPage, page.window != nil else { return }
+        guard tilt.window != nil, tilt.bounds.width >= 200 else { return noteCoverGuardReject() }
+        guard isInsideCoverCell(tilt) else { return noteCoverGuardReject() }
+        guard let cover = sameSizeChild(of: tilt), cover.alpha > 0.01 else {
+            return noteCoverGuardReject()
+        }
+        guard let page = lastPage, page.window != nil else { return noteCoverGuardReject() }
 
-        let isNewCoverObject = tilt !== lastGuardedTilt
-        let now = CFAbsoluteTimeGetCurrent()
-        guard isNewCoverObject || now >= nextCoverGuardAt else { return }
+        hideSpotifyCover(cover, in: page)
 
-        lastGuardedTilt = tilt
-        nextCoverGuardAt = now + coverGuardInterval
-
-        keepNativeCoverHidden(in: page)
+        coverLocalHides += 1
+        guard coverLocalHides == 1 || coverLocalHides % 20 == 0 else { return }
+        writeDebugLog(
+            "[\(logTag)] hid the native cover from its own tilt (local path) — hide #\(coverLocalHides),"
+                + " \(coverLocalRejects) gate rejection(s) so far"
+        )
     }
 
-    /// 事件驱动那条路的自节流（见 `coverDidLayOut`）。
-    private static var nextCoverGuardAt: CFAbsoluteTime = 0
-    private static let coverGuardInterval: CFAbsoluteTime = 0.05
-    /// 上一次"事件驱动"按住的是哪一个 tilt：**换了新对象就立刻再走一遍**（换歌那一下必须零延迟），
-    /// 同一个对象则受节流（见 `coverDidLayOut`）。
-    private static weak var lastGuardedTilt: UIView?
+    /// 门禁没过的计数 + 一次总结。
+    ///
+    /// ★ 为什么必须有（独立复核指出这条新路**原来一行日志都没有**）：日志里只有
+    /// `[CoverGuard] armed on …`（装没装），却分不清"tilt 从来没布局过"与"布局了但门禁一直不过"。
+    /// 后面那条正是照片 64 复发时最需要知道的事。
+    private static var coverLocalHides = 0
+    private static var coverLocalRejects = 0
+    private static var reportedCoverGuardReject = false
+    private static let coverGuardRejectReportAfter = 60
+
+    private static func noteCoverGuardReject() {
+        coverLocalRejects += 1
+        guard !reportedCoverGuardReject, coverLocalRejects >= coverGuardRejectReportAfter else { return }
+        reportedCoverGuardReject = true
+        writeDebugLog(
+            "[\(logTag)] the cover-tilt guard rejected \(coverLocalRejects) layout(s) and never hid anything"
+                + " — check the gates (window / width / CoverArtCellImpl ancestor / same-size child)"
+        )
+    }
+
+    /// pw 的 `inCoverCell(tilt)`：祖先里有 `NowPlaying_ContentLayersImpl.CoverArtCellImpl`。
+    ///
+    /// 为什么认这个类：contentlayer 里**真正的封面**住在 `CoverArtCellImpl` 这个 cell 里
+    /// （日志 53：`10.CoverArtCellImpl@…,id=nowplaying-contentlayer-cell-5000` 换到 `-5001`），
+    /// 而迷你条、列表卡片里那些 tilt 不在其内 ⇒ 一条判据同时解决"是哪张"与"要不要管"。
+    ///
+    /// ⚠️ 用 **`isKind(of:)`（= pw 的 `isKindOfClass:`）而不是比较类名字符串**（独立复核指出）：
+    /// 字符串比较只在**恰好**是那个类时成立，Spotify 一旦派生子类就静默失效 ——
+    /// 而 `NSClassFromString` 一次拿到类对象，之后 `isKind` 连子类一起认。
+    /// 走查有界（8 跳），拿不到就放弃（宁可漏，不可误伤）。
+    private static func isInsideCoverCell(_ tilt: UIView) -> Bool {
+        guard let cellClass = coverCellClass else { return false }
+        var node: UIView? = tilt.superview
+        var hops = 0
+        while let current = node, hops < 8 {
+            if current.isKind(of: cellClass) { return true }
+            node = current.superview
+            hops += 1
+        }
+        return false
+    }
+
+    /// 只查**一个**类（不是运行时类枚举，本仓库纪律 1）。
+    private static let coverCellClass: AnyClass? =
+        NSClassFromString("NowPlaying_ContentLayersImpl.CoverArtCellImpl")
+
+    /// pw 的 `coverIn(tilt)`：**和 tilt 等大的那个直接子视图**就是封面
+    /// （`CoverArtTiltView 354x354 > 一个同样大小的 ElementView > ImageViewProxy >
+    /// `Encore.ImageView` > 真正画图的 `UIImageView`，见 pw 那份 `PlayerArtwork.x` 的树注）。
+    ///
+    /// ⚠️ 用 `bounds` 比大小，不用 `frame`：tilt 被 inspect 手势转过时 `frame` 会变、`bounds` 不变
+    /// （pw 同款注释，也是本仓库规矩 8）。
+    private static func sameSizeChild(of tilt: UIView) -> UIView? {
+        for sub in tilt.subviews where CGSizeEqualToSize(sub.bounds.size, tilt.bounds.size) {
+            return sub
+        }
+        return nil
+    }
 
     /// 铺一次；失败就退回"未展开"并**开重试窗口**。
     ///

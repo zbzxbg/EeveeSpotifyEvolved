@@ -101,129 +101,50 @@ enum DeclutterChrome {
         writeDebugLog("[Declutter] \(message)")
     }
 
-    /// ★★ 2026-10-09：**「封面下单行歌词」这个开关到底该干什么 —— 三层，各管一段。**
+    /// ★★ 2026-10-10（照片 63 之后定案）：**「封面下单行歌词」这个开关 = 两层，各管一段。**
     ///
-    /// ## 用户给的两轮现场
+    /// ## 三代现场（用户给的，逐字）
     ///
-    /// 第一轮（照片 58/59，逐字）：
-    /// > 图片 58 是胶囊显示「显示歌词」（**此时单行功能生效**）的时候截屏的
-    /// > （但是这个功能似乎是**只隐藏歌词内容，不隐藏功能，所以封面被抬上去了**）；
-    /// > 图片 59 是胶囊显示「隐藏歌词」的时候截屏的（**此时单行功能关闭，封面还是原来的正常的样子**）。
-    /// > **我想要的高度效果是图片 59 的效果。**
+    /// 第一轮（照片 58/59）：
+    /// > 图片 58 是胶囊显示「显示歌词」（**此时单行功能生效**）的时候截屏的 …… 图片 59 是胶囊显示
+    /// > 「隐藏歌词」的时候截屏的（**此时单行功能关闭，封面还是原来的正常的样子**）。**我想要的高度效果是图片 59。**
     ///
     /// 第二轮（照片 60）：
     /// > **那个单行歌词并没有被隐藏** …… 并且开关「隐藏封面下单行歌词」的按钮没有用。
     ///
-    /// ## 日志 53 说清了"为什么没有用"
+    /// 第三轮（照片 63）：
+    /// > **还没把这个隐藏歌词的胶囊搞掉吗**，而且还发现了另外一个「切换至视频」的胶囊。
+    ///
+    /// ## 现在为什么能成（证据在日志 54，不是推的）
     ///
     /// ```
-    /// 08:08:02  [Declutter] singalong is on but the show/hide-lyrics pill was not found
-    ///                       - leaving it alone (you can still switch it off by hand; …)
+    /// 13.Primary@0,0,104,32,id=lyrics-npv-switch-button                 ← 那颗胶囊（一直有 id！）
+    /// 13.Primary@0,0,26,32,hidden,id=nowplaying-npv-musicvideos-switch  ← 旁边那颗
     /// ```
+    /// 而且日志 54 整份里 `LyricsContainerView` / `singalong-lyrics-view` **一个都没有**
+    /// ⇒ 第三层的 flag（`lyrics_under_cover_art_enabled=false`）**已经把功能从根上拿掉了**，
+    /// 所以这一轮不必再"替用户按"，只剩两件**没有副作用**的事：
     ///
-    /// 上一轮把整个机制压在**"替用户按下那颗胶囊"**这一条路上，而那颗胶囊的判据是
-    /// **类名子串 `ShowLyricsButton`**（来自类名表 `dump-9.1.88.txt:3570`
-    /// 的 `Lyrics_CardElementImpl.ShowLyricsButtonElementUI`）。日志 53 的
-    /// `[NPVTree]`（听歌页子树，390–556 节点，**没有截断**）里**一个含 `ShowLyricsButton`
-    /// 的视图都没有** ⇒ 那条判据在运行期根本命不中，于是：不按、不藏、什么都不做。
-    /// **类名子串是猜的，不是从视图树上读来的** —— 这正是仓库规矩 4 说的那件事。
+    /// | 层 | 做什么 | 在哪 | 生效时机 |
+    /// |---|---|---|---|
+    /// | ① **内容层**：那一行视图 `hidden` | `applySingalongLine`（本文件） | ≤0.3s |
+    /// | ② **根上层**：`lyrics_under_cover_art_enabled=false` | `Premium/DynamicPremium+ModifyingFunctions.swift` | 下次启动 |
+    /// | ③ **chrome 层**：那两颗胶囊 `alpha = 0` | `applyNowPlayingPills`（本文件） | 出现即隐藏（事件 hook） |
     ///
-    /// ## 现在的三层（从"立刻能看见"到"从根上关掉"）
-    ///
-    /// | 层 | 做什么 | 什么时候生效 |
-    /// |---|---|---|
-    /// | ① **当场藏掉那一行**（`singalong.isHidden = true` + 我们的标记） | 屏幕上立刻没有那一行歌词 | 下一拍（≤0.3s） |
-    /// | ② **按它自己的胶囊**（判据放宽：类名子串 **或** 无障碍标签；**一场只按一次**） | Spotify 自己的功能被真正关掉 | 找到就立刻 |
-    /// | ③ **关掉它自己的 flag**（`lyrics_under_cover_art_enabled=false`，见 `DynamicPremium+ModifyingFunctions`） | 连"封面被抬起来"的布局后果与那颗胶囊一起消失 | **下次启动**（customize 重发） |
-    ///
-    /// ①与②③**不冲突**：①只让那一行看不见（内容层），③管的是"这个功能在不在"（布局层）。
-    /// 上一轮把①整块删掉、只留②，于是②一失败就**什么都没有** —— 那正是照片 60 的状态。
-    ///
-    /// ⚠️ 找到胶囊时**用 `sendActions(for: .touchUpInside)` 而不是改它的 state**：
-    /// 让 Spotify 自己走一遍它的动作（它要落盘用户偏好、要重排那一格）。
-    ///
-    /// ⚠️ 判据为什么从"整窗 BFS 2000 节点"改成"**key window + 更大预算**"：
-    /// 那颗胶囊在听歌页的**覆盖层**上（照片 58 里它在底部左侧、进度条上方），
-    /// 而听歌页子树本身就有 390–556 个节点，全窗口 BFS 的前 2000 个很容易被首页那棵大树吃光。
-    @discardableResult
-    static func applySingalongPreference(singalong: UIView, in root: UIView) -> Bool {
-        // ① 内容层：不管功能开没开，这一行都不该出现（开关开着的时候）。
-        if !singalong.isHidden {
-            singalong.isHidden = true
-            markHiddenByUs(singalong)
-            reportOnce(
-                "singalongLineHidden",
-                "hid the sing-along line itself (the feature is still Spotify's; see the flag below)"
-            )
-        }
-
-        // 本来就关着（那一格高度 0）：没什么可关的，算成功。
-        guard singalong.bounds.height > 1 else { return true }
-
-        // ★★ 一次会话**只按一次**（独立复核抓到的 blocker）。
-        //
-        // 那颗胶囊上写的是「显示歌词 / 隐藏歌词」—— **两个标签都在判据表里**，
-        // 而判据不看 `alpha` / `isHidden`。所以"按过之后再按一次"是**完全可能**的：
-        // 节流只挡住 2s 内的重复，T+2s / T+4s 那两拍会再次找到**同一个控件**并按下去。
-        // `sendActions` 是**切换**，于是按两次 = 又开回来（照片 58 的封面被抬起 = 用户报的那个症状），
-        // 而日志还会连着说两遍"已经关掉了"。
-        //
-        // ⇒ 按下过就记账（`pillWeHid` 非空 = 这一场已经按过），不再找、不再按。
-        //    真要"再关一次"只有两条路：用户把开关关掉再打开（`restoreSingalongIfNeeded` 清账），
-        //    或者**第三层**（`lyrics_under_cover_art_enabled=false`，下次启动）。
-        guard pillWeHid == nil else { return true }
-
-        // ② 功能层：替他按下那颗胶囊。
-        switch lookUpShowLyricsPill(in: root) {
-        case .found(let control):
-            control.sendActions(for: .touchUpInside)
-            // ★ 按住的就是**刚按下去的那一个**（不要再走一次查找 —— 那条查找有 2s 节流与 3 次上限，
-            //   第二次调用必然空手而归，胶囊就会留在屏幕上，而用户明确说过它不该出现）。
-            pillWeHid = control
-            control.alpha = 0
-            reportOnce(
-                "singalongOff",
-                "turned Spotify's own singalong line off through its pill"
-                    + " (hiding the view was not enough: it removed the text but left the cover lifted)"
-            )
-            reportOnce(
-                "singalongPillHidden",
-                "hid the show/hide-lyrics pill (the singalong is off, so it has nothing left to toggle)"
-            )
-            return true
-
-        case .notFound:
-            // ★ 只有**真的把三次预算走完**才算"找不到"（独立复核抓到：节流/预算用尽那一拍
-            //   上一版也会走到这里，于是第一次空手就打"找不到"，那句日志此后永不重复，
-            //   结果是"三次都空"和"只试了一次"在日志里长得一模一样）。
-            guard pillSearchAttempts >= pillSearchMaxAttempts else { return false }
-            reportPillSearchShapeOnce()
-            reportOnce(
-                "singalongPillMissing",
-                "singalong is on but no show/hide-lyrics pill was found after"
-                    + " \(pillSearchMaxAttempts) search(es) - the line stays hidden,"
-                    + " and the flag replacement (next launch) takes the feature itself away"
-            )
-            return false
-
-        case .skipped:
-            // 节流 / 预算用尽：这一拍**根本没查**，什么都不许报。
-            return false
-        }
+    /// 上一轮那套"找胶囊 + 按胶囊"**整块删掉**，理由见本文件 `nowPlayingPillIdentifiers` 上面那段注释。
+    static func applySingalongLine(_ singalong: UIView) {
+        guard !singalong.isHidden else { return }
+        singalong.isHidden = true
+        markHiddenByUs(singalong)
+        reportOnce(
+            "singalongLineHidden",
+            "hid the sing-along line itself (the feature itself is off through"
+                + " lyrics_under_cover_art_enabled=false; see the flag replacement)"
+        )
     }
 
-    /// 那行被抬起来之后要写回的东西：`.singalong` 视图本身（旧版本可能给它写过 `hidden`）
-    /// 和我们按住过的那颗胶囊。
-    private static weak var pillWeHid: UIView?
-
-    /// 关掉开关时写回。
-    ///
-    /// ⚠️ **写回的是"我们动过的视图"，不是"Spotify 的偏好"**（独立复核指出这里原来那句话说得太满）：
-    /// 我们按下去的那颗胶囊走的是 Spotify 自己的动作（它会落盘用户偏好），而**偏好写不回去** ——
-    /// 想还原只能"再按一次"，可那时屏幕上分不清"是我们关的"还是"用户自己关的"
-    /// （判据只有那一行的高度），再按一次就可能**违背用户刚刚的手动选择**。
-    /// ⇒ 所以：视图全部还原（那一行、那颗胶囊的 `alpha`）、**偏好留给用户自己按一下**
-    ///   （胶囊已经被我们写回可见了），并在文档里写明这一点。
+    /// 关掉开关时写回那一行（旧机制可能给它写过 `hidden`）。
+    /// ⚠️ 那两颗胶囊的写回在 `apply(wantVanished:to:)` 里（走 `vanishedPills` 那张表）。
     private static func restoreSingalongIfNeeded(_ view: UIView) {
         // 旧机制（藏视图）留下的痕迹也要清掉，否则升级上来的用户会一直看不到那一行。
         if wasHiddenByUs(view) {
@@ -231,135 +152,161 @@ enum DeclutterChrome {
             clearHiddenByUs(view)
             writeDebugLog("[Declutter] singalongLine restored")
         }
-        // 那条走查的账也要清：用户关掉再打开开关时，应该重新给三次机会去找那颗胶囊
-        // （`pillWeHid` 也一起清 —— 「一次会话只按一次」那条门禁就是它）。
-        pillSearchAttempts = 0
-        lastPillSearchAt = 0
-        reportedPillSearchShape = false
-        lastPillSearchControlsSeen = 0
-
-        guard let pill = pillWeHid else { return }
-        pill.alpha = 1
-        pillWeHid = nil
-        writeDebugLog(
-            "[Declutter] the show/hide-lyrics pill is visible again"
-                + " (Spotify's own preference is whatever our single press left it at -"
-                + " press the pill once if you want it back)"
-        )
     }
 
-    /// 那颗「显示歌词 / 隐藏歌词」胶囊 —— **它没有 id**，找到后要拿到它**能点的那个 `UIControl`**。
-    ///
-    /// ## 两条判据（2026-10-09 放宽）
-    ///
-    /// 1. **类名子串 `ShowLyricsButton`** —— 来自类名表
-    ///    （`Lyrics_CardElementImpl.ShowLyricsButtonElementUI`，`dump-9.1.88.txt:3570`）。
-    ///    ⚠️ 它在日志 53 的听歌页视图树（`[NPVTree]`，390–556 节点、**没有被预算截断**）里
-    ///    **一个都没有** ⇒ 这条判据在运行期很可能永远不成立。留着只是因为"某些构建里它也许真是那个类"，
-    ///    代价只是一次字符串判断。
-    /// 2. **无障碍标签逐字命中**「显示歌词 / 隐藏歌词」（英文 `Show lyrics` / `Hide lyrics`）
-    ///    —— 胶囊上写的就是这几个字（照片 58/59 逐像素可见）。仓库里已有先例：
-    ///    `WordByWordPlaybackControl` 找原生控件用的就是标签表（`["expand", "full screen", …]`）。
-    ///
-    /// ★ **找不到就只打一行日志，绝不拿"看起来像"的控件去按。** 判据必须能说清"为什么是它"。
-    ///
-    /// ## 预算与节流
-    ///
-    /// 那颗胶囊在听歌页的**覆盖层**上（照片 58：底部左侧、进度条上方），而听歌页子树本身
-    /// 就有 390–556 个节点 ⇒ 整窗 BFS 的 2000 节点很容易被首页那棵大树吃光（上一版就是 2000）。
-    /// 这里给到 8000，并且**每次最多 3 次尝试、每次间隔 ≥2s** ——
-    /// 找不到就不再空转（仓库纪律：走查有界，且不做变相轮询）。
-    private static let showLyricsPillLabels: [String] = [
-        "显示歌词", "隐藏歌词",
-        "Show lyrics", "Hide lyrics",
-    ]
+    // MARK: - ★★ 2026-10-10：听歌页那排胶囊（照片 63）—— **按 id 找，不再猜**
 
-    private static let pillSearchNodes = 8000
-    private static let pillSearchInterval: CFAbsoluteTime = 2.0
-    private static let pillSearchMaxAttempts = 3
-    private static var pillSearchAttempts = 0
-    private static var lastPillSearchAt: CFAbsoluteTime = 0
-    private static var reportedPillSearchShape = false
-    /// 最近一次走查看到过多少个 `UIControl`（只进那行"形状"日志）。
-    private static var lastPillSearchControlsSeen = 0
+    /// 两颗胶囊的**无障碍 id**（日志 54 的 `[NPVTree]` 逐字）：
+    ///
+    /// ```
+    /// 13.Primary@0,0,26,32,hidden,id=nowplaying-npv-musicvideos-switch   ← 「切换至视频」
+    /// 13.Primary@0,0,104,32,id=lyrics-npv-switch-button                  ← 「显示 / 隐藏歌词」
+    /// ```
+    ///
+    /// ## 为什么这次一定能找到（前两轮为什么白绕）
+    ///
+    /// 上一轮为了"找到那颗显示/隐藏歌词的胶囊"，先按类名子串 `ShowLyricsButton`（日志 53 零命中），
+    /// 又按无障碍**标签**「显示歌词 / 隐藏歌词」搜整窗 8000 个节点（照片 63 证明仍然没命中）。
+    /// 而它其实**一直带着 id**：`lyrics-npv-switch-button`。
+    /// ⇒ 仓库规矩第 4 条（判据落在 `accessibilityIdentifier` 上）不是教条，是**省掉两轮**的那句话。
+    ///
+    /// ## 为什么是"藏"而不是"按"
+    ///
+    /// 上一轮还想"替用户按下它"（为了让 Spotify 自己的单行歌词功能整体关掉）。
+    /// 日志 54 证明**那条路已经不需要了**：整份日志里 `LyricsContainerView` /
+    /// `singalong-lyrics-view` **一个都没有** ⇒ `lyrics_under_cover_art_enabled=false`
+    /// 那条 flag（第三次层次）已经把功能从根上拿掉了。于是"按"只剩坏处：
+    /// 它是**切换**（按两次 = 又开回来，独立复核抓过这个 blocker），而且会**落盘用户偏好**。
+    /// ⇒ 现在只做两件不产生副作用的事：**藏**（`alpha = 0`）与**写回**。
+    ///
+    /// ## 为什么用 `alpha` 不用 `hidden`
+    ///
+    /// 这两颗是 `Encore.Button.Primary`，挂在 Encore 的栈里；pw 的文档写得最直白
+    /// （`.spotify-ipa/spotipw-v0.21.1/AGENTS.md`）：*"Setting `hidden` on views inside
+    /// Spotify's `OverflowStackView` or its Encore stacks crashes, so use alpha."*
+    private static let lyricsPillIdentifier = "lyrics-npv-switch-button"
+    private static let videoPillIdentifier = "nowplaying-npv-musicvideos-switch"
+    private static let nowPlayingPillIdentifiers = [lyricsPillIdentifier, videoPillIdentifier]
 
-    /// 那一次查找的三种结局 —— **必须分开**（独立复核抓到的假日志）：
-    /// 上一版把"节流没过、根本没查"与"查了、没有"混成同一个 `nil`，
-    /// 于是日志会在第一次空手时就说"没找到"，而且那句此后不再重复。
-    private enum PillLookup {
-        case found(UIControl)
-        case notFound
-        case skipped
+    /// 我们写成了 `alpha = 0` 的那几颗（写回时只认这张表里的）。
+    private static let vanishedPills = NSHashTable<UIView>.weakObjects()
+
+    /// 事件 hook 递进来的那两颗。
+    ///
+    /// ⚠️ **必须是 `weak`**：这是 Spotify 的视图，页面走了它们就该能释放
+    /// （写死强引用会把它连同整棵子树留在内存里，而且我们还会继续往一个不在屏上的视图写 `alpha`）。
+    /// ⚠️ **不能用"字典 + 边遍历边删"**（第一版就是这么写的，那是 Swift 的独占性违规）——
+    /// 两个 id 就两个槽位，最省事也最安全。
+    private static weak var lyricsPill: UIView?
+    private static weak var videoPill: UIView?
+
+    static var hideNowPlayingPills: Bool { UserDefaults.hideNowPlayingPills }
+
+    /// 事件 hook 用：这颗 `Primary` 按钮带着我们关心的 id 吗？
+    /// 命中就记下来并**当场**处理 —— 胶囊出现的那一帧就没了，不用等 0.3s 的复查节拍。
+    static func notePillIfOurs(_ view: UIView) {
+        // ⚠️ 用 `if id == 常量`，不用 `switch case 常量:` —— 后者在 Swift 里是"表达式模式"，
+        //    细节（Optional 提升 / 会不会被当成绑定）不值得赌，而这里就两个 id。
+        let id = view.accessibilityIdentifier
+        guard id == lyricsPillIdentifier || id == videoPillIdentifier else { return }
+        if id == lyricsPillIdentifier {
+            lyricsPill = view
+        } else {
+            videoPill = view
+        }
+        apply(wantVanished: hideNowPlayingPills, to: view)
     }
 
-    private static func lookUpShowLyricsPill(in root: UIView) -> PillLookup {
+    /// 复查节拍那一条：把记住的那两颗重新施加一遍（Spotify 会自己把 `alpha` 写回来）。
+    /// 只在开关开着、且有已记住的引用时才写；**没有引用时不走查**（走查交给事件 hook）。
+    static func reconcileNowPlayingPills() {
+        for view in [lyricsPill, videoPill].compactMap({ $0 }) where view.window != nil {
+            apply(wantVanished: hideNowPlayingPills, to: view)
+        }
+    }
+
+    /// ★ 兜底发现（独立复核提的缺口）：万一**事件 hook 没跑到**（类被改名 / Orion 拒装 /
+    /// id 是在某次布局之后才写上去的），那就按 id 在窗口里找一遍。
+    ///
+    /// 只在"开关开着 + 有槽位是空的 + 1s 节流到了"时才走 ⇒ 常态零成本；
+    /// 预算**自己一份**（`lastPillScanAt`，不跟 `resolveIDTargets` 共用 —— 仓库规矩 5：
+    /// 判据的预算按通道分）。找不到时打一行带节点数的日志，好让下一份日志能区分
+    /// "没找到"与"根本没找"。
+    private static let pillScanInterval: CFAbsoluteTime = 1.0
+    private static var lastPillScanAt: CFAbsoluteTime = 0
+    private static var reportedPillScanMiss = false
+
+    private static func resolvePillsIfNeeded(in root: UIView) {
+        guard hideNowPlayingPills, lyricsPill == nil || videoPill == nil else { return }
+
         let now = CFAbsoluteTimeGetCurrent()
-        guard pillSearchAttempts < pillSearchMaxAttempts,
-              now - lastPillSearchAt >= pillSearchInterval else { return .skipped }
-        lastPillSearchAt = now
-        pillSearchAttempts += 1
+        guard now - lastPillScanAt >= pillScanInterval else { return }
+        lastPillScanAt = now
 
+        var found = 0
         var visited = 0
-        var controlsSeen = 0
         var queue: [UIView] = [root]
 
-        while !queue.isEmpty, visited < pillSearchNodes {
+        while !queue.isEmpty, visited < maxScanNodes {
             let view = queue.removeFirst()
             visited += 1
-
-            if let control = view as? UIControl {
-                controlsSeen += 1
-                if let label = control.accessibilityLabel?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   showLyricsPillLabels.contains(label) {
-                    lastPillSearchControlsSeen = controlsSeen
-                    return .found(control)
-                }
-            }
-            if NSStringFromClass(type(of: view)).contains("ShowLyricsButton") {
-                if let control = firstControl(in: view) {
-                    lastPillSearchControlsSeen = controlsSeen
-                    return .found(control)
-                }
+            if let id = view.accessibilityIdentifier, nowPlayingPillIdentifiers.contains(id) {
+                notePillIfOurs(view)
+                found += 1
             }
             queue.append(contentsOf: view.subviews)
         }
 
-        lastPillSearchControlsSeen = controlsSeen
-        return .notFound
-    }
-
-    /// 走查的形状**只报一次**（预算真的走完之后才调）：
-    /// 下一次日志里就能看出"那条路走过几次、看了多少控件、比对了什么"，
-    /// 而不是像日志 53 那样只能看到一句"没找到"（连找过几个节点都不知道）。
-    private static func reportPillSearchShapeOnce() {
-        guard !reportedPillSearchShape else { return }
-        reportedPillSearchShape = true
+        guard found == 0, !reportedPillScanMiss else { return }
+        reportedPillScanMiss = true
         writeDebugLog(
-            "[Declutter] show/hide-lyrics pill: \(pillSearchAttempts) search(es),"
-                + " ≤\(pillSearchNodes) nodes each, \(lastPillSearchControlsSeen) control(s) inspected"
-                + " — neither a view whose class contains ShowLyricsButton"
-                + " nor a control labelled one of \(showLyricsPillLabels.joined(separator: " / "))"
+            "[Declutter] no Now Playing pill found by id in the window ("
+                + nowPlayingPillIdentifiers.joined(separator: " / ")
+                + ") — visited \(visited) node(s)"
         )
     }
 
-    private static func firstControl(in view: UIView) -> UIControl? {
-        if let control = view as? UIControl { return control }
-        var visited = 0
-        var queue: [UIView] = view.subviews
-        while !queue.isEmpty, visited < 64 {
-            let node = queue.removeFirst()
-            visited += 1
-            if let control = node as? UIControl { return control }
-            queue.append(contentsOf: node.subviews)
+    /// 藏 / 写回，两个方向都幂等。判据是"这颗是不是被我们写成 0 的"。
+    ///
+    /// ⚠️ 日志**不能只打第一次**（独立复核指出）：Spotify 每换一次播放内容就可能重建这两颗，
+    /// 而 `reportOnce` 一辈子只打一行 ⇒ "藏了一次就再没出过问题"与"每拍都在重新藏"在日志里
+    /// 长得一样。所以改成"第一次 + 每 20 次"。
+    private static var pillsHiddenCount = 0
+
+    private static func apply(wantVanished: Bool, to view: UIView) {
+        if wantVanished {
+            guard view.alpha > 0.01 else { return }
+            view.alpha = 0
+            vanishedPills.add(view)
+            pillsHiddenCount += 1
+            guard pillsHiddenCount == 1 || pillsHiddenCount % 20 == 0 else { return }
+            writeDebugLog(
+                "[Declutter] hid the Now Playing pill row ("
+                    + nowPlayingPillIdentifiers.joined(separator: " / ")
+                    + ") — hide #\(pillsHiddenCount)"
+            )
+            return
         }
-        return nil
+        guard vanishedPills.contains(view) else { return }
+        view.alpha = 1
+        vanishedPills.remove(view)
+        writeDebugLog("[Declutter] the Now Playing pills are visible again")
     }
 
-    // ★ 2026-10-09：`hideShowLyricsPill(in:)` 已删 —— 它在按下胶囊之后**又查一次**
-    //   （`showLyricsPillView`），而新加的查找有 2s 节流 + 3 次上限 ⇒ 第二次必然空手而归，
-    //   胶囊就留在屏幕上（用户明确说过它不该出现）。现在由 `applySingalongPreference`
-    //   直接把"刚按下的那一个"写进 `pillWeHid` 并 `alpha = 0`（一次查找只服务一次动作）。
+    // ★★ 2026-10-10：**"找那颗胶囊"这一整套已经删掉。**
+    //
+    // 删掉的是：类名子串 `ShowLyricsButton` 判据、无障碍标签表（「显示歌词 / 隐藏歌词」）、
+    // 8000 节点的整窗走查、2s 节流 + 3 次上限、`PillLookup` 三态、以及"替用户按下它"。
+    //
+    // 为什么整块删（证据在日志 54 与照片 63）：
+    //   ① **那颗胶囊一直有 id**：`lyrics-npv-switch-button`（`[NPVTree]` 逐字，104×32）。
+    //      按类名/标签猜了两轮，一头都没中 —— 判据落在 `accessibilityIdentifier` 上就不必猜；
+    //   ② **"按它"已经不需要**：日志 54 里 `LyricsContainerView` / `singalong-lyrics-view`
+    //      **一个都没有** ⇒ 第三层（`lyrics_under_cover_art_enabled=false`）已经把
+    //      "封面下单行歌词"整个功能拿掉了；
+    //   ③ 而"按"本身有害：它是**切换**（按两次 = 又开回来，独立复核抓过这条 blocker），
+    //      还会落盘用户偏好。
+    // ⇒ 现在只剩**不产生副作用**的两件事：把那一行藏起来（内容层）、把两颗胶囊 `alpha = 0`（chrome 层）。
 
     /// 藏 / 撤销，两个方向都幂等。
     ///
@@ -479,16 +426,18 @@ enum DeclutterChrome {
         }
         if let view = targets.singalong {
             if hideSingalongLine {
-                // ★★ 2026-10-09：**两层一起做** —— ①当场藏掉那一行（屏幕上立刻见效），
-                //    ②替他按下 Spotify 自己那颗胶囊（功能真的关掉，并把胶囊一起按住）。
-                //    上一轮只剩②，而②的判据（类名子串）在运行期零命中 ⇒ 什么都没有发生。
-                //    第二层之上还有第三层：`lyrics_under_cover_art_enabled=false`
-                //    （见 `DynamicPremium+ModifyingFunctions` 的 flag 替换，下次启动生效）。
-                _ = applySingalongPreference(singalong: view, in: root)
+                // ★ 2026-10-10：只剩"藏那一行"。功能本身由 flag（`lyrics_under_cover_art_enabled=false`）
+                //   在下次启动时从根上关掉；那两颗胶囊由 `reconcileNowPlayingPills` 管。
+                applySingalongLine(view)
             } else {
                 restoreSingalongIfNeeded(view)
             }
         }
+
+        // ★ 2026-10-10（照片 63）：听歌页那排胶囊。**事件 hook 负责"出现即隐藏"**，
+        //   这里做两件事：①兜底发现（万一 hook 没跑到）；②把 Spotify 写回来的 `alpha` 再按住。
+        resolvePillsIfNeeded(in: root)
+        reconcileNowPlayingPills()
         if let view = targets.homeHeader {
             apply(
                 wantHidden: hideHomeHeader,
@@ -719,9 +668,34 @@ class SingalongLyricsLineHideHook: ClassHook<UIView> {
 
         guard self.target.accessibilityIdentifier == "singalong-lyrics-view" else { return }
 
-        // 只登记；**真正动手的是 `reconcile` 那条节拍里的 `applySingalongPreference`**
-        // —— 那条路手上有页面根（要找得到那颗胶囊），而这里只有这一行自己。
+        // 只登记；**真正动手的是 `reconcile` 那条节拍里的 `applySingalongLine`**
+        // —— 那条路手上有页面根，而这里只有这一行自己。
         DeclutterChrome.note(self.target, as: .singalong)
+    }
+}
+
+/// 听歌页那排胶囊（照片 63）：「切换至视频」+「显示 / 隐藏歌词」。
+///
+/// ⚠️ 它是**通用类**（`Encore.Button.Primary`，全 App 都在用），所以判据只认**无障碍 id**
+/// （日志 54 的 `[NPVTree]` 逐字）：`lyrics-npv-switch-button` /
+/// `nowplaying-npv-musicvideos-switch`。命中不了就什么都不做 —— 宁可漏，不可误伤别的按钮。
+///
+/// 为什么挂 `Encore.Button.Primary` 而不是"每 0.3s 找一遍"：这两颗是**会随播放内容出现**
+/// 的（有 MV 的歌才出现「切换至视频」；歌词状态一变那颗胶囊就在 52pt / 104pt 之间重排），
+/// 轮询永远慢半拍。挂在这里 ⇒ **它一布局就被按住**，用户看不到闪一下。
+///
+/// ⚠️ 照抄仓库既有写法：hook 方法体是**非隔离**的，而 `DeclutterChrome` 是纯 enum、
+/// `notePillIfOurs` 不碰任何 `@MainActor` 类型 —— 与 `SingalongLyricsLineHideHook` 同一条路。
+struct HideNowPlayingPillsGroup: HookGroup {}
+
+class NowPlayingPillHideHook: ClassHook<UIView> {
+    typealias Group = HideNowPlayingPillsGroup
+    static let targetName = "_TtCCE16Encore_ButtonKitO16EncoreFoundation6Encore6Button7Primary"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+
+        DeclutterChrome.notePillIfOurs(self.target)
     }
 }
 
@@ -811,6 +785,16 @@ func activateDeclutterChrome() {
         writeDebugLog("[Declutter] missing \(SingalongLyricsLineHideHook.targetName) — singalong hook inactive")
     }
 
+    // ★ 2026-10-10（照片 63）：听歌页那排胶囊 —— 按**无障碍 id** 按住（出现即隐藏）。
+    if NSClassFromString(NowPlayingPillHideHook.targetName) != nil {
+        HideNowPlayingPillsGroup().activate()
+    } else {
+        writeDebugLog(
+            "[Declutter] missing \(NowPlayingPillHideHook.targetName)"
+                + " — the Now Playing pills (lyrics/video switch) cannot be hidden event-driven"
+        )
+    }
+
     if NSClassFromString(HomeHeaderHideHook.targetName) != nil {
         HideHomeHeaderGroup().activate()
     } else {
@@ -836,6 +820,7 @@ func activateDeclutterChrome() {
         "[Declutter] installed (miniPlayer="
             + "\(DeclutterChrome.hideMiniPlayerBar ? "ON" : "OFF")"
             + " singalongLine=\(DeclutterChrome.hideSingalongLine ? "ON" : "OFF")"
+            + " npvPills=\(DeclutterChrome.hideNowPlayingPills ? "ON" : "OFF")"
             + " homeHeader=\(DeclutterChrome.hideHomeHeader ? "ON" : "OFF")"
             + " connectButton=\(DeclutterChrome.hideConnectButton ? "ON" : "OFF")"
             + " addToButton=\(DeclutterChrome.hideAddToButton ? "ON" : "OFF"))"

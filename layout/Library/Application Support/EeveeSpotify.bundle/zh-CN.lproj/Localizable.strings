@@ -352,6 +352,7 @@ extras_description = "在 EeveeSpotify 之上加的这一批功能，集中放�
 declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自你设备的视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
 hide_mini_player_bar = "隐藏迷你播放条";
 hide_singalong_line = "隐藏封面下的一行歌词";
+hide_npv_pills = "隐藏播放器里的胶囊（切换至视频 / 显示歌词）";
 declutter_home_player_section = "首页与播放器";
 declutter_home_player_description = "再藏掉 Spotify 自己的三处东西，类名/标识都来自本机的视图树转储。设备按钮在迷你条和播放器里共用，所以关掉是每条传输条上都不显示。";
 hide_home_header = "隐藏首页顶部条";
