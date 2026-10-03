@@ -23,6 +23,18 @@ struct LyricsDto {
     ///   · 网易云 lrc 里带「纯音乐」（`NeteaseLyricsRepository`）；
     ///   · LRCLIB 的 `song.instrumental == true`（`LrclibLyricsRepository`）。
     var isInstrumental: Bool = false
+
+    /// ★ 2026-10-12：**源给的官方罗马字**（网易的 `romalrc`），与 `lines` **同序、同长**。
+    ///
+    /// 为什么单开一个字段、而不再像以前那样直接改写 `lines[i].content`：
+    /// 用户 2026-10-12 的判据是「罗马字要在**原文上方**，不许替换原文」。
+    /// 官方那份罗马字的质量比本地转换好（分写是源自己做过的），所以**留着**，
+    /// 但它只能当"上方那一行" —— 也就是 `romanizedContentsForDisplay()` 的**首选**来源；
+    /// 主歌词始终是 `lines[i].content`（原文）。
+    ///
+    /// 空数组 ⇒ 显示层照旧自己算（`romanizedForWordByWordIfEnabled()`），与改动前一致。
+    /// ⚠️ 长度必须等于 `lines.count`（显示层按下标配对）；对不上的那份**不许**用。
+    var officialRomanizedLines: [String] = []
     /// 这份歌词**实际**是谁给的（形如 `"PetitLyrics"`）。
     ///
     /// ★ 2026-10-11：**不再带 `(EeveeSpotify)` 后缀**（用户：「这个就不需要写 eveespotify

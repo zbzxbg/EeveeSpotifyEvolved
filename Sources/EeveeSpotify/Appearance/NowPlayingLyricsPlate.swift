@@ -1818,6 +1818,15 @@ enum NowPlayingLyricsPlate {
               let list = findByIdentifier(listIdentifier, in: page),
               let cover = visibleCover(in: list, page: page) else { return }
 
+        // ★ 2026-10-12（独立复核）：**只缩"播放器自己那一张"。**
+        //   `visibleCover` 的兜底那两趟能挑到**卡片**的封面（它自己的注释里写着
+        //   "卡片自己的封面不在 `SPTNowPlayingView` 里"）—— 把卡片那张缩了就成了新的 bug。
+        //   挑不到主封面就**什么都不做**（宁可这一拍还是 366pt，也不许缩错对象）。
+        if let owner = findByIdentifier(nowPlayingViewIdentifier, in: page),
+           !cover.isDescendant(of: owner) {
+            return
+        }
+
         // ★ 2026-10-12：**按对象记账，而且记的不止一个。**
         //
         // 为什么不是"上一个 / 这一个"两个变量：真机日志 57 里**挑中的封面会换**
@@ -2336,7 +2345,15 @@ enum NowPlayingLyricsPlate {
         //
         // 现在：① 两条路都换算到元素自己的坐标系；② 再兜一条"页面右沿 − 8"——
         // 于是长标题**一定**会在屏幕边上渐隐，不再依赖"右边恰好有别的控件"这个前提。
-        let titleLeft = untransformed(title, in: page).minX
+        // ⚠️ ★ 2026-10-12：这里**不能用 `untransformed`**。
+        //
+        // `untransformed` 会把元素**自己的** `tx` 减掉（它是给 `measure()` 算"位移前的起点"用的），
+        // 而 mask 挂在**这个元素的 layer** 上 ⇒ mask 的 x=0 对的就是元素**当前（位移后）**的左边。
+        // 用 `untransformed` 算出来的可用宽度会**多出整整一个 `shift`**（≈74pt），
+        // 于是 `width == bounds.width`、上面那条 `guard` 直接把 mask 删掉
+        // ⇒ 长标题尾巴**永远不会渐隐**（这正是用户报的第 1 条：晃动区一直顶到屏幕右边）。
+        // 现在用 `convert`（**含 transform**）= 元素此刻在页面上的真实左边。
+        let titleLeft = title.convert(title.bounds, to: page).minX
         let pageLimit = (page.bounds.maxX - 8) - titleLeft
         let limitRoom = trailingControlX(in: title, page: page)
             .map { $0 - titleLeft - titleGap }
@@ -2635,13 +2652,24 @@ enum NowPlayingLyricsPlate {
         guard let suffix = providerSuffix() else { return }
 
         let current = label.text ?? ""
-        guard !current.isEmpty, !current.hasSuffix(suffix) else { return }
+        guard !current.isEmpty else { return }
+
+        // ★ 2026-10-12（独立复核点出来的死角）：**提供商换了名字**（同一首歌重新取词 /
+        //   回落到另一个源）时，`hasSuffix(suffix)` 只挡得住"当前这一段"，
+        //   于是会贴成 `歌手（NetEase）（Genius）`，而 `lastArtistSuffix` 只记得最新那一段
+        //   ⇒ `restoreArtistLine` 只摘一段，**上一段永远留在 Spotify 的标签上**。
+        //   所以贴之前先把**我们上一次贴的那一段**摘掉（记住的那一段，不靠猜括号）。
+        var base = current
+        if let previous = lastArtistSuffix, previous != suffix, base.hasSuffix(previous) {
+            base = String(base.dropLast(previous.count))
+        }
+        guard !base.isEmpty, !base.hasSuffix(suffix) else { return }
 
         // 走到这里有两种情况：
         //   · 第一次贴（文本就是 Spotify 给的纯歌手名）；
         //   · binder 把文本写回成纯歌手名 ⇒ 再贴一次。
         lastArtistSuffix = suffix
-        setLabelText(current + suffix, on: label)
+        setLabelText(base + suffix, on: label)
 
         // ★ 2026-10-04：这条日志原来**一个进程只打一次**，于是"换歌之后有没有重新贴上"
         //   在日志里完全看不出来（用户这次报的就是"没有展示"，而我们手里没有一行能判它的证据）。
@@ -3143,7 +3171,11 @@ enum NowPlayingLyricsPlate {
         }
         guard !singleLyricLines.isEmpty else { return nil }
 
-        let playback = WordByWordPositionResolver.shared.currentPositionSeconds()
+        // ⚠️ 位置是**可选的**（`currentPositionSeconds() -> Double?`：拿不到播放器时是 nil）
+        //    ⇒ 拿不到就**这一拍不画**，不许拿 0 当"唱到开头"（那会让封面下面先闪一句第一行）。
+        guard let playback = WordByWordPositionResolver.shared.currentPositionSeconds() else {
+            return nil
+        }
         let position = LyricPlaybackTimeline.position(at: playback, in: singleLyricLines)
         guard let highlighted = position.highlightedLyricID,
               let line = singleLyricLines.first(where: { $0.id == highlighted }) else {

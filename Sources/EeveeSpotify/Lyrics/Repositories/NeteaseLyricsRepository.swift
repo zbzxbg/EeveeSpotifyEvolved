@@ -1154,6 +1154,22 @@ class NeteaseLyricsRepository: LyricsRepository {
             writeDebugLog("[NetEase] word-by-word path — skipping repo-side romaji (defer to display layer)")
         }
 
+        // ★★ 2026-10-12（用户拍板）：**官方罗马音也不再替换正文。**
+        //
+        // 用户原话：「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，不是在原文的上面
+        // 展示罗马字」，并选了"原生那页也回到日文原文，罗马字只由我们这层画"。
+        //
+        // 这一段以前是把 `lines[i].content` **换成**官方 `romalrc`（并顺带把残留日文的行
+        // 用本地转换补齐），于是屏幕上**日文原文整个没了** —— 正是用户报的那件事，
+        // 只是走的是另一条路（逐字 yrc 那条已经在 `storeLyricsDto` / `toSpotifyLyricsData` 改掉）。
+        //
+        // 现在：官方那份**留着**（它质量比本地转换好），但存进 `officialRomanizedLines`
+        // —— 显示层把它当"原文**上方**那一行"（`LyricLinesAdapter.romanizedContentsForDisplay()`
+        // 首选它，缺的行再退回本地转换）。正文一个字都不动。
+        //
+        // ⚠️ 「修改 NetEase 日语罗马字展示方式」那个开关（`preferLocalRomaji`）**语义不变**：
+        //    它仍然是"宁可要本地那份、也不用官方那份"—— 打开时这里就不存官方罗马字。
+        var officialRomanizedLines: [String] = []
         if let romalrc = raw.romalrc, !romalrc.isEmpty,
            languageCode == "ja",
            UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization"),
@@ -1161,26 +1177,15 @@ class NeteaseLyricsRepository: LyricsRepository {
            !usingWordByWord {
             let romanized = applyRomanization(romalrc, originalLines: lines)
             if romanized.matched > 0 {
-                lines = romanized.lines
-                romanization = .romanized
-                writeDebugLog("[NetEase] Applied official romaji (\(romanized.matched) line(s))")
-
-                // 官方罗马音可能不全：时间戳未命中的行保留原文、或官方行内
-                // 残留假名/汉字。逐行检查，仍含日文的行交给本地罗马字转换兜底；
-                // 已罗马化的行保持官方译文不动（避免二次转换破坏官方分写）。
-                // 本段位于「开启日语罗马化」守卫之内，开关关闭时不生效。
-                var locallyConverted = 0
-                lines = lines.map { line in
-                    guard line.content.containsJapaneseScriptForRomajiFallback else { return line }
-                    locallyConverted += 1
-                    return LyricsLineDto(
-                        content: line.content.toJapaneseRomaji(),
-                        offsetMs: line.offsetMs
-                    )
+                // 与 `lines` **同序同长**：没命中的行留空（显示层会退回本地转换）。
+                officialRomanizedLines = romanized.lines.enumerated().map { index, line -> String in
+                    guard index < lines.count, lines[index].content != line.content else { return "" }
+                    return line.content
                 }
-                if locallyConverted > 0 {
-                    writeDebugLog("[NetEase] Local romaji fallback for \(locallyConverted) line(s)")
-                }
+                writeDebugLog(
+                    "[NetEase] official romaji kept for the line above"
+                        + " (\(romanized.matched) line(s)) — the lyrics text stays as-is"
+                )
             }
         }
 
@@ -1189,7 +1194,8 @@ class NeteaseLyricsRepository: LyricsRepository {
             timeSynced: timeSynced,
             romanization: romanization,
             translation: translation,
-            languageCode: languageCode
+            languageCode: languageCode,
+            officialRomanizedLines: officialRomanizedLines
         )
 
         writeDebugLog("[NetEase] Synced lyrics — \(lines.count) line(s)")

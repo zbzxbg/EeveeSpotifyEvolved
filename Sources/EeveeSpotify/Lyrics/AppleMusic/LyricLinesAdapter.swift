@@ -49,6 +49,36 @@ extension LyricsDto {
         if key == romanizationCacheKey, romanizationCache.count == lines.count {
             return romanizationCache
         }
+
+        // ★ 2026-10-12：**源给的官方罗马字优先**（网易 `romalrc`，见 `LyricsDto.officialRomanizedLines`）。
+        //
+        // 它以前是**替换正文**的（`NeteaseLyricsRepository` 直接改 `lines[i].content`）——
+        // 那正是用户报的「直接把原日文替换了」。现在它只当"原文上方那一行"：
+        // 正文永远是原文，这里返回的是罗马字那一层。
+        //
+        // ⚠️ 三个前提缺一不可：
+        //   · 对应的语言开关开着（官方罗马字是取词时按"日语罗马化"存下来的，
+        //     用户后来把开关关掉时必须跟着不显示 —— 缓存键里已经含这个开关）；
+        //   · 长度与 `lines` 一致（按下标配对，对不上就不用）；
+        //   · 官方有的那几行用官方，缺的那几行**退回本地转换**（官方罗马音常常不全，
+        //     旧的 `preferLocalRomaji` 兜底逻辑就是为这个存在的）。
+        if UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization"),
+           !officialRomanizedLines.isEmpty,
+           officialRomanizedLines.count == lines.count {
+            var merged: [String]
+            if officialRomanizedLines.contains(where: { $0.isEmpty }) {
+                let local = romanizedForWordByWordIfEnabled().lines.map(\.content)
+                merged = zip(officialRomanizedLines, local).map { pair in
+                    pair.0.isEmpty ? pair.1 : pair.0
+                }
+            } else {
+                merged = officialRomanizedLines
+            }
+            romanizationCacheKey = key
+            romanizationCache = merged
+            return merged
+        }
+
         let fresh = romanizedForWordByWordIfEnabled().lines.map(\.content)
         romanizationCacheKey = key
         romanizationCache = fresh
