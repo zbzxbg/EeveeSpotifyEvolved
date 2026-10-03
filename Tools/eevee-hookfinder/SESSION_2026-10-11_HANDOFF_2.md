@@ -284,6 +284,40 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 
 ---
 
+## 4.9 ★ 点行跳转："同一个算法抄了四份"（用户：我选中某一行，定位到上一行去了）
+
+用户原话：**「点击区似乎有些问题。我选中某一行歌词，定位到上一行歌词去了」**。
+
+**这不是点击区的问题，是 seek 落点的问题**，而且仓库里**记过这个坑**：
+
+* 高亮判据是 `time <= playbackTime` ⇒ seek 落在**行边界**上就会被判成**上一行**；
+* `line.time` 是 `TimeInterval(offsetMs) / 1000`，双精度存不下 26.622 ⇒ 落在略小的一侧
+  （26.621999999999999…）⇒ 直接 `Int()` 截断会**再少 1ms**；
+* 全屏页那条路 **2026-09-28** 就踩过并修了 —— 但它是在 `makeRootView` 的**闭包里**就地修的
+  （`rounded() + 5ms`），**没有提成公共函数**；
+* "歌词进播放器"那一档（`NowPlayingLyricsPlate`）当时**另抄了一份**、只 `rounded()` 没有 `+5`
+  ⇒ 用户这次报的正是它；旧 UIKit overlay 的 `handleLineTap` 更是**连 `rounded()` 都没有**
+  （直接把 `offsetMs` 丢进去）。
+
+**修法：只留一份** —— `AppleMusicLyricsOverlay.swift` 文件开头新增
+
+```swift
+func seekToTappedLyricLine(_ time: TimeInterval) {
+    WordByWordSeeker.seek(toMs: Int((time * 1000).rounded()) + 5)
+}
+```
+
+四个调用点全部改走它（全屏页 / 歌词进播放器 / 旧 overlay 的全屏页 / 旧 overlay 的点行）；
+函数上方那段注释把"为什么 `rounded()`、为什么 +5ms、这个 bug 犯过两次"一次写清。
+**仍留在外面的只有** `AppleMusicLyricsPlaybackControl` 里那句 `seek(toMs: 0)`
+（"上一首 → 重播本曲"，语义不同，不该套这个 +5ms）。
+
+> ★ 教训（和 §4.8 是同一类，值得同时记住）：
+> **"就地修好的算法"必须提成一份** —— 修在闭包里、只改一个调用点，
+> 等于给下一条路留了同一个坑（这次就是隔了三周又踩一遍）。
+
+---
+
 ## 6. 下一轮：CI → 装机 → **日志 56 + 照片 74+**
 
 ### 6.1 操作顺序
@@ -362,8 +396,9 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
 | | · **能滚**、**不自动跟随**、点行**不跳转**； |
 | | · **最下面一行不被控件条挡住**（那一页本来就留了 120pt 底部内边距）； |
 | | · 日志里有 `static lyrics N line(s) (this track has no timeline; same renderer, static mode)`。 |
-| ⑬ | S1：**连文本都提不出来**那一档才写「这首歌的歌词没有时间轴」 |
-| ⑭ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
+| ⑬ | ★ **点行跳转落在被点的那一行**（不是上一行）—— 见 §4.9 |
+| ⑭ | S1：**连文本都提不出来**那一档才写「这首歌的歌词没有时间轴」 |
+| ⑮ | 上一轮那张单子：`(anchors: navBottom=… progressTop=… bottomStackTop=…)` 三个都是数字、进出转场不闪、胶囊 `hide #N` |
 
 ### 6.4 ⚠️ 已知风险（照片上专门看这几条）
 
@@ -431,5 +466,9 @@ python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 
     我是把 `isFocused` 传 **false**、只把 `focusStrength` 拉到 1 的 —— 如果照片上行看起来
     "一半亮一半暗"，就是这一处要调。
   * `hasSomethingToShow()` / `hasAnythingToDrawFast()` 两条新门禁也没在真机走过。
+* ★ **点行跳转那 5ms**（§4.9）：这是**"全屏页那条路三周前就验过"的值**，但"歌词进播放器"
+  这一档第一次带上它 ⇒ **没在真机验过**。若照片上还是"点这一行、跳到上一行"，
+  就只改 `seekToTappedLyricLine` 里那一个数（先试 30ms）——
+  它就是"往这一行里面多走一点"的安全余量，没有别的副作用。
 * ★ **照片 74 是"过渡帧"**（用户明确说过：实际页面不长那样）⇒ 它证明的是**收尾顺序有问题**，
   **不能**当成"关着态的稳态长什么样"来读。

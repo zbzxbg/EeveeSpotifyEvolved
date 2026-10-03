@@ -7,6 +7,28 @@ import UIKit
 // 注册自定义 TextAttribute 需要 iOS 26 的 `attributedTextFormattingDefinition`）。
 // 老系统上 `WordByWordHost` 会走原来的 UIKit overlay，行为与改动前完全一致。
 
+// MARK: - 点行跳转（**只有这一份**，两个调用点共用）
+
+/// 点某一行歌词 ⇒ 跳到**那一行的内部**（不是它的边界上）。
+///
+/// ⚠️★ 2026-10-11：把它提成一份，是因为**同一个 bug 犯了两次**。
+///
+/// 两个细节都有来历，别再各抄一份：
+///   · `rounded()` 而不是 `Int()` 截断 —— `line.time` 是 `TimeInterval(offsetMs) / 1000`，
+///     双精度存不下 26.622 这种值，会落在略小的一侧（26.621999999999999…），
+///     `Int()` 截断成 26621，比这一行的起点**少 1 毫秒**；
+///   · **+5ms** —— 播放器 seek 之后回报的位置可能略早，而时间轴的判定是
+///     `time <= playbackTime`：落在边界上就会被判成**上一行**。
+///     全屏页那条路 2026-09-28 就踩过并修了（当时只写在 `makeRootView` 的闭包里）；
+///     而"歌词进播放器"那一档是**另写的一份**、只 `rounded()` 没 `+5` ⇒
+///     用户 2026-10-11 又报了一次：**「我选中某一行歌词，定位到上一行歌词去了」**。
+///     ⇒ 现在两处都调这一个函数，不可能再各走各的。
+///
+/// （`+5ms` 若哪天仍不够，只**改这一个数**：它是"往这一行里面多走一点"的安全余量。）
+func seekToTappedLyricLine(_ time: TimeInterval) {
+    WordByWordSeeker.seek(toMs: Int((time * 1000).rounded()) + 5)
+}
+
 // MARK: - 每帧时间源
 
 /// 播放时间的发布者。
@@ -729,18 +751,9 @@ final class AppleMusicLyricsOverlayHost {
             sideInset: sideInset,
             previewHeaderInset: previewHeaderInset,
             onSeek: { time in
-                // ⚠️ 必须 rounded() 而不是 Int() 截断，并额外 +5ms。
-                //
-                // `line.time` 是 `TimeInterval(offsetMs) / 1000`，双精度存不下
-                // 26.622 这种值，会落在略小的一侧（26.621999999999999…）。
-                // 再 ×1000 得到 26621.999999999996，`Int()` 截断成 **26621** ——
-                // 比这一行的起点少 1 毫秒。而时间轴的判定是 `time <= playbackTime`，
-                // 差这 1 毫秒就正好落回**上一行**，于是"点当前行反而定位到上一行"。
-                //
-                // +5ms 是为了即使有舍入误差或播放器 seek 后回报有轻微滞后，
-                // 也稳定落在这一行**内部**而不是边界上。
-                let ms = Int((time * 1000).rounded()) + 5
-                WordByWordSeeker.seek(toMs: ms)
+                // 点行跳转的算法**只有一份**（见文件开头 `seekToTappedLyricLine`）：
+                // `rounded()` + **5ms**，两个细节缺一个就会"点这一行、跳到上一行"。
+                seekToTappedLyricLine(time)
             },
             trackTitle: currentTrackTitle,
             trackArtist: currentTrackArtist,

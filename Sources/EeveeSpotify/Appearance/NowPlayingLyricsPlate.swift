@@ -1057,7 +1057,12 @@ enum NowPlayingLyricsPlate {
                     trackId: trackId,
                     isStatic: isStatic,
                     onSeek: { seconds in
-                        WordByWordSeeker.seek(toMs: Int((seconds * 1000).rounded()))
+                        // ★ 2026-10-11（用户：「我选中某一行歌词，定位到上一行歌词去了」）：
+                        //   这里以前是**另写的一份** `Int((seconds * 1000).rounded())` ——
+                        //   少了那 5ms ⇒ 落在行边界上 ⇒ 被判成上一行。
+                        //   现在两处都走 `seekToTappedLyricLine`（定义在
+                        //   `AppleMusicLyricsOverlay.swift` 开头，理由都写在那儿）。
+                        seekToTappedLyricLine(seconds)
                     }
                 )
             }

@@ -837,8 +837,9 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
             projection: projection,
             primaryColor: .white,
             onSeek: { time in
-                // 与点歌词行走同一条 seek 路径（+5ms 是为了稳稳落在行内部而不是边界）。
-                WordByWordSeeker.seek(toMs: Int((time * 1000).rounded()) + 5)
+                // 点行跳转**只有一份实现**（见 `AppleMusicLyricsOverlay.swift` 开头的
+                // `seekToTappedLyricLine`：`rounded()` + 5ms，缺一个就会"点这一行、跳到上一行"）。
+                seekToTappedLyricLine(time)
             },
             onClose: {
                 WordByWordPlaybackControl.dismissFullscreen()
@@ -1518,7 +1519,10 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         guard let label = recognizer.view as? LineLabel,
               let dto = dto, label.lineIndex >= 0, label.lineIndex < dto.lines.count,
               let offset = dto.lines[label.lineIndex].offsetMs else { return }
-        WordByWordSeeker.seek(toMs: offset)
+        // ★ 2026-10-11：这一条（旧 UIKit overlay 的点行）以前是**直接 seek 到 offsetMs** ——
+        //   少了那 5ms，和"歌词进播放器"那一档犯的是同一个错（点这一行、跳到上一行）。
+        //   统一走 `seekToTappedLyricLine`（定义在 `AppleMusicLyricsOverlay.swift` 开头）。
+        seekToTappedLyricLine(TimeInterval(offset) / 1000)
     }
 }
 
