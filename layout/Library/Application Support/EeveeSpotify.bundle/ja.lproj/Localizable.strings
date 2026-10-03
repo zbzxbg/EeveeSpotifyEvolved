@@ -78,8 +78,6 @@ dark_popups = "ポップアップをダークモードで表示";
 
 // Experiments
 
-show_instagram_destination = "Instagramで共有先を表示";
-show_instagram_destination_description = "常にInstagramで共有先を表示します。%@";
 
 livecontainer_sharing = "LiveContainerに共有";
 livecontainer_sharing_description = "選択した共有先が対応していない場合は、LiveContainerに共有してURLをコピーします。";
@@ -140,8 +138,6 @@ do_not_replace_lyrics_description = "When this option is enabled, the custom lyr
 spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
 netease_description = "NetEase: Most lyrics come with timestamps. However, support for users outside mainland China is weaker, and timestamps may be misaligned.";
 amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
-Developement = "Developers";
-Localization = "Localization";
 ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
 ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
 ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";
@@ -170,11 +166,6 @@ enable_log_recording = "Enable Log Recording";
 enable_log_recording_description = "There's no need to enable log recording for normal use.";
 dump_customize_body = "Dump customize response";
 dump_customize_body_description = "Diagnostic only. Writes the raw configuration response into the debug log so the bundled snapshot can be replaced with your own.";
-now_playing_shell_section = "Now playing page";
-now_playing_shell = "Cover-tinted page + our own top bar";
-now_playing_shell_backdrop = "Background follows the cover";
-now_playing_shell_header = "Draw our own top bar (title and artist)";
-now_playing_shell_description = "Draws the now playing page ourselves instead of layering into Spotify's views: the whole page takes the cover's colour, and the title and artist are ours. Spotify's controls stay where they are and keep working. Switching it off restores the page, including Spotify's own header.";
 export_debug_log = "Export Debug Log";
 clear_debug_log = "Clear Debug Log";
 debug_log_cleared = "Debug log cleared.";

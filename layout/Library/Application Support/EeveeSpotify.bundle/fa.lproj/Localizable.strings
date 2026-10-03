@@ -85,8 +85,6 @@ dark_popups = "پاپ آپ های تیره";
 
 // Experiments
 
-show_instagram_destination = "نمایش مقصد اینستاگرام";
-show_instagram_destination_description = "همیشه گزینه اشتراک‌گذاری در اینستاگرام را نمایش دهد. %@";
 
 livecontainer_sharing = "اشتراک‌گذاری در LiveContainer";
 livecontainer_sharing_description = "در صورتی که مقصد انتخاب‌شده پشتیبانی نشود، محتوا را در LiveContainer به اشتراک گذاشته و نشانی (URL) را کپی می‌کند.";
@@ -284,8 +282,6 @@ spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics 
 netease_description = "NetEase: Most lyrics come with timestamps. However, support for users outside mainland China is weaker, and timestamps may be misaligned.";
 amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
 could_not_share_popup = "Couldn’t share to the selected destination or LiveContainer. The URL has been copied.";
-Developement = "Developers";
-Localization = "Localization";
 ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
 ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
 ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";

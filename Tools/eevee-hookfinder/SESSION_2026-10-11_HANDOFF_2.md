@@ -494,6 +494,51 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 
 ---
 
+## 4.15 ★ 本地化审计（用户：「我怎么感觉有很多已废弃和重复的本地化文件。你看看」）
+
+### 4.15.1 审计方法（两个坑，下次直接用正确的解析器）
+
+* **没有重复的文件**：全仓库只有 `layout/…/EeveeSpotify.bundle/` 下 **27 个 `.lproj/Localizable.strings`**，
+  一个语言一份，没有第二份副本。
+* ⚠️ **坑 1：键可以不带引号**。26 个语言用的是老式 plist 写法
+  （`patching = "Patching";`，只有 `en` / `zh-CN` / `it` 三种混用带引号的写法）。
+  只按 `"key" =` 解析会得到"0 个键"。
+* ⚠️ **坑 2：`//` 行注释必须先剥掉**，否则整段注释会被当成键名（第一版审计就这样造出了
+  一堆"extra 键"假阳性）。块注释 `/* */` 也要剥。
+* **死键判定**要看**代码/配置**文件（`.swift/.plist/.json/...`），**不能**把 `Tools/**/*.md`
+  算进来 —— 会话笔记里到处都在引用键名，会把所有死键都判成"仍被引用"。
+* ⚠️ **动态拼接的键不是死键**：`reduce_interventions_flag_<shortName>`（`_description` 同）
+  与 `reduce_interventions_scope_<末段>`（`_footer` 同）共 **34 个**是
+  `EeveeReduceInterventionsView.swift:290/294/331/335` 拼出来的。
+
+### 4.15.2 结论：真正的问题不是"文件"，而是三种**键**的问题
+
+| 问题 | 实测 | 处理 |
+|---|---|---|
+| ★ **`zh-CN` 你自己的更新被旧条目盖住了** | `flag_catalog_description` 有两条：337 行是你新写的（"…点一行即可填入上面的表单…"），393 行是旧文案（"…把这条钉住…"，说的是**已经删掉的钉住交互**）。`.strings` 里**后写的生效** ⇒ 你的新版**没起作用** | ✅ **删掉 393 那条**（代码里这个键只在 `EeveeFlagCatalogView.swift:20` 用一次） |
+| ★ **`it` 的 96 条意译全被英文盖住** | 该文件 = "上游英文表（裸键）+ 一份意译贴在前面（带引号）"，于是这 96 个键**意译在前、英文在后** ⇒ 意大利用户看到的是英文 | ✅ **删掉这 96 条英文重复行**（保留意译） |
+| **15 个死键**（全语言共 236 行） | `now_playing_shell*`（7，自绘壳那一整节 2026-10-02 已删）、`music_style*`（3）、`show_instagram_destination*`（2）、`amoled_description`（1）、`Developement` / `Localization`（2，疑似误加的垃圾键）——**代码/配置里 0 处引用** | ✅ 全语言删除 → en 427 → **412** |
+
+**校验**：`l10n_lint` `en exit 0`、`zh-CN 412 keys, 0 missing, 0 extra`（`zh-TW/ja/it` 也 exit 0）；
+六条自检全绿；`it` 的 `resetButtonTitle` / `showToast` 已确认只剩意译。
+
+### 4.15.3 顺带查清、**还没动**的两件事
+
+1. ★ **`resetSubtitle` 一个键用在两个地方**（代码级，跨所有语言）：
+   * `SponsorBlockAdvancedView.swift:77` —— SponsorBlock「重置」ActionSheet 的 **message**
+     （en：`"Each is independent."`，"各项互不影响。" ⇒ 合理）；
+   * `EeveeSettingsView.swift:326` —— **完全重置**的确认框 message（同一个键）⇒
+     **每种语言的"完全重置"确认框都在说"各项互不影响。"** ✗（zh-TW 恰好写反了：
+     它的 `resetSubtitle` 是擦除说明 ⇒ SponsorBlock 那边反而不对）。
+   * 建议修法（**待用户拍板**）：确认框改用 `resetFooter`（en 里就是那段擦除说明，
+     各语言也都翻了），或另起一个键。**没有擅自改 UI 文案。**
+2. **25 个语言的覆盖率**：改完后 en = 412 键，而 22 个语言只有 **275**（= **137 个键缺失**）、
+   `ja`/`zh-TW` 277、`it` 278 ⇒ 这些语言里**三分之一的界面是英文**（优雅回落，不是 bug，是没翻）。
+   `now_playing_one_screen` / `now_playing_backdrop_section` / `now_playing_control_glyphs`
+   这类新键更是只有 **2/27** 个语言有。**要补就是全语言机器翻译 + 人工抽查**，是另一件事。
+
+---
+
 ## 5. 本机自检（六条全绿）
 
 ```

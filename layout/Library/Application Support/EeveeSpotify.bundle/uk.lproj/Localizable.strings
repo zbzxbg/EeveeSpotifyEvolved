@@ -78,8 +78,6 @@ dark_popups = "Темні спливаючі вікна";
 
 // Experiments
 
-show_instagram_destination = "Поширити в Instagram";
-show_instagram_destination_description = "Завжди показувати можливість поширення в Instagram %@";
 
 livecontainer_sharing = "Надіслати у LiveContainer";
 livecontainer_sharing_description = "Надіслати у LiveContainer і скопіювати URL, якщо вибране місце призначення не підтримується.";
@@ -139,8 +137,6 @@ do_not_replace_lyrics_description = "When this option is enabled, the custom lyr
 spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
 netease_description = "NetEase: Most lyrics come with timestamps. However, support for users outside mainland China is weaker, and timestamps may be misaligned.";
 amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
-Developement = "Developers";
-Localization = "Localization";
 ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
 ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
 ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";

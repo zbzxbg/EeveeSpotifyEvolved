@@ -78,8 +78,6 @@ dark_popups = "Mørke pop op-beskeder";
 
 // Experiments
 
-show_instagram_destination = "Vis Instagram destination";
-show_instagram_destination_description = "Vis altid Instagram som delingsdestination. %@";
 
 livecontainer_sharing = "Del til LiveContainer";
 livecontainer_sharing_description = "Del til LiveContainer eller kopier URL'en hvis den valgte destination ikke er understøttet.";
@@ -140,8 +138,6 @@ do_not_replace_lyrics_description = "When this option is enabled, the custom lyr
 spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
 netease_description = "NetEase: Most lyrics come with timestamps. However, support for users outside mainland China is weaker, and timestamps may be misaligned.";
 amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
-Developement = "Developers";
-Localization = "Localization";
 ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
 ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
 ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";

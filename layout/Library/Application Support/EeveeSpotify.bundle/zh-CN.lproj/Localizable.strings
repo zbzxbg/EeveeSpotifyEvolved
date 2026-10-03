@@ -71,8 +71,6 @@ dark_popups = "深色弹窗";
 
 // Experiments
 
-show_instagram_destination = "显示 Instagram 分享目标";
-show_instagram_destination_description = "始终将 Instagram 作为分享目标，更改需要重启程序。";
 
 livecontainer_sharing = "分享到 LiveContainer";
 livecontainer_sharing_description = "如果不支持所选分享目标，则分享到 LiveContainer 并复制 URL。";
@@ -104,8 +102,6 @@ let_the_music_play = "♪";
 liked_songs = "喜欢的歌曲";
 
 contributors = "参与者";
-Developement = "开发者";
-Localization = "本地化翻译";
 
 lrclib_api = "服务器地址";
 
@@ -346,7 +342,6 @@ dump_view_tree_description = "把当前屏幕的视图结构每 2 秒写一行�
 
 /* MARK: 外观 */
 amoled = "深色栏底色（仿 Apple Music）";
-amoled_description = "仿 Apple Music 的深色栏：导航栏保持透明，封面与内容从标题下面透出来；当 Spotify 自己要画底色时，把原来那层灰色渐变遮罩换成深色材质。打开立即生效。它不会强行把栏变成不透明，所以不会破坏封面透出的效果。";
 
 extras_title = "扩展功能";
 extras_description = "功能思路来自 spoti.pw。";
@@ -373,24 +368,13 @@ blocked_artists_add_footer = "按 Spotify 里显示的名字填；匹配不区�
 blocked_artists_clear_all = "清空名单";
 
 /* MARK: 听歌页外观（样品） */
-music_style_section = "听歌页外观（样品）";
-now_playing_shell_section = "听歌页";
-now_playing_shell = "整页跟封面取色 + 自绘顶栏";
-now_playing_shell_backdrop = "背景跟封面取色";
-now_playing_shell_header = "自绘顶栏（歌名 + 艺人）";
-now_playing_shell_glass = "顶栏用液态玻璃";
-now_playing_shell_glass_description = "用系统的液态玻璃（iOS 26 起才有）。它会折射底下的内容 —— 代价是顶栏下面那片封面和按钮也会被糊掉，想要那种观感再打开。";
 library_section = "音乐库";
 tab_bar_glass_section = "标签栏";
 tab_bar_glass = "标签用液态玻璃";
 tab_bar_glass_description = "给底部四颗标签（主页 / 搜索 / 音乐库 / 创建）后面垫一层系统的液态玻璃。";
 library_large_title = "Apple Music 式头部";
 library_large_title_description = "此功能可能看起来不太明显。观感上来看就是音乐库这几个字大了几个字号。";
-now_playing_shell_description = "自己接管听歌页，而不是往 Spotify 的视图里插层：整页底色跟着封面走，歌名/艺人由我们画，Spotify 自己那道会渐显的吸顶头再也盖不住它。Spotify 的控件（传输键、进度条、菜单）全部留在原地、照常可用。关掉开关即完全还原，包括 Spotify 自己的吸顶头。";
-music_style_nowplaying = "背景跟封面取色 + 顶部大标题";
-music_style_nowplaying_description = "Apple Music 风格的第一个样品：整页背景取封面的主色，歌名与艺人压在顶部。它只加不删——不隐藏 Spotify 自己的任何播放器控件，所以关掉开关即完全还原。播放页下次布局时生效，不用重启。";
 
-flag_catalog_description = "这些名字与 scope 都来自调试日志。点一行 = 把这条钉住（布尔类关掉，enum 类写回服务端下发的值）；再点一下 = 取消。要改具体取值，回上一页改。";
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
 flag_catalog_empty_result = "没有匹配的 flag";
 tab_bar_hide_labels = "隐藏标签文字";

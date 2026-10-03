@@ -77,8 +77,6 @@ dark_popups = "Dark PopUps";
 
 // Experiments
 
-show_instagram_destination = "Show Instagram Destination";
-show_instagram_destination_description = "Always use Instagram as the share destination. A restart is required after changing.";
 
 livecontainer_sharing = "Share to LiveContainer";
 livecontainer_sharing_description = "Share to LiveContainer and copy the URL if the selected destination is not supported.";
@@ -110,8 +108,6 @@ let_the_music_play = "♪";
 liked_songs = "Liked songs";
 
 contributors = "Contributors";
-Developement = "Developers";
-Localization = "Localization";
 
 lrclib_api = "Server Address";
 
@@ -355,7 +351,6 @@ dump_view_tree_description = "Writes the current screen's view structure to the 
 
 /* MARK: Appearance */
 amoled = "Dark bar chrome (Apple Music style)";
-amoled_description = "Apple Music style dark chrome: the navigation bar stays transparent so artwork shows through under the title, and when Spotify draws its own bar background this swaps the grey gradient scrim for a dark material. Takes effect immediately. It never forces the bar opaque, so turning it on cannot break the artwork look.";
 
 extras_title = "Extras";
 extras_description = "Features added on top of EeveeSpotify, kept together here so the settings root stays short. The ideas follow spoti.pw; the code is this project's own. Each one has its own page, except the switches above.";
@@ -382,22 +377,12 @@ blocked_artists_add_footer = "Type the artist's name as Spotify shows it. Matchi
 blocked_artists_clear_all = "Remove all blocked artists";
 
 /* MARK: Now playing look (sample) */
-music_style_section = "Now playing look (sample)";
-now_playing_shell_section = "Now playing page";
-now_playing_shell = "Cover-tinted page + own top bar";
-now_playing_shell_backdrop = "Background follows the cover";
-now_playing_shell_header = "Draw our own top bar (title and artist)";
-now_playing_shell_glass = "Liquid Glass on the top bar";
-now_playing_shell_glass_description = "Uses the system's Liquid Glass (iOS 26 and up). It refracts whatever is under it, which also blurs the cover and the buttons below the bar — turn it on only if you want that look.";
 library_section = "Music library";
 tab_bar_glass_section = "Tab bar";
 tab_bar_glass = "Liquid Glass on the tabs";
 tab_bar_glass_description = "Puts the system's Liquid Glass (iOS 26 and up, falling back to a material) behind the four tabs — Home, Search, Your Library and Create. The four tabs are also pulled slightly towards the centre so the glass hugs them instead of stretching across the whole bar. The icons stay above the glass and keep working. Switching it off removes everything again.";
 library_large_title = "Apple Music style header";
 library_large_title_description = "Changes Spotify's own library header: the title goes left-aligned with a little more breathing room, and the grey fade Spotify draws at the top edge is taken away. Switching it off puts both back.";
-now_playing_shell_description = "Draws the now playing page ourselves instead of layering into Spotify's views: the whole page takes the cover's colour, and the title and artist are ours, so Spotify's own fading header can no longer cover them. Spotify's controls (transport, slider, menu) stay where they are and keep working. Switching it off restores the page, including Spotify's own header.";
-music_style_nowplaying = "Cover-tinted background + big title";
-music_style_nowplaying_description = "The first sample of the Apple Music style: the page background takes the cover's own colour, and the song title and artist sit at the top. It only ADDS those two things and hides nothing of Spotify's own player, so switching it off restores the page exactly. It applies the next time the now playing page lays out — no restart.";
 tab_bar_hide_labels = "Hide tab labels";
 
 mini_bar_glass_section = "Mini player";

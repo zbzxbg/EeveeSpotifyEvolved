@@ -78,8 +78,6 @@ dark_popups = "Missatges emergents foscos";
 
 // Experiments
 
-show_instagram_destination = "Mostra el destí d'Instagram";
-show_instagram_destination_description = "Mostra sempre el destí d'Instagram. %@";
 
 livecontainer_sharing = "Comparteix a LiveContainer";
 livecontainer_sharing_description = "Comparteix a LiveContainer i copia l'URL si el destí seleccionat no és compatible.";
@@ -152,8 +150,6 @@ do_not_replace_lyrics_description = "When this option is enabled, the custom lyr
 spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
 netease_description = "NetEase: Most lyrics come with timestamps. However, support for users outside mainland China is weaker, and timestamps may be misaligned.";
 amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
-Developement = "Developers";
-Localization = "Localization";
 ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
 ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
 ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";
