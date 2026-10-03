@@ -225,7 +225,55 @@ enum DeclutterChrome {
         }
     }
 
-    /// ★ 兜底发现（独立复核提的缺口）：万一**事件 hook 没跑到**（类被改名 / Orion 拒装 /
+    /// ★★ 2026-10-10（日志 55 之后加）：**从听歌页自己的子树里**把这两颗胶囊认下来。
+    ///
+    /// 为什么单开这一条：整窗那条（`resolvePillsIfNeeded`）会在**启动瞬间**就打掉唯一那次
+    /// "没找到"的日志（日志 55 逐字：`no Now Playing pill found by id in the window (…) — visited
+    /// 6 node(s)` —— 那时 App 刚起来，窗口里只有 6 个节点），而之后**再也没有一行**
+    /// 说明它到底找没找到 ⇒ 下一次日志仍然读不出结论。
+    /// 页面子树只有几百个节点、一定够用，而且调用点在"我们正在这一页上"的时刻。
+    ///
+    /// 仍然自带 1s 节流（这条每 0.3s 跑一次），并且**只在有槽位空着时**才走查。
+    private static let pagePillScanInterval: CFAbsoluteTime = 1.0
+    private static var lastPagePillScanAt: CFAbsoluteTime = 0
+    private static var reportedPagePillMiss = false
+
+    static func adoptNowPlayingPills(from page: UIView) {
+        guard hideNowPlayingPills, lyricsPill == nil || videoPill == nil else { return }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastPagePillScanAt >= pagePillScanInterval else { return }
+        lastPagePillScanAt = now
+
+        var found = 0
+        var visited = 0
+        var queue: [UIView] = [page]
+
+        while !queue.isEmpty, visited < maxNodes {
+            let view = queue.removeFirst()
+            visited += 1
+            if let id = view.accessibilityIdentifier, nowPlayingPillIdentifiers.contains(id) {
+                notePillIfOurs(view)
+                found += 1
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+
+        guard found == 0 else {
+            // 找到了就把"没找到"的账清掉，方便下一次换歌 / 换页面时再报。
+            reportedPagePillMiss = false
+            return
+        }
+        guard !reportedPagePillMiss else { return }
+        reportedPagePillMiss = true
+        writeDebugLog(
+            "[Declutter] the player page has no pill with id "
+                + nowPlayingPillIdentifiers.joined(separator: " / ")
+                + " (visited \(visited) node(s) of that page)"
+        )
+    }
+
+    /// 兜底发现（独立复核提的缺口）：万一**事件 hook 没跑到**（类被改名 / Orion 拒装 /
     /// id 是在某次布局之后才写上去的），那就按 id 在窗口里找一遍。
     ///
     /// 只在"开关开着 + 有槽位是空的 + 1s 节流到了"时才走 ⇒ 常态零成本；

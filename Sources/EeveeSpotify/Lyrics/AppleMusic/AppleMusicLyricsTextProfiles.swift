@@ -91,6 +91,31 @@ struct LyricsTypographyScale {
         supplementalSpacing: 4
     )
 
+    /// ★ 2026-10-11（照片 67 我们 / 照片 68 kumone）：**「歌词进播放器」那一层自己的档**。
+    ///
+    /// 为什么不能沿用上面两档：这一层既不是"200pt 高的小卡片"（`.preview`），
+    /// 也不是"整屏接管"（`.fullscreen`）——它是**中段一整块（日志 55：`20,261,374,323`，
+    /// 约 370×320pt）**。用 `.preview` 的结果就是照片 67 那个"挤"：块间距只有 10pt，
+    /// 一屏能塞 7–8 行，看上去像一份文档；而 kumone（照片 68）**一屏只有 4 块**，
+    /// 中间留着大片呼吸。
+    ///
+    /// 数字是**从照片 68 量出来的**（591px 宽 ÷ 1.428 ≈ 414pt）：
+    ///   · 主歌词一行 "I like to feel like I am" ≈ 273pt / 25 字符 ⇒ **≈22pt**；
+    ///   · 同一行折行后的行距 ≈ 40px ⇒ **≈28pt**；
+    ///   · 译文（中文 17 字 ≈ 291pt）⇒ **≈17pt**；
+    ///   · 块与块之间（`LazyVStack(spacing: 26)`，kumone 源码；
+    ///     我们这边早就抄进了 `NowPlayingMetrics.lyricLineSpacing = 26`，一直没消费）
+    ///     ⇒ **26pt**。
+    ///
+    /// ⚠️ 26 与 6 这两个数是**手感**（可调）；22 / 17 与 `.fullscreen` 同源，
+    /// 但**容器更宽更矮**，所以行距按 kumone 走、不按比例缩。
+    static let player = Self(
+        primaryFontSize: 22,
+        supplementalFontSize: 17,
+        lineSpacing: 26,
+        supplementalSpacing: 6
+    )
+
     /// 内嵌「预览歌词」卡片：容器约 200pt 高、且更窄，比全屏再小一档。
     ///
     /// 20pt 时实测 "Twenty racks a table cut from ebony" ≈ 339pt，

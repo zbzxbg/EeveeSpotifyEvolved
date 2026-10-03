@@ -248,8 +248,21 @@ enum NowPlayingLyricsPlate {
     private static let titleGap: CGFloat = 12
     private static let titleFade: CGFloat = 20
     private static let thumbTop: CGFloat = 8
-    private static let lyricsTop: CGFloat = 20
+    /// header 与歌词之间那段**空气**。
+    ///
+    /// ★ 2026-10-11（照片 67/68）：kumone 的 header 到歌词之间空 **109pt**（133 → 242），
+    /// 那块空地就是"原来放封面、现在让给呼吸"的位置 —— 也是它看起来"松"的原因之一。
+    /// 我们的 header 下沿落在 ≈176（缩略图 72pt 从 104 起）⇒ 取 **66** 让歌词正好从 242 开始。
+    private static let lyricsTop: CGFloat = 66
     private static let lyricsBottom: CGFloat = 8
+    /// 歌词块底边与进度条之间的**让位**（kumone：歌词 623 / 进度条 642 ⇒ 19pt）。
+    private static let lyricGapAboveProgress: CGFloat = 19
+    /// 导航条那一行的判据（id）：真机每一份 `[NPVTree]` 里都有
+    /// `Tertiary@0,0,48,48,id=now-playing-minimize-button`。
+    private static let minimizeButtonIdentifier = "now-playing-minimize-button"
+    /// 进度条单元的判据（id）：真机树里是
+    /// `AutoLayoutStackView@0,0,358,41,id=Components.UI.ProgressBarUnitNowPlaying`。
+    private static let progressUnitIdentifier = "Components.UI.ProgressBarUnitNowPlaying"
     /// 歌词区进场时从 0.96 放大到 1（pw 的 `kLyricsEnterScale`）。
     /// ⚠️ **本轮没做**：那要把容器也改成"只动 transform + bounds/center"（同封面那一套），
     /// 否则 `ensureContainer` 每拍写 `frame` 会和 transform 打架。留到下一轮。
@@ -335,6 +348,31 @@ enum NowPlayingLyricsPlate {
     /// （`UserDefaults.nowPlayingLyricsExpanded`），见 `rememberExpanded(_:)` / `reopenIfRemembered(in:)`。
     private static var isOpen = false
 
+    /// ★★ 2026-10-10（照片 66）：**「我们打算铺着」** —— 比 `isOpen` 宽一档。
+    ///
+    /// 为什么必须有它：`isOpen` 只有在**铺成功**之后才为真，而进页面那一下
+    /// （`viewWillAppear` → `apply` → `reopenIfRemembered` → `openAndMount`）
+    /// **第一拍经常量不到**（日志 55 逐字：`not expanding (cannot find a visible artwork
+    /// wide enough (>=200pt) inside the player list)`），于是 `isOpen` 当场被回退，
+    /// 而"按住原生封面"那条路（`coverDidLayOut` / `keepNativeCoverHidden`）的门禁里
+    /// 写的正是 `isOpen || coverHost != nil || lastContainer != nil` ⇒ **那一整段窗口里
+    /// 没有人去按封面** ⇒ 进入播放器的转场里就是**原生大封面在动**（照片 66 的闪）。
+    ///
+    /// ⇒ 意图一立就置 `true`（点开、或记忆要展开），**只有用户收起 / 切开关 / 页面收尾才清**。
+    ///   门禁用它，于是"打算铺"的那一刻起，原生封面就已经被按住了。
+    private static var wantsOpen = false
+
+    /// ★★ 2026-10-10（照片 65）：`viewWillDisappear` 只把这一位置 `true`，**什么都不收**。
+    ///
+    /// 退出转场里页面**还在屏幕上**（滑下去 / 缩回迷你条）。原来的写法是
+    /// `viewWillDisappear` 当场 `closeEverything(animated: false)` ⇒ 封面立刻 `alpha = 1`
+    /// ⇒ 整个退出动画里都是**原生那张大封面**（照片 65 的闪）。
+    /// 现在把收尾推迟到"**页面真的不在窗口里**"那一刻（`reconcile` 那条既有节拍负责），
+    /// 于是退出动画里页面一直是**我们的样子**；等它真的走了，才在屏幕外写回封面、摘掉我们的层。
+    /// （pw 的做法同源：它的 morph 在 `tearDown` 里才 `SGRPlayerSetCoverHidden(NO)`，
+    ///   见 `.spotify-ipa/spotipw-v0.21.1/.../PlayerMorph.x:215`。）
+    private static var pageLeaving = false
+
     /// 「点开了但这一拍没铺上」的**重试窗口**。
     ///
     /// ★★ 这就是日志 50「点歌词键没反应」的**根因**，而且它是**本轮新引入的回归**。
@@ -369,6 +407,8 @@ enum NowPlayingLyricsPlate {
 
     static func apply(in pageView: UIView) {
         lastPage = pageView
+        // 进页面 = 这一程开始（上一次的"要走了"作废）。
+        pageLeaving = false
 
         guard isEnabled else {
             // 关开关：**不动画**（用户多半在设置页，而且页面上可能正有转场）。
@@ -377,6 +417,16 @@ enum NowPlayingLyricsPlate {
             return
         }
         guard pageView.bounds.width > 1, pageView.bounds.height > 1 else { return }
+
+        // ★★ 2026-10-10：进页面先收拾**上一程的残留**。
+        //
+        // 为什么会有残留：退出时我们把收尾**推迟**到"页面真的不在窗口里"那一刻（照片 65 的修法）。
+        // 万一那一拍没赶上（比如 Spotify 把这一页留在窗口里、只是不再显示），残留就会跟着进来：
+        // 我们的缩略图 + 被按住的封面 —— 而这一次**没有**要求展开（用户上次是收起的）
+        // ⇒ 屏幕上是一个"大封面没了、歌词也没有"的半成品（照片 57 那一类）。
+        if !isOpen, coverHost != nil || lastContainer != nil {
+            closeEverything(reason: "left over from the previous visit", animated: false)
+        }
 
         // ⚠️ 顺序要紧：先铺歌词（封面 / 标题 / 容器都会 `bringSubviewToFront`），
         // **再**摆那枚键 —— 后写的赢，否则键会被我们自己的容器压住。
@@ -390,6 +440,14 @@ enum NowPlayingLyricsPlate {
             reopenIfRemembered(in: pageView)
         }
         ensureToggleZone(in: pageView)
+    }
+
+    /// ★ 2026-10-10（照片 65）：页面**要**走了 —— 只记一笔，**什么都不收**。
+    ///
+    /// 收尾（撤销几何、把原生封面写回、摘掉我们的层与那枚键）交给 `reconcile` 在
+    /// **"页面真的不在窗口里"**那一刻做 —— 这样整个退出转场里页面都是我们的样子。
+    static func pageWillLeave() {
+        pageLeaving = true
     }
 
     /// ★★ 2026-10-10（用户提的「页面记忆」）：进页面时若记得"上次是展开的"，就把它铺回去。
@@ -418,6 +476,9 @@ enum NowPlayingLyricsPlate {
             return
         }
         writeDebugLog("[\(logTag)] re-entering the player expanded (remembered choice)")
+        // ★ 意图立刻立起来：这样从**这一帧**起，`coverDidLayOut` / `reconcile` 就会按住原生封面
+        //   （照片 66 的闪：进页面的第一拍量不到，但封面已经被按住了）。
+        wantsOpen = true
         openAndMount(in: page)
     }
 
@@ -445,8 +506,30 @@ enum NowPlayingLyricsPlate {
     @discardableResult
     static func reconcile() -> Bool {
         guard isEnabled else { return false }
-        guard let page = lastPage, page.window != nil else { return false }
+
+        // ★★ 2026-10-10（照片 65）：**收尾推迟到这一刻** —— 页面真的不在窗口里了。
+        //
+        // 顺序要紧：这一段必须在下面那个 `guard let page, page.window != nil` **之前**，
+        // 否则页面一走那条 guard 就直接 return，我们永远等不到收尾（我们的层、被按住的封面、
+        // 标题行的位移就全留在那一页上了）。
+        guard let leavingPage = lastPage else { return false }
+        if leavingPage.window == nil {
+            guard pageLeaving || isOpen || coverHost != nil || lastContainer != nil else { return false }
+            // 页面已经不在屏幕上了 ⇒ 现在写回封面 / 撤销几何 / 摘掉我们的层与那枚键，什么都看不见。
+            closeEverything(reason: "page disappeared", animated: false)
+            removeToggle()
+            return false
+        }
+
+        guard let page = lastPage else { return false }
         guard #available(iOS 26.0, *) else { return false }
+
+        // 转场里（`viewWillDisappear` 已记一笔，但页面还在窗口里）⇒ **保持现状**：
+        // 不写回封面、不撤销几何 —— 整个退出动画里页面都是我们的样子。
+        if pageLeaving {
+            ensureToggleZone(in: page)
+            return isOpen
+        }
 
         if isOpen {
             // 可能因为"封面还没布局好"铺不上 —— 那时退回去，并由 `openAndMount` 开重试窗口。
@@ -457,12 +540,25 @@ enum NowPlayingLyricsPlate {
             ensureToggleZone(in: page)
             return isOpen
         }
+
+        // ★ 2026-10-10（照片 66）：**"打算铺但还没铺上"**的那段窗口里也要按住原生封面 ——
+        //   否则进入播放器的转场里就是原生大封面在动（这一拍 `isOpen` 还是 false）。
+        if wantsOpen {
+            keepNativeCoverHidden(in: page)
+        }
+
+        // ★ 2026-10-10：顺手把那两颗胶囊认下来。**从这一页的子树里找**（按 id）——
+        //   整窗 BFS 会被首页那棵大树吃掉预算（日志 55 那行 `visited 6 node(s)` 是启动瞬间的，
+        //   而页面自己这棵树只有几百个节点，一定够用）。认下来之后 `DeclutterChrome` 会一直盯着。
+        DeclutterChrome.adoptNowPlayingPills(from: page)
         // ★ 2026-10-07：「**点开了但没铺上**」的重试（见 `pendingOpenUntil` 的说明）。
         //   没有这一段，日志 50 里那一次点击就是这枚键的**最后一次**机会。
         //   ⚠️ 重试**也要过门禁**：`openAndMount` 里没有 `canShow`，而换歌之后
         //   "这一首有没有词"是会变的 —— 没词了就把窗口清掉，别拿一首没词的歌空转五拍。
         if CFAbsoluteTimeGetCurrent() < pendingOpenUntil {
-            if hasLyricsAvailable() {
+            // ★ 2026-10-11：`noticeText()` 也算"有东西可画"（用户要的是键随时能按）——
+            //   否则一首没词的歌在"第一拍量不到封面"之后就再也没人重试了。
+            if hasLyricsAvailable() || noticeText() != nil {
                 openAndMount(in: page)
                 keepNativeCoverHidden(in: page)
             } else {
@@ -487,7 +583,12 @@ enum NowPlayingLyricsPlate {
         return false
     }
 
-    /// 进/出页面：`viewWillDisappear` 里收掉（pw：关闭播放器前要撤销几何，否则迷你条对不上）。
+    /// 立刻收掉（**页面离开的那条路已经不用它了** —— 见 `pageWillLeave()`：退出转场里页面
+    /// 还在屏幕上，当场收尾会闪出原生大封面，照片 65）。
+    ///
+    /// 现在它只服务两类"当场"的场合：
+    ///   · 设置页把「歌词进播放器」**关掉**（`EeveeExtrasSettingsView`）；
+    ///   · `reconcile` 判到"页面真的不在窗口里了"之后的收尾。
     ///
     /// ⚠️ **必须无条件走 `closeEverything`**（哪怕看起来"没展开"）：标题行的位移是我们用
     /// `transform` 写上去的，**不撤销就会留在 Spotify 的元素上**（那一行此后永远偏上一截）。
@@ -528,7 +629,9 @@ enum NowPlayingLyricsPlate {
         // ⚠️ 但**不认死** —— `openAndMount` 会顺手开一个 2.5s 的重试窗口。
         // ★ 2026-10-10：**先记"用户要展开"**，再铺。这样即便第一拍量不到（2.5s 重试窗口接手），
         //   下次进页面也还是"记得要展开"——记忆跟的是**用户的意图**，不是这一拍的成功与否。
+        //   `wantsOpen` 同时把"按住原生封面"提前到这一帧（照片 66 的闪就是这么来的）。
         rememberExpanded(true)
+        wantsOpen = true
         openAndMount(in: page)
         // ⚠️ 必须在铺完之后再摆一次：容器会 `bringSubviewToFront`，键会被压到它下面。
         ensureToggleZone(in: page)
@@ -613,7 +716,10 @@ enum NowPlayingLyricsPlate {
     ///     而且节流正是"闪一下"的来源。
     static func coverDidLayOut(from tilt: UIView) {
         guard isEnabled, #available(iOS 26.0, *) else { return }
-        guard isOpen || coverHost != nil || lastContainer != nil else { return }
+        // ★ `wantsOpen` 必须在门禁里（照片 66）：进页面第一拍 `isOpen` 还是 false，
+        //   而那时原生封面已经在转场里动着了 —— 这条门禁原来把那一整段窗口漏掉了。
+        guard isOpen || wantsOpen || coverHost != nil || lastContainer != nil else { return }
+        guard !pageLeaving else { return }
         guard tilt.window != nil, tilt.bounds.width >= 200 else { return noteCoverGuardReject() }
         guard isInsideCoverCell(tilt) else { return noteCoverGuardReject() }
         guard let cover = sameSizeChild(of: tilt), cover.alpha > 0.01 else {
@@ -757,7 +863,16 @@ enum NowPlayingLyricsPlate {
         // **之后** ⇒ 那一步一旦失败就会留下"封面藏了、标题移了、而 `isOpen` 还是 false"
         // 的半成品（只能等离页时 `closeEverything` 去收）。
         // ⚠️ 本轮加了重试窗口之后这一点更要紧：这条路径一晚会走好几回。
-        guard let lines = currentLines(), let trackId = currentTrackId() else {
+        // ★ 2026-10-11（用户要求）：**没有歌词可画时不再"点了没反应"** ——
+        //   键照样能开，打开之后在歌词的位置居中写一句说明。
+        //   于是这里从"必须要行模型"放宽成"要么有行，要么有一句可说的事"。
+        let notice = noticeText()
+        guard let trackId = currentTrackId() else {
+            noteSkip("no track id yet (the player has not reported one)")
+            return false
+        }
+        let lines = currentLines() ?? []
+        if lines.isEmpty, notice == nil {
             noteSkip("no lyric lines to draw right now (the line model is not ready)")
             return false
         }
@@ -790,6 +905,8 @@ enum NowPlayingLyricsPlate {
 
         let container = ensureContainer(in: page, frame: frame)
         applyEdgeFade(to: container)
+        // ★ 2026-10-11：说明文案写在这一块**正中间**（用户原话：「写歌词的正中间最好」）。
+        applyNoticeLabel(notice, in: container)
 
         if let host = currentHost(for: page) {
             let version = currentLyricsVersion
@@ -829,6 +946,9 @@ enum NowPlayingLyricsPlate {
                 "[\(logTag)] expanded — thumbnail \(Int(geometry.thumb.width))pt at \(frameText(geometry.thumb)), "
                     + "lyrics area \(frameText(frame)), cover shrunk in from \(frameText(geometry.cover)), "
                     + "title row \(titleNote)"
+                    // ★ 2026-10-11：三个锚点的**实测值**（`measure()` 里算的，这里只管打印）——
+                    //   照片 67→68 那两片几何全靠它对齐，下一份日志一眼就能看出量到没有。
+                    + " " + lastAnchorText
             )
         }
         return true
@@ -845,7 +965,9 @@ enum NowPlayingLyricsPlate {
         //    否则页面都走了它还挂着一个 deadline（虽然 `page.window` 会挡住，但账要算清）。
         let hadSomethingVisible = isOpen || lastContainer != nil || coverHost != nil
         isOpen = false
+        wantsOpen = false
         pendingOpenUntil = 0
+        pageLeaving = false
         // 封面判据的日志预算**按"一次开合"重置** —— 否则开合三次就把 12 行用光，
         // 正好在下一个 bug 出现时看不见了（独立复核指出）。
         chosenCoverLogs = 0
@@ -975,9 +1097,18 @@ enum NowPlayingLyricsPlate {
             max(rawLeading, page.bounds.minX + stageSideInset),
             page.bounds.maxX - thumbSide - stageSideInset
         )
+        // ★ 2026-10-11（照片 67 → 68）：缩略图**不再跟着原生封面**，改成**贴导航条下沿**。
+        //
+        // 原来 `thumb.y = cover.minY + 8`：日志 55 的 `cover.minY = 161` ⇒ 169，
+        // 也就是把 96（导航条下沿）到 161 那 **65pt 白扔**；而 kumone 的 header 是贴着自己那根
+        // 横条下面的（67–133）。我们上面有 Spotify 的 96pt 导航条躲不开 ⇒ 目标 = 96 + 8 = 104
+        // （能达到的最近位置）。导航条用 **id** 量（`now-playing-minimize-button`），
+        // 量不到就退回旧算法（宁可回到旧行为，也不要一张都摆不出来）。
+        let navBottom = navBarBottom(in: page)
+        let thumbY = navBottom.map { $0 + thumbTop } ?? (cover.minY + thumbTop)
         let thumb = CGRect(
             x: leading,
-            y: cover.minY + thumbTop,
+            y: thumbY,
             width: thumbSide,
             height: thumbSide
         )
@@ -988,14 +1119,30 @@ enum NowPlayingLyricsPlate {
         let lift = top - (rowFrame?.minY ?? top)
         let shift = rowFrame == nil ? 0 : thumbSide + thumbGap
 
-        // 歌词区：缩略图/标题之下 → 进度条之上。
-        let barTop = bottomStackTop(in: list, page: page) ?? (page.bounds.height - 240)
+        // 歌词区：缩略图/标题之下 → **进度条之上**。
+        //
+        // ★ 2026-10-11：原来锚在 `npv.bottomStackView` 的**顶边**（≈593）⇒ 歌词 261–584，
+        // 而进度条在 ≈680 ⇒ 中段白空 80–100pt；kumone 是"歌词一直排到进度条上方 19pt"
+        // （623 / 642）。改成锚**进度条单元**的顶边（id），量不到才退回旧锚点。
+        let stageBottom: CGFloat
+        let progressTop = progressUnitTop(in: list, page: page)
+        // 这一次走查**同时**服务"退路"与日志（别为了打日志再走一遍）。
+        let stackTop = bottomStackTop(in: list, page: page)
+        if let progressTop {
+            stageBottom = progressTop - lyricGapAboveProgress
+        } else {
+            stageBottom = (stackTop ?? (page.bounds.height - 240)) - lyricsBottom
+        }
+        // 三个锚点的实测值（只给 `[NPVLyrics] expanded — …` 那一行用；**不编造**：量不到就打 not found）。
+        lastAnchorText = "(anchors: navBottom=\(anchorText(navBottom)),"
+            + " progressTop=\(anchorText(progressTop)),"
+            + " bottomStackTop=\(anchorText(stackTop)))"
         let stageTop = max(thumb.maxY, top + (rowFrame?.height ?? 0)) + lyricsTop
         let stage = CGRect(
             x: stageSideInset,
             y: stageTop,
             width: page.bounds.width - stageSideInset * 2,
-            height: barTop - lyricsBottom - stageTop
+            height: stageBottom - stageTop
         )
 
         guard stage.height > livingHeight / 2 else {
@@ -1169,8 +1316,7 @@ enum NowPlayingLyricsPlate {
     /// `page.bounds.height - 240` 是个硬编码猜值（日志 50 里是 656），而那一坨的顶边是
     /// `558` ⇒ 猜值比真值**低约 97pt**，歌词区会一路画到标题行 / 进度条 / 控件上。
     /// 两个消费者（`toggleFrame` / 底部音量条）都是用 `page` 那一跳才稳的，这里跟它们对齐。
-    private static func bottomStackTop(in list: UIView, page: UIView) -> CGFloat? {
-        if let stack = findByIdentifier(bottomStackIdentifier, in: page) {
+    private static func bottomStackTop(in list: UIView, page: UIView) -> CGFloat? {        if let stack = findByIdentifier(bottomStackIdentifier, in: page) {
             let top = stack.convert(stack.bounds, to: page).minY
             if top > 0, top < page.bounds.height { return top }
         }
@@ -1185,6 +1331,36 @@ enum NowPlayingLyricsPlate {
         let frame = view.convert(view.bounds, to: host)
         let t = view.transform
         return frame.offsetBy(dx: -t.tx, dy: -t.ty)
+    }
+
+    // MARK: - 两个新锚点（2026-10-11：照片 67 → 68 的几何对齐）
+
+    /// 导航条的下沿（pt，页面坐标系）。
+    ///
+    /// 判据是 **id**：`now-playing-minimize-button`（真机每一份 `[NPVTree]` 里都有
+    /// `Tertiary@0,0,48,48,id=now-playing-minimize-button`）——
+    /// 不按类名（`Tertiary` 全页好几颗）、不按几何猜。
+    private static func navBarBottom(in page: UIView) -> CGFloat? {
+        guard let button = findByIdentifier(minimizeButtonIdentifier, in: page) else { return nil }
+        let frame = untransformed(button, in: page)
+        guard frame.maxY > 0, frame.maxY < page.bounds.height / 2 else { return nil }
+        return frame.maxY
+    }
+
+    /// 进度条单元的顶边（pt，页面坐标系）。
+    ///
+    /// 判据同样是 **id**：`Components.UI.ProgressBarUnitNowPlaying`
+    /// （真机树里 `AutoLayoutStackView@0,0,358,41,id=…`）。
+    /// 先在这一页的列表里找，再在整页找 —— 它在不在列表子树里，不同构建不一样
+    /// （`bottomStackTop` 的注释里记过同一类问题）。
+    private static func progressUnitTop(in list: UIView, page: UIView) -> CGFloat? {
+        for root in [list, page] {
+            guard let unit = findByIdentifier(progressUnitIdentifier, in: root) else { continue }
+            let frame = untransformed(unit, in: page)
+            guard frame.minY > 0, frame.minY < page.bounds.height else { continue }
+            return frame.minY
+        }
+        return nil
     }
 
     // MARK: - 封面与标题
@@ -1821,17 +1997,86 @@ enum NowPlayingLyricsPlate {
     }
 
     /// 这一首有没有能画的东西（行级即可 —— 与上一版放宽后的门禁一致）。
+    ///
+    /// ★ 2026-10-11：**再加一条"有事可说"的路** —— 用户要的是"键随时能按"：
+    ///   没词可画时打开，就在歌词的位置写「未找到歌词」/「此歌曲为纯音乐。」/「正在查找歌词…」。
+    ///   （以前这里直接 false ⇒ 键看得见、点下去什么都不会发生，用户报的就是这个。）
     private static func canShow(for page: UIView) -> Bool {
         if #available(iOS 26.0, *) {} else { return false }
         guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else {
             noteSkip("'Better word-by-word lyrics' is off")
             return false
         }
-        guard hasUsableWordLevelData(currentLyricsDto) || hasUsableLineLevelData(currentLyricsDto) else {
-            noteSkip("no usable lyrics for this track")
-            return false
+        // ★ 用户要求「键随意能按」⇒ 这里**永远为真**：有词就画词，没词就写一句说明
+        //   （见 `noticeText()`），画不出来的异常也照样给一句话，绝不留下"点了没反应"的键。
+        return true
+    }
+
+    /// 打开之后写在歌词**正中间**的那句话。`nil` = 有歌词可画（不写）。
+    ///
+    /// 三种"没词"必须分开说（这正是用户要的）：
+    ///   · 源**明确**说是纯音乐 ⇒ 「此歌曲为纯音乐。」（`song_is_instrumental`，键早就有了）；
+    ///   · 查完了没有 ⇒ 「未找到歌词」（`ngzhwm_lyrics_unavailable`，键也早就有了）；
+    ///   · 还在查 ⇒ 「正在查找歌词…」（`lyrics_looking_up`，本轮新增的键）。
+    /// ⚠️ "查无此歌"**不许**冒充纯音乐 —— 判据是 `LyricsDto.isInstrumental`（只有源明确判定时才置位）。
+    private static func noticeText() -> String? {
+        // ① 有行而且画得出来 ⇒ 正常画歌词。
+        if currentLyricsDto?.lines.isEmpty == false, currentLines() != nil { return nil }
+        // ② 源明确说了这是纯音乐。
+        if currentLyricsDto?.isInstrumental == true { return "song_is_instrumental".localized }
+        // ③ 有行却画不出来（转换异常）：按"没找到"给一句话，**别做成死键**。
+        if currentLyricsDto?.lines.isEmpty == false { return "ngzhwm_lyrics_unavailable".localized }
+        // ④ 数据还没到：正在查 vs 查完了没有。
+        switch currentLyricsLookupState {
+        case .idle, .loading:
+            return "lyrics_looking_up".localized
+        case .failed, .found:
+            return "ngzhwm_lyrics_unavailable".localized
         }
-        return currentLines() != nil
+    }
+
+    private static weak var lastNoticeLabel: UILabel?
+
+    /// 摆 / 撤那句说明。`text == nil` ⇒ 撤掉（有歌词可画了）。
+    private static func applyNoticeLabel(_ text: String?, in container: UIView) {
+        guard let text else {
+            lastNoticeLabel?.removeFromSuperview()
+            lastNoticeLabel = nil
+            return
+        }
+
+        let label: UILabel
+        if let existing = lastNoticeLabel, existing.superview === container {
+            label = existing
+        } else {
+            lastNoticeLabel?.removeFromSuperview()
+            let fresh = UILabel()
+            fresh.accessibilityIdentifier = "eevee-npv-lyrics-notice"
+            fresh.textAlignment = .center
+            fresh.numberOfLines = 0
+            fresh.font = .systemFont(ofSize: 17, weight: .medium)
+            fresh.textColor = UIColor.white.withAlphaComponent(0.55)
+            // 我们自己的一句话，不该抢歌词行的点击（点行跳转仍在 SwiftUI 那一层）。
+            fresh.isUserInteractionEnabled = false
+            container.addSubview(fresh)
+            lastNoticeLabel = fresh
+            label = fresh
+        }
+
+        if label.text != text { label.text = text }
+
+        // 居中：容器就是"歌词那一块"（日志 55 的 `20,261,374,323`），
+        // 用 `sizeThatFits` 量出文字高度再把它摆在中间 —— 直接铺满会变成顶对齐。
+        let maxWidth = max(container.bounds.width - 32, 40)
+        let size = label.sizeThatFits(CGSize(width: maxWidth, height: .greatestFiniteMagnitude))
+        let frame = CGRect(
+            x: 16,
+            y: ((container.bounds.height - size.height) / 2).rounded(),
+            width: maxWidth,
+            height: size.height
+        )
+        if label.frame != frame { label.frame = frame }
+        container.bringSubviewToFront(label)
     }
 
     private static func currentLines() -> [LyricLine]? {
@@ -1856,6 +2101,15 @@ enum NowPlayingLyricsPlate {
     private static func frameText(_ frame: CGRect) -> String {
         "\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))"
     }
+
+    /// 锚点那种"可能量不到"的数值：量不到就说 `not found`，**不编造**。
+    private static func anchorText(_ value: CGFloat?) -> String {
+        guard let value else { return "not found" }
+        return "\(Int(value))"
+    }
+
+    /// 最近一次 `measure()` 量到的三个锚点（**只给日志用**，避免为了打印再走查一遍）。
+    private static var lastAnchorText = ""
 
     private static func findByIdentifier(_ identifier: String, in root: UIView) -> UIView? {
         var visited = 0

@@ -37,9 +37,23 @@ enum NowPlayingPageOverlay {
     private static let bottomAnchorIdentifier = "npv.bottomStackView"
     /// 锚点走查上限（本仓库纪律）。
     private static let maxNodes = 2000
-    /// 音量条自己的尺寸（左右内缩各 4pt，与 `npv.bottomStackView` 的 4,0,406 对齐）。
-    private static let volumeHeight: CGFloat = 32
-    private static let sideInset: CGFloat = 8
+    /// 音量那一行的尺寸。
+    ///
+    /// ★ 2026-10-11（照片 69 → 照片 68）：**原来那一版"很难看"，因为它是系统原样的
+    /// `MPVolumeView`** —— iOS 26 上那是一条玻璃胶囊轨 + 一颗大钮，铺满整宽（照片 69 里
+    /// 就是那条横在页面最底、白钮贴左边缘的东西）。kumone 的（照片 68）是：
+    /// **约 4pt 细轨 + 小圆钮（≈14pt）+ 两端各一个小喇叭图标**，整行**左右各内缩 ≈42pt**，
+    /// 行高 24pt、夹在三键与三个圆钮之间。
+    ///
+    /// 我们照它的**观感**来（位置仍沿用既有锚点逻辑 —— 那是为"别压到原生控件/别撞 home indicator"
+    /// 定的，先不动）：细轨、小钮、两端喇叭，行左右各内缩 24pt。
+    private static let volumeRowHeight: CGFloat = 28
+    private static let volumeRowInset: CGFloat = 24
+    private static let volumeGlyphSize: CGFloat = 16
+    private static let volumeGlyphGap: CGFloat = 10
+    private static let volumeTrackHeight: CGFloat = 4
+    private static let volumeThumbDiameter: CGFloat = 14
+    private static let volumeRowIdentifier = "eevee-npv-volume-row"
     private static let gapBelowAnchor: CGFloat = 4
 
     private static var overlayKey: UInt8 = 0
@@ -140,12 +154,11 @@ enum NowPlayingPageOverlay {
             changed = true
         }
 
-        let slider = ensureVolumeSlider(in: overlay)
         let target = volumeFrame(in: page, overlay: overlay)
-        if slider.frame != target {
-            slider.frame = target
+        if overlay.subviews.first(where: { $0.accessibilityIdentifier == volumeRowIdentifier })?.frame != target {
             changed = true
         }
+        layoutVolumeRow(in: overlay, frame: target)
 
         if !didLogInstall {
             didLogInstall = true
@@ -160,9 +173,150 @@ enum NowPlayingPageOverlay {
         return changed
     }
 
+    /// 把音量那一行摆好 + 给系统那条音量条**换皮**。
+    ///
+    /// 结构（我们自己的视图，Spotify 一个字节都不动）：
+    /// ```
+    /// eevee-npv-volume-row            ← 容器，不吃触摸
+    ///   ├─ 左喇叭（speaker.fill）      ← 纯装饰
+    ///   ├─ MPVolumeView                ← 唯一吃触摸的那个（系统音量只能靠它）
+    ///   └─ 右喇叭（speaker.wave.3.fill）
+    /// ```
+    private static func layoutVolumeRow(in overlay: UIView, frame: CGRect) {
+        let row = ensureVolumeRow(in: overlay)
+        if row.frame != frame { row.frame = frame }
+
+        let glyph = volumeGlyphSize
+        let sliderX = glyph + volumeGlyphGap
+        let sliderWidth = max(40, frame.width - sliderX * 2)
+        let sliderFrame = CGRect(
+            x: sliderX,
+            y: (frame.height - volumeRowHeight) / 2,
+            width: sliderWidth,
+            height: volumeRowHeight
+        )
+        let slider = volumeSlider(in: row)
+        if slider.frame != sliderFrame { slider.frame = sliderFrame }
+
+        let left = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-low" }
+        let right = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-high" }
+        let glyphY = (frame.height - glyph) / 2
+        left?.frame = CGRect(x: 0, y: glyphY, width: glyph, height: glyph)
+        right?.frame = CGRect(x: frame.width - glyph, y: glyphY, width: glyph, height: glyph)
+    }
+
+    /// 幂等：那一行只建一次（`MPVolumeView` 走的是系统音量，Apple 自己的控件）。
+    private static func ensureVolumeRow(in overlay: UIView) -> UIView {
+        if let existing = overlay.subviews.first(where: {
+            $0.accessibilityIdentifier == volumeRowIdentifier
+        }) {
+            return existing
+        }
+
+        let row = UIView(frame: .zero)
+        // ⚠️ 容器不吃触摸；只有里面那条 `MPVolumeView` 吃（原生的下拉关闭 / 滚动照常）。
+        row.isUserInteractionEnabled = false
+        row.accessibilityIdentifier = volumeRowIdentifier
+
+        row.addSubview(volumeGlyph(named: "speaker.fill", identifier: "eevee-npv-volume-glyph-low"))
+        row.addSubview(volumeGlyph(named: "speaker.wave.3.fill", identifier: "eevee-npv-volume-glyph-high"))
+
+        let slider = MPVolumeView(frame: .zero)
+        slider.showsRouteButton = false          // 不要那枚 AirPlay 路由按钮（kumone 也没有）
+        slider.isUserInteractionEnabled = true
+        styleVolumeSlider(slider)
+        row.addSubview(slider)
+
+        overlay.addSubview(row)
+        return row
+    }
+
+    private static func volumeSlider(in row: UIView) -> MPVolumeView {
+        if let existing = row.subviews.compactMap({ $0 as? MPVolumeView }).first {
+            return existing
+        }
+        let slider = MPVolumeView(frame: .zero)
+        slider.showsRouteButton = false
+        slider.isUserInteractionEnabled = true
+        styleVolumeSlider(slider)
+        row.addSubview(slider)
+        return slider
+    }
+
+    /// 两端的小喇叭（纯装饰，不吃触摸）。
+    private static func volumeGlyph(named symbol: String, identifier: String) -> UIImageView {
+        let view = UIImageView()
+        view.image = UIImage(
+            systemName: symbol,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        )
+        view.tintColor = UIColor.white.withAlphaComponent(0.55)
+        view.contentMode = .scaleAspectFit
+        view.isUserInteractionEnabled = false
+        view.accessibilityIdentifier = identifier
+        return view
+    }
+
+    // MARK: - 给系统音量条换皮（照片 68 的样子）
+
+    /// ★ 2026-10-11：**只走公开接口**。
+    ///
+    /// `MPVolumeView` 内部那枚 `UISlider` 是私有层级（改 tint 属于"猜内部结构"），
+    /// 而它有三条**公开**的图片接口：`setMinimumVolumeSliderImage(_:for:)`（已播放那段）、
+    /// `setMaximumVolumeSliderImage(_:for:)`（未播放那段）、`setVolumeThumbImage(_:for:)`。
+    /// 用可拉伸的图片喂进去 ⇒ 想要多细就多细，且**不会**碰到它的内部视图。
+    private static func styleVolumeSlider(_ slider: MPVolumeView) {
+        guard !styledVolumeSliders.contains(slider) else { return }
+        styledVolumeSliders.add(slider)
+
+        slider.setMinimumVolumeSliderImage(
+            trackImage(color: UIColor.white.withAlphaComponent(0.92)),
+            for: .normal
+        )
+        slider.setMaximumVolumeSliderImage(
+            trackImage(color: UIColor.white.withAlphaComponent(0.22)),
+            for: .normal
+        )
+        slider.setVolumeThumbImage(thumbImage(), for: .normal)
+    }
+
+    private static let styledVolumeSliders = NSHashTable<MPVolumeView>.weakObjects()
+
+    /// 一条胶囊轨（两端半圆），中间可拉伸。
+    private static func trackImage(color: UIColor) -> UIImage {
+        let height = volumeTrackHeight
+        let size = CGSize(width: height * 3, height: height)
+        let image = UIGraphicsImageRenderer(size: size).image { _ in
+            color.setFill()
+            UIBezierPath(
+                roundedRect: CGRect(origin: .zero, size: size),
+                cornerRadius: height / 2
+            ).fill()
+        }
+        let cap = height / 2
+        return image.resizableImage(
+            withCapInsets: UIEdgeInsets(top: 0, left: cap, bottom: 0, right: cap)
+        )
+    }
+
+    /// 小圆钮（带一点投影，白钮在深色底上才站得住）。
+    private static func thumbImage() -> UIImage {
+        let side = volumeThumbDiameter
+        let size = CGSize(width: side, height: side)
+        return UIGraphicsImageRenderer(size: size).image { context in
+            context.cgContext.setShadow(
+                offset: CGSize(width: 0, height: 1),
+                blur: 3,
+                color: UIColor.black.withAlphaComponent(0.35).cgColor
+            )
+            UIColor.white.setFill()
+            UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).fill()
+        }
+    }
+
     /// 音量条放哪：**锚点下面**；锚点不在（或空间不够）就贴安全区底。
     private static func volumeFrame(in page: UIView, overlay: UIView) -> CGRect {
-        let width = max(120, page.bounds.width - sideInset * 2)
+        let width = max(120, page.bounds.width - volumeRowInset * 2)
         let x = (page.bounds.width - width) / 2
 
         // 安全区底：页面自己的 `safeAreaInsets` 就是最可靠的"别压到 home indicator"来源。
@@ -173,28 +327,14 @@ enum NowPlayingPageOverlay {
             let frame = anchor.convert(anchor.bounds, to: overlay)
             y = frame.maxY + gapBelowAnchor
         } else {
-            y = bottomLimit - volumeHeight
+            y = bottomLimit - volumeRowHeight
         }
 
         // 越界就往回收，绝不叠到原生控件上。
-        if y + volumeHeight > bottomLimit {
-            y = max(0, bottomLimit - volumeHeight)
+        if y + volumeRowHeight > bottomLimit {
+            y = max(0, bottomLimit - volumeRowHeight)
         }
-        return CGRect(x: x, y: y, width: width, height: volumeHeight)
-    }
-
-    /// 幂等：音量条只建一次（`MPVolumeView` 走的是系统音量，Apple 自己的控件）。
-    private static func ensureVolumeSlider(in overlay: UIView) -> MPVolumeView {
-        if let existing = overlay.subviews.compactMap({ $0 as? MPVolumeView }).first {
-            return existing
-        }
-
-        let slider = MPVolumeView(frame: .zero)
-        slider.showsRouteButton = false          // 不要那枚 AirPlay 路由按钮（kumone 也没有）
-        // ⚠️ 只有这一个子视图开交互；容器本身仍然不吃触摸。
-        slider.isUserInteractionEnabled = true
-        overlay.addSubview(slider)
-        return slider
+        return CGRect(x: x, y: y, width: width, height: volumeRowHeight)
     }
 
     /// `npv.bottomStackView` 在哪：**页面 → 播放器列表 → 窗口**，三跳。

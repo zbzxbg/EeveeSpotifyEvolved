@@ -467,11 +467,15 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         InlineLyricsHostLocator.stopLookup()
         // 定向转储的登记也一起撤掉 —— 否则离开听歌页之后还会一直按"页面"预算转储。
         ViewTreeDumper.setPage(nil)
-        // 「歌词进播放器」那一层也收掉：页面已经不在屏幕上，留着只是白占一份 hosting。
-        // ⚠️ 它在 `@MainActor` 上，而这里是非隔离的 hook 方法 ⇒ 走 `onMainThreadSync`。
-        // 这一处**必须同步**（`viewWillDisappear` 里的清理不能延后），而它已经是主线程，
-        // 所以 `assumeIsolated` 会立即执行 —— 时序与直接调用一致。
-        onMainThreadSync { NowPlayingLyricsPlate.remove(reason: "page disappeared") }
+        // 「歌词进播放器」那一层：★★ 2026-10-10（照片 65）**这里只记一笔，什么都不收**。
+        //
+        // 原来这里直接 `remove(...)` ⇒ 封面当场 `alpha = 1`、我们的层当场摘掉，
+        // 而**退出转场里页面还在屏幕上**（滑下去 / 缩回迷你条）⇒ 整个退出动画都是
+        // **原生那张大封面**（照片 65 的闪）。现在收尾推迟到"页面真的不在窗口里"那一刻，
+        // 由 `NowPlayingLyricsPlate.reconcile()`（`DeclutterChrome` 那条 0.3s 节拍）执行 ——
+        // 那时页面已经不在屏幕上了，写回封面 / 撤销几何都看不见。
+        // ⚠️ 仍然走 `onMainThreadSync`（`@MainActor` 类型，而 hook 方法体是非隔离的）。
+        onMainThreadSync { NowPlayingLyricsPlate.pageWillLeave() }
     }
 }
 

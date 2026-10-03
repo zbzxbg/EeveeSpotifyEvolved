@@ -142,6 +142,7 @@ ngzhwm_korean_romanization = "韩语歌词罗马化";
 ngzhwm_remove_interlude_symbol = "删除间奏符号「♪」";
 ngzhwm_remove_interlude_symbol_description = "选项开启时后会删除歌词内的间奏符号「♪」，有♪的这一行会显示空白。";
 ngzhwm_lyrics_unavailable = "未找到歌词";
+lyrics_looking_up = "正在查找歌词…";
 track_mismatch = "取词期间切了歌，重新播放这一首即可获取歌词。";
 // Debug
 

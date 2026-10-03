@@ -114,7 +114,9 @@ class LrclibLyricsRepository: LyricsRepository {
             return LyricsDto(
                 lines: [],
                 timeSynced: false,
-                romanization: .original
+                romanization: .original,
+                // ★ 2026-10-11：同上 —— 源明确判定过，听歌页据此写「此歌曲为纯音乐。」。
+                isInstrumental: true
             )
         }
 

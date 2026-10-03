@@ -10,6 +10,19 @@ struct LyricsDto {
     var romanization: LyricsRomanizationStatus
     var translation: LyricsTranslationDto? = nil
     var languageCode: String? = nil
+
+    /// ★ 2026-10-11：**源明确说过"这一首是纯音乐"**。
+    ///
+    /// 为什么必须单开一个字段（而不是"行是空的"就当纯音乐）：
+    /// 两份仓库注释都为此写过同一句话 —— *"不把上游『空歌词 → 纯音乐占位』的 bug 带过来"*
+    /// （`NeteaseLyricsRepository` 的 `No usable lyrics` 分支、`GeniusLyricsRepository` 的
+    /// `noSuchSong` 分支）。"查无此歌"与"这是纯音乐"在数据上**长得一样**（都是空行），
+    /// 但对用户是两句话：**「未找到歌词」** vs **「此歌曲为纯音乐。」**
+    ///
+    /// 置位的地方只有两处，都是**源自己的可信分类**：
+    ///   · 网易云 lrc 里带「纯音乐」（`NeteaseLyricsRepository`）；
+    ///   · LRCLIB 的 `song.instrumental == true`（`LrclibLyricsRepository`）。
+    var isInstrumental: Bool = false
     /// 这份歌词**实际**是谁给的（形如 `"PetitLyrics (EeveeSpotify)"`）。
     ///
     /// 由 `CustomLyrics.storeLyricsDto(_:source:)` 在拿到数据的同一刻写入，

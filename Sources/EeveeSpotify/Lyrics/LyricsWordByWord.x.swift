@@ -19,6 +19,26 @@ import SwiftUI
 var currentLyricsDto: LyricsDto?
 var currentLyricsVersion: Int = 0
 
+/// ★ 2026-10-11（用户提的现场）：**这一次"取词"走到哪一步了。**
+///
+/// 为什么需要它：以前只有"有词 / 没词"两态，而"没词"其实是**三件不同的事** ——
+/// **还在查** / **查完了没找到** / **源明确说是纯音乐**。
+/// 三者被压成同一个"点了没反应"（用户原话：「那个歌词按钮是不是点不开」），
+/// 而用户要的是：**键随时能按**，按开之后在歌词的位置写清楚是哪一种。
+///
+/// 写入点（`CustomLyrics.x.swift`，只有三处）：
+///   · 请求开始 / 切歌 ⇒ `.loading`；
+///   · `storeLyricsDto` ⇒ `.found`（有数据；纯音乐那种看 `LyricsDto.isInstrumental`）；
+///   · 取词失败 ⇒ `.failed`。
+enum LyricsLookupState {
+    case idle
+    case loading
+    case found
+    case failed
+}
+
+var currentLyricsLookupState: LyricsLookupState = .idle
+
 /// `currentLyricsDto` 这份数据**属于哪一首**（曲目 id）。
 ///
 /// ── 为什么需要它（日志 28 的真机现场）────────────────────────────────────

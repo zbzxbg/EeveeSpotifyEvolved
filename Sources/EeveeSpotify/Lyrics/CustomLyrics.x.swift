@@ -655,6 +655,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
         let overlayDto = dto.romanizedForWordByWordIfEnabled()
         currentLyricsDto = overlayDto
+        // ★ 2026-10-11：数据到了（哪怕是纯音乐那种"空行 + isInstrumental"）⇒ 取词这一步=found。
+        currentLyricsLookupState = .found
         // 这份数据**属于哪一首**：切歌不一定伴随歌词请求（客户端命中自己的歌词存储 /
         // 离线歌词时不会有 `color-lyrics` 请求），所以"模型归属"必须显式记下来，
         // 供两层每帧比对。详见 `currentLyricsDtoTrackId` 的说明。
@@ -695,9 +697,18 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     ///
     /// - Parameter reason: 日志里那句原因。默认保持历史文案（取词失败那条路）；
     ///   切歌时传 "track changed…"，这样日志一眼能分清是"没词"还是"换歌"。
-    private func resetWordByWordLyrics(reason: String = "no custom lyrics for this track") {
+    private func resetWordByWordLyrics(
+        reason: String = "no custom lyrics for this track",
+        lookupFailed: Bool = true
+    ) {
         writeDebugLog("[Lyrics] \(reason) — clearing word-by-word layer")
         currentLyricsDto = nil
+        // ★ 2026-10-11：听歌页那层靠这个状态决定"点开之后写哪一句" ——
+        //   「还在查」与「查完了没有」必须分开（用户要的是前者写"正在查找"、后者写"未找到"）。
+        //   `lookupFailed: false` 的调用点是"切歌 / 功能被关"，那两种情况**不许**写成"未找到"。
+        if lookupFailed {
+            currentLyricsLookupState = .failed
+        }
         // 模型归属也要一起清：留着它会让"这份数据属于哪一首"永远指向上一首。
         currentLyricsDtoTrackId = ""
         currentLyricsProvider = ""
@@ -798,7 +809,9 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
     guard !NgzhwmSettingsViewModel.isLyricsFeatureDisabled else {
         writeDebugLog("[Lyrics] Feature disabled — refusing")
         // 功能被关掉时同样要把逐词层清干净：否则它会继续盖着原生歌词显示旧内容。
-        resetWordByWordLyrics()
+        // ⚠️ `lookupFailed: false`：这是"用户把功能关了"，不是"没找到歌词"——
+        //    听歌页那层不该因此写「未找到歌词」。
+        resetWordByWordLyrics(lookupFailed: false)
         throw LyricsError.invalidSource
     }
 
@@ -856,8 +869,10 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
         let isTrackSwitch = lyricsLayerTrackId != nil
         lyricsLayerTrackId = requestedTrackId
         if isTrackSwitch {
-            resetWordByWordLyrics(reason: "track changed (\(requestedTrackId))")
+            resetWordByWordLyrics(reason: "track changed (\(requestedTrackId))", lookupFailed: false)
         }
+        // ★ 2026-10-11：切到新的一首 ⇒ 取词这一步重新开始（听歌页那层会写"正在查找歌词…"）。
+        currentLyricsLookupState = .loading
     }
 
     if !trackIdentifier.isEmpty && !originalPath.contains(trackIdentifier) {
@@ -865,6 +880,8 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
     }
 
     var lyrics: Lyrics
+    // ★ 2026-10-11：真的开始查了（听歌页那层据此写"正在查找歌词…"）。
+    currentLyricsLookupState = .loading
     do {
         lyrics = try loadCustomLyricsForCurrentTrack()
     } catch let error {

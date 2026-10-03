@@ -921,7 +921,10 @@ class NeteaseLyricsRepository: LyricsRepository {
         // 网易「纯音乐，请欣赏」= 这首歌是纯音乐（可信分类）：直接返回纯音乐占位。
         if let lrc = raw.lrc, lrc.contains("纯音乐") {
             writeDebugLog("[NetEase] Instrumental — returning empty lyrics")
-            let dto = LyricsDto(lines: [], timeSynced: false, romanization: .original)
+            var dto = LyricsDto(lines: [], timeSynced: false, romanization: .original)
+            // ★ 2026-10-11：**把"源说过这是纯音乐"记在 dto 上** —— 听歌页那层据此写
+            //   「此歌曲为纯音乐。」而不是「未找到歌词」（两者数据都是空行，只有这个字段能区分）。
+            dto.isInstrumental = true
             lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey as NSString)
             return dto
         }
