@@ -75,16 +75,21 @@ private final class NowPlayingLyricsHost {
             showsProviderFooter: false,
             sideInset: NowPlayingLyricsPlate.stageSideInset,
             previewHeaderInset: 0,
-            transparentBackdrop: true,
             onSeek: onSeek,
             trackTitle: "",
             trackArtist: "",
+            // ⚠️ **参数顺序必须与结构体里的属性声明顺序完全一致** —— SwiftUI 的逐成员初始化器
+            // 是位置敏感的（2026-10-05 CI 抓到：我把 `transparentBackdrop` 写在 `previewHeaderInset`
+            // 后面，编译器报 "argument labels do not match"）。
+            transparentBackdrop: true,
             clock: clock,
             projection: projection
         )
 
         let hosting = UIHostingController(rootView: root)
-        hosting.view.backgroundColor = .clear
+        // ⚠️ 必须写全 `UIColor.clear`：这里没有上下文类型，`.clear` 推断不出来
+        // （CI 报 "cannot infer contextual base in reference to member 'clear'"）。
+        hosting.view.backgroundColor = UIColor.clear
         hosting.view.translatesAutoresizingMaskIntoConstraints = false
         hosting.view.accessibilityIdentifier = "eevee-npv-lyrics"
 
