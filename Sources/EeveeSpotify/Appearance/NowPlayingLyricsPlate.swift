@@ -1954,7 +1954,10 @@ enum NowPlayingLyricsPlate {
             usingSpringWithDamping: 1,
             initialSpringVelocity: 0,
             options: [.allowUserInteraction, .beginFromCurrentState],
-            animations: change
+            animations: change,
+            // ⚠️ `completion` 显式写 `nil`：UIKit 那个 Swift 签名虽然给了默认值，
+            //    但这个仓库的编译器版本只保证"最多一个警告"，不冒这个险（同 `applyCoverState`）。
+            completion: nil
         )
     }
 
@@ -2201,13 +2204,26 @@ enum NowPlayingLyricsPlate {
     }
 
     /// 热区被点了 ⇒ 把这一下**转给那颗真的分享键**。
+    ///
+    /// ⚠️ `bandShareButton` 的声明类型是 `UIView?`（我们只当它是"页里那个视图"），
+    /// 而 `sendActions(for:)` 是 **`UIControl`** 的方法 ⇒ 这里必须 `as? UIControl`。
+    /// 这一条 2026-10-11 让 CI 红过一次（`value of type 'UIView' has no member 'sendActions'`
+    /// + `cannot infer contextual base in reference to member 'touchUpInside'`，
+    /// 后一条是前一条的连锁）—— 自检 `swift_member_check.py` 的规则 ④ 就是为它加的。
     fileprivate static func relayShareTap() {
-        guard let button = bandShareButton else { return }
-        writeDebugLog(
-            "[\(logTag)] relaying a tap to the share button "
-                + "(\(NSStringFromClass(type(of: button))))"
-        )
-        button.sendActions(for: .touchUpInside)
+        guard let view = bandShareButton else { return }
+        let name = NSStringFromClass(type(of: view))
+
+        guard let control = view as? UIControl else {
+            // 不是 `UIControl` ⇒ 这颗键不是靠 target/action 响应的，转发不了。
+            // 留一行日志：下一轮就能分清"转发发生了但对方不是 UIControl"和"热区没收到触摸"。
+            writeDebugLog(
+                "[\(logTag)] the share button (\(name)) is not a UIControl — cannot forward the tap"
+            )
+            return
+        }
+        writeDebugLog("[\(logTag)] relaying a tap to the share button (\(name))")
+        control.sendActions(for: .touchUpInside)
     }
 
     /// 把我们写给标题行 / 标题元素的那两段位移撤掉（关开关 / 离开页面）。

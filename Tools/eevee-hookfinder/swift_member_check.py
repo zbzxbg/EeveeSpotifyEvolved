@@ -12,12 +12,18 @@
   同一批还有一条纯语法错：`guard let target = f()`，而 `f()` 返回**非 Optional**。
   这两类都**不需要编译器**就能查出来 —— 本脚本就干这个，省一次 CI。
 
-它检查三件事：
+它检查四件事：
   1. **静态成员是否存在**：`Type.member` 这种写法里，`Type` 若是本仓库声明的类型，
      那 `member` 必须在它（或它的 extension）里声明过；
   2. **`guard let x = expr` 里 expr 是不是明显非 Optional**：只查"本地声明的函数
      返回类型不带 `?`/`!`"这一种确定情形（保守，宁漏不误报）；
-  3. 顺带列出**未被引用的 private/static 成员**（只提示，不判错）。
+  3. 顺带列出**未被引用的 private/static 成员**（只提示，不判错）；
+  4. ★ 2026-10-11 新增：**`UIControl` 专有方法被调在 `UIView` 类型的变量上**
+     （CI 实证：`value of type 'UIView' has no member 'sendActions'` +
+     `cannot infer contextual base in reference to member 'touchUpInside'`）。
+     它会把"声明成 `UIView` 的名字"顺着 `guard let a = b` 这类**纯标识符赋值**传播两三跳，
+     再看这些名字头上有没有 `sendActions` / `addTarget` / `removeTarget`；
+     `… as? UIControl` 那种写法**不会**被算进来（那正是修好之后的样子）。
 
 用法：
     python Tools/eevee-hookfinder/swift_member_check.py            # 扫 Sources/EeveeSpotify
@@ -402,6 +408,52 @@ def main(argv: list[str]) -> int:
     # `session` / `time` 这些**局部变量、参数、闭包捕获**和别处的 static 同名太常见，
     # 纯正则分不出"裸用成员"和"就是个局部变量"。要真判对得做作用域分析，不值得。
     # 上面那条 ③ 只做**能判准**的那一小块（跨文件 + private ⇒ 必然错）。
+
+    # ④ `UIControl` 专有的方法被调在 `UIView` 类型的变量上 —— **必然编译错**（本机就能挡）。
+    #
+    # 2026-10-11 的 CI 实证（`NowPlayingLyricsPlate.relayShareTap`）：
+    #
+    #     private static weak var bandShareButton: UIView?
+    #     …
+    #     guard let button = bandShareButton else { return }
+    #     button.sendActions(for: .touchUpInside)
+    #
+    #   ⇒ `value of type 'UIView' has no member 'sendActions'`
+    #     + `cannot infer contextual base in reference to member 'touchUpInside'`（后一条是连锁）。
+    #
+    # 判据（**只做能判准的那一小块**，宁可漏、不误报 —— 与上面几条同一条纪律）：
+    #   · 先收集"声明成 `UIView`（含 `UIView?` / `weak var`）"的名字；
+    #   · 再顺着 `guard let a = b` / `let a = b` 这种**纯标识符赋值**把类型传播两三跳
+    #     —— 注意 `guard let a = b as? UIControl` 的右边**不是**裸标识符，所以**不会**被算进来
+    #     （那正是修好之后的写法）；
+    #   · 同一个文件里这个名字还当过 `UIControl` 的声明/参数 ⇒ 整名跳过（同名遮蔽那一类误报）。
+    CONTROL_ONLY_METHODS = ("sendActions", "addTarget", "removeTarget")
+    for f, src in per_file_src.items():
+        view_names = set(re.findall(
+            r"\b(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*UIView\??(?![\w.])", src))
+        view_names = {n for n in view_names
+                      if not re.search(r"\b" + re.escape(n) + r"\s*:\s*UIControl", src)}
+        if not view_names:
+            continue
+
+        for _ in range(3):
+            for lhs, rhs in re.findall(
+                r"\b(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
+                r"([A-Za-z_][A-Za-z0-9_]*)\s*(?:else|\n|$|\{)", src):
+                if rhs in view_names:
+                    view_names.add(lhs)
+
+        for name in sorted(view_names):
+            for method in CONTROL_ONLY_METHODS:
+                for m in re.finditer(
+                    r"(?<![\w.])" + re.escape(name) + r"\??\s*\.\s*" + method + r"\s*\(", src
+                ):
+                    line = src[:m.start()].count("\n") + 1
+                    problems.append(
+                        f"{f}:{line}: `{name}.{method}(…)` —— `{name}` 是 `UIView` 类型，"
+                        f"而 `{method}` 是 `UIControl` 的方法（编译期报 has no member）。"
+                        "先用 `x as? UIControl` 接一下再调"
+                    )
 
     if problems:
         # 去重（同一处可能被两条规则各命中一次）

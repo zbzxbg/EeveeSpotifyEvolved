@@ -221,16 +221,49 @@ the landing spot`）。`transform` 改不了父视图的命中范围 ⇒ 加了�
 
 ---
 
-## 5. 本机自检（六条全绿）
+## 4.8 ★ CI 红了一次：`UIView` 上没有 `sendActions`（并加了自检规则 ④）
+
+CI 报（用户转来的原文）：
+
+```
+Sources/EeveeSpotify/Appearance/NowPlayingLyricsPlate.swift:2210:
+  value of type 'UIView' has no member 'sendActions'
+  cannot infer contextual base in reference to member 'touchUpInside'   ← 上一条的连锁
+```
+
+**根因**：`bandShareButton` 的声明类型是 `UIView?`（我们本来只当它是"页里那个视图"），
+所以 `guard let button = bandShareButton` 拿到的是 **`UIView`** —— 而 `sendActions(for:)` 是
+`UIControl` 的方法。
+
+**修法**（`relayShareTap`）：`guard let control = view as? UIControl else { 打一行日志; return }`。
+日志留的是 `the share button (<类名>) is not a UIControl — cannot forward the tap` ——
+下一轮就能分开"我们的转发发生了、但对方不是 UIControl"和"热区根本没收到触摸"这两种。
+
+★ **顺手加了自检规则 ④**（`Tools/eevee-hookfinder/swift_member_check.py`）：把"声明成 `UIView` 的名字"
+顺着 `guard let a = b` 这种**纯标识符赋值**传播两三跳，再看它们头上有没有
+`sendActions` / `addTarget` / `removeTarget`。**两向验证过**：
+
+* 干净仓库 0 命中（272 个文件，exit 0）；
+* 同形状的假货（`.tmp-rule4/Probe.swift`，就是这次的写法）**报在该行、exit 1**；
+* 修好之后的 `as? UIControl` 写法 **不被报**（RHS 不是裸标识符 ⇒ 不进集合）。
+
+⚠️ 顺带把新写的那处 `UIView.animate(... usingSpringWithDamping: …)` 补上 `completion: nil` ——
+UIKit 的 Swift 签名虽然给了默认值，但这个仓库的编译器版本只保证"最多一个警告"，不冒这个险。
+
+
 
 ```
 python Tools/eevee-hookfinder/orion_hook_guard.py      # OK 327 文件
 python Tools/eevee-hookfinder/swift_brace_check.py     # OK 327 文件
-python Tools/eevee-hookfinder/swift_member_check.py    # OK 272 文件
-python Tools/eevee-hookfinder/swift_string_check.py    # OK 276 文件 / 48483 行
+python Tools/eevee-hookfinder/swift_member_check.py    # OK 272 文件（含本场新增的规则 ④）
+python Tools/eevee-hookfinder/swift_string_check.py    # OK 276 文件 / 48499 行
 python Tools/l10n_lint.py --locale en                  # exit 0
 python Tools/l10n_lint.py --locale zh-CN               # 427 keys, 0 missing, 0 extra
 ```
+
+* **规则 ④（本场新增）**：`UIControl` 专有方法被调在 `UIView` 类型的变量上 ⇒ 必然编译错
+  （就是 §4.8 那次 CI 红）。两向验证过；**只认"声明成 `UIView` + 纯标识符赋值传播"**，
+  同名遮蔽 / 参数传入的一律跳过 —— 宁可漏，也不误报（与规则 ③ 同一条纪律）。
 
 ⚠️ 六条都**不做类型检查**（`CGAffineTransform(a:b:c:d:tx:ty:)` 的逐参数、`@discardableResult` 的调用点、
 `flatMap` 那两处 Optional 链、`NSMutableParagraphStyle` 那几行只能靠 CI）。
