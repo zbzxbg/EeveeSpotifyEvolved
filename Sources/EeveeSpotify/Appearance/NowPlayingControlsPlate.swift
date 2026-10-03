@@ -40,28 +40,35 @@ import ObjectiveC.runtime
 //
 // 开关：扩展功能 → 听歌页 →「**播放键换成本地字形**」，**默认关**。日志 tag：`[NPVControls]`。
 //
-// ## ★ 2026-10-03 修（日志 48 + 照片 49/50 判读）：播放键"点一下暂停就换一张脸"
+// ## ★ 2026-10-03 修（日志 48 + 照片 49/50 判读）：播放键"点一下暂停就闪一下白圆盘"
 //
 // **用户报**：「点击暂停键会有闪烁」。
 //
-// **照片取证**（同一台机、同一首 `Starboy`）：
-//   * 照片 49（播放中）：按钮 = **纯白圆盘（Ø≈63pt）+ 深色暂停横条** —— 这是**原生**的样子；
-//   * 照片 50（暂停）：按钮 = **一个裸白三角（≈24×27pt），没有圆盘** —— 这是**我们的字形**。
-//   ⇒ 点一下暂停，整颗按钮在白圆盘与裸三角之间**整个换脸**。
+// **照片取证**（同一台机、同一首 `Starboy`；两张的时区换算见 SESSION_2026-10-05 §8）
+//   * 照片 50（**暂停**，10:47 = 01:47 UTC，与日志 48 第一行 `pos=99.9s` 同一拍）：
+//     按钮 = **一个裸白三角（≈24×27pt），没有圆盘** —— 这是**原生稳态**的样子；
+//   * 照片 49（10:46 = 01:46 UTC，**在日志 48 的 `[INIT]` 之前**）：
+//     按钮 = 纯白圆盘（Ø≈62pt）+ 残缺的深色横条 + 一个小点。
 //
-// **病根（本文件里的一处自相矛盾）**：`hideNativeContent(of: play, excludingClassFragment:)`
-// 传的是 `playDiscClassFragment`，而 `visit` 命中那个片段时是 **`return`（整棵子树跳过）** ——
-// 于是：播放中，原生白圆盘**和**圆盘里的原生暂停横条一直没被透明掉（我们的白字形画在白圆盘上
-// = 看不见）⇒ 与原生一模一样；暂停时圆盘不画 ⇒ 露出我们的白三角。
-// （文件上面那段注释写的却是"白圆盘也一并透明掉"——**注释与实现不一致**，这就是那个 bug。）
+// ⚠️ **2026-10-05 用户纠正**：照片 49 是**"快速连点暂停键时截到的"** —— 那是**过渡帧**，
+// **原生的稳态不长这样**。所以那颗白圆盘**不是**"原生播放中"的样子，而是 Spotify 在换播放状态时
+// **交叉淡入的那张圆盘快照**（pw `PlayerControls.x` 原话：*"The holder Spotify crossfades
+// a snapshot of the disc in when play turns to pause."*）。
+// （横条"残缺"+ 旁边那个小点，正是"淡入到一半"的痕迹 —— 一开始把它读成原生暂停字形是**读错了**。）
 //
-// **修法两条**：
-//   1. 白圆盘改成**自己 `alpha = 0`（记账，关开关时写回）**，然后**继续往下走**把里面的
-//      原生图形也透明掉 ⇒ 三个键在两种状态下都画成同一套裸字形，换脸这条路从根上断掉。
-//      （`alpha = 0` 不会让按钮失去触摸：命中判定落在 `PlayButtonView` 自己身上。）
-//   2. 原生内容被写回时排一轮**短促重试**（`armRehide`，与 `MiniBarGlass.armColorGuard` 同一套
-//      纪律：只排一轮、不叠加）。日志 48 里同一项在 `0/1` 之间反复横跳就是这个"写回"，
-//      而重试原来只靠 0.5s 的复查节拍 ⇒ 最坏 ~0.5s 能看到原生图形闪回来。
+// ⇒ **真正要修的是**：每点一次播放/暂停，Spotify 就合成一张圆盘快照并**从 alpha 0 淡入到 1**，
+//    而上一版走查**只在"它已经可见"时才动手**（`if view.alpha == 0 { return }`）且**带 1.2× 尺寸闸**
+//    ⇒ 开头几帧必然漏掉 ⇒ 用户看到的就是"每点一次闪一下白圆盘"。
+//
+// **修法三条**：
+//   1. 播放键那一支**取消尺寸闸**，并且**连 alpha 已经是 0 的图形叶子也按住**（快照就起于 alpha 0）
+//      —— 让它**没有机会淡进来**，而不是等它亮了再去按；
+//   2. 白圆盘（`MixedPlayButtonDecorationView`）仍然**整层 `alpha = 0` 并继续往下走**
+//      （上一版在这里 `return`，整棵跳过；那是个独立的缺陷，一并修掉）；
+//   3. 原生内容被写回时排一轮**短促重试**（`armRehide`，与 `MiniBarGlass.armColorGuard` 同一套
+//      纪律：只排一轮、不叠加）—— 日志 48 里同一项在 `0/1` 之间反复横跳就是这个"写回"。
+//   4. 我们的字形加 `layer.zPosition = 1000`：快照是**后插**进来的，一后插就压在字形上面，
+//      而 `bringSubviewToFront` 只在我们跑到的那一拍生效 —— 持续生效的只有 zPosition。
 //
 // ## ★ 2026-10-05 补：把 pw 那边**我们漏掉的三处**补上（读 `PlayerControls.x` 得来，GPL-3.0）
 //
@@ -292,7 +299,7 @@ enum NowPlayingControlsPlate {
             hiddenLeaves += hideNativeContent(
                 of: play,
                 discClassFragment: playDiscClassFragment,
-                snapshotHostsUnlimitedSize: true
+                noSizeGateForWholeSubtree: true
             )
             // pw 的同款补丁：缓冲 spinner 还立着时**把我们的字形藏起来** —— 否则"缓冲中"
             // 会显示一个假的播放/暂停字形，用户点完看到的就是"字形自己跳"。
@@ -398,18 +405,23 @@ enum NowPlayingControlsPlate {
     ///
     /// 规则：
     /// * **只动叶子**（没有子视图的视图）—— 容器留着，免得把布局/触摸的骨架也弄没；
-    /// * 叶子必须**比自己小**（≥ 按钮 1.2 倍的跳过：那是命中区/背景，不是图标）；
+    /// * 叶子必须**比自己小**（≥ 按钮 1.2 倍的跳过：那是命中区/背景，不是图标）
+    ///   —— ⚠️ **播放键整棵子树取消这条闸**（`noSizeGateForWholeSubtree`），理由见下"快照"；
     /// * 跳过我们自己的字形；
     /// * ★ **"白圆盘"（`discClassFragment`）要整层透明掉，并且继续往下走**——
     ///   见文件头"2026-10-03 修"：它自己就是那圈白色（是**容器**，没有"图形叶子"），
     ///   上一版在这里 `return` 把它整棵跳过了，正是"点一下暂停就换一张脸"的病根；
+    /// * ★ **crossfade 快照**：pw `PlayerControls.x` 原文 —— *"The holder Spotify crossfades a
+    ///   snapshot of the disc in when play turns to pause."* ⇒ 换状态时 Spotify 会合成一张圆盘快照
+    ///   并**淡入**它。所以播放键那一支要**连 alpha 已经是 0 的图形叶子也按住**（它就起于 alpha 0），
+    ///   并且**不设尺寸闸**（那张快照可能比按钮大）。只在"它已经可见"时才动手，必然漏掉开头几帧；
     /// * 记下改过的视图**与它当时的 alpha**（`HiddenView`），`restore()` 逐个写回**原值**
     ///   —— 不是一律写 1（理由见 `HiddenView` 的注释）。
     @discardableResult
     private static func hideNativeContent(
         of button: UIView,
         discClassFragment: String?,
-        snapshotHostsUnlimitedSize: Bool = false
+        noSizeGateForWholeSubtree: Bool = false
     ) -> Int {
         let size = button.bounds.size
         guard size.width > 1, size.height > 1 else { return 0 }
@@ -418,11 +430,13 @@ enum NowPlayingControlsPlate {
         let glyph = objc_getAssociatedObject(button, &glyphKey) as? UIView
         var hidden = 0
 
-        func note(_ view: UIView) {
-            if !changed.contains(where: { $0.view === view }) { changed.append(HiddenView(view)) }
+        func note(_ view: UIView) -> Bool {
+            if changed.contains(where: { $0.view === view }) { return false }
+            changed.append(HiddenView(view))
+            return true
         }
 
-        func visit(_ view: UIView, depth: Int, unlimitedSize: Bool) {
+        func visit(_ view: UIView, depth: Int, noSizeLimit: Bool) {
             guard depth <= 8 else { return }
             let className = NSStringFromClass(type(of: view))
 
@@ -433,18 +447,17 @@ enum NowPlayingControlsPlate {
             //   命中的是 `PlayButtonView` 自己，子视图全透明时它照样收得到触摸。
             if let fragment = discClassFragment, className.contains(fragment) {
                 if view.alpha > 0 {
-                    note(view)
+                    _ = note(view)
                     view.alpha = 0
                     hidden += 1
                 }
-                for sub in view.subviews { visit(sub, depth: depth + 1, unlimitedSize: unlimitedSize) }
+                for sub in view.subviews { visit(sub, depth: depth + 1, noSizeLimit: noSizeLimit) }
                 return
             }
 
             if view.subviews.isEmpty {
                 // 叶子：这才是真正画东西的那些。
-                if view.alpha == 0 { return }
-                if !unlimitedSize,
+                if !noSizeLimit,
                    view.bounds.width > size.width * 1.2 || view.bounds.height > size.height * 1.2 {
                     return
                 }
@@ -456,24 +469,27 @@ enum NowPlayingControlsPlate {
                     || className.contains("Image")
                     || className.contains("IconView")
                 if !visual { return }
-                note(view)
-                view.alpha = 0
-                hidden += 1
+
+                // 播放键（`noSizeLimit`）：**连 alpha 已经是 0 的也按住**。用户 2026-10-05 纠正：
+                // 照片 49 那颗白圆盘是**连点暂停时截到的过渡帧**，原生稳态本来就是裸字形 ——
+                // 也就是说那张 crossfade 快照是"**alpha 0 起步、淡入到 1**"。
+                // 只在它可见时才动手 ⇒ 必然漏掉开头几帧 ⇒ 每点一次闪一下白圆盘。
+                // 上一个/下一个维持老行为（已经透明的不再记一笔），少动别人的东西。
+                if view.alpha == 0, !noSizeLimit { return }
+
+                let wasVisible = view.alpha != 0
+                let first = note(view)
+                if wasVisible { view.alpha = 0 }
+                // `first` 也算一次"按住"：新登记的快照要**立刻**排上短促重试盯着它。
+                if first || wasVisible { hidden += 1 }
                 return
             }
 
-            // ★ pw 的同款补丁（`PlayerControls.x` 原文）：*"The holder Spotify crossfades a snapshot
-            //   of the disc in when play turns to pause."* —— 换播放状态时 Spotify 会**交叉淡入一张
-            //   圆盘快照**，它装在一个**恰好是纯 `UIView`** 的直接子视图里。常规走查有 `1.2×` 的
-            //   尺寸闸，而那张快照**可能比按钮大** ⇒ 在它下面**取消尺寸闸**（只对播放键开）。
-            //   判据照 pw：**直接子视图**且类**恰好**是 `UIView`
-            //   （圆盘 / `CondensedButton` / 我们的字形都不在射程内）。
-            let childUnlimited = unlimitedSize
-                || (snapshotHostsUnlimitedSize && depth == 0 && object_getClass(view) == UIView.self)
-            for sub in view.subviews { visit(sub, depth: depth + 1, unlimitedSize: childUnlimited) }
+            for sub in view.subviews { visit(sub, depth: depth + 1, noSizeLimit: noSizeLimit) }
         }
 
-        for sub in button.subviews { visit(sub, depth: 0, unlimitedSize: false) }
+        let rootNoSizeLimit = noSizeGateForWholeSubtree
+        for sub in button.subviews { visit(sub, depth: 0, noSizeLimit: rootNoSizeLimit) }
 
         objc_setAssociatedObject(button, &alphaKey, changed, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return hidden
@@ -519,6 +535,11 @@ enum NowPlayingControlsPlate {
             glyph.isUserInteractionEnabled = false
             glyph.accessibilityIdentifier = "eevee-npv-transport-glyph"
             glyph.tintColor = .white
+            // ★ **z 序不要靠 subview 顺序**：Spotify 换播放状态时会把那张圆盘快照**后插**进来，
+            //   一后插就压在我们的字形上面 ⇒ 用户看到"字形被白圆盘盖住一下"。
+            //   `bringSubviewToFront` 只能在我们跑到的那一拍生效，`zPosition` 是**持续生效**的。
+            //   这是我们自己视图的属性，关开关时随字形一起消失，不欠还原。
+            glyph.layer.zPosition = 1000
             button.addSubview(glyph)
             objc_setAssociatedObject(button, &glyphKey, glyph, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
