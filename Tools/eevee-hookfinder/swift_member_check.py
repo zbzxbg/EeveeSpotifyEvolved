@@ -79,6 +79,17 @@ LOCAL_NAME_MUFFLE = {
 
 TRIVIA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
+# 规则 ③ 用的挡板：这些名字在我们自己的 `private static` 里出现纯属巧合（SDK / 语言级 / 太泛）。
+SWIFT_KEYWORDS = {
+    "self", "Self", "super", "init", "deinit", "true", "false", "nil", "new", "old",
+    "result", "value", "count", "size", "frame", "bounds", "center", "alpha", "hidden",
+    "tag", "text", "image", "color", "title", "name", "key", "data", "index", "type",
+    "first", "last", "next", "previous", "current", "empty", "isEmpty", "description",
+    "isEnabled", "isHidden", "isSelected", "isHighlighted", "state", "window", "layer",
+    "target", "action", "duration", "delay", "options", "completion", "handler",
+    "interval", "timeout", "limit", "max", "min", "width", "height", "x", "y", "z",
+}
+
 
 def strip_comments_and_strings(src: str) -> str:
     out = []
@@ -289,15 +300,108 @@ def main(argv: list[str]) -> int:
                     "不是 Optional，不能这样绑（编译期报 conditional binding）"
                 )
 
-    # ② 裸引用的 `static` 成员（少写类型前缀）—— **故意没做**。
+    # ③ 裸引用"**别的文件**里的 private static 成员" —— 2026-10-11 加（CI 实证）。
+    #
+    # 实证：`DeclutterChrome.x.swift` 里写了 `visited < maxNodes`，而那个文件里的常量叫
+    # `maxScanNodes` —— `maxNodes` 是**另外五个文件各自的 private static**（800 / 2000 / 400）。
+    # 编译期报 `error: cannot find 'maxNodes' in scope`。
+    #
+    # 这一条是上面那段"裸引用 static **故意不做**"里**唯一能判准**的一种：
+    # 那名字在别的文件里是 `private`（文件级可见性），所以从本文件裸引用它
+    # **永远不可能**解析成功 —— 不是"可能错"，是**必然错**。
+    #
+    # 保守约定（当年那两版之所以误报 246 / 110 条，是因为把局部变量也算进来了）：
+    #   · 只查"仓库里确实有人用 `private` / `fileprivate` 声明过"的名字（我们自己的常量风格）；
+    #   · 本文件里**声明过 / 当参数或局部标注用过**同名标识符 ⇒ 整份文件跳过；
+    #   · 仓库里只要有**顶层（非 private）**同名声明 ⇒ 跳过（那才是合法的跨文件引用）；
+    #   · 同一个名字最多报 3 处。
+    private_names_by_file: dict[Path, set[str]] = {}
+    global_names: set[str] = set()
+
+    for f, src in per_file_src.items():
+        privates: set[str] = set()
+        for m in re.finditer(
+            r"(?:^|\n)([ \t]*)((?:@\w+(?:\([^)]*\))?\s*)*"
+            r"(?:(?:public|internal|private|fileprivate|open|final|static|class|override|mutating|lazy|weak|unowned)\s+)*"
+            r"(?:var|let|func)\s+([A-Za-z_][A-Za-z0-9_]*))",
+            src,
+        ):
+            indent, decl_line, name = m.group(1), m.group(2), m.group(3)
+            if "private" in decl_line or "fileprivate" in decl_line:
+                privates.add(name)
+            elif indent == "":
+                # 顶层（没有缩进）= 全局，别的文件可以合法裸引用。
+                global_names.add(name)
+        private_names_by_file[f] = privates
+
+    candidate_names = set().union(*private_names_by_file.values()) - global_names
+    candidate_names -= SWIFT_KEYWORDS
+    candidate_names -= {"newValue", "oldValue"}   # 隐式 setter 参数，不是常量
+    #
+    # ⚠️ 性能：第一版是"每个候选名 × 每个文件"都跑几条全文件正则 —— 仓库里有上千个
+    #    private 名字、三百多个文件 ⇒ 上百万次扫描，**脚本直接跑不完**（2026-10-11 实测）。
+    #    改成：每个文件先做**一次**标识符扫描，取交集；再为这个文件拼**一条** alternation
+    #    正则扫一遍。
+    for f, src in per_file_src.items():
+        present = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", src))
+        suspects = sorted((candidate_names & present) - private_names_by_file[f])
+        if not suspects:
+            continue
+
+        live: list[str] = []
+        for name in suspects:
+            # 本文件声明过 / 当参数或标注用过 ⇒ 极可能是个局部名字，跳过（宁可漏，不误报）。
+            if re.search(r"\b(?:let|var|func|case|class|struct|enum|protocol|typealias)\s+"
+                         + re.escape(name) + r"\b", src):
+                continue
+            if re.search(r"\b" + re.escape(name) + r"\s*[:=]", src):
+                continue
+            # 本文件里**绑过这个名字**（闭包参数 / for 模式）⇒ 跳过。
+            # 纯正则分不出"这一处是绑定、那一处是值"，而误报会淹掉真问题（仓库老规矩：宁可漏）。
+            if re.search(r"\{\s*" + re.escape(name) + r"\s+in\b", src):
+                continue
+            if re.search(r"\bfor\s*\(?[^)\n]*\b" + re.escape(name) + r"\b[^)\n]*\)?\s+in\b", src):
+                continue
+            live.append(name)
+
+        if not live:
+            continue
+
+        pattern = re.compile(
+            r"(?<![\w.])(?P<name>" + "|".join(re.escape(n) for n in live) + r")(?![\w])"
+        )
+        per_name_hits: dict[str, int] = {}
+        for m in pattern.finditer(src):
+            name = m.group("name")
+            if per_name_hits.get(name, 0) >= 3:
+                continue
+            # ⚠️ **只认"值位置"的用法**（第一版就是在这里误报 17 条的，全部是别的形态）：
+            #   · 闭包 / for 的绑定名 —— `map { content in` / `for (className, …) in`；
+            #   · 调用的方法名 —— `contains(where:` / `setupBindings()`；
+            #   · 成员访问 —— `titleLabel?.font`。
+            # 这些后面紧跟的字符分别是 `in` / `(` `.` `?` `,` `)`，而**常量**在值位置上
+            # 后面跟的是 `{`、换行… ⇒ 用"后一个字符"作判据：命中的一律跳过。
+            # 代价是 `min(a, maxNodes)` 这种也会漏 —— 按本仓库那条老规矩：宁可漏，不可误报。
+            tail = src[m.end():m.end() + 12].lstrip()
+            if tail[:2] == "in" and (len(tail) == 2 or not tail[2].isalnum()):
+                continue
+            if tail[:1] in ("(", ".", "?", ":", ",", ")", "!", "=", "[", '"', "'"):
+                continue
+            line = src[:m.start()].count("\n") + 1
+            problems.append(
+                f"{f}:{line}: 裸引用了 `{name}` —— 这个名字在本仓库里只有 "
+                "`private` / `fileprivate` 声明（可能在别的文件里），从本文件引用解析不到"
+                "（编译期报 cannot find in scope）。要么补类型前缀，要么用本文件自己的那个名字"
+            )
+            per_name_hits[name] = per_name_hits.get(name, 0) + 1
+
+    # ② 裸引用的 `static` 成员（少写类型前缀）—— **其余情形仍然故意不做**。
     #
     # 2026-10-01 试过两版，全部失败：从"整个类型体里找名字"（误报 246 条）收紧到
     # "只在函数体里、且本函数没声明过"（仍误报 110 条）—— `label` / `name` / `key` /
     # `session` / `time` 这些**局部变量、参数、闭包捕获**和别处的 static 同名太常见，
     # 纯正则分不出"裸用成员"和"就是个局部变量"。要真判对得做作用域分析，不值得。
-    #
-    # 记在最前面那句 total 里：这条**只靠人来守**（搬代码时，新位置引用的每个
-    # `static` 名字都补全类型前缀）。
+    # 上面那条 ③ 只做**能判准**的那一小块（跨文件 + private ⇒ 必然错）。
 
     if problems:
         # 去重（同一处可能被两条规则各命中一次）
