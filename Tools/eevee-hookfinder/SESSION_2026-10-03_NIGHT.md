@@ -446,6 +446,25 @@ SPTNowPlayingPlaybackControllerImplementation                            ← 动
 
 ## 10.4 下一道工序（用户说"先下一道工序"）
 
+### ★ 10.4.0 两条"本机无编译器就抓不到"的错，已经连栽两次（2026-10-05）
+
+> 五条自检**不做类型检查**，所以下面两类错**只能靠 CI** —— 每次都要烧用户一轮编译。
+> 写 Swift 时按这两条自查（都是实际发生过的）：
+
+1. **泛型/逐成员初始化器是位置敏感的**：给 SwiftUI 视图加字段后，
+   **参数顺序必须与属性声明顺序完全一致**。CI 原话：
+   *"argument labels do not match; expected …previewHeaderInset:onSeek:…trackArtist:transparentBackdrop:clock:…"*
+   —— 我把新字段插在了 `previewHeaderInset` 后面，而它声明在 `trackArtist` 之后。
+   ⇒ **加字段之后，去读一遍结构体的属性顺序，再照着写调用点。**
+2. **`@MainActor` 类型不能在非隔离上下文里被调**：门面/宿主标了 `@MainActor`，
+   调用它的地方（**尤其是 Orion 的 hook 方法**）就得走 `onMainThreadSync { … }`；
+   **不要**给 hook 方法本身加 `@MainActor`（Orion 的代码生成器会拼出 `@MainActoroverride`，
+   成文规矩在 `LyricsChromeVisibility.swift`）。
+   ⇒ 提交前把新 API 的**所有调用点**列出来逐个看。
+
+（另：逐成员初始化器一失败，**紧邻的几行会跟着报"推断不出类型"**（例如
+`hosting.view.backgroundColor = .clear` 报 `cannot infer contextual base`）——
+那是编译器的恢复状态，**先修第一条**，别去改第二处。这次两处都改了，但根因只有第一条。）
 按**风险从低到高**、且**不再新增未验证的手势/属性写入**排：
 
 | 顺序 | 做什么 | 为什么排这里 | 需要什么 |
