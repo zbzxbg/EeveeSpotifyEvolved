@@ -428,6 +428,49 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 
 ---
 
+## 4.13 ★ 默认值：把用户点名的那些开关改成默认开
+
+用户原话：
+
+> 这样：听歌页的那几个功能全部默认开启，音乐库的那个默认开启，标签栏功能默认开启，
+> 迷你播放条选项默认开启，隐藏封面下一行歌词和隐藏胶囊默认开启
+
+**先做了一次全量审计**（`UserDefaults+Extension.swift` + `ngzhwmSettingsViewModel.swift` 里每一个
+`static var X: Bool`），再按设置页的分区标题逐条对：
+
+| 用户说的 | 设置分区（中文标题） | 开关（键） | 改之前 | 结果 |
+|---|---|---|---|---|
+| **听歌页那几个** | 「听歌页」 | 整页封面取色底 `nowPlayingBackdrop` | ON | 本来就是开 |
+| | | 一屏 `nowPlayingOneScreen` | ON | 本来就是开 |
+| | | **底部音量条** `nowPlayingVolume` | **OFF** | ★ **改成 ON** |
+| | | **歌词进播放器** `nowPlayingLyricsInPlayer` | **OFF** | ★ **改成 ON** |
+| | | **控制键换成本地字形** `nowPlayingControlGlyphs` | **OFF** | ★ **改成 ON** |
+| 音乐库那个 | 「音乐库」 | Apple Music 式头部 `libraryLargeTitle` | ON | 本来就是开 |
+| 标签栏 | 「标签栏」 | 标签用液态玻璃 `tabBarGlass` / 隐藏标签文字 `tabBarHideLabels` | ON / ON | 本来就是开 |
+| 迷你播放条 | 「迷你播放条」 | 迷你播放条用液态玻璃 `miniBarGlass` | ON | 本来就是开 |
+| 隐藏封面下一行歌词 | （隐藏类那一节） | `hideSingalongLine` | ON | 本来就是开 |
+| 隐藏胶囊 | 同上 | `hideNowPlayingPills` | ON | 本来就是开 |
+
+⇒ **实际只翻了 3 个**（`nowPlayingVolume` / `nowPlayingLyricsInPlayer` / `nowPlayingControlGlyphs`），
+三处的注释都从"为什么当初默认关"改写成"为什么现在默认开"（并把用户原话记进去）✓。
+
+### 4.13.1 两个要留意的点
+
+* **改默认值只影响"还没写过这个键"的用户** —— 已经写过的值照旧。
+  用户自己的设备上：日志 56 那行 `installed (miniPlayer=OFF singalongLine=ON npvPills=ON …)`
+  说明 **miniPlayer 是已存值**；`nowPlayingVolume` / `nowPlayingLyricsInPlayer` 他已经开过 ⇒
+  这一改对**他的设备**几乎没有可见变化（`nowPlayingControlGlyphs` 若从没点过则会生效）。
+* ★ **"歌词进播放器"默认开之后，它的前置门禁却是关的**：
+  `NowPlayingLyricsPlate.canShow()` 第一道就是
+  `NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled`（「更好的逐词歌词」），
+  而它 `defaultValue: false`（`ngzhwmSettingsViewModel.swift:110`）⇒ **全新安装上
+  "歌词进播放器"会是"键看得见、点了没反应"**。
+  用户这次没点名那个开关 ⇒ **没有擅自翻**，只在回复里点出来问了一句
+  （要开的话也是改一个 `false` → `true`；顺带会把 `isLyricsBlurredBackdropEnabled` /
+  `isLyricsBackdropMaterialEnabled` 一起带开，那两个是它的派生值）。
+
+---
+
 ## 5. 本机自检（六条全绿）
 
 ```

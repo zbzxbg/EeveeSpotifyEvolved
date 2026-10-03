@@ -560,33 +560,41 @@ extension UserDefaults {
         }
     }
 
-    /// 听歌页底部那条**音量条**（我们自己的一层覆盖层上的第一件控件）。**默认关**。
+    /// 听歌页底部那条**音量条**（我们自己的一层覆盖层上的第一件控件）。**默认开**。
     ///
     /// 它是 kumone 播放页下半屏的辨识度元素之一（Apple Music 没有）。落点与纪律写在
     /// `NowPlayingPageOverlay` 的文件头：**透明覆盖层 + 只加我们自己的视图 +
     /// 容器不吃触摸**，关掉 = 把那一层拿掉，天然完全还原。
+    ///
+    /// ★ 2026-10-11（用户）：从「默认关」改成「**默认开**」——
+    /// 原话「听歌页的那几个功能**全部默认开启**」。
+    /// （当初默认关的理由是"让用户先看一眼认不认"；用户看过照片 70/71 之后拍板要开。）
     static var nowPlayingVolume: Bool {
         get {
-            container.object(forKey: nowPlayingVolumeKey) as? Bool ?? false
+            container.object(forKey: nowPlayingVolumeKey) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: nowPlayingVolumeKey)
         }
     }
 
-    /// 听歌页「**歌词进播放器**」。**默认关**。
+    /// 听歌页「**歌词进播放器**」。**默认开**。
     ///
     /// 把**我们自己的**逐词歌词画进播放器中段（`npv.bottomStackView` 之上那块），
     /// 这样「一屏」把卡片全折掉之后，页面上仍然有歌词可看 —— 它是「一屏」能默认开的**前置**。
     ///
-    /// ⚠️ 默认关的两个理由：
-    ///   1. 它压住的是 Spotify 自己的卡片区（视觉上"遮了一块"），得先让用户看一眼认不认；
-    ///   2. 需要**逐词**数据（`hasUsableWordLevelData`），没有逐词的歌这一层会自己收起来。
+    /// ★ 2026-10-11（用户）：从「默认关」改成「**默认开**」（「听歌页的那几个功能全部默认开启」）。
+    /// 当初默认关的两条理由现在的状态：
+    ///   1. "它压住的是 Spotify 自己的卡片区，得先让用户看一眼" —— 用户已经用过并拍板（照片 70/71/75）；
+    ///   2. "需要**逐词**数据，没有逐词的歌这一层会自己收起来" —— 仍然成立，而且现在
+    ///      **没有词就写一句说明 / 没有时间轴就静态列全文**（见 `NowPlayingLyricsPlate.noticeText()`），
+    ///      所以"收起来"不再是唯一结局。
+    ///
     /// 渲染复用 `AppleMusicLyricsOverlayView`（内嵌那一档，背景透明），宿主是
     /// `NowPlayingLyricsPlate` 自己的一份 —— 不去抢全屏页那个单例宿主。
     static var nowPlayingLyricsInPlayer: Bool {
         get {
-            container.object(forKey: nowPlayingLyricsInPlayerKey) as? Bool ?? false
+            container.object(forKey: nowPlayingLyricsInPlayerKey) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: nowPlayingLyricsInPlayerKey)
@@ -623,18 +631,20 @@ extension UserDefaults {
         }
     }
 
-    /// 听歌页「**控制键换成本地字形**」（上一首 / 播放暂停 / 下一首）。**默认关**。
+    /// 听歌页「**控制键换成本地字形**」（上一首 / 播放暂停 / 下一首）。**默认开**。
     ///
     /// 这是照 spoti.pw v0.21.1（GPL-3.0）`PlayerControls.x` 的做法：**原生按钮留着**
     /// （动作 / 可用状态 / 无障碍 / 手势区全在），只把按钮里原来那个图标**设成透明**，
     /// 再叠一个我们自己的 SF Symbol 字形（不吃触摸）。播放键底下那层白圆盘一起透明掉 ——
     /// 照片 40/41（kumone）里是**裸字形**，没有圆盘。
     ///
-    /// ⚠️ 默认关的理由：它改的是**别人按钮的内部**（透明度），这类改动本仓库栽过
-    /// （藏错一个视图 = 整页空白），所以先让用户看一眼；关掉即把透明度写回并拿走我们的字形。
+    /// ★ 2026-10-11（用户）：从「默认关」改成「**默认开**」（「听歌页的那几个功能全部默认开启」）。
+    /// 当初默认关的理由是"它改的是**别人按钮的内部**（透明度），这类改动本仓库栽过，
+    /// 先让用户看一眼" —— 现在用户已经看过照片 70/71（三颗键是本地字形）、并点名要开；
+    /// 关掉仍然即把透明度写回并拿走我们的字形（`NowPlayingControlsPlate.restore()`）。
     static var nowPlayingControlGlyphs: Bool {
         get {
-            container.object(forKey: nowPlayingControlGlyphsKey) as? Bool ?? false
+            container.object(forKey: nowPlayingControlGlyphsKey) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: nowPlayingControlGlyphsKey)
