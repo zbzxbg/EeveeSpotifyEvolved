@@ -7,8 +7,12 @@ import UIKit
 /// 根页只解 `tagName`，这里多解 `name` / `body` / `htmlUrl` / `publishedAt` / `prerelease`，
 /// 全部可选 —— 某个 release 少字段不影响这一页，也不影响版本检查。
 ///
-/// ⚠️ 本仓库若没有 tag 化的 release，接口会 404：那时这一页显示"没有取到"，
-/// 而不是空转圈（与 `EeveeSettingsVersionView` 的兜底同一条纪律）。
+/// ⚠️ ★ 2026-10-11 更正：这里用的是**列表**接口 `/repos/<slug>/releases` ——
+/// 仓库存在但**没有 release** 时它回的是 **200 + `[]`**，走下面的
+/// `.loaded(...) where isEmpty` ⇒ 显示 `updates_empty`，**不是 404**。
+/// 404 只在仓库**不存在 / 改名 / 转私有**时出现，那时显示 `updates_error_not_found`
+/// （文案已按"找不到仓库"改写）。
+/// 无论哪种，这一页都不会空转圈（与 `EeveeSettingsVersionView` 的兜底同一条纪律）。
 struct EeveeUpdatesSettingsView: View {
 
     private enum LoadState {

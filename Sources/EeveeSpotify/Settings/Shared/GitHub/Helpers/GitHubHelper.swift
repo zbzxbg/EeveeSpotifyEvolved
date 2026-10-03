@@ -15,7 +15,15 @@ enum GitHubAPIError: Error {
     /// 限流。GitHub 未登录是 **60 次/小时，按出口 IP 算**。
     /// `reset` 是 `X-RateLimit-Reset` / `Retry-After` 给的恢复时刻（拿不到就是 nil）。
     case rateLimited(reset: Date?)
-    /// 404：仓库或路径不存在（本仓库**还没有** release 时 `/releases/latest` 就是它）。
+    /// 404：仓库或路径不存在。
+    ///
+    /// ★ 2026-10-11 更正（查"这条文案还用得到吗"时发现的）：
+    ///   · `/releases/latest` 在"本仓库还没有 tag 化 release"时**确实**回 404 ——
+    ///     `getLatestRelease` 那条注释说的是对的，别改；
+    ///   · 但**列表**接口（`getReleases` → `/repos/<slug>/releases?per_page=30`）在同样情况下
+    ///     回的是 **200 + `[]`**，只有仓库**不存在 / 改名 / 转私有**时才 404。
+    /// ⇒ 这一支现在的含义就是"**仓库找不到了**"，界面文案（`updates_error_not_found`）
+    ///   已按这个真相改写（原来是"还没有 release，预期内无害"，对不上唯一能走到这里的场景）。
     case notFound
     /// 其它非 2xx（会把状态码原样带出来，方便日志与界面区分）。
     case httpStatus(Int)

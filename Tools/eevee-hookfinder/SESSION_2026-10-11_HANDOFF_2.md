@@ -539,6 +539,35 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
 
 ---
 
+## 4.16 ★ `updates_error_not_found` 按"找不到仓库"改写（用户选 A）
+
+用户问：「`updates_error_rate_limit` 和 `updates_error_rate_limit_reset` 有区别吗，
+`updates_error_not_found` 这玩意也用不到了吧」。查证结果：
+
+* **`_rate_limit` vs `_rate_limit_reset`：有区别**，是同一条 `case .rateLimited` 的两半 ——
+  拿不到（或已过期）`X-RateLimit-Reset` ⇒ 用不带时间那条；拿得到 ⇒ 用带
+  「大约 %d 分钟后恢复」那条。正文**一字不差**，只差末尾那句。
+  顺带量过：**27/27 个语言的 `_reset` 都带 `%d`** ✓（不会被 `String(format:)` 静默丢参）。
+* **`updates_error_not_found`：代码是活的，但实际到不了** ——
+  `getReleases()` 打的是**列表**接口 `/repos/<slug>/releases?per_page=30`，
+  而 GitHub 对"仓库存在但没有 release"回的是 **200 + `[]`**（该场景由
+  `.loaded(...) where isEmpty` → `updates_empty` 显示），**只有仓库不存在/改名/转私有才 404**
+  ⇒ 唯一能走到这里的场景是"仓库找不到了"，而原文案写的是"还没有 release，预期内无害" ✗。
+* ⚠️ **自我更正**：上一轮我在回复里说"`GitHubHelper.swift` 那两处注释也是错的"——
+  **说错了**。那两处写的是 `/releases/latest`（"没有 tag 化 release 时会 404"），
+  **是对的**，不用改。真正错的只有 `EeveeUpdatesSettingsView.swift` 开头那条（它说的是这一页
+  =列表接口）。已在代码注释里写明这层区别，免得下一个人照着改错。
+
+**这一轮改了什么**（用户选 A = 保留兜底、把文案改成真相）：
+
+| 位置 | 改动 |
+|---|---|
+| `updates_error_not_found` ×27 语言 | en / zh-CN / zh-TW 用**新译文**（"找不到这个仓库…可能改名/转私有/网络拦了它"），其余 24 个语言这一条本来就是**英文原文副本** ⇒ 一并换成新英文（等价于回落，但文件里不再留旧文案） |
+| `GitHubHelper.swift` 的 `case notFound` 注释 | 写明"`/releases/latest` 与列表接口在'没有 release'时行为不同"，并指出文案已按真相改写 |
+| `EeveeUpdatesSettingsView.swift` 文件头注释 | 更正"没有 release 会 404"→ 实际走 `updates_empty`；404 只在仓库不存在时出现 |
+
+---
+
 ## 5. 本机自检（六条全绿）
 
 ```
