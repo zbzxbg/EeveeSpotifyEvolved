@@ -41,6 +41,7 @@ extension UserDefaults {
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
     private static let nowPlayingVolumeKey = "nowPlayingVolume"
     private static let nowPlayingLyricsInPlayerKey = "nowPlayingLyricsInPlayer"
+    private static let nowPlayingLyricsExpandedKey = "nowPlayingLyricsExpanded"
     private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
@@ -90,6 +91,7 @@ extension UserDefaults {
         nowPlayingOneScreenKey,
         nowPlayingVolumeKey,
         nowPlayingLyricsInPlayerKey,
+        nowPlayingLyricsExpandedKey,
         nowPlayingControlGlyphsKey,
 
         // 不在上面那批常量里、但同样属于我们的：
@@ -588,6 +590,36 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingLyricsInPlayerKey)
+        }
+    }
+
+    /// ★ 2026-10-10（用户提的「**页面记忆**」）：听歌页上"歌词是展开着的那一屏"这个状态**记不记**。
+    ///
+    /// ⚠️ **默认 `false` = "还没有偏好"**，不是"功能关着"：这个键**只由用户点那枚歌词键来写**
+    ///    （点开 ⇒ true，点收起 ⇒ false）。默认 false 的结果就是"用户没表过态时，行为与改动前
+    ///    完全一样（每次进播放器都是大封面）"；他**第一次点开**之后，记忆才开始生效。
+    ///    如果默认给 `true`，那"从没点开过"的用户一进播放器就会被自动展开 —— 那是错的。
+    ///
+    /// 用户原话：
+    /// > 是不是没有那种页面记忆的功能。就是假如说我当时正在打开歌词的这个页面（照片 63），
+    /// > 退出之后再重进也还是在这个页面，不是那个大封面
+    ///
+    /// 现状（改动前的实证）：歌词展不展开只活在 `NowPlayingLyricsPlate.isOpen` 这个内存变量里，
+    /// 而 `remove(reason:)`（页面 `viewWillDisappear`）会走 `closeEverything` 把它清成 `false`
+    /// ⇒ **没有记忆**，重进必然是大封面。
+    ///
+    /// 语义（写死在 `NowPlayingLyricsPlate` 里，不另设开关）：
+    ///   · **用户点开**歌词键 ⇒ 记 `true`；**用户点收起** ⇒ 记 `false`。只有这两种动作会改它；
+    ///   · **离开页面 / 切歌 / 收起动画 / 切开关**都不动它（那正是"记忆"的含义）；
+    ///   · 重进页面时若记的是 `true`、且「歌词进播放器」开着、且这一首**有能画的东西**
+    ///     ⇒ 自动铺回去；没词就只打一行日志、保持大封面（不空转）；
+    ///   · **落盘**（`UserDefaults`）⇒ 杀掉 App 重开也还记得。
+    static var nowPlayingLyricsExpanded: Bool {
+        get {
+            container.object(forKey: nowPlayingLyricsExpandedKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingLyricsExpandedKey)
         }
     }
 

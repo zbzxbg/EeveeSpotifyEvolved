@@ -329,6 +329,10 @@ enum NowPlayingLyricsPlate {
     private static weak var hostPage: UIView?
 
     /// 歌词是否展开（pw 的 `sg_open`）。
+    ///
+    /// ⚠️ 这是**当前这一页实例的实时状态**，页面一走就被 `closeEverything` 清成 `false`。
+    /// "离开再回来还是展开的"那件事**不靠它** —— 靠下面那条**落盘的意图**
+    /// （`UserDefaults.nowPlayingLyricsExpanded`），见 `rememberExpanded(_:)` / `reopenIfRemembered(in:)`。
     private static var isOpen = false
 
     /// 「点开了但这一拍没铺上」的**重试窗口**。
@@ -378,8 +382,56 @@ enum NowPlayingLyricsPlate {
         // **再**摆那枚键 —— 后写的赢，否则键会被我们自己的容器压住。
         // 铺不上（拿不到封面图等）就**不认"已展开"**，别留半成品 —— 但会由 `openAndMount`
         // 开一个 2.5s 的重试窗口，下一拍接着试。
-        if isOpen { openAndMount(in: pageView) }
+        if isOpen {
+            openAndMount(in: pageView)
+        } else if UserDefaults.nowPlayingLyricsExpanded {
+            // ★ 2026-10-10：**页面记忆** —— 上次离开这一页时是"展开"状态，这次进来就还铺上。
+            //   见 `reopenIfRemembered`。顺序同样要在 `ensureToggleZone` 之前（后写的赢）。
+            reopenIfRemembered(in: pageView)
+        }
         ensureToggleZone(in: pageView)
+    }
+
+    /// ★★ 2026-10-10（用户提的「页面记忆」）：进页面时若记得"上次是展开的"，就把它铺回去。
+    ///
+    /// 用户原话：
+    /// > 是不是没有那种页面记忆的功能。就是假如说我当时正在打开歌词的这个页面（照片 63），
+    /// > 退出之后再重进也还是在这个页面，不是那个大封面
+    ///
+    /// 改动前的实证：展开状态只活在 `isOpen` 里，而 `remove(reason:)`（`viewWillDisappear`）
+    /// 会走 `closeEverything` 把它清掉 ⇒ 重进必然是大封面。
+    ///
+    /// 门禁（缺一不可）：
+    ///   · 开关开着（`apply` 已经判过，这里再判一次是为了 `reapply()` 那条路）；
+    ///   · 记的是"展开"；
+    ///   · **这一首有能画的东西**（`canShow`）—— 没词就保持大封面，只打一行日志，
+    ///     别把 `openAndMount` 的重试窗口浪费在一首没词的歌上（与 `toggle()` 同一条纪律）。
+    private static func reopenIfRemembered(in page: UIView) {
+        guard isEnabled, UserDefaults.nowPlayingLyricsExpanded else { return }
+        guard canShow(for: page) else {
+            guard !didLogRememberedWithoutLyrics else { return }
+            didLogRememberedWithoutLyrics = true
+            writeDebugLog(
+                "[\(logTag)] re-entering the player while the remembered state is"
+                    + " \"expanded\", but this track has nothing to draw - staying on the cover"
+            )
+            return
+        }
+        writeDebugLog("[\(logTag)] re-entering the player expanded (remembered choice)")
+        openAndMount(in: page)
+    }
+
+    private static var didLogRememberedWithoutLyrics = false
+
+    /// ★ 记下"用户上一次选的展开状态"。**只有用户点那枚键时才会调它** ——
+    /// 离开页面 / 切歌 / 收起动画都不许动它（那正是"记忆"的含义）。
+    private static func rememberExpanded(_ expanded: Bool) {
+        guard UserDefaults.nowPlayingLyricsExpanded != expanded else { return }
+        UserDefaults.nowPlayingLyricsExpanded = expanded
+        writeDebugLog(
+            "[\(logTag)] remembering the player's lyrics state: "
+                + (expanded ? "expanded (re-entering comes back here)" : "collapsed (re-entering starts from the cover)")
+        )
     }
 
     /// 设置页切开关时叫一次。
@@ -458,6 +510,8 @@ enum NowPlayingLyricsPlate {
         if isOpen || coverHost != nil || lastContainer != nil {
             // 用户自己点收起 ⇒ **放动画**（封面"飞回原位"）。
             closeEverything(reason: "tapped", animated: true)
+            // ★ 2026-10-10：**用户这一下就是"记忆"** —— 下次进播放器还是大封面。
+            rememberExpanded(false)
             // 图标当场换回"歌词"，不等 0.5s 的复查节拍。
             ensureToggleZone(in: page)
             return
@@ -472,6 +526,9 @@ enum NowPlayingLyricsPlate {
         }
         // 铺不上就当场认输（`noteSkip` 已经写清了原因），别把开关停在"展开但什么都没变"上。
         // ⚠️ 但**不认死** —— `openAndMount` 会顺手开一个 2.5s 的重试窗口。
+        // ★ 2026-10-10：**先记"用户要展开"**，再铺。这样即便第一拍量不到（2.5s 重试窗口接手），
+        //   下次进页面也还是"记得要展开"——记忆跟的是**用户的意图**，不是这一拍的成功与否。
+        rememberExpanded(true)
         openAndMount(in: page)
         // ⚠️ 必须在铺完之后再摆一次：容器会 `bringSubviewToFront`，键会被压到它下面。
         ensureToggleZone(in: page)

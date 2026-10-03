@@ -124,8 +124,47 @@ or its Encore stacks crashes, so use alpha."* —— 这两颗胶囊正是 `Enco
 | `Appearance/DeclutterChrome.x.swift`（hook 区） | 新增 `HideNowPlayingPillsGroup` + `NowPlayingPillHideHook`（目标类 `_TtCCE16Encore_ButtonKitO16EncoreFoundation6Encore6Button7Primary`，`dump-9.1.88.txt:16168`），在 `activateDeclutterChrome()` 里按"类在不在"装；`[Declutter] installed (…)` 那行加上 `npvPills=` |
 | `Appearance/NowPlayingLyricsPlate.swift` | `coverDidLayOut(from tilt:)` 改成 **pw 的局部手法**：门禁（开关 + 我们铺着 + tilt 在窗口里且 ≥200pt + 祖先里有 `CoverArtCellImpl`）⇒ `sameSizeChild(of: tilt)` ⇒ 对**那一个**写 `alpha = 0`（走同一个还原表）。**删掉** 50ms 节流与 `lastGuardedTilt`（局部动作不需要节流，节流正是"闪一下"的来源）。祖先判据用 **`isKind(of:)`**（= pw 的 `isKindOfClass:`，连子类一起认），不是比类名 |
 
-### 3.1 ★ 独立只读复核（本轮）抓到的三条缺口 —— 已补
+| `Appearance/CoverFlashGuard.x.swift` | 文件头注释按新手法重写（照片 61 → 64 的两代现场 + pw 的 `coverIn`/`inCoverCell` 出处） |
+| `Appearance/NowPlayingLyricsPlate.swift` | ★★ **新增「页面记忆」**（§3.2）：`rememberExpanded(_:)` + `reopenIfRemembered(in:)`；`toggle()` 里只有**用户点键**才改记忆；`apply(in:)` 在"没铺着但记着要展开"时自动铺回去 |
+| `Shared/…/UserDefaults+Extension.swift` | 新增 `nowPlayingLyricsExpanded`（**默认 false = "还没偏好"**，不是"功能关着"）+ key 白名单 |
 
+### 3.2 ★★ 页面记忆（用户这一轮直接提的）
+
+> 用户原话：**「是不是没有那种页面记忆的功能。就是假如说我当时正在打开歌词的这个页面（照片 63），
+> 退出之后再重进也还是在这个页面，不是那个大封面」**
+
+**答复：确实没有，现在加上了。** 改动前的实证（读代码即可确认）：展开状态只活在
+`NowPlayingLyricsPlate.isOpen` 这个**内存**变量里，而页面 `viewWillDisappear` 会走
+`remove(reason:)` → `closeEverything` 把它清成 `false` ⇒ 重进必然是大封面。
+
+实现（`NowPlayingLyricsPlate.swift`）：
+
+| 时机 | 行为 |
+|---|---|
+| 用户点开歌词键 | `rememberExpanded(true)` → **落盘**；再铺（先记后铺：万一第一拍量不到，2.5s 重试窗口接手，而"意图"已经记住了） |
+| 用户点收起 | `rememberExpanded(false)` → 落盘 |
+| 离开页面 / 切歌 / 收起动画 / 切开关 | **一律不动记忆**（那正是"记忆"的含义；`closeEverything` 只清实时状态） |
+| 重进页面（`apply`） | 记的是 `true` **且** 开关开着 **且** 这一首有能画的东西 ⇒ `openAndMount` 铺回去；没词 ⇒ 只打一行日志、保持大封面（不空转） |
+
+**默认值为什么是 `false`**：这个键**只由用户点键来写**。默认 `false` = "还没表过态" ⇒
+行为与改动前**逐字节一致**（每次进来都是大封面）；他**第一次点开**之后记忆才开始生效。
+若默认给 `true`，从没点开过的用户一进播放器就会被自动展开 —— 那是错的。
+
+**暂不另设开关**：整个功能已经由「歌词进播放器」(`nowPlayingLyricsInPlayer`) 管着；
+要"忘掉记忆"就点一下收起。若用户以后想要独立开关，再补（l10n 两行 + 一行 Toggle）。
+
+预期日志：
+
+```
+[NPVLyrics] remembering the player's lyrics state: expanded (re-entering comes back here)
+[NPVLyrics] re-entering the player expanded (remembered choice)
+   —— 或者（这一首没词）：
+[NPVLyrics] re-entering the player while the remembered state is "expanded", but this track has
+            nothing to draw - staying on the cover
+[NPVLyrics] remembering the player's lyrics state: collapsed (re-entering starts from the cover)
+```
+
+### 3.1 ★ 独立只读复核（本轮）抓到的三条缺口 —— 已补
 | # | 复核说的问题 | 处置 |
 |---|---|---|
 | R1 | **没有兜底发现**：万一事件 hook 没跑到（类改名 / Orion 拒装 / id 是布局之后才写上去的），`reconcileNowPlayingPills` 只认"已记住的引用"，屏幕上就永远没人管那颗胶囊 —— 而且**没有任何日志** | 新增 `resolvePillsIfNeeded(in:)`：开关开着 + 有槽位空着 + **1s 节流**时按 id 走查一遍（预算**自己一份**，不跟 `resolveIDTargets` 共用 —— 仓库规矩：预算按通道分）；找不到时打一行带节点数的日志 |
@@ -168,7 +207,10 @@ python Tools/l10n_lint.py --locale zh-CN               # 425 keys, 0 missing, 0 
 2. 换一首**没有 MV** 的 → 拍一张（那颗「切换至视频」本来就不出现，但「显示歌词」也不该在）；
 3. **连换三首**，每首停 2 秒 → 拍三张（★ 主验收点：**不许**再出现照片 64 那种"大封面 + 上一首的缩略图"）；
 4. 进设置页把「隐藏播放器里的胶囊」**关掉** → 回听歌页（胶囊该回来）→ 再**打开**（该再消失）；
-5. 回归：三颗传输键 / 歌词键能开能关 / `bounce=on` / 迷你条与首页开关没受影响。
+5. ★ **页面记忆**：点开歌词键 → 按左上角 `v` 收起播放器（回主界面）→ 再从迷你条进播放器
+   ⇒ **还是歌词那一屏**（不是大封面）；然后点**收起**歌词 → 再退出重进 ⇒ **回到大封面**；
+6. ★ 再验一次**落盘**：点开歌词 → **杀掉 App 重开** → 进播放器 ⇒ 仍是歌词那一屏；
+7. 回归：三颗传输键 / 歌词键能开能关 / `bounce=on` / 迷你条与首页开关没受影响。
 
 ### 5.2 预期日志
 
@@ -195,7 +237,8 @@ python Tools/l10n_lint.py --locale zh-CN               # 425 keys, 0 missing, 0 
 | ② | 无 MV 的歌：那颗「显示歌词」也不在 |
 | ③ | **换歌不再出现照片 64**（原生大封面 + 上一首的缩略图同屏）；缩略图不显示上一首 |
 | ④ | 设置页那颗开关**当场**生效（关→回来、开→消失），不需要重启 |
-| ⑤ | 回归：传输键 / 歌词键 / `bounce=on` / 迷你条与首页开关不受影响 |
+| ⑤ | ★ **页面记忆**：点开歌词 → 退出播放器 → 重进 ⇒ **还是展开的**；点收起 → 退出重进 ⇒ **回到大封面**；杀掉 App 重开 ⇒ 记忆仍在 |
+| ⑥ | 回归：传输键 / 歌词键 / `bounce=on` / 迷你条与首页开关不受影响 |
 
 ### 5.4 失败时要警惕的
 
