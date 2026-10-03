@@ -105,9 +105,22 @@ class NgzhwmSettingsViewModel: ObservableObject {
 
     /// 「更好的逐词歌词」：Apple Music 风格的独立渲染层（需 iOS 26+）。
     ///
-    /// 默认**关闭** —— 这是整体重写，先让用户显式开启；出问题一键回到旧实现。
+    /// ★ 2026-10-11：从「默认关闭」改成「**默认开启**」。
+    ///
+    /// 原话：「2 也默认打开吧」—— 因为它是「歌词进播放器」的**第一道门禁**
+    /// （`NowPlayingLyricsPlate.canShow()` 里 `guard isBetterWordByWordLyricsEnabled`），
+    /// 那个开关现在默认开了，这个若还默认关，全新安装上就是"键看得见、点了没反应"。
+    /// 顺带把两个派生值也一起带开：`isLyricsBlurredBackdropEnabled`（模糊封面底）与
+    /// `isLyricsBackdropMaterialEnabled`（系统材质压色带）—— 它们本来就写死跟随这一个开关。
+    ///
+    /// 当初默认关闭的理由（"这是整体重写，先让用户显式开启；出问题一键回到旧实现"）
+    /// 现在的状态：用户在真机上已经用了几十轮、并逐步把这块指定成主界面（照片 67→75）。
+    /// 想回到旧实现的人仍然可以在这里关掉它（关掉即回退旧 overlay）。
+    ///
+    /// ⚠️ 它需要 **iOS 26+**（`#available(iOS 26.0, *)`）—— 低版本设备上这个开关
+    /// **开着也不会生效**，走的是旧实现那条路（见 `AppleMusicLyricsOverlay` 的可用性判断）。
     static var isBetterWordByWordLyricsEnabled: Bool {
-        bool(forKey: betterWordByWordLyricsKey, defaultValue: false)
+        bool(forKey: betterWordByWordLyricsKey, defaultValue: true)
     }
 
     /// 是否在模糊封面之上再叠一层系统材质压色带。

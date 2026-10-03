@@ -465,9 +465,32 @@ func seekToTappedLyricLine(_ time: TimeInterval) {
   `NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled`（「更好的逐词歌词」），
   而它 `defaultValue: false`（`ngzhwmSettingsViewModel.swift:110`）⇒ **全新安装上
   "歌词进播放器"会是"键看得见、点了没反应"**。
-  用户这次没点名那个开关 ⇒ **没有擅自翻**，只在回复里点出来问了一句
-  （要开的话也是改一个 `false` → `true`；顺带会把 `isLyricsBlurredBackdropEnabled` /
-  `isLyricsBackdropMaterialEnabled` 一起带开，那两个是它的派生值）。
+  ⇒ **已按用户回复（「2 也默认打开吧」）改成 `defaultValue: true`**，
+  连带 `isLyricsBlurredBackdropEnabled`（模糊封面底）与 `isLyricsBackdropMaterialEnabled`
+  （系统材质压色带）两个派生值一起开。注释里记了：想回旧实现的人仍然可以关掉它。
+
+---
+
+## 4.14 ★ 最低 / 推荐 iOS 版本（用户问的，证据在这）
+
+| | 值 | 证据 |
+|---|---|---|
+| **最低** | **iOS 14.0** | `control`：`Depends: ${ORION}, firmware (>= 14.0)`；`Makefile:1`：`TARGET := iphone:clang:latest:14.0`（deployment target = 14） |
+| **推荐** | **iOS 26 或更高**（作者自己的目标机是 **iOS 27**） | `#available(iOS 26.0, *)` 在仓库里 **47 处**；听歌页那一整套（`NowPlayingLyricsPlate` / Apple Music 渲染层 / 玻璃）都挂在这条线上；已有记录里目标机是 iOS 27（`LYRICS_MODULE_FINDINGS.md:3`） |
+
+**推论（装机/答疑时别答错）**：
+
+* **iOS 14~25 能装、能跑**，但**听歌页那一套（音量条 / 一屏 / 歌词进播放器 / 控制键本地字形 /
+  Apple Music 渲染层）与液态玻璃都用不了** —— `canShow` / `apply` 那几处 `guard #available(iOS 26.0, *)`
+  会直接返回，走的是旧实现那条路；
+* 这也是仓库的一条**明文纪律**（`SESSION_2026-10-02_APPEARANCE.md` §6.3）：
+  **不要为了玻璃提高最低版本**（提高版本 = 砍掉 iOS 14~25 的全部用户，换不到新能力；
+  iOS 26 的玻璃 API 靠**运行期反射**拿）；
+* ⚠️ 因为底线是 14，写代码时**不能用 iOS 15+ 的 API**（`UIButton.Configuration`、
+  SwiftUI `foregroundStyle` 这类都会编译错 —— 记录在 `SESSION_2026-10-01.md:295`）；
+* 另一条轴是 **Spotify 版本**（`EeveeSpotify.hookTarget`，`Tweak.x.swift:296`）：
+  `8.9.8 → .lastAvailableiOS14`、`9.0.48 → .lastAvailableiOS15`、`9.1.x → .v91`、其余 `→ .latest`。
+  也就是"iOS 14 这条线"实际绑的是**最后一个支持 iOS 14 的 Spotify 版本**。
 
 ---
 
