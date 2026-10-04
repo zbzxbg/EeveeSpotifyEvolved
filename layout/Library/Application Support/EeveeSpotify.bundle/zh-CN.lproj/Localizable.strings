@@ -122,8 +122,8 @@ ngzhwm_word_by_word_lyrics_description = "Musixmatch，PetitLyrics，SpicyLyrics
 ngzhwm_better_word_by_word_lyrics = "更好的逐词歌词";
 ngzhwm_better_word_by_word_lyrics_description = "像Apple Music那样，系统版本最低要求iOS26。选项开启后不会展示歌词翻译。";
 word_by_word_lyrics_provider = "逐词歌词提供者：%@";
-ngzhwm_inject_lyrics_card_element = "给没有歌词卡片的歌曲补一张";
-ngzhwm_lyrics_entry_point_flag = "强制歌词入口开关";
+ngzhwm_inject_lyrics_card_element = "补充模块5";
+ngzhwm_lyrics_entry_point_flag = "歌词入口开关";
 ngzhwm_multi_level_fallback = "多级回退";
 ngzhwm_multi_level_fallback_description = "多级回退:歌词将按照Mxm-PL-LRC-Gen的方式多级回退查询(Mxm和PL最长等待5秒，LRCLIB和Genius最长等待3秒；如果某个来源在对应时间内仍未返回有效歌词，则查询下一个来源)。";
 ngzhwm_netease_romaji_local = "修改NetEase日语罗马字的展示方式";
@@ -346,10 +346,10 @@ extras_description = "功能思路来自 spoti.pw。";
 
 declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自你设备的视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
 hide_mini_player_bar = "隐藏迷你播放条";
-hide_singalong_line = "隐藏单行歌词";
+hide_singalong_line = "隐藏Spotify官方的单行歌词";
 hide_npv_pills = "隐藏播放器里的切换至视频 / 显示歌词胶囊";
 declutter_home_player_section = "首页与播放器";
-declutter_home_player_description = "类名/标识都来自本机的视图树转储。";
+declutter_home_player_description = "类名/标识都来自视图树转储。";
 hide_home_header = "隐藏首页顶部条";
 hide_connect_button = "隐藏设备按钮";
 hide_add_to_button = "隐藏喜欢按钮";
@@ -493,7 +493,7 @@ reduce_interventions_scope_yourlibaryx_footer = "音乐库里出现的提示、�
 // 见 Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift。
 now_playing_backdrop_section = "歌曲播放页";
 now_playing_backdrop = "整页封面取色底";
-now_playing_backdrop_description = "用封面取色调出一层渐变铺满听歌页。";
+now_playing_backdrop_description = "你可以在这里调整歌曲播放页的各部分内容是否展示。";
 // ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
@@ -501,7 +501,7 @@ now_playing_backdrop_description = "用封面取色调出一层渐变铺满听�
 now_playing_one_screen = "隐藏Spotify歌曲播放页模块";
 now_playing_volume = "展示音量条";
 now_playing_lyrics_in_player = "歌词进播放器";
-now_playing_single_lyric = "封面与歌词键之间显示一行歌词";
+now_playing_single_lyric = "封面与歌词键之间显示单行歌词";
 show_romanized_lyrics = "展示罗马化歌词";
 show_lyrics_translation = "展示歌词翻译";
 now_playing_blur_unplayed_lyrics = "未播放歌词行模糊化";
