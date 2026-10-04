@@ -440,16 +440,19 @@ enum LibraryAppearance {
         }
         movedHeaderControls.removeAllObjects()
 
-        // ④ 灰纱：写回**它自己原来的** alpha（不是一律写 1 —— 它随滚动变，原值可能就不是 1）。
+        // ④ 灰纱：写回**它自己原来的** alpha（不是一律写 1 —— 它随滚动变，原值可能就不是 1），
+        //    然后把"记过账"这件事抹掉（关联对象也清）：下次再开开关时它是**新记的一次**，
+        //    日志也会重新报一行（"只报一次"的旗子现在挂在关联对象上，不再是一个 static bool ——
+        //    2026-10-12 那次编译错误就是漏删了旧的 `didReportScrim`）。
         for scrim in touchedScrims.allObjects {
             if let original = objc_getAssociatedObject(scrim, &originalScrimAlphaKey) as? NSNumber {
                 scrim.alpha = CGFloat(original.doubleValue)
             }
+            objc_setAssociatedObject(scrim, &originalScrimAlphaKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         touchedScrims.removeAllObjects()
 
         didLogHeaderRestyle = false
-        didReportScrim = false
     }
 
     private static func className(_ view: UIView) -> String {

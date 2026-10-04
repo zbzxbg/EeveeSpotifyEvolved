@@ -145,6 +145,9 @@ YourLibraryHeaderView
 
 * **本轮 3 个源码文件 + 2 个 l10n 文件，一行都没在真机上跑过。** 本机**没有 Swift 工具链**，
   "能编译"只有 CI / 用户能回答；六条自检**不做类型检查**（上一轮的两条编译错误就是这么漏过去的）。
+  ⚠️ **这一轮又漏了第三条**（用户报回）：`LibraryAppearance.restore()` 里还留着 `didReportScrim = false`，
+  而那个 `static var` 在同一次改动里已经被"每层灰纱各记各的关联对象"取代 ⇒ `cannot find 'didReportScrim' in scope`。
+  **教训（第三遍了）**：把一个 static 旗子/局部量换掉之后，**必须 grep 一遍旧名字**再提交。
 * **所有 id / 类名都是 pw 的树 + 9.1.88 的类名 dump 对出来的**，不是我们真机的树：
   `Artwork.Row.Library` / `Components.UI.CardLibrary.Artwork` / `Components.Header.UI.Toolbar.SearchField` /
   `…ButtonContainer` 这几个 id **没有一份我们自己的 dump 作证** ⇒ 所以每一片都写了"找不到就自报一行"，
