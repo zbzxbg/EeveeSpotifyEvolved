@@ -130,6 +130,9 @@ enum TabBarSystemGlass {
     private static var didReportCommitFailure = false
     /// "第几颗 ↔ 哪个 VC"：容器切页时由 `learnSelection` 学下来（拖动提交唯一能用的东西）。
     private static var knownControllers: [Int: UIViewController] = [:]
+    /// 手势诊断（各只报一次）：见 `reportTapWithoutIndex` / `noteFirstTapSeen`。
+    private static var didReportTapWithoutIndex = false
+    private static var didNoteFirstTap = false
 
     private static var lastBar: UIView?
     private static var lastSkipReason = ""
@@ -244,6 +247,8 @@ enum TabBarSystemGlass {
         mirroredSelections = 0
         didReportCommitFailure = false
         knownControllers.removeAll()
+        didReportTapWithoutIndex = false
+        didNoteFirstTap = false
         didLogLayout = false
         lastSelectionIndex = -1
         lastSelectionSignal = ""
@@ -579,6 +584,14 @@ enum TabBarSystemGlass {
             tap.cancelsTouchesInView = false
             stockBar.addGestureRecognizer(tap)
             objc_setAssociatedObject(stockBar, &stockTapKey, tap, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            // ★ 这一行是"点一下到底有没有被我们看见"的**判据**：
+            //   日志 68 里用户点了标签，却只有 0.5s 节拍那几行 `selection → #N`（说明气泡是靠节拍追上的）
+            //   ⇒ 要么手势没装、要么装了没收到触摸、要么收到了但算不出第几颗。
+            //   有这一行 + `first tap seen` 一行，下一份日志就能把三者分开。
+            writeDebugLog(
+                "[\(logTag)] tap recogniser installed on Spotify's own bar — it does not cancel touches,"
+                    + " so Spotify still switches the page; we only mirror the bubble at once. Waiting for the first tap."
+            )
         }
         guard commitRouteAvailable, objc_getAssociatedObject(stockBar, &stockPanKey) == nil else { return }
         let pan = UIPanGestureRecognizer(
@@ -614,6 +627,23 @@ enum TabBarSystemGlass {
         mirroredSelections += 1
         guard mirroredSelections <= 3 else { return }
         writeDebugLog("[\(logTag)] bubble mirrored straight away — #\(index) (\(reason); no waiting for the 0.5s tick)")
+    }
+
+    /// 手势**收到了触摸**，但算不出第几颗（= 手势没问题，是"哪一个"的判据不成立）—— 只报一次。
+    static func reportTapWithoutIndex() {
+        guard !didReportTapWithoutIndex else { return }
+        didReportTapWithoutIndex = true
+        writeDebugLog(
+            "[\(logTag)] ⚠️ the tap recogniser fired but no tab index could be worked out"
+                + " — either the tabs stack is not where we think, or the point is outside all four frames"
+        )
+    }
+
+    /// 第一次真的收到点击（与上面那行"Waiting for the first tap"配对读：有前者没后者 = 触摸没到我们手里）。
+    static func noteFirstTapSeen() {
+        guard !didNoteFirstTap else { return }
+        didNoteFirstTap = true
+        writeDebugLog("[\(logTag)] first tap seen on Spotify's own bar — the bubble now moves at once")
     }
 
     /// 手指滑过一格：气泡立刻跟过去，并**真的切页**（切不动就把气泡**拨回真实那一颗**，绝不假装）。
@@ -1279,8 +1309,12 @@ final class TabBarSystemGlassGestureRelay: NSObject {
     /// 点一下：Spotify 自己去换页（触摸没被我们取消），我们**同时**把气泡对过去。
     @objc func stockTapped(_ recognizer: UITapGestureRecognizer) {
         onMainThreadSync {
-            guard let bar = recognizer.view,
-                  let index = TabBarSystemGlass.itemIndex(at: recognizer.location(in: bar), in: bar) else { return }
+            guard let bar = recognizer.view else { return }
+            guard let index = TabBarSystemGlass.itemIndex(at: recognizer.location(in: bar), in: bar) else {
+                TabBarSystemGlass.reportTapWithoutIndex()
+                return
+            }
+            TabBarSystemGlass.noteFirstTapSeen()
             TabBarSystemGlass.mirrorSelection(index: index, reason: "a tap on Spotify's own bar")
         }
     }
