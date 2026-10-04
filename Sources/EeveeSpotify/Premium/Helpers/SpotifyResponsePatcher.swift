@@ -830,7 +830,10 @@ enum SpotifyResponsePatcher {
             //   以前没有任何一行能量这个窗口的长短 ⇒ 这条链只能靠猜。现在只报一次。
             if !didReportBodyArrival {
                 didReportBodyArrival = true
-                let seconds = launchAt.map { Date().timeIntervalSince($0) } ?? 0
+                // ⚠️ `launchAt` 是**非可选**的 `Date`（`private static let launchAt = Date()`）
+                //   ⇒ 直接算差值，**不能写 `launchAt.map { … } ?? 0`**（2026-10-12 编译错：
+                //   `value of type 'Date' has no member 'map'`）。
+                let seconds = Date().timeIntervalSince(launchAt)
                 writeDebugLog(
                     String(
                         format: "[CustomizeSeed] the real body arrived — %.1fs after launch."
