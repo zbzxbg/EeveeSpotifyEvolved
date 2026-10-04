@@ -829,6 +829,32 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
     reportLyricsReplacementOutcome(values)
 }
 
+/// **档位核心**：服务器就算一颗都没发，这几颗也必须写 —— 它们决定"App 认为自己是会员"。
+///
+/// ★★ 2026-10-12（用户问"Reincarnated 他们的解锁配置不能用吗"）：
+/// 对照他们的 `EeveePremiumForce.x.swift`，我们把"**什么时候**写"改成了两档 ——
+///   · **核心集合（下面这些）**：无条件写（他们叫 `seedAlways`，理由一致）；
+///   · **其余每一颗**：**只在服务端确实下发了它的时候**才覆盖 ⇒ **绝不凭空造键**。
+///
+/// 他们踩过的那一脚写在原注释里，逐字是：
+///   `// Over-seeding caused greyed-out tracks (streaming-rules mismatch).`
+///   `// Only seed the safe core set; dates and logout keys override-only.`
+/// 我们以前是**无条件写 ~30 颗**（`loudness-levels`、`mixing-tools=EDIT`、`libspotify`、
+/// `mobile`、`your-library-tags` … 服务器没发也造）⇒ 正是他们说的 over-seeding。
+private let premiumCoreKeys: Set<String> = [
+    "type",
+    "catalogue",
+    "product",
+    "financial-product",
+    "name",
+    "player-license",
+    "player-license-v2",
+    "ads",
+    "on-demand",
+    "unrestricted",
+    "shuffle-eligible",
+]
+
 private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
     let serverAuthoritativeAttributes = Dictionary(
         uniqueKeysWithValues: ServerSidedFeaturePolicy.serverAuthoritativeAccountAttributes
@@ -836,128 +862,178 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
     )
 
     let oneYearFromNow = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
-    
+
     let formatter = ISO8601DateFormatter()
     formatter.timeZone = TimeZone(abbreviation: "UTC")
-    
-    attributes["ads"] = AccountAttribute.with {
+
+    // ① **先算出"会员该有的值"**（逐字沿用以前那些赋值，只改"什么时候用得上它们"）。
+    var premium: [String: AccountAttribute] = [:]
+
+    premium["ads"] = AccountAttribute.with {
         $0.boolValue = false
     }
-    
-    attributes["ab-ad-player-targeting"] = AccountAttribute.with {
+
+    premium["ab-ad-player-targeting"] = AccountAttribute.with {
         $0.stringValue = "0"
     }
-    
-    attributes["allow-advertising-id-transmission"] = AccountAttribute.with {
+
+    premium["allow-advertising-id-transmission"] = AccountAttribute.with {
         $0.boolValue = false
     }
-    
-    attributes["restrict-advertising-id-transmission"] = AccountAttribute.with {
+
+    premium["restrict-advertising-id-transmission"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
-    attributes["can_use_superbird"] = AccountAttribute.with {
+    premium["can_use_superbird"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
-    attributes["enable-crossfade-product-state"] = AccountAttribute.with {
+    premium["enable-crossfade-product-state"] = AccountAttribute.with {
         $0.stringValue = "1"
     }
 
-    attributes["enable-gapless-product-state"] = AccountAttribute.with {
+    premium["enable-gapless-product-state"] = AccountAttribute.with {
         $0.stringValue = "1"
     }
 
-    attributes["catalogue"] = AccountAttribute.with {
+    premium["catalogue"] = AccountAttribute.with {
         $0.stringValue = "premium"
     }
 
-    attributes["financial-product"] = AccountAttribute.with {
+    premium["financial-product"] = AccountAttribute.with {
         $0.stringValue = "pr:premium,tc:0"
     }
 
-    attributes["is-eligible-premium-unboxing"] = AccountAttribute.with {
+    premium["is-eligible-premium-unboxing"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
-    attributes["name"] = AccountAttribute.with {
+    premium["name"] = AccountAttribute.with {
         $0.stringValue = "Spotify Premium"
     }
 
-    attributes["nft-disabled"] = AccountAttribute.with {
+    premium["nft-disabled"] = AccountAttribute.with {
         $0.stringValue = "1"
     }
 
-    attributes["on-demand"] = AccountAttribute.with {
+    premium["on-demand"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
-    attributes["payments-initial-campaign"] = AccountAttribute.with {
+    premium["payments-initial-campaign"] = AccountAttribute.with {
         $0.stringValue = "default"
     }
 
-    attributes["player-license"] = AccountAttribute.with {
+    premium["player-license"] = AccountAttribute.with {
         $0.stringValue = "premium"
     }
 
-    attributes["player-license-v2"] = AccountAttribute.with {
+    premium["player-license-v2"] = AccountAttribute.with {
         $0.stringValue = "premium"
     }
 
-    attributes["product-expiry"] = AccountAttribute.with {
+    // ★ 2026-10-12 新加：他们的核心集合里有 `product`，我们**以前一颗都不碰** ⇒
+    //   `type=premium` 而 `product` 还是服务端那份（free）—— 核心集合内部就不一致。
+    premium["product"] = AccountAttribute.with {
+        $0.stringValue = "premium"
+    }
+
+    premium["product-expiry"] = AccountAttribute.with {
         $0.stringValue = formatter.string(from: oneYearFromNow)
     }
 
-    attributes["shuffle-eligible"] = AccountAttribute.with {
+    premium["shuffle-eligible"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
-    attributes["streaming-rules"] = AccountAttribute.with {
+    // 空串 = **把免费档的播放规则清掉**（他们那颗"灰歌"的修法就是它：只在服务端
+    // 确实下发了 `streaming-rules` 时才覆盖，不再凭空造）。
+    premium["streaming-rules"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+    premium["previous-streaming-rules"] = AccountAttribute.with {
         $0.stringValue = ""
     }
 
-    attributes["subscription-enddate"] = AccountAttribute.with {
+    premium["subscription-enddate"] = AccountAttribute.with {
         $0.stringValue = formatter.string(from: oneYearFromNow)
     }
 
-    attributes["type"] = AccountAttribute.with {
+    premium["type"] = AccountAttribute.with {
         $0.stringValue = "premium"
     }
 
-    attributes["unrestricted"] = AccountAttribute.with {
+    premium["unrestricted"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
     // Premium-vs-free product-state deltas. boolValue serializes as "0"/"1".
-    attributes["high-bitrate"] = AccountAttribute.with {
+    premium["high-bitrate"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
     // audio-quality left unforced: Very High fails to stream on a free entitlement.
 
-    attributes["loudness-levels"] = AccountAttribute.with {
+    premium["loudness-levels"] = AccountAttribute.with {
         $0.stringValue = "1:-5.0,0.0,3.0:-2.0"
     }
 
-    attributes["pick-and-shuffle"] = AccountAttribute.with {
+    premium["pick-and-shuffle"] = AccountAttribute.with {
         $0.boolValue = false
     }
 
-    attributes["mixing-tools"] = AccountAttribute.with {
+    premium["mixing-tools"] = AccountAttribute.with {
         $0.stringValue = "EDIT"
     }
 
-    attributes["your-library-tags"] = AccountAttribute.with {
+    premium["your-library-tags"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
     // Unknown purpose; premium sets these to 1.
-    attributes["libspotify"] = AccountAttribute.with {
+    premium["libspotify"] = AccountAttribute.with {
         $0.boolValue = true
     }
 
-    attributes["mobile"] = AccountAttribute.with {
+    premium["mobile"] = AccountAttribute.with {
         $0.boolValue = true
+    }
+
+    // ★★ 2026-10-12 新加（同样来自 Reincarnated）：**反登出**那一族。
+    //   他们原注释：服务器推这些键就是为了触发 `ForcedLogoutDaemon` / `AccessTokenRevokerDaemon`。
+    //   如果"退出重进后歌曲全黑、过一会又回来"其实是**会话被判失效**，这一族就是解药。
+    //   语义与别人一致：**只在服务端下发了它们的时候**才压回去。
+    premium["forced_logout"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+    premium["force_logout"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+    premium["forced_logout_abroad_since"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+    premium["logout_required"] = AccountAttribute.with {
+        $0.stringValue = "0"
+    }
+    premium["session_invalidated"] = AccountAttribute.with {
+        $0.stringValue = "0"
+    }
+
+    // ② **两档写回**：核心集合无条件写；其余只覆盖"服务端已经下发过的键"。
+    var seeded = 0
+    var overridden = 0
+    var skipped: [String] = []
+    for (key, value) in premium {
+        if attributes[key] != nil {
+            attributes[key] = value
+            overridden += 1
+        } else if premiumCoreKeys.contains(key) {
+            attributes[key] = value
+            seeded += 1
+        } else {
+            skipped.append(key)
+        }
     }
 
     attributes.removeValue(forKey: "payment-state")
@@ -995,4 +1071,15 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
             attributes.removeValue(forKey: name)
         }
     }
+
+    // ③ 一行判据：**"有没有凭空造键"从今往后是看得见的**。
+    //   下一份日志里若 `skipped` 一大堆，就说明服务器本来就没发那些键 ——
+    //   而它们以前是被我们造出来的（Reincarnated 认定这就是灰歌的来源）。
+    writeDebugLog(
+        "[Premium] attributes — core \(seeded) seeded, \(overridden) overridden, \(skipped.count) left alone"
+            + " (the server never sent them; inventing them is what greys tracks out)"
+            + "; streaming-rules blanked: \(attributes["streaming-rules"] != nil)"
+            + "; logout keys neutralised: \(attributes["logout_required"] != nil || attributes["forced_logout"] != nil)"
+            + (skipped.isEmpty ? "" : "; left alone: \(skipped.sorted().prefix(12).joined(separator: ","))")
+    )
 }
