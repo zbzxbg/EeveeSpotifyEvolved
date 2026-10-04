@@ -173,3 +173,77 @@ YourLibraryHeaderView
 3. **判据只留一份**：灰纱只有 `LibraryAppearance.clearTopEdgeScrim(in:)` 一份；胶囊几何只有
    `TabBarGlassPlate.capsuleRect` 一份；行的半径/间距只有 `LibraryRowsMetrics` 一份。
    要调数值**只改那一处**。
+
+---
+
+## 8. ★★ 真机第二轮（照片 82/83/84 + 日志 64）：三条纠正 + 一条新要求
+
+用户原话：「照片82，日志64. **这做的也太矮了吧，高度长度都不对**，而且**这些功能并没有实际效果**。
+而且音乐库在划动的过程中，右边会有个**可以拖动的小条（图片84）这个条子可以隐藏吗**」。
+
+**这一份日志是 `[Tree]` 开着跑的**（`[Tree] #1…#20`，每 2 秒一份）⇒ 视图树有真身，不用再猜。
+
+### 8.1 玻璃"太矮、长度不对" —— **是我把宿主摆小了**（提交 `a2e5a80`）
+
+```
+[TabBarSystem] glass geometry — host 27,-3,360,60 ; system bar 0,0,360,60
+                drawn [_UITabBarItemPlatterView=48,-3,318,39 …]
+[Tree] #1 11.TabBarSystemGlassHost@27,-3,360,60
+[Tree] #1 13._UITabBarItemPlatterView@21,0,318,39          ← 相对宿主：左 21、右 21、底 21、顶 0
+```
+⇒ **UIKit 画的玻璃比我们给的框小一圈**（它自己留了内边距）。上一版我把宿主**当成**目标那块
+⇒ 玻璃变成 318×39（照片 83 明显比照片 82 扁）。
+**改法**：按**实测差**把宿主往外扩（`place` 里的 `drawnGlassFrame`）——
+关系是"玻璃 = 宿主 − 常量"⇒ **一次收敛、幂等**，而且 21 这个数**没有写进代码**。
+对齐目标仍然是 `TabBarGlassPlate.capsuleRect`（360×60、贴图标行、左右各 24pt）。
+
+### 8.2 "功能没有实际效果" —— **五条转发路一条都没通**（同一笔提交）
+
+```
+[TabBarSystem] ⚠️ tap on #1 found nothing to forward to — ElementContentView<…TabBarItemElement>
+   ; inside [UILongPressGestureRecognizer on ElementContentView | UITapGestureRecognizer on TabBarItemElementView | …]
+```
+识别器**在**，但旧的三条路（读 `_targets` 的 target/action / 无障碍 / UIControl）**全都不通**
+⇒ 点标签栏不切页。**新增第 ① 条 = 公开 API**：
+Spotify 那条栏的容器 `NavigationUI_TabBarImpl.TabBarContainerImpl` **是 `UITabBarController` 的子类**
+（pw 在它身上 hook 的正是 `setSelectedViewController:` —— 那是 `UITabBarController` 的公开方法）
+⇒ **`selectedIndex = index`** 就是"用户点了那一颗"的等价物。
+后面依次：pw 的识别器路 → `-handleTap`（只找"响应它的对象"：响应链 + ivar）→ `accessibilityActivate()` → `UIControl`。
+**五条全不通 ⇒ 把触摸还给 Spotify 那条栏**（`handTouchesBack`）：只有第一次点击失效，之后点得动，
+只是没有"按下回弹" —— 绝不留下"看得见、点不动"。
+
+### 8.3 音乐库行/卡片：**假警报**，不是不生效（提交 `0bf5f12`）
+
+```
+[Tree] #8 23.ImageView@0,0,116,116,id=Components.UI.CardLibrary.Artwork      ← 卡片封面 id **存在**
+[Tree] #8 21.…id=Components.UI.AddArtistCardLibrary / AddPodcastCardLibrary /
+        AddEventCardLibrary / ImportMusicCardLibrary                          ← 占位卡（本来就没有封面）
+```
+上一版报的 `⚠️ no row artwork id on a 116x143 cell` 打在**占位卡**上。
+**改法**：占位卡不再报；真行/真卡缺封面仍报；两个 id 都不匹配时**退到按几何认封面**
+（贴边、接近正方、40…200pt），并把**真实类名 + id + 半径**打进日志（下一份日志把 id 钉死）。
+另外两条从 `[Tree]` 读出来、已写进 `LibraryAppearance` 文件头的事实：
+标题那串 id 挂在 **Encore 包装视图**上、**字号与位移都写在里层 `.title-internal` 那个 `UILabel`**（看日志要看它）；
+头部靠右打包**是生效的**（`AdaptiveFaceContainer@350,0,48,48`、search@254、plus@302）。
+
+### 8.4 照片 84 那条"可以拖动的小条" —— **能隐藏，已隐藏**（同一笔提交）
+
+```
+[Tree] #9 17.QuickScrollView@0,0,414,896
+        ├ 18.QuickScrollIndicator@354,141,48,28,bg=#262626,id=quickscroll.indicator  ← 拖动时那个日期气泡（「2026年6月」）
+        └ 18.QuickScrollHandle@381,141,48,48,bg=#262626,id=quickscroll.handle        ← 右边那颗可拖的圆把手
+```
+**做法：从父视图里拿走**（不是 `alpha = 0`）—— 它本来就随滚动自己显形/隐藏，
+每拍写 alpha 会和它的显示动画打架（§2.1 那笔账的翻版）；拿走之后它再也显不出来，
+而且那块**不再吃手势**（"可拖动"一起关掉，用户要的正是这个）。记原父视图与下标，
+关开关**按原位放回**。
+
+### 8.5 这一轮的验收（在 §4 那张表之外，只看这五条）
+
+| # | 应该看到 | 日志判据 |
+|---|---|---|
+| A | 标签栏那条玻璃**明显变高变长**，与迷你播放条那条胶囊对齐 | `glass geometry — host 6,-3,402,81 …`（应为这个量级）而 `drawn [_UITabBarItemPlatterView=27,-3,360,60 …]` |
+| B | **点四颗都能切页** | `tap on #N forwarded to Spotify — route UITabBarController.selectedIndex on Spotify's own container`；若出现 `⚠️ … handing the touches back` ⇒ 五条都没通，把那行发我 |
+| C | 音乐库那条**快速滚动条不再出现**（划动时也不出现） | `[Library] the quick-scroll scrubber is off — QuickScrollView …` |
+| D | 卡片封面圆角**看得出来更柔**；**占位卡不再刷噪声** | `[Library] library artwork styled — ImageView id=Components.UI.CardLibrary.Artwork 116pt → r=8.0 continuous …` |
+| E | 关掉开关：玻璃回到自绘胶囊、滚动条回来、圆角与灰纱还原 | —— |
