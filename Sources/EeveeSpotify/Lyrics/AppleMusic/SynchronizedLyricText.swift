@@ -209,7 +209,11 @@ struct SynchronizedLyricText: View {
             .font(font)
             .foregroundStyle(primaryColor)
             .multilineTextAlignment(alignment.textAlignment)
-            .lineSpacing(typography.lineSpacing)
+            // ★ 2026-10-12（用户：「主语言换行的中间空隙有点大了」）：
+            //   这里以前吃的是 `typography.lineSpacing` —— 那是**块间距**（`.player` 档 26pt，
+            //   kumone 的 `LazyVStack(spacing: 26)` 那条）。一行自己折成两行时也吃 26
+            //   ⇒ 折行看着像"空了一整句"。改用**折行专用**的紧行距（见 `wrappedLineSpacing`）。
+            .lineSpacing(typography.wrappedLineSpacing)
             // ⚠️ 顺序要紧：先注册属性作用域，再挂渲染器。
             // 少了 `lyricTextAttributes()`，渲染器在 run 上取不到逐字时间轴，
             // 表现为文字正常但完全不亮（且不报错）。

@@ -68,6 +68,16 @@ struct LyricsTypographyScale {
     let supplementalFontSize: CGFloat
     /// 视觉行之间的间距
     let lineSpacing: CGFloat
+    /// ★ 2026-10-12：**同一行歌词折行之后，两行之间**的间距。
+    ///
+    /// 用户原话：「有个感觉就是现在主语言换行的中间空隙有点大了」——
+    /// 原因很直接：`SynchronizedLyricText` 里那句 `.lineSpacing(typography.lineSpacing)` 用的是
+    /// **块间距**（`.player` 档 26pt），而 26 是"上一句到下一句"的距离（kumone 的
+    /// `LazyVStack(spacing: 26)`）。一行**自己折成两行**时也吃这个值 ⇒ 折行看起来像"空了一整句"。
+    ///
+    /// 现在分开：本字段 = **折行**的行距（Apple Music 的正文是紧排的，约 0.25×字号）；
+    /// `lineSpacing` 仍然只管**块与块**（`AppleMusicLyricsPage` 的 `LazyVStack(spacing:)` 用）。
+    let wrappedLineSpacing: CGFloat
     /// 同一行的原文与译文之间
     let supplementalSpacing: CGFloat
 
@@ -88,6 +98,7 @@ struct LyricsTypographyScale {
         primaryFontSize: 22,
         supplementalFontSize: 16,
         lineSpacing: 15,
+        wrappedLineSpacing: 5,
         supplementalSpacing: 4
     )
 
@@ -113,6 +124,8 @@ struct LyricsTypographyScale {
         primaryFontSize: 22,
         supplementalFontSize: 17,
         lineSpacing: 26,
+        // ★ 2026-10-12：折行用紧行距（≈0.27×字号）。26 只留给"块与块"（见 `wrappedLineSpacing`）。
+        wrappedLineSpacing: 6,
         supplementalSpacing: 6
     )
 
@@ -124,6 +137,7 @@ struct LyricsTypographyScale {
         primaryFontSize: 20,
         supplementalFontSize: 14,
         lineSpacing: 10,
+        wrappedLineSpacing: 3,
         supplementalSpacing: 3
     )
 
@@ -139,6 +153,7 @@ struct LyricsTypographyScale {
             primaryFontSize: primaryFontSize * CGFloat(primaryFactor),
             supplementalFontSize: supplementalFontSize * CGFloat(supplementalFactor),
             lineSpacing: lineSpacing,
+            wrappedLineSpacing: wrappedLineSpacing,
             supplementalSpacing: supplementalSpacing
         )
     }

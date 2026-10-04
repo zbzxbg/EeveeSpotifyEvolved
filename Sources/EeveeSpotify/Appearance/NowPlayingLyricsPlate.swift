@@ -2679,7 +2679,7 @@ enum NowPlayingLyricsPlate {
         guard let label = artistLabel(in: page) else { return }
         guard let suffix = providerSuffix() else { return }
 
-        let current = label.text ?? ""
+        let current = effectiveLabelText(label)
         guard !current.isEmpty else { return }
 
         // ★ 2026-10-12（独立复核点出来的死角）：**提供商换了名字**（同一首歌重新取词 /
@@ -2726,7 +2726,7 @@ enum NowPlayingLyricsPlate {
     /// 把歌手那一行还原成纯歌手名（**离开页面 / 关开关** —— 不再跟着"收起歌词"走）。
     private static func restoreArtistLine(in page: UIView) {
         guard let suffix = lastArtistSuffix, let label = artistLabel(in: page) else { return }
-        let current = label.text ?? ""
+        let current = effectiveLabelText(label)
         guard current.hasSuffix(suffix) else {
             lastArtistSuffix = nil
             return
@@ -2738,85 +2738,163 @@ enum NowPlayingLyricsPlate {
     /// 上一次贴之前那一行的原文（用来分辨"换歌"与"被 binder 写回"，只给日志用）。
     private static var lastArtistBase = ""
 
-    /// 歌手那一行到底是哪一个 `UILabel`。
+    /// 歌手那一行到底是哪一个 `UILabel`。判据**从硬到软**三条：
     ///
-    /// ① **老判据（id）**：真机树里是
-    ///    `MarqueeLabel@0,24,308,22,id=now-playing-subtitle-label`（标题是 `now-playing-title-label`）。
-    /// ② ★ 2026-10-04 **新增兜底**（见 `siblingArtistLabel`）。
+    ///   ① **id**：`now-playing-subtitle-label`（9.1.76 那份树里是它；9.1.88 上这份日志证明**已经不在**）；
+    ///   ② ★ 2026-10-12（日志 58）：**按文本认** —— 页面里那个写着**当前歌手名**的标签。
+    ///      歌手名从曲目元数据取（口径与 `LyricsWordByWord` 的壳、`AppleMusicLyricsOverlay` 的页头一致）。
+    ///      这是**确定性**判据，不是位置猜；
+    ///   ③ 位置兜底：标题那一行里、标题**正下方**、且与标题左边缘对齐的标签。
     ///
-    /// 为什么必须加兜底：日志 57 整份里**一次都没有** `lyrics provider written next to the artist`，
-    /// 而 `currentLyricsProvider` 明明是 `NetEase`（同日志 `[Lyrics] provider: NetEase`）
-    /// ⇒ 唯一能吞掉它的就是①这一句（`as? UILabel` 不成立、或者这个 id 在 9.1.88 上已经变了），
-    /// 而且它是**静默**返回的 —— 用户看到的就是"提供商没写在歌手后面"，我们手里却没有一行证据。
-    /// 现在：找不到就**明说**（一次），找到兜底那一份也**明说**（带上类名，下一份日志能钉死它）。
+    /// ## 为什么必须重做（日志 58 逐字）
+    ///
+    /// ```
+    /// [NPVLyrics] the artist line was found by position, not by id — class UILabel
+    /// [NPVLyrics] lyrics provider written next to the artist — "直播" + "（NetEase）"
+    /// ```
+    ///
+    /// ⇒ 旧的"位置兜底"挑中了一个 **`text = "直播"` 的徽章**：提供商被贴到 LIVE 徽章上，
+    /// 用户看到的仍然是"提供商没写在歌手后面"（而且我们还改坏了别人的一个标签）。
+    ///
+    /// ## 另一半（同样致命）
+    ///
+    /// 三条判据都改用 `effectiveLabelText`：Spotify 的标签**未必把文字放在 `text` 里**
+    /// （`attributedText` 是常态）—— 只认 `text` 会把真正的歌手行**整行跳过**，
+    /// 于是兜底才轮得到那个徽章。这正是"直播"能中选的原因。
     private static func artistLabel(in page: UIView) -> UILabel? {
         let list = findByIdentifier(listIdentifier, in: page)
         let byId = (list.flatMap { findByIdentifier(subtitleLabelIdentifier, in: $0) })
             ?? findByIdentifier(subtitleLabelIdentifier, in: page)
-        if let label = byId as? UILabel { return label }
+        if let label = byId as? UILabel, !effectiveLabelText(label).isEmpty { return label }
 
-        guard let fallback = siblingArtistLabel(in: page) else {
-            if !didLogArtistLabelMissing {
-                didLogArtistLabelMissing = true
-                writeDebugLog(
-                    "[\(logTag)] cannot find the artist line (tried the id "
-                        + "\(subtitleLabelIdentifier) and the title row's own labels)"
-                        + " - the provider stays off that line"
-                )
+        let titleLabel = (list.flatMap { findByIdentifier(titleLabelIdentifier, in: $0) })
+            ?? findByIdentifier(titleLabelIdentifier, in: page)
+        let titleFrame = titleLabel.map { untransformed($0, in: page) }
+        let candidates = textLabels(in: page)
+
+        // ② 按歌手名认（包含即可：Spotify 可能写成 "A, B" 而我们拿到的是主艺人）。
+        let artist = currentArtistName()
+        if !artist.isEmpty {
+            let matched = candidates.filter { candidate in
+                guard candidate.label !== titleLabel else { return false }
+                let text = effectiveLabelText(candidate.label)
+                return text.range(of: artist, options: .caseInsensitive) != nil
             }
-            return nil
+            if let best = nearestBelow(matched, to: titleFrame) {
+                if !didLogArtistLabelByText {
+                    didLogArtistLabelByText = true
+                    writeDebugLog(
+                        "[\(logTag)] the artist line was found by its text — class "
+                            + "\(NSStringFromClass(type(of: best)))"
+                    )
+                }
+                return best
+            }
         }
-        if !didLogArtistLabelFallback {
-            didLogArtistLabelFallback = true
-            writeDebugLog(
-                "[\(logTag)] the artist line was found by position, not by id —"
-                    + " class \(NSStringFromClass(type(of: fallback)))"
-            )
+
+        // ③ 位置兜底：标题**正下方** + 左边缘对齐（比旧判据严一档：旧判据只要求"水平有重叠"，
+        //    徽章也能满足）。三条都要过 `effectiveLabelText`。
+        if let titleFrame {
+            let positional = candidates.filter { candidate in
+                guard candidate.label !== titleLabel else { return false }
+                return candidate.frame.minY >= titleFrame.maxY - 2
+                    && abs(candidate.frame.minX - titleFrame.minX) <= 12
+            }
+            if let best = nearestBelow(positional, to: titleFrame) {
+                if !didLogArtistLabelFallback {
+                    didLogArtistLabelFallback = true
+                    writeDebugLog(
+                        "[\(logTag)] the artist line was found by position, not by id — class "
+                            + "\(NSStringFromClass(type(of: best)))"
+                    )
+                }
+                return best
+            }
         }
-        return fallback
+
+        // ④ 三条都不中：把**候选原样打进日志**（只打一次）。
+        //    上一轮就是因为只有一句"找不到"，下一轮仍然只能猜 —— 这次让日志自己说出页面里有什么。
+        if !didLogArtistLabelMissing {
+            didLogArtistLabelMissing = true
+            let dump = candidates.prefix(8).map { candidate -> String in
+                let text = effectiveLabelText(candidate.label)
+                let shown = text.count > 24 ? String(text.prefix(24)) + "..." : text
+                let className = NSStringFromClass(type(of: candidate.label))
+                return "\(className) [\(shown)] \(frameText(candidate.frame))"
+            }.joined(separator: " | ")
+            writeDebugLog("[\(logTag)] cannot find the artist line — candidates: \(dump)")
+        }
+        return nil
     }
 
     private static var didLogArtistLabelMissing = false
     private static var didLogArtistLabelFallback = false
+    private static var didLogArtistLabelByText = false
 
-    /// 兜底找法：在**标题所在的那一行**里找"标题下面、与标题水平重叠"的那个 `UILabel`。
+    /// 标签的**有效文本**：`text` 为空就看 `attributedText`。
     ///
-    /// 判据只有位置与类型两条，**不猜类名**（`MarqueeLabel` 在 9.1.88 是
-    /// `LegacyUI_ECMCoreKit.Views.MarqueeLabel`，但那是 Swift 私有类，按名字认迟早失效）：
-    ///   · `UILabel`（含子类）且 `text` 非空；
-    ///   · 它的 y 在标题**之下**（Spotify 的"歌名 / 歌手"是上下两行）；
-    ///   · 与标题在水平方向上有重叠（同一列）。
-    /// 走查有界（64 个节点），**一个都不满足就返回 nil** ——
-    /// 宁可什么都不写，也绝不把提供商贴到歌名上。
-    private static func siblingArtistLabel(in page: UIView) -> UILabel? {
+    /// ★ 日志 58 的教训（用户：「歌词提供商还是没在歌手后面」）：Spotify 那一行未必用 `text`
+    ///   写入 —— 旧判据只认 `text`，于是**真正的歌手行被整行跳过**，位置兜底才挑中了
+    ///   一个 `text = "直播"` 的徽章。凡是要读标签文字的地方都走这一个口径。
+    private static func effectiveLabelText(_ label: UILabel) -> String {
+        let plain = label.text ?? ""
+        if !plain.isEmpty { return plain }
+        return label.attributedText?.string ?? ""
+    }
+
+    /// 当前这首的**歌手名**（页面上的歌手那一行就该写着它）。
+    ///
+    /// 口径与仓库另外两处一致（`LyricsWordByWord` 的壳 `:897`、`AppleMusicLyricsOverlay` 的页头 `:671`）：
+    /// 9.1.x 上要 `artistName()`，老版本只有 `artistTitle()`（见 `SPTPlayerTrack+Extension` 的说明）。
+    private static func currentArtistName() -> String {
+        let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
+        let name = EeveeSpotify.hookTarget == .lastAvailableiOS14
+            ? track?.artistTitle()
+            : track?.artistName()
+        return (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 标题那一行里所有"**有文字**的 `UILabel`"（含标题自己），带它们在页面坐标里的 frame。
+    ///
+    /// 起点**逐级放宽**：标题元素 → 标题行 → 整页；哪一级找到就不往下找（越近的越可能是它）。
+    /// 走查有界（每级 64 个节点）。**只看有效文本非空的**（见 `effectiveLabelText`）。
+    private static func textLabels(in page: UIView) -> [(label: UILabel, frame: CGRect)] {
         let list = findByIdentifier(listIdentifier, in: page)
         let titleLabel = (list.flatMap { findByIdentifier(titleLabelIdentifier, in: $0) })
             ?? findByIdentifier(titleLabelIdentifier, in: page)
-        guard let title = titleLabel, let row = title.superview?.superview else { return nil }
-        let titleFrame = untransformed(title, in: page)
 
-        var best: UILabel?
-        var bestY = CGFloat.greatestFiniteMagnitude
-        var visited = 0
-        var queue: [UIView] = row.subviews
+        var roots: [UIView] = []
+        if let element = titleLabel?.superview { roots.append(element) }
+        if let row = titleLabel?.superview?.superview { roots.append(row) }
+        roots.append(page)
 
-        while !queue.isEmpty, visited < 64 {
-            let view = queue.removeFirst()
-            visited += 1
-            queue.append(contentsOf: view.subviews)
-            guard view !== title, !view.isHidden, view.alpha > 0.01, view.bounds.height > 1 else {
-                continue
+        var found: [(label: UILabel, frame: CGRect)] = []
+        for root in roots {
+            var visited = 0
+            var queue: [UIView] = [root]
+            while !queue.isEmpty, visited < 64 {
+                let view = queue.removeFirst()
+                visited += 1
+                queue.append(contentsOf: view.subviews)
+                guard !view.isHidden, view.alpha > 0.01, view.bounds.height > 1 else { continue }
+                guard let label = view as? UILabel else { continue }
+                guard !effectiveLabelText(label).isEmpty else { continue }
+                if found.contains(where: { $0.label === label }) { continue }
+                found.append((label, untransformed(view, in: page)))
             }
-            guard let label = view as? UILabel, (label.text ?? "").isEmpty == false else { continue }
-            let frame = untransformed(view, in: page)
-            guard frame.minY >= titleFrame.maxY - 2 else { continue }
-            guard frame.maxX > titleFrame.minX, frame.minX < titleFrame.maxX else { continue }
-            if frame.minY < bestY {
-                bestY = frame.minY
-                best = label
-            }
+            if !found.isEmpty { break }
         }
-        return best
+        return found
+    }
+
+    /// 在候选里挑"**在标题下方、离标题最近**"的那个；没有标题 frame 就取第一个。
+    private static func nearestBelow(
+        _ candidates: [(label: UILabel, frame: CGRect)],
+        to titleFrame: CGRect?
+    ) -> UILabel? {
+        guard let titleFrame else { return candidates.first?.label }
+        let below = candidates.filter { $0.frame.minY >= titleFrame.maxY - 2 }
+        return below.min { $0.frame.minY < $1.frame.minY }?.label ?? candidates.first?.label
     }
 
     /// `"歌手（提供商）"` 里那一段后缀；提供商为空 ⇒ `nil`（那就什么都不写，保持 Spotify 原样）。

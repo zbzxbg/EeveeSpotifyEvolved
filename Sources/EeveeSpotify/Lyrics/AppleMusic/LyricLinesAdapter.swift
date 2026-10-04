@@ -71,14 +71,23 @@ extension LyricsDto {
         if UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization"),
            !officialRomanizedLines.isEmpty,
            officialRomanizedLines.count == lines.count {
+            // ★ 2026-10-12（用户）：「如果日语罗马字用的是**网易云自己做的**，首字母不会被大写」。
+            //
+            // 官方 `romalrc` 全是小写，而本地那条管线（`romanizedForWordByWordIfEnabled()`）会做
+            // `capitalizingFirstLetterIfAlphabetic()`。两者显示的是**同一行**（原文上方那一行），
+            // 大小写必须一致 —— 否则"换了官方罗马字"看起来就像少做了一步。
+            // 这里只动**显示的那份**，主歌词与词级对齐都不受影响。
+            let official = officialRomanizedLines.map { line -> String in
+                line.isEmpty ? line : line.capitalizingFirstLetterIfAlphabetic()
+            }
             var merged: [String]
-            if officialRomanizedLines.contains(where: { $0.isEmpty }) {
+            if official.contains(where: { $0.isEmpty }) {
                 let local = romanizedForWordByWordIfEnabled().lines.map(\.content)
-                merged = zip(officialRomanizedLines, local).map { pair in
+                merged = zip(official, local).map { pair in
                     pair.0.isEmpty ? pair.1 : pair.0
                 }
             } else {
-                merged = officialRomanizedLines
+                merged = official
             }
             romanizationCacheKey = key
             romanizationCache = merged

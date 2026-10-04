@@ -287,12 +287,29 @@ enum TimedLyricTextBuilder {
     ) {
         let hasBreaks = !lineBreakOffsets.isEmpty
 
-        // 没折行时，只在「按估算宽度看它本该折」的情况下才报警，
+        // 没折行时，只在「按真实度量看它本该折」的情况下才报警，
         // 免得把一屏短的短行全打出来。
+        //
+        // ★ 2026-10-12（用户：「某些歌词行会有额外换行…后面明明还有空间」）：
+        //   **这里以前是估的** —— `source.count * fontSize * 0.55`，而 0.55 那个系数是给拉丁文写的：
+        //   一行 20 个字的日文，22pt 估出来只有 242pt（低于 358pt 的可用宽）⇒ **一条都不打**。
+        //   于是整份日志 58 里 `[LyricWrap]` **零条**，而屏幕上确实有折行 —— 我们手里一行证据都没有。
+        //   现在改用**和折行同一个测量函数**（`measuredTextWidth` vs `effectiveLayoutWidth`）：
+        //   下一份日志会直接写出"这一行 text=… layout=…"以及断点，不用再猜。
         var shouldLog = hasBreaks
         if !hasBreaks, let constrainedWidth, constrainedWidth > 0, fontSize > 0 {
-            let estimatedWidth = CGFloat(source.count) * fontSize * 0.55
-            shouldLog = estimatedWidth > constrainedWidth
+            let measured = measuredTextWidth(
+                source: source,
+                fontSize: fontSize,
+                fontWeight: fontWeight
+            )
+            let layout = effectiveLayoutWidth(
+                source: source,
+                constrainedWidth: constrainedWidth,
+                fontSize: fontSize,
+                usesTimedRunBoundaries: true
+            )
+            shouldLog = measured > layout
         }
         guard shouldLog else { return }
 
