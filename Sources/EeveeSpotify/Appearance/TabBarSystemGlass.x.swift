@@ -49,9 +49,18 @@ import ObjectiveC.runtime
 ///   · 转发完成后 0.25s 再 `reapply()` 一次：Spotify 会晚一点重画标签颜色（选中态信号）。
 ///   · 宿主只有那一块 ⇒ **玻璃以外的区域照旧落到 Spotify 的栏上**，行为不变。
 ///
-/// ⚠️ **2026-10-12 真机日志 64 的两条教训**（都已改进代码，别回退）：
-///   1. 旧的三条路**一条都没通**（`⚠️ tap on #N found nothing to forward to`）⇒ 点标签栏没反应；
-///   2. 玻璃比我们给的框**小一圈** ⇒ `place` 改成按实测差自校准（见那里的注释）。
+/// ⚠️ **2026-10-12 真机日志 64 + 用户第三轮反馈的三条教训**（都已改进代码，别回退）：
+///   1. 旧的三条转发路**一条都没通**（`⚠️ tap on #N found nothing to forward to`）⇒ 点标签栏没反应；
+///   2. 玻璃比我们给的框**小一圈** ⇒ `place` 按实测差自校准（见那里的注释）；
+///   3. **"只能动一次 + 没有实际的按键效果"**：上一版是"先接管触摸、转发失败再把触摸还回去"，
+///      于是**第一下点空**；而且"还回去"时**漏了宿主** —— 宿主自己开着交互又盖在胶囊那块上，
+///      触摸被它吃掉 ⇒ 页面既不切、也没有回弹。现在改成：
+///        · **建栏时先问"有没有可用的转发路"**（`canForwardTaps`：容器是 `UITabBarController`
+///          且有 ≥2 个 VC）——有才接管触摸，没有就从头让触摸穿透（与第一片一致：点得动，只是没有回弹）；
+///        · 运行时万一仍然全不通，`handTouchesBack` **栏与宿主一起关**，并且**交还过就不再收回**
+///          （避免"点一下空一下"）。
+///   4. **"玻璃大小一直变"**：`place` 的内边距**量一次就冻结**，而且只认**栏自己那块**
+///      `UITabBarPlatterView`（不能按面积挑 —— `_UITabBarItemPlatterView` 是选中气泡，尺寸随选中态变）。
 ///
 /// 顺带记两条**实测**（都写进日志了，别再猜）：
 ///   · `accessibilityTraits` 在 Spotify 9.1.88 上**没有** `.selected` 标记（`traits=0x0`）
@@ -103,6 +112,12 @@ enum TabBarSystemGlass {
     /// 系统栏量出来的高度**只量一次**：让出高度之后 `sizeThatFits` 会要得更多（pw 的注释点了这件事）。
     private static var measuredGlassHeight: CGFloat = 0
 
+    /// UIKit 自己留的那圈内边距（**玻璃 = 宿主 − 它**）：**量一次就冻结**，见 `place`。
+    private static var glassInsets: UIEdgeInsets?
+    private static weak var measuredInsetsBar: UIView?
+    /// 我们是否已经把触摸交还给 Spotify（交还过就**不再收回**，避免"点一下空一下"）。
+    private static var handedBackTouches = false
+
     private static var lastBar: UIView?
     private static var lastSkipReason = ""
     private static var lastSelectionIndex = -1
@@ -144,6 +159,16 @@ enum TabBarSystemGlass {
         // ③ 选中态：气泡跟着 Spotify 走。
         syncSelection(on: systemBar, items: items)
 
+        // ★ 建栏那一刻可能还没接上容器（响应链还在长）⇒ 每拍再问一次"有转发路了吗"。
+        //   ⚠️ **一旦交还过触摸就不再收回**（否则会"点一下空一下"地来回抖）。
+        if !handedBackTouches, !systemBar.isUserInteractionEnabled, canForwardTaps(in: bar) {
+            systemBar.isUserInteractionEnabled = true
+            hostView(for: bar)?.isUserInteractionEnabled = true
+            writeDebugLog(
+                "[\(logTag)] a forwarding route showed up — the system bar takes the touches now (press bounce included)"
+            )
+        }
+
         // ★ 摆位（第二片）：把宿主/系统栏摆成"自绘胶囊那一块"。
         place(systemBar, in: bar)
 
@@ -182,6 +207,9 @@ enum TabBarSystemGlass {
         }
         restoreStockContent()
         measuredGlassHeight = 0
+        glassInsets = nil
+        measuredInsetsBar = nil
+        handedBackTouches = false
         didLogLayout = false
         lastSelectionIndex = -1
         lastSelectionSignal = ""
@@ -239,8 +267,16 @@ enum TabBarSystemGlass {
         //   pw 也是这么做的（`SGRTabBarHost`）：UIKit 按"所在视图的安全区"量玻璃条的高度。
         let host = TabBarSystemGlassHost()
         host.backgroundColor = .clear
-        host.isUserInteractionEnabled = true
         host.accessibilityIdentifier = "eevee-tabbar-system-glass-host"
+
+        // ★★ 2026-10-12 第三版：**"要不要接管触摸"改成建栏时一次判定**（用户报："只能动一次，
+        //    而且没有实际的按键效果"）。上一版是"先接管、第一条转发失败再把触摸还回去" ——
+        //    结果是**第一下点空**，而且"还给 Spotify"那一半还漏了**宿主**：宿主自己开着交互、
+        //    又盖在胶囊那一块上 ⇒ 触摸被它吃掉，页面既不切、也没有回弹（正是"没有实际的按键效果"）。
+        //    现在：**有可用的转发路才接管**（见 `canForwardTaps`），没有就从头让触摸穿透（= 第一片的行为：
+        //    点得动，只是没有按下回弹）。
+        let takesTouches = canForwardTaps(in: bar)
+        host.isUserInteractionEnabled = takesTouches
 
         let systemBar = TabBarSystemGlassBar(frame: host.bounds)
         systemBar.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -248,9 +284,7 @@ enum TabBarSystemGlass {
         // ⇒ 浅色模式的手机上会出现"亮玻璃压在纯黑上"。Spotify 永远是深色，这条栏也是。
         systemBar.overrideUserInterfaceStyle = .dark
         systemBar.accessibilityIdentifier = "eevee-tabbar-system-glass"
-        // ★★ 2026-10-12 第二片：**触摸交给系统栏**（"果冻"与"可划动"的前提）。
-        //   代价是点击不再落到 Spotify 那几颗上 ⇒ 必须由 `relay` 转发（见文件头）。
-        systemBar.isUserInteractionEnabled = true
+        systemBar.isUserInteractionEnabled = takesTouches
         // 自己的背景不要画：我们要的是系统玻璃本身。
         systemBar.backgroundImage = UIImage()
         systemBar.shadowImage = UIImage()
@@ -267,9 +301,24 @@ enum TabBarSystemGlass {
         objc_setAssociatedObject(bar, &hostKey, host, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         writeDebugLog(
             "[\(logTag)] system bar added \(frameText(bar.bounds)) on \(NSStringFromClass(type(of: bar)))"
-                + " — in a host that reports no bottom safe area, and taking touches"
+                + " — in a host that reports no bottom safe area"
+                + (takesTouches
+                    ? "; taking the touches (press bounce comes with it) and forwarding taps to Spotify"
+                    : "; leaving the touches to Spotify's own bar (no forwarding route found, so tapping behaves exactly as before)")
         )
         return systemBar
+    }
+
+    /// **我们到底有没有一条可用的转发路？** —— 建栏时问一次，答案是"要不要接管触摸"。
+    ///
+    /// 目前唯一能**预判**的是第 ① 条（公开 API）：Spotify 那条栏的容器是 `UITabBarController` 的子类，
+    /// 且它的 `viewControllers` 至少两个 ⇒ `selectedIndex` 一定能换页。
+    /// 其余四条（识别器 / `handleTap` / 无障碍 / `UIControl`）都要**先失败才知道**，没法预判
+    /// ⇒ 宁可一开始就不接管触摸（点得动是第一位的，回弹是第二位的）。
+    private static func canForwardTaps(in bar: UIView) -> Bool {
+        guard let container = container(of: bar), let tabs = container as? UITabBarController,
+              let controllers = tabs.viewControllers, controllers.count >= 2 else { return false }
+        return true
     }
 
     private static func hostView(for bar: UIView) -> TabBarSystemGlassHost? {
@@ -286,30 +335,59 @@ enum TabBarSystemGlass {
     ///      ⇒ 一次收敛、幂等；
     ///   ③ 拿不到可信几何（首次布局 / 栏还没进窗口 / 玻璃还没排完）时退回"整条栏"，下一拍再对齐 ——
     ///      绝不因为量不到就把玻璃藏起来（那是"看得见、点不动"那条红线的近亲）。
+    ///
+    /// ★★ 2026-10-12 第三版（用户报："**这个玻璃的大小会一直变**"）：内边距**量一次就冻结**
+    /// （`glassInsets`），而且只认**栏自己那块 platter**（见 `drawnGlassFrame`）。
+    /// 上一版每一拍都重量 ⇒ 量到的地方一变（选中动画期间那几块 platter 的尺寸会动）宿主就跟着变
+    /// ⇒ 玻璃肉眼可见地忽大忽小。冻结之后：**量一次 → 之后每拍只按它摆位**，稳。
     private static func place(_ systemBar: UITabBar, in bar: UIView) {
         guard let host = hostView(for: bar) else { return }
         let target = TabBarGlassPlate.targetCapsuleRect(in: bar) ?? bar.bounds
 
-        var frame = target
-        if let drawn = drawnGlassFrame(in: systemBar, in: bar) {
-            frame = CGRect(
-                x: target.minX - (drawn.minX - host.frame.minX),
-                y: target.minY - (drawn.minY - host.frame.minY),
-                width: target.width + (host.frame.width - drawn.width),
-                height: target.height + (host.frame.height - drawn.height)
+        // 换了栏（页面重建）就重新量一次。
+        if measuredInsetsBar !== bar {
+            measuredInsetsBar = bar
+            glassInsets = nil
+        }
+        if glassInsets == nil, let drawn = drawnGlassFrame(in: systemBar, in: bar) {
+            let insets = UIEdgeInsets(
+                top: drawn.minY - host.frame.minY,
+                left: drawn.minX - host.frame.minX,
+                bottom: host.frame.maxY - drawn.maxY,
+                right: host.frame.maxX - drawn.maxX
+            )
+            glassInsets = insets
+            writeDebugLog(
+                "[\(logTag)] glass insets measured once — left \(Int(insets.left)) right \(Int(insets.right))"
+                    + " top \(Int(insets.top)) bottom \(Int(insets.bottom))"
+                    + " (UIKit keeps them to itself; the host is expanded by them so the glass lands on our capsule;"
+                    + " measured once on purpose, so the glass cannot drift)"
             )
         }
+        let insets = glassInsets ?? .zero
+        let frame = CGRect(
+            x: target.minX - insets.left,
+            y: target.minY - insets.top,
+            width: target.width + insets.left + insets.right,
+            height: target.height + insets.top + insets.bottom
+        )
         if !host.frame.equalTo(frame) { host.frame = frame }
         if !systemBar.frame.equalTo(host.bounds) { systemBar.frame = host.bounds }
     }
 
-    /// UIKit 自己画的那块玻璃（`_UITabBarPlatterView` 那条线）：取**面积最大**的那一块
-    /// （同一行日志里 `_UILiquidLensView` 是选中气泡，更小）。还没排完就返回 nil（下一拍再来）。
+    /// UIKit 自己画的那块玻璃 —— **只认 `UITabBarPlatterView` 那条线**（栏自己的 platter）。
+    ///
+    /// ⚠️ 不能按"面积最大"挑：同一族里还有 `_UITabBarItemPlatterView`（**选中那颗的气泡**，
+    /// 日志 64 的 `drawn` 列表里两者同名不同命）与 `_UILiquidLensView`（选中透镜）——
+    /// 它们的尺寸**随选中态变**，按面积挑会在点标签时挑到它们 ⇒ 宿主跟着变 ⇒ 玻璃忽大忽小。
+    /// 另外要求宽度至少是栏宽的四成（排到一半的 0×0 一律不要）。
     private static func drawnGlassFrame(in systemBar: UITabBar, in bar: UIView) -> CGRect? {
-        let candidates = platterViews(in: systemBar)
+        let widest = max(bar.bounds.width, 1)
+        return platterViews(in: systemBar)
+            .filter { shortName(NSStringFromClass(type(of: $0.1))).contains("UITabBarPlatterView") }
             .map { $0.1.convert($0.1.bounds, to: bar) }
-            .filter { $0.width > 1 && $0.height > 1 }
-        return candidates.max { $0.width * $0.height < $1.width * $1.height }
+            .filter { $0.width > widest * 0.4 && $0.height > 1 }
+            .max { $0.width * $0.height < $1.width * $1.height }
     }
 
     /// 从 Spotify 那几颗同步 item（**顺序一致**，索引就是选中态与转发的对齐依据）。
@@ -441,7 +519,11 @@ enum TabBarSystemGlass {
     /// 而 `apply` 只在**建栏那一刻**设过 `isUserInteractionEnabled`（之后每拍都不碰它）。
     private static func handTouchesBack(to systemBar: UITabBar, reason: String) {
         guard systemBar.isUserInteractionEnabled else { return }
+        handedBackTouches = true
         systemBar.isUserInteractionEnabled = false
+        // ⚠️ **宿主必须一起关**：它开着交互、又盖在胶囊那一块上 ⇒ 只关栏的话触摸会被宿主吃掉，
+        //   页面既切不动、也没有回弹（用户 2026-10-12 报的"没有实际的按键效果"）。
+        systemBar.superview?.isUserInteractionEnabled = false
         writeDebugLog(
             "[\(logTag)] ⚠️ \(reason) — handing the touches back to Spotify's own bar so taps keep working from now on;"
                 + " the system glass stays as a picture (no press bounce) until the switch is toggled"
