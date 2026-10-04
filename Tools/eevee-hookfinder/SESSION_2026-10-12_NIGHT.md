@@ -11,14 +11,18 @@
 
 ## 0. 三十秒现状
 
+> ⚠️ **本文档有两轮**：§1–§7 是第一轮（UI/交互/歌词 + apresolve），**§8 起是同一晚的第二轮**
+> （装机之后发现的：标签栏系统玻璃、与上游 fork 的对比、以及**两件要用户做的事**）。
+> **先看 §0、§11、§12**：下一步不是写代码，是**跑两个不用重装的 A/B**。
+
 | | |
 |---|---|
-| 提交 | 本会话共 **21 笔**（`531a6ac` → `942e81e`），**已全部推到 `origin/main`** |
-| 要编译的 | `main` 最新提交 **`942e81e`**；点 `Build IPA — patched` 时 `Use workflow from` 选 `main`，**`ipa_url` 留空** |
-| 自检 | ✅ 六条全绿（orion 328 / brace 328 / member 273 / string 277 / l10n en / l10n zh-CN 416 keys） |
-| CI | ⏳ **`Build IPA — patched` 要用户手动点**（本机没有 `gh`，我点不了） |
-| 装机 | ❌ **一轮都没上机器**：§2 那 16 条全是"看一眼" |
-| 一句话 | **代码改完、自检过、推上去了；接下来是「点一次 Build IPA（`942e81e`）→ 装 → 按 §2 拍照 + 存日志 63」**，然后**开页面**（§3） |
+| 提交 | 两轮共 **28 笔**（`531a6ac` → **`01ece12`**），**已全部推到 `origin/main`** |
+| 要编译的 | `main` 最新提交 **`01ece12`**；点 `Build IPA — patched` 时 `Use workflow from` 选 `main`，**`ipa_url` 留空** |
+| 自检 | ✅ 六条全绿（orion 329 / brace 329 / member 274 / string 278 / l10n en / l10n zh-CN 418 keys） |
+| CI | ⏳ **`Build IPA — patched` 要用户手动点**（本机没有 `gh`，我点不了）。**已经红过一次**（`@MainActor` 隔离，见 §8.4）⇒ 推完先看它绿不绿 |
+| 装机 | 🟡 **装了两版**：日志 63 / 照片 82 = 带 apresolve 修复 + 标签栏模块的那一版；**§11 那两个 A/B 请在现在这版上直接做** |
+| 一句话 | **先跑 §11 的 A/B（不用重装）→ 把结果告我；同时 §12 那支证据（内容请求日志）我下一轮补上** |
 
 ---
 
@@ -283,8 +287,164 @@
 
 ## 7. 下一轮最容易踩的三件事
 
-1. **先看 CI 红不红**（`Build IPA — patched`，`ipa_url` 留空）。红了先修编译，别的都别验。
-2. **`apresolve` 这条要盯住**：如果新版本**还是**卡/空，先看 `[PLAYER]` 那三行 + `[NET] … apresolve …`，
-   再决定是"还有别的接入点拦截"还是"根因不在这"——**别急着回滚那三处放行**。
+1. **先跑 §11 的两个 A/B**（不用重装，各 2 分钟）——它们比再猜一轮都值钱；
+   跑完再点 CI（`Build IPA — patched`，`ipa_url` 留空）：**已经红过一次**（§8.4 的 `@MainActor`）。
+2. **`apresolve` 这条要盯住，但别再当它是根因**：日志 63 证明修复生效（`Cancelled` 零命中）而症状还在
+   ⇒ 假设**被证伪**；它现在是"与上游不同的一处"（§9.3），留着 + 盯，**别急着再动它**。
 3. **做页面时**：先看 §3.3 那三条 + §3.5 的红线；每片**只拍一个判据**；
    动 `LibraryAppearance` 之前先 `git diff`，**别把"原值还原"删掉**。
+
+---
+
+# 第二轮（同一晚，装机之后）
+
+## 8. 标签栏：换成**系统 `UITabBar`** 的真玻璃（用户点名要的"像 pw 那样"）
+
+### 8.1 起因与结论
+
+用户看出差别：*"我做的标签栏液态玻璃是不是和 pw 的不一样，我的只是看起来是个液态玻璃胶囊，
+pw 的是不是可以像果冻一样，并且可滑动的"* —— **对，而且路线完全不同**：
+
+| | pw（`Redesigned/Navbar/TabBar.x`，492 行） | 我们（改前） |
+|---|---|---|
+| 做法 | Spotify 那条栏**留着但隐形**，上面叠一条**系统 `UITabBar`** | **手拼** `UIGlassEffect` 胶囊贴在图标行下面（994 行，逐像素校准） |
+| 玻璃 | **UIKit 画的真玻璃**（选中气泡、折射、明暗自适应）—— 原文：*"with no glass API of ours"* | 我们自己的玻璃层 |
+| "会滑" | **系统栏的选中气泡在 item 之间滑动/形变** | 没有：选中态是 Spotify 自己那颗白色标签 |
+| "果冻" | 系统玻璃的交互物理 | 只有**按下回弹**（`UIGlassEffect.isInteractive`） |
+| 拖动 | **也不能拖**：那个 `UILongPressGestureRecognizer` 是"长按主页图标进设置" | v4.3 拖过、v4.6 按用户要求删了（会被误拖） |
+
+### 8.2 新增模块 `Appearance/TabBarSystemGlass.x.swift`（四步照 pw）
+
+① 藏 Spotify 那几颗的**图标与文字**（不是整颗）；② 叠系统栏、item 从原栏同步；
+③ 选中态跟着"白色那颗"走；④ 系统栏更高时把差额写进 `TabBarContainerImpl.additionalSafeAreaInsets.bottom`
+（Spotify 自己把栏 / 迷你播放器 / 页面一起让开）。**开关默认关**：设置 → 扩展功能 → 标签栏 →「标签栏改用系统玻璃」；
+与旧的自绘胶囊**互斥**（`TabBarGlassPlate.isEnabled` 现在两颗开关都要看）。
+
+### 8.3 第一次真机（日志 63 + 照片 82）→ 三处已修（提交 `d99b5fd`）
+
+| 用户看到 | 根因 | 现在的做法 |
+|---|---|---|
+| **整条栏点不动**（"划不动"） | **我们的错**：把整颗 item 视图按成 `alpha = 0`，而 UIKit 命中测试**跳过 alpha < 0.01 的视图** ⇒ 点击落不到 Spotify 那几颗上 | 只藏**图标与文字**两个子视图，item 视图 alpha 不动 ⇒ 看不见但照样收触摸 |
+| **图标不见了** | 系统栏只拿到标题（`glyphImage` 深度 ≤ 4 找不到），原图标又被藏了 | 图标/文字都找到**深度 6**；**先同步后隐藏**；**拿不到图标的那颗就不藏原图标**（安全网） |
+| 「隐藏标签栏文字」**不生效** | 文字由**系统栏**画，而那颗开关归让位的那盘胶囊管 | `tabBarHideLabels` 开着时**不给系统栏标题** |
+
+另外两条**实测**（别再猜）：`accessibilityTraits` 在 9.1.88 上**没有 `.selected`**（四颗 `traits=0x0`）
+⇒ 选中态实际靠**文字亮度**（`主页` `#FFFFFF` vs 其余 `#B3B3B3`）；`made room` 那行没出现**是对的**
+（`83 − 49 − 34 = 0`，Face ID 机型两条栏本来就对得上）。
+
+### 8.4 CI 红过一次（`@MainActor`，提交 `619c947`）
+
+```
+TabBarSystemGlass.x.swift:80: call to main actor-isolated static method 'findTabsStack(in:)'
+                              in a synchronous nonisolated context
+```
+`TabBarGlassPlate.findTabsStack(in:)` 是 `@MainActor`（`:872`）⇒ 新模块**整个 enum 标 `@MainActor`**
+（`NowPlayingControlsPlugin` 同款写法）。两条证据：`onMainThreadSync` 的闭包类型本身就是
+`@escaping @MainActor () -> Void`（`LyricsChromeVisibility.swift:25`），设置页 `persist` 闭包与既有的
+`NowPlayingControlsPlate.reapply()` 同一上下文 ⇒ **两个调用点都不用包东西**。
+
+### 8.5 还没做（第二片）
+
+**"果冻"要系统栏接管触摸**：接管之后必须把点击**转发**给 Spotify 那一颗（pw 用 objc runtime 读手势
+识别器的 target/action）。转发入口的优先链应当是：`UIControl.sendActions` → `accessibilityActivate()` →
+runtime 读 recognizer；**哪条真能触发只有真机日志能回答**，所以第一片先不吃触摸（点击行为不变，零风险）。
+
+### 8.6 下一版要看的两条（日志）
+
+`[TabBarSystem] items synced — … ; icons [Y,Y,Y,Y]`（出现 `N` 就说明还有图标没找到，把那行发我）
+与 `[TabBarSystem] selection signal in use: bright label`。
+
+---
+
+## 9. ★ 与上游 fork 的对比（用户点名："对比一下那几个 eeveespotify 仓库处理 premium、http 有什么不同"）
+
+### 9.1 本地就有三个上游 fork —— 不用上网
+
+`C:\Users\ngzhwm\Documents\GitHub\` 下有 **`EeveeSpotifyReincarnated`**、`EeveeSpotifyReborn`、
+`EeveeSpotifyReborn-ng`（+ `kumone`、`MeloX`、`spoti.pw`）。**whoeevee 原仓库已被 GitHub DMCA 封**
+（`api.github.com` 返回 **451**）⇒ 只能拿本地这几个比。
+
+**`EeveeSpotifyReincarnated` 是最近的同代 fork**（Reborn 那两代**连这些文件都没有**）：
+
+| 文件 | 我们 | Reincarnated | 说明 |
+|---|---|---|---|
+| `SessionProtection.x.swift` | 350 | 340 | **逐行一致**（含 `apresolve` 的取消） |
+| `Premium/DynamicPremium+ModifyBootstrap.x.swift` | 108 | 108 | 一致 |
+| `Premium/Helpers/SpotifyResponsePatcher.swift` | **727** | **165** | 多出的 560 行 = 我们的 **flag 覆盖机制 + 探针** |
+| `DataLoaderServiceHooks.x.swift` | 290 | 180 | 多出的是我们的 **`LyricsResponseCache`**（会用缓存顶掉真实响应，只作用于歌词路径） |
+| `HttpClientURLSessionHooks.x.swift` | 240 | 153 | 同上 |
+| `EeveePremiumForce.x.swift` | 228 | 205 | —— |
+| `Premium/Models/EeveePropertyReplacement.swift` | 32 | 18 | 我们多了 `.forceEnum` / `.forceInt`（**追加进配置**的能力 —— 用户那条 full-bleed 覆盖走的就是它） |
+| `Privacy/TelemetryBlocker.swift` | 89 | **没有** | 我们自己的上报拦截 |
+
+### 9.2 ★ 找到的那条真差异：`cachedCustomizeData` **我们只有内存**
+
+```
+上游（Reincarnated）：
+  SpotifyResponsePatcher.swift:26    UserDefaults.cachedCustomizeData = newValue
+  DataLoaderServiceHooks.x.swift:61  if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
+  DataLoaderServiceHooks.x.swift:62      ?? UserDefaults.cachedCustomizeData {
+
+我们（改前）：只有内存 `_cachedCustomizeData`（+ 启动时用随包 `resolveconfiguration_*.bnk` 喂一份）
+```
+
+**机制**（正好落在用户说的"退出重进之后"）：新进程刚起 → 随包快照没拿到（或 Spotify 换了文件名）
+→ 服务器对 customize 回 **304**（很常见）→ `cachedCustomizeData == nil` ⇒ **我们交不出 body**
+⇒ App 拿到空配置 ⇒ premium / 可播放性降级 ⇒ **歌单发灰、歌曲消失、放不动**（用户报的三个症状）。
+
+**已对齐（提交 `01ece12`）**：setter 同步落盘（沿用上游键名 `eeveeCachedCustomizeData`；
+**刻意不进 `ownedKeys`** —— 它是缓存不是设置，不该进备份、不该被"清空设置"连坐），
+四处读取都补 `?? UserDefaults.cachedCustomizeData`（两个传输层各两处，304 回放那两条路）。
+
+### 9.3 `apresolve`：**与上游不同的一处**（保留 + 盯）
+
+对比结果：上游/Reincarnated **也**把它当登出端点拦（`shouldBlock` + `blockedResponseData` 回
+`{"status":"OK"}` + `SessionProtection` 里 30 秒后 `cancel()`）⇒ **那不是我们引入的**（`git log -S`
+追到 2026-09-18 的上游导入提交），而我们的修复（`942e81e`）**逆着上游**。
+
+**证据判它无效**：日志 63（带修复的那版）里 `apresolve` **只被记一次、`Cancelled` 零命中**，
+而用户的灰色/空歌单**照旧** ⇒ **假设被证伪**。
+
+**处置**：**保留**（给"接入点解析"回假 `{"status":"OK"}` 本身没道理，且没有任何证据表明它有害），
+但**标注成"与上游不同、待观察"**。要完全对齐上游：把那三处改回来即可
+（`SpotifyResponsePatcher.shouldBlock` 一条、`blockedResponseData` 一条、`SessionProtection` 里那段
+注释换回原来的 `task.cancel()`）。
+
+---
+
+## 10. 还缺的那支证据：**内容请求到底拿到了多少**
+
+"歌单里的歌全部消失 / 只显示一部分"至今**没有直接判据** —— 我们的响应钩子只记**歌词路径**与几个探针，
+**播放列表/内容请求一行都不记** ⇒ 分不清"**服务器只给了几行**"还是"**UI 把它们丢了**"。
+
+**下一轮补**（照仓库已有的只读探针写法，如 `probeHasLyricsKey` / `CasitaResponseProbe`）：
+在 `DataLoaderServiceHooks` 与 `HttpClientURLSessionHooks` 的 `didReceiveData` 里，
+对一小组**内容路径**（`playlist/v2`、`metadata/4`、`context-resolve`、`collection/v2`、`browse/`、`hub/`…）
+记 **URL 路径 + HTTP 状态 + 累计字节数**（只在完成时打一行、有上限、**不记内容**）。
+判读：字节数为 0 / 明显偏小 ⇒ 服务端就没给；字节正常而界面空 ⇒ 是我们或 App 的渲染层。
+
+---
+
+## 11. ★★ 请用户做的两个 A/B（**不用重装**，各 2 分钟）
+
+现在装的那版就够（两个开关都在设置页里）。**做完把"A 还灰不灰 / B 还灰不灰"告我**。
+
+| # | 做什么 | 若"不灰了"意味着 | 我接下来做什么 |
+|---|---|---|---|
+| **A** | 设置 → **Flag 覆盖** → **清空全部覆盖** → 完全退出重启 → 用一会儿 | 元凶是**我们往配置里追加 flag** 那套（`.forceEnum`/`.forceInt` 的 append 能力；用户当前有一条 full-bleed 覆盖） | 把 append 收窄：只对**已知安全**的 flag 追加、并校验追加进去的 `AssignedValue` 形状 |
+| **B** | 设置 → 补丁 → 打开「**不要补丁 premium**」→ 完全退出重启 → 再看 | 元凶在 **premium 层**（customize / premium 那份配置） | 继续按 §9 往上游对 `SpotifyResponsePatcher` 的 flag 改动，一条条 A/B |
+
+**两个都不灰了** ⇒ 各自按上表处理；**两个都还灰** ⇒ 基本可以排除"我们的配置层"，
+转向 §10 那支证据（内容请求字节数）+ 账号/地区那条线（`SESSION_2026-10-03_HANDOFF.md` §2.3 的 H1/H3）。
+
+---
+
+## 12. 第二轮的其它小账
+
+* **探针的"没有曲目"那行太急**：日志 63 里两次都是 `~3s (5–6s since launch)` —— 冷启动 5 秒还没载入曲目
+  **是正常的** ⇒ 下一轮把阈值提到 **~10s**（否则每条日志都会带一行噪声，反而看不出真现场）。
+* **`selected flags [----]`** 已被 `syncSelection` 的"亮度优先"接住（§8.3），但日志里那一段仍会打 `----`
+  （它读的是 traits）—— 别把它当成"选中态失效"。
+* **上一轮那 16 条验收**（§2.2）**依然有效**，其中 ①（`Cancelled apresolve` 消失）**已验证 ✓**；
+  ⑮（上一轮 10 个问题）见 `SESSION_2026-10-12_HANDOFF.md` §3。
+
