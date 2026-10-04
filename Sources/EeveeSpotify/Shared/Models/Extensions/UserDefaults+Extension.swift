@@ -38,6 +38,7 @@ extension UserDefaults {
     private static let tabBarGlassKey = "tabBarGlass"
     private static let tabBarSystemGlassKey = "tabBarSystemGlass"
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
+    private static let tabBarHideCreateKey = "tabBarHideCreate"
     private static let miniBarGlassKey = "miniBarGlass"
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
@@ -93,6 +94,7 @@ extension UserDefaults {
         tabBarGlassKey,
         tabBarSystemGlassKey,
         tabBarHideLabelsKey,
+        tabBarHideCreateKey,
         miniBarGlassKey,
         nowPlayingBackdropKey,
         nowPlayingOneScreenKey,
@@ -590,6 +592,25 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: tabBarHideLabelsKey)
+        }
+    }
+
+    /// 「**隐藏「创建」标签**」—— 用户 2026-10-13 要的：
+    /// 「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。即液态玻璃只显示主页，搜索，音乐库三个按键」。
+    ///
+    /// **默认开**（就是他要的结果）。做法：把**整颗 arranged subview** 藏掉
+    /// （真机树：`CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，id `TabBar.Item.创建`）——
+    /// `UIStackView` 会把它的位置让给另外三颗 ⇒ 三颗平分整条栏，玻璃上就只有三颗；
+    /// 同时它**收不到点击**（隐藏视图不参与命中测试）⇒ "创建"这个入口真的没了。
+    ///
+    /// ⚠️ 判据是**类名**而不是文字：文字随语言变（`创建` / `Create`）。
+    /// ⚠️ 与 `tabBarHideLabels` 一样是**可撤销**的：关掉开关把它恢复成原来的 `isHidden`（见 `TabBarGlassPlate`）。
+    static var tabBarHideCreate: Bool {
+        get {
+            container.object(forKey: tabBarHideCreateKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: tabBarHideCreateKey)
         }
     }
 

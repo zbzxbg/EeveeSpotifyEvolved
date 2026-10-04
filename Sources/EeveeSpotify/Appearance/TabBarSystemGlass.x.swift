@@ -202,7 +202,15 @@ enum TabBarSystemGlass {
             return
         }
 
-        let items = stack.subviews
+        // ★ 复查节拍上再压一次（幂等）：Spotify 可能把「创建」显示回来。
+        //   主驱动是栏自己的布局回合（`TabBarPlateHook.layoutSubviews`），这里是保险。
+        //   ⚠️ **必须在下面取 `items` 之前** —— 顺序反了的话，第一拍会按四颗镜像一次。
+        TabBarGlassPlate.applyCreateTabVisibility(in: bar)
+
+        // ★ 2026-10-13：**只镜像"看得见的"那几颗** —— 用户要求去掉第 4 颗「创建」之后
+        //   （`TabBarGlassPlate.applyCreateTabVisibility` 把整颗 item 藏了），
+        //   这里就是三颗。编号（`item.tag`）与这一份列表**一一对应**，转发/几何都跟着它走。
+        let items = TabBarGlassPlate.visibleItems(in: stack)
         guard !items.isEmpty else { return }
 
         // ② 先同步系统栏 —— **顺序要紧**：下面"藏什么"取决于"镜像到了什么"
@@ -437,7 +445,9 @@ enum TabBarSystemGlass {
     /// 这正是 pw 依赖的那一环，也是"为什么 pw 的写法在我们这版不通"的唯一判据。
     private static func chainDescription(in bar: UIView) -> String {
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return "no tabs stack yet" }
-        return stack.subviews.enumerated().map { index, item -> String in
+        // ⚠️ 与转发用的是**同一份列表**（看得见的那几颗）—— 编号必须对得上。
+        let items = TabBarGlassPlate.visibleItems(in: stack)
+        return items.enumerated().map { index, item -> String in
             let name = shortName(NSStringFromClass(type(of: item)))
             let pieces = subtree(of: item, maxDepth: 6).flatMap { view -> [String] in
                 (view.gestureRecognizers ?? []).map { recognizer in
@@ -458,15 +468,18 @@ enum TabBarSystemGlass {
             return .container(controllers: controllers.count)
         }
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return nil }
-        for (index, item) in stack.subviews.enumerated() {
+        // ⚠️ 只探**看得见的那几颗**：藏起来的「创建」即使读得出转发路也不算数
+        //    （它的下标在镜像列表里不存在 ⇒ 接管了触摸也转发不出去 = 白丢一下）。
+        let items = TabBarGlassPlate.visibleItems(in: stack)
+        for (index, item) in items.enumerated() {
             if let recognizer = firstFireableTapRecognizer(in: item, index: index) { return recognizer }
         }
-        for (index, item) in stack.subviews.enumerated() {
+        for (index, item) in items.enumerated() {
             if let holder = handleTapHolder(in: item) {
                 return .handleTap(index: index, holder: holder.via)
             }
         }
-        for (index, item) in stack.subviews.enumerated() {
+        for (index, item) in items.enumerated() {
             if let control = subtree(of: item, maxDepth: 6).first(where: { $0 is UIControl }) {
                 return .control(index: index, name: shortName(NSStringFromClass(type(of: control))))
             }
@@ -624,7 +637,9 @@ enum TabBarSystemGlass {
             writeDebugLog("[\(logTag)] ⚠️ a tab was picked but the stock row is gone — nothing to forward to")
             return
         }
-        let items = stack.subviews
+        // ⚠️ 与 `syncItems` 用的是**同一份列表**（`visibleItems`）：`item.tag` 就是它的下标。
+        //    藏掉「创建」之后这里是三颗 —— 拿 `stack.subviews` 会把第 3 颗转发到第 4 颗上。
+        let items = TabBarGlassPlate.visibleItems(in: stack)
         let index = item.tag
         guard index >= 0, index < items.count else {
             writeDebugLog("[\(logTag)] ⚠️ picked item tag \(index) is out of range (\(items.count) item(s))")
@@ -734,9 +749,12 @@ enum TabBarSystemGlass {
     }
 
     /// 点击/划动时算"手指在哪一格"（按四颗的 frame 判；落缝里就按 x 等分兜底）。
+    ///
+    /// ⚠️ 走 `visibleItems`：藏掉「创建」之后这里只有三格，与系统栏那三颗**同序同数**
+    ///    （两处不一致的话，点第 3 颗会被算成第 4 颗）。
     static func itemIndex(at point: CGPoint, in bar: UIView) -> Int? {
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return nil }
-        let items = stack.subviews
+        let items = TabBarGlassPlate.visibleItems(in: stack)
         if let hit = items.firstIndex(where: { $0.convert($0.bounds, to: bar).contains(point) }) { return hit }
         guard bar.bounds.width > 1, !items.isEmpty else { return nil }
         let ratio = max(0, min(0.999, point.x / bar.bounds.width))

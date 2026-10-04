@@ -92,7 +92,7 @@ enum TabBarGlassProbe {
     @MainActor
     static func dumpSelectionSignals(_ bar: UIView) {
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return }
-        writeDebugLog("[TabBarSel] ---- selection signals begin (comparing all 4) ----")
+        writeDebugLog("[TabBarSel] ---- selection signals begin (every tab, hidden ones included) ----")
         for container in stack.subviews {
             var parts: [String] = []
             parts.append("item=\(firstIdentifier(below: container) ?? "?")")

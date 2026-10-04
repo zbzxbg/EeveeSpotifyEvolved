@@ -15,7 +15,7 @@
 | 用户这一轮的话 | 「**标题栏液态玻璃不跟手**，在划动过程中，**可能有胶囊回弹 / 替用户按按键**的情况，而且**胶囊也没有反射**。你可以去看一下 spoti.pw 看一下他们的标题栏液态玻璃是怎么做的」 |
 | 判读 | 说的就是**底部那条玻璃栏**（Spotify 四颗：主页 / 搜索 / 音乐库 / 创建）。pw 那边整块功能就叫 **`Navbar`**（`Redesigned/Navbar/TabBar.x`），是它唯一的玻璃栏；我们这条是照它做的 |
 | 根因（**日志 70 第一行 + 代码实证**） | 我们的"要不要接管触摸"判据只认第 ① 条公开路（容器是 `UITabBarController`），真机上容器**不是** ⇒ 判定永远 false ⇒ **系统栏一次都没接过触摸**：玻璃只是一张画（不跟手、不折射），而手指全落在 Spotify 那条栏上，由我们第三片装的 **pan 手势**代劳 ⇒ 划一下就**替用户换页**，提交不了还把气泡**拨回原位** |
-| 改了什么 | ① `probeForwardRoute`：转发路**读得出来**才让系统栏接管触摸（pw 那条路本来就能在点之前读出来）；② **删掉那只 pan** 及整套机械（`dragCrossed` / `commitSelection` / `refreshCommitRoute` / `learnSelection` / `TabBarContainerSelectionHook`）；③ 修掉一行**自相矛盾**的日志（`installed — … taking touches`） |
+| 改了什么 | ① `probeForwardRoute`：转发路**读得出来**才让系统栏接管触摸（pw 那条路本来就能在点之前读出来）；② **删掉那只 pan** 及整套机械（`dragCrossed` / `commitSelection` / `refreshCommitRoute` / `learnSelection` / `TabBarContainerSelectionHook`）；③ 修掉一行**自相矛盾**的日志（`installed — … taking touches`）；④ **第二轮**：去掉第 4 颗「创建」（见 §8） |
 | 自检 | ✅ 七条全绿（orion 332 / brace 332 / member 277 / string 281 / l10n en / l10n zh-CN / `Tests\ResolveConfigurationSnapshot\test.py`） |
 | 装机 | ❌ **这一版一行都没上过机器**。要验的就是 §5 那三行日志（`forward route probe: …` / `a forward route showed up — …` / 不再有 `drag installed …`） |
 
@@ -173,3 +173,64 @@
 3. 若 ① 读到 `none`：同样靠那行 `chain: …` 定位（三种可能：`_targets` 改名 / nil / target 不响应）。
 4. **仍然挂着的旧账**（用户"碰到再说"的）：灰歌三条路线（`SESSION_2026-10-12_SUMMARY.md` §3 P1）、
    主页第二片 / 搜索页 / 歌单页（§3 P2）、SponsorBlock 观察者、短歌当前行居中、iOS 16.1–18 覆盖。
+
+---
+
+# 8. 第二轮（同一天，用户紧接着提的）：**去掉第 4 颗「创建」**
+
+## 8.1 用户原话与判读
+
+> 「有个按键在音乐库的右边，**叫创建歌单**。能不能**不要这个功能了**。即液态玻璃**只显示主页，搜索，音乐库三个按键**」
+
+= 标签栏第 4 颗 `TabBar.Item.创建`（点开是"创建歌单/播放列表"的菜单）。
+真机树逐字（**日志 70 的 `[TabBarDump]`**，这就是判据，不用猜）：
+
+```
+#5  ElementContentView<TabBarItemElement> frame=(0,0 104x49)     → #7  TabBarItemElementView              id=TabBar.Item.主页
+#12 ElementContentView<TabBarItemElement> frame=(104,0 104x49)   → #14 TabBarItemElementView              id=TabBar.Item.搜索
+#19 ElementContentView<TabBarItemElement> frame=(207,0 104x49)   → #21 TabBarItemElementView              id=TabBar.Item.音乐库
+#26 ElementContentView<TabBarItemElement> frame=(310,0 104x49)   → #28 CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView id=TabBar.Item.创建
+```
+
+⇒ **第 4 颗是另一个类**（`CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，pw 也 hook 这个类名）。
+判据用**类名**，不用文字 —— 文字随语言变（`创建` / `Create`）。
+
+## 8.2 做法：藏**整颗 arranged subview**，不是只藏图标与文字
+
+| | |
+|---|---|
+| **只藏内容**（像我们藏图标/文字那样） | 那个位置仍然占着宽度、**而且仍然点得动**（点下去照样弹创建菜单）⇒ "不要这个功能了"没做到 |
+| **藏整颗 `isHidden = true`**（采用的） | `UIStackView` 把它的位置让给另外三颗 ⇒ **三颗平分整条栏**；隐藏视图**不参与命中测试** ⇒ 那个入口真的没了；可精确还原（记了它自己的原 `isHidden`） |
+
+**一处判据**：新增 `TabBarGlassPlate.visibleItems(in:)`（`subviews.filter { !$0.isHidden }`），
+所有"按颗数"的地方都走它 —— 自绘胶囊的 `tightenOffsets` / `measure` / `tightenRow`，
+系统玻璃的镜像列表、`itemIndex(at:)`（手指在哪一格）、`forwardSelection`（`item.tag` → 转发给哪一颗）。
+⚠️ 这一步非做不可：隐藏的 arranged subview **仍在 `stack.subviews` 里**，不筛的话三颗会按四颗算
+（胶囊偏/宽、点第 3 颗转发到第 4 颗上）。
+
+**开关**：设置 → 扩展功能 → 标签栏 →「**隐藏「创建」标签**」，**默认开**（= 用户要的结果），
+关掉把原 `isHidden` 写回；与别处一样是可以撤销的。
+驱动：栏自己的布局回合（`TabBarPlateHook.layoutSubviews` 里**先于**两条玻璃路跑）+ 0.5s 复查节拍再压一次
+（幂等；Spotify 若把它显示回来，我们会**再藏一次**并报一行 `shown again N time(s)`）。
+
+## 8.3 这一轮改的文件
+
+`Sources/EeveeSpotify/Appearance/TabBarGlass.x.swift`（藏那一颗 + `visibleItems` + 钩子）、
+`…/TabBarSystemGlass.x.swift`（三处取列表都走 `visibleItems`）、
+`…/Settings/Sections/Extras/Views/EeveeExtrasSettingsView.swift`（一行开关）、
+`…/Shared/Models/Extensions/UserDefaults+Extension.swift`（键 `tabBarHideCreate`，默认 **true**）、
+`en` / `zh-CN` 两条文案（并顺手改掉 `tab_bar_*_description` 里"四颗/含创建"的过期说法）。
+
+## 8.4 验收（与 §5 那五行一起看）
+
+| # | 怎么做 | 应该看到 | 日志判据 |
+|---|---|---|---|
+| ⑥ | 进 App 看底部那盘玻璃 | **只有三颗**：主页 / 搜索 / 音乐库（平分整条栏、居中） | `[TabBarPlate] hid the Create tab (…CreateMenuTabBarItemView) — the bar keeps three items: Home, Search, Your Library` |
+| ⑦ | 原来第 4 颗的位置点一下 | **什么都不发生**（创建菜单不弹） | —— |
+| ⑧ | 点那三颗 | 都还能换页（红线） | `[TabBarSystem] items synced — 3 item(s)` 与 `installed — 3 item(s)`；`tap on #N forwarded …` |
+| ⑨ | 设置里关掉「隐藏「创建」标签」 | 「创建」**当场**回来；再打开又没 | `[TabBarPlate] the Create tab is back (…)` |
+| ⑩ | 玻璃胶囊的宽度 | 比四颗时**略窄**且**仍然居中**（它按"看得见的图标那一带"算，三颗自然窄一点） | `[TabBarSystem] glass geometry — … drawn […360×60…]` 那行的数字会变小 |
+
+**未验证声明（追加）**：藏 arranged subview 之后 Spotify 会不会在它自己的回合里把 `isHidden` 写回、
+三颗的图标间距/胶囊宽度最终长什么样，**都没有真机数据**（本机没有编译器）。
+若 ⑥ 之后又冒出第 4 颗，日志里那行 `shown again N time(s)` 就是现场。

@@ -41,6 +41,7 @@ struct EeveeExtrasSettingsView: View {
         var tabBarGlass = UserDefaults.tabBarGlass
         var tabBarSystemGlass = UserDefaults.tabBarSystemGlass
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
+        var tabBarHideCreate = UserDefaults.tabBarHideCreate
         var miniBarGlass = UserDefaults.miniBarGlass
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
@@ -150,6 +151,22 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.tabBarHideLabels,
                         persist: { UserDefaults.tabBarHideLabels = $0 }
+                    )
+                )
+
+                // ★ 2026-10-13（用户）：「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。
+                //   即液态玻璃只显示主页，搜索，音乐库三个按键」——**默认开**（就是他要的结果）。
+                //   做法：把整颗「创建」item 藏掉 ⇒ stack 把位置让给另外三颗，玻璃上只剩三颗，
+                //   而且那一块收不到点击。关掉即恢复（原 `isHidden` 精确写回）。
+                Toggle(
+                    "tab_bar_hide_create".localized,
+                    isOn: shadowBinding(
+                        \.tabBarHideCreate,
+                        persist: { value in
+                            UserDefaults.tabBarHideCreate = value
+                            // 栏的布局回合不常有 ⇒ 改完当场落地（下一次布局还会再走一遍）。
+                            TabBarGlassPlate.refreshCreateTabVisibility()
+                        }
                     )
                 )
 

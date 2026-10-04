@@ -179,7 +179,8 @@ enum TabBarGlassPlate {
 
     /// 四颗往中心收的比例（0 = 不动，1 = 全收到中心）。
     /// 用户反馈"四个图标之间距离太大" → 0.20：外两颗各向内 ~31pt，间距 103.5 → 82.7pt。
-    /// **只在 `stack.subviews.count == 4` 这个已知形状上生效**。
+    /// **只在"看得见的颗数"是 2–4 这个已知形状上生效**（2026-10-13 起按 `visibleItems` 数：
+    /// 藏掉「创建」之后是三颗，见 `applyCreateTabVisibility`）。
     private static let tightenFactor: CGFloat = 0.20
 
     /// 纵向居中的位移上限。真机算出来是 ≈ +10pt；给它 24 是"万一量歪了，
@@ -406,13 +407,18 @@ enum TabBarGlassPlate {
     /// "四颗全被推 +41"（照片 28 / 日志 24 的真凶）。所以宽度没过闸就**一律返回空**：
     /// 这一轮不收紧（量出来的就是没收紧的布局），`apply` 那边的有界重试会把我们叫回来。
     /// 形状不是"四颗"时同样不动（宁可不动，也别乱动）。
+    ///
+    /// ★ 2026-10-13：**按"看得见的颗数"算**（`visibleItems`）—— 藏掉「创建」之后
+    /// 实际是三颗平分整条栏，仍按 4 算的话收紧量会整体错位。
     @MainActor
     private static func tightenOffsets(in bar: UIView, stack: UIView?) -> [CGFloat] {
-        guard let stack, stack.subviews.count == 4, stack.bounds.width > 100 else { return [] }
-        let count = CGFloat(stack.subviews.count)
+        guard let stack, stack.bounds.width > 100 else { return [] }
+        let items = visibleItems(in: stack)
+        guard items.count >= 2, items.count <= 4 else { return [] }
+        let count = CGFloat(items.count)
         let centerX = bar.bounds.midX
 
-        return (0..<stack.subviews.count).map { index in
+        return (0..<items.count).map { index in
             // ★ 用**等分布局推算**中心，而不是读 `item.frame.midX`：
             //   Apple 对 `frame` 的说明是"transform 非恒等时该值未定义"，实测它会把我们
             //   上一轮写进去的位移算进去 → 每轮又按"已经被挪过的位置"再收一次 →
@@ -467,7 +473,8 @@ enum TabBarGlassPlate {
         var iconRects: [CGRect] = []
         var labelRects: [CGRect] = []
 
-        for (index, item) in stack.subviews.enumerated() {
+        // ★ 2026-10-13：只量**看得见的**那几颗（藏掉「创建」之后是三颗，见 `visibleItems`）。
+        for (index, item) in visibleItems(in: stack).enumerated() {
             let size = item.bounds.size
             // ⚠️ **有一颗还没排（size 0）就整条都不量**：宁可退回老量法（`contentBand`）
             //    并等下一次布局，也不要拿"四颗里只有一颗有几何"去算胶囊 ——
@@ -789,7 +796,7 @@ enum TabBarGlassPlate {
     ///   - dy: 每颗的纵向位移（v4.6.1 起**一颗一个数**，见 `rowShifts`）。
     @MainActor
     private static func tightenRow(_ stack: UIView, in bar: UIView, dx: [CGFloat], dy: [CGFloat]) {
-        let items = stack.subviews
+        let items = visibleItems(in: stack)
         guard items.count == dx.count else { return }
 
         for (index, item) in items.enumerated() {
@@ -889,6 +896,112 @@ enum TabBarGlassPlate {
         guard depth <= 8 else { return }
         if NSStringFromClass(type(of: node)).contains("EncoreLabel") { found.append(node) }
         for sub in node.subviews { collectEncoreLabels(in: sub, depth: depth + 1, into: &found) }
+    }
+
+    // MARK: - ★ 「创建」那一颗（用户 2026-10-13：不要这个功能了）
+
+    /// 我们藏过的 item 的**原** `isHidden`（按对象记：关掉开关要精确还原）。
+    ///
+    /// ⚠️ 与 `DeclutterChrome` 里那份"被我们藏过的视图"同一个教训：**每个视图记它自己的原值**，
+    ///    不能一律写 `false`（`ObjectIdentifier` 是地址、可能被复用 ⇒ 只在我们自己写入/还原时读它）。
+    private static var hiddenTabItemStates: [ObjectIdentifier: Bool] = [:]
+    private static var didReportCreateTab = false
+    /// 藏过之后**又被显示回来**的次数（Spotify 的 binder 有可能这么干 —— 与标签文字那条同一个现象）。
+    /// 它只是"我们是不是在和别人抢"的证据：**照样每拍再藏一次**（用户要的就是它不在），但会报一行。
+    private static var createTabWriteBacks = 0
+    private static var didReportCreateWriteBack = false
+    /// 最近一次见到的那条栏（设置页拨开关时当场落地用；弱引用）。
+    private static weak var lastTabBar: UIView?
+
+    /// 藏掉「创建」那一颗 ⇒ **玻璃上只剩主页 / 搜索 / 音乐库三颗**。
+    ///
+    /// 用户原话（2026-10-13）：「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。
+    /// 即液态玻璃只显示主页，搜索，音乐库三个按键」。
+    ///
+    /// ── 为什么藏**整颗 arranged subview**，而不是只藏它的图标与文字 ──────────────
+    /// 只藏内容的话，那个位置仍然占着宽度、也仍然**收得到点击**（点下去照样弹创建菜单）
+    /// ⇒ "不要这个功能了"没做到。藏整颗之后 `UIStackView` 会把它的位置让出来：
+    /// 剩下三颗平分整条栏，玻璃上就是三颗，而且那一块**不再参与命中测试**。
+    ///
+    /// ── 判据为什么是类名 ────────────────────────────────────────────────────
+    /// 真机树（日志 70）：第 4 颗是 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，
+    /// 另外三颗是 `NavigationUI_TabBarImpl.TabBarItemElementView`
+    /// （id 依次 `TabBar.Item.主页` / `搜索` / `音乐库` / `创建`）。文字随语言变（`创建` / `Create`），
+    /// 所以认类名 —— 与 pw hook 那颗用的也是同一个类名。
+    ///
+    /// 幂等；**每拍都跑**（Spotify 可能把它显示回来 —— 与 `applyLabelVisibility` 同一条纪律）。
+    @MainActor
+    static func applyCreateTabVisibility(in bar: UIView) {
+        lastTabBar = bar
+        guard let stack = findTabsStack(in: bar) else { return }
+        let shouldHide = UserDefaults.tabBarHideCreate
+
+        for item in stack.subviews where isCreateTab(item) {
+            let identifier = ObjectIdentifier(item)
+            if shouldHide {
+                guard !item.isHidden else { continue }
+                if hiddenTabItemStates[identifier] == nil {
+                    hiddenTabItemStates[identifier] = item.isHidden
+                } else {
+                    createTabWriteBacks += 1          // 我们藏过，它又被显示回来了
+                }
+                item.isHidden = true
+                guard !didReportCreateTab else { continue }
+                didReportCreateTab = true
+                writeDebugLog(
+                    "[TabBarPlate] hid the Create tab (\(className(item)))"
+                        + " — the bar keeps three items: Home, Search, Your Library"
+                )
+            } else if let original = hiddenTabItemStates[identifier] {
+                // 只还原**我们自己藏过的**那一颗（没记过的不碰 —— 宁可保持原生）。
+                hiddenTabItemStates.removeValue(forKey: identifier)
+                if item.isHidden != original { item.isHidden = original }
+                writeDebugLog("[TabBarPlate] the Create tab is back (\(className(item)))")
+            }
+        }
+
+        guard createTabWriteBacks > 0, !didReportCreateWriteBack else { return }
+        didReportCreateWriteBack = true
+        writeDebugLog(
+            "[TabBarPlate] the Create tab was shown again \(createTabWriteBacks) time(s) — hiding it again on every pass"
+        )
+    }
+
+    /// 设置页拨开关时当场落地（栏不在了就等下一拍 —— 那条栏每次布局都会再走一遍）。
+    @MainActor
+    static func refreshCreateTabVisibility() {
+        guard let bar = lastTabBar else { return }
+        applyCreateTabVisibility(in: bar)
+    }
+
+    /// 这一颗是不是「创建」（按类名认，见 `applyCreateTabVisibility`）。
+    @MainActor
+    private static func isCreateTab(_ item: UIView) -> Bool {
+        var found = false
+
+        func walk(_ node: UIView, _ depth: Int) {
+            guard !found, depth <= 6 else { return }
+            let name = NSStringFromClass(type(of: node))
+            if name.contains("CreateMenuTabBarItemView") || (name.contains("CreateMenu") && name.contains("TabBarItem")) {
+                found = true
+                return
+            }
+            for sub in node.subviews { walk(sub, depth + 1) }
+        }
+
+        walk(item, 0)
+        return found
+    }
+
+    /// 标签栏上**真正在用的那几颗**（`isHidden` 的不算）。
+    ///
+    /// 为什么需要它：藏掉「创建」之后，它**仍然在 `stack.subviews` 里**
+    /// （隐藏的 arranged subview 不会被移除）⇒ 凡是"按 subviews 数几何 / 编号"的地方
+    /// 都必须走这里，否则三颗的布局会被当成四颗算（胶囊会偏、会宽）。
+    /// 两条路共用这一处判据：系统玻璃镜像几颗、自绘胶囊量几颗，都以它为准。
+    @MainActor
+    static func visibleItems(in stack: UIView) -> [UIView] {
+        stack.subviews.filter { !$0.isHidden }
     }
 
     // MARK: - 找图标那一行 / 量它的内容带
@@ -1116,6 +1229,11 @@ class TabBarPlateHook: ClassHook<UIView> {
         orig.layoutSubviews()
         let bar = self.target
         onMainThreadSync {
+            // ★★ 2026-10-13：**先摆"哪几颗标签"**（藏掉「创建」，见 `applyCreateTabVisibility`），
+            //    再走下面两条玻璃路 —— 顺序要紧：镜像几颗、量几颗都取决于它。
+            //    它**不属于**任何一条玻璃路（两条都要），所以放在这两个 apply 之外。
+            TabBarGlassPlate.applyCreateTabVisibility(in: bar)
+
             // ★ 2026-10-12：两条路**互斥**，都在这一拍里判 ——
             //   · 系统玻璃（`TabBarSystemGlass`）：藏掉 Spotify 的内容 + 叠系统栏；
             //   · 旧的自绘胶囊（`TabBarGlassPlate`）：新开关开着时它自己的 `isEnabled` 是 false ⇒
