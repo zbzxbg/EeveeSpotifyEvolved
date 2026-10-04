@@ -82,3 +82,12 @@ inspect(
     "6b3ca5af9c686c6899386fa3900d8306608d2d2093b30964eaba06742123907f",
     1089,
 )
+# 2026-10-12：9.1.88 的真机 customize body 转出来的新种子（107272 字节的 CustomizeMessage
+# → 100278 字节的 ResolveConfiguration / 1096 条 assignment）。
+# 为什么必须补这一条：**服务器回 304 的时候 App 就跑在这份配置上**，而旧的 9.1.76 种子里
+# 根本没有 9.1.88 才有的开关（真机日志 69 里 4 个 `[Flags] replacement … 0 match(es)`）。
+inspect(
+    BUNDLE / "resolveconfiguration_9_1_88.bnk",
+    "b9dbd29908a8c41c19587af7e38b69a822e67fd5cd3aba0c9cef53653c060ce7",
+    1096,
+)

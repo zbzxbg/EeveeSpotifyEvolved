@@ -21,9 +21,15 @@ r"""把真机抓到的 customize 响应体（base64）转成可随包的 .bnk �
 用法
 ────
     # 1) 从日志里取出 base64（两行标记之间）
+    #
+    #    ⚠️ 2026-10-12 修正：日志每一行前面都有 `[时间] ` 前缀，而且**载荷那一行没有
+    #    `[CustomizeBody]` 标签**（只有 `[2026-10-04 13:57:55 +0000] CoTGBgq…`）。
+    #    旧版这条命令按"载荷独占一行"来写 ⇒ 前缀没被剥掉 ⇒ 脚本报
+    #    `base64 解码失败：Only base64 data is allowed`。下面这条是**真机验证过的**：
     pwsh -Command "$t=Get-Content .\eeveespotify_debug_shared.log -Raw; `
-      [regex]::Match($t,'(?s)\[CustomizeBody\] base64-begin\r?\n(.*?)\r?\n\[CustomizeBody\] base64-end').Groups[1].Value `
-      | Set-Content -Encoding ascii custom.b64"
+      $m=[regex]::Match($t,'(?s)\[CustomizeBody\] base64-begin\r?\n(.*?)\r?\n\[[^\]]+\] \[CustomizeBody\] base64-end'); `
+      $b64=(($m.Groups[1].Value -split \"\r?\n\") | ForEach-Object { $_ -replace '^\[[^\]]+\]\s*','' }) -join ''; `
+      Set-Content -Encoding ascii custom.b64 $b64"
 
     # 2) 转成 .bnk
     python Tools/eevee-hookfinder/bnk_from_customize_dump.py custom.b64 -o new.bnk
@@ -31,10 +37,12 @@ r"""把真机抓到的 customize 响应体（base64）转成可随包的 .bnk �
     # 3) 核对（会打印 flag 条数，与日志里 [CustomizeSeed] 那行对得上才算成功）
     python Tools/eevee-hookfinder/bnk_from_customize_dump.py --inspect new.bnk
 
-    # 4) 替换（保留旧文件做回退）
-    copy "layout\\Library\\Application Support\\EeveeSpotify.bundle\\resolveconfiguration_9_1_76.bnk" `
-         "layout\\Library\\Application Support\\EeveeSpotify.bundle\\resolveconfiguration_9_1_76.bnk.bak"
-    copy new.bnk "layout\\Library\\Application Support\\EeveeSpotify.bundle\\resolveconfiguration_9_1_76.bnk"
+    # 4) 装进 bundle（**留着旧文件做回退**），并同步两处契约：
+    #    · `Sources/EeveeSpotify/Premium/Helpers/BundledConfigurationPolicy.swift`
+    #      —— 加一个 `spotify91XXResourceName` + 版本门槛（9.1.88 就是这么加的）；
+    #    · `Tests/ResolveConfigurationSnapshot/test.py`
+    #      —— 加一条 `inspect(...)`，填**新文件的 sha256 与 assignment 条数**（CI 会核对）。
+    copy new.bnk "layout\Library\Application Support\EeveeSpotify.bundle\resolveconfiguration_9_1_88.bnk"
 
 ⚠️ 抓到的 body 里**没有**账号私有信息之外的东西（就是配置），但它含你的
 账号所属的 A/B 分组；提交进仓库前自己判断一下要不要用它（本地自用则无所谓）。
