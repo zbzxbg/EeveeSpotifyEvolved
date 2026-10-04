@@ -328,7 +328,7 @@ flag_override_mode_set = "写入指定值";
 flag_override_value_placeholder = "enum 值，例如 count";
 flag_override_value_required = "需要填值";
 flag_catalog_section = "已知 flag";
-flag_catalog_description = "这些名字与 scope 都来自本机自己的调试日志，没有一条是猜的。点一行即可填入上面的表单：布尔类的直接生成一条覆盖，enum 类的会帮你填好取值框。普通 int 类型的只列出、暂不可改。";
+flag_catalog_description = "这些名字与 scope 都来自调试日志。点一行即可填入上面的表单：布尔类的直接生成一条覆盖，enum 类的会帮你填好取值框。普通 int 类型的只列出、暂不可改。";
 flag_group_lyrics = "歌词";
 flag_group_npv = "正在播放页卡片";
 flag_group_home = "首页与分享";
@@ -344,7 +344,7 @@ amoled = "深色栏底色（仿 Apple Music）";
 extras_title = "扩展功能";
 extras_description = "功能思路来自 spoti.pw。";
 
-declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自你设备的视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
+declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
 hide_mini_player_bar = "隐藏迷你播放条";
 hide_singalong_line = "隐藏Spotify官方的单行歌词";
 hide_npv_pills = "隐藏播放器里的切换至视频 / 显示歌词胶囊";
