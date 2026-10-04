@@ -35,7 +35,6 @@ extension UserDefaults {
     private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
     private static let libraryLargeTitleKey = "libraryLargeTitle"
     private static let homeLargeTitleKey = "homeLargeTitle"
-    private static let tabBarGlassKey = "tabBarGlass"
     private static let tabBarSystemGlassKey = "tabBarSystemGlass"
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
     private static let tabBarHideCreateKey = "tabBarHideCreate"
@@ -91,7 +90,6 @@ extension UserDefaults {
         dumpCustomizeBodyKey,
         libraryLargeTitleKey,
         homeLargeTitleKey,
-        tabBarGlassKey,
         tabBarSystemGlassKey,
         tabBarHideLabelsKey,
         tabBarHideCreateKey,
@@ -478,24 +476,11 @@ extension UserDefaults {
 
     // MARK: - 标签栏玻璃
 
-    /// 底部标签栏铺**一条玻璃胶囊**（主页 / 搜索 / 音乐库 / 创建 浮在它上面）。**默认开**。
-    ///
-    /// ── 三版演进（都记下来，别再退回第一版）──────────────────────────────────
-    ///   1. 第一版：每颗标签各一块 `103×49` 玻璃 → 不融合、盖住选中滑块，"更难看"；
-    ///   2. 第二版：同样每颗一块、只内缩 10pt → 还是四块，方向没变；
-    ///   3. **这一版**：整条栏**一条**胶囊（左右留 8、上下留 6、半径=半高）——
-    ///      这才是照片里那个形状；四颗标签与 Spotify 的选中滑块全部浮在上面。
-    ///
-    /// "靠近就融合"那种 morph 需要把 Spotify 的四颗视图搬进同一个玻璃容器，
-    /// 会打断它们的布局与手势 —— 不做（见 `TabBarGlass.x.swift` 开头的说明）。
-    static var tabBarGlass: Bool {
-        get {
-            container.object(forKey: tabBarGlassKey) as? Bool ?? true
-        }
-        set {
-            container.set(newValue, forKey: tabBarGlassKey)
-        }
-    }
+    // ⛔「**标签用液态玻璃**」（`tabBarGlass`，我们自己画的那条胶囊）已于 2026-10-13
+    //   按用户要求**连同实现一起删除**（"这个功能可以删掉了"）。现在的标签栏玻璃只有一条路：
+    //   `tabBarSystemGlass`（下面那个）—— 叠一条系统 `UITabBar`，玻璃由 iOS 26 自己画
+    //   （折射 / 镜片 / 明暗自适应都是 UIKit 的）。旧键留在 `UserDefaults` 里无害，
+    //   只是不再被读；「重置本仓库设置」也不再管它（它已经不进 `ownedKeys`）。
 
     /// 「**标签栏改用系统玻璃**」—— 用户 2026-10-12 提的（他看出 pw 那条栏"像果冻、还能滑"）。
     ///
@@ -504,7 +489,7 @@ extension UserDefaults {
     /// 我看不到真机，所以先当实验品：**开关关着 = 完全不动**（连一次布局都不碰）；
     /// 开着 = 藏内容 + 叠系统栏 + 给容器让高度（`additionalSafeAreaInsets` 会**精确写回**）。
     ///
-    /// ⚠️ 与 `tabBarGlass`（我们自绘的胶囊）**互斥**：这条开着时那条整盘让位，见 `TabBarGlassPlate.isEnabled`。
+    /// ⚠️ 它现在是**唯一**一条标签栏玻璃的路（自绘那条已于 2026-10-13 删除）。
     /// 实现与四步做法写在 `Appearance/TabBarSystemGlass.x.swift` 的文件头。
     static var tabBarSystemGlass: Bool {
         get {

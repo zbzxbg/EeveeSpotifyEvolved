@@ -13,8 +13,10 @@ import UIKit
 /// `_UIVisualEffectBackdropView`" —— 那是**错的**。日志 20 的全树 dump 里
 /// `UIVisualEffectView` **只有我们自己铺的那一块**（`(8,6 398x71)`），标签栏本身没有任何材质；
 /// 系统玻璃只在**上面**那条（Platter / `ScrollEdgeEffectView`）。
-/// 所以标签栏那条玻璃得我们自己做（见 `TabBarGlass.x.swift`），
-/// **别去"让位"给一个不存在的玻璃**。
+///
+/// ⚠️ **2026-10-13 再更正**：那句话的后半（"标签栏那条玻璃得我们自己做"）也**过期**了 ——
+/// 我们现在是**叠一条系统 `UITabBar`**（`TabBarSystemGlass.x.swift`，照 spoti.pw 的做法），
+/// 玻璃由 iOS 26 自己画；**自绘那块已经删除**（`TabBarGlass.x.swift` 只剩几何与标签内容取舍）。
 ///
 /// 真机证据（日志 9，玻璃构建）：
 ///   · `[AMOLED] SPNavigationBar first layout — scrim=0 blur=0 bar=0 barBg=0 gradient=0`

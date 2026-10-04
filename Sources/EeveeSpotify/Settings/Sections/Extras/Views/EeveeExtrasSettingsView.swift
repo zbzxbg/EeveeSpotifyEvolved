@@ -38,7 +38,6 @@ struct EeveeExtrasSettingsView: View {
 
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
         var homeLargeTitle = UserDefaults.homeLargeTitle
-        var tabBarGlass = UserDefaults.tabBarGlass
         var tabBarSystemGlass = UserDefaults.tabBarSystemGlass
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
         var tabBarHideCreate = UserDefaults.tabBarHideCreate
@@ -131,20 +130,18 @@ struct EeveeExtrasSettingsView: View {
             // 那几版 bug 太多（糊底、两颗 ⌄、与原生吸顶头打架……），先放一边，
             // 等导航栏这条线收干净再重做。
 
-            // 底部标签栏玻璃：每颗标签后面垫一层真液态玻璃（iOS 26+）或材质。
+            // 底部标签栏：内容与玻璃都由「标签栏改用系统玻璃」那条路负责（见 TabBarSystemGlass）。
+            //
+            // ⛔「**标签用液态玻璃**」那颗开关（我们把整条栏铺一条自绘胶囊）已于 2026-10-13
+            //   **按用户要求删除**（"这个功能可以删掉了"）：它整盘被系统玻璃那条路取代
+            //   （iOS 26 自己画的玻璃有折射/镜片/明暗自适应，我们自绘的只是 UIVisualEffectView）。
+            //   自绘那套代码同时从 `TabBarGlass.x.swift` 删掉；那个文件现在只剩
+            //   **共用的几何判据 + 标签内容的取舍**（藏文字 / 藏「创建」）。
             Section(
                 header: Text("tab_bar_glass_section".localized),
                 footer: Text("tab_bar_glass_description".localized)
             ) {
-                Toggle(
-                    "tab_bar_glass".localized,
-                    isOn: shadowBinding(
-                        \.tabBarGlass,
-                        persist: { UserDefaults.tabBarGlass = $0 }
-                    )
-                )
-
-                // 照片 21/23/25 里那条栏是**没有文字**的；藏掉之后玻璃自然收到 ~40pt。
+                // 照片 21/23/25 里那条栏是**没有文字**的。
                 // 思路借自 spoti.pw 的「Hide labels」（只借思路，代码自己写）。
                 Toggle(
                     "tab_bar_hide_labels".localized,

@@ -234,3 +234,38 @@
 **未验证声明（追加）**：藏 arranged subview 之后 Spotify 会不会在它自己的回合里把 `isHidden` 写回、
 三颗的图标间距/胶囊宽度最终长什么样，**都没有真机数据**（本机没有编译器）。
 若 ⑥ 之后又冒出第 4 颗，日志里那行 `shown again N time(s)` 就是现场。
+
+---
+
+# 9. 第三轮（同日）：**「标签用液态玻璃」整条删除**
+
+> 用户原话：「**标签用液态玻璃这个功能可以删掉了**」—— 指设置页那颗 `tabBarGlass`
+> （我们**自绘**的那盘胶囊），它已经被「标签栏改用系统玻璃」整盘取代。
+
+## 9.1 删了什么、留了什么（一条线画在"画"与"判据"之间）
+
+| | |
+|---|---|
+| **删（"画"的那一半）** | `TabBarGlassPlate.apply` / `removePlate` / `layering` / `makeGlassView` / `plateKey` / `interactiveOn` / `hasGoodFrame` / `retryCount` / `scheduleRetry` / `report` / `lastReported*` / `reportLimit`，以及只为它服务的**纵向位移**（`rowShifts` / `iconShifts` / `hasDeviation` / `rowIsTransient` / `armRowRecheck` / `recheckRow` / `reconcileRowIfTransient` / `rowShiftLimit`）和 `tightenRow`（**真的去收四颗**那一步） |
+| **删（功能面）** | 设置页那一行 `tab_bar_glass`、`UserDefaults.tabBarGlass` 键与访问器、`ownedKeys` 里那一项、en/zh-CN 的 `tab_bar_glass` 文案；那节 footer 改写（它原来整段在讲自绘那盘玻璃） |
+| **删（连带）** | `DeclutterChrome` 里那行 `reconcileRowIfTransient()`（它正是"复核自绘胶囊那一行"用的）；`NewDesignYield.x.swift` 里"标签栏玻璃得我们自己做"那句过期结论 |
+| **留（**共用判据**）** | `findTabsStack` / `targetCapsuleRect`（`measure` + `tightenOffsets` + `capsuleRect` + `contentBand` + `isUsable`）/ `capsuleWidth` + `capsuleWidthRatio`（迷你播放条按它等宽）/ `visibleItems` / `applyCreateTabVisibility` / `applyLabelVisibility` / 钩子 |
+| **改动最大的一个决定** | `tightenFactor = 0.20` **保留**，但它现在的语义变了：**真的去收四颗的代码删了**，这个数只参与 `measure` ⇒ "胶囊按收紧后的版式算多宽"。四颗时 272 + 88 = **360**（就是现在屏幕上那条）。删了它，胶囊会变成贴边的 ≈398 |
+
+**钩子现在只剩三步**（顺序要紧，`TabBarPlateHook.layoutSubviews`）：
+① `applyCreateTabVisibility`（藏「创建」）→ ② `applyLabelVisibility`（藏文字，**与玻璃无关，两种开关状态下都要生效**）→ ③ `TabBarSystemGlass.apply`。
+⚠️ ②原来挂在自绘胶囊的 `apply` 里 —— 直接删那条 `apply` 会让「隐藏标签文字」**失效**，所以它被搬到了钩子里。
+
+## 9.2 验收
+
+| # | 怎么做 | 应该看到 | 日志判据 |
+|---|---|---|---|
+| ⑪ | 设置 → 扩展功能 → 标签栏 | **没有**「标签用液态玻璃」那一行；剩下「隐藏标签文字」「隐藏「创建」标签」「标签栏改用系统玻璃」 | —— |
+| ⑫ | 关掉「标签栏改用系统玻璃」 | 标签栏回**Spotify 原生**那条（**没有**我们画的胶囊），文字仍按开关藏、创建仍按开关藏 | 不该再出现 `[TabBarPlate] glass capsule laid on …` / `capsule (…) ← with-text band …` |
+| ⑬ | 开回来 | 与第 8 节验收一致（系统玻璃 + 三颗 + 点得动） | `[TabBarSystem] system bar added …` |
+| ⑭ | 启动日志 | 一行新的安装说明 | `[TabBarPlate] installed — tab row policy (hide labels / hide Create) over NavigationUI_TabBarImpl.TabBarView; the glass itself comes from TabBarSystemGlass (the self-drawn capsule was removed on 2026-10-13)` |
+
+**未验证声明（追加）**：这一轮**删了 589 行**（`TabBarGlass.x.swift` 从 1258 → 778 行），
+本机**没有编译器**；七条自检都不做类型检查 ⇒ "能编译"只有 CI 能回答。
+系统玻璃那条路的几何判据**一个字没改**（`targetCapsuleRect` 的输入输出与删除前逐行一致），
+所以"胶囊还是 360×60"这件事在代码上是**同一份计算**，但没有真机复核。

@@ -27,7 +27,9 @@ import ObjectiveC.runtime
 /// **① 尺寸与自绘的对齐。** 用户原话：「这个系统的液态玻璃和原本自己做的尺寸不一样……
 /// **你和自绘的对齐就行**」。做法：给系统栏加一个**宿主视图**（下面那个 class），
 /// 把宿主摆成 `TabBarGlassPlate.targetCapsuleRect(in:)` 算出来的**那一块**（360×60、
-/// 贴图标行、左右各 24pt）—— 几何判据只有那一份，两条路不可能再漂。
+/// 贴图标行、左右各 24pt）—— 几何判据只有那一份。
+/// ⚠️ 2026-10-13：自绘那盘**已删除**，所以现在不是"两条路对齐"，而是**这一份判据就是唯一的一份**
+/// （`TabBarGlass.x.swift` 只剩几何与标签内容取舍）。
 /// ⚠️ 宿主**必须**把底部安全区报成 0：UIKit 的浮岛玻璃是"按所在视图的安全区"量高度的
 /// （Face ID 机型 `max(83, 49 + inset)`），不这么做的话它会留 34pt 给 Home Indicator，
 /// 内容区只剩 26pt。这是 pw 的 `SGRTabBarHost` 那一招。
@@ -521,7 +523,8 @@ enum TabBarSystemGlass {
         objc_getAssociatedObject(bar, &hostKey) as? TabBarSystemGlassHost
     }
 
-    /// ★ 第二片 ①：**把宿主摆成"自绘胶囊那一块"**（几何判据只有 `TabBarGlassPlate` 那一份）。
+    /// ★ 第二片 ①：**把宿主摆成几何判据算出来的那一块**（`TabBarGlassPlate.targetCapsuleRect`）。
+    /// （2026-10-13 之前那句是"自绘胶囊那一块" —— 自绘那盘已删除，判据本身没变。）
     ///
     /// ★★ 2026-10-12 第二版（**真机日志 64 纠正**）：**UIKit 画的玻璃比我们给的框小一圈** ——
     /// 日志逐字：`host 27,-3,360,60` → 它画出来的 `_UITabBarItemPlatterView` 是 `48,-3,318,39`

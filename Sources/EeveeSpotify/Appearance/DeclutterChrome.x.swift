@@ -558,15 +558,13 @@ enum DeclutterChrome {
         //   时打，所以不刷屏。同一条纪律：**不新开定时器**。
         onMainThreadSync { PlayerStateProbe.tick() }
 
-        // ★ v4.9：标签栏那一行的**纵向复核**。点开「创建」时那一颗处于暂时态，
-        //   而**菜单关掉时这条栏不一定再布局** —— 日志 29 里我们的 transform 就停在
-        //   `+2.5`，创建那颗一直比另外三颗高 8pt（16 秒没回来）。
-        //   这里跟上面同一个纪律：**只在"这一行还没稳"时才真的重算**，稳着时是一次 bool 读。
-        onMainThreadSync { TabBarGlassPlate.reconcileRowIfTransient() }
+        // ⛔ v4.9 的「标签栏那一行的纵向复核」（`TabBarGlassPlate.reconcileRowIfTransient()`）
+        //   已随**自绘胶囊**一起删除（2026-10-13）：那套复核是给"把四颗摆到我们画的胶囊中心"
+        //   服务的，胶囊没了就没人再动那几颗的 transform，也就没有什么"暂时不齐"要复核。
 
         // ★ 2026-10-12：「标签栏改用系统玻璃」也在这条节拍上兜一次 ——
-        //   它要同步 item / 选中态 / 让高度，而**关掉菜单或切歌之后这条栏不一定再布局**
-        //   （与上面 `reconcileRowIfTransient` 同一个理由）。开关关着时开销 = 一次 bool 读。
+        //   它要同步 item / 选中态 / 让高度，而**关掉菜单或切歌之后这条栏不一定再布局**。
+        //   开关关着时开销 = 一次 bool 读。
         onMainThreadSync { TabBarSystemGlass.reapply() }
     }
 
