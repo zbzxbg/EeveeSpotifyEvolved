@@ -15,9 +15,9 @@
 | Channel | Version | Spotify |
 | --- | --- | --- |
 | Public release | `v0.1.0` | 9.1.76 |
-| Development | `v1.0.0-beta.83` | 9.1.88 |
+| Development | `v1.0.0-beta.86` | 9.1.88 |
 
-Development version last updated: `2026/10/03`.
+Development version last updated: `2026/10/04`.
 
 > [!WARNING]
 > Development versions are not publicly distributed to users.
@@ -77,7 +77,7 @@ Both pipelines build the same tweak; the difference is whether zxPluginsInject.d
 | --- | --- | --- |
 | TrollStore | `-patched.ipa` | Not re-signed, entitlements intact; the shim is harmless and the Safari appex stays |
 | Paid certificate (1 year) | `-patched.ipa` | The profile covers the extra bundles, and the shim covers what re-signing breaks |
-| SideStore / AltStore / Sideloadly / free enterprise certificate | `.ipa` (no patch) | Those profiles usually have no wildcard, so the Watch app and native appex have to be stripped (`Tools/strip-ipa.sh`) |
+| SideStore / AltStore / Sideloadly / leaked enterprise certificate (for free) | `.ipa` (no patch) | Those profiles usually have no wildcard, so the Watch app and native appex have to be stripped (`Tools/strip-ipa.sh`) |
 | LiveContainer | `.ipa` (no patch) | LiveContainer virtualises keychain, app groups and preferences itself; the shim on top conflicts |
 | Jailbroken | the `.deb` | `make package FINALPACKAGE=1` |
 
