@@ -338,7 +338,7 @@ flag_override_mode_set = "Set value";
 flag_override_value_placeholder = "enum value, e.g. count";
 flag_override_value_required = "Needs a value";
 flag_catalog_section = "Known flags";
-flag_catalog_description = "Names and scopes come from this device's own debug log, so none of them is a guess. Tap a row to pin that flag (booleans get turned off, enum flags keep the value Spotify sent); tap it again to unpin. Change the exact value on the previous page.";
+flag_catalog_description = "Names and scopes come from the debug log. Tap a row to pin that flag (booleans get turned off, enum flags keep the value Spotify sent); tap it again to unpin. Change the exact value on the previous page.";
 flag_catalog_search_placeholder = "Filter by name or scope";
 flag_catalog_empty_result = "No flag matches that filter";
 flag_group_lyrics = "Lyrics";
@@ -356,7 +356,7 @@ amoled = "Dark bar chrome (Apple Music style)";
 extras_title = "Extras";
 extras_description = "Features added on top of EeveeSpotify, kept together here so the settings root stays short. The ideas follow spoti.pw; the code is this project's own. Each one has its own page, except the switches above.";
 
-declutter_description = "Hides Spotify's own non-content chrome by class name, taken from this device's view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
+declutter_description = "Hides Spotify's own non-content chrome by class name, taken from the view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
 hide_mini_player_bar = "Hide the mini player bar";
 hide_singalong_line = "Hide Spotify's own one-line lyrics";
 hide_npv_pills = "Hide the Now Playing pills (switch to video / show lyrics)";
