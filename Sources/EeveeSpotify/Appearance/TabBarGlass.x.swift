@@ -315,26 +315,8 @@ enum TabBarGlassPlate {
         hasGoodFrame = true
         retryCount = 0
 
-        // 宽：**贴着图标那一行**（+ 左右留边），上限是"栏宽 − sideInset×2"。
-        let width = min(
-            max(16, bar.bounds.width - sideInset * 2),
-            max(16, band.width + horizontalPadding * 2)
-        )
-        // ★ 顺手报给迷你播放条那条胶囊（用户要求两条**等宽**）：绝对值 + 相对栏宽的比例。
-        capsuleWidth = width
-        capsuleWidthRatio = bar.bounds.width > 1 ? width / bar.bounds.width : 0
-        // 高：**与迷你播放条那条胶囊同一个数**（`GlassCapsule.height` = 真机实测 60）。
-        //     用户 2026-10-02 拍板：无论「隐藏标签文字」开关如何，高度都按"有文字"版式算 ——
-        //     现在它直接是一个共用常量，两条胶囊**不可能再漂**（见 `GlassCapsule`）。
-        let height = min(bar.bounds.height + maxOverhang, max(16, GlassCapsule.height))
-        let centeredY = band.midY - height / 2
-        let y = min(max(-maxOverhang, centeredY), max(0, bar.bounds.height - height))
-        let target = CGRect(
-            x: band.midX - width / 2,
-            y: y,
-            width: width,
-            height: height
-        )
+        // 宽 / 高 / 位置：**唯一**那一处几何判据（系统玻璃那条路也来问它）。
+        let target = capsuleRect(in: bar, band: band)
 
         // ★ 最后才写四颗的 transform：横向收紧 + （文字藏起来时）纵向居中。
         //   幂等（值没变不写）且**不动布局** —— 与 v4.2 起定的纪律一致。
@@ -369,6 +351,49 @@ enum TabBarGlassPlate {
         guard let plate = objc_getAssociatedObject(bar, &plateKey) as? UIVisualEffectView else { return }
         plate.removeFromSuperview()
         objc_setAssociatedObject(bar, &plateKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    // MARK: - 胶囊几何（**只此一份**）
+
+    /// 胶囊的矩形 = 宽度 + 高度 + 它在栏里的位置。
+    ///
+    /// ★ 2026-10-12：**系统玻璃那条路也走这里**（`TabBarSystemGlass`）——
+    /// 用户原话：「这个系统的液态玻璃和原本自己做的尺寸不一样 …… **你和自绘的对齐就行**」。
+    /// 两条路各算一份的话迟早会漂（v4.6 之前高度就漂过 40 ↔ 56），所以判据只留这一处：
+    ///   · 宽：**贴着图标那一行**（+ 左右留边），上限是"栏宽 − sideInset×2"；
+    ///   · 高：**与迷你播放条那条胶囊同一个数**（`GlassCapsule.height` = 真机实测 60）。
+    ///     用户 2026-10-02 拍板：无论「隐藏标签文字」开关如何，高度都按"有文字"版式算；
+    ///   · 纵向：以 `band.midY` 为心，越出栏顶/栏底都有上限（`maxOverhang`）。
+    ///
+    /// ⚠️ 副作用是**故意**的：顺手把宽度报给迷你播放条那条胶囊（用户要求两条等宽）。
+    @MainActor
+    static func capsuleRect(in bar: UIView, band: CGRect) -> CGRect {
+        let width = min(
+            max(16, bar.bounds.width - sideInset * 2),
+            max(16, band.width + horizontalPadding * 2)
+        )
+        capsuleWidth = width
+        capsuleWidthRatio = bar.bounds.width > 1 ? width / bar.bounds.width : 0
+
+        let height = min(bar.bounds.height + maxOverhang, max(16, GlassCapsule.height))
+        let centeredY = band.midY - height / 2
+        let y = min(max(-maxOverhang, centeredY), max(0, bar.bounds.height - height))
+        return CGRect(x: band.midX - width / 2, y: y, width: width, height: height)
+    }
+
+    /// 给**系统玻璃**那条路用：跑一遍同一套量算，返回"我们要对齐到的那个矩形"（**不画任何东西**）。
+    ///
+    /// 几何不可信（首次布局、栏还没进窗口）时返回 `nil` —— 调用方那一次按自己的兜底摆，
+    /// 下一拍再来（与 `apply` 里 `isUsable` 那条纪律一致：宁可不动，也别画歪）。
+    @MainActor
+    static func targetCapsuleRect(in bar: UIView) -> CGRect? {
+        guard bar.bounds.width > 1, bar.bounds.height > 1 else { return nil }
+        let stack = findTabsStack(in: bar)
+        let dx = tightenOffsets(in: bar, stack: stack)
+        let measured = measure(in: bar, stack: stack, dx: dx)
+        let band = measured?.full ?? measured?.icons ?? contentBand(in: bar, stack: stack)
+        guard isUsable(band: band, bar: bar) else { return nil }
+        return capsuleRect(in: bar, band: band)
     }
 
     // MARK: - 量算：四颗的布局几何（v4.6 起不再读 frame，也不 convert 到栏）
