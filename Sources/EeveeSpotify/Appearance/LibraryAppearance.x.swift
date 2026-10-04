@@ -5,6 +5,15 @@ import ObjectiveC.runtime
 
 /// 音乐库（Your Library）的「改原生」第一批 —— 不是加层，是**改 Spotify 自己的视图**。
 ///
+/// ── 2026-10-12 这一批的分工（**Apple Music 那一档的观感**，用户点名"要 AM 的优雅感"）──
+/// Apple Music 音乐库的解构（公开 App + HIG 的 token，见交接文档 §9）：**贴左的大标题（32pt/800）**、
+/// 标题行右端一颗（Edit；iOS 26 是头像）、标题下面一整行**筛选 chips**、区块标题（18pt/800）、
+/// 行 = 小圆角封面（6pt 连续）+ 主标题/灰色元信息、分隔线**从文字左沿起**、侧边距 16–18pt。
+/// 落到 Spotify 自己的视图上就是三片（**同一个开关**，关掉各自精确还原）：
+///   · **本文件**：头部 —— ① 大标题字号、③ 标题贴左 + 头像/按钮贴右、④ 收掉顶部灰纱；
+///   · `LibraryRowsAppearance.x.swift`：列表行/网格卡片 —— 封面连续圆角（6/8pt）+ 行间发丝线；
+///   · `LibrarySearchAppearance.x.swift`：库内搜索页 —— 搜索框与 Cancel 变胶囊 + 收灰纱。
+///
 /// ── 为什么从这里开始 ────────────────────────────────────────────────────────
 /// 听歌页那条线（"加一层壳"那一套，**2026-10-02 已整块删除**）做的是加壳：能改底色、能加顶栏，
 /// 但页面本身的结构一点没动，所以观感上限锁死在"加了点东西"。要真的像 Apple Music，必须动
@@ -36,10 +45,8 @@ import ObjectiveC.runtime
 ///   3. **只改读得到的属性**（`alpha` / `backgroundColor` / `textAlignment` /
 ///      `constraint.constant`），**不碰任何需要猜签名的方法**。
 ///
-/// ⚠️ 这一批**刻意没做**的（留到下一批）：
-///   · **大标题的字号/字重** —— 会被 binder 写回，改了会闪；要做得先摸清 binder 的更新时机；
-///   · **列表行的封面圆角 / 发丝分隔线** —— 那些是 element 自己画的，不是
-///     `UIImageView.layer.cornerRadius` 那种改法。
+/// ⚠️ 已经做掉的（旧版的"留到下一批"清单，别再照抄）：**大标题字号**在 §①（真机验过、没被 binder 写回）；
+///    **列表行的封面圆角 / 发丝分隔线**在 `LibraryRowsAppearance.x.swift`（2026-10-12 补上）。
 struct LibraryAppearanceGroup: HookGroup {}
 
 /// 资料库这几处的排版常数。
@@ -69,6 +76,12 @@ enum LibraryAppearance {
         guard let root else { return }
         note(root)
         reconcile(force: true)
+        // ⚠️ 灰纱**只在这一条快路径里收**（= 页面/头部自己的布局回合），**绝不进 0.5s 节拍** ——
+        //    Spotify 会随滚动改它，每 0.5 秒强写一次就是在和滚动动画对着干（§② 记的就是那次教训）。
+        if let header = headerView ?? findHeader(in: root) {
+            headerView = header
+            clearTopEdgeScrim(in: header)
+        }
     }
 
     /// 登记当前这一页。weak —— 页面销毁后自动失效，不用手动摘。
@@ -104,6 +117,7 @@ enum LibraryAppearance {
         lastReconcileAt = now
 
         applyLargeTitle(in: root)
+        placeHeaderControls(in: root)
         flushPendingLayoutInvalidation()
     }
 
@@ -203,21 +217,174 @@ enum LibraryAppearance {
         return nil
     }
 
-    // MARK: ② 顶部那层滚边渐隐 —— **已删除**
+    // MARK: ③ 头部重排：标题靠左、头像与按钮靠右（2026-10-12）
 
-    // 这里原来按类名收掉 `Reprise_LiquidGlassKit.LiquidGlass.GradientView` 的 alpha。
-    // 真机上它确实生效过（日志 18：`已收掉顶部滚边渐隐 (_TtCO22Reprise_LiquidGlassKit11LiquidGlass12GradientView)`），
-    // 但**已经删掉**，两条理由：
+    /// 这一条照 pw 的 `Redesigned/Library/LibraryHeader.x` —— **同一个信号、同一套 id**：
+    /// 9.1.88 那份解密 IPA 里逐字都有 `YourLibrary_YourLibraryXImpl.YourLibraryHeaderView`、
+    /// `YourLibrary_CommonKit.YourLibraryHeaderContentFiltersView`、
+    /// `ListeningActivity_ElementsKit.AdaptiveFaceContainer`（见 `dump-9.1.88.txt`）。
+    ///
+    /// 真机结构（pw 的树 + 我们自己的 dump 对得上）：
+    /// ```
+    /// YourLibraryHeaderView
+    /// ├ LiquidGlass.GradientView                       ← 顶部那层灰纱（§④ 收掉）
+    /// ├ AutoLayoutStackView，48pt 高的一行
+    /// │  ├ AdaptiveFaceContainer    id=Components.UI.SideDrawerButton  ← 头像（挪到最右）
+    /// │  ├ YourLibraryHeader.title                                    ← 标题（挪到左沿）
+    /// │  ├ (spacer)
+    /// │  ├ YourLibraryHeader.recents （这个账号上隐藏）
+    /// │  ├ YourLibraryHeader.search
+    /// │  └ YourLibraryHeader.plus
+    /// └ YourLibraryHeaderContentFiltersView            ← 筛选 chips：**原样保留，一个字不动**
+    /// ```
+    ///
+    /// ── 为什么用 transform，而不是 frame ────────────────────────────────────
+    /// 那一行是 Spotify 自己的 stack，每拍按约束摆一遍；而 **Auto Layout 只写 center 与 bounds、
+    /// 不碰 transform** ⇒ 位移能活过它那一拍（pw 的原话就是这个）。位移一律从"布局摆出来的位置"
+    /// 算（`center` 不受 transform 影响，`frame` 会）⇒ **幂等**：值没变一个字节都不写。
+    ///
+    /// ⚠️ 这一行全是 **arranged subview**：**绝不能把谁从 stack 里摘掉**
+    /// （pw 的注释：摘一颗会让那个 stack 卡在 `updateConstraints` 里）—— 所以这里只有位移，没有移除。
+
+    /// 右侧留边（pw 的 `kRowInset` = 8）：48pt 的按钮贴到右沿时，它 24pt 的字形离屏 20pt。
+    private static let headerRowInset: CGFloat = 8
+    /// 左侧留边（pw 的 `SGRSideMargin` = 16）。
+    private static let headerSideMargin: CGFloat = 16
+    /// 靠右打包的次序（读起来从左到右）；**头像排在最后 = 最右**，与 pw 的 Home/Library 一致。
+    private static let headerTrailingIdentifiers = [
+        "YourLibraryHeader.recents",
+        "YourLibraryHeader.search",
+        "YourLibraryHeader.plus",
+    ]
+    private static let adaptiveFaceClassName = "ListeningActivity_ElementsKit.AdaptiveFaceContainer"
+
+    private static weak var headerView: UIView?
+    private static let movedHeaderControls = NSHashTable<UIView>.weakObjects()
+    private static var didLogHeaderRestyle = false
+
+    @MainActor
+    private static func placeHeaderControls(in root: UIView) {
+        guard let header = headerView ?? findHeader(in: root) else { return }
+        headerView = header
+        moveHeaderControls(in: header)
+    }
+
+    private static func findHeader(in view: UIView) -> UIView? {
+        if className(view).contains("YourLibraryHeaderView") { return view }
+        for sub in view.subviews {
+            if let found = findHeader(in: sub) { return found }
+        }
+        return nil
+    }
+
+    @MainActor
+    private static func moveHeaderControls(in header: UIView) {
+        guard header.bounds.width > 1 else { return }
+
+        // ① 标题贴左沿。标题仍然是 **Spotify 自己那一个**（我们只放大过它的字号，见 §①）——
+        //    不像 pw 那样另画一个：那条路要连字号/字重一起自己负责，而"字号"这一项我们已经验过。
+        if let title = titleLabel ?? findTitleLabel(in: header) {
+            titleLabel = title
+            place(title, atLeading: headerSideMargin, in: header)
+        }
+
+        // ② 头像与按钮一起贴右沿打包，头像在最右。
+        var trailing: [UIView] = []
+        for identifier in headerTrailingIdentifiers {
+            guard let control = findView(in: header, where: { $0.accessibilityIdentifier == identifier }),
+                  !control.isHidden, control.alpha > 0.01, control.bounds.width > 1 else { continue }
+            trailing.append(control)
+        }
+        if let face = findView(in: header, where: { className($0) == adaptiveFaceClassName && $0.bounds.width > 1 }) {
+            trailing.append(face)
+        }
+        guard !trailing.isEmpty else { return }
+
+        var right = header.bounds.width - headerRowInset
+        for control in trailing.reversed() {
+            let width = control.bounds.width
+            place(control, atLeading: right - width, in: header)
+            right -= width
+        }
+
+        if !didLogHeaderRestyle, header.window != nil {
+            didLogHeaderRestyle = true
+            writeDebugLog(
+                "[Library] header restyled — the title sits at the leading edge, \(trailing.count) control(s) packed at the trailing edge"
+                    + " (rightmost: \(trailing.last.map { className($0) } ?? "none"))"
+            )
+        }
+    }
+
+    /// 用 transform 把一颗控件挪到"相对头部左沿 = target"的位置。**幂等**。
+    private static func place(_ control: UIView, atLeading target: CGFloat, in header: UIView) {
+        guard let host = control.superview else { return }
+        // ⚠️ 用 `center`（Auto Layout 摆出来的那个，transform 改不动它），**不要用 `frame`**
+        //    （transform 一上，frame 就未定义了）。
+        let hostOriginX = host.convert(CGPoint.zero, to: header).x
+        let naturalLeading = hostOriginX + control.center.x - control.bounds.width / 2
+        let move = CGAffineTransform(translationX: target - naturalLeading, y: 0)
+        if control.transform != move { control.transform = move }
+        if !movedHeaderControls.contains(control) { movedHeaderControls.add(control) }
+    }
+
+    // MARK: ④ 顶部灰纱（只在这条快路径里收，见 `apply`）
+
+    /// 我们收过的灰纱（弱引用）+ 各自原 alpha 的关联键（原值记在视图自己身上）。
+    private static let touchedScrims = NSHashTable<UIView>.weakObjects()
+    private static var originalScrimAlphaKey: UInt8 = 0
+
+    /// 收掉某个头部顶上那层滚边灰纱（`LiquidGlass.GradientView`）。**幂等**。
+    ///
+    /// ⚠️ 只在**页面/头部的布局回合**里写（`apply` 调），**不进 0.5s 节拍** —— 见 §②的账：
+    ///    那层是**滚动边缘效果**，Spotify 随滚动改它的 alpha，每 0.5 秒归零就是在和滚动动画对着干。
+    ///    现在这样与 pw 等价（他也是只在头部那一拍清一次），而且值已经是 0 就**一个字节都不写**。
+    ///
+    /// 音乐库页与**库内搜索页**各有自己的一层 ⇒ 判据只写这一份，原 alpha 记在**那层视图自己身上**
+    /// （关联对象），还原走一张弱表。
+    @MainActor
+    static func clearTopEdgeScrim(in header: UIView) {
+        guard let scrim = findView(in: header, where: { className($0).contains("GradientView") }) else { return }
+        if objc_getAssociatedObject(scrim, &originalScrimAlphaKey) == nil {
+            objc_setAssociatedObject(
+                scrim,
+                &originalScrimAlphaKey,
+                NSNumber(value: Double(scrim.alpha)),
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+            touchedScrims.add(scrim)
+            writeDebugLog(
+                "[Library] the top edge scrim is off — \(className(scrim))"
+                    + " (written on a layout pass only, never on the 0.5s tick: it follows the scroll)"
+            )
+        }
+        if scrim.alpha != 0 { scrim.alpha = 0 }
+    }
+
+    /// 有界找第一个满足条件的视图（找不到就 nil；只在头部子树里用，别拿它扫整页）。
+    static func findView(in view: UIView, where matches: (UIView) -> Bool) -> UIView? {
+        if matches(view) { return view }
+        for sub in view.subviews {
+            if let found = findView(in: sub, where: matches) { return found }
+        }
+        return nil
+    }
+
+    // MARK: ② 顶部那层滚边渐隐 —— 的历史（**现在在 §④**，别把这段当"不许做"）
+
+    // v1 按类名收掉 `Reprise_LiquidGlassKit.LiquidGlass.GradientView` 的 alpha，真机生效过
+    // （日志 18：`已收掉顶部滚边渐隐 (…LiquidGlass12GradientView)`），但那一版**被删掉了**，两条理由：
     //
-    //   1. **肉眼看不出来**：那层本来就极淡，静帧下几乎无差别（用户反馈"没任何改动"）。
-    //   2. **它属于"动别人视图"那一类**，与听歌页那段把页面搞到划不动的代码同源。
-    //      而且那层是**滚动边缘效果**，Spotify 会随滚动改它的 alpha —— 我们每 0.5 秒
-    //      去把它归零，就是在和它的滚动动画对着干，轻则闪烁重则影响滚动。
+    //   1. **肉眼看不出来**：那层本来就极淡，静帧下几乎无差别（用户当时反馈"没任何改动"）——
+    //      所以 2026-10-12 这一版**把标题也挪到左沿**（§③），不再是"只收一层看不见的纱"；
+    //   2. **它属于"动别人视图"那一类**：那层是**滚动边缘效果**，Spotify 会随滚动改它的 alpha，
+    //      而 v1 是**每 0.5 秒**去把它归零 ⇒ 在和滚动动画对着干，轻则闪烁重则影响滚动。
     //
-    // 要收它，前提是确认"它不会随滚动被重新写"，并且只做一次性改动 —— 不是现在。
+    // ⇒ 2026-10-12 的复刻（§④）把频率这一条钉死了：**只在页面/头部自己的布局回合写一次**
+    //    （`apply` 那条快路径），**绝不进 0.5s 节拍**，且值已是 0 就一个字节都不写 —— 与 pw 等价。
     //
-    // 现在这个开关只剩"大标题字号"一项：那是**改我们看得懂、也碰得起的东西**
-    // （一个 `UILabel` 的 font），不动任何布局与滚动机制。
+    // ⚠️ 这一次也只碰"alpha 与 transform"这两样能精确还原的东西；**布局与滚动机制一个字不动**
+    //    （标题/头像/按钮全都是**位移**，不是改约束）。
 
     // MARK: ③ 改了约束就要让 layout 重跑（第一版漏了这步）
 
@@ -266,9 +433,23 @@ enum LibraryAppearance {
         originalFont = nil
         titleLabel = nil
         hasAppliedOnce = false
-        // 注：灰纱（`LiquidGlass.GradientView`）那一项已经整段删除（见上面 §②），
-        // 所以这里**不再**有 `gradientView` / `originalGradientAlpha` 要还原 ——
-        // 第一版删代码时漏删了这两行引用，编译期报 "cannot find … in scope"。
+
+        // ③ 头部重排：位移回 0（那就是 Auto Layout 摆的位置）。
+        for control in movedHeaderControls.allObjects where control.transform != .identity {
+            control.transform = .identity
+        }
+        movedHeaderControls.removeAllObjects()
+
+        // ④ 灰纱：写回**它自己原来的** alpha（不是一律写 1 —— 它随滚动变，原值可能就不是 1）。
+        for scrim in touchedScrims.allObjects {
+            if let original = objc_getAssociatedObject(scrim, &originalScrimAlphaKey) as? NSNumber {
+                scrim.alpha = CGFloat(original.doubleValue)
+            }
+        }
+        touchedScrims.removeAllObjects()
+
+        didLogHeaderRestyle = false
+        didReportScrim = false
     }
 
     private static func className(_ view: UIView) -> String {
@@ -302,14 +483,25 @@ class LibraryAppearanceHook: ClassHook<UIView> {
 }
 
 func activateLibraryAppearance() {
-    guard NSClassFromString(LibraryAppearanceHook.targetName) != nil else {
-        writeDebugLog("[Library] missing \(LibraryAppearanceHook.targetName) — hook inactive")
+    // 三片各自一个 hook（头部在这里，行与库内搜索在各自文件里），**同一个 group** ⇒ 这里一次激活。
+    // ⚠️ 缺哪个就照实报哪个：只有"一个都没有"才整个不装（少一片不该把另外两片也拖下水）。
+    let targets = [
+        LibraryAppearanceHook.targetName,
+        LibraryRowStyleHook.targetName,
+        LibrarySearchStyleHook.targetName,
+    ]
+    let missing = targets.filter { NSClassFromString($0) == nil }
+    if missing.count == targets.count {
+        writeDebugLog("[Library] missing \(missing.joined(separator: ", ")) — hook inactive")
         return
     }
 
     LibraryAppearanceGroup().activate()
     writeDebugLog(
-        "[Library] library native restyle installed (header="
+        "[Library] library native restyle installed (switch="
             + "\(UserDefaults.libraryLargeTitle ? "ON" : "OFF"))"
+            + " — header: title font + title leading + avatar trailing + scrim off;"
+            + " rows: continuous corners + hairline; in-library search: capsules"
+            + (missing.isEmpty ? "" : " (missing targets: \(missing.joined(separator: ", ")))")
     )
 }
