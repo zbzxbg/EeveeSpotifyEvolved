@@ -38,14 +38,20 @@ import ObjectiveC.runtime
 /// 里面那个胶囊**不可用手划动**」。第一片里系统栏 `isUserInteractionEnabled = false`
 /// ⇒ 手指落到 Spotify 那条栏上，玻璃只是张画。现在：
 ///   · 系统栏**接管触摸**（`isUserInteractionEnabled = true` + `delegate` 中继）；
-///   · 选中的那一颗**转发成对 Spotify 那一颗的点击** —— 照 pw 的做法：先读那颗 item 子树里
-///     **tap 手势识别器自己的 target/action** 并触发（`_targets` 是私有 ivar，pw 就是这么干的），
-///     依次退到 `accessibilityActivate()` → `UIControl.sendActions`；
-///   · 用了哪条路**打进日志**（`tap on #N forwarded … route …`），三条都不行时把子树里的
-///     识别器与 UIControl 全列出来 —— 下一份日志直接告诉我们该打哪儿。
-///   · 转发完成后 0.25s 再 `reapply()` 一次：Spotify 会晚一点重画标签颜色（选中态信号），
-///     那一刻气泡要跟着走（pw 也是这么收尾的）。
-///   · 宿主只有那一块（≈360×60）⇒ **玻璃以外的区域照旧落到 Spotify 的栏上**，行为不变。
+///   · 选中的那一颗**转发成对 Spotify 那一颗的点击** —— 五条路，**从最公开到最私有**：
+///     ① **`UITabBarController.selectedIndex`**（容器是 `UITabBarController` 的子类，公开 API）
+///     ② 那颗 item 子树里 **tap 手势识别器自己的 target/action**（pw 的做法）
+///     ③ `-handleTap`（pw 点名的 `TabBarItemElementUI`；只找"响应它的对象"，不猜签名）
+///     ④ `accessibilityActivate()`　⑤ `UIControl.sendActions`
+///   · **五条全不通 ⇒ 把触摸还给 Spotify 那条栏**（`handTouchesBack`）：只有第一次点击失效，
+///     之后点得动，只是没有"按下回弹" —— 绝不留下"看得见、点不动"。
+///   · 用了哪条路**打进日志**；全不通时把子树里的识别器与 UIControl 全列出来。
+///   · 转发完成后 0.25s 再 `reapply()` 一次：Spotify 会晚一点重画标签颜色（选中态信号）。
+///   · 宿主只有那一块 ⇒ **玻璃以外的区域照旧落到 Spotify 的栏上**，行为不变。
+///
+/// ⚠️ **2026-10-12 真机日志 64 的两条教训**（都已改进代码，别回退）：
+///   1. 旧的三条路**一条都没通**（`⚠️ tap on #N found nothing to forward to`）⇒ 点标签栏没反应；
+///   2. 玻璃比我们给的框**小一圈** ⇒ `place` 改成按实测差自校准（见那里的注释）。
 ///
 /// 顺带记两条**实测**（都写进日志了，别再猜）：
 ///   · `accessibilityTraits` 在 Spotify 9.1.88 上**没有** `.selected` 标记（`traits=0x0`）
@@ -272,14 +278,38 @@ enum TabBarSystemGlass {
 
     /// ★ 第二片 ①：**把宿主摆成"自绘胶囊那一块"**（几何判据只有 `TabBarGlassPlate` 那一份）。
     ///
-    /// 拿不到可信几何（首次布局 / 栏还没进窗口）时退回"整条栏"，下一拍再对齐 ——
-    /// 绝不因为量不到就把玻璃藏起来（那是"看得见、点不动"那条红线的近亲）。
+    /// ★★ 2026-10-12 第二版（**真机日志 64 纠正**）：**UIKit 画的玻璃比我们给的框小一圈** ——
+    /// 日志逐字：`host 27,-3,360,60` → 它画出来的 `_UITabBarItemPlatterView` 是 `48,-3,318,39`
+    /// ⇒ 它自己留了 **左右各 21、底 21**（顶 0）。所以：
+    ///   ① 我们给的框 ≠ 屏幕上的玻璃（用户原话："这做的也太矮了吧，**高度长度都不对**"）；
+    ///   ② 修法**不写死 21**，而是按**实测差**把宿主往外扩 —— 关系是"玻璃 = 宿主 − 常量"
+    ///      ⇒ 一次收敛、幂等；
+    ///   ③ 拿不到可信几何（首次布局 / 栏还没进窗口 / 玻璃还没排完）时退回"整条栏"，下一拍再对齐 ——
+    ///      绝不因为量不到就把玻璃藏起来（那是"看得见、点不动"那条红线的近亲）。
     private static func place(_ systemBar: UITabBar, in bar: UIView) {
         guard let host = hostView(for: bar) else { return }
-        let target = TabBarGlassPlate.targetCapsuleRect(in: bar)
-        let frame = target ?? bar.bounds
+        let target = TabBarGlassPlate.targetCapsuleRect(in: bar) ?? bar.bounds
+
+        var frame = target
+        if let drawn = drawnGlassFrame(in: systemBar, in: bar) {
+            frame = CGRect(
+                x: target.minX - (drawn.minX - host.frame.minX),
+                y: target.minY - (drawn.minY - host.frame.minY),
+                width: target.width + (host.frame.width - drawn.width),
+                height: target.height + (host.frame.height - drawn.height)
+            )
+        }
         if !host.frame.equalTo(frame) { host.frame = frame }
         if !systemBar.frame.equalTo(host.bounds) { systemBar.frame = host.bounds }
+    }
+
+    /// UIKit 自己画的那块玻璃（`_UITabBarPlatterView` 那条线）：取**面积最大**的那一块
+    /// （同一行日志里 `_UILiquidLensView` 是选中气泡，更小）。还没排完就返回 nil（下一拍再来）。
+    private static func drawnGlassFrame(in systemBar: UITabBar, in bar: UIView) -> CGRect? {
+        let candidates = platterViews(in: systemBar)
+            .map { $0.1.convert($0.1.bounds, to: bar) }
+            .filter { $0.width > 1 && $0.height > 1 }
+        return candidates.max { $0.width * $0.height < $1.width * $1.height }
     }
 
     /// 从 Spotify 那几颗同步 item（**顺序一致**，索引就是选中态与转发的对齐依据）。
@@ -340,17 +370,41 @@ enum TabBarSystemGlass {
             return
         }
 
-        forwardTap(to: items[index], index: index)
+        forwardTap(to: items[index], index: index, systemBar: systemBar)
 
         // Spotify 会在 ~0.25s 后重画标签颜色（那是我们唯一的选中态信号）⇒ 那一刻再对一次气泡。
         // pw 也是这么收尾的（`didSelectItem` 里那个 dispatch_after）。
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { reapply() }
     }
 
-    /// 三条路依次试（pw 的顺序：先手势识别器，再无障碍，再 UIControl）。
-    private static func forwardTap(to item: UIView, index: Int) {
+    /// 四条路依次试。**顺序是"从最公开到最私有"**，而且第 ① 条来自真机日志 64 的教训：
+    ///
+    /// ★★ 2026-10-12（真机日志 64）：四颗全是
+    /// `⚠️ tap on #N found nothing to forward to … inside [UILongPressGestureRecognizer … |
+    /// UITapGestureRecognizer on TabBarItemElementView | …]` ⇒ **旧的三条路一条都没通**
+    /// （识别器**在**，但读它的 `_targets` 拿不到可触发的 target/action）⇒ 点标签栏完全没反应
+    /// （用户原话："**这些功能并没有实际效果**"）。所以第 ① 条换成**公开 API**：
+    ///
+    ///   ① **`UITabBarController.selectedIndex`** —— Spotify 那条栏的容器
+    ///      （`NavigationUI_TabBarImpl.TabBarContainerImpl`）**是 `UITabBarController` 的子类**
+    ///      （pw 在它身上 hook 的正是 `setSelectedViewController:`，那是 `UITabBarController` 的公开方法）
+    ///      ⇒ `selectedIndex` 就是"用户点了那一颗"的等价物，**一行签名都不用猜**。
+    ///   ② pw 那条路（读 tap 识别器的 target/action）—— 留着，它在 pw 的机器上是通的；
+    ///   ③ `-handleTap`（照 pw 注释里点名的 `TabBarItemElementUI`）：不猜签名、只找"响应它的对象"；
+    ///   ④ `accessibilityActivate()` → ⑤ `UIControl.sendActions`。
+    /// 五条全不通就**把触摸还给 Spotify 那条栏**（见 `handTouchesBack`）——
+    /// 宁可不要"按下回弹"，也绝不能留下"看得见、点不动"。
+    private static func forwardTap(to item: UIView, index: Int, systemBar: UITabBar) {
+        if selectThroughContainer(index: index) {
+            reportForward(index: index, route: "UITabBarController.selectedIndex on Spotify's own container")
+            return
+        }
         if fireTapRecognizers(in: item) {
             reportForward(index: index, route: "the item's own tap recognizer")
+            return
+        }
+        if callHandleTap(in: item) {
+            reportForward(index: index, route: "handleTap on the item's element")
             return
         }
         if activateAccessibility(in: item) {
@@ -362,6 +416,36 @@ enum TabBarSystemGlass {
             return
         }
         reportForwardFailure(index: index, item: item)
+        handTouchesBack(to: systemBar, reason: "every route failed on #\(index)")
+    }
+
+    /// ① 公开 API：让 Spotify 自己的容器换页（= 那条栏的 `selectedIndex`）。
+    ///
+    /// 判据：容器是 `UITabBarController` 的子类、并且它的 `viewControllers` 里有第 index 个。
+    /// 对不上就**什么都不做**（返回 false，交给下一路）—— 绝不瞎改别人的选中态。
+    private static func selectThroughContainer(index: Int) -> Bool {
+        guard let bar = lastBar, let container = container(of: bar),
+              let tabs = container as? UITabBarController,
+              let controllers = tabs.viewControllers,
+              index >= 0, index < controllers.count else { return false }
+        guard tabs.selectedIndex != index else { return true }
+        tabs.selectedIndex = index
+        return true
+    }
+
+    /// ★ 兜底：五条路全不通 ⇒ **把触摸还给 Spotify 自己那条栏**。
+    ///
+    /// 代价：**只有第一次点击失效**，之后每一次都落到 Spotify 那条栏上（= 第一片的行为：点得动、
+    /// 但没有"按下回弹"）。收益：绝不留下"看得见、点不动"。
+    /// 之所以能做到"只失效一次"：系统栏一旦不吃触摸，我们的 `delegate` 就不会再被叫到，
+    /// 而 `apply` 只在**建栏那一刻**设过 `isUserInteractionEnabled`（之后每拍都不碰它）。
+    private static func handTouchesBack(to systemBar: UITabBar, reason: String) {
+        guard systemBar.isUserInteractionEnabled else { return }
+        systemBar.isUserInteractionEnabled = false
+        writeDebugLog(
+            "[\(logTag)] ⚠️ \(reason) — handing the touches back to Spotify's own bar so taps keep working from now on;"
+                + " the system glass stays as a picture (no press bounce) until the switch is toggled"
+        )
     }
 
     /// 照 pw 的做法：**读那颗 item 子树里 tap 识别器自己的 target/action 并触发它**
@@ -412,7 +496,58 @@ enum TabBarSystemGlass {
         return unsafeBitCast(raw, to: Selector.self)
     }
 
-    /// 第二路：无障碍激活（最深的那一层先试 —— 真正响应点击的往往是里层那颗）。
+    /// ③ 私有退路：`-handleTap`。
+    ///
+    /// 名字来自 pw 的注释（`TabBar.x:137-138`："`NavigationUI_TabBarImpl`'s `TabBarItemElementUI`
+    /// answers a tap recognizer (`-handleTap`)"），但**这里不猜参数/返回值** ——
+    /// 只在"响应这个 selector 的对象"上调用它，找不到就返回 false：
+    ///   · 先看那颗 item 子树里每个视图的 **`next`（响应链）**；
+    ///   · 再**有界扫它们的 ivar**（Element 的 UI 对象一般挂在某个视图的 ivar 上，不在响应链里）。
+    private static func callHandleTap(in item: UIView) -> Bool {
+        let selector = NSSelectorFromString("handleTap")
+        for view in subtree(of: item, maxDepth: 6) {
+            if let responder = view.next as? NSObject, responder.responds(to: selector) {
+                _ = responder.perform(selector)
+                writeDebugLog(
+                    "[\(logTag)] tap → \(shortName(NSStringFromClass(type(of: responder)))) handleTap (responder chain)"
+                )
+                return true
+            }
+            if let holder = ivarHolding(selector: selector, in: view) {
+                _ = holder.perform(selector)
+                writeDebugLog(
+                    "[\(logTag)] tap → \(shortName(NSStringFromClass(type(of: holder)))) handleTap (an ivar of \(shortName(NSStringFromClass(type(of: view)))))"
+                )
+                return true
+            }
+        }
+        return false
+    }
+
+    /// 有界扫一个对象的 ivar（含父类，最多 4 层），找**第一个**响应 `selector` 的对象。
+    private static func ivarHolding(selector: Selector, in object: NSObject) -> NSObject? {
+        var cls: AnyClass? = type(of: object)
+        var hops = 0
+        while let current = cls, hops < 4 {
+            var count: UInt32 = 0
+            if let ivars = class_copyIvarList(current, &count) {
+                defer { free(ivars) }
+                for index in 0 ..< Int(count) {
+                    let ivar = ivars[index]
+                    // 只看对象类型的 ivar（编码首字符 '@'）——SEL/int/结构体一律跳过。
+                    guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 0x40 else { continue }
+                    if let value = object_getIvar(object, ivar) as? NSObject, value.responds(to: selector) {
+                        return value
+                    }
+                }
+            }
+            cls = class_getSuperclass(current)
+            hops += 1
+        }
+        return nil
+    }
+
+    /// 第四路：无障碍激活（最深的那一层先试 —— 真正响应点击的往往是里层那颗）。
     private static func activateAccessibility(in item: UIView) -> Bool {
         for view in subtree(of: item, maxDepth: 6).reversed() {
             if view.accessibilityActivate() { return true }
@@ -420,7 +555,7 @@ enum TabBarSystemGlass {
         return false
     }
 
-    /// 第三路：`UIControl` 的 target-action。
+    /// 第五路：`UIControl` 的 target-action。
     private static func sendControlActions(in item: UIView) -> Bool {
         for view in subtree(of: item, maxDepth: 6) {
             guard let control = view as? UIControl else { continue }
