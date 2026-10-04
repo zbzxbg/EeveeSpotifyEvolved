@@ -56,12 +56,52 @@ import ObjectiveC.runtime
 ///   3. **"只能动一次 + 没有实际的按键效果"**：上一版是"先接管触摸、转发失败再把触摸还回去"，
 ///      于是**第一下点空**；而且"还回去"时**漏了宿主** —— 宿主自己开着交互又盖在胶囊那块上，
 ///      触摸被它吃掉 ⇒ 页面既不切、也没有回弹。现在改成：
-///        · **建栏时先问"有没有可用的转发路"**（`canForwardTaps`：容器是 `UITabBarController`
-///          且有 ≥2 个 VC）——有才接管触摸，没有就从头让触摸穿透（与第一片一致：点得动，只是没有回弹）；
+///        · **建栏时先问"有没有可用的转发路"**（当时叫 `canForwardTaps`，**第四片已换成**
+///          `probeForwardRoute`：能把链读出来才算有）——有才接管触摸，没有就从头让触摸穿透
+///          （与第一片一致：点得动，只是没有回弹）；
 ///        · 运行时万一仍然全不通，`handTouchesBack` **栏与宿主一起关**，并且**交还过就不再收回**
 ///          （避免"点一下空一下"）。
 ///   4. **"玻璃大小一直变"**：`place` 的内边距**量一次就冻结**，而且只认**栏自己那块**
 ///      `UITabBarPlatterView`（不能按面积挑 —— `_UITabBarItemPlatterView` 是选中气泡，尺寸随选中态变）。
+///
+/// ## ★★ 第四片（2026-10-12 深夜；照片 86/87 + 日志 **70**）—— 用户第四轮反馈，两条一起改
+///
+/// 用户原话：「**标题栏液态玻璃不跟手**，在划动过程中，**可能有胶囊回弹 / 替用户按按键**的情况，
+/// 而且**胶囊也没有反射**。你可以去看一下 spoti.pw 看一下他们的标题栏液态玻璃是怎么做的」
+/// （= 底部那条玻璃栏；pw 那边整块功能就叫 `Navbar`，机制在 `Redesigned/Navbar/TabBar.x`）。
+///
+/// **日志 70 第一行就是全部答案**（它和同一秒后面那行 `installed — … taking touches` **自相矛盾**）：
+///
+/// ```
+/// [TabBarSystem] system bar added 0,0,414,83 on NavigationUI_TabBarImpl.TabBarView
+///     — in a host that reports no bottom safe area;
+///       leaving the touches to Spotify's own bar (no forwarding route found, so tapping behaves exactly as before)
+/// ```
+///
+/// ⇒ 前几版的 `canForwardTaps` **只认第 ① 条公开路**（容器是 `UITabBarController`），
+///    而真机上容器是 `TabBarContainerImpl`、`children: 1`（日志 67）⇒ 判定**永远是 false**
+///    ⇒ **系统栏一次都没接过触摸**。于是三件事同时成立，正好就是用户报的三件：
+///
+/// | 用户看到 | 机制（代码实证） |
+/// |---|---|
+/// | **不跟手 / 胶囊没有反射** | 手指落在 **Spotify 那条栏**上（系统栏 `isUserInteractionEnabled = false`）⇒ UIKit 的玻璃永远收不到 `touchesBegan`，它只是一张**画**（`_UILiquidLensView` 在树上、但没有任何交互态） |
+/// | **替用户按按键** | 第三片装的那只 `UIPanGestureRecognizer`（`cancelsTouchesInView = true`）"滑过哪格切哪格"，每次 `.changed` 都 `commitSelection` ⇒ 用户只是划一下，页面被**我们**换掉了 |
+/// | **胶囊回弹** | 同上；提交路没学到时 `dragCrossed` 会把气泡**拨回真实那一颗**（日志 70：`⚠️ the drag could not switch the page yet`） |
+///
+/// **两条改法（照 pw 的机制，代码自己写）：**
+///
+/// 1. **转发路"读得出来"才接管触摸**（`probeForwardRoute`）。pw 那条路本来就可以**在点之前读出来**：
+///    item 子树里那颗 `UITapGestureRecognizer` 的 `_targets` 里有一对**目标真的响应**的 target/action
+///    （`TabBarItemElementUI` 的 `-handleTap`）。读得到 ⇒ `isUserInteractionEnabled = true`
+///    ⇒ 玻璃接得住手指（"跟手"与折射就是从这里来的）；读不到 ⇒ 照旧让触摸穿透，
+///    并把那条链**逐环**写进日志（`chainDescription`：`_targets` 在不在 / 有几对 / 每对解出来什么）。
+///    ⚠️ 这一版**不再**"先接管、失败再还回去"（那会白丢第一下，见第三片的教训）。
+/// 2. **删掉那只 pan**（"按住划"）及其整套机械（`dragCrossed` / `commitSelection` /
+///    `refreshCommitRoute` / `learnSelection` / `TabBarContainerSelectionHook`）。
+///    pw 那条栏上**一只手势都没有**（只有"长按主页进设置"，`TabBar.x:228-239`）——
+///    "能划动/果冻"是**系统玻璃自己**的交互，不是我们模拟出来的。
+///
+/// 顺带修掉一处**自相矛盾的日志**：`installed — …` 原来写死 `taking touches…`（见 `logLayoutOnce`）。
 ///
 /// 顺带记两条**实测**（都写进日志了，别再猜）：
 ///   · `accessibilityTraits` 在 Spotify 9.1.88 上**没有** `.selected` 标记（`traits=0x0`）
@@ -120,16 +160,17 @@ enum TabBarSystemGlass {
     private static var handedBackTouches = false
     /// 从"图标视图"快照出来的图标（按视图缓存：每拍生成新图会让 `syncItems` 永远判成"形状变了"）。
     private static var iconSnapshots: [ObjectIdentifier: UIImage] = [:]
-    /// 我们装在 **Spotify 自己那条栏**上的两只手势（点一下 / 按住划）。
+    /// 我们装在 **Spotify 自己那条栏**上的那只"点一下"手势（**不抢触摸**，只让气泡立刻对过去）。
+    ///
+    /// ⚠️ 2026-10-12 第四片：这里本来还有**第二只** `UIPanGestureRecognizer`（"按住划 = 滑过哪格切哪格"），
+    /// **已删除** —— 见文件头"第四片"：它 `cancelsTouchesInView = true`（吃掉系统玻璃要的那次触摸）、
+    /// 而且会**替用户换页**、切不动时还把气泡拨回原位。用户原话：
+    /// 「**不跟手**……**可能有胶囊回弹 / 替用户按按键**的情况」。pw 那条栏上**一只手势都没有**
+    /// （除了"长按主页进设置"），"跟手"是系统玻璃自己接住手指之后才有的东西。
     private static var stockTapKey: UInt8 = 0
-    private static var stockPanKey: UInt8 = 0
-    /// 划动时"滑过就切"的提交是否可用（没有提交路就**不装** pan：只让气泡跟手而不换页 = 骗人）。
-    private static var commitRouteChecked = false
-    private static var commitRouteAvailable = false
     private static var mirroredSelections = 0
-    private static var didReportCommitFailure = false
-    /// "第几颗 ↔ 哪个 VC"：容器切页时由 `learnSelection` 学下来（拖动提交唯一能用的东西）。
-    private static var knownControllers: [Int: UIViewController] = [:]
+    /// 上一次"探转发路"的时刻（`ProcessInfo.systemUptime`）—— 节流用，见 `probeForwardRouteThrottled`。
+    private static var lastProbeAt: TimeInterval = 0
     /// 手势诊断（各只报一次）：见 `reportTapWithoutIndex` / `noteFirstTapSeen`。
     private static var didReportTapWithoutIndex = false
     private static var didNoteFirstTap = false
@@ -175,19 +216,21 @@ enum TabBarSystemGlass {
         // ③ 选中态：气泡跟着 Spotify 走。
         syncSelection(on: systemBar, items: items)
 
-        // ★★ 第三片：把"点一下 / 按住划"装到 **Spotify 自己那条栏**上（不抢它的触摸），
-        //    并在装之前把"划动能不能真的换页"问清楚（日志 65 那句 `no forwarding route found`
-        //    把三个不同原因说成了一句话，这里分开报）。
-        refreshCommitRoute(in: bar)
+        // ★ 第三片留下的那半：把"点一下"装到 **Spotify 自己那条栏**上（不抢它的触摸，只让气泡立刻对过去）。
+        //   ⚠️ 第四片删掉了它的兄弟（"按住划"）—— 见文件头。
         installStockGestures(on: bar)
 
-        // ★ 建栏那一刻可能还没接上容器（响应链还在长）⇒ 每拍再问一次"有转发路了吗"。
+        // ★★ 第四片：**系统栏该不该接管触摸**？—— 判据改成"能不能在**点之前**把转发路读出来"
+        //   （见 `probeForwardRoute`）。能读出来 ⇒ 玻璃才接得住手指（"跟手"与折射就是从这里来的）；
+        //   读不出来 ⇒ 照旧把触摸留给 Spotify 那条栏，并把那条链**逐环**写进日志。
         //   ⚠️ **一旦交还过触摸就不再收回**（否则会"点一下空一下"地来回抖）。
-        if !handedBackTouches, !systemBar.isUserInteractionEnabled, canForwardTaps(in: bar) {
+        if !handedBackTouches, !systemBar.isUserInteractionEnabled,
+           let route = probeForwardRouteThrottled(in: bar) {
             systemBar.isUserInteractionEnabled = true
             hostView(for: bar)?.isUserInteractionEnabled = true
             writeDebugLog(
-                "[\(logTag)] a forwarding route showed up — the system bar takes the touches now (press bounce included)"
+                "[\(logTag)] a forward route showed up — \(describe(route));"
+                    + " the system bar takes the touches now (the glass answers the finger, taps are forwarded)"
             )
         }
 
@@ -225,14 +268,10 @@ enum TabBarSystemGlass {
                 objc_setAssociatedObject(target, &hostKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
             objc_setAssociatedObject(target, &relayKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            // ★ 装在 Spotify 那条栏上的两只手势也要摘掉 —— 不然关掉开关之后**拖动还会换页**。
+            // ★ 装在 Spotify 那条栏上的那只"点一下"手势也要摘掉 —— 不然关掉开关之后它还挂着。
             if let tap = objc_getAssociatedObject(target, &stockTapKey) as? UIGestureRecognizer {
                 target.removeGestureRecognizer(tap)
                 objc_setAssociatedObject(target, &stockTapKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            }
-            if let pan = objc_getAssociatedObject(target, &stockPanKey) as? UIGestureRecognizer {
-                target.removeGestureRecognizer(pan)
-                objc_setAssociatedObject(target, &stockPanKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
             restoreRoom(in: target)
         }
@@ -242,11 +281,8 @@ enum TabBarSystemGlass {
         measuredInsetsBar = nil
         handedBackTouches = false
         iconSnapshots.removeAll()
-        commitRouteChecked = false
-        commitRouteAvailable = false
         mirroredSelections = 0
-        didReportCommitFailure = false
-        knownControllers.removeAll()
+        lastProbeAt = 0
         didReportTapWithoutIndex = false
         didNoteFirstTap = false
         didLogLayout = false
@@ -316,13 +352,18 @@ enum TabBarSystemGlass {
         host.backgroundColor = .clear
         host.accessibilityIdentifier = "eevee-tabbar-system-glass-host"
 
-        // ★★ 2026-10-12 第三版：**"要不要接管触摸"改成建栏时一次判定**（用户报："只能动一次，
-        //    而且没有实际的按键效果"）。上一版是"先接管、第一条转发失败再把触摸还回去" ——
-        //    结果是**第一下点空**，而且"还给 Spotify"那一半还漏了**宿主**：宿主自己开着交互、
-        //    又盖在胶囊那一块上 ⇒ 触摸被它吃掉，页面既不切、也没有回弹（正是"没有实际的按键效果"）。
-        //    现在：**有可用的转发路才接管**（见 `canForwardTaps`），没有就从头让触摸穿透（= 第一片的行为：
-        //    点得动，只是没有按下回弹）。
-        let takesTouches = canForwardTaps(in: bar)
+        // ★★ 2026-10-12 第四版：**"要不要接管触摸" = "能不能在点之前把转发路读出来"**
+        //    （见 `probeForwardRoute`）。用户第四轮原话：
+        //    「**标题栏液态玻璃不跟手**……**可能有胶囊回弹 / 替用户按按键**……**而且胶囊也没有反射**」。
+        //    日志 70 的第一行就是答案：`leaving the touches to Spotify's own bar (no forwarding route found…)`
+        //    ⇒ 前几版只认第 ① 条公开路（容器是 `UITabBarController`），而真机上容器**不是**
+        //    ⇒ 判定永远 false ⇒ **系统栏从来没接过一次触摸** ⇒ 玻璃只是一张画
+        //    （没有按下回弹、没有折射响应，也没有 UIKit 自己的跟手），而手指全落在 Spotify 那条栏上、
+        //    由第三片装的两只手势代劳 ⇒ 那三条症状一个不少。
+        //    pw 的做法正相反：**触摸全给系统栏**（`TabBar.x:360-364` 把 Spotify 那几个子视图
+        //    `alpha = 0` + `userInteractionEnabled = NO`），点击在 `didSelectItem` 里转发。
+        let route = probeForwardRoute(in: bar)
+        let takesTouches = route != nil
         host.isUserInteractionEnabled = takesTouches
 
         let systemBar = TabBarSystemGlassBar(frame: host.bounds)
@@ -349,23 +390,118 @@ enum TabBarSystemGlass {
         writeDebugLog(
             "[\(logTag)] system bar added \(frameText(bar.bounds)) on \(NSStringFromClass(type(of: bar)))"
                 + " — in a host that reports no bottom safe area"
+                + "; forward route probe: \(describe(route))"
                 + (takesTouches
-                    ? "; taking the touches (press bounce comes with it) and forwarding taps to Spotify"
-                    : "; leaving the touches to Spotify's own bar (no forwarding route found, so tapping behaves exactly as before)")
+                    ? "; the system bar takes the touches (that is what makes the glass answer a finger)"
+                    : "; leaving the touches to Spotify's own bar (nothing readable to forward a tap to,"
+                        + " so tapping behaves exactly as before) — chain: \(chainDescription(in: bar))")
         )
         return systemBar
     }
 
-    /// **我们到底有没有一条可用的转发路？** —— 建栏时问一次，答案是"要不要接管触摸"。
+    // MARK: - ★★ 第四片：转发路**读得出来**才接管触摸
+
+    /// "点了某颗之后谁来接"——**在建栏时就能读出来的那几条路**。
     ///
-    /// 目前唯一能**预判**的是第 ① 条（公开 API）：Spotify 那条栏的容器是 `UITabBarController` 的子类，
-    /// 且它的 `viewControllers` 至少两个 ⇒ `selectedIndex` 一定能换页。
-    /// 其余四条（识别器 / `handleTap` / 无障碍 / `UIControl`）都要**先失败才知道**，没法预判
-    /// ⇒ 宁可一开始就不接管触摸（点得动是第一位的，回弹是第二位的）。
-    private static func canForwardTaps(in bar: UIView) -> Bool {
-        guard let container = container(of: bar), let tabs = container as? UITabBarController,
-              let controllers = tabs.viewControllers, controllers.count >= 2 else { return false }
-        return true
+    /// 为什么必须"读得出来"才算数：系统栏一旦接管触摸，Spotify 那几颗就再也收不到点击
+    /// ⇒ 转发要是落空，标签栏立刻变成"看得见、点不动"（仓库红线）。所以判据从
+    /// "先接管、失败了再还回去"（会白丢第一下）改成"**先证明有人接**"。
+    private enum ForwardRoute {
+        /// ① 公开 API：容器是 `UITabBarController`，`selectedIndex` 就能换页。
+        case container(controllers: Int)
+        /// ② pw 那条路：item 子树里那颗 tap 识别器的 `_targets` 里有一对**目标真的响应**的
+        ///    target/action（`TabBarItemElementUI` 的 `-handleTap` 就是它）。
+        case tapRecognizer(index: Int, target: String, action: String)
+        /// ③ 子树里（响应链或 ivar 上）有对象响应 `-handleTap`。
+        case handleTap(index: Int, holder: String)
+        /// ⑤ 子树里有 `UIControl`（`sendActions` 能点）。
+        case control(index: Int, name: String)
+    }
+
+    /// 一行说清"是**哪条**路、在哪一颗上"。日志里必须带这个，否则"接管了又点不动"没法复盘。
+    private static func describe(_ route: ForwardRoute?) -> String {
+        guard let route = route else { return "none — no route can be read before a tap" }
+        switch route {
+        case .container(let controllers):
+            return "route ① (public) the container is a UITabBarController with \(controllers) view controllers"
+        case .tapRecognizer(let index, let target, let action):
+            return "route ② (pw's) the tap recogniser on #\(index) fires \(target):\(action)"
+        case .handleTap(let index, let holder):
+            return "route ③ handleTap answers on #\(index) (found on \(holder))"
+        case .control(let index, let name):
+            return "route ⑤ a UIControl on #\(index) (\(name)) answers sendActions"
+        }
+    }
+
+    /// 一条都读不出来时，把**那条链逐环**写出来（`_targets` 在不在 / 有几对 / 每对解出来什么）。
+    /// 这正是 pw 依赖的那一环，也是"为什么 pw 的写法在我们这版不通"的唯一判据。
+    private static func chainDescription(in bar: UIView) -> String {
+        guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return "no tabs stack yet" }
+        return stack.subviews.enumerated().map { index, item -> String in
+            let name = shortName(NSStringFromClass(type(of: item)))
+            let pieces = subtree(of: item, maxDepth: 6).flatMap { view -> [String] in
+                (view.gestureRecognizers ?? []).map { recognizer in
+                    "\(describe(recognizer)) on \(shortName(NSStringFromClass(type(of: view))))"
+                }
+            }
+            return "#\(index) \(name)[\(pieces.isEmpty ? "no recognisers at all" : pieces.joined(separator: " | "))]"
+        }.joined(separator: "; ")
+    }
+
+    /// 探一次：**能读出来的**第一条路（顺序与 `forwardTap` 一致，从最公开到最私有）。
+    ///
+    /// ⚠️ 只探"点得动"这件事；`accessibilityActivate()` 那条**探不出来**（要真调一次才知道），
+    ///    所以它只能留在 `forwardTap` 的兜底里，不能当接管触摸的判据。
+    private static func probeForwardRoute(in bar: UIView) -> ForwardRoute? {
+        if let container = container(of: bar), let tabs = container as? UITabBarController,
+           let controllers = tabs.viewControllers, controllers.count >= 2 {
+            return .container(controllers: controllers.count)
+        }
+        guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return nil }
+        for (index, item) in stack.subviews.enumerated() {
+            if let recognizer = firstFireableTapRecognizer(in: item, index: index) { return recognizer }
+        }
+        for (index, item) in stack.subviews.enumerated() {
+            if let holder = handleTapHolder(in: item) {
+                return .handleTap(index: index, holder: holder.via)
+            }
+        }
+        for (index, item) in stack.subviews.enumerated() {
+            if let control = subtree(of: item, maxDepth: 6).first(where: { $0 is UIControl }) {
+                return .control(index: index, name: shortName(NSStringFromClass(type(of: control))))
+            }
+        }
+        return nil
+    }
+
+    /// 子树里第一颗"**真的点得动**"的 tap 识别器：`_targets` 里至少有一对 target/action 能解出来，
+    /// 且那个 target **响应**那个 action。读不出来就返回 nil（= 这条路不能算数）。
+    private static func firstFireableTapRecognizer(in item: UIView, index: Int) -> ForwardRoute? {
+        for view in subtree(of: item, maxDepth: 6) {
+            for recognizer in view.gestureRecognizers ?? [] {
+                guard recognizer is UITapGestureRecognizer, recognizer.isEnabled else { continue }
+                for pair in pairs(of: recognizer) {
+                    guard let target = target(of: pair), let action = action(of: pair),
+                          target.responds(to: action) else { continue }
+                    return .tapRecognizer(
+                        index: index,
+                        target: shortName(NSStringFromClass(type(of: target))),
+                        action: NSStringFromSelector(action)
+                    )
+                }
+            }
+        }
+        return nil
+    }
+
+    /// 探一次要**走一遍四颗的子树**，而 `apply` 每次布局 + 每 0.5s 复查都会进来
+    /// ⇒ 只在"系统栏还没接管触摸"这一档里探，并且**最多 1s 一次**（第一次立刻探）。
+    /// 一旦接管了触摸就不再探（`apply` 那条 `if` 直接短路）。
+    private static func probeForwardRouteThrottled(in bar: UIView) -> ForwardRoute? {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard lastProbeAt == 0 || now - lastProbeAt >= 1 else { return nil }
+        lastProbeAt = now
+        return probeForwardRoute(in: bar)
     }
 
     private static func hostView(for bar: UIView) -> TabBarSystemGlassHost? {
@@ -558,23 +694,25 @@ enum TabBarSystemGlass {
         return true
     }
 
-    // MARK: - ★ 第三片：点一下 / 按住划（装在 **Spotify 自己那条栏**上，不抢触摸）
+    // MARK: - ★ 第三片：点一下（装在 **Spotify 自己那条栏**上，不抢触摸）
 
     /// 用户 2026-10-12（照片 86/87 + 日志 65）：「**液态玻璃不可以用手划动**，而且**反应时间有点慢**」。
     ///
     /// 日志 65 第一行就是答案：`… leaving the touches to Spotify's own bar (no forwarding route found …)`
-    /// ⇒ 这一版**根本没接管触摸**（那是对的：接管了又转发不出去 = 点不动），代价是两件事：
+    /// ⇒ 那一版**根本没接管触摸**（那是对的：接管了又转发不出去 = 点不动），代价是两件事：
     ///   · **慢**：气泡只能靠 0.5s 复查节拍追上去（日志里 `selection → #N` 都是半秒一跳）；
     ///   · **划不动**：手势压根没到我们手里。
     ///
-    /// 解法：把两只手势装在 **Spotify 那条栏**上 ——
-    ///   · `UITapGestureRecognizer`（`cancelsTouchesInView = false`）：点击照旧由 Spotify 完成
-    ///     （唯一被真机证明能换页的路），我们**同时**知道点了哪一颗 ⇒ **气泡立刻对过去**（不再等半秒）；
-    ///   · `UIPanGestureRecognizer`（`cancelsTouchesInView = true`）：手指滑过哪一格就切到哪一格，
-    ///     气泡实时跟着走。`true` 是**故意**的：pan 只在真的拖动时才 recognize（点一下不 recognize）
-    ///     ⇒ 不影响点击，却能在拖动时**取消**那次触摸，免得松手时又触发"按下时那一颗"的点击、把结果顶回去。
+    /// 留下的这一只：`UITapGestureRecognizer`（**`cancelsTouchesInView = false`**）——
+    /// 点击照旧由 Spotify 完成（唯一被真机证明能换页的路），我们**同时**知道点了哪一颗
+    /// ⇒ **气泡立刻对过去**（不再等半秒）。
     ///
-    /// ⚠️ 划动要**真的换页**就得有提交路（`commitSelection`）；没有就**不装 pan**（只让气泡跟手而不换页 = 骗人）。
+    /// ★★ 第四片（2026-10-12 深夜）：**它的兄弟 `UIPanGestureRecognizer` 已删除**。
+    /// 那只 pan 是"按住划 = 滑过哪格切哪格"，用户这一轮报的三件事全是它：
+    ///   · `cancelsTouchesInView = true` ⇒ **吃掉那次触摸**，系统玻璃永远接不到手指（"不跟手 / 没有反射"）；
+    ///   · 每次 `.changed` 都 `mirrorSelection` + `commitSelection` ⇒ **替用户换页**；
+    ///   · 提交不了时把气泡**拨回真实那一颗** ⇒ 看到的"胶囊回弹"。
+    /// pw 那条栏上**一只手势都没有**（只有"长按主页进设置"），所以这三个症状它一个都没有。
     private static func installStockGestures(on stockBar: UIView) {
         if objc_getAssociatedObject(stockBar, &stockTapKey) == nil {
             let tap = UITapGestureRecognizer(
@@ -593,17 +731,6 @@ enum TabBarSystemGlass {
                     + " so Spotify still switches the page; we only mirror the bubble at once. Waiting for the first tap."
             )
         }
-        guard commitRouteAvailable, objc_getAssociatedObject(stockBar, &stockPanKey) == nil else { return }
-        let pan = UIPanGestureRecognizer(
-            target: TabBarSystemGlassGestureRelay.shared,
-            action: #selector(TabBarSystemGlassGestureRelay.stockDragged(_:))
-        )
-        pan.cancelsTouchesInView = true
-        stockBar.addGestureRecognizer(pan)
-        objc_setAssociatedObject(stockBar, &stockPanKey, pan, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        writeDebugLog(
-            "[\(logTag)] drag installed on Spotify's own bar — sliding across the tabs switches them, and taps still belong to Spotify"
-        )
     }
 
     /// 点击/划动时算"手指在哪一格"（按四颗的 frame 判；落缝里就按 x 等分兜底）。
@@ -646,117 +773,6 @@ enum TabBarSystemGlass {
         writeDebugLog("[\(logTag)] first tap seen on Spotify's own bar — the bubble now moves at once")
     }
 
-    /// 手指滑过一格：气泡立刻跟过去，并**真的切页**（切不动就把气泡**拨回真实那一颗**，绝不假装）。
-    static func dragCrossed(to index: Int, ended: Bool) {
-        mirrorSelection(index: index, reason: ended ? "the drag ended here" : "a finger slid onto it")
-        guard commitSelection(index: index) else {
-            // 提交不了 ⇒ 把气泡拨回**真实选中的那一颗**（不能停在骗人的位置），并只报一次。
-            if let bar = lastBar, let stack = TabBarGlassPlate.findTabsStack(in: bar),
-               let picked = selectedIndex(items: stack.subviews) {
-                mirrorSelection(index: picked.index, reason: "snapping back — the commit route is not learned yet")
-            }
-            if !didReportCommitFailure {
-                didReportCommitFailure = true
-                writeDebugLog(
-                    "[\(logTag)] ⚠️ the drag could not switch the page yet — the container never told us which view controller"
-                        + " belongs to that tab. Tap that tab once (Spotify will call setSelectedViewController: and we learn it), then dragging works."
-                )
-            }
-            return
-        }
-    }
-
-    /// 提交给 Spotify：**按"公开 → 有出处"的顺序**试。
-    ///   ① `UITabBarController.selectedIndex`（容器真是 `UITabBarController` 时，公开 API）；
-    ///   ② 容器自己的 `setSelectedViewController:` —— **这不是猜签名**：pw 在 `TabBar.x:466-474` hook 的
-    ///      就是这个方法，说明它在 9.1.x 上确实存在、参数就是一个 `UIViewController`；
-    ///      传 `children[index]`（容器自己的子 VC，顺序跟着标签）。
-    ///
-    /// ★★ 2026-10-12 第三版（真机日志 67 纠正）：
-    /// `drag stays off — container TabBarContainerImpl, is a UITabBarController: false, children: 1,
-    /// answers setSelectedViewController: true` ⇒ **容器不是 UITabBarController、`children` 只有 1 个**
-    /// （四颗的 VC 不在里面）⇒ 上一版的"按 children 取 VC"走不通，拖动因此一直没装上。
-    /// 但那条日志同时证明**容器响应 `setSelectedViewController:`** ⇒ 改成：
-    ///   ②' **用它自己告诉我们过的那个 VC**（`learnSelection` 学下来的 `knownControllers[index]`）。
-    private static func commitSelection(index: Int) -> Bool {
-        guard let bar = lastBar, let container = container(of: bar) else { return false }
-        if let tabs = container as? UITabBarController,
-           let controllers = tabs.viewControllers, index < controllers.count {
-            if tabs.selectedIndex != index { tabs.selectedIndex = index }
-            return true
-        }
-        let selector = NSSelectorFromString("setSelectedViewController:")
-        guard container.responds(to: selector) else { return false }
-        if let learned = knownControllers[index] {
-            _ = container.perform(selector, with: learned)
-            return true
-        }
-        // 还没学到：退回 `children`（真机上只有 1 个，基本必失败）—— 失败由调用方把气泡拨回去。
-        let children = container.children
-        guard index < children.count else { return false }
-        _ = container.perform(selector, with: children[index])
-        return true
-    }
-
-    /// 容器切页时**顺手把"第几颗 ↔ 哪个 VC"记下来**（拖动提交唯一能用的东西）。
-    ///
-    /// ⚠️ 容器是在**切完之后**才叫我们的（`orig` 先跑）⇒ 标签颜色要过一会儿才是新的，
-    ///    所以这里 0.15s 后再读一次"哪颗是白的"。
-    static func learnSelection(controller: UIViewController) {
-        guard isEnabled, let bar = lastBar else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            guard let stack = TabBarGlassPlate.findTabsStack(in: bar),
-                  let picked = selectedIndex(items: stack.subviews) else { return }
-            if knownControllers[picked.index] !== controller {
-                knownControllers[picked.index] = controller
-                writeDebugLog(
-                    "[\(logTag)] learned tab #\(picked.index) → \(shortName(NSStringFromClass(type(of: controller))))"
-                        + " (this is the pair the drag needs; the container is not a UITabBarController and has no four children)"
-                )
-            }
-        }
-    }
-
-    /// 建栏时问一次"划动能不能真的换页"，并把**为什么不能**写清楚 ——
-    /// 日志 65 只有一句 `no forwarding route found`，那是三个完全不同的原因共用了一个说法。
-    ///
-    /// ★ 2026-10-12 第三版（日志 67）：容器**不是** `UITabBarController`、`children` 只有 1 个，
-    /// 但**响应 `setSelectedViewController:`** ⇒ 判据改成"响应那个 selector 就装 pan"，
-    /// VC 由 `learnSelection` 在用户正常点标签时学下来（第一次拖动之前先点一遍即可）。
-    private static func refreshCommitRoute(in bar: UIView) {
-        guard !commitRouteChecked else { return }
-        commitRouteChecked = true
-        guard let container = container(of: bar) else {
-            writeDebugLog(
-                "[\(logTag)] drag stays off — no TabBarContainerImpl above Spotify's bar, so there is nothing to ask to switch tabs"
-            )
-            return
-        }
-        let containerName = shortName(NSStringFromClass(type(of: container)))
-        if let tabs = container as? UITabBarController, let controllers = tabs.viewControllers, controllers.count >= 2 {
-            commitRouteAvailable = true
-            writeDebugLog(
-                "[\(logTag)] drag is possible — the container is \(containerName) with \(controllers.count) view controllers (public selectedIndex)"
-            )
-            return
-        }
-        let selector = NSSelectorFromString("setSelectedViewController:")
-        let answers = container.responds(to: selector)
-        guard answers else {
-            writeDebugLog(
-                "[\(logTag)] drag stays off — container \(containerName), is a UITabBarController: \(container is UITabBarController)"
-                    + ", children: \(container.children.count), answers setSelectedViewController: false"
-            )
-            return
-        }
-        commitRouteAvailable = true
-        writeDebugLog(
-            "[\(logTag)] drag is armed — container \(containerName) is not a UITabBarController"
-                + " (children: \(container.children.count)) but it answers setSelectedViewController:, which pw hooks;"
-                + " we learn which view controller belongs to each tab from its own calls (tap a tab once and it is known)"
-        )
-    }
-
     /// ★ 兜底：五条路全不通 ⇒ **把触摸还给 Spotify 自己那条栏**。    ///
     /// 代价：**只有第一次点击失效**，之后每一次都落到 Spotify 那条栏上（= 第一片的行为：点得动、
     /// 但没有"按下回弹"）。收益：绝不留下"看得见、点不动"。
@@ -791,12 +807,8 @@ enum TabBarSystemGlass {
     }
 
     private static func fire(_ recognizer: UIGestureRecognizer) -> Bool {
-        guard let targetsIvar = class_getInstanceVariable(UIGestureRecognizer.self, "_targets"),
-              let pairs = object_getIvar(recognizer, targetsIvar) as? [AnyObject] else {
-            return false
-        }
         var fired = false
-        for pair in pairs {
+        for pair in pairs(of: recognizer) {
             guard let target = target(of: pair), let action = action(of: pair) else { continue }
             guard target.responds(to: action) else { continue }
             _ = target.perform(action, with: recognizer)
@@ -806,6 +818,18 @@ enum TabBarSystemGlass {
             fired = true
         }
         return fired
+    }
+
+    /// 读一条手势的 `_targets`（**私有 ivar**）。读不出来就是空数组 = 这条路不能算数。
+    ///
+    /// ★ 第四片把它抽出来给两处共用：`fire`（真的触发）与 `probeForwardRoute`
+    /// （**点之前**先读一遍，判断"点了有没有人接"）。
+    private static func pairs(of recognizer: UIGestureRecognizer) -> [AnyObject] {
+        guard let targetsIvar = class_getInstanceVariable(UIGestureRecognizer.self, "_targets"),
+              let raw = object_getIvar(recognizer, targetsIvar) as? [AnyObject] else {
+            return []
+        }
+        return raw
     }
 
     private static func target(of pair: AnyObject) -> NSObject? {
@@ -835,24 +859,28 @@ enum TabBarSystemGlass {
     /// 他走的是 `fireTapRecognizers`（即上面的 ②），只是那个识别器的 action 恰好叫 `-handleTap`。
     /// 我这一条是"那一步读不出来时的补网"，**不是 pw 的做法**；命中与否都会打一行日志，别把它当成主路。
     private static func callHandleTap(in item: UIView) -> Bool {
+        guard let found = handleTapHolder(in: item) else { return false }
+        _ = found.holder.perform(NSSelectorFromString("handleTap"))
+        writeDebugLog(
+            "[\(logTag)] tap → \(shortName(NSStringFromClass(type(of: found.holder)))) handleTap (\(found.via))"
+        )
+        return true
+    }
+
+    /// 谁响应 `-handleTap`（③ 那条路）。**读得出来**就说明"点了有人接" ——
+    /// 所以 `probeForwardRoute` 与 `callHandleTap` 共用这一处。
+    private static func handleTapHolder(in item: UIView) -> (holder: NSObject, via: String)? {
         let selector = NSSelectorFromString("handleTap")
         for view in subtree(of: item, maxDepth: 6) {
             if let responder = view.next as? NSObject, responder.responds(to: selector) {
-                _ = responder.perform(selector)
-                writeDebugLog(
-                    "[\(logTag)] tap → \(shortName(NSStringFromClass(type(of: responder)))) handleTap (responder chain)"
-                )
-                return true
+                return (responder, "responder chain")
             }
             if let holder = ivarHolding(selector: selector, in: view) {
-                _ = holder.perform(selector)
-                writeDebugLog(
-                    "[\(logTag)] tap → \(shortName(NSStringFromClass(type(of: holder)))) handleTap (an ivar of \(shortName(NSStringFromClass(type(of: view)))))"
-                )
-                return true
+                let owner = shortName(NSStringFromClass(type(of: view)))
+                return (holder, "an ivar of \(owner)")
             }
         }
-        return false
+        return nil
     }
 
     /// 有界扫一个对象的 ivar（含父类，最多 4 层），找**第一个**响应 `selector` 的对象。
@@ -1224,11 +1252,17 @@ enum TabBarSystemGlass {
         didLogLayout = true
         // ⚠️ 日志 63 里我打的是 `stack.frame`，那时它是 `0,0,0,0`（还没排）⇒ 现在改打**每颗的 frame**。
         let frames = items.map { frameText($0.convert($0.bounds, to: bar)) }.joined(separator: " ")
+        // ⚠️ 这一行原来**写死**了 `taking touches, taps forwarded to Spotify's own items` ——
+        //   日志 70 里它和上面那行 `leaving the touches to Spotify's own bar` **自相矛盾**（第四片才发现）。
+        //   现在照实报：`isUserInteractionEnabled` 是什么就写什么。
+        let touchState = systemBar.isUserInteractionEnabled
+            ? "; taking the touches, taps forwarded to Spotify's own items"
+            : "; not taking the touches (nothing readable to forward a tap to), so Spotify's own bar still gets them"
         writeDebugLog(
             "[\(logTag)] installed — \(items.count) item(s); icons \(mirrored.icons.map { $0 ? "Y" : "N" })"
                 + "; item frames [\(frames)]; system bar \(frameText(systemBar.frame))"
                 + "; class \(NSStringFromClass(type(of: systemBar)))"
-                + "; taking touches, taps forwarded to Spotify's own items"
+                + touchState
         )
     }
 
@@ -1261,27 +1295,6 @@ final class TabBarSystemGlassHost: UIView {
     }
 }
 
-/// **容器钩子**：Spotify 那条栏的容器（`TabBarContainerImpl`）切页时，把"第几颗 ↔ 哪个 VC"记下来。
-///
-/// 为什么非有它不可（真机日志 67）：`drag stays off — container TabBarContainerImpl,
-/// is a UITabBarController: false, children: 1, answers setSelectedViewController: true`
-/// ⇒ 容器**不是** `UITabBarController`、`children` 只有 1 个 ⇒ 拿不到另外三颗的 VC，
-/// 而拖动要提交就必须有 VC。它自己每次切页都会**告诉我们那个 VC** ⇒ 学下来即可。
-///
-/// ⚠️ 这个类是 Orion 的 `ClassHook`（**不是**普通类）：hook 方法里不许碰 `@MainActor` 的东西，
-/// 真正的活进 `onMainThreadSync`（仓库成文规矩）。
-class TabBarContainerSelectionHook: ClassHook<NSObject> {
-    typealias Group = TabBarGlassGroup
-    static let targetName = "NavigationUI_TabBarImpl.TabBarContainerImpl"
-
-    func setSelectedViewController(_ controller: UIViewController) {
-        orig.setSelectedViewController(controller)
-        onMainThreadSync {
-            TabBarSystemGlass.learnSelection(controller: controller)
-        }
-    }
-}
-
 /// 点击中继：系统栏 `delegate` 是 **weak** 的 ⇒ 这个对象由关联对象持有（见 `ensureBar`）。
 ///
 /// ⚠️ 这个类**故意不标 `@MainActor`**（与 `SponsorBlockOverlay` 同一个写法）：
@@ -1298,10 +1311,14 @@ final class TabBarSystemGlassRelay: NSObject, UITabBarDelegate {
     }
 }
 
-/// **手势中继**：装在 **Spotify 自己那条栏**上的"点一下 / 按住划"（不抢它的触摸）。
+/// **手势中继**：装在 **Spotify 自己那条栏**上的那只"点一下"（**不抢触摸**）。
 ///
 /// 与点击中继同一套写法：这个类**故意不标 `@MainActor`**（`@objc` 的手势 action 从
 /// UIKit 那侧调进来），真正的活全部在 `onMainThreadSync` 的闭包里干。
+///
+/// ⚠️ 第四片删掉了它的第二只手势（`UIPanGestureRecognizer` "按住划"）—— 见文件头；
+///    系统栏接管触摸时这一只根本收不到触摸（手指落在我们的宿主上），只在
+///    "把触摸交还 Spotify" 那一档里起作用。
 final class TabBarSystemGlassGestureRelay: NSObject {
 
     static let shared = TabBarSystemGlassGestureRelay()
@@ -1316,16 +1333,6 @@ final class TabBarSystemGlassGestureRelay: NSObject {
             }
             TabBarSystemGlass.noteFirstTapSeen()
             TabBarSystemGlass.mirrorSelection(index: index, reason: "a tap on Spotify's own bar")
-        }
-    }
-
-    /// 按住划：滑过哪一格就切到哪一格（气泡实时跟手）。
-    @objc func stockDragged(_ recognizer: UIPanGestureRecognizer) {
-        onMainThreadSync {
-            guard let bar = recognizer.view,
-                  let index = TabBarSystemGlass.itemIndex(at: recognizer.location(in: bar), in: bar) else { return }
-            let ended = recognizer.state == .ended || recognizer.state == .cancelled
-            TabBarSystemGlass.dragCrossed(to: index, ended: ended)
         }
     }
 }
