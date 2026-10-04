@@ -67,7 +67,7 @@ This project interoperates with Spotify's iOS client, which means parts of it we
     
 <summary>Building an IPA with this tweak</summary>
  
-You do not need this to use the tweak — take a release. This section is for building a Spotify IPA with the tweak baked in. You supply your own decrypted Spotify IPA; this repository never ships one or says where to get one (see Reverse-engineered Data and Takedowns above).
+If you only need the .deb (or if you're jailbroken), just download the latest release. This section is a guide to building a Spotify IPA with the tweak baked in. You supply your own decrypted Spotify IPA; this repository never ships one or says where to get one (see Reverse-engineered Data and Takedowns above).
  
 ### Which artifact?
  
