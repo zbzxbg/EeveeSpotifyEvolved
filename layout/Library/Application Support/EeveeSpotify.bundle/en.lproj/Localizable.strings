@@ -148,7 +148,6 @@ ngzhwm_lyrics_unavailable = "No lyrics found";
 lyrics_looking_up = "Looking for lyrics…";
 lyrics_looking_up_easter_egg = "The girl is praying…";
 lyrics_search_placeholder_easter_egg = "Replace the placeholder shown while looking for lyrics";
-lyrics_search_placeholder_easter_egg_description = "A little easter egg.";
 lyrics_no_timeline = "These lyrics have no timing";
 track_mismatch = "The track changed while lyrics were loading. Play it again to fetch lyrics.";
 // Debug

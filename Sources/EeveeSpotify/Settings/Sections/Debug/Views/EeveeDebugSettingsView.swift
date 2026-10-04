@@ -70,10 +70,15 @@ struct EeveeDebugSettingsView: View {
     /// 只做一件事：还在取词的时候，那句「正在查找歌词…」写成「少女祈祷中…」
     /// （改的只有 `NowPlayingLyricsPlate.noticeText()` 里"还在查"那一档，全仓库就那一处）。
     ///
+    /// ★ 2026-10-13（用户）：「调试页面的那个『替换寻找歌词时的占位符』的那行介绍删掉」
+    ///   ⇒ 那一行 `Section(footer:)` 的说明（`lyrics_search_placeholder_easter_egg_description`）
+    ///   **已删除**（en/zh-CN 两个键一起删 —— 过期文案不留）。开关本身**保留**（那是个长期彩蛋）。
+    ///   于是这一节现在与上面「转储视图树」那节一样，只有一行开关、没有 footer。
+    ///
     /// ⚠️ 本页的定位是"排查工具、验证完就删"，这一节是**例外**（用户要求放这里，它是个长期彩蛋）：
     ///    将来清理这一页时**别顺手删它**。
     @ViewBuilder private func lyricsSearchPlaceholderEasterEggSection() -> some View {
-        Section(footer: Text("lyrics_search_placeholder_easter_egg_description".localized)) {
+        Section {
             Toggle(
                 "lyrics_search_placeholder_easter_egg".localized,
                 isOn: $viewModel.lyricsSearchPlaceholderEasterEgg

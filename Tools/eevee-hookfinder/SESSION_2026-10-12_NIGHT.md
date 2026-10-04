@@ -105,7 +105,7 @@
 |---|---|
 | **全仓库 `.listStyle` 统一成 `InsetGroupedListStyle()`**（`ae84d29`） | pw 的做法就是 `UITableViewStyleInsetGrouped`（11 个文件都是这一句，内容用 `UIListContentConfiguration`）—— **没有自绘**，iOS 26 上系统把它画成"胶囊卡片"。17 个文件从 `GroupedListStyle()` 换过来，另 6 个本来就是 ⇒ 23 处一致；`InsetGroupedListStyle` 是 iOS 14+，**不抬高底线** |
 | **新开关「未播放歌词行模糊化」**（`8623813`） | **默认关**（关 = 只变淡不发糊）；并进 `romanizationSwitchesFingerprint()`，否则是"哑开关"（拨了要等换歌） |
-| **彩蛋「替换寻找歌词时的占位符」**（`88a6b7c` / `a4b5734`） | 调试页、转储视图树**下面**；开着把「正在查找歌词…」写成「少女祈祷中…」；footer 只写"一个小彩蛋。"。**全仓库只有一处**写那句占位文本（`noticeText()` 的"还在查"分支） |
+| **彩蛋「替换寻找歌词时的占位符」**（`88a6b7c` / `a4b5734`） | 调试页、转储视图树**下面**；开着把「正在查找歌词…」写成「少女祈祷中…」；footer 只写"一个小彩蛋。" ⚠️ **那一行 footer 已于 2026-10-13 按用户要求删除**（`lyrics_search_placeholder_easter_egg_description` 两个语言键一起删，开关保留）。**全仓库只有一处**写那句占位文本（`noticeText()` 的"还在查"分支） |
 | 一屏说明补回（`59cfbcc`） | 分区 footer 改成通用说明后，原来那两句（"卡片全折起来/歌词卡也被折掉"）**没地方显示了** ⇒ 挂回那颗开关标签里的第二行小字 |
 | flag 说明与行为对齐（`51f2c39`） | 中文那条描述的是**旧交互**（"点一行即可填入上面的表单"），与代码（点一下=加覆盖、再点一下=取消、改取值去上一层、未观察到数值的 int 点不了）不符 ⇒ 中英一起重写；一屏标签英文对齐中文（`Hide Spotify's now-playing modules`） |
 | l10n 同步若干轮（`4cf4413` / `a840cdd` / `b6ca6e0` / `a5e2333`） | 用户**自己改中文**、我同步英文。分区键改名 `now_playing_backdrop_{section,description}` → `now_playing_{section,section_description}`（只有 en/zh-CN 有这两条）；删掉 AMLL/逐词介绍里"不展示歌词翻译"那句（已过期）；`补充模块5` 的含义**仓库注释自己对得上**（`EeveeDebugSettingsView.swift:17`：「往元素列表里补 `5`」） |
