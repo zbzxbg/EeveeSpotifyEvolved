@@ -197,8 +197,11 @@ struct EeveeExtrasSettingsView: View {
                 // 一屏：把播放器下面那些卡片折起来 + 把列表钉在它的顶部
                 // （kumone / Music app 那种"一屏一首歌、滚不动"）。
                 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），写在 `NowPlayingOneScreen` 文件头。
+                // ★ 2026-10-12（用户问「那个一屏的介绍换成什么了来着」）：那段说明原本挂在
+                //   分区的 footer 上，分区改成通用说明之后就**没地方显示了** —— 现在挂回
+                //   **这一颗开关自己**：写成标签里的第二行小字（同 Section 里还有别的开关，
+                //   不能只为它加 Section footer；iOS 14 也支持 Toggle 的 label ViewBuilder）。
                 Toggle(
-                    "now_playing_one_screen".localized,
                     isOn: shadowBinding(
                         \.nowPlayingOneScreen,
                         persist: { value in
@@ -212,7 +215,14 @@ struct EeveeExtrasSettingsView: View {
                             }
                         }
                     )
-                )
+                ) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("now_playing_one_screen".localized)
+                        Text("now_playing_one_screen_description".localized)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
 
                 // 底部音量条：kumone 播放页下半屏的那一条（Apple Music 没有）。
                 // 落在**我们自己的透明覆盖层**上（`NowPlayingPageOverlay`），不碰 Spotify 属性。

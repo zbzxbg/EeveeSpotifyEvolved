@@ -499,6 +499,7 @@ now_playing_section_description = "你可以在这里调整歌曲播放页的各
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
 // Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift。
 now_playing_one_screen = "隐藏Spotify歌曲播放页模块";
+now_playing_one_screen_description = "把播放器下面那些卡片全折起来、列表钉在顶部：播放器变成一屏、滚不动。歌词卡也会一起被折掉，歌词请从播放器上那颗歌词键进。";
 now_playing_volume = "展示音量条";
 now_playing_lyrics_in_player = "歌词进播放器";
 now_playing_single_lyric = "封面与歌词键之间显示单行歌词";

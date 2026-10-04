@@ -512,6 +512,7 @@ now_playing_section_description = "Choose which parts of the now-playing page ar
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
 now_playing_one_screen = "One screen (no scrolling)";
+now_playing_one_screen_description = "Folds every card under the player away and pins the list to its top, so the player is one screen you cannot scroll. The lyrics card is folded away too - open lyrics from the player's lyrics button.";
 now_playing_volume = "Volume slider at the bottom";
 now_playing_lyrics_in_player = "Lyrics in the player";
 now_playing_single_lyric = "Show one line of lyrics between the cover and the lyrics button";
