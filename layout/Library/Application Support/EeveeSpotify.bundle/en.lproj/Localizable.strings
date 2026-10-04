@@ -131,7 +131,7 @@ ngzhwm_better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
 ngzhwm_better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum. Lyric translations are not shown when enabled.";
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
 ngzhwm_inject_lyrics_card_element = "Add a Lyrics Card to Tracks Without One";
-ngzhwm_lyrics_entry_point_flag = "Force Lyrics Entry Point Flag";
+ngzhwm_lyrics_entry_point_flag = "Lyrics entry point flag";
 ngzhwm_multi_level_fallback = "Multi-level Fallback";
 ngzhwm_multi_level_fallback_description = "Multi-level Fallback: lyrics are searched through multiple providers in this order: Musixmatch → PetitLyrics → LRCLIB → Genius. Musixmatch and PetitLyrics are given up to 5 seconds each, while LRCLIB and Genius are given up to 3 seconds each; if a provider has not returned lyrics within its time limit, the next provider is queried.";
 ngzhwm_netease_romaji_local = "Modify How NetEase Japanese Romaji Is Displayed";
@@ -358,10 +358,10 @@ extras_description = "Features added on top of EeveeSpotify, kept together here 
 
 declutter_description = "Hides Spotify's own non-content chrome by class name, taken from this device's view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
 hide_mini_player_bar = "Hide the mini player bar";
-hide_singalong_line = "Hide the one-line lyrics under the cover";
+hide_singalong_line = "Hide Spotify's own one-line lyrics";
 hide_npv_pills = "Hide the Now Playing pills (switch to video / show lyrics)";
 declutter_home_player_section = "Home and player";
-declutter_home_player_description = "Hides three more of Spotify's own chrome, each taken from this device's view-tree dumps. The connect button is shared between the mini bar and the player, so hiding it removes it from every transport row.";
+declutter_home_player_description = "Class and accessibility identifiers come from the view-tree dumps.";
 hide_home_header = "Hide the Home header";
 hide_connect_button = "Hide the connect button";
 hide_add_to_button = "Hide the add-to button";
@@ -505,16 +505,16 @@ reduce_interventions_scope_yourlibaryx_footer = "Tips, banners and cards shown i
 // Apple-Music-style full-page tint: the page takes its colour from the cover art.
 // The recipe (gradient tint, not a blur) is borrowed from kumone (LGPL-3.0 / GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift.
-now_playing_backdrop_section = "Now playing";
+now_playing_section = "Now-playing page";
 now_playing_backdrop = "Cover-coloured background";
-now_playing_backdrop_description = "Paints the now-playing page with a gradient built from the cover art's colour — the Apple Music look. Takes over Spotify's own background layer and puts it back when you turn this off. The switch below folds away every card under the player and pins the list to its top, so the player is one screen you cannot scroll — the Music app's player. It folds the lyrics card away too, so leave it off unless you open lyrics from elsewhere.";
+now_playing_section_description = "Choose which parts of the now-playing page are shown.";
 // One screen: every card under the player is folded away and the list is pinned to its top,
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
 now_playing_one_screen = "One screen (no scrolling)";
 now_playing_volume = "Volume slider at the bottom";
 now_playing_lyrics_in_player = "Lyrics in the player";
-now_playing_single_lyric = "One-line lyric between the cover and the lyrics button";
+now_playing_single_lyric = "Show one line of lyrics between the cover and the lyrics button";
 show_romanized_lyrics = "Show romanized lyrics";
 show_lyrics_translation = "Show lyric translation";
 now_playing_blur_unplayed_lyrics = "Blur the lines that are not playing";

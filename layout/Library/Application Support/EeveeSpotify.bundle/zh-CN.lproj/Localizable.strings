@@ -491,9 +491,9 @@ reduce_interventions_scope_yourlibaryx_footer = "音乐库里出现的提示、�
 // ── 听歌页取色底（2026-10-03）────────────────────────────────────────────────
 // 配方（取色渐变，不是模糊）借鉴 kumone（LGPL-3.0 / GPL-3.0），
 // 见 Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift。
-now_playing_backdrop_section = "歌曲播放页";
+now_playing_section = "歌曲播放页";
 now_playing_backdrop = "整页封面取色底";
-now_playing_backdrop_description = "你可以在这里调整歌曲播放页的各部分内容是否展示。";
+now_playing_section_description = "你可以在这里调整歌曲播放页的各部分内容是否展示。";
 // ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
