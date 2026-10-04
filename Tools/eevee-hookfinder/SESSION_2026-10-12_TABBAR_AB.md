@@ -191,6 +191,69 @@ SponsorBlock 看不到播放状态 / 短歌当前行居中 / 旧 UIKit 逐词层
 
 ---
 
+## 9. ★★ 第四轮（照片 86/87 + 日志 65）：图标、划动、反应、主页标题
+
+用户原话：「液态玻璃**不可以用手划动**，并且**反应时间有点慢**。而且**图标偏移位置，图标几乎看不见**。
+主页上的 **主页两个字会偏上**」。
+
+### 9.1 日志 65 一句话就把标签栏的处境说清了
+
+```
+[TabBarSystem] system bar added … — in a host that reports no bottom safe area;
+                leaving the touches to Spotify's own bar (no forwarding route found, so tapping behaves exactly as before)
+[TabBarSystem] items synced — 4 item(s); icons ["N", "N", "N", "N"]
+[TabBarSystem] glass insets measured once — left 21 right 21 top 0 bottom 21
+[TabBarSystem] glass geometry — host 6,-3,402,81 … drawn [_UITabBarItemPlatterView=27,-3,360,60 …]   ← 尺寸修好了 ✓
+```
+⇒ 尺寸那一半**已经对了**（玻璃 = 360×60，与自绘胶囊对齐）；剩下三件事：
+**没接管触摸**（`canForwardTaps` 判 false）⇒ 只能靠 0.5s 节拍追选中态（"慢"）、手势压根没到我们手里（"划不动"）；
+**图标一个都没拿到**（`icons ["N",…]`）⇒ 原图标留在玻璃底下（暗）+ 我们那几颗只剩文字（"偏"）。
+
+### 9.2 图标：这一版的图标**不是 `UIImageView`**
+
+真机树：`16.OBJC_ONLY_IconView@40,5,24,24,id=Encore.IconView`（Encore 自己画的）。
+只找 `UIImageView.image` **永远拿不到**（前两版都栽在这）。
+照 pw（`TabBar.x:76-133` 的 `renderLayer`）补一条：**找类名含 `IconView` 的那颗视图，把它的 layer 渲染成
+UIImage**（按视图缓存；必须在"藏原图标"之前做）⇒ 交回 UIKit 当模板图用（`.alwaysTemplate` 自己上色）。
+
+### 9.3 划动 + 反应：把两只**不抢触摸**的手势装到 Spotify 那条栏上
+
+- `UITapGestureRecognizer`（`cancelsTouchesInView = false`）：点击照旧由 Spotify 完成（**唯一被真机证明能换页的路**），
+  我们**同时**知道点了哪一颗 ⇒ **气泡立刻对过去**（不再等 0.5s 节拍）＝ 修"反应慢"。
+- `UIPanGestureRecognizer`（`cancelsTouchesInView = true`）：**滑过哪一格就切到哪一格**，气泡实时跟手 ＝ 修"划不动"。
+  `true` 是故意的：pan 只在真拖动时 recognize（点一下不 recognize）⇒ 不影响点击，却能**取消**那次触摸，
+  免得松手时又触发"按下时那一颗"的点击、把划动结果顶回去。
+- 划动要**真的换页**得有提交路（`commitSelection`）：① `UITabBarController.selectedIndex`（公开）；
+  ② 容器自己的 `setSelectedViewController:` —— **不是猜签名**，pw 在 `TabBar.x:466-474` hook 的就是它，
+  参数是一个 `UIViewController`，传 `children[index]`。没有提交路就**不装 pan**（只动气泡不换页 = 骗人）。
+
+### 9.4 为什么"没有转发路"这句话上一版说不清（已修）
+
+`canForwardTaps` 只有一句 `no forwarding route found`，而它背后有三个完全不同的原因。
+现在 `refreshCommitRoute` 会分开报：**没有容器** / **容器不是 UITabBarController**（连带 children 数量、
+是否响应 `setSelectedViewController:`）/ **就是它**。下一份日志能直接定位。
+
+### 9.5 主页那两个字偏上：**改成都跟头像一条中线**，并把日志补回来
+
+- 日志 65 里**一条 `[Home] header …` 都没有** —— 而树里 `18.LeadingFadeMaskView@0,1,366,32,alpha=0.00`
+  （x 从 48 被翻成 0 = RTL 生效、alpha 0 = pills 收掉）说明**代码其实跑了**。
+  原因：那一行里嵌了**转义双引号**、还带 `header.window != nil` 这个条件 —— 两个都不留（见代码注释）。
+- 位置：标题的**垂直中线改成对齐头像那一颗**（`face.midY`；拿不到头像才退回那一行），
+  这是"看得见的那一行"的判据。日志里现在会打出 **title / row / avatar / header 四个 frame**，
+  下一份日志直接能看出还差多少。
+
+### 9.6 这一轮的验收
+
+| # | 应该看到 | 日志判据 |
+|---|---|---|
+| A | 四颗图标**正常显示、不再偏、不再暗** | `[TabBarSystem] icon taken from … at 24,24 — read as a snapshot of its layer, because this build draws icons itself` |
+| B | 点一下标签：**气泡立刻动**（不再半秒后） | `bubble mirrored straight away — #N (a tap on Spotify's own bar; no waiting for the 0.5s tick)` |
+| C | **按住划**：滑过哪一格就切哪一格、气泡跟手 | `drag installed on Spotify's own bar …` + `drag is possible — …`；划动时每次 `bubble mirrored …` |
+| D | 若划不动：日志会**直接说为什么** | `drag stays off — no TabBarContainerImpl …` 或 `… container X, is a UITabBarController: …, children: …, answers setSelectedViewController: …` |
+| E | 主页「主页」与右上头像**一条中线** | `[Home] header restyled — title 主页 at 32pt, frame …; row …; avatar …; header …` |
+
+---
+
 ## 8. 下一轮最容易踩的三件事
 
 1. **系统栏现在吃触摸了** ⇒ ③ 那条（四颗挨个点）**必须先验**：转发要是哪一颗不通，那一颗就是"看得见、点不动"。

@@ -137,25 +137,34 @@ enum HomeHeaderAppearance {
         )
         if title.font != font { title.font = font }
 
-        let row = stack.convert(stack.bounds, to: header)
-        let trailing = face.map { stack.convert($0.frame, to: header).minX - HomeHeaderMetrics.gap }
+        // 水平：左沿固定，右端到"头像左边 8pt"为止（拿不到头像就顶到右沿留一个边距）。
+        let trailing = face.map { $0.convert($0.bounds, to: header).minX - HomeHeaderMetrics.gap }
             ?? (header.bounds.width - HomeHeaderMetrics.sideMargin)
+
+        // 垂直：**以头像那一颗为心**（用户 2026-10-12：「主页上的 主页两个字会偏上」）——
+        // 头像是他看得见的那一行，标题就该跟它一条中线；拿不到头像才退回那一行的中心。
+        let rowMidY = face.map { $0.convert($0.bounds, to: header).midY }
+            ?? stack.convert(stack.bounds, to: header).midY
         let height = ceil(font.lineHeight)
         let frame = CGRect(
             x: HomeHeaderMetrics.sideMargin,
-            y: round(row.midY - height / 2),
+            y: round(rowMidY - height / 2),
             width: max(0, trailing - HomeHeaderMetrics.sideMargin),
             height: height
         )
         if !title.frame.equalTo(frame) { title.frame = frame }
 
-        if !didLog, header.window != nil, header.bounds.width > 1 {
+        // ⚠️ 这一行**不许嵌转义双引号**、也**不要** `header.window != nil` 这个条件：
+        //   上一版就是这么写的，结果整行没进日志（日志 65 里一条 `[Home] header …` 都没有，
+        //   而 `LeadingFadeMaskView … alpha=0.00` 证明代码其实跑了）⇒ 我们白猜了一轮。
+        if !didLog, header.bounds.width > 1 {
             didLog = true
             writeDebugLog(
-                "[Home] header the way Apple Music has it — title \"\(text)\" \(Int(font.pointSize))pt at the leading edge"
-                    + ", avatar \(face.map { frameText($0.convert($0.bounds, to: header)) } ?? "not found") at the trailing edge"
-                    + ", pills \(HomeHeaderMetrics.vanishPills ? "vanished (alpha only, they stay in the stack)" : "left alone")"
-                    + ", scrim off"
+                "[Home] header restyled — title \(text) at \(Int(font.pointSize))pt, frame \(frameText(frame))"
+                    + "; row \(frameText(stack.convert(stack.bounds, to: header)))"
+                    + "; avatar \(face.map { frameText($0.convert($0.bounds, to: header)) } ?? "not found")"
+                    + "; header \(frameText(header.bounds))"
+                    + "; pills \(HomeHeaderMetrics.vanishPills ? "faded with alpha" : "left alone")"
             )
         }
     }

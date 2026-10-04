@@ -117,6 +117,16 @@ enum TabBarSystemGlass {
     private static weak var measuredInsetsBar: UIView?
     /// 我们是否已经把触摸交还给 Spotify（交还过就**不再收回**，避免"点一下空一下"）。
     private static var handedBackTouches = false
+    /// 从"图标视图"快照出来的图标（按视图缓存：每拍生成新图会让 `syncItems` 永远判成"形状变了"）。
+    private static var iconSnapshots: [ObjectIdentifier: UIImage] = [:]
+    /// 我们装在 **Spotify 自己那条栏**上的两只手势（点一下 / 按住划）。
+    private static var stockTapKey: UInt8 = 0
+    private static var stockPanKey: UInt8 = 0
+    /// 划动时"滑过就切"的提交是否可用（没有提交路就**不装** pan：只让气泡跟手而不换页 = 骗人）。
+    private static var commitRouteChecked = false
+    private static var commitRouteAvailable = false
+    private static var mirroredSelections = 0
+    private static var didReportCommitFailure = false
 
     private static var lastBar: UIView?
     private static var lastSkipReason = ""
@@ -158,6 +168,12 @@ enum TabBarSystemGlass {
 
         // ③ 选中态：气泡跟着 Spotify 走。
         syncSelection(on: systemBar, items: items)
+
+        // ★★ 第三片：把"点一下 / 按住划"装到 **Spotify 自己那条栏**上（不抢它的触摸），
+        //    并在装之前把"划动能不能真的换页"问清楚（日志 65 那句 `no forwarding route found`
+        //    把三个不同原因说成了一句话，这里分开报）。
+        refreshCommitRoute(in: bar)
+        installStockGestures(on: bar)
 
         // ★ 建栏那一刻可能还没接上容器（响应链还在长）⇒ 每拍再问一次"有转发路了吗"。
         //   ⚠️ **一旦交还过触摸就不再收回**（否则会"点一下空一下"地来回抖）。
@@ -203,6 +219,15 @@ enum TabBarSystemGlass {
                 objc_setAssociatedObject(target, &hostKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
             objc_setAssociatedObject(target, &relayKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            // ★ 装在 Spotify 那条栏上的两只手势也要摘掉 —— 不然关掉开关之后**拖动还会换页**。
+            if let tap = objc_getAssociatedObject(target, &stockTapKey) as? UIGestureRecognizer {
+                target.removeGestureRecognizer(tap)
+                objc_setAssociatedObject(target, &stockTapKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            }
+            if let pan = objc_getAssociatedObject(target, &stockPanKey) as? UIGestureRecognizer {
+                target.removeGestureRecognizer(pan)
+                objc_setAssociatedObject(target, &stockPanKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            }
             restoreRoom(in: target)
         }
         restoreStockContent()
@@ -210,6 +235,11 @@ enum TabBarSystemGlass {
         glassInsets = nil
         measuredInsetsBar = nil
         handedBackTouches = false
+        iconSnapshots.removeAll()
+        commitRouteChecked = false
+        commitRouteAvailable = false
+        mirroredSelections = 0
+        didReportCommitFailure = false
         didLogLayout = false
         lastSelectionIndex = -1
         lastSelectionSignal = ""
@@ -511,8 +541,136 @@ enum TabBarSystemGlass {
         return true
     }
 
-    /// ★ 兜底：五条路全不通 ⇒ **把触摸还给 Spotify 自己那条栏**。
+    // MARK: - ★ 第三片：点一下 / 按住划（装在 **Spotify 自己那条栏**上，不抢触摸）
+
+    /// 用户 2026-10-12（照片 86/87 + 日志 65）：「**液态玻璃不可以用手划动**，而且**反应时间有点慢**」。
     ///
+    /// 日志 65 第一行就是答案：`… leaving the touches to Spotify's own bar (no forwarding route found …)`
+    /// ⇒ 这一版**根本没接管触摸**（那是对的：接管了又转发不出去 = 点不动），代价是两件事：
+    ///   · **慢**：气泡只能靠 0.5s 复查节拍追上去（日志里 `selection → #N` 都是半秒一跳）；
+    ///   · **划不动**：手势压根没到我们手里。
+    ///
+    /// 解法：把两只手势装在 **Spotify 那条栏**上 ——
+    ///   · `UITapGestureRecognizer`（`cancelsTouchesInView = false`）：点击照旧由 Spotify 完成
+    ///     （唯一被真机证明能换页的路），我们**同时**知道点了哪一颗 ⇒ **气泡立刻对过去**（不再等半秒）；
+    ///   · `UIPanGestureRecognizer`（`cancelsTouchesInView = true`）：手指滑过哪一格就切到哪一格，
+    ///     气泡实时跟着走。`true` 是**故意**的：pan 只在真的拖动时才 recognize（点一下不 recognize）
+    ///     ⇒ 不影响点击，却能在拖动时**取消**那次触摸，免得松手时又触发"按下时那一颗"的点击、把结果顶回去。
+    ///
+    /// ⚠️ 划动要**真的换页**就得有提交路（`commitSelection`）；没有就**不装 pan**（只让气泡跟手而不换页 = 骗人）。
+    private static func installStockGestures(on stockBar: UIView) {
+        if objc_getAssociatedObject(stockBar, &stockTapKey) == nil {
+            let tap = UITapGestureRecognizer(
+                target: TabBarSystemGlassGestureRelay.shared,
+                action: #selector(TabBarSystemGlassGestureRelay.stockTapped(_:))
+            )
+            tap.cancelsTouchesInView = false
+            stockBar.addGestureRecognizer(tap)
+            objc_setAssociatedObject(stockBar, &stockTapKey, tap, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        guard commitRouteAvailable, objc_getAssociatedObject(stockBar, &stockPanKey) == nil else { return }
+        let pan = UIPanGestureRecognizer(
+            target: TabBarSystemGlassGestureRelay.shared,
+            action: #selector(TabBarSystemGlassGestureRelay.stockDragged(_:))
+        )
+        pan.cancelsTouchesInView = true
+        stockBar.addGestureRecognizer(pan)
+        objc_setAssociatedObject(stockBar, &stockPanKey, pan, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        writeDebugLog(
+            "[\(logTag)] drag installed on Spotify's own bar — sliding across the tabs switches them, and taps still belong to Spotify"
+        )
+    }
+
+    /// 点击/划动时算"手指在哪一格"（按四颗的 frame 判；落缝里就按 x 等分兜底）。
+    static func itemIndex(at point: CGPoint, in bar: UIView) -> Int? {
+        guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return nil }
+        let items = stack.subviews
+        if let hit = items.firstIndex(where: { $0.convert($0.bounds, to: bar).contains(point) }) { return hit }
+        guard bar.bounds.width > 1, !items.isEmpty else { return nil }
+        let ratio = max(0, min(0.999, point.x / bar.bounds.width))
+        return Int(ratio * CGFloat(items.count))
+    }
+
+    /// **立刻**把气泡对到第 index 颗 —— 这就是"反应慢"那一半的修法（不再等 0.5s 节拍）。
+    static func mirrorSelection(index: Int, reason: String) {
+        guard isEnabled else { return }
+        guard let bar = lastBar,
+              let systemBar = objc_getAssociatedObject(bar, &systemBarKey) as? UITabBar,
+              let items = systemBar.items, index >= 0, index < items.count else { return }
+        lastSelectionIndex = index
+        if systemBar.selectedItem !== items[index] { systemBar.selectedItem = items[index] }
+        mirroredSelections += 1
+        guard mirroredSelections <= 3 else { return }
+        writeDebugLog("[\(logTag)] bubble mirrored straight away — #\(index) (\(reason); no waiting for the 0.5s tick)")
+    }
+
+    /// 手指滑过一格：气泡立刻跟过去，并**真的切页**（切不动就报一次，绝不假装）。
+    static func dragCrossed(to index: Int, ended: Bool) {
+        mirrorSelection(index: index, reason: ended ? "the drag ended here" : "a finger slid onto it")
+        guard commitSelection(index: index) else {
+            if !didReportCommitFailure {
+                didReportCommitFailure = true
+                writeDebugLog("[\(logTag)] ⚠️ the drag moved the bubble but could not switch the page — no usable commit route")
+            }
+            return
+        }
+    }
+
+    /// 提交给 Spotify：**按"公开 → 有出处"的顺序**试。
+    ///   ① `UITabBarController.selectedIndex`（容器真是 `UITabBarController` 时，公开 API）；
+    ///   ② 容器自己的 `setSelectedViewController:` —— **这不是猜签名**：pw 在 `TabBar.x:466-474` hook 的
+    ///      就是这个方法 ⇒ 它在 9.1.x 上确实存在、参数就是一个 `UIViewController`；
+    ///      传 `children[index]`（容器自己的子 VC，顺序跟着标签走）。
+    private static func commitSelection(index: Int) -> Bool {
+        guard let bar = lastBar, let container = container(of: bar) else { return false }
+        if let tabs = container as? UITabBarController,
+           let controllers = tabs.viewControllers, index < controllers.count {
+            if tabs.selectedIndex != index { tabs.selectedIndex = index }
+            return true
+        }
+        let children = container.children
+        guard index < children.count else { return false }
+        let selector = NSSelectorFromString("setSelectedViewController:")
+        guard container.responds(to: selector) else { return false }
+        _ = container.perform(selector, with: children[index])
+        return true
+    }
+
+    /// 建栏时问一次"划动能不能真的换页"，并把**为什么不能**写清楚 ——
+    /// 日志 65 只有一句 `no forwarding route found`，那是三个完全不同的原因共用了一个说法。
+    private static func refreshCommitRoute(in bar: UIView) {
+        guard !commitRouteChecked else { return }
+        commitRouteChecked = true
+        guard let container = container(of: bar) else {
+            writeDebugLog(
+                "[\(logTag)] drag stays off — no TabBarContainerImpl above Spotify's bar, so there is nothing to ask to switch tabs"
+            )
+            return
+        }
+        let containerName = shortName(NSStringFromClass(type(of: container)))
+        if let tabs = container as? UITabBarController, let controllers = tabs.viewControllers, controllers.count >= 2 {
+            commitRouteAvailable = true
+            writeDebugLog(
+                "[\(logTag)] drag is possible — the container is \(containerName) with \(controllers.count) view controllers (public selectedIndex)"
+            )
+            return
+        }
+        let selector = NSSelectorFromString("setSelectedViewController:")
+        let children = container.children
+        guard children.count >= 2, container.responds(to: selector) else {
+            writeDebugLog(
+                "[\(logTag)] drag stays off — container \(containerName), is a UITabBarController: \(container is UITabBarController)"
+                    + ", children: \(children.count), answers setSelectedViewController: \(container.responds(to: selector))"
+            )
+            return
+        }
+        commitRouteAvailable = true
+        writeDebugLog(
+            "[\(logTag)] drag is possible — container \(containerName) has \(children.count) children and answers setSelectedViewController: (the method pw hooks)"
+        )
+    }
+
+    /// ★ 兜底：五条路全不通 ⇒ **把触摸还给 Spotify 自己那条栏**。    ///
     /// 代价：**只有第一次点击失效**，之后每一次都落到 Spotify 那条栏上（= 第一片的行为：点得动、
     /// 但没有"按下回弹"）。收益：绝不留下"看得见、点不动"。
     /// 之所以能做到"只失效一次"：系统栏一旦不吃触摸，我们的 `delegate` 就不会再被叫到，
@@ -764,6 +922,50 @@ enum TabBarSystemGlass {
 
     /// 那一颗里所有的图标视图（**最深 6 层**：日志 63 证明原来只找 `UIImageView.image`、
     /// 深度 ≤ 4 时是**找不到**的 —— 所以放宽，并且调用方会按"找没找到"决定藏不藏）。
+    /// 一颗 item 的图标：**先找现成的 `UIImage`；拿不到就把那个"图标视图"整个渲染成一张图**。
+    ///
+    /// ★★ 2026-10-12（真机日志 65：`items synced — … icons ["N", "N", "N", "N"]`，照片 86）：
+    /// 这一版的图标**不是** `UIImageView` —— 真机树里是
+    /// `16.OBJC_ONLY_IconView@40,5,24,24,id=Encore.IconView`（Encore 自己画的图标视图）
+    /// ⇒ 只找 `UIImageView.image` **永远拿不到**（前两版都栽在这），于是原图标留在玻璃底下：
+    /// 又暗（隔着一层玻璃）又偏（位置由 Spotify 那条栏决定），而那几颗 item 只剩文字。
+    /// 照 pw 补一条（`TabBar.x:76-133` 的 `renderLayer`）：**把那个视图的 layer 渲染成 UIImage**，
+    /// 当模板图交给 UIKit（`.alwaysTemplate` 会自己上色）。
+    ///
+    /// ⚠️ 快照**必须在藏原图标之前**做（`apply` 里顺序是先 `syncItems` 再 `hideStockContent`）；
+    ///    而且要**按视图缓存**，否则每拍都会生成一张"新"图，`syncItems` 的"形状没变就不重建"永远不成立。
+    private static func glyphImage(of node: UIView) -> UIImage? {
+        if let ready = glyphViews(in: node).first?.image { return ready }
+        guard let icon = findIconView(in: node), icon.bounds.width >= 8, icon.bounds.height >= 8 else { return nil }
+        let key = ObjectIdentifier(icon)
+        if let cached = iconSnapshots[key] { return cached }
+
+        let renderer = UIGraphicsImageRenderer(bounds: icon.bounds)
+        let shot = renderer.image { context in
+            icon.layer.render(in: context.cgContext)
+        }.withRenderingMode(.alwaysTemplate)
+        iconSnapshots[key] = shot
+        writeDebugLog(
+            "[\(logTag)] icon taken from \(shortName(NSStringFromClass(type(of: icon))))"
+                + " at \(frameText(icon.bounds)) — read as a snapshot of its layer, because this build draws icons itself"
+        )
+        return shot
+    }
+
+    /// 类名含 `IconView`、尺寸像个图标的那颗视图（深度 ≤ 6）。
+    private static func findIconView(in node: UIView, depth: Int = 0) -> UIView? {
+        guard depth <= 6 else { return nil }
+        if className(node).contains("IconView"), node.bounds.width >= 8, node.bounds.height >= 8 { return node }
+        for sub in node.subviews {
+            if let found = findIconView(in: sub, depth: depth + 1) { return found }
+        }
+        return nil
+    }
+
+    private static func className(_ view: UIView) -> String {
+        NSStringFromClass(type(of: view))
+    }
+
     private static func glyphViews(in node: UIView, depth: Int = 0) -> [UIImageView] {
         guard depth <= 6 else { return [] }
         var found: [UIImageView] = []
@@ -779,10 +981,6 @@ enum TabBarSystemGlass {
         if let label = node as? UILabel, !(label.text ?? "").isEmpty { found.append(label) }
         for sub in node.subviews { found.append(contentsOf: labelViews(in: sub, depth: depth + 1)) }
         return found
-    }
-
-    private static func glyphImage(of node: UIView) -> UIImage? {
-        glyphViews(in: node).first?.image
     }
 
     /// 那一颗的文字。
@@ -988,6 +1186,34 @@ final class TabBarSystemGlassRelay: NSObject, UITabBarDelegate {
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         onMainThreadSync {
             TabBarSystemGlass.forwardSelection(from: tabBar, item: item)
+        }
+    }
+}
+
+/// **手势中继**：装在 **Spotify 自己那条栏**上的"点一下 / 按住划"（不抢它的触摸）。
+///
+/// 与点击中继同一套写法：这个类**故意不标 `@MainActor`**（`@objc` 的手势 action 从
+/// UIKit 那侧调进来），真正的活全部在 `onMainThreadSync` 的闭包里干。
+final class TabBarSystemGlassGestureRelay: NSObject {
+
+    static let shared = TabBarSystemGlassGestureRelay()
+
+    /// 点一下：Spotify 自己去换页（触摸没被我们取消），我们**同时**把气泡对过去。
+    @objc func stockTapped(_ recognizer: UITapGestureRecognizer) {
+        onMainThreadSync {
+            guard let bar = recognizer.view,
+                  let index = TabBarSystemGlass.itemIndex(at: recognizer.location(in: bar), in: bar) else { return }
+            TabBarSystemGlass.mirrorSelection(index: index, reason: "a tap on Spotify's own bar")
+        }
+    }
+
+    /// 按住划：滑过哪一格就切到哪一格（气泡实时跟手）。
+    @objc func stockDragged(_ recognizer: UIPanGestureRecognizer) {
+        onMainThreadSync {
+            guard let bar = recognizer.view,
+                  let index = TabBarSystemGlass.itemIndex(at: recognizer.location(in: bar), in: bar) else { return }
+            let ended = recognizer.state == .ended || recognizer.state == .cancelled
+            TabBarSystemGlass.dragCrossed(to: index, ended: ended)
         }
     }
 }
