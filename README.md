@@ -94,7 +94,7 @@ Actions → **Build IPA — patched (Orion.framework + zxPluginsInject)** or **B
 | Input | Meaning |
 | --- | --- |
 | `ipa_url` | **Required.** Direct download URL of your decrypted Spotify IPA. It must return the `.ipa` itself — e.g. `https://example.com/abc.ipa`. Do not use cloud-drive share pages, login-gated links, or links that redirect to a preview page. |
-| `orion_url` | **Optional.** Leave it empty (the default) and the workflow builds `Orion.framework` itself from the Theos submodule — no external download, nothing for you to research. Set it to an `Orion.zip` URL only if that source build ever fails. |
+| `orion_url` | URL of the `Orion.zip` bundled into the app. The default is this project's own mirror, so there is nothing to research and no third-party dependency. Only change it if that URL 404s. (Clearing it makes the workflow build `Orion.framework` from the Theos submodule instead — that path does not currently work on GitHub runners; see the comment in the workflow.) |
 | `upload_method` | Where the finished IPA(s) go: `artifacts` (default), `filebin`, or `both`. |
 | `liquid_glass` | On by default. Removes `UIDesignRequiresCompatibility` so iOS 26+ gets the new design language; set it to false to keep Spotify's own compatibility-mode look. |
 

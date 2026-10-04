@@ -42,6 +42,12 @@ build_log.txt
 .github/copilot-instructions.md
 Scripts/spotify_symbol_diff.py
 
+# Python bytecode caches. Running the repo's own check scripts
+# (Tools/eevee-hookfinder/*.py, Tools/l10n_lint.py, Tools/migrate_localizations.py)
+# creates these next to the sources; they must never be committed.
+__pycache__/
+*.pyc
+
 # Session handoff logs: kept on disk on purpose, never tracked. These are
 # one-shot process records (and they contain local paths), so they live here
 # rather than in the repository. Conclusions worth keeping belong in the source

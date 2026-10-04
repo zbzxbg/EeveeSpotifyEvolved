@@ -61,8 +61,8 @@ on:
         required: true
         type: string
       orion_url:
-        description: "Optional escape hatch. Leave EMPTY (the default) and the workflow builds Orion.framework itself from the Theos submodule - no external download. Only set this to an Orion.zip URL if that source build ever fails."
-        default: ""
+        description: "URL of the Orion.zip that gets bundled into the app. The default points at this project's own mirror (zbzxbg/es-build-tools), so there is nothing to research and no third-party dependency. Only change it if that URL 404s. NOTE: leaving it EMPTY makes the workflow build Orion from the Theos submodule instead - that path does NOT currently work on GitHub runners, see the comment in the Provide Orion.framework step."
+        default: "https://github.com/zbzxbg/es-build-tools/releases/download/v1.0.0/Orion.zip"
         required: false
         type: string
       upload_method:
@@ -136,10 +136,15 @@ jobs:
       - uses: levibostian/action-hide-sensitive-inputs@v1
 
       # ── 1. Orion.framework（本工作流存在的主要理由）────────────────────
-      # 默认**不下载任何东西**：Orion 的源码就在 theos 的子模块里
-      # （`$THEOS/vendor/orion`，见 theos 的 .gitmodules），直接编译即可 ——
-      # 这样 fork 用户不需要任何外部资产，也不会因为某个第三方 release 被删
-      # 或改名而全体构建失败。`orion_url` 留作逃生口。
+      # 默认从**本项目自己的镜像**取（zbzxbg/es-build-tools 的 Orion.zip，
+      # 内容 = 上游那份 v6.6.4 附件 `SideloadLabs/…/Orion.zip` 的原样副本，
+      # sha256 6316e49d487c29aa1ea03767fb8a78b5ea5588b609bdeb8bf6f4528537766658）。
+      # 这样 fork 用户不用研究任何东西，也不再依赖第三方 release。
+      #
+      # ⚠️ 2026-10 实测：`orion_url` 留空时那条「从 theos 子模块自编」的路**跑不通**
+      #    —— GitHub runner 上的 Xcode 缺 iOS 平台组件，xcodebuild 找不到
+      #    `{ generic:1, platform:iOS }` 目标并报 "iOS 26.1 is not installed"。
+      #    自编分支因此只作备用保留；要复活它，先解决 runner 上的平台组件问题。
       - name: Provide Orion.framework
         env:
           ORION_URL: ${{ inputs.orion_url }}
@@ -148,7 +153,7 @@ jobs:
           rm -rf "$RUNNER_TEMP/orion"; mkdir -p "$RUNNER_TEMP/orion"
 
           if [ -z "$ORION_URL" ]; then
-            # ── 默认路径：从 theos 子模块自己编 Orion ──────────────────────
+            # ── 备用路径：从 theos 子模块自己编 Orion（⚠️ 见上面：CI 上目前失败）──
             ORION_SRC="$THEOS/vendor/orion"
             [ -d "$ORION_SRC" ] || {
               echo "::error::$ORION_SRC is missing - the Theos checkout did not include submodules."
