@@ -603,6 +603,8 @@ enum NowPlayingLyricsPlate {
             restoreCoverScale()
             // ★ 2026-10-04：单行歌词也是我们的东西。
             removeSingleLyric()
+            // ★ 2026-10-12：触摸替身也一样（它的 `row` 是别人的视图，不能留着乱转发）。
+            removeTitleRelay()
             return
         }
         guard pageView.bounds.width > 1, pageView.bounds.height > 1 else { return }
@@ -644,6 +646,8 @@ enum NowPlayingLyricsPlate {
         // ★ 2026-10-04：封面与歌词键之间那一行居中歌词（用户建议的第二条）。
         //   `applySingleLyric` 自己会在"展开着 / 没词"时把它收起来。
         applySingleLyric(in: pageView)
+        // ★ 2026-10-12：被移走的标题行**还能点**（点歌名/歌手跳专辑/歌手页）。
+        applyTitleRelay(in: pageView)
         ensureToggleZone(in: pageView)
     }
 
@@ -730,6 +734,7 @@ enum NowPlayingLyricsPlate {
             guard pageLeaving || isOpen || coverHost != nil || lastContainer != nil
                 || bandShareButton != nil || closedTitleRow != nil || wantsOpen
                 || !scaledCoverBase.isEmpty || lastArtistSuffix != nil || singleLyric != nil
+                || titleRelay != nil
             else { return false }
             // 页面已经不在屏幕上了 ⇒ 现在写回封面 / 撤销几何 / 摘掉我们的层与那枚键，什么都看不见。
             closeEverything(reason: "page disappeared", animated: false)
@@ -742,6 +747,8 @@ enum NowPlayingLyricsPlate {
             restoreCoverScale()
             // ★ 2026-10-04：单行歌词也要拿走（页面都走了，别把它留在树上）。
             removeSingleLyric()
+            // ★ 2026-10-12：触摸替身一起拿走（页面没了，它转发给谁都不知道）。
+            removeTitleRelay()
             return false
         }
 
@@ -770,6 +777,8 @@ enum NowPlayingLyricsPlate {
             ensureToggleZone(in: page)
             // ★ 2026-10-04：整页歌词就在眼前，封面那一行居中的单行歌词要收起来（不然是重复的）。
             hideSingleLyric()
+            // ★ 2026-10-12：展开态那一行也被移走了（缩略图右边）⇒ 同样点不到，替身一样要摆。
+            applyTitleRelay(in: page)
             return isOpen
         }
 
@@ -785,6 +794,8 @@ enum NowPlayingLyricsPlate {
         //   它的 y 是"封面底边与控件条上沿的中点"，所以必须排在 `applyCoverRestingScale`
         //   （封面缩到 242pt）**之后**，否则量到的还是 366pt 那张的底边。
         applySingleLyric(in: page)
+        // ★ 2026-10-12：被移走的标题行**还能点**（点歌名/歌手跳专辑/歌手页）。
+        applyTitleRelay(in: page)
 
         // ★ 2026-10-10（照片 66）：**"打算铺但还没铺上"**的那段窗口里也要按住原生封面 ——
         //   否则进入播放器的转场里就是原生大封面在动（这一拍 `isOpen` 还是 false）。
@@ -867,6 +878,8 @@ enum NowPlayingLyricsPlate {
         restoreCoverScale()
         // ★ 2026-10-04：单行歌词同样是我们摆上去的。
         removeSingleLyric()
+        // ★ 2026-10-12：标题行的触摸替身也是我们的。
+        removeTitleRelay()
     }
 
     /// 那枚"歌词键"被点了。
@@ -3411,6 +3424,60 @@ enum NowPlayingLyricsPlate {
         singleLyricLines = []
     }
 
+    // MARK: - ★ 2026-10-12：被我们移走的标题行**还能点**（点歌名 / 歌手跳专辑 / 歌手页）
+
+    /// 触摸替身（来龙去脉见 `NowPlayingTitleRelayView` 的说明）。
+    private static weak var titleRelay: NowPlayingTitleRelayView?
+    private static var titleRelayForwards = 0
+
+    /// 每拍把替身对准"当前那一行"。
+    ///
+    /// **两个状态都要摆**：展开时那一行在缩略图右边（`lastUnit`），收起时在左上角
+    /// （`closedTitleRow`）—— 两处都是被 `transform` 移出自己 cell 的，所以两处都点不到。
+    /// 一行都没有（量不到标题行）就把替身收掉：宁可没有替身，也不要一个乱转发触摸的层。
+    private static func applyTitleRelay(in page: UIView) {
+        guard let row = lastUnit ?? closedTitleRow, row.window != nil else {
+            removeTitleRelay()
+            return
+        }
+
+        let relay: NowPlayingTitleRelayView
+        if let existing = titleRelay, existing.superview === page {
+            relay = existing
+        } else {
+            relay = NowPlayingTitleRelayView(frame: page.bounds)
+            relay.backgroundColor = .clear
+            relay.isUserInteractionEnabled = true
+            relay.accessibilityIdentifier = "eevee-npv-title-relay"
+            relay.isAccessibilityElement = false
+            relay.onForward = { noteTitleRelayForward() }
+            page.addSubview(relay)
+            titleRelay = relay
+        }
+        relay.row = row
+        if relay.frame != page.bounds { relay.frame = page.bounds }
+        page.bringSubviewToFront(relay)
+    }
+
+    /// 真的转发了一次触摸 ⇒ 记一行（**有上限**：这是每点一次都会走的路，不许刷屏）。
+    ///
+    /// 为什么要这行日志：用户 2026-10-12 报的"点歌名/歌手不能跳转"在**上一份日志里
+    /// 一条痕迹都没有**（我们根本没参与那次触摸）。有了它，下一份日志能直接回答
+    /// "替身接到触摸了吗、转进去了吗"。
+    private static func noteTitleRelayForward() {
+        guard titleRelayForwards < 5 else { return }
+        titleRelayForwards += 1
+        writeDebugLog(
+            "[\(logTag)] forwarded a tap into the moved title row — forward #\(titleRelayForwards)"
+                + " (it should open the album / artist page)"
+        )
+    }
+
+    private static func removeTitleRelay() {
+        titleRelay?.removeFromSuperview()
+        titleRelay = nil
+    }
+
     // MARK: - 我们自己的容器
 
     private static func ensureContainer(in page: UIView, frame: CGRect) -> UIView {
@@ -3717,6 +3784,50 @@ enum NowPlayingLyricsPlate {
             queue.append(contentsOf: view.subviews)
         }
         return nil
+    }
+}
+
+/// 被我们**移走**的标题行的触摸替身 —— 让"点歌名 / 歌手跳专辑 / 歌手页"这个原生功能活下来。
+///
+/// ## 为什么需要它（用户 2026-10-12 报的）
+///
+/// > spotify 点击歌手 / 歌曲名字那里是可以点击然后跳往专辑或者歌手主页的。但是现在没这个功能。
+///
+/// 我们把标题行用 `transform` 抬到了左上角（照片 72/73 的 kumone 位），但**行还在它原来的
+/// cell 里** —— UIKit 的命中测试是从窗口往下走的：点落在 cell 的 frame **之外**时，
+/// 那一整棵子树根本不会被问 ⇒ 抬上去的那一行**看着在、点不到**（这是"移动别人的子视图"
+/// 的固有代价，pw 也踩过）。
+///
+/// ## 做法（照 pw `PlayerLyrics.x` 的 `hitTest:`）
+///
+/// pw 在同一处境下的解法是：在**自己**这一层重写 `hitTest:`，把点**换算**进那一行，
+/// 问它要一个命中视图并返回（`PlayerLyrics.x:100-104`）。这里照做：
+///   · 本层铺满页面，但 `point(inside:)` 只认**那一行当前的视觉 frame**；
+///   · `hitTest` 里先问那一行；命中就把那个视图返回 ⇒ 触摸照常走到 Spotify 的控件
+///     （它的祖先手势 / 选中机制也都还能收到这次触摸）。
+/// 范围之外一律返回 nil，触摸穿透给下面原有的视图。
+final class NowPlayingTitleRelayView: UIView {
+
+    /// 被我们移走的那一行（弱引用：换歌 / 页面走了它自己就没了）。
+    weak var row: UIView?
+
+    /// 真的转发了一次触摸 ⇒ 叫一声（只给日志用，见 `noteTitleRelayForward`）。
+    var onForward: (() -> Void)?
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return false }
+        guard let row, row.window != nil else { return false }
+        return row.convert(row.bounds, to: self).contains(point)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return nil }
+        guard let row, row.window != nil else { return nil }
+        guard row.convert(row.bounds, to: self).contains(point) else { return nil }
+        // 把点换算进那一行自己的坐标系，问它（以及它的子视图）谁接到这一下。
+        let hit = row.hitTest(row.convert(point, from: self), with: event)
+        if hit != nil { onForward?() }
+        return hit
     }
 }
 

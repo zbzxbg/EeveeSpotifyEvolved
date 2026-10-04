@@ -12,8 +12,10 @@ import ObjectiveC.runtime
 /// * **不是**"自绘壳"：2026-10-02 那版是**加模糊 / 铺实心盖住原生内容**（照片 19/20 的糊底、
 ///   一整页空白），被整块删掉（`Tweak.x.swift:384-387`）。这一层**什么都不画** ——
 ///   透明、无背景、无内容，只提供坐标系。
-/// * 容器自己 `isUserInteractionEnabled = false`：**不吃触摸**，Spotify 原生手势
-///   （下拉关闭 / 滚动 / 左右切歌）全部照常；只有放在它上面的**具体控件**才开交互。
+/// * 容器**只在音量那一行的范围内**吃触摸（`NowPlayingOverlayView.point(inside:)`）：
+///   Spotify 原生手势（下拉关闭 / 滚动 / 左右切歌）全部照常；只有放在它上面的**具体控件**才开交互。
+///   ★ 2026-10-12：以前写的是"整层不吃触摸"，那会让里面那颗 `MPVolumeView` **也点不到**
+///   （UIKit 的命中测试在父视图这一级就停了）—— 用户报的"音量键是个装饰"就是它。
 /// * **不碰 Spotify 任何属性**（唯一会动的是"往它上面加我们自己的子视图"）⇒
 ///   关掉 = 把这一层拿掉，**天然完全还原**。
 ///
@@ -148,10 +150,21 @@ enum NowPlayingPageOverlay {
         if let existing = objc_getAssociatedObject(page, &overlayKey) as? UIView {
             overlay = existing
         } else {
-            overlay = UIView(frame: page.bounds)
+            overlay = NowPlayingOverlayView(frame: page.bounds)
             overlay.backgroundColor = .clear
-            // ★ 容器不吃触摸：原生的下拉关闭 / 滚动 / 左右切歌全部照常。
-            overlay.isUserInteractionEnabled = false
+            // ★★ 2026-10-12（用户：「目前那个调节音量的按键是个装饰，能不能让它真的可以调节音量」）：
+            //   **不能再用 `isUserInteractionEnabled = false`。**
+            //
+            //   那一句当初是为了"不吃原生手势"（下拉关闭 / 滚动 / 左右切歌），但它有个
+            //   UIKit 层面的副作用：命中测试**在父视图这一级就停了** —— 父视图关掉交互，
+            //   **整个子树**都收不到触摸，包括里面那颗**真的** `MPVolumeView`
+            //   ⇒ 音量条只能是装饰（用户报的正是这个）。
+            //
+            //   现在改成"整层开着交互、但**只有音量那一行的范围**返回 true"
+            //   （`NowPlayingOverlayView.point(inside:)`）—— 与
+            //   `NowPlayingLyricsContainerView.passThroughBottom` 同一个手法：
+            //   范围之外照旧全部穿透给 Spotify。
+            overlay.isUserInteractionEnabled = true
             overlay.clipsToBounds = false
             overlay.accessibilityIdentifier = "eevee-npv-overlay"
             overlay.isAccessibilityElement = false
@@ -185,6 +198,12 @@ enum NowPlayingPageOverlay {
             changed = true
         }
         layoutVolumeRow(in: overlay, frame: target)
+        // ★ 2026-10-12：把"唯一吃触摸的范围"告诉覆盖层（见 `NowPlayingOverlayView`）——
+        //   不更新它，音量条就还是没有触摸（这一层只在那一行里放行）。
+        if let interactive = overlay as? NowPlayingOverlayView, interactive.interactiveFrame != target {
+            interactive.interactiveFrame = target
+            changed = true
+        }
 
         if !didLogInstall {
             didLogInstall = true
@@ -263,8 +282,10 @@ enum NowPlayingPageOverlay {
         }
 
         let row = UIView(frame: .zero)
-        // ⚠️ 容器不吃触摸；只有里面那条 `MPVolumeView` 吃（原生的下拉关闭 / 滚动照常）。
-        row.isUserInteractionEnabled = false
+        // ★ 2026-10-12：**这一行必须吃触摸**，否则里面那颗 `MPVolumeView` 一样点不到
+        //   （子视图能不能收到触摸，取决于**它和它的每一个祖先**都开着交互）。
+        //   范围外的穿透由父层 `NowPlayingOverlayView.point(inside:)` 保证。
+        row.isUserInteractionEnabled = true
         row.accessibilityIdentifier = volumeRowIdentifier
 
         row.addSubview(volumeGlyph(named: "speaker.fill", identifier: "eevee-npv-volume-glyph-low"))
@@ -416,6 +437,33 @@ enum NowPlayingPageOverlay {
             queue.append(contentsOf: view.subviews)
         }
         return nil
+    }
+
+    // MARK: - 整页覆盖层（只让音量那一行吃触摸）
+
+    /// 铺满整页、**只在音量那一行的范围内**吃触摸的透明层。
+    ///
+    /// ★★ 2026-10-12（用户：「目前那个调节音量的按键是个装饰，能不能让它真的可以调节音量」）：
+    ///   这一层以前是 `isUserInteractionEnabled = false`（为了不吃原生手势），而 UIKit 的命中测试
+    ///   **在父视图这一级就停了**：父层关掉交互 ⇒ **整个子树**（含那颗真的 `MPVolumeView`）
+    ///   都收不到触摸 ⇒ 音量条只能是装饰。
+    ///
+    ///   现在：整层开着交互，靠 `point(inside:)` 把"可交互范围"限死在音量那一行
+    ///   （`interactiveFrame` 每一拍由 `layout(overlay:in:)` 更新）—— 手法与
+    ///   `NowPlayingLyricsContainerView.passThroughBottom` 完全一致。
+    ///   范围之外返回 false ⇒ 照旧全部穿透给 Spotify（下拉关闭 / 滚动 / 左右切歌不受影响）。
+    final class NowPlayingOverlayView: UIView {
+
+        /// 唯一要吃到触摸的那条范围（本视图坐标系 = 页面坐标系，因为这一层就钉在页面原点）。
+        /// `.null` ⇒ 整层穿透（音量条还没摆好时不抢任何触摸）。
+        var interactiveFrame: CGRect = .null
+
+        override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+            guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return false }
+            guard !interactiveFrame.isNull else { return false }
+            // 上下各放宽 8pt：手指落在轨/钮边上一点也该算这一行（行高只有 28pt）。
+            return interactiveFrame.insetBy(dx: -2, dy: -8).contains(point)
+        }
     }
 
     // MARK: - 日志
