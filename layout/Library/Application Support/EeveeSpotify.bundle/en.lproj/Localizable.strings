@@ -387,8 +387,8 @@ tab_bar_glass = "Liquid Glass on the tabs";
 tab_bar_system_glass = "Use the system glass tab bar";
 tab_bar_system_glass_description = "Hides Spotify's own tab bar content and puts a system tab bar over it, so iOS 26 draws the real Liquid Glass: the selection bubble slides between tabs, with refraction and light/dark adaptation. Touches pass through to Spotify's own bar, so tapping behaves exactly as before. Off by default.";
 tab_bar_glass_description = "Puts the system's Liquid Glass (iOS 26 and up, falling back to a material) behind the four tabs — Home, Search, Your Library and Create. The four tabs are also pulled slightly towards the centre so the glass hugs them instead of stretching across the whole bar. The icons stay above the glass and keep working. Switching it off removes everything again.";
-library_large_title = "Apple Music style header";
-library_large_title_description = "Changes Spotify's own library header: the title goes left-aligned with a little more breathing room, and the grey fade Spotify draws at the top edge is taken away. Switching it off puts both back.";
+library_large_title = "Apple Music style library";
+library_large_title_description = "Restyles Spotify's own library the way Apple Music has it: a bigger title at the leading edge with the avatar moved to the trailing edge, the grey fade at the top edge gone, list covers with Apple's soft continuous corners and a hairline that starts where the text does, and the in-library search field turned into a capsule. Switching it off puts every one of them back.";
 tab_bar_hide_labels = "Hide tab labels";
 
 mini_bar_glass_section = "Mini player";
