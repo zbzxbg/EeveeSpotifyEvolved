@@ -732,7 +732,10 @@ final class TabBarSystemGlassHost: UIView {
 ///    UIKit 的 delegate 回调按这个写就不用碰隔离判据；真正的活全部在
 ///    `onMainThreadSync` 的闭包里干（那个闭包本身就是 `@MainActor`）。
 final class TabBarSystemGlassRelay: NSObject, UITabBarDelegate {
-    func tabBar(_ tabBar: UITabBar, didSelectItem item: UITabBarItem) {
+    /// ⚠️ Swift 里这个名字是 **`tabBar(_:didSelect:)`**（ObjC 的 `tabBar:didSelectItem:`
+    /// 从 Swift 3 起就被导入成这个短名）。写成 `didSelectItem` 编译器直接报
+    /// "'tabBar(_:didSelectItem:)' has been renamed to 'tabBar(_:didSelect:)'"（2026-10-12 踩过）。
+    func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         onMainThreadSync {
             TabBarSystemGlass.forwardSelection(from: tabBar, item: item)
         }

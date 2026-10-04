@@ -330,7 +330,9 @@ enum TabBarGlassPlate {
         if !plate.frame.equalTo(frame) {
             plate.frame = frame
         }
-        let radius = height / 2
+        // 圆角 = 半高（胶囊形状）。⚠️ `height` 这个局部量已经搬进 `capsuleRect` 了
+        // （2026-10-12 抽几何那一笔），这里必须从 `target` 读 —— 别再写第二份高度来源。
+        let radius = target.height / 2
         if abs(plate.layer.cornerRadius - radius) > 0.01 {
             plate.layer.cornerRadius = radius
         }

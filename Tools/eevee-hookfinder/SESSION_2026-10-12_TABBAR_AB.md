@@ -142,6 +142,10 @@
 4. `fix(premium)`（本笔）：**撤掉那道闸门**（`shouldSpoofPremium` / `UserDefaults.serverSaidPremium` 全删，
    `modifyAttributes` 恢复无条件执行）+ 换成**只记不改**的取证行
    `[Premium] the account state on the wire: type=… catalogue=… player-license=…` + 更正本文
+5. `fix(tabbar)`（编译修复，用户报回）：`TabBarGlass.x.swift` 里 `let radius = height / 2`
+   还在用**已经被抽进 `capsuleRect` 的局部 `height`** ⇒ 改 `target.height / 2`；
+   `TabBarSystemGlassRelay` 的 delegate 方法名写成 `tabBar(_:didSelectItem:)`（旧签名，Swift 3 起改名）
+   ⇒ `tabBar(_:didSelect:)`
 
 ---
 
@@ -149,6 +153,10 @@
 
 * **本轮的源码改动，一行都没在真机上跑过。** 本机**没有 Swift 工具链**，"能编译"只有 CI 能回答；
   六条自检**不做类型检查**（它们只查 hook 目标名、括号、成员、字符串与 l10n）。
+* **本机没有 Swift 工具链 ⇒ 六条自检抓不到类型错误，这一轮的两条就是编译器抓回来的**
+  （用户 2026-10-12 报回，见 §5 第 5 笔）。以后抽函数/改签名之后，**必须**至少核一遍
+  "被抽走的局部量还有没有别处引用"（`grep` 一下旧名字）与"UIKit 协议方法在 Swift 里的**现代**名字"
+  （旧签名会被直接当 error 拦：`tabBar(_:didSelectItem:)` → `tabBar(_:didSelect:)`）。
 * **系统玻璃的实际尺寸还是推的**：`_UITabBarItemPlatterView` / `_UILiquidLensView` 在 dump 里是
   `54x0`（那一刻还没排完），pw 的注释说"玻璃条要 83、platter 占它顶上 62" ⇒ 我按"宿主给它 360×60"
   摆，**UIKit 会不会照这个框画、还是按自己的内边距画**只有真机知道。
