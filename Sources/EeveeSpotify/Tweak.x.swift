@@ -542,6 +542,22 @@ struct EeveeSpotify: Tweak {
                 + " (ON = the bundled Premium config snapshot fully replaces the one the server sends)"
         )
 
+        // ★ 2026-10-12：**「不启用 Premium 补丁」那一档以前一行都没有** —— 于是用户那轮
+        // A/B（"和 A 无关、和 B 有关：不启用 Premium 补丁时正常，打了补丁才灰"）在日志里
+        // **无法复核**：翻遍 30 多份日志也查不到症状出现时 patchType 在哪一档。
+        // 判读：
+        //   · `requests`  = 我们改写账号态（`modifyAttributes`）——用户报"灰"的那一档；
+        //   · `disabled`  = 服务端说什么就是什么（真订阅账号在这一档本来就是正常的）；
+        //   · `notSet`    = 还没定过档（首次启动、或"清空设置"之后）。
+        // `serverSaidPremium` 是**上次**在线 payload 里的账号档（跨启动记住的，见
+        // `UserDefaults.serverSaidPremium`）—— 它决定随包快照那一次要不要下伪装。
+        writeDebugLog(
+            "[INIT] patching: patchType=\(UserDefaults.patchType)"
+                + " (requests = we rewrite the account state | disabled = we leave it alone)"
+                + " | hasPatchedBootstrap=\(UserDefaults.hasPatchedBootstrap ? "ON" : "OFF")"
+                + " | the server last said premium=\(UserDefaults.serverSaidPremium ? "YES" : "NO")"
+        )
+
         // CarPlay crash fix (Issue #16) — safe-gated
         activateCarPlayCrashFix()
 

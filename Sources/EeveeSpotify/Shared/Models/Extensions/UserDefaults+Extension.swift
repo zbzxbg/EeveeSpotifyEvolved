@@ -12,6 +12,7 @@ extension UserDefaults {
     private static let lyricsOptionsKey = "lyricsOptions"
     private static let hasShownCommonIssuesTipKey = "hasShownCommonIssuesTip"
     private static let hasPatchedBootstrapKey = "eeveeHasPatchedBootstrap"
+    private static let serverSaidPremiumKey = "eeveeServerSaidPremium"
     private static let iconNamePrettifyKey = "iconNamePrettify"
     private static let cleanShareLinksKey = "cleanShareLinks"
     private static let enableLogRecordingKey = "enableLogRecording"
@@ -161,6 +162,24 @@ extension UserDefaults {
     static var hasPatchedBootstrap: Bool {
         get { container.bool(forKey: hasPatchedBootstrapKey) }
         set { container.set(newValue, forKey: hasPatchedBootstrapKey) }
+    }
+
+    /// 账号在服务端**本来就是 Premium**（最近一次在线 payload 里看到的档位）—— **跨启动记住**。
+    ///
+    /// ★ 2026-10-12 加：用户那轮 A/B 的结论是「不启用 Premium 补丁时正常，**打了补丁才灰**」
+    /// ⇒ 症状落在"我们改账号态"这一层。判据与理由写在
+    /// `ServerSidedFeaturePolicy.shouldSpoofPremium(_:)`，这里只负责**记住**。
+    ///
+    /// 为什么非记住不可：随包快照（`SpotifyResponsePatcher.seedCustomizeDataIfNeeded`）是在
+    /// **网络之前**组装好的，那一次还没见过账号态 —— 忘了这件事，冷启动第一个 customize
+    /// 回 304 时交出去的种子又是"伪装过的"，真 Premium 账号在那一段里依旧是坏的
+    /// （用户报的"退出重进之后歌单发灰"正是这一档）。
+    ///
+    /// ⚠️ 刻意**不进 `ownedKeys`**：它是缓存不是设置（与 `cachedCustomizeData` 同一条纪律），
+    /// 不该进备份、也不该被"清空设置"连坐。
+    static var serverSaidPremium: Bool {
+        get { container.bool(forKey: serverSaidPremiumKey) }
+        set { container.set(newValue, forKey: serverSaidPremiumKey) }
     }
 
     static var hasShownCommonIssuesTip: Bool {
