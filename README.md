@@ -15,7 +15,7 @@
 | Channel | Version | Spotify |
 | --- | --- | --- |
 | Public release | `v0.1.0` | 9.1.76 |
-| Development | `v1.0.0-beta.86` | 9.1.88 |
+| Development | `v1.0.0-beta.94` | 9.1.88 |
 
 Development version last updated: `2026/10/04`.
 
@@ -24,7 +24,7 @@ Development version last updated: `2026/10/04`.
 
 ## System Requirements
 
-- Minimum: iOS 16
+- Minimum: iOS 16.1
 - Recommended: iOS 26 or later
 
 ## Verified Environment
