@@ -1,4 +1,5 @@
 import Foundation
+import Orion
 import UIKit
 import ObjectiveC.runtime
 
@@ -127,6 +128,8 @@ enum TabBarSystemGlass {
     private static var commitRouteAvailable = false
     private static var mirroredSelections = 0
     private static var didReportCommitFailure = false
+    /// "第几颗 ↔ 哪个 VC"：容器切页时由 `learnSelection` 学下来（拖动提交唯一能用的东西）。
+    private static var knownControllers: [Int: UIViewController] = [:]
 
     private static var lastBar: UIView?
     private static var lastSkipReason = ""
@@ -240,6 +243,7 @@ enum TabBarSystemGlass {
         commitRouteAvailable = false
         mirroredSelections = 0
         didReportCommitFailure = false
+        knownControllers.removeAll()
         didLogLayout = false
         lastSelectionIndex = -1
         lastSelectionSignal = ""
@@ -251,10 +255,18 @@ enum TabBarSystemGlass {
 
     /// 藏**图标与文字**：图标只藏"已经镜像到系统栏"的那些（安全网），文字一律藏
     /// （文字要么由系统栏画标题，要么本来就该没有 —— 见 `tabBarHideLabels`）。
+    ///
+    /// ★★ 2026-10-12（真机日志 67 + 用户："**底部 spotify 自带的那一层按钮还在**"）：
+    /// 上一版这里只藏 `glyphViews`（= `UIImageView`），而**这一版的图标是 `SPTEncoreIconView`**
+    /// （日志 67：`icon taken from SPTEncoreIconView at 0,0,24,24`）⇒ 一颗都没藏住，
+    /// 我们镜像出来的图标和原图标**叠在一起**。
+    /// ⇒ **镜像到了什么就藏什么**：`findIconView`（我们取快照的那颗）与 `glyphViews` 一起藏。
     private static func hideStockContent(items: [UIView], mirroredIcons: [Bool]) {
         for (index, item) in items.enumerated() {
             if index < mirroredIcons.count, mirroredIcons[index] {
-                for glyph in glyphViews(in: item) { hide(glyph) }
+                var glyphs: [UIView] = glyphViews(in: item)
+                if let iconView = findIconView(in: item) { glyphs.append(iconView) }
+                for glyph in glyphs { hide(glyph) }
             }
             for label in labelViews(in: item) { hide(label) }
         }
@@ -604,13 +616,21 @@ enum TabBarSystemGlass {
         writeDebugLog("[\(logTag)] bubble mirrored straight away — #\(index) (\(reason); no waiting for the 0.5s tick)")
     }
 
-    /// 手指滑过一格：气泡立刻跟过去，并**真的切页**（切不动就报一次，绝不假装）。
+    /// 手指滑过一格：气泡立刻跟过去，并**真的切页**（切不动就把气泡**拨回真实那一颗**，绝不假装）。
     static func dragCrossed(to index: Int, ended: Bool) {
         mirrorSelection(index: index, reason: ended ? "the drag ended here" : "a finger slid onto it")
         guard commitSelection(index: index) else {
+            // 提交不了 ⇒ 把气泡拨回**真实选中的那一颗**（不能停在骗人的位置），并只报一次。
+            if let bar = lastBar, let stack = TabBarGlassPlate.findTabsStack(in: bar),
+               let picked = selectedIndex(items: stack.subviews) {
+                mirrorSelection(index: picked.index, reason: "snapping back — the commit route is not learned yet")
+            }
             if !didReportCommitFailure {
                 didReportCommitFailure = true
-                writeDebugLog("[\(logTag)] ⚠️ the drag moved the bubble but could not switch the page — no usable commit route")
+                writeDebugLog(
+                    "[\(logTag)] ⚠️ the drag could not switch the page yet — the container never told us which view controller"
+                        + " belongs to that tab. Tap that tab once (Spotify will call setSelectedViewController: and we learn it), then dragging works."
+                )
             }
             return
         }
@@ -619,8 +639,15 @@ enum TabBarSystemGlass {
     /// 提交给 Spotify：**按"公开 → 有出处"的顺序**试。
     ///   ① `UITabBarController.selectedIndex`（容器真是 `UITabBarController` 时，公开 API）；
     ///   ② 容器自己的 `setSelectedViewController:` —— **这不是猜签名**：pw 在 `TabBar.x:466-474` hook 的
-    ///      就是这个方法 ⇒ 它在 9.1.x 上确实存在、参数就是一个 `UIViewController`；
-    ///      传 `children[index]`（容器自己的子 VC，顺序跟着标签走）。
+    ///      就是这个方法，说明它在 9.1.x 上确实存在、参数就是一个 `UIViewController`；
+    ///      传 `children[index]`（容器自己的子 VC，顺序跟着标签）。
+    ///
+    /// ★★ 2026-10-12 第三版（真机日志 67 纠正）：
+    /// `drag stays off — container TabBarContainerImpl, is a UITabBarController: false, children: 1,
+    /// answers setSelectedViewController: true` ⇒ **容器不是 UITabBarController、`children` 只有 1 个**
+    /// （四颗的 VC 不在里面）⇒ 上一版的"按 children 取 VC"走不通，拖动因此一直没装上。
+    /// 但那条日志同时证明**容器响应 `setSelectedViewController:`** ⇒ 改成：
+    ///   ②' **用它自己告诉我们过的那个 VC**（`learnSelection` 学下来的 `knownControllers[index]`）。
     private static func commitSelection(index: Int) -> Bool {
         guard let bar = lastBar, let container = container(of: bar) else { return false }
         if let tabs = container as? UITabBarController,
@@ -628,16 +655,44 @@ enum TabBarSystemGlass {
             if tabs.selectedIndex != index { tabs.selectedIndex = index }
             return true
         }
-        let children = container.children
-        guard index < children.count else { return false }
         let selector = NSSelectorFromString("setSelectedViewController:")
         guard container.responds(to: selector) else { return false }
+        if let learned = knownControllers[index] {
+            _ = container.perform(selector, with: learned)
+            return true
+        }
+        // 还没学到：退回 `children`（真机上只有 1 个，基本必失败）—— 失败由调用方把气泡拨回去。
+        let children = container.children
+        guard index < children.count else { return false }
         _ = container.perform(selector, with: children[index])
         return true
     }
 
+    /// 容器切页时**顺手把"第几颗 ↔ 哪个 VC"记下来**（拖动提交唯一能用的东西）。
+    ///
+    /// ⚠️ 容器是在**切完之后**才叫我们的（`orig` 先跑）⇒ 标签颜色要过一会儿才是新的，
+    ///    所以这里 0.15s 后再读一次"哪颗是白的"。
+    static func learnSelection(controller: UIViewController) {
+        guard isEnabled, let bar = lastBar else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            guard let stack = TabBarGlassPlate.findTabsStack(in: bar),
+                  let picked = selectedIndex(items: stack.subviews) else { return }
+            if knownControllers[picked.index] !== controller {
+                knownControllers[picked.index] = controller
+                writeDebugLog(
+                    "[\(logTag)] learned tab #\(picked.index) → \(shortName(NSStringFromClass(type(of: controller))))"
+                        + " (this is the pair the drag needs; the container is not a UITabBarController and has no four children)"
+                )
+            }
+        }
+    }
+
     /// 建栏时问一次"划动能不能真的换页"，并把**为什么不能**写清楚 ——
     /// 日志 65 只有一句 `no forwarding route found`，那是三个完全不同的原因共用了一个说法。
+    ///
+    /// ★ 2026-10-12 第三版（日志 67）：容器**不是** `UITabBarController`、`children` 只有 1 个，
+    /// 但**响应 `setSelectedViewController:`** ⇒ 判据改成"响应那个 selector 就装 pan"，
+    /// VC 由 `learnSelection` 在用户正常点标签时学下来（第一次拖动之前先点一遍即可）。
     private static func refreshCommitRoute(in bar: UIView) {
         guard !commitRouteChecked else { return }
         commitRouteChecked = true
@@ -656,17 +711,19 @@ enum TabBarSystemGlass {
             return
         }
         let selector = NSSelectorFromString("setSelectedViewController:")
-        let children = container.children
-        guard children.count >= 2, container.responds(to: selector) else {
+        let answers = container.responds(to: selector)
+        guard answers else {
             writeDebugLog(
                 "[\(logTag)] drag stays off — container \(containerName), is a UITabBarController: \(container is UITabBarController)"
-                    + ", children: \(children.count), answers setSelectedViewController: \(container.responds(to: selector))"
+                    + ", children: \(container.children.count), answers setSelectedViewController: false"
             )
             return
         }
         commitRouteAvailable = true
         writeDebugLog(
-            "[\(logTag)] drag is possible — container \(containerName) has \(children.count) children and answers setSelectedViewController: (the method pw hooks)"
+            "[\(logTag)] drag is armed — container \(containerName) is not a UITabBarController"
+                + " (children: \(container.children.count)) but it answers setSelectedViewController:, which pw hooks;"
+                + " we learn which view controller belongs to each tab from its own calls (tap a tab once and it is known)"
         )
     }
 
@@ -1171,6 +1228,27 @@ final class TabBarSystemGlassHost: UIView {
         insets.top = 0
         insets.bottom = 0
         return insets
+    }
+}
+
+/// **容器钩子**：Spotify 那条栏的容器（`TabBarContainerImpl`）切页时，把"第几颗 ↔ 哪个 VC"记下来。
+///
+/// 为什么非有它不可（真机日志 67）：`drag stays off — container TabBarContainerImpl,
+/// is a UITabBarController: false, children: 1, answers setSelectedViewController: true`
+/// ⇒ 容器**不是** `UITabBarController`、`children` 只有 1 个 ⇒ 拿不到另外三颗的 VC，
+/// 而拖动要提交就必须有 VC。它自己每次切页都会**告诉我们那个 VC** ⇒ 学下来即可。
+///
+/// ⚠️ 这个类是 Orion 的 `ClassHook`（**不是**普通类）：hook 方法里不许碰 `@MainActor` 的东西，
+/// 真正的活进 `onMainThreadSync`（仓库成文规矩）。
+class TabBarContainerSelectionHook: ClassHook<NSObject> {
+    typealias Group = TabBarGlassGroup
+    static let targetName = "NavigationUI_TabBarImpl.TabBarContainerImpl"
+
+    func setSelectedViewController(_ controller: UIViewController) {
+        orig.setSelectedViewController(controller)
+        onMainThreadSync {
+            TabBarSystemGlass.learnSelection(controller: controller)
+        }
     }
 }
 

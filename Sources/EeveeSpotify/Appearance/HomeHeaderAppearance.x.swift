@@ -310,14 +310,42 @@ class HomeHeaderAppearanceHook: ClassHook<UIViewController> {
     }
 }
 
+/// ★ 2026-10-12 补（用户第二轮反馈："主页那两个字**还是**偏上"）：
+/// **页面那一拍不够** —— 真机日志 67 里我们那一行是**对齐的**
+/// （`title frame 16,6,342,39` ⇒ 中心 25.5；`avatar 366,8,32,34` ⇒ 中心 25），
+/// 说明用户看到的错位发生在**某次只有那一行自己在动**的时候（滚动时 Spotify 会让这一行单独滑动/淡出，
+/// 那种回合**不一定**经过页面的 `viewDidLayoutSubviews`）。
+/// 这正是 pw 的教训，他的原话：**"那一行也要盯着，它自己的每一拍都把控件重新摆一遍"**
+/// （`LibraryHeader.x` 文件头最后一段）⇒ 所以这里**再挂一个头部自己的布局回合**，
+/// 两条路都算一次（幂等，重复算没有代价）。
+class HomeHeaderLayoutHook: ClassHook<UIView> {
+    typealias Group = HomeHeaderAppearanceGroup
+    // 与 `DeclutterChrome` 的「隐藏主页头部」同一个类名（那是另一颗开关，互不干扰）。
+    static let targetName = "_TtC19Home_FunkisPageImplP33_297EC57FD07AE9FCEAA7B66079FC278C14HomeHeaderView"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        let header = target
+        onMainThreadSync {
+            // 传 header 自己也行：`apply` 找的就是"类名含 HomeHeaderView"的那个视图，
+            // 而且 `matches(view)` 先判自己 ⇒ 一下命中。
+            HomeHeaderAppearance.apply(to: header)
+        }
+    }
+}
+
 func activateHomeHeaderAppearance() {
-    guard NSClassFromString(HomeHeaderAppearanceHook.targetName) != nil else {
-        writeDebugLog("[Home] missing \(HomeHeaderAppearanceHook.targetName) — hook inactive")
+    // 两个挂点：页面（滑动每一步）+ 头部自己（那一行自己的每一拍）——缺一个就可能"某一刻错位"。
+    let targets = [HomeHeaderAppearanceHook.targetName, HomeHeaderLayoutHook.targetName]
+    let missing = targets.filter { NSClassFromString($0) == nil }
+    if missing.count == targets.count {
+        writeDebugLog("[Home] missing \(missing.joined(separator: ", ")) — hook inactive")
         return
     }
     HomeHeaderAppearanceGroup().activate()
     writeDebugLog(
         "[Home] home header restyle installed (switch=\(UserDefaults.homeLargeTitle ? "ON" : "OFF"))"
             + " — a large title at the leading edge, the avatar at the trailing edge, the pills and the scrim gone"
+            + (missing.isEmpty ? "" : " (missing targets: \(missing.joined(separator: ", ")))")
     )
 }
