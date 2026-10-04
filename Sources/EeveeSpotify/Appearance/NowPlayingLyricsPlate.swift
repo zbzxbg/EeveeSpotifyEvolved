@@ -583,7 +583,26 @@ enum NowPlayingLyricsPlate {
     private static var didLogInstall = false
     private static var lastSkipReason = ""
 
-    static var isEnabled: Bool { UserDefaults.nowPlayingLyricsInPlayer }
+    /// 这一层参不参与。
+    ///
+    /// ★★ 2026-10-12（用户报的）：
+    /// > 当只开启逐词歌词、不开启更好的逐词歌词的时候，**歌词按钮点不动**。
+    ///
+    /// **根因**：这一层是 **Apple Music 那套渲染层**（`canShow` 里早就要求「更好的逐词歌词」开着），
+    /// 但以前这里**只判了「歌词进播放器」** ⇒ 更好的那一颗关着时：
+    ///   ① 那枚圆形歌词键照样摆出来（它自己判的也是 `isEnabled`）；
+    ///   ② 它在页面**最上层**（`bringSubviewToFront`），把下面 Spotify 自己的东西一起挡住；
+    ///   ③ 点下去 ⇒ `toggle()` → `canShow` 直接 false ⇒ **什么都不发生**。
+    /// 也就是"看得见、摸得着、点了没反应"—— 正是本轮在音量条 / 歌名跳转上修过的同一类错。
+    ///
+    /// **现在**把「更好的逐词歌词」并进总开关：关着 ⇒ 这一整条链**根本不参与**
+    /// （`apply` 的 else 分支会把我们改过的东西全部还原：封面缩放 / 标题行 / 控件条 / 单行歌词 /
+    /// 触摸替身 / 那枚键），播放器页面回到 Spotify 原样，歌词走它自己的入口 + 旧 overlay
+    /// （`LyricsWordByWord`，它在「更好的」开着时会主动让位，见那两处判据）。
+    static var isEnabled: Bool {
+        UserDefaults.nowPlayingLyricsInPlayer
+            && NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled
+    }
 
     // MARK: - 对外入口
 
@@ -605,6 +624,9 @@ enum NowPlayingLyricsPlate {
             removeSingleLyric()
             // ★ 2026-10-12：触摸替身也一样（它的 `row` 是别人的视图，不能留着乱转发）。
             removeTitleRelay()
+            // ★ 2026-10-12：**为什么没参与**要留在日志里（否则"歌词键不见了"没法判）。
+            //   一次一页只报一行（`lastEnabledSkipReason`）。
+            noteDisabledReason()
             return
         }
         guard pageView.bounds.width > 1, pageView.bounds.height > 1 else { return }
@@ -900,7 +922,11 @@ enum NowPlayingLyricsPlate {
             return
         }
         guard canShow(for: page) else {
-            noteSkip("no usable lyrics for this track")
+            // ⚠️ 这里**不许**说成"这首歌没有可用的歌词"：`canShow` 自己已经把**真正的原因**
+            //    写进日志了（关着的开关 / 没有可画的东西），再补一句笼统的会把原因盖掉。
+            //    ★ 2026-10-12（用户报「歌词按钮点不动」那条）：以前这里写的就是那句笼统的话，
+            //      而真正的原因往往在上面一行 —— 两条一起看才不误导。
+            noteSkip("the lyrics button was tapped but our layer cannot open (see the reason above)")
             // ⚠️ 用户刚被告知"这首没词" ⇒ 把可能还挂着的重试窗口**清掉**，
             //    别让下一拍拿同一首歌再空转五回。
             pendingOpenUntil = 0
@@ -3152,6 +3178,13 @@ enum NowPlayingLyricsPlate {
     ///（`canShow` 直接 false，还会打出误导人的"这首歌没有可用的歌词"）。独立复核抓到的。
     private static func ensureToggleZone(in page: UIView) {
         guard #available(iOS 26.0, *) else { return }
+        // ★ 2026-10-12：总开关关着就**一枚键都不许摆** —— 用户报的"歌词按钮点不动"
+        //   就是"键摆出来了、点下去 `canShow` 直接 false"造成的。调用点（`apply` / `reconcile`）
+        //   本来都判过了，这里再判一次是**兜底**：将来多一条调用路径，也不会再造出那枚死键。
+        guard isEnabled else {
+            removeToggle()
+            return
+        }
         guard let wanted = toggleFrame(in: page) else {
             noteSkip("cannot find the play button, so there is nowhere to put the lyrics button")
             return
@@ -3763,6 +3796,22 @@ enum NowPlayingLyricsPlate {
         guard lastSkipReason != reason else { return }
         lastSkipReason = reason
         writeDebugLog("[\(logTag)] not expanding (\(reason))")
+    }
+
+    /// 「这一层为什么没参与」——一次一页只报一行。
+    ///
+    /// ★ 2026-10-12：加了「更好的逐词歌词」这条判据之后，"歌词键不见了"有两种完全不同的原因
+    /// （用户把那颗关了 / 把「歌词进播放器」关了），日志里必须能分开 ——
+    /// 否则下一份日志只能看到"什么都没有"，没法定位（本仓库的老规矩：任何静默返回都要留话）。
+    private static var lastEnabledSkipReason = ""
+
+    private static func noteDisabledReason() {
+        let reason = NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled
+            ? "'Lyrics in the player' is off"
+            : "'Better word-by-word lyrics' is off - this layer stands down and Spotify's own lyrics entry is left alone"
+        guard lastEnabledSkipReason != reason else { return }
+        lastEnabledSkipReason = reason
+        writeDebugLog("[\(logTag)] our layer is not in play (\(reason))")
     }
 
     private static func frameText(_ frame: CGRect) -> String {
