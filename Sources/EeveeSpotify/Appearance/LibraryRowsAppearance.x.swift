@@ -70,12 +70,14 @@ enum LibraryRowsAppearance {
             return
         }
 
+        // 两个 id 各自找一遍（不写三元表达式：闭包套在 `? :` 里对这种小工具不值当，
+        // 而且这一层是"每颗单元每拍跑一次"的路径，多一次树走的代价可以忽略）。
         let thumb = LibraryAppearance.findView(in: cell, where: {
             $0.accessibilityIdentifier == thumbIdentifier
         })
-        let cover = thumb == nil ? LibraryAppearance.findView(in: cell, where: {
+        let cover = LibraryAppearance.findView(in: cell, where: {
             $0.accessibilityIdentifier == cardArtworkIdentifier
-        }) : nil
+        })
         if let thumb {
             round(thumb, to: LibraryRowsMetrics.thumbRadius)
         } else if let cover {

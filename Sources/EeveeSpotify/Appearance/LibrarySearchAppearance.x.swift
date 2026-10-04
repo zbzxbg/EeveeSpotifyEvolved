@@ -64,11 +64,15 @@ enum LibrarySearchAppearance {
         // 灰纱：与音乐库页**同一份判据**（`LibraryAppearance.clearTopEdgeScrim`），只是换了个头部。
         LibraryAppearance.clearTopEdgeScrim(in: header)
 
+        // ⚠️ "找到没"和"量到尺寸没"必须分开数：布局第一拍上形状**在**但高度还是 0
+        //    （`capsule` 会拒绝），把那种情况也算成"找不到"就会报一条假警报。
+        var found = 0
         var shaped = 0
         for identifier in [LibrarySearchMetrics.fieldIdentifier, LibrarySearchMetrics.buttonIdentifier] {
             guard let shape = LibraryAppearance.findView(in: header, where: {
                 $0.accessibilityIdentifier == identifier
             }) else { continue }
+            found += 1
             if capsule(shape) { shaped += 1 }
         }
 
@@ -78,7 +82,7 @@ enum LibrarySearchAppearance {
                 "[Library] the in-library search field and Cancel are capsules now"
                     + " (\(shaped) shape(s); the glass inside them is Spotify's own, we only changed the shape)"
             )
-        } else if !didReportMissing, shaped == 0, header.bounds.height > 1 {
+        } else if !didReportMissing, found == 0, header.bounds.height > 1 {
             didReportMissing = true
             writeDebugLog(
                 "[Library] ⚠️ the in-library search header has neither \(LibrarySearchMetrics.fieldIdentifier)"
