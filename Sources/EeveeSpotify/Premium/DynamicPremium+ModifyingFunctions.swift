@@ -428,9 +428,21 @@ private let propertyReplacements = [
     //     ios-feature-lyrics  lyrics_entry_point_enabled = false
     //
     // 而"与「关于艺人」并列的歌词卡片"正是这个词的字面意思（入口：点了才进全屏歌词）。
-    // scope/name 都来自服务端实际下发的内容（不是猜的）→ `setBool` 是"钉已存在的值"，
-    // 不存在命中 0 条的空枪风险；服务端要是本来就是 true，这一行等于没写。
-    EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .setBool(true)),
+    // scope/name 都来自服务端实际下发的内容（不是猜的）。
+    //
+    // ★★ 2026-10-12（用户：「退出重进 Spotify **大概率突然无法播放任何歌词**…换代理也不行，
+    //    **开启覆盖配置也只能好一小会**」）：
+    //    这里原来是 `.setBool`（**只钉已下发的值、绝不新增**），而它的"空枪"是**静默**的 ——
+    //    只要某一份 customize payload **没有**携带这条 flag（unauth 配置、增量/部分 payload
+    //    都可能没有），我们这一枪就落空，而服务端那份的取值是 **false**
+    //    （日志 59 第 16 行：`scope=ios-feature-lyrics name=lyrics_entry_point_enabled bool=false`）
+    //    ⇒ **歌词入口整个消失**，用户看到的就是"没有任何歌词"。
+    //    这也解释了"开覆盖能好一小会"：用户自己加的覆盖走的是 `.forceBool` / `.forceEnum`，
+    //    那条路**有追加能力**（日志里 `0 match(es) (server did not send it; we append our own)`）。
+    //    ⇒ 升级成 `.forceBool(true)`：**命中就钉住、没下发就补一条**。
+    //      scope 来自服务端实发内容（不是猜的），所以补进去的那条能对得上。
+    //    ⚠️ 开关仍然有效：`modifyAssignedValues` 里那条门禁照旧整条跳过（`SKIPPED: switch off`）。
+    EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
 
     // ─────────────────────────────────────────────────────────────────────
     // ★ 2026-10-09：「封面下单行歌词」（跟唱那一行）—— **用户那个开关的第三层**。
@@ -600,6 +612,33 @@ private func reportLyricsReplacementOutcome(_ values: [AssignedValue]) {
     }
 }
 
+/// 「歌词入口」那条 flag 在**这一份 payload** 里到底有没有（**改写之前**数）。
+///
+/// ★ 2026-10-12（用户：「退出重进 Spotify 大概率突然无法播放任何歌词」）：
+///   这条替换从 `.setBool` 升级成 `.forceBool` 之后，"服务端没下发"不再等于失效，
+///   而是**我们补一条**；而"有没有"这件事直接决定歌词入口在不在，所以必须能在日志里看见。
+///   ⚠️ 现成的 `reportLyricsReplacementOutcome` 帮不上：它`reportedLyricsReplacements`
+///   是"每个 key 只报一次"，后续 payload 全被挡住 —— 而问题恰恰出在**后续**那份 payload 上。
+///   这里只报**状态翻转**（有 → 没有，或反过来），不刷屏。
+private var entryPointFlagWasPresent: Bool?
+
+private func reportEntryPointFlagPresence(_ values: [AssignedValue]) {
+    let present = values.contains {
+        $0.propertyID.name == lyricsEntryPointFlagName
+            && $0.propertyID.scope == "ios-feature-lyrics"
+    }
+    guard entryPointFlagWasPresent != present else { return }
+    let isFirstPayload = entryPointFlagWasPresent == nil
+    entryPointFlagWasPresent = present
+    writeDebugLog(
+        "[Flags] lyrics_entry_point_enabled "
+            + (present
+                ? "is in this payload"
+                : "is MISSING from this payload - we append our own")
+            + (isFirstPayload ? " (first payload of this launch)" : " (changed since the last payload)")
+    )
+}
+
 /// 用户自己加的那条覆盖（设置页 → Flag 覆盖）有没有**真的够到**服务端下发的配置。
 ///
 /// 为什么单独打一行：`reportLyricsReplacementOutcome` 只覆盖 `isFlagOfInterest`
@@ -637,6 +676,8 @@ private func reportUserOverrideOutcomes(_ values: [AssignedValue]) {
 private func modifyAssignedValues(_ values: inout [AssignedValue]) {
     dumpLyricsFlags(values)
     dumpNPVFlags(values)
+    // ★ 2026-10-12：**在改写之前**先记一次"这份 payload 到底有没有那条 flag"（见下面的说明）。
+    reportEntryPointFlagPresence(values)
     reportUserOverrideOutcomes(values)
 
     // 用户自定义覆盖追加在**内置替换之后**：数组顺序即应用顺序，所以设置页里
