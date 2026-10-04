@@ -148,7 +148,11 @@ struct TabBarGlassGroup: HookGroup {}
 
 enum TabBarGlassPlate {
 
-    static var isEnabled: Bool { UserDefaults.tabBarGlass }
+    /// ⚠️ 2026-10-12：**「标签栏改用系统玻璃」开着时这一盘整条让位**（见 `TabBarSystemGlass.x.swift`）——
+    /// 那条路是把 Spotify 的栏内容藏掉、在上面叠一条**系统 `UITabBar`**（真玻璃 + 选中气泡会滑）。
+    /// 两条一起跑就会变成"我们的胶囊 + 系统的玻璃"叠在一起，所以这里**必须互斥**；
+    /// 关掉新开关即刻还回来（`apply` 的 `!isEnabled` 分支会 `removePlate`）。
+    static var isEnabled: Bool { UserDefaults.tabBarGlass && !UserDefaults.tabBarSystemGlass }
 
     /// 玻璃层挂在宿主上的关联键。
     private static var plateKey: UInt8 = 0
@@ -1085,6 +1089,11 @@ class TabBarPlateHook: ClassHook<UIView> {
         orig.layoutSubviews()
         let bar = self.target
         onMainThreadSync {
+            // ★ 2026-10-12：两条路**互斥**，都在这一拍里判 ——
+            //   · 系统玻璃（`TabBarSystemGlass`）：藏掉 Spotify 的内容 + 叠系统栏；
+            //   · 旧的自绘胶囊（`TabBarGlassPlate`）：新开关开着时它自己的 `isEnabled` 是 false ⇒
+            //     这一拍会 `removePlate`，把我们的胶囊还回去（**互斥靠它自己那条判据，别在这里再写一份**）。
+            TabBarSystemGlass.apply(to: bar)
             TabBarGlassPlate.apply(to: bar)
         }
     }

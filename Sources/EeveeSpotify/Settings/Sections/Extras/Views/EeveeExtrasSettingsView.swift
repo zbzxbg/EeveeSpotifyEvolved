@@ -38,6 +38,7 @@ struct EeveeExtrasSettingsView: View {
 
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
         var tabBarGlass = UserDefaults.tabBarGlass
+        var tabBarSystemGlass = UserDefaults.tabBarSystemGlass
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
         var miniBarGlass = UserDefaults.miniBarGlass
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
@@ -148,6 +149,25 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.tabBarHideLabels,
                         persist: { UserDefaults.tabBarHideLabels = $0 }
+                    )
+                )
+
+                // ★ 2026-10-12（用户看出 pw 那条栏"像果冻、还能滑"）：改用**系统 `UITabBar`** ——
+                //   Spotify 的栏内容藏掉，上面叠一条系统栏 ⇒ iOS 26 自己画真·液态玻璃
+                //   （选中气泡会滑、折射、明暗自适应）。**默认关**（我看不到真机，先当实验品）；
+                //   与上面那一条**互斥**（开着时自绘胶囊整盘让位），关掉即刻精确还原。
+                Toggle(
+                    "tab_bar_system_glass".localized,
+                    isOn: shadowBinding(
+                        \.tabBarSystemGlass,
+                        persist: { value in
+                            UserDefaults.tabBarSystemGlass = value
+                            if value {
+                                TabBarSystemGlass.reapply()
+                            } else {
+                                TabBarSystemGlass.remove(reason: "switch off")
+                            }
+                        }
                     )
                 )
             }

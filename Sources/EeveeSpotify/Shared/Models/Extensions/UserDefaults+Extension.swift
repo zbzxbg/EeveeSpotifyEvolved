@@ -35,6 +35,7 @@ extension UserDefaults {
     private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
     private static let libraryLargeTitleKey = "libraryLargeTitle"
     private static let tabBarGlassKey = "tabBarGlass"
+    private static let tabBarSystemGlassKey = "tabBarSystemGlass"
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
     private static let miniBarGlassKey = "miniBarGlass"
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
@@ -88,6 +89,7 @@ extension UserDefaults {
         dumpCustomizeBodyKey,
         libraryLargeTitleKey,
         tabBarGlassKey,
+        tabBarSystemGlassKey,
         tabBarHideLabelsKey,
         miniBarGlassKey,
         nowPlayingBackdropKey,
@@ -486,6 +488,24 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: tabBarGlassKey)
+        }
+    }
+
+    /// 「**标签栏改用系统玻璃**」—— 用户 2026-10-12 提的（他看出 pw 那条栏"像果冻、还能滑"）。
+    ///
+    /// **默认关**：这条路是**照 pw 的做法**（`Redesigned/Navbar/TabBar.x`）把 Spotify 的栏内容藏掉、
+    /// 在上面叠一条**系统 `UITabBar`** ⇒ iOS 26 直接画成真·液态玻璃（选中气泡会滑、折射、明暗自适应）。
+    /// 我看不到真机，所以先当实验品：**开关关着 = 完全不动**（连一次布局都不碰）；
+    /// 开着 = 藏内容 + 叠系统栏 + 给容器让高度（`additionalSafeAreaInsets` 会**精确写回**）。
+    ///
+    /// ⚠️ 与 `tabBarGlass`（我们自绘的胶囊）**互斥**：这条开着时那条整盘让位，见 `TabBarGlassPlate.isEnabled`。
+    /// 实现与四步做法写在 `Appearance/TabBarSystemGlass.x.swift` 的文件头。
+    static var tabBarSystemGlass: Bool {
+        get {
+            container.object(forKey: tabBarSystemGlassKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: tabBarSystemGlassKey)
         }
     }
 
