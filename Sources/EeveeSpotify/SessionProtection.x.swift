@@ -379,11 +379,21 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
                     task.cancel()
                     return
                 }
-                if elapsed > 30 && host.contains("apresolve") {
-                    writeDebugLog("[NET] Cancelled apresolve at \(elapsedInt)s")
-                    task.cancel()
-                    return
-                }
+                // ★★ 2026-10-12：这里**原来是**"30 秒后取消 apresolve"；同一意图的另一半
+                //   （`SpotifyResponsePatcher.blockedResponseData` 给它回假的 `{"status":"OK"}`）
+                //   也一起删掉了。
+                //
+                //   原因：`apresolve.spotify.com` **不是登出端点**，它回答的是
+                //   "**音频/内容接入点在哪**"（真响应形如 `{"accesspoint":[…]}`）。
+                //   取消它 ⇒ App 拿不到接入点 ⇒ 用户 2026-10-12 报的三个症状一起出现
+                //   （照片 80/81、日志 61/62）：**歌放不动**（`[PLAYER] ⚠️ position stalled
+                //   at 9.5s … dur=238.0s`）、**歌单列表空或只加载一部分**（`0 分钟`、行不全）、
+                //   **整列表变灰**（可播放性判不出来）。也解释了"换代理没用"（本地行为）。
+                //
+                //   登出保护**一点没少**：这一层照旧拦 `DeleteToken` / `signup/public` /
+                //   `pses/screenconfig` / `v1/customize`，`session/purge` 与 `token/revoke`
+                //   在 `SpotifyResponsePatcher` 那边拦。
+                //   ⚠️ 上面 `[NET] Auth request: …` 那行日志保留（它是有用的现场判据）。
             }
         }
         orig.resume()

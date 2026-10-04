@@ -652,7 +652,9 @@ enum SpotifyResponsePatcher {
             return url.isAccountValidate || url.isOndemandSelector
                 || url.isTrialsFacade || url.isPremiumMarketing || url.isPendragonFetchMessageList
                 || url.isPushkaTokens
-                || url.path.contains("signup/public") || url.path.contains("apresolve")
+                || url.path.contains("signup/public")
+                // ⚠️ ★★ 2026-10-12：**`apresolve` 从这里删掉了** —— 见
+                //    `blockedResponseData` 里那段说明（它不是登出端点，是"音频接入点在哪"）。
                 || url.path.contains("pses/screenconfig")
                 || url.path.contains("v1/customize")
         }
@@ -693,12 +695,28 @@ enum SpotifyResponsePatcher {
         if url.isSessionInvalidation
             || url.path.contains("session/purge")
             || url.path.contains("token/revoke")
-            || url.path.contains("signup/public")
-            || url.path.contains("apresolve") {
+            || url.path.contains("signup/public") {
             // Logout daemons parse the body; synthetic OK keeps them off the
             // actual logout codepath.
             return #"{"status":"OK"}"#.data(using: .utf8)!
         }
+        // ★★ 2026-10-12（用户报了三个症状，日志 61/62 抓到现场）：
+        //   「退出重进 Spotify **大概率无法播放全部歌曲**（位置冻在 9.5s、时长却是 238s）」
+        //   「歌单里的歌**全部消失**，重进全是灰色；有时只显示一部分」
+        //
+        //   **`apresolve` 以前也在上面那一串里** —— 那是**上游带过来的**一行（`git log -S` 追到
+        //   2026-09-18 的导入提交，没有任何说明）。但 `apresolve.spotify.com` **不是登出端点**：
+        //   它回答的是「**音频/内容的接入点在哪**」（真响应形如 `{"accesspoint":[…]}`）。
+        //   我们却给它回 `{"status":"OK"}` + 30 秒后整条拦掉（`shouldBlock` 里那一行，同时删了）
+        //   ⇒ App 拿不到接入点 ⇒ 三件事一起出现：
+        //     · 音频拉不下来 ⇒ **位置冻住、放不动**（正是日志 62 那条
+        //       `⚠️ position stalled at 9.5s for ~3s (dur=238.0s)`）；
+        //     · 内容请求打不到接入点 ⇒ **歌单列表空/只加载一部分**（照片 80/81：`0 分钟`、行不全）；
+        //     · 可播放性判不出来 ⇒ **整列表变灰**。
+        //   这也解释了"换代理没用"（这是本地行为）与"退出重进后大概率"（30 秒后才开始拦）。
+        //   ⇒ 现在**原样放行**：让它自己去解析接入点。登出保护一个都没少
+        //     （`session/purge` / `token/revoke` / `DeleteToken` / `signup/public` 照旧拦）。
+        //   ⚠️ `[NET] Auth request: … apresolve …` 那行**保留**（它是有用的现场判据）。
         if url.path.contains("pses/screenconfig") {
             return #"{}"#.data(using: .utf8)!
         }
