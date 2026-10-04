@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """只读地摊开一个 Theos tweak 的 `.deb`（用来清点**用户可见功能**，不是读实现）。
 
-为什么需要它：缺口的对照对象（spoti.pw）是 PolyForm Strict，本仓库的规矩是
-**只看思路、代码全部自己写**。所以这个脚本刻意只抽"用户能看到的东西"：
+为什么需要它：缺口的对照对象（spoti.pw）从 v0.22.0 起是 PolyForm Strict，**那一部分**
+只看思路、不复用代码（v0.21.1 及更早是 GPL-3.0，已另行复用）。所以这个脚本刻意只抽
+"用户能看到的东西"：
   · `control`（包元数据：版本/描述/依赖）
   · 任何 `*.bundle/**/Localizable.strings`（设置页里那些开关的名字与说明）
   · `*.plist`（偏好设置键名 = 一份功能清单）
@@ -91,8 +92,8 @@ def printable_strings(blob: bytes, minimum: int = 5) -> list[str]:
     """把二进制里的**可见字符串**捞出来（ASCII + UTF-16LE 两种编码）。
 
     ⚠️ 这是本工具的**边界**：只捞"字符串"（设置页上那些文案、偏好键、URL），
-    **不反汇编、不读方法实现** —— 对照对象的许可是 PolyForm Strict，本仓库的规矩是
-    只看思路、代码全部自己写。
+    **不反汇编、不读方法实现** —— 对照对象从 v0.22.0 起的许可是 PolyForm Strict，
+    那一部分只看思路、不复用代码。
     """
     found: list[str] = []
 

@@ -453,8 +453,8 @@ licenses_upstream = "Upstream";
 licenses_upstream_detail = "A fork of EeveeSpotify (see README.md); upstream's own license and credits apply there.";
 licenses_bundled = "Bundled components";
 licenses_bundled_detail = "Third-party source ships in-tree (SwiftProtobuf, XMLCoder, fishhook …). The repository does not carry their separate license files — check those projects directly.";
-licenses_inspiration = "Ideas borrowed";
-licenses_inspiration_detail = "Some features only borrow ideas (spoti.pw, PolyForm Strict 1.0.0). No code was reused — everything here was written from scratch.";
+licenses_inspiration = "spoti.pw";
+licenses_inspiration_detail = "Code and design from spoti.pw v0.21.1 (GPL-3.0, © Vojtěch Škopek) are reused in this repository and modified by it. Only v0.21.1 and earlier were used — v0.22.0 and later are PolyForm Strict 1.0.0, and none of their source was taken.";
 licenses_kumone = "kumone";
 licenses_kumone_detail = "The now-playing page's full-page colour backdrop (gradient tint built from the cover colour) follows the recipe in kumone, an independent NetEase Cloud Music client — LGPL-3.0 (library) / GPL-3.0 (app), compatible with this repository's GPL-3.0. Only values, curves and the layer recipe were taken; the view code here is our own UIKit.";
 

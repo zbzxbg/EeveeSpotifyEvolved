@@ -143,7 +143,11 @@ mkdir -p "$LOCAL_BIN"
 ensure_path_contains "$LOCAL_BIN"
 
 pipx ensurepath >/dev/null 2>&1 || true
-pipx install --force git+https://github.com/asdfzxcvbn/pyzule-rw.git >/dev/null
+# `cyan` 注入器。来源是**本项目自己的镜像**（zbzxbg/es-build-tools 的 v1.0.0
+# release，内容 = 上游 asdfzxcvbn/pyzule-rw v1.4.4 的原样副本），与
+# .github/workflows/*.yml 保持一致。
+pipx install --force \
+  "https://github.com/zbzxbg/es-build-tools/releases/download/v1.0.0/pyzule-rw-1.4.4.tar.gz" >/dev/null
 
 need_cmd cyan
 
@@ -164,8 +168,22 @@ if ! command -v ipapatch >/dev/null 2>&1; then
     SUFFIX="macos-arm64"
   fi
 
-  curl -fsSL "https://github.com/asdfzxcvbn/ipapatch/releases/latest/download/ipapatch.${SUFFIX}" \
+  # ipapatch，来自本组织自己的镜像（zbzxbg/es-build-tools v1.0.0），并校验 sha256。
+  # 两个哈希是上游 release 页公布的值；镜像里的二进制与上游 v2.1.3 逐字节相同。
+  # 与 patched 工作流保持一致。
+  if [ "$SUFFIX" = "macos-arm64" ]; then
+    WANT=05df2e7310b041891892cf152ce6bbd93574880bf147b96d775051fad796737f
+  else
+    WANT=0577fd7af013991c4e8b24b7a05146d2dd8b0650e1d017c3c538264a34ada0b3
+  fi
+  curl -fsSL "https://github.com/zbzxbg/es-build-tools/releases/download/v1.0.0/ipapatch.${SUFFIX}" \
     -o "$LOCAL_BIN/ipapatch"
+  GOT=$(shasum -a 256 "$LOCAL_BIN/ipapatch" | awk '{print $1}')
+  if [ "$GOT" != "$WANT" ]; then
+    err "ipapatch sha256 mismatch (want $WANT, got $GOT)"
+    rm -f "$LOCAL_BIN/ipapatch"
+    exit 1
+  fi
   chmod +x "$LOCAL_BIN/ipapatch"
 fi
 

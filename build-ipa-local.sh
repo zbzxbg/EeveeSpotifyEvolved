@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Local IPA build — mirror of .github/workflows/main.yml. Produces an IPA
-# you can sign with Sideloadly/AltStore/TrollStore.
+# Local IPA build — the local counterpart of the two CI workflows:
+#   .github/workflows/build-ipa-with-orion.yml          (no patch)
+#   .github/workflows/build-ipa-with-orion-patched.yml  (patched)
+# Produces an IPA you can sign with Sideloadly/AltStore/TrollStore.
 #
 # Pipeline:
 #   1. Build EeveeSwiftProtobuf.framework from apple/swift-protobuf source

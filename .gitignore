@@ -40,4 +40,17 @@ build_log.txt
 .vscode/
 .website/
 .github/copilot-instructions.md
-scripts/spotify_symbol_diff.py
+Scripts/spotify_symbol_diff.py
+
+# Session handoff logs: kept on disk on purpose, never tracked. These are
+# one-shot process records (and they contain local paths), so they live here
+# rather than in the repository. Conclusions worth keeping belong in the source
+# comments next to the code they explain.
+.handoffs/
+
+# WorkBuddy AI's own memory directory. That file belongs to the tool and stays
+# at the path the tool expects it at; it is not part of this repository.
+.workbuddy-ai/
+
+# Local-only upload helper binary. Never part of the project.
+/Tools/TelegramUploadEeveeSpotify

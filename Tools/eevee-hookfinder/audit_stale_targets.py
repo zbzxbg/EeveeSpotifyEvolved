@@ -196,7 +196,9 @@ def collect_literals():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dump", default=r"C:\dsh\ipa\dump-9.1.86.txt")
+    # 解密 IPA 的 dump 放哪：默认看 $EEVEE_IPA_DIR，没设就用当前目录。
+    ap.add_argument("--dump", default=os.path.join(
+        os.environ.get("EEVEE_IPA_DIR", os.getcwd()), "dump-9.1.86.txt"))
     ap.add_argument("--ipa-classes",
                     default=os.path.join(REPO, ".spotify-ipa", "objc-classnames-by-image.txt"))
     ap.add_argument("--flag-table",

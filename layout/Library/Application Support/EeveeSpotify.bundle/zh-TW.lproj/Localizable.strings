@@ -352,5 +352,5 @@ licenses_upstream = "上游";
 licenses_upstream_detail = "本倉庫是 EeveeSpotify 的 fork（出處見 README.md）；上游的授權與署名以它自己的倉庫為準。";
 licenses_bundled = "內建的第三方原始碼";
 licenses_bundled_detail = "倉庫內建了第三方原始碼（SwiftProtobuf、XMLCoder、fishhook 等）；倉庫裡**沒有**隨附它們各自的授權檔，需要時請看它們自己的專案。";
-licenses_inspiration = "只借鑑了思路的";
-licenses_inspiration_detail = "部分功能只借鑑思路（spoti.pw，PolyForm Strict 1.0.0）—— 沒有重用任何一行程式碼，全部自己寫。";
+licenses_inspiration = "spoti.pw";
+licenses_inspiration_detail = "本倉庫重用了 spoti.pw v0.21.1（GPL-3.0，版權歸 Vojtěch Škopek）的程式碼與設計，並加以修改。只使用 v0.21.1 及更早的版本；v0.22.0 起為 PolyForm Strict 1.0.0，未取其任何原始碼。";

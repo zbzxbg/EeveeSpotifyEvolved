@@ -5,7 +5,7 @@
 >
 > ```
 > python Tools/eevee-hookfinder/audit_stale_targets.py \
->     --ipa "C:\dsh\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa"
+>     --ipa "<data-dir>\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa"
 > ```
 >
 > 与 `Scripts/diff-symbol-dumps.py`（CI `binary-diff.yml` 用的那个）的分工：

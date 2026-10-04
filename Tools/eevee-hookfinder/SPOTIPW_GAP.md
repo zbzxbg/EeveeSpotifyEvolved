@@ -7,9 +7,10 @@
 
 ## 0. 红线与清点方法（先看这段）
 
-- 本地 checkout `C:\Users\ngzhwm\Documents\GitHub\spoti.pw` = **v0.22.0**（`version.txt`；
+- 本地 checkout `<repos>\spoti.pw` = **v0.22.0**（`version.txt`；
   `README.md` 徽章也是 PolyForm Strict 1.0.0）→ 已过 v0.21.1 那条 GPL 线，
-  **禁止修改 / 复用 / 再分发它的代码**。用户定的规矩：**只看思路，代码全部自己写**。
+  **禁止修改 / 复用 / 再分发它的代码**。这一条**只约束 v0.22.0 及以后**；v0.21.1 及更早是
+  GPL-3.0，已经**复用并修改**（署名、许可与改动见 README 与 App 内「开源许可」页）。
 - 本次清点**只读了它的 `.md`**：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`docs/tweaks.md`、
   `harness/*/README.md`（19 个）。`tweak/`、`vendor/`、`extension/`、`scripts/` 一行没看。
   所以下面每一条都能追到文档，没有一条来自它的实现。
@@ -139,7 +140,7 @@ Navbar Hide labels、Licenses 页、Reset-to-stock、`spotify:` 链接派发（�
 
 ## 5. ★ 2026-10-02 复核：拿到 **v0.23.0-beta 的 deb** 之后（新增/纠正）
 
-用户把 `C:\dsh\else\com.spotipw_0.23.0-beta_iphoneos-arm.deb` 给了我们 —— 比上面那次
+用户把 `<data-dir>\else\com.spotipw_0.23.0-beta_iphoneos-arm.deb` 给了我们 —— 比上面那次
 （v0.22.0，**只读 `.md`**）新。红线不变：**不读它的源码、不反汇编**。
 这次的证据来源只是**它自己的设置页文案**（等于把它的设置页翻了一遍），工具是新写的
 `Tools/eevee-hookfinder/inspect_tweak_deb.py`（只抽可见字符串与 plist，**不反汇编**）。

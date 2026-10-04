@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// 「扩展功能」—— 后加的这批（思路来自 spoti.pw，代码自己写）集中在一页。
+/// 「扩展功能」—— 后加的这批（来路见「开源许可」页）集中在一页。
 ///
 /// 为什么这样放：EeveeSpotify 根页原来因为每加一个功能就多一行，涨到了 18 行——
 /// 用户反馈"页面臃肿"。spoti.pw 的结构正好相反：**根页只放分类，功能各进自己的页**。
@@ -142,7 +142,7 @@ struct EeveeExtrasSettingsView: View {
                 footer: Text("tab_bar_glass_description".localized)
             ) {
                 // 照片 21/23/25 里那条栏是**没有文字**的。
-                // 思路借自 spoti.pw 的「Hide labels」（只借思路，代码自己写）。
+                // 来自 spoti.pw 的「Hide labels」（来源、许可与改动见「开源许可」页）。
                 Toggle(
                     "tab_bar_hide_labels".localized,
                     isOn: shadowBinding(

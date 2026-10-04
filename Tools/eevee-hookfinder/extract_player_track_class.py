@@ -33,8 +33,10 @@
 
 用法
 ----
-    python3 extract_player_track_class.py "C:\\dsh\\ipa\\Spotify- Music and Podcasts_9.1.86_decrypted.ipa"
+    python3 extract_player_track_class.py "<解密 Spotify IPA 的路径>"
     python3 extract_player_track_class.py <ipa> --out report.txt
+
+不给 <ipa> 时按 `$EEVEE_IPA_DIR` → 仓库根目录 → 仓库根的 `ipa/` 的顺序找。
 """
 
 import argparse
@@ -242,8 +244,9 @@ def find_default_ipa():
     here = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.abspath(os.path.join(here, "..", ".."))
 
+    ipa_dir = os.environ.get("EEVEE_IPA_DIR")
     patterns = []
-    for root in (repo_root, os.path.join(repo_root, "ipa"), r"C:\dsh\ipa"):
+    for root in ([ipa_dir] if ipa_dir else []) + [repo_root, os.path.join(repo_root, "ipa")]:
         patterns += [
             os.path.join(root, "*decrypted*.ipa"),
             os.path.join(root, "*decrypted*.IPA"),

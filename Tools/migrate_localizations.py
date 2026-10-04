@@ -47,14 +47,21 @@ import re
 import sys
 from pathlib import Path
 
-# 上游（Reincarnated）的 bundle 路径。默认给的是 Windows 上的常规克隆位置；
-# 换机器/换目录时**不要改代码**，用环境变量指定即可：
+# 上游（Reincarnated）的 bundle 路径。优先用环境变量指定：
 #     EEVEESPOTIFY_UPSTREAM_BUNDLE=/path/to/.../EeveeSpotify.bundle
+# 没给就假设上游仓库与本仓库**同级克隆**（例如 GitHub/ 下同时有
+# EeveeSpotify-ng-latest/ 和 EeveeSpotifyReincarnated/）。
 # 仓库地址见文件头。见 `--help` 里的说明。
 SRC_BUNDLE = Path(
     os.environ.get("EEVEESPOTIFY_UPSTREAM_BUNDLE")
-    or r"C:\Users\ngzhwm\Documents\GitHub\EeveeSpotifyReincarnated"
-    r"\layout\Library\Application Support\EeveeSpotify.bundle"
+    or (
+        Path(__file__).resolve().parents[2]
+        / "EeveeSpotifyReincarnated"
+        / "layout"
+        / "Library"
+        / "Application Support"
+        / "EeveeSpotify.bundle"
+    )
 )
 DST_BUNDLE = (
     Path(__file__).resolve().parents[1]

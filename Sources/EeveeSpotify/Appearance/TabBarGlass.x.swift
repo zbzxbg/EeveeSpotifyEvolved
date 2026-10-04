@@ -453,7 +453,7 @@ enum TabBarGlassPlate {
     /// ⚠️ 会不会被 Spotify 的 binder 写回来？—— 每次栏布局我们都会再走一遍，并且**计数**；
     /// 写回超过 `labelWriteBackLimit` 次就停手并打日志（宁可保持原生，也不跟它抢 —— 文档铁律）。
     ///
-    /// 思路借自 **spoti.pw** 的「Hide labels」（`docs/tweaks.md`）；**只借思路，代码自己写**。
+    /// 来自 **spoti.pw** 的「Hide labels」（`docs/tweaks.md`）；来源、许可与改动见「开源许可」页。
     private static var labelMarkKey: UInt8 = 0
     private static var labelWriteBacks = 0
     private static let labelWriteBackLimit = 12

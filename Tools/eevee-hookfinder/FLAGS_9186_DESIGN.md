@@ -1,6 +1,6 @@
 # 9.1.86 设计类 flag 短名单（从解密 IPA 抽出）
 
-> 2026-10-01。来源：`C:\dsh\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa`
+> 2026-10-01。来源：`<data-dir>\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa`
 > 的**主二进制**（`Payload/Spotify.app/Spotify`，230 MB），
 > 用本仓库自己的工具 `Tools/eevee-hookfinder/extract_flags.py` 抽的字面量。
 > **只读 IPA，没有改它，也没看 spoti.pw 的任何源码。**

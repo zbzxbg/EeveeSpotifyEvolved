@@ -1,21 +1,33 @@
 EeveeSpotify Version Update Locations
 =====================================
 
-When bumping the version, update these 3 files:
+When bumping the version, update these 2 files:
 
 1. control
-   - Line 3: Version: X.X.X
-   - Example: Version: 6.4.5
+   - line 3: `Version: X.X.X`   <- the .deb package version
 
 2. Sources/EeveeSpotify/Tweak.x.swift
-   - Line 62: static let version = "X.X.X"
-   - Example: static let version = "6.4.5"
+   - the `static let version = "X.X.X"` constant (the tweak's runtime version)
+   - line numbers drift, so find it instead of trusting a fixed one:
+       grep -n 'static let version' Sources/EeveeSpotify/Tweak.x.swift
+   - note it sits far down the file (~line 292 as of 2026-10-12); do not go
+     looking for it near the top
 
-3. build-ipa-local.sh
-   - Line 8: VERSION="X.X.X"
-   - Example: VERSION="6.4.5"
-
-All three must match for consistent versioning across:
+Both must match for consistent versioning across:
 - .deb packages (control)
 - Tweak runtime (Tweak.x.swift)
-- IPA builds (build-ipa-local.sh)
+- IPA builds (they report the tweak version)
+
+There is NO third place to edit. build-ipa-local.sh reads the version out of
+control at run time:
+
+    VERSION=$(grep -E '^Version:' control | awk '{print $2}')
+
+so it can never drift from control.
+
+----
+Fixed 2026-10-12: this file used to say "update these 3 files" and pointed at
+Tweak.x.swift "line 62" and at a VERSION="X.X.X" on "line 8" of
+build-ipa-local.sh. Both were wrong — line 62 is not that constant, and line 8
+of that script is a header comment. There were only ever two edit sites, and the
+third "must match" claim described something that is derived, not typed.

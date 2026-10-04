@@ -58,9 +58,9 @@ on:
         required: true
         type: string
       orion_url:
-        description: "URL to Orion.zip (leave default unless it 404s)"
-        default: "https://github.com/SideloadLabs/EeveeSpotifyReincarnated/releases/download/v6.6.4/Orion.zip"
-        required: true
+        description: "Optional escape hatch. Leave EMPTY (the default) and the workflow builds Orion.framework itself from the Theos submodule - no external download. Only set this to an Orion.zip URL if that source build ever fails."
+        default: ""
+        required: false
         type: string
       upload_method:
         description: "Where to upload the built IPA(s)"
@@ -105,42 +105,80 @@ jobs:
         run: |
           brew install make dpkg ldid wget
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
+          # `cyan` 注入器。来源是**本项目自己的镜像**（zbzxbg/es-build-tools 的
+          # v1.0.0 release，内容 = 上游 asdfzxcvbn/pyzule-rw v1.4.4 的原样副本），
+          # 这样上游那个第三方个人仓库被删/改名也不会让所有 fork 一起挂。
+          # 升级：把新版 tarball 传到 es-build-tools 的新 release，再改这里的 URL。
           python3 -m pip install --upgrade --break-system-packages \
-              git+https://github.com/asdfzxcvbn/pyzule-rw.git
+              "https://github.com/zbzxbg/es-build-tools/releases/download/v1.0.0/pyzule-rw-1.4.4.tar.gz"
           # [PATCHED 差异] ipapatch 只有 patched 那条路用得到，patched 版在这里
           # 多一段：curl 它的 release 装到 /usr/local/bin 并 `--help` 自检。
 
       - uses: levibostian/action-hide-sensitive-inputs@v1
 
       # ── 1. Orion.framework（本工作流存在的主要理由）────────────────────
-      - name: Fetch & validate Orion.framework
+      # 默认**不下载任何东西**：Orion 的源码就在 theos 的子模块里
+      # （`$THEOS/vendor/orion`，见 theos 的 .gitmodules），直接编译即可 ——
+      # 这样 fork 用户不需要任何外部资产，也不会因为某个第三方 release 被删
+      # 或改名而全体构建失败。`orion_url` 留作逃生口。
+      - name: Provide Orion.framework
+        env:
+          ORION_URL: ${{ inputs.orion_url }}
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/orion"; mkdir -p "$RUNNER_TEMP/orion"
-          wget "${{ inputs.orion_url }}" --no-verbose -O "$RUNNER_TEMP/Orion.zip"
 
-          # 固定这份 release 附件的 sha256；换 URL 时把这里一起改掉。
-          # 不匹配只 warn 不 fail —— 上游重新上传过附件的话不该挡住你。
-          EXPECTED="6316e49d487c29aa1ea03767fb8a78b5ea5588b609bdeb8bf6f4528537766658"
-          ACTUAL=$(shasum -a 256 "$RUNNER_TEMP/Orion.zip" | awk '{print $1}')
-          if [ "$EXPECTED" = "$ACTUAL" ]; then
-            echo "Orion.zip sha256 verified"
+          if [ -z "$ORION_URL" ]; then
+            # ── 默认路径：从 theos 子模块自己编 Orion ──────────────────────
+            ORION_SRC="$THEOS/vendor/orion"
+            [ -d "$ORION_SRC" ] || {
+              echo "::error::$ORION_SRC is missing - the Theos checkout did not include submodules."
+              echo "::error::Keep 'submodules: recursive' on the Setup Theos step, or set orion_url to an Orion.zip."
+              exit 1
+            }
+
+            # ⚠️ 要的是 `make package`，**不是** `make vendor`：`make vendor` 会把
+            # `xcrun tapi stubify` 之后的 **stub**（几 KB，只给编译器看）装进
+            # $THEOS/vendor/lib，那份 dlopen 加载不了。真二进制约 215 KB，只存在于
+            # 打包好的 deb 里 —— 所以下面从 deb 把它掏出来（和本仓库从自己的 deb
+            # 掏 EeveeSpotify.dylib 是同一套路）。
+            # 不传 TARGET：theos 在 Darwin 上的默认 target 就是 iphone
+            # （makefiles/platform/Darwin.mk: _THEOS_PLATFORM_DEFAULT_TARGET := iphone）。
+            make -C "$ORION_SRC" clean >/dev/null 2>&1 || true
+            make -C "$ORION_SRC" package FINALPACKAGE=1 || {
+              echo "::error::building Orion from \$THEOS/vendor/orion failed (see the log above)."
+              echo "::error::Workaround: set orion_url to an Orion.zip URL and re-run - see README."
+              exit 1
+            }
+
+            ORION_DEB=$(ls -t "$ORION_SRC"/packages/dev.theos.orion*.deb 2>/dev/null | head -1)
+            [ -n "$ORION_DEB" ] || {
+              echo "::error::Orion produced nothing matching packages/dev.theos.orion*.deb"
+              ls -la "$ORION_SRC/packages" 2>/dev/null | sed 's|^|  |'
+              exit 1
+            }
+            echo "Orion deb: $ORION_DEB"
+
+            dpkg-deb -x "$ORION_DEB" "$RUNNER_TEMP/orion"
           else
-            echo "::warning::Orion.zip sha256 does not match (expected $EXPECTED, got $ACTUAL) - continuing, but please verify the source"
+            # ── 逃生口：外部 Orion.zip（只有源码构建挂掉时才该走这里）──────
+            # 原先这里钉死过一个 sha256，但它只对某一个具体的 zip 有意义，而且
+            # 不匹配也只是 warning；改成"可覆盖的逃生口"之后它不再有意义。
+            echo "Using an external Orion.zip (orion_url was set)"
+            wget "$ORION_URL" --no-verbose -O "$RUNNER_TEMP/Orion.zip"
+            unzip -q "$RUNNER_TEMP/Orion.zip" -d "$RUNNER_TEMP/orion"
+
+            # ⚠️ 必须排除 __MACOSX：这份 zip 是在 macOS 上打的，带 AppleDouble
+            # 元数据目录，里面同样有一个 `__MACOSX/Orion.framework`（只有 `._Orion`，
+            # 没有真正的 `Orion`）。`find` 的遍历顺序会让它先命中，于是后面
+            # "没有 Orion 这个二进制" 直接 fail —— 实测踩过。
+            rm -rf "$RUNNER_TEMP/orion/__MACOSX"
           fi
-
-          unzip -q "$RUNNER_TEMP/Orion.zip" -d "$RUNNER_TEMP/orion"
-
-          # ⚠️ 必须排除 __MACOSX：这份 zip 是在 macOS 上打的，带 AppleDouble
-          # 元数据目录，里面同样有一个 `__MACOSX/Orion.framework`（只有 `._Orion`，
-          # 没有真正的 `Orion`）。`find` 的遍历顺序会让它先命中，于是后面
-          # "没有 Orion 这个二进制" 直接 fail —— 实测踩过。
-          rm -rf "$RUNNER_TEMP/orion/__MACOSX"
 
           FW=$(find "$RUNNER_TEMP/orion" -maxdepth 3 -type d -name 'Orion.framework' \
                  -not -path '*__MACOSX*' | head -1)
           [ -n "$FW" ] || {
-            echo "::error::no Orion.framework inside Orion.zip. Extracted structure:"
+            echo "::error::no Orion.framework found under \$RUNNER_TEMP/orion (the source build and the escape hatch both land there). Structure:"
             find "$RUNNER_TEMP/orion" -maxdepth 3 | sed 's|^|  |'
             exit 1
           }

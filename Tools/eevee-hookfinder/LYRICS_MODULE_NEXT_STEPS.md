@@ -1,6 +1,6 @@
 # 歌词模块：卡片由 payload 驱动；`timeSynchronized` 决定走哪个面
 
-**数据**：`C:\dsh\readlog\eeveespotify_debug.log`（无编号，最早那份）+ `eeveespotify_debug{ 2 … 15 }.log` + 两份 `.ips`（2026-09-24/25、09-26/27）
+**数据**：`<data-dir>\readlog\eeveespotify_debug.log`（无编号，最早那份）+ `eeveespotify_debug{ 2 … 15 }.log` + 两份 `.ips`（2026-09-24/25、09-26/27）
 
 ---
 
@@ -39,7 +39,7 @@
 
 - 用户肉眼 + 日志一致：`placeholder` 下**卡片确实出现**（多条
   `inline host found: Lyrics_TextElementImpl.LyricsTextView … 342x256`，342x256 正是卡片歌词区尺寸）。
-- 照片 `C:\dsh\else\photo_2026-09-25_04-15-09.jpg` 是 `good` 模式：封面下缘被我们 overlay
+- 照片 `<data-dir>\else\photo_2026-09-25_04-15-09.jpg` 是 `good` 模式：封面下缘被我们 overlay
   画了 3 行 SECRET 的歌词，而底部「关于艺人」之上**没有卡片**。
 - **卡片上的 provider 是 `EeveeForce…`** → 卡片渲染的是我们的数据。
 
@@ -620,7 +620,7 @@ against the right edge and are sung from the right"*）——"从右往左扫"�
 ## 57. 日志脱敏：**写入口硬脱敏 + 导出时假名化**（2026-09-30）
 
 **用户要求**：先问"日志是不是会记录 cookie 之类的敏感信息"，看完 19 号日志
-（`C:\dsh\readlog\eeveespotify_debug 19.log`，477 行 / 80 秒会话）后列出 7 类敏感点，
+（`<data-dir>\readlog\eeveespotify_debug 19.log`，477 行 / 80 秒会话）后列出 7 类敏感点，
 问"哪些需要隐藏"，最后"改吧"。
 
 ### 57.1 先定性：**凭证没有泄露，泄露的是行为画像**
@@ -1062,7 +1062,7 @@ Genius 出词的歌仍能显示（只是不再有假时间轴）。
 
 ## 51. 「Genius 回退时好时坏」定性：**三层原因，日志 11 是"开关关着"那一层**；四处改动（2026-09-27）
 
-**材料**：`C:\dsh\readlog` 全部 15 份日志（关键字统计 + 逐曲对照，没有逐份通读）+ `Sources/`。
+**材料**：`<data-dir>\readlog` 全部 15 份日志（关键字统计 + 逐曲对照，没有逐份通读）+ `Sources/`。
 
 ### 51.1 日志 11：170 次请求、124 次网易云失败、**0 次回退**
 
@@ -1277,7 +1277,7 @@ log 13/14 的探针里拿到过），但**先写纯透传探针确认签名，�
 
 ## 48. 崩溃事故二：**`objc_copyClassList` 的元素当 Swift 类型用 ⇒ 启动即崩**（2026-09-27 01:42，`Spotify-2026-09-27-014242.ips`）
 
-**材料**：`C:\dsh\readlog\Spotify-2026-09-27-014242.ips`。用户口径："spotify 在打开时崩溃。"
+**材料**：`<data-dir>\readlog\Spotify-2026-09-27-014242.ips`。用户口径："spotify 在打开时崩溃。"
 
 ### 48.1 崩溃形状
 
@@ -1327,7 +1327,7 @@ frames: ___forwarding___.cold.4 → ___forwarding___ → _CF_forwarding_prep_0
 
 ## 47. 崩溃事故：**参数类型写成 `NSString` ⇒ 播歌闪退**（2026-09-26 23:57，`Spotify-2026-09-26-235758.ips`）
 
-**材料**：`C:\dsh\readlog\Spotify-2026-09-26-235758.ips`。
+**材料**：`<data-dir>\readlog\Spotify-2026-09-26-235758.ips`。
 用户口径："开启日志记录后，播放歌曲闪退。"
 
 ### 47.1 崩溃点就在 §46 那个钩子里
@@ -1384,7 +1384,7 @@ func registerScrollProviderIn(_ payload: Any) {
 
 ## 46. 日志 13：探针**当场抓到卡**；flag 判死；改成拦 `registerScrollProviderIn:`（2026-09-26）
 
-**材料**：`C:\dsh\readlog\eeveespotify_debug 13.log`（149,643B，13:55:32–13:57 前后，UTC）。
+**材料**：`<data-dir>\readlog\eeveespotify_debug 13.log`（149,643B，13:55:32–13:57 前后，UTC）。
 这一场**带 §45 之后的新代码**（`[INIT] npv prerelease provider:` / `[PrerelProbe]` 都出现了），
 用户设置：**「屏蔽过期的『即将发布』卡」开着**。
 
@@ -1489,7 +1489,7 @@ func registerScrollProviderIn(_ payload: Any) {
 
 ## 45. 解密二进制定位：这张卡是 `PrereleaseCardNowPlaying`，数据源是「正在播放页专用 provider」（2026-09-26）
 
-**材料**：`C:\dsh\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa`
+**材料**：`<data-dir>\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa`
 （主二进制 `Payload/Spotify.app/Spotify`，241,175,152 字节，单 arm64 slice）。
 分析脚本（**只读**，本轮新增在 `Tools/eevee-hookfinder/_prerel_probe/`）：
 `find_prerelease_strings.py` / `find_prerelease_symbols.py` / `prerel_component_sweep.py` /
@@ -1860,8 +1860,8 @@ scrollsita manifest 无 12（也没有 5）
 
 ## 40. 日志 10：坏卡曲目 = `Biohazard`；**正版卡与坏卡是两回事**（2026-09-26，日志 10 + 照片 11）
 
-**材料**：`C:\dsh\readlog\eeveespotify_debug 10.log`（177KB，09:51:05–09:53:10 UTC = 本地 17:51–17:53）、
-`C:\dsh\else\11.jpg`（17:54，本模型读不了图）。
+**材料**：`<data-dir>\readlog\eeveespotify_debug 10.log`（177KB，09:51:05–09:53:10 UTC = 本地 17:51–17:53）、
+`<data-dir>\else\11.jpg`（17:54，本模型读不了图）。
 
 ⚠️ **用户纠正**：`Detour`（ZWE1HVNDXR）那张是**正常**的预热卡；真正出错的是 `Biohazard`。
 日志里确实有 `"Biohazard" - KSLV Noh (id 6d9QrWBqoH6t4VyuvlvcOm)` ——
@@ -2027,8 +2027,8 @@ scrollsita manifest 无 12（也没有 5）
 
 ## 38. 预热卡：78 条 manifest 全解 + 关键字零命中 ⇒ 数据不在我们能看到的网络里，加「全量请求清单 + 日期串」探针（2026-09-26，日志 8 + 照片 8/9）
 
-**材料**：`C:\dsh\readlog\eeveespotify_debug 8.log`（537KB，06:22:52–06:33:14 UTC = 本地 15:22–15:33）、
-`C:\dsh\else\8.jpg`（Dog Eats Dog，14:07）、`C:\dsh\else\9.jpg`（Final Stage，15:32）。
+**材料**：`<data-dir>\readlog\eeveespotify_debug 8.log`（537KB，06:22:52–06:33:14 UTC = 本地 15:22–15:33）、
+`<data-dir>\else\8.jpg`（Dog Eats Dog，14:07）、`<data-dir>\else\9.jpg`（Final Stage，15:32）。
 
 ### 38.1 三件事被这份日志**排除**（都是硬证据，不是推断）
 
@@ -2120,7 +2120,7 @@ MONTAGEM KOKORO，即 §36 那张**正版**卡）。⇒ 「服务端下发了一
 
 ## 37. 预热卡三条线全部收口：元素/旁路都排除，剩"数据从哪来"—— 加两支探针（2026-09-26，日志 7 + 照片 8）
 
-**材料**：`eeveespotify_debug 7.log`、`C:\dsh\else\8.jpg`。
+**材料**：`eeveespotify_debug 7.log`、`<data-dir>\else\8.jpg`。
 
 ### 37.1 坏卡长什么样（照片 8，Dog Eats Dog，东京 14:06 / UTC 05:06）
 
@@ -2228,7 +2228,7 @@ upcoming / release_date / releasedate`（全部小写、大小写不敏感）。
 
 ## 36. 预热卡：元素 `12` 是**正版**，坏卡来自旁路模块（2026-09-26，日志 6 + 照片 5/7）
 
-**材料**：`eeveespotify_debug 6.log`、`C:\dsh\else\6.jpg`、`5.jpg`、`7.jpg`。
+**材料**：`eeveespotify_debug 6.log`、`<data-dir>\else\6.jpg`、`5.jpg`、`7.jpg`。
 
 ### 36.1 结论：两类"预热卡"，来源不同
 
@@ -2365,8 +2365,8 @@ pre-release 正是其一类，且 `entityUri` 就是当前曲目）；`EventCard
 
 ## 34. 「补卡片元素」也改回真开关；日志 3 解出的元素清单（2026-09-26）
 
-**材料**：`C:\dsh\readlog\eeveespotify_debug 3.log`（9/26 02:13，Spotify 9.1.86 / iOS 27）、
-`C:\dsh\else\5.jpg`（「即将发布 / 已预收藏」卡的照片）、日志 2、日志 28。
+**材料**：`<data-dir>\readlog\eeveespotify_debug 3.log`（9/26 02:13，Spotify 9.1.86 / iOS 27）、
+`<data-dir>\else\5.jpg`（「即将发布 / 已预收藏」卡的照片）、日志 2、日志 28。
 
 ### 34.1 起因：404 曲目上会出现一张「即将发布 / 已预收藏」卡
 
@@ -2478,7 +2478,7 @@ pre-release 正是其一类，且 `entityUri` 就是当前曲目）；`EventCard
 
 ## 33. 「补时间轴」改回真开关 + 多级回退的署名（2026-09-26）
 
-**材料**：`C:\dsh\readlog\eeveespotify_debug.log`（9/26 00:39–00:42，Spotify 9.1.86 / iOS 27，下文简称日志 29）
+**材料**：`<data-dir>\readlog\eeveespotify_debug.log`（9/26 00:39–00:42，Spotify 9.1.86 / iOS 27，下文简称日志 29）
 
 ### 33.1 起因：日志 29 里唯一一处署名错误
 
@@ -2684,7 +2684,7 @@ $0.providedBy = lastRequestedLyricsSourceDescription.isEmpty
 
 ## 30. 逐行歌词不再套"逐词那套壳"：没有逐词数据就整首交还原生（2026-09-25）
 
-用户给的四张真机对照图（`C:\dsh\else\1..4.jpg`）把口径定死了：
+用户给的四张真机对照图（`<data-dir>\else\1..4.jpg`）把口径定死了：
 
 | 图 | 是什么 |
 |---|---|

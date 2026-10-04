@@ -6,7 +6,7 @@ import ObjectiveC.runtime
 /// 标签栏：**把 Spotify 那条栏的内容藏起来，在它上面叠一条系统 `UITabBar`** ——
 /// iOS 26 会把它画成**真·液态玻璃**（选中气泡、折射、明暗自适应），**一行玻璃 API 都不用我们写**。
 ///
-/// ## 做法照 pw（`Redesigned/Navbar/TabBar.x`，GPL-3.0；**思路复用、代码自己写**）四步
+/// ## 做法照 pw（`Redesigned/Navbar/TabBar.x`，GPL-3.0；来源、许可与改动见「开源许可」页）四步
 ///
 ///   ① Spotify 的栏**留着**（frame / 交互 / inset 都不碰），但它的**内容不可见**；
 ///   ② 叠一条**系统栏**，item 从 Spotify 那几颗同步（顺序跟着；标题与图标同源 ⇒ 开关跟着）；
@@ -90,7 +90,7 @@ import ObjectiveC.runtime
 /// | **替用户按按键** | 第三片装的那只 `UIPanGestureRecognizer`（`cancelsTouchesInView = true`）"滑过哪格切哪格"，每次 `.changed` 都 `commitSelection` ⇒ 用户只是划一下，页面被**我们**换掉了 |
 /// | **胶囊回弹** | 同上；提交路没学到时 `dragCrossed` 会把气泡**拨回真实那一颗**（日志 70：`⚠️ the drag could not switch the page yet`） |
 ///
-/// **两条改法（照 pw 的机制，代码自己写）：**
+/// **两条改法（照 pw 的机制；来源与许可见「开源许可」页）：**
 ///
 /// 1. **转发路"读得出来"才接管触摸**（`probeForwardRoute`）。pw 那条路本来就可以**在点之前读出来**：
 ///    item 子树里那颗 `UITapGestureRecognizer` 的 `_targets` 里有一对**目标真的响应**的 target/action

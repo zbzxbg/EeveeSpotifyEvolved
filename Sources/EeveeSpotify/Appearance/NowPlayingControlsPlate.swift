@@ -7,7 +7,7 @@ import ObjectiveC.runtime
 // 「播放器控件换成本地字形」：把 Spotify 那三个控制键（上一首 / 播放暂停 / 下一首）的
 // **图标换成 Apple Music 那套细字形**，按钮本身留着。
 //
-// ## 这不是"自绘一整排按钮" —— 这是 pw 的做法（照抄思路，代码自己写）
+// ## 这不是"自绘一整排按钮" —— 这是 pw 的做法（来源、许可与改动见「开源许可」页）
 //
 // spoti.pw v0.21.1（GPL-3.0，隔离副本 `.spot-ipa/spotipw-v0.21.1`）的 `PlayerControls.x` 原话：
 //
@@ -958,7 +958,7 @@ enum NowPlayingControlsPlate {
 
     /// 那颗播放键**被点了**（`PlayButtonView.uiButtonTapped`，只认听歌页那一颗）。
     ///
-    /// pw v0.21.1 `PlayerControls.x` 的做法逐字照搬其思路（代码自己写）：
+    /// pw v0.21.1 `PlayerControls.x` 的做法（来源、许可与改动见「开源许可」页）：
     /// 把字形翻到"这一下的目标态"（当前显示的反面），当场落地，不等下一个布局回合；
     /// 之后由 `playGlyphName()` 在状态跟上时交还。
     static func notePlayTapped(from button: UIView) {

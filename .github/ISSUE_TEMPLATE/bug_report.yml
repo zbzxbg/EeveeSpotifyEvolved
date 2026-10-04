@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         **Before you submit:**
-        - Check the [Common Issues / FAQ](https://github.com/jaydenjcpy/EeveeSpotifyReincarnated/blob/Master/common_issues.md) — most premium, logout, lyrics, and download questions are answered there.
+        - Check the [Common Issues / FAQ](https://github.com/zbzxbg/EeveeSpotifyEvolved/blob/main/common_issues.md) — most premium, logout, lyrics, and download questions are answered there.
         - Issues about server-sided features (Very High audio quality, native playlist downloading, Jam hosting, AI DJ/Playlist, Spotify Connect, homescreen/podcast ads) will be closed without further discussion.
         - If you can, update to the latest EeveeSpotify and Spotify versions and check whether the bug still happens.
 
@@ -53,7 +53,7 @@ body:
     attributes:
       label: Pre-submit checks
       options:
-        - label: I have read the [Common Issues / FAQ](https://github.com/jaydenjcpy/EeveeSpotifyReincarnated/blob/Master/common_issues.md)
+        - label: I have read the [Common Issues / FAQ](https://github.com/zbzxbg/EeveeSpotifyEvolved/blob/main/common_issues.md)
         - label: This is not a server-sided feature listed in the FAQ or README
         - label: I am on the latest EeveeSpotify release (or this also happens on it)
     validations:

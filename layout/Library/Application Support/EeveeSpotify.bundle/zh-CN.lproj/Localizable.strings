@@ -444,8 +444,8 @@ licenses_upstream = "上游";
 licenses_upstream_detail = "本仓库是EeveeSpotify的fork（出处见README.md）；上游的许可与署名以它自己的仓库为准。";
 licenses_bundled = "内置的第三方源码";
 licenses_bundled_detail = "仓库内置了第三方源码（SwiftProtobuf、XMLCoder、fishhook 等）；仓库里没有随附它们各自的许可文件，需要时请看它们自己的项目。";
-licenses_inspiration = "借鉴思路";
-licenses_inspiration_detail = "借鉴了spoti.pw v0.21.1版本之前的代码思路。";
+licenses_inspiration = "spoti.pw";
+licenses_inspiration_detail = "本仓库复用并修改了 spoti.pw v0.21.1（GPL-3.0，版权归 Vojtěch Škopek）的代码与设计。只使用了 v0.21.1 及更早的版本；v0.22.0 起为 PolyForm Strict 1.0.0，未取其任何源码。";
 licenses_kumone_detail = "「整页取色底」的配方来自 kumone—— LGPL-3.0（库）/ GPL-3.0（应用）";
 
 // ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────

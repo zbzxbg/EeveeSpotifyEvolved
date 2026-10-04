@@ -569,8 +569,8 @@ extension UserDefaults {
     /// 这一条同时把"玻璃太扁"顺手解掉：内容带从"图标 + 文字 44pt"变成"只有图标 ~24pt"，
     /// 胶囊自然收到 ~40pt（正好是照片里的比例），图标仍然居中。
     ///
-    /// 思路借自 **spoti.pw** 的「Hide labels」（见它的 `docs/tweaks.md`）——
-    /// **只借思路，代码自己写**（红线见会话文档 §10）。
+    /// 来自 **spoti.pw** 的「Hide labels」（见它的 `docs/tweaks.md`）——
+    /// 来源、许可与改动见「开源许可」页。
     static var tabBarHideLabels: Bool {
         get {
             container.object(forKey: tabBarHideLabelsKey) as? Bool ?? true

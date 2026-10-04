@@ -1,12 +1,12 @@
 # 歌词模块（预览卡片）不展示：真机取证报告
 
 **取证对象**：Spotify 9.1.86 (build 918602428) · iOS 27.0 · iPhone · tweak 6.6.8
-**材料**：`C:\dsh\readlog\eeveespotify_debug.log`、`C:\dsh\readlog\eeveespotify_debug 2 (2).log`、
-`C:\dsh\readlog\Spotify-2026-09-24-{210732,215922}.ips`、
-`C:\dsh\else\dump-unknown.txt`（eevee-symbol-dump v1，16930 类 / 295 rpc / 540 flags）、
-`C:\dsh\else\player_track_class_report.txt`、
-`C:\dsh\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa`、
-`C:\dsh\ipa\EeveeSpotify-9.1.0.ipa`
+**材料**：`<data-dir>\readlog\eeveespotify_debug.log`、`<data-dir>\readlog\eeveespotify_debug 2 (2).log`、
+`<data-dir>\readlog\Spotify-2026-09-24-{210732,215922}.ips`、
+`<data-dir>\else\dump-unknown.txt`（eevee-symbol-dump v1，16930 类 / 295 rpc / 540 flags）、
+`<data-dir>\else\player_track_class_report.txt`、
+`<data-dir>\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa`、
+`<data-dir>\ipa\EeveeSpotify-9.1.0.ipa`
 
 ---
 
@@ -41,7 +41,7 @@
 
 ## 证据 2：9.1.0 → 9.1.86 的架构换血（离线二进制比对）
 
-> **独立复核（本轮新增）**：以下比对已用 `C:\dsh\else\dump-unknown.txt`
+> **独立复核（本轮新增）**：以下比对已用 `<data-dir>\else\dump-unknown.txt`
 > （`eevee-symbol-dump v1`，spotify.ipa，16930 个 Swift 类 / 295 rpc / 540 flags /
 > 12408 selectors）**独立复核过**，与早先两次脚本输出一致。
 >
@@ -147,7 +147,7 @@ $0.lines = [ 提示行, "", 提示行 ]      // ← 每行 offsetMs 都是 nil
 
 ## 证据 5：`has_lyrics` 这条老路的现状
 
-`C:\dsh\else\player_track_class_report.txt`（同一脚本、同一 IPA）：
+`<data-dir>\else\player_track_class_report.txt`（同一脚本、同一 IPA）：
 
 ```
 [1] 目标方法名是否存在
@@ -205,7 +205,7 @@ events:lyrics
 
 ## 证据 8：崩溃报告与歌词问题无关（排除干扰）
 
-`C:\dsh\readlog\Spotify-2026-09-24-{210732,215922}.ips` 两份：
+`<data-dir>\readlog\Spotify-2026-09-24-{210732,215922}.ips` 两份：
 
 ```
 exception: EXC_BREAKPOINT / SIGTRAP，rawCodes [1, 0x000000019dbe54b4]
@@ -337,8 +337,8 @@ exception: EXC_BREAKPOINT / SIGTRAP，rawCodes [1, 0x000000019dbe54b4]
 ```powershell
 # 判定点与 flag 上下文取证（本报告的证据 2 由此而来）
 python Tools\eevee-hookfinder\audit_lyrics_gate.py `
-  --ipa "C:\dsh\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa" `
-  --baseline "C:\dsh\ipa\EeveeSpotify-9.1.0.ipa" `
+  --ipa "<data-dir>\ipa\Spotify- Music and Podcasts_9.1.86_decrypted.ipa" `
+  --baseline "<data-dir>\ipa\EeveeSpotify-9.1.0.ipa" `
   --out Tools\eevee-hookfinder\lyrics_gate_audit.txt
 ```
 

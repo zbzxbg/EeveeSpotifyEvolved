@@ -23,9 +23,11 @@
 
 用法
 ====
-    python find_lyrics_gate.py "C:\\dsh\\ipa\\Spotify- Music and Podcasts_9.1.86_decrypted.ipa"
+    python find_lyrics_gate.py "<解密 Spotify IPA 的路径>"
     python find_lyrics_gate.py <ipa> --out report.txt
     python find_lyrics_gate.py <ipa> --section swift      # 只看某一节
+
+不给 <ipa> 时按 `$EEVEE_IPA_DIR` → `~/Downloads` → 当前目录 的顺序找一个 `*decrypted*.ipa`。
 
 设计约束（踩过的坑）
 ====================
@@ -258,7 +260,8 @@ def main():
     args = ap.parse_args()
 
     if not args.ipa:
-        for pat in (r"C:\dsh\ipa", os.path.expanduser("~/Downloads"), os.getcwd()):
+        ipa_dir = os.environ.get("EEVEE_IPA_DIR")
+        for pat in ([ipa_dir] if ipa_dir else []) + [os.path.expanduser("~/Downloads"), os.getcwd()]:
             if os.path.isdir(pat):
                 for fn in sorted(os.listdir(pat)):
                     if fn.lower().endswith(".ipa") and "decrypted" in fn.lower():

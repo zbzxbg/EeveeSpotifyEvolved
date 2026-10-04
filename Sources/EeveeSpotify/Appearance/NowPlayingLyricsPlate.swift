@@ -13,7 +13,7 @@ import ObjectiveC.runtime
 //   · 它复用了内嵌档的**模糊封面背景**（`LyricsBackdropRepresentable`，写死 `isBackdropOpaque`）
 //     ⇒ 在取色底上又叠一层模糊，更糊（那层今天已修，但形状本身还是错的）。
 //
-// ## pw 的形状（`Redesigned/Player/PlayerLyrics.x`，GPL-3.0 隔离副本，代码自己写）
+// ## pw 的形状（`Redesigned/Player/PlayerLyrics.x`，GPL-3.0 隔离副本；来源与许可见「开源许可」页）
 //
 // 它文件头原话：*"the footer's lyrics glyph is the only way to them: it **shrinks the cover into a
 // thumbnail** at the top of the artwork band, **lifts the track's title up beside it**, and fades the
@@ -1027,7 +1027,7 @@ enum NowPlayingLyricsPlate {
     /// 然后 `coverIn(tilt)` = **它自己那个和 tilt 等大的直接子视图**，对它下手。
     /// 局部、无竞态、不依赖"哪一张现在可见"。
     ///
-    /// ⇒ 这里照抄同一套（许可证：v0.21.1 是 GPL-3.0，与本仓库一致；思路复用、代码自己写）：
+    /// ⇒ 这里沿用同一套（v0.21.1 是 GPL-3.0，与本仓库一致；来源、许可与改动见「开源许可」页）：
     ///   · 门禁：开关开 + **我们确实铺着** + tilt 在窗口里且够大 + **祖先里有 `CoverArtCellImpl`**
     ///     （这一条把迷你条/卡片里那些 tilt 一次滤掉 —— pw 同款）；
     ///   · 动作：把"和 tilt 等大的那个直接子视图"写成 `alpha = 0`（**同一个 `hideSpotifyCover`

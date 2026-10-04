@@ -67,7 +67,7 @@ require(
     "device placeholder must keep the path readable, got: \(deviceSafe)"
 )
 require(
-    !DebugLogSanitizer.sanitize("GET spotify:user:ngzhwm/x").contains("ngzhwm"),
+    !DebugLogSanitizer.sanitize("GET spotify:user:someuser/x").contains("someuser"),
     "spotify:user id must be redacted"
 )
 

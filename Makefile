@@ -56,6 +56,31 @@ endif
 # handled out-of-process by modules/zxPluginsInject — LC-injected via ipapatch
 # in build-ipa-local.sh and the GitHub workflow. No flags needed here.
 
+# ── 打包依赖：`control` 里的 ${ORION} 是 **theos 的占位符**，不是本仓库的变量 ──
+# `control` 结尾写的是 `Depends: ${ORION}, firmware (>= 14.0)`。这里的 ${ORION}
+# **不由本 Makefile 定义**（全仓库 grep `ORION =` 会是零命中，那是正常的），
+# 它在 `make package` 时由 theos 自己替换：
+#
+#   $(THEOS)/makefiles/package/deb.mk
+#     _THEOS_DEB_ORION_DEPENDS := dev.theos.orion (>= 1.0.0)
+#     sed -e 's/\${ORION}/$(_THEOS_DEB_ORION_DEPENDS)/g; …'
+#
+# ⇒ 最终 deb 的 Depends 是 `dev.theos.orion (>= 1.0.0), firmware (>= 14.0)`。
+# 同一机制还有 ${LIBSWIFT} / ${LIBSWIFT_VERSION}。**不要**把 ORION 定义成本地
+# 变量 —— 那会变成普通 make 变量替换，反而绕过 theos 的版本约束。
+#
+# 为什么必须有这条依赖：本 tweak 链着 Orion.framework（Swift 侧 `import Orion`，
+# ObjC 侧 `#import <Orion/Orion.h>`），越狱设备上要装 Orion 运行时才能加载。
+# Orion 包名是 `dev.theos.orion12` / `dev.theos.orion14`，两者都声明
+# `Provides: dev.theos.orion` ⇒ 依赖虚拟名 `dev.theos.orion` 即可跨 iOS 版本。
+# 包从 theos 源装：https://repo.theos.dev/
+#
+# ⚠️ 别把这段说明写进 `control`：theos 的 sed 管道只删 Version / Architecture /
+#    空行，`#` 注释会被原样带进 DEBIAN/control，破坏字段解析。要写就写在这里。
+#
+# ⚠️ `EeveeSwiftProtobuf.framework` 走的是另一条路：它由 internal-stage 拷进
+#    deb（见下），**不**通过 ${…} 占位符声明依赖。
+
 include $(THEOS_MAKE_PATH)/tweak.mk
 
 internal-stage::

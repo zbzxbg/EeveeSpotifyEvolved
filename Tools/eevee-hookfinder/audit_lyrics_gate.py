@@ -18,10 +18,10 @@
 用法
 ====
     python audit_lyrics_gate.py
-    python audit_lyrics_gate.py --ipa "C:\\dsh\\ipa\\Spotify- Music and Podcasts_9.1.86_decrypted.ipa"
-    python audit_lyrics_gate.py --baseline "C:\\dsh\\ipa\\EeveeSpotify-9.1.0.ipa"
+    python audit_lyrics_gate.py --ipa "<解密 Spotify IPA 的路径>"
+    python audit_lyrics_gate.py --baseline "<EeveeSpotify-9.1.0.ipa 的路径>"
 
-不给 --ipa 时会自动在常见位置找 `*decrypted*.ipa`。
+不给 --ipa 时按 `$EEVEE_IPA_DIR` → `~/Downloads` → 当前目录 的顺序找 `*decrypted*.ipa`。
 """
 
 import argparse
@@ -199,7 +199,8 @@ def main():
     args = ap.parse_args()
 
     if not args.ipa:
-        for d in (r"C:\dsh\ipa", os.path.expanduser("~/Downloads"), os.getcwd()):
+        ipa_dir = os.environ.get("EEVEE_IPA_DIR")
+        for d in ([ipa_dir] if ipa_dir else []) + [os.path.expanduser("~/Downloads"), os.getcwd()]:
             if os.path.isdir(d):
                 for fn in sorted(os.listdir(d)):
                     if fn.lower().endswith(".ipa") and "decrypted" in fn.lower():

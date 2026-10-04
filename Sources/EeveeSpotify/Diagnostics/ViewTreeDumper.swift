@@ -5,13 +5,13 @@ import UIKit
 /// 为什么需要它：给 Spotify 的界面写 hook 之前必须先知道屏幕上到底有哪些类。
 /// AMOLED / 隐藏某个区块 / 播放器手势这三类改动全都卡在这一步。spoti.pw 那套是
 /// FLEX + `make trees` 交互录屏；本项目是侧载，跑不了那套流程，所以退一步：
-/// 一个**只读**定时器把结构写进日志，用户按现有习惯（`C:\dsh\readlog`）捞出来即可。
+/// 一个**只读**定时器把结构写进日志，用户按现有习惯把设备日志捞出来即可。
 ///
 /// ⚠️ 三条纪律，都是本仓库用真金白银换来的：
 ///   1. **不做运行时类枚举**。2026-09 的两次启动崩溃都是这么来的：EXC_BREAKPOINT /
 ///      SIGTRAP，栈在 `_CF_forwarding_prep_0` → `swift_getObjectType`，寄存器里是
 ///      `__NSGenericDeallocHandler` —— 给已释放的类对象发消息。见 `Tweak.x.swift`
-///      里 `logPlayerTrackCandidates` 那段注释与 `C:\dsh\readlog` 的 .ips。所以这里
+///      里 `logPlayerTrackCandidates` 那段注释与当时那几份 .ips 崩溃报告。所以这里
 ///      **只从 key window 往下走活着的视图**，绝不碰 `objc_getClassList`。
 ///   2. **只读**：不改 frame / 颜色 / 层级，不注册手势，不读文本内容
 ///      （只读类名、frame、hidden、alpha、accessibilityIdentifier）。
