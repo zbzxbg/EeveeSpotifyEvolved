@@ -467,8 +467,17 @@ class MusixmatchLyricsRepository: LyricsRepository {
                 writeDebugLog("[Musixmatch] richsync words attached to \(matchedWordLines)/\(lyricsLines.count) line(s)")
             }
 
-            // 用于验证是否实际发生了替换
+            // 用于验证是否实际发生了替换（**只剩 path A**：用户把"罗马音语言"直接选成歌词语言，
+            // 那是语言选择、不是罗马化开关，替换是用户要的）。
             var didReplaceAnyLine = false
+
+            // ★★ 2026-10-12（用户：「把 mxm 的问题解决一下」）：
+            // **源给的官方罗马字**，与 `lyricsLines` **同序、同长**，由我们那层画在**原文上方**
+            // （`LyricLinesAdapter.romanizedContentsForDisplay()` 的首选来源）。
+            //
+            // ⚠️ 长度**必须**等于 `lyricsLines.count`，没匹配上的行留**空串** ——
+            //    这是那条 guard 的硬要求（长度对不上会被整份忽略 ⇒ 罗马字一行都不显示）。
+            var officialRomanizedLines: [String] = []
 
             // subtitle_translated：MxM 返回的目标语言字幕（罗马音或真实翻译）。
             // 按「行起始 offset」对齐到 lyricsLines（richsync/subtitle 行都带 offsetMs 且同源同时间；
@@ -510,8 +519,14 @@ class MusixmatchLyricsRepository: LyricsRepository {
                     )
                 }
             }
-            // 次优先：未选择任何目标语言时，全局罗马化开关开启，
-            // 尝试通过翻译接口拿 MxM 罗马音替换歌词行（按 content 匹配，兼容 richsync x 与 subtitle text）。
+            // 次优先：未选择任何目标语言时，全局罗马化开关开启，尝试通过翻译接口拿 MxM 罗马音。
+            //
+            // ★★ 2026-10-12（用户：「把 mxm 的问题解决一下」）：这一段以前是**替换原文**
+            //   （`lyricsLines[i].content = translationText`，按 content 匹配）——
+            //   与用户已经拍板的规矩**直接冲突**：「罗马字只画在原文上方，**绝不替换原文**」
+            //   （网易 `romalrc` 那条上一轮就是这么改的，见 `LyricsDto.officialRomanizedLines`）。
+            //   它现在走**同一套机制**：原文一个字不动，罗马字存进 `officialRomanizedLines`，
+            //   由我们那层画在原文上方 —— Spotify 原生页也照旧是原文。
             // 已选择真实翻译语言时不走这里，避免 MxM 罗马音顶掉本地转换。
             else if isNgzhwmRomanizationEnabled(for: romanizationLanguage),
                 requestedLanguage.isEmpty {
@@ -519,20 +534,30 @@ class MusixmatchLyricsRepository: LyricsRepository {
                     query.spotifyTrackId,
                     selectedLanguage: romanizationLanguage
                 ) {
-                    for (original, translationText) in translations {
-                        for i in 0..<lyricsLines.count {
-                            if lyricsLines[i].content == original {
-                                lyricsLines[i].content = translationText
-                                didReplaceAnyLine = true
-                            }
-                        }
+                    // content → 罗马字 的表：同一行原文出现多次时共用同一条罗马字
+                    // （覆盖范围与旧实现"所有 content 相同的行都替换"一致）。
+                    var romanizedByOriginal: [String: String] = [:]
+                    for (original, romanizedText) in translations
+                    where romanizedByOriginal[original] == nil {
+                        romanizedByOriginal[original] = romanizedText
                     }
+                    officialRomanizedLines = lyricsLines.map { line in
+                        romanizedByOriginal[line.content] ?? ""
+                    }
+                    let matched = officialRomanizedLines.filter { !$0.isEmpty }.count
+                    writeDebugLog(
+                        "[Musixmatch] romanization kept as the line above the original — \(matched)/\(lyricsLines.count) line(s)"
+                    )
                 }
             }
 
             if shouldRemoveMxmInterludeSymbol {
                 for index in lyricsLines.indices {
                     lyricsLines[index].content = cleanedMxmLyricsText(lyricsLines[index].content)
+                }
+                // 官方罗马字那一份同样清洗：否则原行被清成空、罗马字那行还挂着个 `♪`。
+                if !officialRomanizedLines.isEmpty {
+                    officialRomanizedLines = officialRomanizedLines.map { cleanedMxmLyricsText($0) }
                 }
             }
 
@@ -555,7 +580,8 @@ class MusixmatchLyricsRepository: LyricsRepository {
                 timeSynced: true,
                 romanization: romanization,
                 translation: translation,
-                languageCode: subtitleLanguage
+                languageCode: subtitleLanguage,
+                officialRomanizedLines: officialRomanizedLines
             )
 
             writeDebugLog("[Musixmatch] Synced lyrics — \(lyricsDto.lines.count) line(s)")

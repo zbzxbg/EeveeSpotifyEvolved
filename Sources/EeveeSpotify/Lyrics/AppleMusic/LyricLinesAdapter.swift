@@ -66,12 +66,19 @@ extension LyricsDto {
         // 正文永远是原文，这里返回的是罗马字那一层。
         //
         // ⚠️ 三个前提缺一不可：
-        //   · 对应的语言开关开着（官方罗马字是取词时按"日语罗马化"存下来的，
-        //     用户后来把开关关掉时必须跟着不显示 —— 缓存键里已经含这个开关）；
+        //   · 对应的语言开关开着（官方罗马字是取词时按**那门语言**的开关存下来的，
+        //     用户后来把开关关掉时必须跟着不显示 —— 缓存键里已经含这三个开关）；
         //   · 长度与 `lines` 一致（按下标配对，对不上就不用）；
         //   · 官方有的那几行用官方，缺的那几行**退回本地转换**（官方罗马音常常不全，
         //     旧的 `preferLocalRomaji` 兜底逻辑就是为这个存在的）。
-        if UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization"),
+        //
+        // ★ 2026-10-12：这条判据以前**写死日语**（网易 `romalrc` 只有日语，当时够用）。
+        //   但"官方罗马字"现在不止网易一家：Musixmatch 那份是按**歌词语言**取的
+        //   （`MusixmatchLyricsRepository` 里对应 rc/rj/rk，2026-10-12 起也存进同一个字段）。
+        //   写死日语 ⇒ 中文/韩文歌曲的官方罗马字被**整份忽略**（只能退回本地转换，等于白存）。
+        //   现在改成"**这门语言的开关开着**，或日语开关开着" —— 后半句是网易那份的既有行为，
+        //   一个字都不动（那条路真机验证过，不许顺手改）。
+        if isOfficialRomanizationEnabled(for: languageCode),
            !officialRomanizedLines.isEmpty,
            officialRomanizedLines.count == lines.count {
             // ★ 2026-10-12（用户）：「如果日语罗马字用的是**网易云自己做的**，首字母不会被大写」。
@@ -101,6 +108,24 @@ extension LyricsDto {
         romanizationCacheKey = key
         romanizationCache = fresh
         return fresh
+    }
+
+    /// 官方罗马字要不要显示：**按这门语言的开关**。
+    ///
+    /// 判据顺序与理由见 `romanizedContentsForDisplay()` 里那段（日语那条是网易路径的既有行为，
+    /// 必须保持；zh/ko 是 2026-10-12 给 Musixmatch 补的）。
+    ///
+    /// ⚠️ 三个键的字面量在本仓库**还没收敛**（`NgzhwmSettingsViewModel` / 本文件 /
+    ///   `MusixmatchLyricsRepository` 各有一份 —— handoff §2.3b 记着这笔账）。
+    ///   这里用的是**同一批键名**；收敛是另一次改动，别混进来。
+    private func isOfficialRomanizationEnabled(for languageCode: String?) -> Bool {
+        let defaults = UserDefaults.standard
+        // 日语：网易 `romalrc` 那条路的既有判据，保持不动。
+        if defaults.bool(forKey: "ngzhwm_japaneseRomanization") { return true }
+        let code = (languageCode ?? "").lowercased()
+        if code.hasPrefix("zh") { return defaults.bool(forKey: "ngzhwm_chineseRomanization") }
+        if code.hasPrefix("ko") { return defaults.bool(forKey: "ngzhwm_koreanRomanization") }
+        return false
     }
 }
 
