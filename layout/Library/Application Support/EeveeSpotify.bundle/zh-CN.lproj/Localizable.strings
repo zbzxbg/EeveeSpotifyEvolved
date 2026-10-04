@@ -504,4 +504,5 @@ now_playing_lyrics_in_player = "歌词进播放器";
 now_playing_single_lyric = "封面与歌词键之间显示一行歌词";
 show_romanized_lyrics = "展示罗马化歌词";
 show_lyrics_translation = "展示歌词翻译";
+now_playing_blur_unplayed_lyrics = "未播放歌词行模糊化";
 now_playing_control_glyphs = "控制键换成本地字形";

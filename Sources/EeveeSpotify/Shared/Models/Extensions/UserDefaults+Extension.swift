@@ -43,6 +43,7 @@ extension UserDefaults {
     private static let nowPlayingLyricsInPlayerKey = "nowPlayingLyricsInPlayer"
     private static let nowPlayingLyricsExpandedKey = "nowPlayingLyricsExpanded"
     private static let nowPlayingSingleLyricKey = "nowPlayingSingleLyric"
+    private static let nowPlayingBlurUnplayedLyricsKey = "nowPlayingBlurUnplayedLyrics"
     private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
@@ -94,6 +95,7 @@ extension UserDefaults {
         nowPlayingLyricsInPlayerKey,
         nowPlayingLyricsExpandedKey,
         nowPlayingSingleLyricKey,
+        nowPlayingBlurUnplayedLyricsKey,
         nowPlayingControlGlyphsKey,
 
         // 不在上面那批常量里、但同样属于我们的：
@@ -652,6 +654,28 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingSingleLyricKey)
+        }
+    }
+
+    /// 听歌页「**未播放歌词行模糊化**」—— 非当前播放的歌词行要不要**发糊**。**默认关**。
+    ///
+    /// ★ 2026-10-12（用户原话）：
+    /// > 现在是未播放歌词行是模糊不清的，加个功能叫「未播放歌词行模糊化」。
+    /// > 关闭之后，未当前播放歌词行不模糊化，**默认关闭**。
+    ///
+    /// 关着（默认）：非当前行**只变淡、不发糊**（变淡是"焦点"这件事的表达，两边都有）；
+    /// 翻开：回到改动前那条公式 `maximumNonFocusedBlurRadius × (1 − 焦点强度)`
+    /// （`AppleMusicLyricsPage.blurRadius`）。
+    ///
+    /// ⚠️ 拨开关要**当场生效**：它只写 `UserDefaults`、不会让 `currentLyricsVersion` 变，
+    ///    所以它进的是 `romanizationSwitchesFingerprint()` 那个"要不要重建渲染层"的指纹
+    ///    （与罗马字 / 译文两颗同一个理由；不进去就得等换歌 —— 那正是上一轮修掉的"哑开关"）。
+    static var nowPlayingBlurUnplayedLyrics: Bool {
+        get {
+            container.object(forKey: nowPlayingBlurUnplayedLyricsKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingBlurUnplayedLyricsKey)
         }
     }
 

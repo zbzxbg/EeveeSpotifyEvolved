@@ -517,4 +517,5 @@ now_playing_lyrics_in_player = "Lyrics in the player";
 now_playing_single_lyric = "One-line lyric between the cover and the lyrics button";
 show_romanized_lyrics = "Show romanized lyrics";
 show_lyrics_translation = "Show lyric translation";
+now_playing_blur_unplayed_lyrics = "Blur the lines that are not playing";
 now_playing_control_glyphs = "Music app style transport buttons";

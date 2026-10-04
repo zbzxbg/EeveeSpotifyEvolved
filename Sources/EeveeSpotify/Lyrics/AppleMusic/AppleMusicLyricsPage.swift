@@ -760,7 +760,20 @@ struct AppleMusicLyricsPage: View {
     }
 
     /// 非焦点行的模糊：跟随焦点强度，离焦点越"远"越糊（这里只做线性过渡）。
+    ///
+    /// ★★ 2026-10-12（用户）：「现在是未播放歌词行是模糊不清的，加个功能叫**未播放歌词行模糊化**。
+    ///   关闭之后，未当前播放歌词行不模糊化，**默认关闭**」。
+    ///
+    /// 所以这一档**默认是不模糊的**（`UserDefaults.nowPlayingBlurUnplayedLyrics` 默认 false）：
+    /// 没开开关 ⇒ 直接返回 0（非当前行仍然按 `deselectedTextOpacity` **变淡**，只是不再发糊 ——
+    /// 变淡是"焦点"这件事的表达，发糊是可选的口味）。
+    /// 翻开开关 ⇒ 回到改动前那条公式（`maximumNonFocusedBlurRadius × (1 − 焦点强度)`）。
+    ///
+    /// ⚠️ 开关**当场生效**靠的是"指纹"那条路：它只写 `UserDefaults`、不会让
+    ///   `currentLyricsVersion` 变，所以它必须进 `romanizationSwitchesFingerprint()`
+    ///   （播放器那一层的宿主按那个指纹决定要不要重建；不进去就得等换歌 —— 那就是"哑开关"）。
     private func blurRadius(focusStrength: Double) -> CGFloat {
+        guard UserDefaults.nowPlayingBlurUnplayedLyrics else { return 0 }
         let radius = Self.profile.nonFocusedBlurRadius
             + (Self.profile.maximumNonFocusedBlurRadius
                 - Self.profile.nonFocusedBlurRadius)

@@ -49,6 +49,7 @@ struct EeveeExtrasSettingsView: View {
         //   读的是**同一批 UserDefaults 键** ⇒ 与 设置 → 歌词 里那几颗两面同步。
         var showRomanizedLyrics = NgzhwmSettingsViewModel.anyRomanizationEnabled
         var showLyricsTranslation = !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled
+        var nowPlayingBlurUnplayedLyrics = UserDefaults.nowPlayingBlurUnplayedLyrics
         var nowPlayingControlGlyphs = UserDefaults.nowPlayingControlGlyphs
     }
 
@@ -293,6 +294,20 @@ struct EeveeExtrasSettingsView: View {
                     )
                 )
 
+                // ★ 2026-10-12（用户）：「现在是未播放歌词行是模糊不清的，加个功能叫
+                // **未播放歌词行模糊化**。关闭之后，未当前播放歌词行不模糊化，**默认关闭**」。
+                // 关着 = 非当前行只变淡、不发糊；翻开 = 回到改动前那条公式。
+                Toggle(
+                    "now_playing_blur_unplayed_lyrics".localized,
+                    isOn: shadowBinding(
+                        \.nowPlayingBlurUnplayedLyrics,
+                        persist: { value in
+                            UserDefaults.nowPlayingBlurUnplayedLyrics = value
+                            // 这个开关进了宿主那条指纹 ⇒ 下一拍就重建，不用等换歌。
+                            NowPlayingLyricsPlate.reapply()
+                        }
+                    )
+                )
                 // 控制键换成本地字形：原生按钮留着（动作/状态/无障碍全在），
                 // 只把按钮里的原生图标设成透明、叠一个我们自己的 SF Symbol 字形。
                 // 做法照 pw v0.21.1 的 `PlayerControls.x`（GPL-3.0）：见 `NowPlayingControlsPlate` 文件头。

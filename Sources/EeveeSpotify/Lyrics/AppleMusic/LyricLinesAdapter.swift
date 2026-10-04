@@ -28,6 +28,9 @@ func romanizationSwitchesFingerprint() -> Int {
     //   （`NowPlayingLyricsHost.isCurrent`）⇒ 不进来的话，用户一拨开关要**等换歌**才看到效果
     //   （那就是一颗"哑开关"，正是用户这次要解决的那种体验）。
     if !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled { bits |= 8 }
+    // ★ 2026-10-12（用户新加的「未播放歌词行模糊化」）：**同一类开关，同一个理由** ——
+    //   它也只写 `UserDefaults`、不让版本号变，不进来就得等换歌才生效（哑开关）。
+    if UserDefaults.nowPlayingBlurUnplayedLyrics { bits |= 16 }
     return bits
 }
 
