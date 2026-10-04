@@ -12,7 +12,7 @@ import Combine
 /// 目前有两个（全部沿用**原 key**，只是换了容器 ⇒ 设备上已设的值不会丢）：
 ///
 ///   · 「给没有歌词卡片的歌曲补一张」`ngzhwm_injectLyricsCardElement`
-///   · 「强制歌词入口开关」`ngzhwm_lyricsEntryPointFlag`
+///   · 「歌词入口开关」`ngzhwm_lyricsEntryPointFlag`
 ///
 /// 已清理掉一个（2026-09-27）：「补全歌词时间轴」`ngzhwm_syntheticLineTiming` ——
 /// 真机 A/B 结论是"关掉之后差不多或略好"，而给纯文本源伪造时间轴本身不合语义，
@@ -28,7 +28,7 @@ import Combine
 /// （`hideOfficialLyrics`、`syntheticLineTiming` 都是这么处理的），页面上不该留长期住户。
 class EeveeDebugSettingsViewModel: ObservableObject {
 
-    /// 「给没有歌词卡片的曲目补一个卡片元素」。初值必须走 getter（默认开）。
+    /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）。初值必须走 getter（默认开）。
     @Published var injectLyricsCardElement = NgzhwmSettingsViewModel.isLyricsCardElementInjectionEnabled {
         didSet {
             UserDefaults.standard.set(

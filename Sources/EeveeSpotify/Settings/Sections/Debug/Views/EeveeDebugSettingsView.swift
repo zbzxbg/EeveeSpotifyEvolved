@@ -14,11 +14,11 @@ struct EeveeDebugSettingsView: View {
 
     var body: some View {
         List {
-            // 「给没有歌词卡片的曲目补一张」：往元素列表里补 `5`。
+            // 「补充模块5」：往元素列表里补 `5`。
             // 没有 footer —— 用途是判定"404 曲目上那张卡是不是这个元素渲出来的"。
             injectLyricsCardElementSection()
 
-            // 「强制歌词入口开关」：把服务端那条 `lyrics_entry_point_enabled` 钉成 true。
+            // 「歌词入口开关」：把服务端那条 `lyrics_entry_point_enabled` 钉成 true。
             lyricsEntryPointFlagSection()
 
             // 「转储视图树」：给还没写的界面 hook 铺路（AMOLED / 隐藏区块 / 手势）。
@@ -29,7 +29,7 @@ struct EeveeDebugSettingsView: View {
         .animation(.default, value: viewModel.animationValues)
     }
 
-    /// 「给没有歌词卡片的曲目补一个卡片元素」。
+    /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）。
     @ViewBuilder private func injectLyricsCardElementSection() -> some View {
         Section {
             Toggle(

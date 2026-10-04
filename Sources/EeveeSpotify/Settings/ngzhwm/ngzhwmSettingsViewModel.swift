@@ -23,7 +23,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
     //   · 只有**占位文案**仍然补（`makeUnavailableLyrics` 里写死）——
     //     那是"未找到歌词"这一行能不能显示出来的前提，不是给某个源伪造时间轴。
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
-    /// 「给没有歌词卡片的曲目补一个卡片元素」—— 见 `isLyricsCardElementInjectionEnabled`。
+    /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）—— 见 `isLyricsCardElementInjectionEnabled`。
     ///
     /// ⚠️ 2026-09-26 **恢复为真开关**（曾一度写死启用）：2026-09-26 的真机日志（日志 3）
     /// 显示这个元素在部分曲目上渲染成了「即将发布 / 已预收藏」卡，需要 A/B 才能定性。
@@ -161,7 +161,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
         isBetterWordByWordLyricsEnabled
     }
 
-    /// 「给没有歌词卡片的曲目补一个卡片元素」。
+    /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）。
     ///
     /// 背景：真机取证发现 `scrollsita/v1/scroll/spotify:track:<id>`（正在播放页的**元素列表**）
     /// 只在"Spotify 自己有官方歌词"的曲目上多下发一个元素（内层字段号 5，只引用曲目 URI）。
