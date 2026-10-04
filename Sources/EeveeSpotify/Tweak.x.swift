@@ -400,6 +400,10 @@ struct EeveeSpotify: Tweak {
         // 与听歌页那条"加壳"路线不同 —— 它改的是 Spotify 自己的视图，关掉即还原。
         activateLibraryAppearance()
 
+        // ★ 2026-10-12：主页头部 —— 与音乐库同一套"AM 化"（大标题贴左 + 头像靠右 + 收 pills/灰纱），
+        //   但**挂点不同**：主页的头随滚动动，所以挂在页面的 `viewDidLayoutSubviews` 上（见那个文件头）。
+        activateHomeHeaderAppearance()
+
         // 清爽开关（迷你播放条 / 标签栏渐隐 / free-tier 提示条）。同上：总是装、实时读。
         activateDeclutterChrome()
 

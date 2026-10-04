@@ -34,6 +34,7 @@ extension UserDefaults {
     private static let blockedArtistsKey = "blockedArtists"
     private static let dumpCustomizeBodyKey = "dumpCustomizeBody"
     private static let libraryLargeTitleKey = "libraryLargeTitle"
+    private static let homeLargeTitleKey = "homeLargeTitle"
     private static let tabBarGlassKey = "tabBarGlass"
     private static let tabBarSystemGlassKey = "tabBarSystemGlass"
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
@@ -88,6 +89,7 @@ extension UserDefaults {
         blockedArtistsKey,
         dumpCustomizeBodyKey,
         libraryLargeTitleKey,
+        homeLargeTitleKey,
         tabBarGlassKey,
         tabBarSystemGlassKey,
         tabBarHideLabelsKey,
@@ -792,6 +794,23 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: libraryLargeTitleKey)
+        }
+    }
+
+    // MARK: - 主页（改原生，2026-10-12）
+
+    /// 主页头部按 **Apple Music 的 Listen Now** 改：大标题贴左（自己画、文字取标签栏那一颗 ⇒ 跟随语言）、
+    /// 头像靠右、收掉「全部/音乐/播客」那排 pills 与顶部灰纱。**默认开**（与音乐库那颗同一个观感档）。
+    ///
+    /// ⚠️ 它与音乐库那颗**刻意相反**的一点：音乐库的筛选 chips **保留**（排序要用，pw 删过又装回来），
+    /// 而主页那排 pills 是**内容筛选**、AM 没有 ⇒ 收掉。理由写在 `HomeHeaderAppearance` 文件头。
+    /// 关掉即还原（标题移除、RTL 翻回、pills 与灰纱的原 alpha 写回）。
+    static var homeLargeTitle: Bool {
+        get {
+            container.object(forKey: homeLargeTitleKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: homeLargeTitleKey)
         }
     }
 

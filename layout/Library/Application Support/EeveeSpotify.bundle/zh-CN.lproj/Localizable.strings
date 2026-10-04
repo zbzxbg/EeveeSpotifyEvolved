@@ -377,6 +377,10 @@ tab_bar_system_glass_description = "把 Spotify 自己那条标签栏的内容�
 tab_bar_glass_description = "给底部四颗标签（主页 / 搜索 / 音乐库 / 创建）后面垫一层系统的液态玻璃。";
 library_large_title = "Apple Music 式音乐库";
 library_large_title_description = "按 Apple Music 的样子改 Spotify 自己的音乐库：标题变大并靠左、头像挪到右边、顶部灰纱收掉、列表封面换成苹果那种连续圆角、分隔线从文字那一边开始，库内搜索框变成胶囊。关掉全部还原。";
+home_section = "主页";
+home_large_title = "Apple Music 式主页";
+home_large_title_description = "按 Apple Music 的「现在就听」改主页头部：大标题贴左、头像靠右，顶部那层灰纱和「全部 / 音乐 / 播客」筛选胶囊一起收掉（那排胶囊是 Spotify 自己的内容筛选，AM 没有，位置让给大标题）。关掉全部还原。";
+home_header_title = "主页";
 
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
 flag_catalog_empty_result = "没有匹配的 flag";

@@ -37,6 +37,7 @@ struct EeveeExtrasSettingsView: View {
         var hideAddToButton = UserDefaults.hideAddToButton
 
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
+        var homeLargeTitle = UserDefaults.homeLargeTitle
         var tabBarGlass = UserDefaults.tabBarGlass
         var tabBarSystemGlass = UserDefaults.tabBarSystemGlass
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
@@ -373,6 +374,21 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.libraryLargeTitle,
                         persist: { UserDefaults.libraryLargeTitle = $0 }
+                    )
+                )
+            }
+
+            // 主页：与音乐库同一套"AM 化"（大标题贴左 + 头像靠右 + 收 pills 与灰纱），
+            // 但那一页的头**随滚动动**，所以实现挂在页面 VC 上（见 `HomeHeaderAppearance` 文件头）。
+            Section(
+                header: Text("home_section".localized),
+                footer: Text("home_large_title_description".localized)
+            ) {
+                Toggle(
+                    "home_large_title".localized,
+                    isOn: shadowBinding(
+                        \.homeLargeTitle,
+                        persist: { UserDefaults.homeLargeTitle = $0 }
                     )
                 )
             }
