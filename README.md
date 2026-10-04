@@ -1,4 +1,4 @@
-# EeveeSpotify-ng
+# EeveeSpotifyEvolved
 
 A Spotify iOS tweak: fixed lyrics on Spotify 9.1.88, word-by-word karaoke lyrics, more lyrics sources, and a liquid-glass UI.
 
