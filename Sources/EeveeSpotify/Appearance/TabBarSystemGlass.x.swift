@@ -585,6 +585,10 @@ enum TabBarSystemGlass {
     /// 只在"响应这个 selector 的对象"上调用它，找不到就返回 false：
     ///   · 先看那颗 item 子树里每个视图的 **`next`（响应链）**；
     ///   · 再**有界扫它们的 ivar**（Element 的 UI 对象一般挂在某个视图的 ivar 上，不在响应链里）。
+    ///
+    /// ⚠️ **2026-10-12 复核 pw 源码之后的结论**：pw 自己**从来不是直接调 `handleTap`** 的 ——
+    /// 他走的是 `fireTapRecognizers`（即上面的 ②），只是那个识别器的 action 恰好叫 `-handleTap`。
+    /// 我这一条是"那一步读不出来时的补网"，**不是 pw 的做法**；命中与否都会打一行日志，别把它当成主路。
     private static func callHandleTap(in item: UIView) -> Bool {
         let selector = NSSelectorFromString("handleTap")
         for view in subtree(of: item, maxDepth: 6) {
@@ -656,19 +660,48 @@ enum TabBarSystemGlass {
     }
 
     /// 三条路全不通时的现场：**把子树里的识别器与 UIControl 全列出来**，下一份日志直接给答案。
+    ///
+    /// ★ 2026-10-12 加细：**tap 识别器要把 pw 那条转发链逐环写清楚**
+    /// （`_targets` 在不在 → 有几对 → 每对的 `_target`/`_action` 解出来没有）。
+    /// 这是"为什么 pw 的写法在我们这版不通"的**唯一**判据 —— 上一版只报类名，等于什么都没说。
     private static func reportForwardFailure(index: Int, item: UIView) {
         var pieces: [String] = []
         for view in subtree(of: item, maxDepth: 6) {
             let viewName = shortName(NSStringFromClass(type(of: view)))
             if view is UIControl { pieces.append("UIControl \(viewName)") }
             for recognizer in view.gestureRecognizers ?? [] {
-                pieces.append("\(shortName(NSStringFromClass(type(of: recognizer)))) on \(viewName)")
+                if recognizer is UITapGestureRecognizer {
+                    pieces.append("\(describe(recognizer)) on \(viewName)")
+                } else {
+                    pieces.append("\(shortName(NSStringFromClass(type(of: recognizer)))) on \(viewName)")
+                }
             }
         }
         writeDebugLog(
             "[\(logTag)] ⚠️ tap on #\(index) found nothing to forward to — \(shortName(NSStringFromClass(type(of: item))))"
                 + "; inside [\(pieces.isEmpty ? "nothing at all" : pieces.joined(separator: " | "))]"
         )
+    }
+
+    /// 把一条 tap 识别器的**转发链**逐环写清楚（pw 的链：`_targets` → 每对 `_target`/`_action`）。
+    private static func describe(_ recognizer: UIGestureRecognizer) -> String {
+        let name = shortName(NSStringFromClass(type(of: recognizer)))
+        guard let ivar = class_getInstanceVariable(UIGestureRecognizer.self, "_targets") else {
+            return "\(name)[_targets ivar is gone in this build]"
+        }
+        guard let raw = object_getIvar(recognizer, ivar) else {
+            return "\(name)[_targets is nil]"
+        }
+        guard let pairs = raw as? [AnyObject] else {
+            return "\(name)[_targets is not a walkable array]"
+        }
+        guard !pairs.isEmpty else { return "\(name)[no target/action pairs at all]" }
+        let described = pairs.map { pair -> String in
+            let targetName = target(of: pair).map { shortName(NSStringFromClass(type(of: $0))) } ?? "nil-target"
+            let actionName = action(of: pair).map { NSStringFromSelector($0) } ?? "nil-action"
+            return "\(targetName):\(actionName)"
+        }
+        return "\(name)[\(described.joined(separator: " "))]"
     }
 
     private static func subtree(of node: UIView, maxDepth: Int, depth: Int = 0) -> [UIView] {
