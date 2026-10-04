@@ -147,7 +147,34 @@
 
 ---
 
-## 7. 下一轮最容易踩的三件事
+## 8. ★★ CI 契约：**为什么 GitHub 上一串红叉**（2026-10-12 付的学费）
+
+用户问「怎么我这边 GitHub 提交的全是有个红 x 的」。根因：**`Logic tests`（`.github/workflows/tests.yml`，
+每次 push 都跑）会把几个源文件<u>单独</u>丢给 `swiftc`**，只加上它自己的测试 main：
+
+```
+swiftc Sources/EeveeSpotify/Premium/Helpers/ServerSidedFeaturePolicy.swift  Tests/ServerSidedFeaturePolicy/main.swift
+swiftc Sources/EeveeSpotify/Privacy/TelemetryEndpointRules.swift            Tests/TelemetryClassification/main.swift
+swiftc Sources/EeveeSpotify/Flags/FlagOverride.swift                        Tests/FlagOverrideStore/main.swift
+swiftc Sources/EeveeSpotify/Shared/Models/Extensions/URL+Extension.swift    Tests/URLAdClassification/main.swift
+swiftc Sources/EeveeSpotify/Shared/Helpers/DebugLogSanitizer.swift          Tests/DebugLogRedaction/main.swift
+swiftc Sources/EeveeSpotify/Premium/Helpers/BrowsitaSectionStripper.swift   Tests/BrowsitaSectionStripper/main.swift
+python3 Tests/ResolveConfigurationSnapshot/test.py
+```
+
+⇒ **这六个文件只许依赖 Foundation**。我为了 Premium 取证，往 `ServerSidedFeaturePolicy.swift` 里加了一个
+`static func reportServerAccountTier(_ attributes: [String: AccountAttribute])` —— 它引用了 `AccountAttribute`
+与 `writeDebugLog`，而这两个在独立编译里**都不存在** ⇒ 那一步编不过 ⇒ 从 `7a4fd5a` 起每个 push 都红。
+
+**修法**：把那段取证搬到 `DynamicPremium+ModifyingFunctions.swift`（CI **不**单独编译它，而且它本来就
+用着 `writeDebugLog`），`ServerSidedFeaturePolicy.swift` 的**代码**回到原样，并在文件尾留一段
+"这是 CI 契约"的注释；那六个文件同上 —— **动它们之前先看 `tests.yml`**。
+
+⚠️ 归类：这和"六条自检不做类型检查"是同一类 —— **本机看不出来的错，只有 CI / 真机能发现**。
+
+---
+
+## 9. 下一轮最容易踩的三件事
 
 1. **先编译**：新加了一个 `ClassHook<UIViewController>` 与一次激活改动 —— 编译错最容易出在这一层。
    另外记住那条踩过三次的纪律：**hook 方法体里不许直接碰 `@MainActor` 的东西**（`viewIfLoaded` 也算！），
