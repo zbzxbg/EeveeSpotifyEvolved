@@ -44,6 +44,7 @@ extension UserDefaults {
     private static let nowPlayingLyricsExpandedKey = "nowPlayingLyricsExpanded"
     private static let nowPlayingSingleLyricKey = "nowPlayingSingleLyric"
     private static let nowPlayingBlurUnplayedLyricsKey = "nowPlayingBlurUnplayedLyrics"
+    private static let lyricsSearchPlaceholderEasterEggKey = "lyricsSearchPlaceholderEasterEgg"
     private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
@@ -96,6 +97,7 @@ extension UserDefaults {
         nowPlayingLyricsExpandedKey,
         nowPlayingSingleLyricKey,
         nowPlayingBlurUnplayedLyricsKey,
+        lyricsSearchPlaceholderEasterEggKey,
         nowPlayingControlGlyphsKey,
 
         // 不在上面那批常量里、但同样属于我们的：
@@ -676,6 +678,24 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: nowPlayingBlurUnplayedLyricsKey)
+        }
+    }
+
+    /// 调试页「**替换寻找歌词时的占位符**」—— 用户 2026-10-12 点名要的**彩蛋**。**默认关**。
+    ///
+    /// 用户原话：
+    /// > 在转储视图树的下面，名字：替换寻找歌词时的占位符。它的作用：正常来讲找歌词的时候，
+    /// > 页面会显示「正在查找歌词...」，换成「少女祈祷中...」。这东西作为一个彩蛋好了。
+    ///
+    /// 开 ⇒ 还在取词时那句占位文本换成 `lyrics_looking_up_easter_egg`
+    /// （改的只有 `NowPlayingLyricsPlate.noticeText()` 里"还在查"那一档，**一处**）。
+    /// 默认关：彩蛋要自己发现，别默认把所有人看到的那句话换掉。
+    static var lyricsSearchPlaceholderEasterEgg: Bool {
+        get {
+            container.object(forKey: lyricsSearchPlaceholderEasterEggKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: lyricsSearchPlaceholderEasterEggKey)
         }
     }
 

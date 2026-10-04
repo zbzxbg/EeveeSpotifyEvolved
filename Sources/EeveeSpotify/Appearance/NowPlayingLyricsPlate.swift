@@ -3608,7 +3608,12 @@ enum NowPlayingLyricsPlate {
         // ④ 数据还没到：正在查 vs 查完了没有。
         switch currentLyricsLookupState {
         case .idle, .loading:
-            return "lyrics_looking_up".localized
+            // ★ 2026-10-12（用户点名要的**彩蛋**）：「正在查找歌词…」→「少女祈祷中…」。
+            //   开关在**调试**页（「替换寻找歌词时的占位符」），**默认关**。
+            //   全文只此一处写这句占位文本（`lyrics_looking_up` 的另一处只是注释）。
+            return UserDefaults.lyricsSearchPlaceholderEasterEgg
+                ? "lyrics_looking_up_easter_egg".localized
+                : "lyrics_looking_up".localized
         case .failed, .found:
             return "ngzhwm_lyrics_unavailable".localized
         }

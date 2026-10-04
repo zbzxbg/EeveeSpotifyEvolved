@@ -66,6 +66,16 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         }
     }
 
+    /// 「替换寻找歌词时的占位符」——用户 2026-10-12 点名要的**彩蛋**（放在"转储视图树"下面）。**默认关**。
+    ///
+    /// 这不是排查工具，是本页唯一的"长期住户"（用户要求放这里）；只改一句话，见
+    /// `NowPlayingLyricsPlate.noticeText()` 里"还在查"那一档。
+    @Published var lyricsSearchPlaceholderEasterEgg = UserDefaults.lyricsSearchPlaceholderEasterEgg {
+        didSet {
+            UserDefaults.lyricsSearchPlaceholderEasterEgg = lyricsSearchPlaceholderEasterEgg
+        }
+    }
+
     /// 见 `EeveeLyricsSettingsViewModel.animationValues` 的用法：把开关本身列进去，
     /// 值一变页面就会重绘（少了它会出现"改了开关但界面不刷新"）。
     var animationValues: [AnyHashable] {
@@ -73,6 +83,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
             injectLyricsCardElement,
             lyricsEntryPointFlag,
             dumpViewTree,
+            lyricsSearchPlaceholderEasterEgg,
         ]
     }
 
@@ -88,6 +99,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         logBooleanSetting($injectLyricsCardElement, "inject lyrics card element")
         logBooleanSetting($lyricsEntryPointFlag, "lyrics entry point flag")
         logBooleanSetting($dumpViewTree, "dump view tree")
+        logBooleanSetting($lyricsSearchPlaceholderEasterEgg, "lyrics search placeholder easter egg")
     }
 
     /// 照抄 `EeveeLyricsSettingsViewModel+setupBindings` 的实现与理由：

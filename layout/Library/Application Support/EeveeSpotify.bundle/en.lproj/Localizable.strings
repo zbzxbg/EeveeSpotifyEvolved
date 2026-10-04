@@ -146,6 +146,9 @@ ngzhwm_remove_interlude_symbol = "Delete Interlude Symbol \"♪\"";
 ngzhwm_remove_interlude_symbol_description = "When this option is enabled, the interlude symbol \"♪\" is removed from lyrics, and lines containing \"♪\" are displayed as blank.";
 ngzhwm_lyrics_unavailable = "No lyrics found";
 lyrics_looking_up = "Looking for lyrics…";
+lyrics_looking_up_easter_egg = "The girl is praying…";
+lyrics_search_placeholder_easter_egg = "Replace the placeholder shown while looking for lyrics";
+lyrics_search_placeholder_easter_egg_description = "While the lyrics are still being fetched, the line that normally reads “Looking for lyrics…” says “The girl is praying…” instead. An easter egg, off by default.";
 lyrics_no_timeline = "These lyrics have no timing";
 track_mismatch = "The track changed while lyrics were loading. Play it again to fetch lyrics.";
 // Debug

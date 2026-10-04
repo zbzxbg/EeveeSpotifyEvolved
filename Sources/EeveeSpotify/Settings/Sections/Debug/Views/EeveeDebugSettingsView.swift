@@ -23,6 +23,9 @@ struct EeveeDebugSettingsView: View {
 
             // 「转储视图树」：给还没写的界面 hook 铺路（AMOLED / 隐藏区块 / 手势）。
             dumpViewTreeSection()
+
+            // 「替换寻找歌词时的占位符」：**彩蛋**（用户 2026-10-12 点名要的），放在上面那一节下面。
+            lyricsSearchPlaceholderEasterEggSection()
         }
                 // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
@@ -58,6 +61,22 @@ struct EeveeDebugSettingsView: View {
             Toggle(
                 "dump_view_tree".localized,
                 isOn: $viewModel.dumpViewTree
+            )
+        }
+    }
+
+    /// 「替换寻找歌词时的占位符」——用户 2026-10-12 点名要的**彩蛋**。**默认关**。
+    ///
+    /// 只做一件事：还在取词的时候，那句「正在查找歌词…」写成「少女祈祷中…」
+    /// （改的只有 `NowPlayingLyricsPlate.noticeText()` 里"还在查"那一档，全仓库就那一处）。
+    ///
+    /// ⚠️ 本页的定位是"排查工具、验证完就删"，这一节是**例外**（用户要求放这里，它是个长期彩蛋）：
+    ///    将来清理这一页时**别顺手删它**。
+    @ViewBuilder private func lyricsSearchPlaceholderEasterEggSection() -> some View {
+        Section(footer: Text("lyrics_search_placeholder_easter_egg_description".localized)) {
+            Toggle(
+                "lyrics_search_placeholder_easter_egg".localized,
+                isOn: $viewModel.lyricsSearchPlaceholderEasterEgg
             )
         }
     }
