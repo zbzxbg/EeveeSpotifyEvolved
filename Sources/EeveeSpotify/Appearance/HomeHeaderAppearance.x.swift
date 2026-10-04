@@ -104,7 +104,9 @@ enum HomeHeaderAppearance {
         // 灰纱：真机里它与 header **同父**（都在那个 LayoutOnlyView 下）⇒ 回头看兄弟。
         clearScrim(around: header)
 
-        guard let stack = findView(in: header, where: { $0 is UIStackView }) else { return }
+        // ⚠️ 必须**强转成 `UIStackView`**：`findView` 的返回类型是 `UIView`，而 `arrangedSubviews`
+        //   只有 stack 才有（2026-10-12 编译错第 1 条就是漏了这个 `as?`）。
+        guard let stack = findView(in: header, where: { $0 is UIStackView }) as? UIStackView else { return }
 
         // ① 那一行翻成 RTL ⇒ 头像自动落到右沿（每拍都成立，宽度变了也不用管）。
         if stack.semanticContentAttribute != .forceRightToLeft {
@@ -167,7 +169,9 @@ enum HomeHeaderAppearance {
         title.accessibilityTraits = .header
         title.adjustsFontSizeToFitWidth = true
         title.minimumScaleFactor = 0.6
-        title.userInteractionEnabled = false
+        // ⚠️ Swift 里是 **`isUserInteractionEnabled`**（`userInteractionEnabled` 是 ObjC 那个名字；
+        //   写成旧的会被编译器直接拦下 —— 2026-10-12 编译错第 2 条）。
+        title.isUserInteractionEnabled = false
         header.addSubview(title)
         objc_setAssociatedObject(header, &titleKey, title, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return title
