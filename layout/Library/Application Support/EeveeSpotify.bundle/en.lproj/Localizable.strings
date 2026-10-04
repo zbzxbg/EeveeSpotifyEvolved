@@ -338,7 +338,7 @@ flag_override_mode_set = "Set value";
 flag_override_value_placeholder = "enum value, e.g. count";
 flag_override_value_required = "Needs a value";
 flag_catalog_section = "Known flags";
-flag_catalog_description = "Names and scopes come from the debug log. Tap a row to pin that flag (booleans get turned off, enum flags keep the value Spotify sent); tap it again to unpin. Change the exact value on the previous page.";
+flag_catalog_description = "Names and scopes come from the debug log. Tap a row to add an override (booleans default to off, enum flags keep the value Spotify sent); tap it again to remove it. The green checkmark marks what is overridden; change the exact value on the previous page. Flags whose value was never observed cannot be tapped - write their value on that page instead.";
 flag_catalog_search_placeholder = "Filter by name or scope";
 flag_catalog_empty_result = "No flag matches that filter";
 flag_group_lyrics = "Lyrics";
@@ -511,7 +511,7 @@ now_playing_section_description = "Choose which parts of the now-playing page ar
 // One screen: every card under the player is folded away and the list is pinned to its top,
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
-now_playing_one_screen = "One screen (no scrolling)";
+now_playing_one_screen = "Hide Spotify's now-playing modules";
 now_playing_one_screen_description = "Folds every card under the player away and pins the list to its top, so the player is one screen you cannot scroll. The lyrics card is folded away too - open lyrics from the player's lyrics button.";
 now_playing_volume = "Volume slider at the bottom";
 now_playing_lyrics_in_player = "Lyrics in the player";

@@ -328,7 +328,7 @@ flag_override_mode_set = "写入指定值";
 flag_override_value_placeholder = "enum 值，例如 count";
 flag_override_value_required = "需要填值";
 flag_catalog_section = "已知 flag";
-flag_catalog_description = "这些名字与 scope 都来自调试日志。点一行即可填入上面的表单：布尔类的直接生成一条覆盖，enum 类的会帮你填好取值框。普通 int 类型的只列出、暂不可改。";
+flag_catalog_description = "这些名字与 scope 都来自调试日志。点一下 = 加一条覆盖（布尔类默认关，enum 类写回服务端下发的值），再点一下 = 取消。绿勾表示已覆盖；改具体取值去上一层「Flag 覆盖」页。没观察到数值的 int 点不了，只能在那页手填。";
 flag_group_lyrics = "歌词";
 flag_group_npv = "正在播放页卡片";
 flag_group_home = "首页与分享";
