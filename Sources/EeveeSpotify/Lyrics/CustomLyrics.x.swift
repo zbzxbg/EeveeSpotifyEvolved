@@ -679,7 +679,12 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         // 罗马字是**显示层**的事：`LyricLinesAdapter.romanizedContentsForDisplay()` 自己会
         // 从这份原文现算一份罗马字（带缓存、跟 `currentLyricsVersion` + 三个开关走），
         // 主歌词仍用 `line.content` ⇒ 原文在、罗马字画在它上方。所以这里必须存**原样**的 dto。
-        currentLyricsDto = dto
+        //
+        // ⚠️ 那句"原样"指的是**不许换成罗马字**；大小写不在此列 —— 2026-10-12 起主歌词也走
+        //    "每行第一个字母大写"这条显示约定（用户问的：「如果主歌词是英文这种字母，首字母
+        //    或者「后面的首个字母是不是不会大写。如果不会大写，改成大写」）。
+        //    见 `LyricsDto.capitalizingFirstLettersForDisplay`：它只动大小写，原文一个字不换。
+        currentLyricsDto = dto.capitalizingFirstLettersForDisplay()
         // ★ 2026-10-11：数据到了（哪怕是纯音乐那种"空行 + isInstrumental"）⇒ 取词这一步=found。
         currentLyricsLookupState = .found
         // 这份数据**属于哪一首**：切歌不一定伴随歌词请求（客户端命中自己的歌词存储 /

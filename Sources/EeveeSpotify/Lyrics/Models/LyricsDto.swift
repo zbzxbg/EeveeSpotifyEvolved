@@ -550,6 +550,61 @@ extension String {
     }
 }
 
+// MARK: - 主歌词的大小写显示约定（2026-10-12）
+
+extension LyricsDto {
+
+    /// 显示约定：**每行第一个字母大写**（`「` `"` `・` 空格 这类装饰前缀会被跳过，
+    /// 规则见 `String.capitalizingFirstLetterIfAlphabetic`）——逐词行**连第一个含字母的词一起**，
+    /// 这样逐词渲染与整行渲染长得一样。
+    ///
+    /// ★ 2026-10-12（用户）：「如果主歌词是英文这种字母，首字母或者「后面的首个字母是不是不会大写。
+    ///   如果不会大写，改成大写」。
+    ///
+    /// 查过之后的**实情**：这条约定早就有，但只做在三个地方 ——
+    ///   ① 注入给 Spotify 的 payload（`toSpotifyLyricsData`）；
+    ///   ② 罗马字（`romanizeLine` 末尾那一句）；
+    ///   ③ 罗马化那份副本（`romanizedForWordByWordIfEnabled`，含词级 token）。
+    /// **我们自己渲染层画的主歌词原文没做** ⇒ 同一首英文歌：Spotify 原生页首字母大写、
+    /// 我们这层小写 —— 用户看到的就是这个。
+    ///
+    /// 现在补成"**DTO 落地时就统一**"：`CustomLyrics.storeLyricsDto` 调一次，之后
+    /// 播放器那层 / 全屏页 / 旧 UIKit 层 / 静态歌词档读到的都是同一份。
+    /// **幂等**：payload 与罗马字那两处会再做一次，结果不变（`…IfAlphabetic` 对已大写的串是恒等）。
+    func capitalizingFirstLettersForDisplay() -> LyricsDto {
+        var result = self
+        result.lines = lines.map { line in
+            var line = line
+            line.content = line.content.capitalizingFirstLetterIfAlphabetic()
+
+            if let words = line.words, !words.isEmpty {
+                var mapped: [LyricsWordDto] = []
+                mapped.reserveCapacity(words.count)
+                // 只大写**第一个含字母的 token**，然后就停。
+                //
+                // ⚠️ 判据是"这个 token 里有没有字母"，**不是**"这次调用有没有改动它" ——
+                //   一个字都不能少（幂等性）：`「` 这类装饰常常是**独立 token**，
+                //   若按"改动与否"判断，装饰 token 改不动 ⇒ 第二次跑时第一个词已是大写、
+                //   也"改不动" ⇒ 会继续把**第二个**词也大写。按字母判断就没有这个洞。
+                var hasPassedFirstLetter = false
+                for word in words {
+                    var word = word
+                    if !hasPassedFirstLetter {
+                        word.text = word.text.capitalizingFirstLetterIfAlphabetic()
+                        if word.text.contains(where: { $0.isLetter }) {
+                            hasPassedFirstLetter = true
+                        }
+                    }
+                    mapped.append(word)
+                }
+                line.words = mapped
+            }
+            return line
+        }
+        return result
+    }
+}
+
 // MARK: - 整行日文分词（供逐字对齐）
 
 /// 整行日文分词的一个 chunk（token 或标点间隙）。
