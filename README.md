@@ -89,7 +89,7 @@ Both pipelines build the same tweak; the difference is whether zxPluginsInject.d
 If a sideloaded build misbehaves around login or keychain, try the patched one — that is what the shim is for.
  
 > [!NOTE]
-> **Orion runtime.** The tweak links `Orion.framework`, so the `.deb` needs the Orion package from <https://repo.theos.dev/> — install it first or Spotify will not launch (details in `Makefile`). The IPA pipelines bundle the framework into the app instead, so sideloaded builds need nothing extra.
+> **Orion runtime.** The `.deb` does not bundle `Orion.framework` — it declares `Depends: dev.theos.orion`, which your package manager resolves from <https://repo.theos.dev/> (add that repo, or the install fails with an unmet dependency). The IPA pipelines bundle the framework into the app instead, since a sideloaded app has no package manager to satisfy a dependency.
 
 ### CI (nothing installed locally)
  
