@@ -57,7 +57,8 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         guard let buffer = URLSessionHelper.shared.obtainData(for: task) else {
             // marked for modify but no body bytes (0-byte/early-completion/redirect).
             // Always forward completion or Spotify hangs and gets watchdog-killed.
-            if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData {
+            if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
+                ?? UserDefaults.cachedCustomizeData {
                 orig.URLSession(session, dataTask: task, didReceiveData: cached)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
             } else {
@@ -175,7 +176,8 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
-           let cached = SpotifyResponsePatcher.cachedCustomizeData {
+           let cached = SpotifyResponsePatcher.cachedCustomizeData
+               ?? UserDefaults.cachedCustomizeData {
             guard let synthetic = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
                 orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
                 return

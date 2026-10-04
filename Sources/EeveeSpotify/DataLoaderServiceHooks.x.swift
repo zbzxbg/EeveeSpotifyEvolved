@@ -75,7 +75,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         guard let buffer = URLSessionHelper.shared.obtainData(for: task) else {
             // Customize 304 fallback — wg-spclient returned 304, no buffer
             // to patch, but we have a cached body from a prior 200.
-            if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData {
+            if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
+                ?? UserDefaults.cachedCustomizeData {
                 orig.URLSession(session, dataTask: task, didReceiveData: cached)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
             } else {
@@ -220,7 +221,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
-           let cached = SpotifyResponsePatcher.cachedCustomizeData {
+           let cached = SpotifyResponsePatcher.cachedCustomizeData
+               ?? UserDefaults.cachedCustomizeData {
             // 304, but our cache holds the already-patched body; force 200 so the
             // consumer accepts the cached data we replay next.
             guard let synthetic = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {

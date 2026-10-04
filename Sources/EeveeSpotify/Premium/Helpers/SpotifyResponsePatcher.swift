@@ -13,7 +13,16 @@ enum SpotifyResponsePatcher {
 
     static var cachedCustomizeData: Data? {
         get { lock.lock(); defer { lock.unlock() }; return _cachedCustomizeData }
-        set { lock.lock(); defer { lock.unlock() }; _cachedCustomizeData = newValue }
+        set {
+            lock.lock(); defer { lock.unlock() }
+            _cachedCustomizeData = newValue
+            // ★★ 2026-10-12（对齐上游 `EeveeSpotifyReincarnated`）：**同时落盘**。
+            //   上游 `SpotifyResponsePatcher.swift:26` 就是这么写的，而它每处读取都
+            //   `?? UserDefaults.cachedCustomizeData` —— 为的是**新进程刚起、随包快照没拿到、
+            //   服务器又回 304** 那一次仍然有 body 可交（交不出 = App 拿到空配置 =
+            //   premium/可播放性降级 = 歌单发灰/歌曲消失/放不动，正是用户报的那三个症状）。
+            UserDefaults.cachedCustomizeData = newValue
+        }
     }
 
     static func markCustomizeTaskHandled(_ id: Int) {

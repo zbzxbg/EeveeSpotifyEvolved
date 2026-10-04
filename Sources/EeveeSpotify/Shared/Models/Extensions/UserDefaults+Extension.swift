@@ -509,6 +509,44 @@ extension UserDefaults {
         }
     }
 
+    // MARK: - customize 快照的**落盘**兜底（2026-10-12，对齐上游）
+
+    /// customize 响应体的**落盘缓存**。
+    ///
+    /// ★★ 为什么加它（用户 2026-10-12 让"对比上游那几个仓库"）：
+    ///   `EeveeSpotifyReincarnated`（我们最近的同代 fork）里，`cachedCustomizeData` **每写一次就同步落盘**，
+    ///   而且**每处读取都 `?? UserDefaults.cachedCustomizeData`**：
+    ///
+    /// ```
+    /// SpotifyResponsePatcher.swift:26   UserDefaults.cachedCustomizeData = newValue
+    /// DataLoaderServiceHooks.x.swift:61 if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
+    /// DataLoaderServiceHooks.x.swift:62     ?? UserDefaults.cachedCustomizeData {
+    /// ```
+    ///
+    /// 我们这边**只有内存那一份**（+ 启动时用随包 `.bnk` 喂一份，见 `SpotifyResponsePatcher.seedCustomizeData`）。
+    /// 缺它的后果很具体，而且**正好落在用户报的"退出重进之后"**：
+    /// 新进程刚起、随包快照没拿到或名字变了、而服务器对 customize 回 **304**（很常见）
+    /// ⇒ `cachedCustomizeData == nil` ⇒ 我们**交不出 body** ⇒ App 拿到空配置
+    /// ⇒ **premium / 可播放性降级 ⇒ 歌单发灰、歌曲消失、放不动**（用户报的那三个症状）。
+    /// 上游靠落盘那一份就永远有 body 可交。
+    ///
+    /// ⚠️ 它**不进 `ownedKeys`**：这是**缓存**不是设置（不该进备份，也不该被"清空设置"连坐）；
+    ///    每次拿到 200 就会被覆盖，所以留着旧的也不会长期错。
+    private static let cachedCustomizeDataKey = "eeveeCachedCustomizeData"
+
+    static var cachedCustomizeData: Data? {
+        get {
+            container.data(forKey: cachedCustomizeDataKey)
+        }
+        set {
+            if let newValue {
+                container.set(newValue, forKey: cachedCustomizeDataKey)
+            } else {
+                container.removeObject(forKey: cachedCustomizeDataKey)
+            }
+        }
+    }
+
     // MARK: - 标签文字（默认藏）
 
     /// 隐藏四颗标签的**文字**（照片 21/23/25 里那条栏是没有文字的）。**默认开**。
