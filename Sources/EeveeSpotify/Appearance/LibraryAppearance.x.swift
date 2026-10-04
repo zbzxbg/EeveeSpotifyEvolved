@@ -102,8 +102,6 @@ enum LibraryAppearance {
             clearTopEdgeScrim(in: header)
         }
         hideQuickScroll(in: root)
-        // ⑥ 顶部那块毛玻璃：**用公开 API 关掉它自己的效果**（不是去涂那一层视图）。
-        hideTopEdgeEffect(in: root)
     }
 
     /// 登记当前这一页。weak —— 页面销毁后自动失效，不用手动摘。
@@ -384,50 +382,6 @@ enum LibraryAppearance {
         if scrim.alpha != 0 { scrim.alpha = 0 }
     }
 
-    // MARK: ⑥ 顶部那块"毛玻璃"（iOS 26 的滚动边缘效果）
-
-    /// 真机树（日志 64 的 dump #8/#9）：
-    /// ```
-    /// 19.BackdropView@0,0,414,188
-    /// 19.ScrollEdgeEffectView@0,0,414,188   ← ★ 顶部那块毛玻璃（#8 可见、#9 alpha=0.00 ⇒ 随滚动淡入淡出）
-    /// ```
-    /// 用户 2026-10-12：「音乐库页面顶部似乎有一块毛玻璃。这个毛玻璃可以去掉，但是**那上面的功能都需要还在**」。
-    ///
-    /// ★★ **用公开 API，不去涂那一层**：iOS 26 起 `UIScrollView` 有 `topEdgeEffect`
-    /// （`UIScrollEdgeEffect`，`isHidden` 可写）—— 那正是系统画这块毛玻璃的开关。所以：
-    /// **只关效果**，标题 / 头像 / 搜索 / 加号 / 筛选 chips **一个都不动、全都能用**。
-    /// 「涂掉 `ScrollEdgeEffectView` 的 alpha」是野路子：它随滚动自己淡入淡出，涂了就是和它的动画打架
-    /// （灰纱那笔账 §②，别再犯）。
-    ///
-    /// ⚠️ 代价（要跟用户说清楚）：**没有那层模糊之后，列表内容会直接从标题底下划过**（字压在内容上）。
-    /// 想要"看着干净、又不糊"的折中，可以在这层下面垫一条我们自己的极淡渐隐 —— 那是另一件事。
-    ///
-    /// ⚠️ 只作用于**音乐库这一页的列表**（`YourLibraryContent.collectionView`）；主页/搜索页各有自己的列表，
-    /// 要一起关得在各自的开关里再来一次（一行）。
-    private static weak var edgeEffectList: UIScrollView?
-
-    @MainActor
-    static func hideTopEdgeEffect(in root: UIView) {
-        guard #available(iOS 26.0, *) else { return }
-        guard let list = (edgeEffectList ?? findLibraryList(in: root)) else {
-            noteSkipOnce("no library collection view yet - the top edge effect is still the system's")
-            return
-        }
-        edgeEffectList = list
-        guard !list.topEdgeEffect.isHidden else { return }
-        list.topEdgeEffect.isHidden = true
-        writeDebugLog(
-            "[Library] the top edge effect is gone — scrollView.topEdgeEffect.isHidden = true"
-                + " (public API; the title, the avatar, search, plus and the filter chips are untouched and keep working)"
-        )
-    }
-
-    private static func findLibraryList(in root: UIView) -> UIScrollView? {
-        findView(in: root, where: {
-            ($0 as? UIScrollView)?.accessibilityIdentifier == "YourLibraryContent.collectionView"
-        }) as? UIScrollView
-    }
-
     /// 有界找第一个满足条件的视图（找不到就 nil；只在头部子树里用，别拿它扫整页）。
     static func findView(in view: UIView, where matches: (UIView) -> Bool) -> UIView? {
         if matches(view) { return view }
@@ -584,12 +538,6 @@ enum LibraryAppearance {
 
         // ⑤ 快速滚动条：按原位放回。
         restoreQuickScroll()
-
-        // ⑥ 毛玻璃：把系统那个开关还回去（我们只关过它一次，写回 false 就是原值）。
-        if #available(iOS 26.0, *), let list = edgeEffectList, list.topEdgeEffect.isHidden {
-            list.topEdgeEffect.isHidden = false
-        }
-        edgeEffectList = nil
 
         didLogHeaderRestyle = false
     }
