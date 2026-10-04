@@ -583,26 +583,20 @@ enum NowPlayingLyricsPlate {
     private static var didLogInstall = false
     private static var lastSkipReason = ""
 
-    /// 这一层参不参与。
+    /// 这一层参不参与：**只看「歌词进播放器」**。
     ///
-    /// ★★ 2026-10-12（用户报的）：
-    /// > 当只开启逐词歌词、不开启更好的逐词歌词的时候，**歌词按钮点不动**。
+    /// ★★ 2026-10-12（用户报「歌词按钮点不动」→ 追问「自己画的这套视图塞不进去单纯的逐词吗」）：
     ///
-    /// **根因**：这一层是 **Apple Music 那套渲染层**（`canShow` 里早就要求「更好的逐词歌词」开着），
-    /// 但以前这里**只判了「歌词进播放器」** ⇒ 更好的那一颗关着时：
-    ///   ① 那枚圆形歌词键照样摆出来（它自己判的也是 `isEnabled`）；
-    ///   ② 它在页面**最上层**（`bringSubviewToFront`），把下面 Spotify 自己的东西一起挡住；
-    ///   ③ 点下去 ⇒ `toggle()` → `canShow` 直接 false ⇒ **什么都不发生**。
-    /// 也就是"看得见、摸得着、点了没反应"—— 正是本轮在音量条 / 歌名跳转上修过的同一类错。
+    /// 这里**一度**（就在今天上午）还挂了「更好的逐词歌词」，因为 `canShow()` 里本来也要它 ——
+    /// 那是**把门禁放错了地方**：这一层**本身就是** Apple Music 那套渲染（SwiftUI 页 + 逐词高亮），
+    /// 而「更好的逐词歌词」真正管的是 **Spotify 原生歌词页**用哪套渲染
+    /// （`AppleMusicLyricsOverlay` ↔ 旧 UIKit overlay `LyricsWordByWord`），
+    /// 跟"播放器这层要不要存在"没关系。挂在这里的后果很具体：
+    /// 只开「逐词歌词」时**整层退出** —— kumone 那套版式全没了（缩封面 / 标题左上 / 控件条 /
+    /// 单行歌词），而用户要的恰恰是"版式留着、歌词照画"。⇒ 恢复成只判这一颗。
     ///
-    /// **现在**把「更好的逐词歌词」并进总开关：关着 ⇒ 这一整条链**根本不参与**
-    /// （`apply` 的 else 分支会把我们改过的东西全部还原：封面缩放 / 标题行 / 控件条 / 单行歌词 /
-    /// 触摸替身 / 那枚键），播放器页面回到 Spotify 原样，歌词走它自己的入口 + 旧 overlay
-    /// （`LyricsWordByWord`，它在「更好的」开着时会主动让位，见那两处判据）。
-    static var isEnabled: Bool {
-        UserDefaults.nowPlayingLyricsInPlayer
-            && NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled
-    }
+    /// 渲染能力由 `canShow()` 里那条 **iOS 26** 判据兜着（这一整条链本就是 iOS 26 起的）。
+    static var isEnabled: Bool { UserDefaults.nowPlayingLyricsInPlayer }
 
     // MARK: - 对外入口
 
@@ -3587,7 +3581,9 @@ enum NowPlayingLyricsPlate {
     /// 但**不打日志**：那枚歌词键每 0.3s 复查一次都要问它，所以只能是几个 bool 读
     /// （`currentLines()` 会建整个数组，不能放在这条热路径上）。
     private static func hasLyricsAvailable() -> Bool {
-        guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else { return false }
+        // ★ 2026-10-12：**不再**看「更好的逐词歌词」—— 那两颗开关在这一层里的分工见
+        //   `isEnabled` 上面那段：这一层画的就是那套渲染，"更好的"只管 Spotify 原生歌词页。
+        //   （以前这里一 false，那枚键会被画成灰的，用户会以为"这首没词"。）
         return hasUsableWordLevelData(currentLyricsDto) || hasUsableLineLevelData(currentLyricsDto)
     }
 
@@ -3598,10 +3594,13 @@ enum NowPlayingLyricsPlate {
     ///   （以前这里直接 false ⇒ 键看得见、点下去什么都不会发生，用户报的就是这个。）
     private static func canShow(for page: UIView) -> Bool {
         if #available(iOS 26.0, *) {} else { return false }
-        guard NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else {
-            noteSkip("'Better word-by-word lyrics' is off")
-            return false
-        }
+        // ★★ 2026-10-12（用户：「那怎么办，自己画的这套视图塞不进去单纯的逐词吗」）：
+        //   **这里不再要求「更好的逐词歌词」。** 这一层画的就是那套渲染（iOS 26 起），
+        //   在这一层里**没有第二种渲染可选**，所以那颗开关不该在这里当闸门 ——
+        //   它管的是 Spotify **原生歌词页**用哪套渲染（`AppleMusicLyricsOverlay` ↔ 旧
+        //   `LyricsWordByWord`）。以前在这里 guard 的后果就是用户报的那条：
+        //   只开「逐词歌词」时**键摆着、点下去这里 false ⇒ 点不动**（而"整层退出"又会让
+        //   kumone 那套版式消失，同样不对）。
         // ★ 用户要求「键随意能按」⇒ 这里**永远为真**：有词就画词，没词就写一句说明
         //   （见 `noticeText()`），画不出来的异常也照样给一句话，绝不留下"点了没反应"的键。
         return true
@@ -3800,15 +3799,12 @@ enum NowPlayingLyricsPlate {
 
     /// 「这一层为什么没参与」——一次一页只报一行。
     ///
-    /// ★ 2026-10-12：加了「更好的逐词歌词」这条判据之后，"歌词键不见了"有两种完全不同的原因
-    /// （用户把那颗关了 / 把「歌词进播放器」关了），日志里必须能分开 ——
-    /// 否则下一份日志只能看到"什么都没有"，没法定位（本仓库的老规矩：任何静默返回都要留话）。
+    /// ★ 2026-10-12：这条现在只剩**一个**原因（「歌词进播放器」关了）。加它是因为
+    /// "歌词键不见了"必须能从日志里读出来 —— 本仓库的老规矩：任何静默返回都要留话。
     private static var lastEnabledSkipReason = ""
 
     private static func noteDisabledReason() {
-        let reason = NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled
-            ? "'Lyrics in the player' is off"
-            : "'Better word-by-word lyrics' is off - this layer stands down and Spotify's own lyrics entry is left alone"
+        let reason = "'Lyrics in the player' is off"
         guard lastEnabledSkipReason != reason else { return }
         lastEnabledSkipReason = reason
         writeDebugLog("[\(logTag)] our layer is not in play (\(reason))")
