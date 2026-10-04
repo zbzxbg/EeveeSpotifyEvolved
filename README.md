@@ -1,3 +1,7 @@
+# EeveeSpotify-ng
+
+A Spotify iOS tweak: fixed lyrics on Spotify 9.1.88, word-by-word karaoke lyrics, more lyrics sources, and a liquid-glass UI.
+
 ## A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
 > [!IMPORTANT]
@@ -60,9 +64,9 @@ This project interoperates with Spotify's iOS client, which means parts of it we
 - Thanks to [whoeevee](https://github.com/whoeevee) for creating the original EeveeSpotify project.
 - Thanks to [SideloadLabs](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) for creating the SpicyLyrics lyrics provider, as well as the logging and export functionality.
 - Thanks to the [MeloX](https://github.com/youshen2/MeloX) project for the inspiration behind this project's karaoke lyrics feature.
-- Thanks to [spoti.pw](https://spoti.pw) for the liquid glass pages in this repository. Code and design from **v0.21.1 and earlier** (GPL-3.0, © Vojtěch Škopek) have been **reused and modified** here, which makes this repository a modified version of that work; the changes are dated 2026-10-03 onward, and the full notice is on the in-app "Licenses" page. v0.22.0 and later are PolyForm Strict 1.0.0: no source code from them has been read or reused — only their public release notes and the visible strings of their packaged builds were consulted for comparison.
+- Thanks to [spoti.pw](https://spoti.pw) for the liquid glass pages. Code and design from **v0.21.1 and earlier** (GPL-3.0, © Vojtěch Škopek) are **reused and modified** here (2026-10-03 onward) — full notice in-app under "Licenses". v0.22.0+ is PolyForm Strict: none of its source was read or reused.
 - [kumone](https://github.com/missuo/kumone) — source of layout ideas for the Now Playing page and main pages.
-- The app icons under `Assets/AppIcon/` are not our work: they come from the upstream [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) project, contributed by its maintainer and community, and are re-distributed here unchanged. Several of them are fan-made derivatives of third-party logos or characters; if you hold rights to one of them, open an issue and it will be removed.
+- The app icons under `Assets/AppIcon/` are not our work: they come from upstream [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and are re-distributed unchanged. Several are fan-made derivatives of third-party logos or characters; rights holders can open an issue and they will be removed.
 
 <details>
     
@@ -85,7 +89,7 @@ Both pipelines build the same tweak; the difference is whether zxPluginsInject.d
 If a sideloaded build misbehaves around login or keychain, try the patched one — that is what the shim is for.
  
 > [!NOTE]
-> **Orion runtime.** This tweak is built on top of [Orion](https://orion.theos.dev) (`import Orion` in Swift, `#import <Orion/Orion.h>` in ObjC), so it links against `Orion.framework`. The `.deb` therefore depends on the Orion runtime package: `control` carries `Depends: ${ORION}, firmware (>= 14.0)`, and theos expands `${ORION}` into `dev.theos.orion (>= 1.0.0)` at package time — it is a theos placeholder (`makefiles/package/deb.mk`), not a variable this repository defines; the full explanation is in `Makefile`. Jailbroken users must install the Orion package from <https://repo.theos.dev/> or Spotify will fail to launch. The two IPA pipelines exist to avoid that dependency entirely: they bundle `Orion.framework` into the app instead, which is what `orion_url` downloads.
+> **Orion runtime.** The tweak links `Orion.framework`, so the `.deb` needs the Orion package from <https://repo.theos.dev/> — install it first or Spotify will not launch (details in `Makefile`). The IPA pipelines bundle the framework into the app instead, so sideloaded builds need nothing extra.
 
 ### CI (nothing installed locally)
  
@@ -94,7 +98,7 @@ Actions → **Build IPA — patched (Orion.framework + zxPluginsInject)** or **B
 | Input | Meaning |
 | --- | --- |
 | `ipa_url` | **Required.** Direct download URL of your decrypted Spotify IPA. It must return the `.ipa` itself — e.g. `https://example.com/abc.ipa`. Do not use cloud-drive share pages, login-gated links, or links that redirect to a preview page. |
-| `orion_url` | URL of the `Orion.zip` bundled into the app. The default is this project's own mirror, so there is nothing to research and no third-party dependency. Only change it if that URL 404s. (Clearing it makes the workflow build `Orion.framework` from the Theos submodule instead — that path does not currently work on GitHub runners; see the comment in the workflow.) |
+| `orion_url` | The bundled `Orion.zip`. Defaults to this project's own mirror — leave it alone unless it 404s. |
 | `upload_method` | Where the finished IPA(s) go: `artifacts` (default), `filebin`, or `both`. |
 | `liquid_glass` | On by default. Removes `UIDesignRequiresCompatibility` so iOS 26+ gets the new design language; set it to false to keep Spotify's own compatibility-mode look. |
 
