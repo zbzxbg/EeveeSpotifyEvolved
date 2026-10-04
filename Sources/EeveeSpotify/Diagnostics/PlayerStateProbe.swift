@@ -36,20 +36,70 @@ enum PlayerStateProbe {
     private static var didReportStall = false
     private static var didReportFirst = false
 
+    /// ★★ 2026-10-12（用户：「退出重进 Spotify 大概率突然**无法播放全部歌曲**…点一下灰色歌曲
+    /// 又突然能放了（以前也有）」）—— 日志 61 的现场：
+    ///
+    /// ```
+    /// [PLAYER] track changed — pos=0.0s dur=0.0s        ← 启动：一个曲目都没载入
+    /// [NET]    Auth request: POST login5.spotify.com/v4/login
+    /// [NET]    Auth request: GET  apresolve.spotify.com/
+    /// [NET]    Auth request: POST login5.spotify.com/v3/login
+    /// …（用户点了一行灰歌）⇒ dur=272 / 215 / 262 / 162 …   ← 又能放了
+    /// ```
+    ///
+    /// 而**旧探针在这个状态是哑的**：它只在 `duration > 0` 时判"卡住"，`dur=0` 直接 `return`
+    /// ⇒ "什么都没有"这件事一行都没有（日志 61 里就那一条 `track changed`）。
+    /// 现在补两件事，都只报一次：
+    ///   · **长时间没有曲目** ⇒ 一行 `⚠️ no track loaded …`（这就是"点了没反应"的现场）；
+    ///   · **启动到第一首的秒数** ⇒ 一行 `first track after launch — Xs`
+    ///     （冷启动要等多久 / 要不要点一下，全看这个数字）。
+    private static var beatsWithoutTrack = 0
+    private static var didReportNoTrack = false
+    private static var launchAt: CFAbsoluteTime?
+    private static var firstTrackAt: CFAbsoluteTime?
+
     static func tick() {
         // 开关关着 = 一眼都不看（探针只服务于日志）。
         guard UserDefaults.enableLogRecording else { return }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        if launchAt == nil { launchAt = now }
 
         let track = statefulPlayer?.currentTrack()
         let durationMs = track?.trackDurationMilliseconds ?? 0
         let duration = Double(durationMs) / 1000
         let position = WordByWordPositionResolver.shared.currentPositionSeconds() ?? -1
 
+        // ★ 没有曲目 = "点了没反应"最常见的那一种：单独报一行（一次启动一行），
+        //   然后**直接返回** —— 下面那些判据（卡住/恢复）都是以"有曲目"为前提的。
+        guard duration > 0 else {
+            beatsWithoutTrack += 1
+            if beatsWithoutTrack >= stallBeats, !didReportNoTrack {
+                didReportNoTrack = true
+                let sinceLaunch = launchAt.map { now - $0 } ?? 0
+                writeDebugLog(
+                    String(
+                        format: "[%@] \u{26a0}\u{fe0f} no track loaded for ~%.0fs (%.0fs since launch) - nothing can play in this state",
+                        logTag, Double(beatsWithoutTrack) * beatSeconds, sinceLaunch
+                    )
+                )
+            }
+            return
+        }
+        beatsWithoutTrack = 0
+
         // ★ 判"换曲"只用数字，**不用 id**：总时长变了、或者位置**往回跳**了（新曲从 0 起）。
         let wentBackwards: Bool = position >= 0 && lastPosition >= 0 && position + 1 < lastPosition
         let trackChanged: Bool = !didReportFirst || durationMs != lastDurationMs || wentBackwards
 
         if trackChanged {
+            if firstTrackAt == nil {
+                firstTrackAt = now
+                let sinceLaunch = launchAt.map { now - $0 } ?? 0
+                writeDebugLog(
+                    String(format: "[%@] first track after launch \u{2014} %.0fs in", logTag, sinceLaunch)
+                )
+            }
             didReportFirst = true
             lastDurationMs = durationMs
             lastPosition = position
@@ -65,7 +115,7 @@ enum PlayerStateProbe {
         let moved: Bool = abs(position - lastPosition) > 0.05
         lastPosition = position
 
-        guard duration > 0, position >= 0 else { return }
+        guard position >= 0 else { return }
 
         if moved {
             stalledBeats = 0
