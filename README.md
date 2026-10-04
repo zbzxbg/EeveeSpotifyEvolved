@@ -44,14 +44,14 @@ Some of the modified features in this fork have been verified to work in this en
 
 This project interoperates with Spotify's iOS client, which means parts of it were derived from a locally decrypted copy of that client. So that there is no ambiguity about what is (and is not) included in this repository:
 
-**What is here.** Only derived *technical identifiers* needed to attach to the client's own extension points: Swift/ObjC class names, feature-flag names and scopes, gRPC service paths, view-hierarchy inventories, and a few resolver-configuration snapshots (`.bnk`). All of it can be regenerated from a copy you supply yourself — see `Scripts/dump-spotify-symbols.py` and `Tools/eevee-hookfinder/`.
+**What is here.** Derived *technical identifiers* needed to attach to the client's own extension points: Swift/ObjC class names, feature-flag names and scopes, gRPC service paths, view-hierarchy inventories, and a few resolver-configuration snapshots (`.bnk`) — plus the reverse-engineering notes and scripts used to derive them (`Tools/eevee-hookfinder/`). All of it can be regenerated from a copy you supply yourself — see `Scripts/dump-spotify-symbols.py`.
 
 **What is not here, and will not be added.**
 
-- No audio, no streams, no decryption keys, no DRM circumvention.
+- No audio, no streams, no decryption keys, and nothing that decrypts Spotify's binary — you supply your own decrypted copy (see below).
 - No lyrics files: lyrics are fetched at runtime by the user's device from third-party providers, and none of their content is bundled.
 - No Spotify account credentials, tokens, or captured traffic.
-- No Spotify binary, no decrypted `.ipa`, no bundled assets of any kind — `*.ipa`, `Decrypted IPA/` and `Tweaked IPA/` are intentionally ignored by git.
+- No Spotify application binary and no decrypted `.ipa` — `*.ipa`, `Decrypted IPA/` and `Tweaked IPA/` are intentionally ignored by git.
 
 **If you are a rights holder** and want something removed, open an issue or contact the maintainer directly and it will be removed — no need for a formal takedown notice. The same applies to third-party projects credited in this document.
 
@@ -66,7 +66,7 @@ This project interoperates with Spotify's iOS client, which means parts of it we
 - Thanks to the [MeloX](https://github.com/youshen2/MeloX) project for the inspiration behind this project's karaoke lyrics feature.
 - Thanks to [spoti.pw](https://spoti.pw) for the liquid glass pages. Code and design from **v0.21.1 and earlier** (GPL-3.0, © Vojtěch Škopek) are **reused and modified** here (2026-10-03 onward) — full notice in-app under "Licenses". v0.22.0+ is PolyForm Strict: none of its source was read or reused.
 - [kumone](https://github.com/missuo/kumone) — source of layout ideas for the Now Playing page and main pages.
-- The app icons under `Assets/AppIcon/` are not our work: they come from upstream [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and are re-distributed unchanged. Several are fan-made derivatives of third-party logos or characters; rights holders can open an issue and they will be removed.
+- The app icons under `Assets/AppIcon/` are not my work: they come from upstream [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and are re-distributed unchanged. Several are fan-made derivatives of third-party logos or characters; rights holders can open an issue and they will be removed.
 
 <details>
     

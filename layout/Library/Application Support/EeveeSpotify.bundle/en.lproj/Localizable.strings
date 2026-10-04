@@ -401,9 +401,9 @@ mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsul
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
 flag_group_interventions = "Tips & promos";
-flag_group_interventions_footer = "Evidence: the IPA literal table (.spotify-ipa/flag-table.txt, 2485 scope.name entries pulled from the 9.1.86 binary) — these were never seen in a device log. Tap one to write an override; whether it lands is in the log: `[Flags] override … N match(es)` (on 0 matches we append our own entry). Spotify calls this module `ios-messaging-reduceinterventions-impl` — one flag per nudge.";
+flag_group_interventions_footer = "Evidence: the IPA literal table (.spotify-ipa/flag-table.txt, 2485 scope.name entries pulled from the 9.1.86 binary) — these were never seen in a device log. Tap one to write an override; whether it lands is in the log: `[Flags] override … N match(es)` (on 0 matches it appends its own entry). Spotify calls this module `ios-messaging-reduceinterventions-impl` — one flag per nudge.";
 flag_group_chrome = "Chrome & extras";
-flag_group_chrome_footer = "Element switches for the now-playing bar, plus cover art. These turn Spotify's own elements off (rather than hiding the view), so they can't fight our declutter switches.";
+flag_group_chrome_footer = "Element switches for the now-playing bar, plus cover art. These turn Spotify's own elements off (rather than hiding the view), so they can't fight the declutter switches.";
 flag_note_interventions_master = "Master switch: turn this off and Spotify drops the whole batch of nudges";
 flag_note_int_needs_number = "Integer flag: use “Write a number” on the Flag overrides page (throttle seconds, count caps)";
 flag_note_data_saver = "Data-saver tooltip. The mode itself is ios-datasaver-automatic-impl.enabled";
@@ -456,7 +456,7 @@ licenses_bundled_detail = "Third-party source ships in-tree (SwiftProtobuf, XMLC
 licenses_inspiration = "spoti.pw";
 licenses_inspiration_detail = "Code and design from spoti.pw v0.21.1 (GPL-3.0, © Vojtěch Škopek) are reused in this repository and modified by it. Only v0.21.1 and earlier were used — v0.22.0 and later are PolyForm Strict 1.0.0, and none of their source was taken.";
 licenses_kumone = "kumone";
-licenses_kumone_detail = "The now-playing page's full-page colour backdrop (gradient tint built from the cover colour) follows the recipe in kumone, an independent NetEase Cloud Music client — LGPL-3.0 (library) / GPL-3.0 (app), compatible with this repository's GPL-3.0. Only values, curves and the layer recipe were taken; the view code here is our own UIKit.";
+licenses_kumone_detail = "The now-playing page's full-page colour backdrop (gradient tint built from the cover colour) follows the recipe in kumone, an independent NetEase Cloud Music client — LGPL-3.0 (library) / GPL-3.0 (app), compatible with this repository's GPL-3.0. Only values, curves and the layer recipe were taken; the view code here is my own UIKit.";
 
 // ── Reduce interventions (2026-10-03) ─────────────────────────────────────────
 // These switches write Spotify **flag overrides** (the ios-messaging-reduceinterventions-impl
