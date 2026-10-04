@@ -21,8 +21,47 @@ enum SpotifyResponsePatcher {
             //   `?? UserDefaults.cachedCustomizeData` —— 为的是**新进程刚起、随包快照没拿到、
             //   服务器又回 304** 那一次仍然有 body 可交（交不出 = App 拿到空配置 =
             //   premium/可播放性降级 = 歌单发灰/歌曲消失/放不动，正是用户报的那三个症状）。
+            //
+            // ⚠️⚠️ 2026-10-12 第二轮修正：**只有"真 body"才许落盘**，并记下它是哪个版本抓的。
+            //   真机日志 69 暴露了反过来的坑：内存里的**随包种子**优先于磁盘上那份
+            //   **上一场真抓到的、同版本、且已改写过**的 body ⇒
+            //   `customize 304 -> replaying the seed, 101415 bytes`（101415 正是种子的字节数），
+            //   磁盘上更好的一份**一次都没用上**。种子现在走 `seedWithoutPersisting`。
+            guard !isSeeding else { return }
             UserDefaults.cachedCustomizeData = newValue
+            UserDefaults.cachedCustomizeVersion = newValue == nil ? nil : currentSpotifyVersion
         }
+    }
+
+    /// 种子装配期间为真 ⇒ setter 不落盘（种子只活在内存里）。
+    private static var isSeeding = false
+
+    /// 进程启动时刻 / "真 body 到了"是否报过（`patch()` 里那行"过了一会"的判据）。
+    private static let launchAt = Date()
+    private static var didReportBodyArrival = false
+
+    /// 当前 App 的版本（就是 customize 快照对应的那个版本）。
+    private static var currentSpotifyVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
+    /// 304 回放该用哪一份 —— **同版本的落盘真 body 优先**，种子兜底。
+    ///
+    /// 返回 nil 表示真的没有可回放的东西（那时 App 会拿到空配置，日志里应能看到 `Missing buffered body`）。
+    static var customizeReplay: (data: Data, source: String)? {
+        let current = currentSpotifyVersion
+        if let stored = UserDefaults.cachedCustomizeData,
+           !current.isEmpty,
+           UserDefaults.cachedCustomizeVersion == current {
+            return (stored, "the last real body from Spotify \(current)")
+        }
+        if let seeded = cachedCustomizeData {
+            return (seeded, "the bundled seed")
+        }
+        if let stored = UserDefaults.cachedCustomizeData {
+            return (stored, "a stored body from another Spotify version (\(UserDefaults.cachedCustomizeVersion ?? "unknown"))")
+        }
+        return nil
     }
 
     static func markCustomizeTaskHandled(_ id: Int) {
@@ -132,7 +171,10 @@ enum SpotifyResponsePatcher {
             modifyRemoteConfiguration(&message.response)
 
             let data = try message.serializedData()
+            // ★ 种子**只进内存**：落盘那一份要留给"上一场真抓到的 body"（见 setter 的注释）。
+            isSeeding = true
             cachedCustomizeData = data
+            isSeeding = false
 
             eeveeSanitizedNSLog("[CustomizeSeed] seed assembled, \(data.count) bytes")
             writeDebugLog(
@@ -729,8 +771,8 @@ enum SpotifyResponsePatcher {
         if url.path.contains("pses/screenconfig") {
             return #"{}"#.data(using: .utf8)!
         }
-        if url.path.contains("v1/customize"), let cached = cachedCustomizeData {
-            return cached
+        if url.path.contains("v1/customize"), let replay = customizeReplay {
+            return replay.data
         }
         return Data()
     }
@@ -781,6 +823,23 @@ enum SpotifyResponsePatcher {
             modifyRemoteConfiguration(&msg.response)
             let data = try msg.serializedData()
             cachedCustomizeData = data
+
+            // ★★ 2026-10-12 补（用户："退出重进 ⇒ 歌曲全黑 ⇒ **过了一会**部分歌能放"）：
+            //   "过了一会"就是**这一行到启动之间的秒数** —— 服务器真 body 到达之前，
+            //   App 手上只有 304 回放的那一份（种子或上一场的 body），账号态也还没被改写。
+            //   以前没有任何一行能量这个窗口的长短 ⇒ 这条链只能靠猜。现在只报一次。
+            if !didReportBodyArrival {
+                didReportBodyArrival = true
+                let seconds = launchAt.map { Date().timeIntervalSince($0) } ?? 0
+                writeDebugLog(
+                    String(
+                        format: "[CustomizeSeed] the real body arrived — %.1fs after launch."
+                            + " Until this line, Spotify rendered whatever the 304 replay handed it"
+                            + " (that is the window where lists come up empty or grey), and the account state below is the first one we could see.",
+                        seconds
+                    )
+                )
+            }
             return PatchResult(data: data, tag: .customize)
         }
         if url.isPlanOverview {

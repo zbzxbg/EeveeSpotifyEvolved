@@ -537,6 +537,7 @@ extension UserDefaults {
     /// ⚠️ 它**不进 `ownedKeys`**：这是**缓存**不是设置（不该进备份，也不该被"清空设置"连坐）；
     ///    每次拿到 200 就会被覆盖，所以留着旧的也不会长期错。
     private static let cachedCustomizeDataKey = "eeveeCachedCustomizeData"
+    private static let cachedCustomizeVersionKey = "eeveeCachedCustomizeVersion"
 
     static var cachedCustomizeData: Data? {
         get {
@@ -547,6 +548,29 @@ extension UserDefaults {
                 container.set(newValue, forKey: cachedCustomizeDataKey)
             } else {
                 container.removeObject(forKey: cachedCustomizeDataKey)
+            }
+        }
+    }
+
+    /// ★★ 2026-10-12 补：那份落盘 body 是**哪个 Spotify 版本**抓到的。
+    ///
+    /// 为什么必须有它（用户这一轮的三个症状）："退出重进 ⇒ 歌曲全黑 ⇒ 过一会部分能放"。
+    /// 新进程刚起、服务器对 customize 回 **304** 时，我们手上其实有两份 body：
+    ///   ① 内存里那份**随包种子**（旧版快照，刚才才修成 9.1.88）；
+    ///   ② 磁盘上那份**上一场真抓到的 body**（同一版本、而且已经过我们的改写）。
+    /// 以前**内存优先** ⇒ 回放的永远是旧快照，磁盘上更好的那一份**从来没被用过**
+    /// （真机日志 69：`customize 304 -> replaying the seed, 101415 bytes` —— 101415 正是种子的字节数）。
+    /// 现在反过来：**同版本的落盘 body 优先**，种子只在"磁盘上那份是别的版本"或"磁盘上没有"时兜底；
+    /// 而**种子本身不再落盘**（否则它会把真正的那份覆盖掉 —— 那就又回到"永远用旧快照"）。
+    static var cachedCustomizeVersion: String? {
+        get {
+            container.string(forKey: cachedCustomizeVersionKey)
+        }
+        set {
+            if let newValue {
+                container.set(newValue, forKey: cachedCustomizeVersionKey)
+            } else {
+                container.removeObject(forKey: cachedCustomizeVersionKey)
             }
         }
     }

@@ -57,8 +57,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         guard let buffer = URLSessionHelper.shared.obtainData(for: task) else {
             // marked for modify but no body bytes (0-byte/early-completion/redirect).
             // Always forward completion or Spotify hangs and gets watchdog-killed.
-            if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
-                ?? UserDefaults.cachedCustomizeData {
+            if url.isCustomize, let cached = SpotifyResponsePatcher.customizeReplay?.data {
                 orig.URLSession(session, dataTask: task, didReceiveData: cached)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
             } else {
@@ -176,14 +175,14 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
-           let cached = SpotifyResponsePatcher.cachedCustomizeData
-               ?? UserDefaults.cachedCustomizeData {
+           let replay = SpotifyResponsePatcher.customizeReplay {
+            let cached = replay.data
             guard let synthetic = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
                 orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
                 return
             }
-            // ⚠️ 这行不是装饰：它是"种子真的被回放了"的**唯一**直接证据。
-            writeDebugLog("[HCUS] customize 304 -> replaying the seed, \(cached.count) bytes")
+            // ⚠️ 这行不是装饰：它是"回放了什么"的**唯一**直接证据（并说清用的是哪一份）。
+            writeDebugLog("[HCUS] customize 304 -> replaying \(replay.source), \(cached.count) bytes")
             orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: cached)
             SpotifyResponsePatcher.markCustomizeTaskHandled(task.taskIdentifier)

@@ -75,8 +75,9 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         guard let buffer = URLSessionHelper.shared.obtainData(for: task) else {
             // Customize 304 fallback — wg-spclient returned 304, no buffer
             // to patch, but we have a cached body from a prior 200.
-            if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
-                ?? UserDefaults.cachedCustomizeData {
+            // ⚠️ 2026-10-12：改走 `customizeReplay` —— **同版本的落盘真 body 优先，种子兜底**
+            //   （以前内存里的种子永远优先 ⇒ 磁盘上那份更好的 body 一次都没用上，日志 69 的现象）。
+            if url.isCustomize, let cached = SpotifyResponsePatcher.customizeReplay?.data {
                 orig.URLSession(session, dataTask: task, didReceiveData: cached)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
             } else {
@@ -221,16 +222,16 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
-           let cached = SpotifyResponsePatcher.cachedCustomizeData
-               ?? UserDefaults.cachedCustomizeData {
+           let replay = SpotifyResponsePatcher.customizeReplay {
+            let cached = replay.data
             // 304, but our cache holds the already-patched body; force 200 so the
             // consumer accepts the cached data we replay next.
             guard let synthetic = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
                 orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
                 return
             }
-            // ⚠️ 这行不是装饰：它是"种子真的被回放了"的**唯一**直接证据。
-            writeDebugLog("[DL] customize 304 -> replaying the seed, \(cached.count) bytes")
+            // ⚠️ 这行不是装饰：它是"回放了什么"的**唯一**直接证据（并说清用的是哪一份）。
+            writeDebugLog("[DL] customize 304 -> replaying \(replay.source), \(cached.count) bytes")
             orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: cached)
             SpotifyResponsePatcher.markCustomizeTaskHandled(task.taskIdentifier)

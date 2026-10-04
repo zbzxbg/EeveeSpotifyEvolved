@@ -1,4 +1,5 @@
 import Foundation
+import MediaPlayer
 
 /// 只读的**播放器状态探针** —— 为「突然无法播放任何歌曲」那条线补现场判据。
 ///
@@ -57,6 +58,25 @@ enum PlayerStateProbe {
     private static var didReportNoTrack = false
     private static var launchAt: CFAbsoluteTime?
     private static var firstTrackAt: CFAbsoluteTime?
+
+    /// ★★ 2026-10-12（用户被问到"这一下是你自己按的暂停吗"时答："**忘了**"）——
+    /// **暂停和"播不动"必须由日志自己分开**，不能靠回忆。系统 Now Playing 里带着播放速率：
+    /// `rate == 0` ⇒ 是**暂停**（自己按的、或被系统暂停），那一行**不该**被读成"不可播放"；
+    /// `rate > 0` 而位置不动，才是真正的"连上了但播不动"。
+    /// 用 `MPNowPlayingInfoCenter`（公开 API；`NowPlayingPageOverlay` 已经 import 了 MediaPlayer）。
+    private static var playbackRate: Double? {
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+        if let rate = info?[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber { return rate.doubleValue }
+        if #available(iOS 13.0, *) {
+            switch MPNowPlayingInfoCenter.default().playbackState {
+            case .playing: return 1
+            case .paused, .stopped: return 0
+            default: return nil
+            }
+        }
+        return nil
+    }
+    private static var didReportPaused = false
 
     static func tick() {
         // 开关关着 = 一眼都不看（探针只服务于日志）。
@@ -119,10 +139,27 @@ enum PlayerStateProbe {
 
         if moved {
             stalledBeats = 0
+            didReportPaused = false
             if didReportStall {
                 didReportStall = false
                 writeDebugLog(
                     String(format: "[%@] position resumed at %.1fs (dur=%.1fs)", logTag, position, duration)
+                )
+            }
+            return
+        }
+
+        // ★ 暂停 ≠ 播不动：播放器自己说 `rate == 0` 时**不计数**（也不报"不可播放"），
+        //   只报一次"这一段是暂停"。这样"你当时按没按暂停"就不再需要回忆。
+        if let rate = playbackRate, rate == 0 {
+            stalledBeats = 0
+            if !didReportPaused {
+                didReportPaused = true
+                writeDebugLog(
+                    String(
+                        format: "[%@] position held at %.1fs while the player reports paused (rate=0.00) — counted as a pause, not as unplayable",
+                        logTag, position
+                    )
                 )
             }
             return
@@ -134,8 +171,8 @@ enum PlayerStateProbe {
         let stuckFor = Double(stallBeats) * beatSeconds
         writeDebugLog(
             String(
-                format: "[%@] ⚠️ position stalled at %.1fs for ~%.0fs (dur=%.1fs) - the unplayable evidence line",
-                logTag, position, stuckFor, duration
+                format: "[%@] ⚠️ position stalled at %.1fs for ~%.0fs (dur=%.1fs, rate=%.2f) - the unplayable evidence line",
+                logTag, position, stuckFor, duration, playbackRate ?? -1
             )
         )
     }
