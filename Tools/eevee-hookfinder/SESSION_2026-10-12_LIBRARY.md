@@ -247,3 +247,39 @@ Spotify 那条栏的容器 `NavigationUI_TabBarImpl.TabBarContainerImpl` **是 `
 | C | 音乐库那条**快速滚动条不再出现**（划动时也不出现） | `[Library] the quick-scroll scrubber is off — QuickScrollView …` |
 | D | 卡片封面圆角**看得出来更柔**；**占位卡不再刷噪声** | `[Library] library artwork styled — ImageView id=Components.UI.CardLibrary.Artwork 116pt → r=8.0 continuous …` |
 | E | 关掉开关：玻璃回到自绘胶囊、滚动条回来、圆角与灰纱还原 | —— |
+
+---
+
+## 9. ★ 第三轮：顶部那块"毛玻璃"（音乐库）—— **用公开 API，不涂那一层**
+
+用户原话：「在音乐库页面，顶部似乎有一块毛玻璃。这个毛玻璃可以去掉，但是**那上面的功能都需要还在**，能做吗」。
+
+**那层是什么**（日志 64 的 dump #8/#9）：
+
+```
+19.BackdropView@0,0,414,188
+19.ScrollEdgeEffectView@0,0,414,188    ← ★ #8 可见、#9 alpha=0.00 ⇒ 随滚动淡入淡出
+```
+
+**做法：关系统的效果开关，不碰那层视图**
+
+- iOS 26 起 `UIScrollView` 有 **`topEdgeEffect`**（`UIScrollEdgeEffect`，`var isHidden: Bool`）
+  —— 见 [Apple 文档 UIScrollEdgeEffect](https://developer.apple.com/documentation/uikit/uiscrolledgeeffect)
+  与 [UIScrollView.topEdgeEffect](https://developer.apple.com/documentation/uikit/uiscrollview/topedgeeffect)：
+  ```swift
+  if #available(iOS 26.0, *) { list.topEdgeEffect.isHidden = true }
+  ```
+- ⇒ **毛玻璃没了**，而**标题 / 头像 / 搜索 / 加号 / 筛选 chips 一个都不动、全都能用**
+  （它们都在 `YourLibraryHeaderView` 里，跟那层效果不是同一个东西）。
+- **为什么不去涂那一层**：它随滚动自己淡入淡出（dump #8 可见 / #9 透明），涂 alpha 就是和它的动画打架
+  —— 与灰纱那笔账（§2.1 / §8.1）同源。**同类问题一律先找公开开关。**
+
+**代价（已写进代码注释，也要跟用户说）**：没有模糊之后，**列表内容会直接从标题底下划过**（字压在内容上）。
+想要"干净但不糊"，可以在这层下面垫一条我们自己的极淡渐隐 —— 另一件事。
+
+**归属**：跟着音乐库那颗开关（`libraryLargeTitle`）走，关掉即写回 `isHidden = false`。
+⚠️ 只作用于**音乐库的列表**（`YourLibraryContent.collectionView`）；主页 / 搜索页各有自己的列表，
+要一起关就在各自的开关里再写一次（一行）。
+
+**日志判据**：`[Library] the top edge effect is gone — scrollView.topEdgeEffect.isHidden = true …`；
+若那行没出现、只有 `standing by (no library collection view yet …)`，说明没找到那个列表，把那行发我。
