@@ -107,7 +107,8 @@ struct SponsorBlockSettingsView: View {
                     .listRowInsets(EdgeInsets())
             }
         }
-        .listStyle(GroupedListStyle())
+                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+        .listStyle(InsetGroupedListStyle())
         .animation(.default, value: options)
         .onChange(of: options) { newValue in
             UserDefaults.sponsorBlockOptions = newValue

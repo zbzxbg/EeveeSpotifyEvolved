@@ -357,7 +357,17 @@ struct EeveeSettingsView: View {
                     .listRowInsets(EdgeInsets())
             }
         }
-        .listStyle(GroupedListStyle())
+        // ★★ 2026-10-12（用户：「现在的设置页面的选项是像这样的长方形，但是 pw 把它做成了胶囊
+        //   一样的样子，怎么实现的」）—— **pw 的做法就是 `UITableViewStyleInsetGrouped`**
+        //   （它的 10+ 个设置页都是 `initWithStyle:UITableViewStyleInsetGrouped`，
+        //    内容用 iOS 14 的 `UIListContentConfiguration`），
+        //   SwiftUI 里的等价物就是 `InsetGroupedListStyle()`：
+        //   · `GroupedListStyle()`（我们原来用的）= **贴边、直角**的分组卡（照片 78 的样子）；
+        //   · `InsetGroupedListStyle()` = 每一节左右各内缩 ≈20pt、四角是圆角的卡片，
+        //     在 **iOS 26 上系统会把它画成很圆的"胶囊卡片"** —— 就是用户要的那个样子。
+        //   本仓库所有自建设置页统一用这一档（`InsetGroupedListStyle` 是 iOS 14+，
+        //   与我们的最低版本一致；仓库里原本就有 4 个页面在用）。
+        .listStyle(InsetGroupedListStyle())
         
         .animation(.default, value: isClearingData)
         .animation(.default, value: hasShownCommonIssuesTip)

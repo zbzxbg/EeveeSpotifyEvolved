@@ -24,7 +24,8 @@ struct EeveeDebugSettingsView: View {
             // 「转储视图树」：给还没写的界面 hook 铺路（AMOLED / 隐藏区块 / 手势）。
             dumpViewTreeSection()
         }
-        .listStyle(GroupedListStyle())
+                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+        .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
     }
 

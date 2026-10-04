@@ -65,7 +65,8 @@ struct EeveeUpdatesSettingsView: View {
                 }
             }
         }
-        .listStyle(GroupedListStyle())
+                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+        .listStyle(InsetGroupedListStyle())
         // ⚠️ 用 `onAppear` + `Task` 而不是 `.task {}`：后者要 iOS 15，
         // 本仓库的最低版本由 Theos 的 spm_config 给（历史上低到 iOS 14），别为这一页抬线。
         .onAppear {

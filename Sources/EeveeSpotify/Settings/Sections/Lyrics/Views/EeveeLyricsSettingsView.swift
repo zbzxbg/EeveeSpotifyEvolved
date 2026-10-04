@@ -69,7 +69,8 @@ struct EeveeLyricsSettingsView: View {
         // 那个 publisher 全工程没有任何一处 `send`（死订阅），而匿名令牌选项本身
         // 也已整体移除 —— 两个一起去掉。
         // 手动填令牌的弹窗保留，改由下面这个绑定在"选中 Musixmatch 那一刻"调用。
-        .listStyle(GroupedListStyle())
+                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+        .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
     }
     

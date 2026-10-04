@@ -431,7 +431,8 @@ struct EeveeExtrasSettingsView: View {
                 }
             }
         }
-        .listStyle(GroupedListStyle())
+                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+        .listStyle(InsetGroupedListStyle())
         // 每次进页重新同步一次：别处（Flag 页、重置、上一版遗留的存储）改了 UserDefaults 时
         // 影子值不该停在旧值上。与 Flag 覆盖页的 `.onAppear` 同一套做法。
         .onAppear { shadow = Shadow() }
