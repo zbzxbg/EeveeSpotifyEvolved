@@ -56,13 +56,23 @@ enum LibraryRowsAppearance {
     /// 封面原半径 / 原圆角曲线（挂在那颗**封面**上的关联键 —— 单元会复用，挂在单元上会串）。
     private static var originalRadiusKey: UInt8 = 0
     private static var originalCurveKey: UInt8 = 0
-    private static var didReportRows = false
+    private static var didReportStyled = false
     private static var didReportMissing = false
 
     private static let thumbIdentifier = "Artwork.Row.Library"
     private static let cardArtworkIdentifier = "Components.UI.CardLibrary.Artwork"
 
     /// 由 hook 在**那颗复用的单元**每次布局时调用。幂等。
+    ///
+    /// ★ 2026-10-12（真机日志 64 的 `[Tree]` 纠正）：这个 build 里**卡片封面的 id 是存在的** ——
+    /// `[Tree] #8 23.ImageView@0,0,116,116,id=Components.UI.CardLibrary.Artwork` ✓
+    /// （那一版里我报的 `⚠️ no row artwork id on a 116x143 cell` 是**假警报**：那颗 116×143 是
+    /// "添加艺人 / 添加播客"那种**占位卡**，它本来就没有封面 —— 占位卡的 id 是
+    /// `Components.UI.AddArtistCardLibrary` / `AddPodcastCardLibrary` / `AddEventCardLibrary` /
+    /// `ImportMusicCardLibrary`，见同一份 `[Tree]`。）
+    /// 所以现在：① 占位卡**不再报警**；② 两个 id 都没有时**退到"按几何认封面"**
+    /// （贴边、接近正方、40…200pt 的那个视图），并把**真实类名 + id + 半径**打进日志 ——
+    /// 下一份日志就能把 id 钉死，不用再猜。
     @MainActor
     static func apply(to cell: UIView) {
         guard isEnabled else {
@@ -70,39 +80,99 @@ enum LibraryRowsAppearance {
             return
         }
 
-        // 两个 id 各自找一遍（不写三元表达式：闭包套在 `? :` 里对这种小工具不值当，
-        // 而且这一层是"每颗单元每拍跑一次"的路径，多一次树走的代价可以忽略）。
         let thumb = LibraryAppearance.findView(in: cell, where: {
             $0.accessibilityIdentifier == thumbIdentifier
         })
         let cover = LibraryAppearance.findView(in: cell, where: {
             $0.accessibilityIdentifier == cardArtworkIdentifier
         })
-        if let thumb {
-            round(thumb, to: LibraryRowsMetrics.thumbRadius)
-        } else if let cover {
-            round(cover, to: LibraryRowsMetrics.coverRadius)
+        let byIdentifier = thumb ?? cover
+        let byGeometry = byIdentifier == nil ? artworkByGeometry(in: cell) : nil
+        let artwork = byIdentifier ?? byGeometry
+
+        // 行与卡片用不同的半径（AM 的规矩：图越大、圆角越大）—— 判据是**单元的形状**，
+        // 不依赖"命中哪个 id"（几何兜底那条路也就能跟着走对）。
+        let isRow = cell.bounds.width > LibraryRowsMetrics.rowMinWidth
+            && cell.bounds.height <= LibraryRowsMetrics.rowMaxHeight
+        if let artwork {
+            round(artwork, to: isRow ? LibraryRowsMetrics.thumbRadius : LibraryRowsMetrics.coverRadius)
         }
         hairline(on: cell, thumb: thumb)
 
-        // 第一次量到**有尺寸的**封面才报（布局第一拍上它还是 0x0，报出来没意义）。
-        if !didReportRows, let thumb, thumb.window != nil, thumb.bounds.width > 1 {
-            didReportRows = true
+        if !didReportStyled, let artwork, artwork.window != nil, artwork.bounds.width > 1 {
+            didReportStyled = true
             writeDebugLog(
-                "[Library] rows styled — the first thumbnail is \(Int(thumb.bounds.width))pt at r="
-                    + "\(String(format: "%.1f", thumb.layer.cornerRadius)) (continuous)"
-                    + "; the hairline starts at the text's leading edge"
+                "[Library] library artwork styled — \(shortName(NSStringFromClass(type(of: artwork))))"
+                    + " id=\(artwork.accessibilityIdentifier ?? "(none)")"
+                    + " \(Int(artwork.bounds.width))pt → r=\(String(format: "%.1f", artwork.layer.cornerRadius)) continuous"
+                    + (byIdentifier == nil ? " (found by geometry, not by id — pin the id from this line)" : "")
+                    + "; rows get a hairline from the text's leading edge"
             )
         }
-        // 两个 id 一个都没找到 ⇒ 自报一行（否则这一片是**静默不生效**，下一个人还得重猜一遍）。
-        if !didReportMissing, thumb == nil, cover == nil, cell.bounds.width > 100, cell.bounds.height > 20 {
-            didReportMissing = true
-            writeDebugLog(
-                "[Library] ⚠️ no row artwork id on a \(Int(cell.bounds.width))x\(Int(cell.bounds.height)) cell"
-                    + " — looked for \(thumbIdentifier) and \(cardArtworkIdentifier)"
-                    + "; this build may name the artwork differently"
-            )
+        reportMissingArtworkIfReal(cell: cell, thumb: thumb, cover: cover)
+    }
+
+    /// 只有"真的该有封面却没有"才报（**占位卡不算** —— 见 `apply` 的说明）。
+    private static func reportMissingArtworkIfReal(cell: UIView, thumb: UIView?, cover: UIView?) {
+        guard !didReportMissing, thumb == nil, cover == nil else { return }
+        guard cell.bounds.width > 100, cell.bounds.height > 20 else { return }
+
+        // 真卡片：`Components.UI.CardLibrary`（占位卡是别的 id）；真行：pw 那三个行 id。
+        let isRealCard = LibraryAppearance.findView(in: cell, where: {
+            $0.accessibilityIdentifier == "Components.UI.CardLibrary"
+        }) != nil
+        let rowIdentifiers = ["Playlist.Row.Library", "Album.Row.Library", "Podcast.Row.Library"]
+        let isRealRow = rowIdentifiers.contains { identifier in
+            LibraryAppearance.findView(in: cell, where: { $0.accessibilityIdentifier == identifier }) != nil
         }
+        guard isRealCard || isRealRow else { return }
+
+        didReportMissing = true
+        writeDebugLog(
+            "[Library] ⚠️ a real \(isRealCard ? "card" : "row") cell (\(Int(cell.bounds.width))x\(Int(cell.bounds.height)))"
+                + " has no artwork id — looked for \(thumbIdentifier) and \(cardArtworkIdentifier)"
+                + " \((byGeometryHint(cell)))"
+        )
+    }
+
+    /// 兜底：按几何认封面 —— **贴边、接近正方、40…200pt** 的那个视图（取面积最大的一个）。
+    ///
+    /// 为什么敢这么做：行的封面固定在 64pt、卡片的封面就是卡片宽度那一块（真机 116），
+    /// 两者都贴左边；判据写成"尺寸 + 贴边"比类名稳（类名 Spotify 一改就没了）。
+    /// 找不到就返回 nil（这一拍不画，下一拍再来）。
+    private static func artworkByGeometry(in cell: UIView) -> UIView? {
+        var best: (view: UIView, area: CGFloat)?
+        for view in allSubviews(in: cell, maxDepth: 6) {
+            let size = view.bounds.size
+            guard size.width >= 40, size.width <= 200, abs(size.width - size.height) <= 4 else { continue }
+            let frame = view.convert(view.bounds, to: cell)
+            let flush = frame.minX <= 24 || (cell.bounds.width - frame.maxX) <= 24
+            guard flush else { continue }
+            let area = size.width * size.height
+            if best == nil || area > best!.area { best = (view, area) }
+        }
+        return best?.view
+    }
+
+    private static func allSubviews(in node: UIView, maxDepth: Int, depth: Int = 0) -> [UIView] {
+        guard depth <= maxDepth else { return [] }
+        var found: [UIView] = []
+        for sub in node.subviews {
+            found.append(sub)
+            found.append(contentsOf: allSubviews(in: sub, maxDepth: maxDepth, depth: depth + 1))
+        }
+        return found
+    }
+
+    private static func byGeometryHint(_ cell: UIView) -> String {
+        let artwork = artworkByGeometry(in: cell)
+        guard let artwork else { return "and geometry found no square artwork either" }
+        return "geometry found \(shortName(NSStringFromClass(type(of: artwork))))"
+            + " id=\(artwork.accessibilityIdentifier ?? "(none)") \(Int(artwork.bounds.width))pt"
+    }
+
+    private static func shortName(_ name: String) -> String {
+        name.split(separator: ".").last.map(String.init) ?? name
     }
 
     /// 圆角：换成 AM 那一档的连续圆角；**本来就是圆的（艺人头像）一个字节都不动**。
@@ -204,7 +274,7 @@ enum LibraryRowsAppearance {
             objc_setAssociatedObject(artwork, &originalCurveKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         (objc_getAssociatedObject(cell, &lineKey) as? CALayer)?.isHidden = true
-        didReportRows = false
+        didReportStyled = false
     }
 }
 

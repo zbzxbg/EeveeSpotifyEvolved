@@ -10,9 +10,28 @@ import ObjectiveC.runtime
 /// 标题行右端一颗（Edit；iOS 26 是头像）、标题下面一整行**筛选 chips**、区块标题（18pt/800）、
 /// 行 = 小圆角封面（6pt 连续）+ 主标题/灰色元信息、分隔线**从文字左沿起**、侧边距 16–18pt。
 /// 落到 Spotify 自己的视图上就是三片（**同一个开关**，关掉各自精确还原）：
-///   · **本文件**：头部 —— ① 大标题字号、③ 标题贴左 + 头像/按钮贴右、④ 收掉顶部灰纱；
+///   · **本文件**：头部 —— ① 大标题字号、③ 标题贴左 + 头像/按钮贴右、④ 收掉顶部灰纱、
+///     ⑤ 收掉右侧那条**快速滚动条**（照片 84）；
 ///   · `LibraryRowsAppearance.x.swift`：列表行/网格卡片 —— 封面连续圆角（6/8pt）+ 行间发丝线；
 ///   · `LibrarySearchAppearance.x.swift`：库内搜索页 —— 搜索框与 Cancel 变胶囊 + 收灰纱。
+///
+/// ── ★ 2026-10-12 真机日志 64 核实过的事实（别再猜）────────────────────────────
+/// ```
+/// [Tree] #8 16.YourLibraryHeaderView@0,0,414,148
+/// [Tree] #8 21.AutoLayoutStackView@8,0,402,48                       ← 标题那一行
+/// [Tree] #8 21.OBJC_ONLY_Label@48,6,86,36,id=YourLibraryHeader.title
+/// [Tree] #8 22.UILabel@-40,0,86,36,id=YourLibraryHeader.title-internal   ← ★ 位移写在**里层** UILabel 上
+/// [Tree] #8 21.AdaptiveFaceContainer@350,0,48,48                    ← 头像在最右 ✓
+/// [Tree] #8 21.EncoreButton@254,0,48,48,id=YourLibraryHeader.search  / @302 …plus   ← 靠右打包 ✓
+/// [Tree] #8 17.QuickScrollView@0,0,414,896 + QuickScrollIndicator/@Handle（§⑤ 收掉）
+/// [Tree] #8 23.ImageView@0,0,116,116,id=Components.UI.CardLibrary.Artwork          ← 卡片封面 id **存在**
+/// ```
+/// ⚠️ 两条由此得出的教训：
+///   1. `YourLibraryHeader.title` 那串 id 挂在 **Encore 的包装视图**上，而**真正的 `UILabel` 是里层的
+///      `.title-internal`**（`findTitleLabel` 命中后者）⇒ 字号与位移都写在里层，**看日志要看 `.title-internal` 那一行**；
+///   2. 网格里那几颗 116×143 的**占位卡**（`Components.UI.AddArtistCardLibrary` / `AddPodcastCardLibrary` /
+///      `AddEventCardLibrary` / `ImportMusicCardLibrary`）**本来就没有封面** ⇒ 上一版对它们报的
+///      "no row artwork id" 是**假警报**（`LibraryRowsAppearance` 里已经改掉）。
 ///
 /// ── 为什么从这里开始 ────────────────────────────────────────────────────────
 /// 听歌页那条线（"加一层壳"那一套，**2026-10-02 已整块删除**）做的是加壳：能改底色、能加顶栏，
@@ -82,6 +101,7 @@ enum LibraryAppearance {
             headerView = header
             clearTopEdgeScrim(in: header)
         }
+        hideQuickScroll(in: root)
     }
 
     /// 登记当前这一页。weak —— 页面销毁后自动失效，不用手动摘。
@@ -118,6 +138,7 @@ enum LibraryAppearance {
 
         applyLargeTitle(in: root)
         placeHeaderControls(in: root)
+        hideQuickScroll(in: root)
         flushPendingLayoutInvalidation()
     }
 
@@ -370,6 +391,69 @@ enum LibraryAppearance {
         return nil
     }
 
+    // MARK: ⑤ 右侧那条"快速滚动条"（可拖动、拖动时显示分组名）
+
+    /// 真机证据（日志 64 的 `[Tree]`；照片 84 拍到的就是它）：
+    /// ```
+    /// 17.QuickScrollView@0,0,414,896                                   ← 整页覆盖层（与 collection view 平级）
+    /// ├ 18.QuickScrollIndicator@244,654,90,28,bg=#262626,id=quickscroll.indicator  ← 拖动时那个日期气泡
+    /// └ 18.QuickScrollHandle@381,644,48,48,bg=#262626,id=quickscroll.handle        ← 右边那颗可拖的圆把手
+    /// ```
+    /// 用户 2026-10-12：「音乐库在划动的过程中，右边会有个可以拖动的小条（图片 84）**这个条子可以隐藏吗**」。
+    ///
+    /// ── 为什么是"从父视图里拿走"，不是 `alpha = 0` ───────────────────────────────
+    /// 它本来就会**随滚动自己显形/隐藏**（日志 64 里它有时 `hidden,alpha=0.00`、有时可见）
+    /// ⇒ "每拍写一次 alpha"会和它的显示动画打架（灰纱那笔账的翻版，§②）。
+    /// 拿走之后它再也显不出来，而且**它那块不再吃手势** —— "可拖动"也就一起关掉了（用户要的就是这个）。
+    /// ⚠️ 记原父视图与下标，关开关时**按原位放回**。
+    private static let removedQuickScroll = NSHashTable<UIView>.weakObjects()
+    private static var quickScrollRestoreKey: UInt8 = 0
+    private static var didReportQuickScroll = false
+
+    private final class QuickScrollPlacement: NSObject {
+        weak var parent: UIView?
+        let index: Int
+        init(parent: UIView?, index: Int) {
+            self.parent = parent
+            self.index = index
+        }
+    }
+
+    @MainActor
+    static func hideQuickScroll(in root: UIView) {
+        guard let view = findView(in: root, where: { className($0).contains("QuickScroll") }) else { return }
+        guard !removedQuickScroll.contains(view), let parent = view.superview else { return }
+        let index = parent.subviews.firstIndex(of: view) ?? 0
+        objc_setAssociatedObject(
+            view,
+            &quickScrollRestoreKey,
+            QuickScrollPlacement(parent: parent, index: index),
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        removedQuickScroll.add(view)
+        view.removeFromSuperview()
+        if !didReportQuickScroll {
+            didReportQuickScroll = true
+            writeDebugLog(
+                "[Library] the quick-scroll scrubber is off — \(className(view))"
+                    + " (taken out of the page, so nothing can bring it back; switching the toggle off puts it back)"
+            )
+        }
+    }
+
+    /// 放回原位（关开关 / 页面走了）。
+    @MainActor
+    private static func restoreQuickScroll() {
+        for view in removedQuickScroll.allObjects {
+            guard let placement = objc_getAssociatedObject(view, &quickScrollRestoreKey) as? QuickScrollPlacement,
+                  let parent = placement.parent else { continue }
+            parent.insertSubview(view, at: min(placement.index, parent.subviews.count))
+            objc_setAssociatedObject(view, &quickScrollRestoreKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        removedQuickScroll.removeAllObjects()
+        didReportQuickScroll = false
+    }
+
     // MARK: ② 顶部那层滚边渐隐 —— 的历史（**现在在 §④**，别把这段当"不许做"）
 
     // v1 按类名收掉 `Reprise_LiquidGlassKit.LiquidGlass.GradientView` 的 alpha，真机生效过
@@ -451,6 +535,9 @@ enum LibraryAppearance {
             objc_setAssociatedObject(scrim, &originalScrimAlphaKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         touchedScrims.removeAllObjects()
+
+        // ⑤ 快速滚动条：按原位放回。
+        restoreQuickScroll()
 
         didLogHeaderRestyle = false
     }
