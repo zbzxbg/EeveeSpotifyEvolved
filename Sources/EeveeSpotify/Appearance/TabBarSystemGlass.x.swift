@@ -32,9 +32,14 @@ import ObjectiveC.runtime
 /// 关掉 = 系统栏移除 + Spotify 栏内容**恢复原 alpha** + `additionalSafeAreaInsets` **写回原值**。
 /// 日志 tag：`[TabBarSystem]`。
 ///
-/// ⚠️ 这个文件里**一律不标 `@MainActor`**：两个调用点（`TabBarPlateHook` 的 `onMainThreadSync` 里、
-///    设置页 `persist` 闭包里）都不带主 actor 隔离，标了就会在那边报隔离不匹配；
-///    而这两条路本来就在主线程（仓库 `NowPlayingControlsPlate` 那一套是另一种写法，别混）。
+/// ⚠️ **整个 enum 标 `@MainActor`**（与 `NowPlayingControlsPlate` 同一个写法）：
+///    它要调 `TabBarGlassPlate.findTabsStack(in:)`，而那个函数是 `@MainActor` 的
+///    ⇒ 我们不在主 actor 上就会被 Swift 6 并发检查直接判错（CI 2026-10-12 就是这么红的）。
+///    两个调用点本来就都在主 actor 上，所以标了不会把谁挡在门外：
+///      · `TabBarPlateHook.layoutSubviews` 里那句 —— 包在 `onMainThreadSync` 里，
+///        而它的闭包类型就是 `@escaping @MainActor () -> Void`（`LyricsChromeVisibility.swift:25`）；
+///      · 设置页 `persist:` 闭包 —— 与既有那些 `NowPlayingControlsPlate.reapply()` 同一个上下文。
+@MainActor
 enum TabBarSystemGlass {
 
     static let logTag = "TabBarSystem"
