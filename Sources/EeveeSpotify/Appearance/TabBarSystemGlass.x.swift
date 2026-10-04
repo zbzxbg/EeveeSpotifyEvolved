@@ -7,35 +7,42 @@ import ObjectiveC.runtime
 ///
 /// ## 做法照 pw（`Redesigned/Navbar/TabBar.x`，GPL-3.0；**思路复用、代码自己写**）四步
 ///
-///   ① Spotify 的栏**留着**（frame 不动 ⇒ 页面 inset / 迷你播放器都还在原位），但它的**内容不可见**；
-///   ② 叠一条**系统栏**，item 从 Spotify 那几颗同步（顺序跟着；隐藏的、自建的都一起）；
+///   ① Spotify 的栏**留着**（frame / 交互 / inset 都不碰），但它的**内容不可见**；
+///   ② 叠一条**系统栏**，item 从 Spotify 那几颗同步（顺序跟着；标题与图标同源 ⇒ 开关跟着）；
 ///   ③ **选中态**：系统栏的选中项跟着"Spotify 把哪一颗标成选中"走 —— 气泡因此会**滑过去/形变**；
-///   ④ **让高度**：系统栏比 Spotify 的栏高，把差额写进 `TabBarContainerImpl` 的
+///   ④ **让高度**：系统栏比 Spotify 的栏高时，把差额写进 `TabBarContainerImpl` 的
 ///      `additionalSafeAreaInsets.bottom` ⇒ Spotify 自己把栏 / 迷你播放器 / 页面**一起让开**。
 ///
-/// pw 的文件头原话（它凭什么能这样）：*"UIKit draws that bar as real Liquid Glass
-/// (selection bubble, lensing, light/dark adaptation) with no glass API of ours."*
+/// ## ★ 2026-10-12 第一次真机（日志 63 + 照片 82）——三处已修
 ///
-/// ## ★ 这一片：**视觉先到位**（2026-10-12 第一片）
+/// | 现场 | 根因 | 现在的做法 |
+/// |---|---|---|
+/// | **整条栏点不动**（"划不动"） | 我把**整颗 item 视图**按成 `alpha = 0`，而 UIKit 命中测试**跳过 alpha < 0.01 的视图** ⇒ 点击再也落不到 Spotify 那几颗上 | 只藏**图标与文字**这两个子视图，**item 视图本身的 alpha 一个字不动** ⇒ 看不见但照样收触摸 |
+/// | **图标不见了** | 系统栏的 item 只拿到标题（`glyphImage` 没找到），而原图标又被藏了 ⇒ 那行只剩文字 | 先同步、后隐藏：**拿不到图标的那一颗，原图标就不藏**（安全网：绝不留下空行）；并把每颗的 `icon=Y/N` 打进日志 |
+/// | 「隐藏标签栏文字」**不生效** | 文字是**系统栏**画的，而我没读那颗开关 | `tabBarHideLabels` 开着时**不给系统栏标题**（原文字本来就被我们藏了） |
 ///
-/// 系统栏**不吃触摸**（`isUserInteractionEnabled = false`）⇒ 手指点下去照样落到 **Spotify 自己那条栏**上
-/// （它只是**内容不可见**，交互一点没动）⇒ **点击行为与今天完全一致**，
-/// 不会出现"标签栏看着在、点了没反应"那种最坏结果。
+/// 顺带记两条**实测**（都写进日志了，别再猜）：
+///   · `accessibilityTraits` 在 Spotify 9.1.88 上**没有** `.selected` 标记（`traits=0x0`）
+///     ⇒ 选中态**实际靠"谁的文字是白色那颗"**：`主页` 的 label 是 `#FFFFFF`、其余 `#B3B3B3`；
+///   · 这台机器上 `made room` 那一行**没出现**是**对的**：`83 - 49 - 34 = 0`，本来就不需要让
+///     （pw 的注释也这么说：Face ID 机型两条栏本来就对得上）。
 ///
-/// 「按下回弹」那种**果冻感**要求系统栏**接管触摸**，那是**第二片**：接管之后必须把点击**转发**给
-/// Spotify 那一颗（pw 用 objc runtime 读手势识别器的 target/action），而"哪条入口真能触发"
-/// 只能靠真机日志确认（控制点 → 无障碍激活 → runtime 两条），所以**不混进这一片**。
+/// ## ⚠️ 这一片**不吃触摸**（第二片才接管）
+///
+/// 系统栏 `isUserInteractionEnabled = false` ⇒ 手指点下去落到 **Spotify 自己那条栏**上
+/// （它只是**内容不可见**，交互一点没动）⇒ 点击行为与以前一致。
+/// 「按下回弹」那种**果冻感**要求系统栏接管触摸 + 把点击**转发**给 Spotify 那一颗 —— 那是第二片。
 ///
 /// ## 开关
 ///
-/// 设置 → 扩展功能 → 标签栏 → 「**标签栏改用系统玻璃**」，**默认关**（这条路我看不到真机，先当实验品）。
-/// 关掉 = 系统栏移除 + Spotify 栏内容**恢复原 alpha** + `additionalSafeAreaInsets` **写回原值**。
+/// 设置 → 扩展功能 → 标签栏 → 「**标签栏改用系统玻璃**」，**默认关**。
+/// 关掉 = 系统栏移除 + 被藏的内容**各自恢复原 alpha** + `additionalSafeAreaInsets` **写回原值**。
 /// 日志 tag：`[TabBarSystem]`。
 ///
 /// ⚠️ **整个 enum 标 `@MainActor`**（与 `NowPlayingControlsPlate` 同一个写法）：
 ///    它要调 `TabBarGlassPlate.findTabsStack(in:)`，而那个函数是 `@MainActor` 的
 ///    ⇒ 我们不在主 actor 上就会被 Swift 6 并发检查直接判错（CI 2026-10-12 就是这么红的）。
-///    两个调用点本来就都在主 actor 上，所以标了不会把谁挡在门外：
+///    两个调用点本来就都在主 actor 上：
 ///      · `TabBarPlateHook.layoutSubviews` 里那句 —— 包在 `onMainThreadSync` 里，
 ///        而它的闭包类型就是 `@escaping @MainActor () -> Void`（`LyricsChromeVisibility.swift:25`）；
 ///      · 设置页 `persist:` 闭包 —— 与既有那些 `NowPlayingControlsPlate.reapply()` 同一个上下文。
@@ -56,19 +63,22 @@ enum TabBarSystemGlass {
     private static var systemBarKey: UInt8 = 0
     private static var roomKey: UInt8 = 0
 
-    /// 被我们按成透明的内容视图（**弱引用**，页面走了它自己就没了）+ 它们各自的**原 alpha**。
+    /// 被我们按成透明的**内容**视图（图标 / 文字；**弱引用**）+ 各自的原 alpha。
     ///
-    /// ⚠️ 必须记"每一个自己的原值"，不能一律写 1：Spotify 自己也会把某些颗按掉
-    /// （仓库在封面那条路上已经踩过"统一写回 1 = 永久错"的坑，见 `NowPlayingLyricsPlate.hideCoverView`）。
+    /// ⚠️ 两条纪律：
+    ///   · **只藏内容，不藏 item 视图本身** —— 藏了它，触摸就再也到不了 Spotify 那几颗
+    ///     （日志 63 的"整条栏点不动"就是这个）；
+    ///   · 每个视图记**它自己的**原 alpha，不能一律写 1（仓库在封面那条路上踩过"统一写回 = 永久错"）。
     private static let hiddenContent = NSHashTable<UIView>.weakObjects()
     private static var hiddenContentAlphas: [ObjectIdentifier: CGFloat] = [:]
 
-    /// 系统栏量出来的高度**只量一次**：让出高度之后 `sizeThatFits` 会要得更多（pw 的注释里点了这件事）。
+    /// 系统栏量出来的高度**只量一次**：让出高度之后 `sizeThatFits` 会要得更多（pw 的注释点了这件事）。
     private static var measuredGlassHeight: CGFloat = 0
 
     private static var lastBar: UIView?
     private static var lastSkipReason = ""
     private static var lastSelectionIndex = -1
+    private static var lastSelectionSignal = ""
     private static var didLogLayout = false
 
     // MARK: - 对外入口
@@ -90,20 +100,21 @@ enum TabBarSystemGlass {
         let items = stack.subviews
         guard !items.isEmpty else { return }
 
-        // ① 藏掉 Spotify 自己的内容（**栏本身不动**：frame / 交互 / inset 全都不碰）。
-        hideStockContent(items)
-
-        // ② 系统栏 + 它的 item（顺序、图标、文字都从 Spotify 那几颗来）。
+        // ② 先同步系统栏 —— **顺序要紧**：下面"藏什么"取决于"镜像到了什么"
+        //   （拿不到图标的那一颗，原图标要留着当安全网）。
         let systemBar = ensureBar(in: bar)
-        syncItems(on: systemBar, from: items)
+        let mirrored = syncItems(on: systemBar, from: items)
 
-        // ③ 选中态：气泡要跟着 Spotify 走。
+        // ① 藏内容（**不是整颗 item**）：只藏那些已经镜像过去的图标，以及文字。
+        hideStockContent(items: items, mirroredIcons: mirrored.icons)
+
+        // ③ 选中态：气泡跟着 Spotify 走。
         syncSelection(on: systemBar, items: items)
 
         // ④ 让高度（放在最后：量高度要用**还没让过高度**的那次结果）。
         makeRoom(for: bar, systemBar: systemBar)
 
-        logLayoutOnce(bar: bar, stack: stack, systemBar: systemBar, items: items)
+        logLayoutOnce(bar: bar, items: items, systemBar: systemBar, mirrored: mirrored)
     }
 
     /// 设置页切开关 / 复查节拍用：手里那次记下的栏还在窗口里就当场重来一次。
@@ -127,26 +138,36 @@ enum TabBarSystemGlass {
         measuredGlassHeight = 0
         didLogLayout = false
         lastSelectionIndex = -1
+        lastSelectionSignal = ""
     }
 
-    // MARK: - ① 藏 Spotify 自己的内容
+    // MARK: - ① 藏 Spotify 自己的内容（**不藏 item 本身**）
 
-    /// 把栈里那几颗按成透明（**不隐藏视图本身**，交互与布局完全不动）。
-    private static func hideStockContent(_ items: [UIView]) {
-        for item in items where item.alpha != 0 {
-            if hiddenContentAlphas[ObjectIdentifier(item)] == nil {
-                hiddenContentAlphas[ObjectIdentifier(item)] = item.alpha
-                hiddenContent.add(item)
+    /// 藏**图标与文字**：图标只藏"已经镜像到系统栏"的那些（安全网），文字一律藏
+    /// （文字要么由系统栏画标题，要么本来就该没有 —— 见 `tabBarHideLabels`）。
+    private static func hideStockContent(items: [UIView], mirroredIcons: [Bool]) {
+        for (index, item) in items.enumerated() {
+            if index < mirroredIcons.count, mirroredIcons[index] {
+                for glyph in glyphViews(in: item) { hide(glyph) }
             }
-            item.alpha = 0
+            for label in labelViews(in: item) { hide(label) }
         }
     }
 
-    /// 还原成**每一颗自己的**原 alpha（没记过的不碰）。
+    private static func hide(_ view: UIView) {
+        guard view.alpha != 0 else { return }
+        if hiddenContentAlphas[ObjectIdentifier(view)] == nil {
+            hiddenContentAlphas[ObjectIdentifier(view)] = view.alpha
+            hiddenContent.add(view)
+        }
+        view.alpha = 0
+    }
+
+    /// 还原成**每一个自己的**原 alpha（没记过的不碰）。
     private static func restoreStockContent() {
-        for item in hiddenContent.allObjects {
-            if let original = hiddenContentAlphas[ObjectIdentifier(item)] {
-                item.alpha = original
+        for view in hiddenContent.allObjects {
+            if let original = hiddenContentAlphas[ObjectIdentifier(view)] {
+                view.alpha = original
             }
         }
         hiddenContent.removeAllObjects()
@@ -154,6 +175,11 @@ enum TabBarSystemGlass {
     }
 
     // MARK: - ② 系统栏与它的 item
+
+    private struct Mirror {
+        var icons: [Bool]
+        var titles: [String?]
+    }
 
     private static func ensureBar(in bar: UIView) -> UITabBar {
         if let existing = objc_getAssociatedObject(bar, &systemBarKey) as? TabBarSystemGlassBar {
@@ -186,44 +212,73 @@ enum TabBarSystemGlass {
     }
 
     /// 从 Spotify 那几颗同步 item（**顺序一致**，索引就是选中态的对齐依据）。
-    private static func syncItems(on systemBar: UITabBar, from items: [UIView]) {
+    ///
+    /// ★ 两条来自日志 63 的实测：
+    ///   · 「隐藏标签栏文字」开着时**不给标题** —— 文字以前由我们自己那盘胶囊负责藏，
+    ///     这一条开着时那盘让位了 ⇒ 得由这里负责（用户报的"隐藏标签栏文字对它不生效"）；
+    ///   · 图标拿不到就**照实记 `false`**（`glyphImage` 没找到）—— 调用方据此**不藏**原来那颗图标。
+    private static func syncItems(on systemBar: UITabBar, from items: [UIView]) -> Mirror {
+        let hidesLabels = UserDefaults.tabBarHideLabels
+
         var wanted: [UITabBarItem] = []
+        var icons: [Bool] = []
+        var titles: [String?] = []
         wanted.reserveCapacity(items.count)
-        for item in items {
-            let title = labelText(of: item)
+
+        for (index, item) in items.enumerated() {
+            let title = hidesLabels ? nil : labelText(of: item)
             let image = glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
-            wanted.append(UITabBarItem(title: title, image: image, tag: wanted.count))
+            wanted.append(UITabBarItem(title: title, image: image, tag: index))
+            icons.append(image != nil)
+            titles.append(title)
         }
 
+        let mirror = Mirror(icons: icons, titles: titles)
         let current = systemBar.items ?? []
         let sameShape = current.count == wanted.count && zip(current, wanted).allSatisfy { pair in
             pair.0.title == pair.1.title && pair.0.image === pair.1.image
         }
-        guard !sameShape else { return }
+        guard !sameShape else { return mirror }
+
         systemBar.items = wanted
         lastSelectionIndex = -1
         writeDebugLog(
-            "[\(logTag)] items synced — \(wanted.count) item(s), titles \(wanted.map { $0.title ?? "-" })"
+            "[\(logTag)] items synced — \(wanted.count) item(s); titles \(titles.map { $0 ?? "-" })"
+                + "; icons \(icons.map { $0 ? "Y" : "N" })"
+                + (hidesLabels ? " (the hide-labels switch is on, so no titles)" : "")
         )
+        return mirror
     }
 
-    /// ③ 选中态：优先用**无障碍标记**（公共 API），拿不到再退回"谁的文字是白色那档"。
+    // MARK: - ③ 选中态
+
+    /// 选中态：**先看文字亮度**（Spotify 选中那颗画白色、其余 `#B3B3B3`），
+    /// 再看 `accessibilityTraits.contains(.selected)`。
+    ///
+    /// ⚠️ 顺序**与第一版相反**，依据是日志 63：这台机器上四颗的 `traits` **全是 `0x0`**
+    /// （`[TabBarSel] item=TabBar.Item.主页 traits=0x0 … label text=#FFFFFF`，其余 `#B3B3B3`）
+    /// ⇒ 无障碍那条判据在 9.1.88 上**根本不成立**，只有亮度是真的。
+    /// 判据只有一处（这里），而且**用了哪条会打进日志**，下一份日志能核对。
     private static func syncSelection(on systemBar: UITabBar, items: [UIView]) {
-        guard let index = selectedIndex(items: items),
-              index < (systemBar.items?.count ?? 0) else { return }
-        guard index != lastSelectionIndex else { return }
-        lastSelectionIndex = index
-        systemBar.selectedItem = systemBar.items?[index]
-        writeDebugLog("[\(logTag)] selection → #\(index)")
+        guard let picked = selectedIndex(items: items),
+              picked.index < (systemBar.items?.count ?? 0) else { return }
+        if lastSelectionSignal != picked.signal {
+            lastSelectionSignal = picked.signal
+            writeDebugLog("[\(logTag)] selection signal in use: \(picked.signal)")
+        }
+        guard picked.index != lastSelectionIndex else { return }
+        lastSelectionIndex = picked.index
+        systemBar.selectedItem = systemBar.items?[picked.index]
+        writeDebugLog("[\(logTag)] selection → #\(picked.index)")
     }
 
-    /// 哪一颗是选中：`accessibilityTraits.contains(.selected)` 是公共 API，先用它；
-    /// 真机上要是这个标记不生效，退回**文字亮度**（Spotify 选中那颗画白色、其余 #B3B3B3）。
-    private static func selectedIndex(items: [UIView]) -> Int? {
-        if let index = items.firstIndex(where: { $0.accessibilityTraits.contains(.selected) }) {
-            return index
+    private static func selectedIndex(items: [UIView]) -> (index: Int, signal: String)? {
+        if let index = items.firstIndex(where: { isBrightLabel($0) }) {
+            return (index, "bright label")
         }
-        if let index = items.firstIndex(where: { isBrightLabel($0) }) { return index }
+        if let index = items.firstIndex(where: { $0.accessibilityTraits.contains(.selected) }) {
+            return (index, "accessibility selected trait")
+        }
         return nil
     }
 
@@ -246,26 +301,36 @@ enum TabBarSystemGlass {
         return nil
     }
 
-    /// 那一颗的图标（最近的一个有图的 `UIImageView`；「隐藏标签文字」开着时它是仅存的信息）。
-    private static func glyphImage(of node: UIView, depth: Int = 0) -> UIImage? {
-        guard depth <= 4 else { return nil }
-        if let imageView = node as? UIImageView, let image = imageView.image { return image }
-        for sub in node.subviews {
-            if let found = glyphImage(of: sub, depth: depth + 1) { return found }
-        }
-        return nil
+    /// 那一颗里所有的图标视图（**最深 6 层**：日志 63 证明原来只找 `UIImageView.image`、
+    /// 深度 ≤ 4 时是**找不到**的 —— 所以放宽，并且调用方会按"找没找到"决定藏不藏）。
+    private static func glyphViews(in node: UIView, depth: Int = 0) -> [UIImageView] {
+        guard depth <= 6 else { return [] }
+        var found: [UIImageView] = []
+        if let imageView = node as? UIImageView, imageView.image != nil { found.append(imageView) }
+        for sub in node.subviews { found.append(contentsOf: glyphViews(in: sub, depth: depth + 1)) }
+        return found
     }
 
-    /// 那一颗的文字（我们自己的「隐藏标签文字」把它藏掉时返回 nil ⇒ 系统栏只画图标，与屏幕一致）。
-    private static func labelText(of node: UIView, depth: Int = 0) -> String? {
-        guard depth <= 4 else { return nil }
-        if let label = node as? UILabel, let text = label.text, !text.isEmpty, label.alpha > 0.01 {
-            return text
-        }
-        for sub in node.subviews {
-            if let found = labelText(of: sub, depth: depth + 1) { return found }
-        }
-        return nil
+    /// 那一颗里所有的文字视图（同上，深度 ≤ 6）。
+    private static func labelViews(in node: UIView, depth: Int = 0) -> [UILabel] {
+        guard depth <= 6 else { return [] }
+        var found: [UILabel] = []
+        if let label = node as? UILabel, !(label.text ?? "").isEmpty { found.append(label) }
+        for sub in node.subviews { found.append(contentsOf: labelViews(in: sub, depth: depth + 1)) }
+        return found
+    }
+
+    private static func glyphImage(of node: UIView) -> UIImage? {
+        glyphViews(in: node).first?.image
+    }
+
+    /// 那一颗的文字。
+    ///
+    /// ⚠️ **不看 alpha**：那些文字是**我们自己**在上一拍藏掉的（`hideStockContent`），
+    /// 按 alpha 过滤的话第二轮就会读成 nil ⇒ 系统栏的标题会在第二拍凭空消失。
+    /// "要不要标题"只由「隐藏标签栏文字」那颗开关决定（`syncItems` 里）。
+    private static func labelText(of node: UIView) -> String? {
+        labelViews(in: node).first?.text
     }
 
     // MARK: - ④ 让高度
@@ -273,8 +338,10 @@ enum TabBarSystemGlass {
     /// 把系统栏**比 Spotify 那条栏多出来的高度**写成容器的 `additionalSafeAreaInsets.bottom`。
     ///
     /// 为什么是这里（pw 的注释写得很清楚）：Spotify 那条栏的高度由"安全区往上 49pt"决定，
-    /// 迷你播放器站在同一条基准上，页面拿 49 + inset ⇒ **只要容器多让出多少，那一整套自己就跟着让**，
-    /// 我们不用去动任何人的 frame。`additionalSafeAreaInsets` 是**我们写的**，关开关时能**精确写回**。
+    /// 迷你播放器站在同一条基准上，页面拿 49 + inset ⇒ **只要容器多让出多少，那一整套自己就跟着让**。
+    /// `additionalSafeAreaInsets` 是**我们写的**，关开关时能**精确写回**。
+    ///
+    /// ⚠️ 日志 63 里**没有** `made room` 那一行是**正确结果**：Face ID 机型 `83 - 49 - 34 = 0`。
     private static func makeRoom(for bar: UIView, systemBar: UITabBar) {
         guard let container = container(of: bar), container.isViewLoaded,
               let view = container.view else {
@@ -365,18 +432,19 @@ enum TabBarSystemGlass {
 
     private static func logLayoutOnce(
         bar: UIView,
-        stack: UIView,
+        items: [UIView],
         systemBar: UITabBar,
-        items: [UIView]
+        mirrored: Mirror
     ) {
         guard !didLogLayout else { return }
         didLogLayout = true
-        let traits = items.map { $0.accessibilityTraits.contains(.selected) ? "S" : "-" }.joined()
+        // ⚠️ 日志 63 里我打的是 `stack.frame`，那时它是 `0,0,0,0`（还没排）⇒ 现在改打**每颗的 frame**。
+        let frames = items.map { frameText($0.convert($0.bounds, to: bar)) }.joined(separator: " ")
         writeDebugLog(
-            "[\(logTag)] installed — \(items.count) item(s) mirrored from the stock row"
-                + " \(frameText(stack.frame)); system bar \(frameText(systemBar.frame))"
-                + "; selected flags [\(traits)]; class \(NSStringFromClass(type(of: systemBar)))"
-                + "; not taking touches in this build (taps fall through to Spotify's own bar)"
+            "[\(logTag)] installed — \(items.count) item(s); icons \(mirrored.icons.map { $0 ? "Y" : "N" })"
+                + "; item frames [\(frames)]; system bar \(frameText(systemBar.frame))"
+                + "; class \(NSStringFromClass(type(of: systemBar)))"
+                + "; not taking touches (taps go to Spotify's own bar)"
         )
     }
 
