@@ -104,11 +104,12 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 取决于地区与语言 —— 日本用户设 PetitLyrics、大陆用户设网易云、其它地区设
     /// SpicyLyrics，各自回退到最合适的地方，不需要我们再维护地区判断。
     ///
-    /// 默认关闭，已装用户的既有行为不变。
+    /// ★ **默认开**（2026-10-13 用户要求：「AMLL优先 此功能改成默认开启」）。
     ///
-    /// ⚠️ 2026-10-02 **恢复**（2026-09-25 删过一次，来龙去脉见 `amllPreferredKey` 的说明）。
+    /// ⚠️ `bool(forKey:defaultValue:)` 只对**从没写过这个键**的设备用默认值 ⇒
+    /// 已经手动关过它的设备保持他关的那一档（不覆盖用户的选择）。
     static var isAmllPreferred: Bool {
-        bool(forKey: amllPreferredKey, defaultValue: false)
+        bool(forKey: amllPreferredKey, defaultValue: true)
     }
 
     /// 「隐藏 Spotify 官方歌词」：我方来源取不到词时，**不再把 Spotify 的原始响应放行**，

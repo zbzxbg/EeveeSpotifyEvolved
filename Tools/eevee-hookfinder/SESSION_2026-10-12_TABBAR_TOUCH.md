@@ -269,3 +269,55 @@
 本机**没有编译器**；七条自检都不做类型检查 ⇒ "能编译"只有 CI 能回答。
 系统玻璃那条路的几何判据**一个字没改**（`targetCapsuleRect` 的输入输出与删除前逐行一致），
 所以"胶囊还是 360×60"这件事在代码上是**同一份计算**，但没有真机复核。
+
+---
+
+# 10. 第四轮（同日）：两个默认值 + 歌单封面「四宫格」的侦察
+
+## 10.1 两个默认值（用户 2026-10-13 要求）
+
+| 事 | 改法 | 注意 |
+|---|---|---|
+| **AMLL 优先 → 默认开** | `Settings/ngzhwm/ngzhwmSettingsViewModel.swift`：`bool(forKey: amllPreferredKey, defaultValue: true)` | 只对**从没写过这个键**的设备生效；手动关过的保持关（不覆盖用户的选择） |
+| **Genius 功能 → 默认开** | `Lyrics/Models/Settings/LyricsOptions+UserDefaults.swift`：`defaultValue` 里 `geniusFallback: true` | ⚠️ **光改默认值不够**：`lyricsOptions` 是**整块 JSON 落盘**的（`@UserDefault` 包装器），用户只要动过其中任一项，盘上那份里 `geniusFallback` 已是具体的 `false` ⇒ 配套**一次性迁移** `LyricsOptions.applyGeniusFallbackDefaultIfNeeded()`（启动时跑，标记键 `lyricsOptionsGeniusDefaultOn`，只做一次并打一行日志） |
+
+启动横幅那行同步加了 `AMLL preferred: ON/OFF` —— 两个开关的**实际生效值**一眼可见（用户的三份日志里 `genius fallback: OFF` 就是这么读出来的）。
+
+## 10.2 ★ 歌单封面那个「四宫格」：**是服务端拼好的一张图**（实证）
+
+**不是客户端拼的** —— 真实 API 数据（公开仓库里缓存的 Spotify 响应）逐字如此：
+
+```
+"images":[{"height":640,"url":"https://mosaic.scdn.co/640/ab67616d0000b27307a7a809c3f77c61fe31e05f
+                                                   ab67616d0000b2730a719f2817838a22e6a7e8c9
+                                                   ab67616d0000b273587227ac29ff1f83ccbd1623
+                                                   ab67616d0000b27362a13d5041f79075d4e317f0","width":640}, …]
+```
+
+四个 **40 个 hex** 的图 id 串在同一个 URL 里（`640/300/60` 三档，id 串完全一样）。
+单张封面的地址是大家熟知的形式：`https://i.scdn.co/image/<那 40 个 hex>`
+（本仓库 `LyricsBackdropArtworkView` 拼的就是它）。
+
+⇒ **要让封面只显示其中一张，最干净的改法是在"URL 进图片加载器"那一刻改写它**：
+`mosaic.scdn.co/<size>/<id1><id2><id3><id4>` → `i.scdn.co/image/<id1>`。
+视图层拿到的已经是一张成品图，改视图（裁切/藏三格）既更脆也更费。
+
+**还差两件事才能落地：**
+
+1. **第一个 id 是不是"第一首歌"的封面** —— 语义上应当是（2×2 的拼接顺序），
+   但要拿一个你认得的歌单在真机上核对一次；
+2. **URL 进的是哪个类 / 哪个方法** —— `dump-9.1.88.txt` 的 `[selectors]` 桶**只给选择器名、
+   不给所属类**（`[methods]` 桶里其实是类型名，不是"类 → 方法"）
+   ⇒ 新增**只读**探针 `Sources/EeveeSpotify/Diagnostics/ImagePipelineProbe.swift`：
+   启动时对 9 个候选类（`ImageLoader_ImageLoaderKit.SPTImageLoaderImpl` /
+   `ImageLoadingServiceImpl.*` / `ECMImageLoader.*` …）× 8 个候选选择器
+   （`loadImageForURL:sourceIdentifier:size:scale:allowUpscaling:context:callback:persistenceKey:` …）
+   逐个问"在不在、认不认"，打 `[ImageProbe] …`。**不 hook、不调用、不改任何东西**。
+
+## 10.3 这一轮的验收行
+
+| 看什么 | 应该出现 |
+|---|---|
+| 两个开关的实际值 | `[INIT] card element inject: … \| genius fallback: **ON** \| AMLL preferred: **ON**` |
+| 迁移（只出现一次） | `[Lyrics] genius fallback default turned on once (the stored options said off) — from here on the switch in the lyrics settings decides` |
+| 图片管线的答案 | `[ImageProbe] SPTImageLoaderImpl is here — answers: …`（哪一行有 `loadImageForURL:…` ⇒ 下一轮就 hook 那一个） |

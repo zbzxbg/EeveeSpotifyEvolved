@@ -476,6 +476,10 @@ struct EeveeSpotify: Tweak {
         let deviceModel = UIDevice.current.model
 
         writeDebugLog("=== EeveeSpotify \(EeveeSpotify.version) (build \(EeveeSpotify.buildNumber)) starting ===")
+        // ★ 2026-10-13：**默认值变更的补偿**（用户要求"Genius 功能默认改成开启"）。
+        //   `lyricsOptions` 是**整块 JSON** 落盘的 ⇒ 只改 `defaultValue` 追不到已经写过的那份，
+        //   所以这里一次性把盘上那份也打开（只做一次，之后尊重用户在设置里的开关）。
+        LyricsOptions.applyGeniusFallbackDefaultIfNeeded()
         writeDebugLog("[INIT] Spotify: \(spotifyVersion) (build \(spotifyBuild))")
         writeDebugLog("[INIT] iOS: \(iosVersion), Device: \(deviceModel)")
         writeDebugLog("[INIT] Hook target: \(EeveeSpotify.hookTarget)")
@@ -516,8 +520,15 @@ struct EeveeSpotify: Tweak {
                 + "\(NgzhwmSettingsViewModel.isLyricsFeatureDisabled ? "ON" : "OFF")"
                 + " | genius fallback: "
                 + "\(UserDefaults.lyricsOptions.geniusFallback ? "ON" : "OFF")"
+                + " | AMLL preferred: "
+                + "\(NgzhwmSettingsViewModel.isAmllPreferred ? "ON" : "OFF")"
         )
         writeDebugLog("[INIT] tweakInitTime: \(tweakInitTime)")
+
+        // ★ 2026-10-13：**只读**探针 —— 封面图到底由哪个类/哪个选择器加载。
+        //   用户问"歌单封面能不能只显示第一首的专辑封面"，而 `dump-9.1.88.txt` 的
+        //   `[selectors]` 桶只给选择器名、不给所属类 ⇒ 只能上设备问一次（不 hook、不调用）。
+        ImagePipelineProbe.probeOnce()
 
         // 隐私 / 触感 / Flag 覆盖都是"默认关、用户自己开"的，所以启动时把**实际生效值**
         // 打出来：排查时"没生效"和"没开"是两件完全不同的事，没有这一行只能靠猜。
