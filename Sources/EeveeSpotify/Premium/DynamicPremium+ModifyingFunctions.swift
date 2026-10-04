@@ -7,18 +7,12 @@ private let liveMessagingAssignmentKeys = Set([
 ])
 
 func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
-    // ★★ 2026-10-12：**账号在服务端本来就是 Premium 时，一个账号态字段都不改**。
-    //
-    // 判据、依据（用户那轮 A/B 的结论 + `EeveePremiumForce.x.swift:88` 那条老账 +
-    // 上游 `have_premium_popup` 用的同一个信号）全部写在
-    // `ServerSidedFeaturePolicy.shouldSpoofPremium(_:)` 里 —— **这里不许再写第二份判据**。
-    //
-    // ⚠️ 必须在 `modifyAttributes` **之前**读 attributes：那个函数会把它们整个盖掉。
-    // ⚠️ 只跳过"账号态伪装"这一块；下面 flag 替换（`modifyAssignedValues`：歌词入口、
-    //    广告 flag、up-sell 卡片……）照旧跑 —— 那些是**用户要的功能**，与账号档位无关。
-    if ServerSidedFeaturePolicy.shouldSpoofPremium(configuration.attributes.accountAttributes) {
-        modifyAttributes(&configuration.attributes.accountAttributes)
-    }
+    // ★ 2026-10-12：**先取证，再改写** —— 这一行读的是**服务器原样给的那份**账号态，
+    //   `modifyAttributes` 跑完之后读到的就是我们自己写进去的值了。
+    //   为什么要取证、怎么判读，见 `ServerSidedFeaturePolicy.reportServerAccountTier(_:)`。
+    ServerSidedFeaturePolicy.reportServerAccountTier(configuration.attributes.accountAttributes)
+
+    modifyAttributes(&configuration.attributes.accountAttributes)
 
     let overwriteRequested = UserDefaults.overwriteConfiguration
     if ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(

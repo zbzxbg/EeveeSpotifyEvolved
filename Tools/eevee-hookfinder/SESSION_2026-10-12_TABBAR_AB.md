@@ -19,7 +19,7 @@
 | 提交 | 本轮 **3 笔**（见 §5），都在 `main` |
 | 要编译的 | `main` 最新提交；点 `Build IPA — patched` 时 `Use workflow from` 选 `main`、**`ipa_url` 留空**（本机没有 `gh`，得你点） |
 | 自检 | ✅ 六条全绿（orion / brace / member / string / l10n en / l10n zh-CN，全 exit 0） |
-| 一句话 | **两条都改了**：标签栏把系统玻璃摆成"自绘胶囊那一块"并**把触摸交给系统栏 + 转发点击**；Premium 那条加了**"账号本来就是真 Premium 就不下伪装"**的闸门 + 三行判据日志。**这一版一行都没上过机器**，验收见 §4 |
+| 一句话 | **两条都有动作**：标签栏把系统玻璃摆成"自绘胶囊那一块"并**把触摸交给系统栏 + 转发点击**；Premium 那条**只加了取证日志**（`patchType` + 账号档位）—— 中途那版"服务端说 premium 就不下伪装"的闸门**已撤**（前提被用户否掉，见 §1.2）。**这一版一行都没上过机器**，验收见 §4 |
 
 ---
 
@@ -35,31 +35,39 @@
 | 「**你和自绘的对齐就行**」（我问过之后他的答案） | 明确：**以自绘那份为准**，不是反过来 | 同上；系统玻璃的真实 frame 每拍打进日志，偏差用实测数字收敛 |
 | 「液态玻璃不是**胶囊套胶囊**吗，**里面那个胶囊不可用手划动**」 | 用户看到的就是 dump 里的真实结构（`_UITabBarPlatterView` + `_UILiquidLensView` + `_UITabSelectionView`）；"划不动"的根因是**第一片故意不吃触摸**（`isUserInteractionEnabled = false`）—— §8.5 明写那是第二片 | 系统栏**接管触摸** + 选中的那颗**转发**成对 Spotify 那一颗的点击（照 pw 的做法，三条退路） |
 
-### 1.2 Premium 那条（第二条）——**A/B 的方向**
+### 1.2 Premium 那条（第二条）——**第一版读错了，已纠正**
 
-- A（清空全部 flag 覆盖）：**无关** ✓（用户原话）。
-- B：用户选的是「**反过来：不启用 Premium 补丁时正常，打了补丁才灰**」
-  ⇒ 症状落在 **`patchType == .requests`（我们改写账号态）**这一层，不是 flag 覆盖那一层。
+**用户 2026-10-12 的追问：「但是我没真会员啊」** ⇒ 我第一版的推理（"他可能是真订阅账号，
+被我们的伪装盖坏了"）**前提不成立，已撤**（见 §3）。
 
-**三条佐证（都在仓库/日志里，不是猜的）**：
+在**免费号**这个前提下，那句 A/B 只有一种读法：
 
-1. `EeveePremiumForce.x.swift:88` 早就写过同一个现象：
-   *"Over-seeding caused greyed-out tracks (streaming-rules mismatch)"* ——
-   而 `modifyAttributes` 现在**仍然**把 `streaming-rules` 清成空串、
-   把 `subscription-enddate` / `product-expiry` 改成"一年后"（见 `DynamicPremium+ModifyingFunctions.swift:857-875`）。
-2. 全部 30 多份日志里每条 `[REVERT_WATCH][init]` 的 `subscription-enddate` **都等于"那次启动 + 1 年"**
-   （例：日志 62 07:16:50 → `2027-10-04T07:16:39Z`；日志 63 08:26:17 → `2027-10-04T08:25:41Z`）
-   ⇒ 服务端不可能每次会话都改订阅到期日 ⇒ **那份 product state 里已经有我们的伪装**
-   ⇒ 这些会话里 `patchType` 一直是 `.requests`（而"灰"就发生在这一档里）。
-3. 上游那条 `have_premium_popup`（"你本来就是真 Premium，那就不打补丁"）用的**就是**这个信号
-   （`DynamicPremium+ModifyBootstrap.x.swift:71-84` 读 bootstrap 的 `attributes["type"]`），
-   但它**只在 `patchType == .notSet` 的那一瞬间**看一眼 —— 而那条路在本机**从未触发**
-   （全部日志里 `[BOOTSTRAP]` **零命中**）⇒ 真订阅账号每次都被照盖不误。
+> **灰 / 放不动 = 「不启用 Premium 补丁」（= 不打补丁）那一档** —— 而**免费号本来就是这样**：
+> 不打补丁 = 原样免费档 = 歌单发灰、不能点播。
+> 用户原话「把不启用 Premium 补丁**关掉**之后，就没这个问题了」正是这个意思：
+> **关掉那颗开关 = 恢复打补丁 = 又能放了**。
+>
+> ⚠️ 我第二轮问的那两个选项，他选的是"反过来"（不打补丁正常、打补丁才灰）—— 与上面**互相矛盾**。
+> 以"我没有真会员"为准：免费号不存在"不打补丁还正常"的世界，所以取上面这一种读法。
+> （这也解释了为什么他第一句和选项会对不上：那两个选项是我写拧了。）
 
-⚠️ **这一条是"实证 + 推理"，不是定论**：我手上**没有**"账号到底是真 Premium 还是免费档"
-的直接判据（所有日志里的那些 premium 字段都可能是我们自己写的）。所以本轮**不下结论、先把判据补上**，
-而且闸门做成"**两种世界都安全**"：
-→ 服务端说 premium 就一个字段都不改（真订阅得救）；服务端说 free 就照旧伪装（免费档行为一个字没变）。
+**⇒ 这一条不构成"我们改账号态的 bug"**：它只是那颗开关的正常语义（关掉伪装，免费号当然就灰）。
+而它真正有价值的地方在于：**库里那些"突然发灰 / 歌曲消失 / 只显示一部分"的现场，
+都属于"伪装没生效"的那一档**。所以要查的不是"伪装做了什么"，而是 ——
+**为什么有时候伪装没生效**。仓库在这条线上已经备好两支：
+
+| 支 | 状态 |
+|---|---|
+| `SESSION_2026-10-12_NIGHT.md` §9.2：冷启动第一个 customize 常回 **304 且没有 body** ⇒ 交不出配置 ⇒ App 拿到空配置 ⇒ premium/可播放性降级（正是那三个症状）。修法 = customize 快照落盘 + 四处读取补 `?? UserDefaults.cachedCustomizeData`（`01ece12`） | **已经在 `main` 上，但用户装的那一版（日志 63 / 照片 82）没有它** ⇒ **这一版装上就是直接验证** |
+| §10：内容请求到底拿到了多少（`playlist/v2` / `metadata/4` / `context-resolve`… 的 URL + 状态 + 字节数） | **还没做**（本轮也没做，先让 §9.2 那一版上机说话） |
+
+**留下的只有取证**（零行为改变）：
+
+| 现在会打的日志 | 判读 |
+|---|---|
+| `[INIT] patching: patchType=… \| hasPatchedBootstrap=…` | 这次启动在哪一档。`disabled` = 免费号本来就该灰（那颗开关的正常语义）；`requests` = 我们在伪装 |
+| `[Premium] the account state on the wire: type=… catalogue=… player-license=…` | **这一行一次都不出现** ⇒ 这次启动**根本没拿到 customize 响应体**（§9.2 的现场，配合 `[DL] customize 304 -> replaying the seed` 一起看）；`type=free` 且后面有 `[Flags] …` ⇒ 伪装链路是通的，症状往 §10 查 |
+| `[REVERT_WATCH][init] … subscription-enddate=…` | 仍等于"那次启动 + 1 年" ⇒ 伪装落地了（免费号在 `requests` 档下就该是这个值） |
 
 ---
 
@@ -113,30 +121,33 @@
 | ③ | **四颗挨个点一遍** | **每一颗都能切页**（这是"接管触摸"的代价，必须验） | `[TabBarSystem] tap on #N forwarded to Spotify — route … (forward #N)`；**出现 `⚠️ … found nothing to forward to` 就把那一行发我**（里面列了子树里的识别器） |
 | ④ | 点**当前已经选中的那一颗**（例如已经在主页再点主页） | 还是能"回到顶部/重选"（`didSelectItem` 对已选中项也会来） | 同上 |
 | ⑤ | 关掉「标签栏改用系统玻璃」 | 回到自绘胶囊，且**尺寸与迷你条依旧对齐** | `[TabBarSystem] system bar removed (reason=switch off)` |
-| ⑥ | Premium：**保持"不启用 Premium 补丁"关着**（= 打补丁那一档）用一会儿 | 歌单**不再发灰**、歌能放 | `[INIT] patching: patchType=requests …`、`[Premium] no spoof — the account is already premium …` |
-| ⑦ | 同一次日志里看 `[REVERT_WATCH][init]` | `subscription-enddate` **不再等于"一年后"**（真值两次启动不会变） | 这一条是**用户账号到底是不是真订阅**的判据 |
-| ⑧ | 只想复核免费档那条老路没坏 | 如果你是免费档：伪装照旧 | `[Premium] spoofing the account attributes … (from the live payload (type=free …))` |
+| ⑥ | Premium：**保持"不启用 Premium 补丁"关着**（= 打补丁那一档，也是出厂默认）用一会儿 | 歌能放、歌单不发灰 | `[INIT] patching: patchType=requests …` |
+| ⑦ | **同一次日志里**找取证行 | 有 `[Premium] the account state on the wire: …` | `type=free` ⇒ 正常（免费号）；**这一行整份日志里一次都没有** ⇒ 这次启动根本没拿到 customize 响应体 ⇒ 把整段日志发我（§9.2 那条线） |
+| ⑧ | 把「不启用 Premium 补丁」**打开**再重启一次（可选，只为复核那颗开关的语义） | 免费号在这一档**本来就该灰、该放不动** | `patchType=disabled` —— 这一档的灰**不是 bug**，别当症状报 |
 
 **下一份日志我要的就是这两行**（其余照旧）：
-`[TabBarSystem] glass geometry — …` 与 `[INIT] patching: patchType=… | … | the server last said premium=…`。
+`[TabBarSystem] glass geometry — …` 与 `[INIT] patching: patchType=… | hasPatchedBootstrap=…`。
 
 ---
 
-## 5. 本轮的三笔提交（都在 `main`）
+## 5. 本轮的提交（都在 `main`）
 
-1. `feat(tabbar)`：胶囊几何抽成唯一一份（`TabBarGlassPlate.capsuleRect` / `targetCapsuleRect`）
+1. `feat(tabbar)`（`331affb`）：胶囊几何抽成唯一一份（`TabBarGlassPlate.capsuleRect` / `targetCapsuleRect`）
    + 系统玻璃按它摆位（宿主 + 安全区归零）+ `glass geometry` 日志
    + 系统栏**接管触摸**并把选中的那一颗转发成对 Spotify 那一颗的点击（三条退路 + 前 3 次报路由）
    —— 两件事同属"第二片"，落在同一批文件里（`TabBarGlass.x.swift` + `TabBarSystemGlass.x.swift`），所以合成一笔
-2. `fix(premium)`：账号本来就是真 Premium 时**不下伪装**（判据 `shouldSpoofPremium`，跨启动记住）
-   + `patchType` 启动日志（`ServerSidedFeaturePolicy` / `UserDefaults+Extension` / `+ModifyingFunctions` / `Tweak.x`）
-3. `docs(handoff)`：本文
+2. `fix(premium)`（`7a4fd5a`）：~~账号本来就是真 Premium 时不下伪装~~ + `patchType` 启动日志
+   —— **闸门前提被用户否掉（他没真会员），已由第 4 笔撤掉**；留档是为了"别再走这条推理"
+3. `docs(handoff)`（`26efe02`）：本文（初版）
+4. `fix(premium)`（本笔）：**撤掉那道闸门**（`shouldSpoofPremium` / `UserDefaults.serverSaidPremium` 全删，
+   `modifyAttributes` 恢复无条件执行）+ 换成**只记不改**的取证行
+   `[Premium] the account state on the wire: type=… catalogue=… player-license=…` + 更正本文
 
 ---
 
 ## 6. 未验证声明（**不要删这一段**）
 
-* **本轮 6 个源码文件，一行都没在真机上跑过。** 本机**没有 Swift 工具链**，"能编译"只有 CI 能回答；
+* **本轮的源码改动，一行都没在真机上跑过。** 本机**没有 Swift 工具链**，"能编译"只有 CI 能回答；
   六条自检**不做类型检查**（它们只查 hook 目标名、括号、成员、字符串与 l10n）。
 * **系统玻璃的实际尺寸还是推的**：`_UITabBarItemPlatterView` / `_UILiquidLensView` 在 dump 里是
   `54x0`（那一刻还没排完），pw 的注释说"玻璃条要 83、platter 占它顶上 62" ⇒ 我按"宿主给它 360×60"
@@ -146,13 +157,14 @@
   Spotify 换实现就会失效 —— 失效时**日志里会有一行把子树里的识别器全列出来**，不是静默死掉。
 * **转发这条路"点得动"只在 pw 上被验证过**；我们的三条退路哪条会先命中**没验过**。
   万一 ③ 出问题：**先把「标签栏改用系统玻璃」关掉**就回到第一片的行为（那一版点击是落回 Spotify 栏上的）。
-* **Premium 那条是"实证 + 推理"**：`[REVERT_WATCH]` 的日期每次都变（实证）、
-  `EeveePremiumForce:88` 的老账（实证）、上游同一个信号（实证）；
-  但**"账号是不是真 Premium"没有直接判据** ⇒ 闸门写成两边都安全，并靠 §4 ⑦ 那一行定案。
-* **闸门只跳"账号态伪装"这一块**：`enable-crossfade-product-state` / `mixing-tools` /
-  `your-library-tags` / `libspotify` / `loudness-levels` 这些**也在 `modifyAttributes` 里**
-  ⇒ 真订阅账号这一版会**少收到**它们（服务端本来大概率就给了，但没验过）。
-  若出现"某个 premium 功能不见了"，把 `shouldSpoofPremium` 的用法从"整块跳过"改成"只跳过 tier 那几个键"即可（一处、可回滚）。
+* **Premium 那条现在只剩取证，没有任何行为改变**（第 4 笔）。第一版那道闸门之所以撤，
+  是因为它的前提（"用户可能是真订阅"）被用户直接否掉 —— 记在这里当作一条教训：
+  **同一个信号（`type`）在两个前提下的结论完全相反，别拿"可能性"当判据去改行为**。
+* **本轮没有动"伪装怎么改"的任何一行**（`modifyAttributes` 一个字没改）：
+  §9.2 那条（304 无 body ⇒ 交不出配置）**已经修在 `main` 上、而用户装的版本没有它** ——
+  这才是"为什么有时候伪装没生效"的第一顺位嫌疑，装上即验。
+* **`[Premium] the account state on the wire` 这一行会不会出现，取决于 customize 到底有没有 body**
+  —— 它本身就是 §9.2 的判据之一；如果整份日志里一次都没有，那就是现场。
 
 ---
 
@@ -175,7 +187,11 @@ SponsorBlock 看不到播放状态 / 短歌当前行居中 / 旧 UIKit 逐词层
 
 1. **系统栏现在吃触摸了** ⇒ ③ 那条（四颗挨个点）**必须先验**：转发要是哪一颗不通，那一颗就是"看得见、点不动"。
    真出问题**先关开关**（回到第一片行为），把日志里 `⚠️ … found nothing to forward to` 那一行发我。
-2. **Premium 那条别当定论**：这一版只是"服务端说 premium 就不动它"。日志里那两行（§4 ⑦）到了再决定
-   要不要把闸门收窄成"只跳过 tier 那几个键"。**别在同一轮里再动 `modifyAttributes` 别的部分**。
-3. **几何判据只有一份**（`TabBarGlassPlate.capsuleRect`）：以后要调胶囊尺寸（宽/高/位置），
+2. **Premium 那条的结论已经改了两次，别再凭"可能性"改行为**：第一版那道闸门就是教训
+   （同一个 `type` 信号，在"真订阅"与"免费号"两个前提下的结论完全相反）。现在的立场是：
+   **不动 `modifyAttributes` 一个字**，先让 §9.2 那支（`01ece12`，用户装的版本还没有）上机说话；
+   下一份日志里 `[Premium] the account state on the wire` **有没有出现**就是第一判据。
+3. **「不启用 Premium 补丁」那一档的灰不是 bug**（免费号的正常语义）。用户下次报"灰"时，
+   先问/先看 `patchType` 在哪一档，别又把那颗开关的正常行为当成症状去修。
+4. **几何判据只有一份**（`TabBarGlassPlate.capsuleRect`）：以后要调胶囊尺寸（宽/高/位置），
    **只改那一处** —— 迷你播放条与系统玻璃两条都会跟着走（这正是用户 2026-10-02 定下的规矩）。

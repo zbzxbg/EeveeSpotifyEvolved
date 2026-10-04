@@ -543,19 +543,17 @@ struct EeveeSpotify: Tweak {
         )
 
         // ★ 2026-10-12：**「不启用 Premium 补丁」那一档以前一行都没有** —— 于是用户那轮
-        // A/B（"和 A 无关、和 B 有关：不启用 Premium 补丁时正常，打了补丁才灰"）在日志里
-        // **无法复核**：翻遍 30 多份日志也查不到症状出现时 patchType 在哪一档。
-        // 判读：
-        //   · `requests`  = 我们改写账号态（`modifyAttributes`）——用户报"灰"的那一档；
-        //   · `disabled`  = 服务端说什么就是什么（真订阅账号在这一档本来就是正常的）；
-        //   · `notSet`    = 还没定过档（首次启动、或"清空设置"之后）。
-        // `serverSaidPremium` 是**上次**在线 payload 里的账号档（跨启动记住的，见
-        // `UserDefaults.serverSaidPremium`）—— 它决定随包快照那一次要不要下伪装。
+        // A/B（"和不启用 Premium 补丁有关"）在日志里**无法复核**：翻遍 30 多份日志也查不到
+        // 症状出现时 patchType 在哪一档。判读：
+        //   · `requests` = 我们在改写账号态与 flag（**用户是免费号，这一档才是"能放"的那一档**）；
+        //   · `disabled` = 服务端说什么就是什么 ⇒ 免费号在这一档**本来就该灰、该放不动**；
+        //   · `notSet`   = 还没定过档（首次启动、或"清空设置"之后）。
+        // `hasPatchedBootstrap` = 这次启动 bootstrap 那条路有没有真的改写成功。
         writeDebugLog(
             "[INIT] patching: patchType=\(UserDefaults.patchType)"
-                + " (requests = we rewrite the account state | disabled = we leave it alone)"
+                + " (requests = we rewrite the account state and the flags | disabled = we leave it alone,"
+                + " which for a free account means grey lists by design)"
                 + " | hasPatchedBootstrap=\(UserDefaults.hasPatchedBootstrap ? "ON" : "OFF")"
-                + " | the server last said premium=\(UserDefaults.serverSaidPremium ? "YES" : "NO")"
         )
 
         // CarPlay crash fix (Issue #16) — safe-gated
