@@ -140,7 +140,7 @@ ngzhwm_lyrics_unavailable = "未找到歌词";
 lyrics_looking_up = "正在查找歌词…";
 lyrics_looking_up_easter_egg = "少女祈祷中…";
 lyrics_search_placeholder_easter_egg = "替换寻找歌词时的占位符";
-lyrics_search_placeholder_easter_egg_description = "还在取词的时候，那句「正在查找歌词…」会写成「少女祈祷中…」。彩蛋，默认关。";
+lyrics_search_placeholder_easter_egg_description = "一个小彩蛋。";
 lyrics_no_timeline = "这首歌的歌词没有时间轴";
 track_mismatch = "取词期间切了歌，重新播放这一首即可获取歌词。";
 // Debug
