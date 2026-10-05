@@ -43,6 +43,7 @@ struct EeveeExtrasSettingsView: View {
         var tabBarHideCreate = UserDefaults.tabBarHideCreate
         var miniBarGlass = UserDefaults.miniBarGlass
         // ★ 2026-10-13：歌单封面的「四宫格 → 单张」（第 5 轮那个问题）。
+        var playlistSingleCover = UserDefaults.playlistSingleCover
         // ★ 2026-10-13：专辑页 / 歌单页的 AM 化（取色底 + 封面下缘溶解）。
         var entityPageField = UserDefaults.entityPageField
         var entityPageDissolve = UserDefaults.entityPageDissolve

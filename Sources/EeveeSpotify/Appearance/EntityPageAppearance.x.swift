@@ -147,7 +147,11 @@ enum EntityPageAppearance {
         let layer = view.gradient
         layer.startPoint = CGPoint(x: 0.5, y: 0)
         layer.endPoint = CGPoint(x: 0.5, y: 1)
-        layer.locations = [0, NSNumber(value: Double(fieldColorEnd)), 1]
+        layer.locations = [
+            NSNumber(value: 0),
+            NSNumber(value: Double(fieldColorEnd)),
+            NSNumber(value: 1),
+        ]
         layer.colors = [color.cgColor, base.cgColor, base.cgColor]
         let key = hex(of: color)
         if key != lastLoggedHex {
@@ -168,7 +172,7 @@ enum EntityPageAppearance {
                 clearedBackgrounds.append((view: node, color: color))
                 node.backgroundColor = .clear
             }
-            for sub in node.subviews { walk(sub, depth: depth + 1) }
+            for sub in node.subviews { walk(sub, depth + 1) }
         }
 
         walk(page, 0)
@@ -217,7 +221,7 @@ enum EntityPageAppearance {
         let layer = strip.gradient
         layer.startPoint = CGPoint(x: 0.5, y: 0)
         layer.endPoint = CGPoint(x: 0.5, y: 1)
-        layer.locations = [0, 1]
+        layer.locations = [NSNumber(value: 0), NSNumber(value: 1)]
         layer.colors = [
             color.withAlphaComponent(0).cgColor,
             color.withAlphaComponent(0.96).cgColor,
