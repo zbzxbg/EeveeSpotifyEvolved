@@ -415,6 +415,18 @@ struct EeveeSpotify: Tweak {
         //   那条每 0.3s 的复查节拍永远追不上"新封面刚建好"的那一帧（见 `CoverFlashGuard.x.swift`）。
         activateCoverFlashGuard()
 
+        // ★ 2026-10-13（用户第 5 轮问的）：「歌单封面是歌单里前四首歌的专辑封面拼成的一张，
+        //   有没有办法让它变成一张？」—— 能，而且不用动视图层：
+        //   那个四宫格**不是视图拼的**，地址里就串着四张图的 id
+        //   （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`，IPA 的 `__cstring` 里逐字有
+        //   模板串 `https://mosaic.scdn.co/%lu/%@`）；把路径截到**第一个 40 位 id**，
+        //   服务端回的是一张正常的单张封面（本机实测 640/300 都是 200 + image/jpeg）。
+        //   钩子挂在 `SPTMosaicImageLoaderRequest` 拆路径之前（`load` / `loadMosaic` / `URL`），
+        //   而**不是**去藏/替换视图 —— 视图那边拿到的本来就是一张成品图。
+        //   证据、为什么不能写 `setURL:`、以及关掉开关的效果都在
+        //   `Appearance/PlaylistSingleCover.x.swift` 文件头。**默认开**（就是他要的结果）。
+        activatePlaylistSingleCover()
+
         // ⛔「播放器双击手势」已于 2026-10-04 删除（用户拍板：先删掉，之后再搞）。
         //   原因（都在日志里）：① 手势挂在**页面根视图**上 ⇒ 在播放键上方双击也会跳歌
         //   （`[Gestures] diag … singleTapsAbove=2`，日志 39/40/41）；② 它最该起作用的那一面

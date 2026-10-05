@@ -39,6 +39,7 @@ extension UserDefaults {
     private static let tabBarHideLabelsKey = "tabBarHideLabels"
     private static let tabBarHideCreateKey = "tabBarHideCreate"
     private static let miniBarGlassKey = "miniBarGlass"
+    private static let playlistSingleCoverKey = "playlistSingleCover"
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
     private static let nowPlayingVolumeKey = "nowPlayingVolume"
@@ -94,6 +95,7 @@ extension UserDefaults {
         tabBarHideLabelsKey,
         tabBarHideCreateKey,
         miniBarGlassKey,
+        playlistSingleCoverKey,
         nowPlayingBackdropKey,
         nowPlayingOneScreenKey,
         nowPlayingVolumeKey,
@@ -618,6 +620,26 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: miniBarGlassKey)
+        }
+    }
+
+    // MARK: - 歌单封面：四宫格 → 单张（默认开）
+    /// 歌单封面默认是**服务端拼好的四宫格**：地址里就串着歌单前四首歌的专辑封面 id
+    /// （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`，每张 40 位十六进制）。
+    /// 把这个地址截到**第一个 id**，服务端回的是一张正常的单张封面（本机实测：
+    /// 640 与 300 的单 id 地址都是 200 + `image/jpeg`）⇒ 不用换 host、不用自己裁图。
+    ///
+    /// **默认开** —— 用户第 5 轮直接点名问的就是「能不能只显示一张」。
+    /// 机制、证据、以及"为什么不能写 `setURL:`"都在 `Appearance/PlaylistSingleCover.x.swift` 文件头。
+    ///
+    /// 关掉即完全还原：钩子只在开关开着时改写（关着一行都不改）；已经加载过的那几张
+    /// 会留在图片缓存里，重开一次歌单页就是原来的四宫格。
+    static var playlistSingleCover: Bool {
+        get {
+            container.object(forKey: playlistSingleCoverKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: playlistSingleCoverKey)
         }
     }
 

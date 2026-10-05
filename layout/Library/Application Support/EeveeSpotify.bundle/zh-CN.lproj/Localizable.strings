@@ -389,6 +389,10 @@ mini_bar_glass_section = "迷你播放条";
 mini_bar_glass = "迷你播放条用液态玻璃";
 mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃。";
 
+playlist_cover_section = "歌单封面";
+playlist_single_cover = "只显示一张封面";
+playlist_single_cover_description = "没有自己封面的歌单，Spotify 会拿前四首歌的专辑封面拼成一张四宫格。那张图的地址是 mosaic.scdn.co/<尺寸>/<id1><id2><id3><id4>，四张封面的 id 直接拼在路径里；而同一个地址只留一个 id 时，回的就是一张普通的单张封面。所以这里在图片请求加载之前把地址截到第一个 id，接下来走的就是 Spotify 自己那条「只有一张」的路。只动 mosaic.scdn.co 这一个域名，而且只在路径末段确实是一串 40 位 id 时才动，看不懂的地址一律放过。关掉开关不做任何改动；已经加载过的封面会留在图片缓存里，重开歌单页才能看到四宫格。";
+
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";
 flag_group_interventions = "提示与推广";

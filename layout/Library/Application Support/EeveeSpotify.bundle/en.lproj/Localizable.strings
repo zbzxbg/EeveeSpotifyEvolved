@@ -398,6 +398,10 @@ mini_bar_glass_section = "Mini player";
 mini_bar_glass = "Liquid Glass on the mini player";
 mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsule as the tab bar: **same width, same 60 pt height, same corner radius, same material**, keeping the small gap between the two. The width follows the tab bar's capsule (360 pt on this device), so the mini player's own content (artwork, title, buttons, progress line) is scaled down uniformly to fit inside (~86%). While it is on, the solid cover-coloured background is cleared — including right after it appears or a track changes, when Spotify writes it back; switching it off restores everything — glass removed, content back to its original size, background and clipping restored.";
 
+playlist_cover_section = "Playlist covers";
+playlist_single_cover = "One cover instead of four";
+playlist_single_cover_description = "A playlist with no cover of its own gets a mosaic: Spotify builds one image out of the album art of its first four tracks. That image is addressed as mosaic.scdn.co/<size>/<id1><id2><id3><id4>, with the four cover ids packed into the path, and the same address carrying a single id is an ordinary single cover. So this cuts the address down to the first id before the image request is loaded, and Spotify's own single-image path takes over. Only mosaic.scdn.co is touched, and only when the tail of the path really is a run of 40-character ids, so any address it cannot read is left alone. Switching it off changes nothing; covers that were already loaded stay in the image cache until the playlist is opened again.";
+
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
 flag_group_interventions = "Tips & promos";

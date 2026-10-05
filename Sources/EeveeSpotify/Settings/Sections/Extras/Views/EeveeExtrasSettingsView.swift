@@ -42,6 +42,8 @@ struct EeveeExtrasSettingsView: View {
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
         var tabBarHideCreate = UserDefaults.tabBarHideCreate
         var miniBarGlass = UserDefaults.miniBarGlass
+        // ★ 2026-10-13：歌单封面的「四宫格 → 单张」（第 5 轮那个问题）。
+        var playlistSingleCover = UserDefaults.playlistSingleCover
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
@@ -410,6 +412,25 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.homeLargeTitle,
                         persist: { UserDefaults.homeLargeTitle = $0 }
+                    )
+                )
+            }
+
+            // ★ 2026-10-13（用户第 5 轮问的）：「Spotify 的歌单封面默认是歌单里前四首歌的专辑
+            //   封面拼成的一张，有没有办法让它变成一张？」——**默认开**（就是他要的结果）。
+            //   那个四宫格**不是视图层拼的**（视图拿到的就是一张成品图）：地址里串着四张图的 id
+            //   （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`），截到第一个 id 之后
+            //   服务端回的就是正常单张封面 ⇒ 改写点在图片请求上，不在视图上。
+            //   完整证据链与"为什么不能写 `setURL:`"见 `Appearance/PlaylistSingleCover.x.swift` 文件头。
+            Section(
+                header: Text("playlist_cover_section".localized),
+                footer: Text("playlist_single_cover_description".localized)
+            ) {
+                Toggle(
+                    "playlist_single_cover".localized,
+                    isOn: shadowBinding(
+                        \.playlistSingleCover,
+                        persist: { UserDefaults.playlistSingleCover = $0 }
                     )
                 )
             }
