@@ -133,7 +133,10 @@ import ObjectiveC.runtime
 ///
 /// ## 开关
 ///
-/// 设置 → 扩展功能 → 标签栏 → 「**标签栏改用系统玻璃**」，**默认关**。
+/// 设置 → 扩展功能 → 标签栏 → 「**标签栏改用系统玻璃**」，**默认开**
+/// （2026-10-13 用户要求："默认启用标签用液态玻璃"；此前默认关，理由只是"我没验过"。
+///  已经在旧版本里拨过这颗开关的盘上值由一次性迁移补上，见
+///  `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()`）。
 /// 关掉 = 系统栏与宿主移除 + 被藏的内容**各自恢复原 alpha** + `additionalSafeAreaInsets` **写回原值**。
 /// 日志 tag：`[TabBarSystem]`。
 ///

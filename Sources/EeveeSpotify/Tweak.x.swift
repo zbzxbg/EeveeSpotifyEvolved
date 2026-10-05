@@ -492,6 +492,14 @@ struct EeveeSpotify: Tweak {
         //   `lyricsOptions` 是**整块 JSON** 落盘的 ⇒ 只改 `defaultValue` 追不到已经写过的那份，
         //   所以这里一次性把盘上那份也打开（只做一次，之后尊重用户在设置里的开关）。
         LyricsOptions.applyGeniusFallbackDefaultIfNeeded()
+        // ★ 2026-10-13（用户要求"**默认启用标签用液态玻璃**"）：同上，把
+        //   `tabBarSystemGlass` 的默认值由关改成**开**；这个键只要被设置页拨过一次，
+        //   盘上就是一个具体的 `false` ⇒ 也要补一刀（只做一次，之后尊重用户在设置里的开关）。
+        //   ⚠️ 关掉它仍然是"完全不动"（内容与高度精确写回），见
+        //   `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()` 的注释。
+        UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()
+        // 这一行是"那一轮跑的是哪一档"的标记：玻璃没出现时，先看它是 ON 还是 OFF。
+        writeDebugLog("[INIT] tab bar glass: \(UserDefaults.tabBarSystemGlass ? "ON" : "OFF")")
         writeDebugLog("[INIT] Spotify: \(spotifyVersion) (build \(spotifyBuild))")
         writeDebugLog("[INIT] iOS: \(iosVersion), Device: \(deviceModel)")
         writeDebugLog("[INIT] Hook target: \(EeveeSpotify.hookTarget)")

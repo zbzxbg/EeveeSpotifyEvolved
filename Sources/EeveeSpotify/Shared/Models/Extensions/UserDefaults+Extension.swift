@@ -92,6 +92,7 @@ extension UserDefaults {
         libraryLargeTitleKey,
         homeLargeTitleKey,
         tabBarSystemGlassKey,
+        tabBarSystemGlassDefaultMigratedKey,
         tabBarHideLabelsKey,
         tabBarHideCreateKey,
         miniBarGlassKey,
@@ -486,20 +487,49 @@ extension UserDefaults {
 
     /// 「**标签栏改用系统玻璃**」—— 用户 2026-10-12 提的（他看出 pw 那条栏"像果冻、还能滑"）。
     ///
-    /// **默认关**：这条路是**照 pw 的做法**（`Redesigned/Navbar/TabBar.x`）把 Spotify 的栏内容藏掉、
+    /// **默认开** —— 2026-10-13 用户要求："默认启用标签用液态玻璃"（此前默认关，理由只是"我没验过"）。
+    /// 做法是**照 pw 的做法**（`Redesigned/Navbar/TabBar.x`）把 Spotify 的栏内容藏掉、
     /// 在上面叠一条**系统 `UITabBar`** ⇒ iOS 26 直接画成真·液态玻璃（选中气泡会滑、折射、明暗自适应）。
-    /// 我看不到真机，所以先当实验品：**开关关着 = 完全不动**（连一次布局都不碰）；
-    /// 开着 = 藏内容 + 叠系统栏 + 给容器让高度（`additionalSafeAreaInsets` 会**精确写回**）。
     ///
-    /// ⚠️ 它现在是**唯一**一条标签栏玻璃的路（自绘那条已于 2026-10-13 删除）。
+    /// ⚠️ 关掉 = **完全不动**（连一次布局都不碰）：藏起来的内容与让出去的高度都**精确写回**
+    /// （见 `TabBarSystemGlass.remove(reason:)`）。
+    /// ⚠️ 它现在是**唯一**一条标签栏玻璃的路（自绘那条已于 2026-10-13 按用户要求删除）。
     /// 实现与四步做法写在 `Appearance/TabBarSystemGlass.x.swift` 的文件头。
+    ///
+    /// ⚠️ **光改默认值不够**：这个键只要被设置页写过一次，盘上就是一个具体的 `false`，
+    /// `?? true` 再也追不到它 ⇒ 配套的一次性迁移见下面
+    /// `applyTabBarSystemGlassDefaultIfNeeded()`（只做一次，之后尊重用户在设置里的开关）。
     static var tabBarSystemGlass: Bool {
         get {
-            container.object(forKey: tabBarSystemGlassKey) as? Bool ?? false
+            container.object(forKey: tabBarSystemGlassKey) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: tabBarSystemGlassKey)
         }
+    }
+
+    /// 迁移标记（只认它一次，之后永远尊重用户在设置里的选择）。
+    private static let tabBarSystemGlassDefaultMigratedKey = "tabBarSystemGlassDefaultOn"
+
+    /// **一次性**把盘上的 `tabBarSystemGlass` 打开 —— 为"默认值从关改成开"补一刀。
+    ///
+    /// 为什么需要它（而不是只改默认值就行）：`UserDefaults.standard` 在这个进程里就是 Spotify 自己的
+    /// 偏好存储，而**设置页那颗开关只要被拨过一次**，盘上就已经有了一个具体的 `false`
+    /// （旧默认值写进去的），`?? true` 永远追不到它 —— 用户会觉得"你根本没改"。
+    ///
+    /// 只发生**一次**（标记键），并且照实打一行日志：
+    /// 这是"默认值变更"的补偿，不是每次启动都覆盖用户的选择。
+    /// 做法与理由与 `LyricsOptions.applyGeniusFallbackDefaultIfNeeded()` 完全一致。
+    static func applyTabBarSystemGlassDefaultIfNeeded() {
+        guard container.object(forKey: tabBarSystemGlassDefaultMigratedKey) == nil else { return }
+        container.set(true, forKey: tabBarSystemGlassDefaultMigratedKey)
+
+        guard container.object(forKey: tabBarSystemGlassKey) as? Bool == false else { return }
+        container.set(true, forKey: tabBarSystemGlassKey)
+        writeDebugLog(
+            "[TabBar] system glass default turned on once (the stored switch said off)"
+                + " — from here on the switch in the extras settings decides"
+        )
     }
 
     // MARK: - customize 快照的**落盘**兜底（2026-10-12，对齐上游）
