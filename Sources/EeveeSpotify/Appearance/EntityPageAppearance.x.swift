@@ -63,6 +63,12 @@ enum EntityPageAppearance {
     private static var dissolve: GradientView?
     /// 我们清过的底色（**记原值**：关开关要逐个写回 —— 与 `DeclutterChrome` 同一条纪律）。
     private static var clearedBackgrounds: [(view: UIView, color: UIColor)] = []
+    /// 已经清过的**对象**（懒建的 cell 每拍都要查一遍，但只记一次；`ObjectIdentifier` 不做强引用）。
+    private static var clearedViews: Set<ObjectIdentifier> = []
+    /// 上面两张表的上限（封死，不让它随着滚动无限长）。
+    private static let maxCleared = 1200
+    /// 「专辑页找到了、但封面图还没加载出来」只报一次（否则那 0.6s 的节拍会刷屏）。
+    private static var didReportMissingColour = false
     private static var didReport = false
     private static var lastLoggedHex: String?
 
@@ -130,6 +136,12 @@ enum EntityPageAppearance {
         if !view.frame.equalTo(page.bounds) { view.frame = page.bounds }
         paintField(view, color: color)
 
+        // ★ 2026-10-13（**日志 79** 实测只有 7 处被清之后发现）：**每一拍都要补清**。
+        //   cell 是**随滚动懒建**的 —— 只在建场那一拍清一次的话，往下滚出来的新 cell 会自己再画一层
+        //   `#121212`，把 field **重新盖住**（pw 那边也是持续在清：它的注释点名 list 与每个 cell）。
+        //   已经清过的按对象记住，不会重复记、也不会重复写。
+        clearBaseSurfaces(in: page)
+
         guard !didReport else { return }
         didReport = true
         writeDebugLog(
@@ -161,14 +173,19 @@ enum EntityPageAppearance {
     }
 
     /// **只清那些颜色恰好是 `#121212` 的视图**（pw 的教训：list 与每个 cell 都自己画这层）。
+    ///
+    /// ⚠️ **每一拍都调**：新 cell 是懒建的，清一次不够（见 `ensureField` 里的调用点）。
+    /// 清过的按对象记下来，第二次走到它就不重复记；上限封死，不会无限长。
     private static func clearBaseSurfaces(in page: UIView) {
-        guard clearedBackgrounds.isEmpty else { return }
+        guard clearedBackgrounds.count < maxCleared else { return }
         var seen = 0
 
         func walk(_ node: UIView, _ depth: Int) {
-            guard depth <= clearDepth, seen < clearNodes, clearedBackgrounds.count < clearNodes else { return }
+            guard depth <= clearDepth, seen < clearNodes, clearedBackgrounds.count < maxCleared else { return }
             seen += 1
-            if let color = node.backgroundColor, isBaseSurface(color) {
+            let identifier = ObjectIdentifier(node)
+            if let color = node.backgroundColor, isBaseSurface(color), !clearedViews.contains(identifier) {
+                clearedViews.insert(identifier)
                 clearedBackgrounds.append((view: node, color: color))
                 node.backgroundColor = .clear
             }
@@ -246,8 +263,10 @@ enum EntityPageAppearance {
             )
         }
         clearedBackgrounds.removeAll()
+        clearedViews.removeAll()
         currentPage = nil
         didReport = false
+        didReportMissingColour = false
         lastLoggedHex = nil
     }
 
@@ -265,7 +284,18 @@ enum EntityPageAppearance {
         // 专辑页：root 有 id，封面元素也有 id。
         if let page = firstView(in: window, withAnyIdentifier: pageIdentifiers) {
             let cover = firstView(in: page, withAnyIdentifier: coverIdentifiers)
-            return Target(page: page, cover: cover, color: cover.flatMap(coverColor))
+            let color = cover.flatMap(coverColor)
+            // ⚠️ 拿不到颜色时**不许静默**（日志 79 里专辑页一次都没出现，就是被我"悄悄 return"藏掉了）：
+            //    报一次，说明是"页面认出来了、图还没加载"还是"封面元素压根没找到"。
+            if color == nil, !didReportMissingColour {
+                didReportMissingColour = true
+                writeDebugLog(
+                    "[\(logTag)] album page \(type(of: page)) found, but no cover colour yet"
+                        + " (cover element \(cover == nil ? "not found at all" : "found, its image is still empty"))"
+                        + " — waiting for the artwork, nothing was changed"
+                )
+            }
+            return Target(page: page, cover: cover, color: color)
         }
 
         // 歌单页：root 的 id 还没拿到 ⇒ 从封面元素往上找"占满屏"的那一层。
