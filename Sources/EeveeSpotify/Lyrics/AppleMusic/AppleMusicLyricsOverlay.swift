@@ -256,6 +256,10 @@ struct AppleMusicLyricsOverlayView: View {
                     // 所以任何存在 view 里、由 host 推入的值在换歌时都会变成陈旧的。
                     // `currentLyricsProvider` 是全局，按需读取天然最新。
                     provider: currentLyricsProvider,
+                    // ★ 2026-10-13：完整署名（provider + Spicy Lyrics 社区同步的 uploader/maker）
+                    //   也一起推给页脚 —— 条款 §6 要求这些人出现在**歌词所在的那一屏**上。
+                    //   与 `provider` 同样从全局按需读（理由见上面那段）。
+                    providerCredit: currentLyricsCreditText(),
                     showsProviderFooter: showsProviderFooter,
                     primaryColor: primaryColor,
                     // ⚠️ 两个分支要**各自**包成 AnyView，不能写成

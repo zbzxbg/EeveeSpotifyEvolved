@@ -2,6 +2,20 @@ import SwiftUI
 
 extension EeveeLyricsSettingsView {
 
+    /// 「想用自己的 Spicy Lyrics 密钥」那个入口的地址。
+    ///
+    /// ⚠️ 现在指**面板的 applications 页**：任何账号都能在那里建 application、开 Client access、
+    /// 打开 "Allow requests with no Origin header"，然后 Create client key 拿到自己的 `sl_pk_`。
+    ///
+    /// ★ 等我们自己的 **app template** 过审之后，把这里换成
+    /// `https://developers.spicylyrics.org/catalog/<slug>`，用户就只需点一下 Add
+    /// —— 条款 §12 对"要分发到别人设备上的应用"推荐的正是这条，§3 也明写不许共用密钥。
+    ///
+    /// 上游的做法可以对照：他们直接指向自己提交的模板
+    /// （`https://developers.spicylyrics.org/catalog/eeveespotifyreincarnated`），
+    /// 并在文案里一步一步教用户点哪里。
+    private static let spicyKeyHelpURL = URL(string: "https://developers.spicylyrics.org/dashboard/applications")
+
     /// 来源选择器的绑定：额外负责"选中 Musixmatch 但还没令牌"时的手动填写提示。
     ///
     /// 为什么要有它：以前这个提示挂在一个**从来没被 `send` 过**的
@@ -86,8 +100,72 @@ extension EeveeLyricsSettingsView {
                 if viewModel.lyricsSource == .lrclib || viewModel.lyricsSource == .multiLevel {
                     lrclibURLField()
                 }
+
+                // 只在真的会用到 SpicyLyrics 时给密钥栏（多级回退链路里没有它）。
+                if viewModel.lyricsSource == .spicy {
+                    spicyLyricsKeyField()
+                }
             }
         }
+    }
+
+    /// SpicyLyrics 官方 API 的客户端密钥输入框。
+    ///
+    /// ★ 2026-10-13（用户拍板）：**本仓库不内置默认密钥**，这一栏是"用 SpicyLyrics 的前提"。
+    /// **留空**时这个源会被跳过、这一首改用 **Musixmatch**（见
+    /// `CustomLyrics.loadCustomLyricsForCurrentTrack` 里那一段替换）—— 不会去走 SpicyLyrics
+    /// 那条被条款禁止的内部接口。见 `UserDefaults.spicyLyricsApiKey` 与
+    /// `SpicyLyricsRepository` 的文件头。
+    @ViewBuilder private func spicyLyricsKeyField() -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("spicylyrics_api_key".localized)
+
+            TextField(
+                "spicylyrics_api_key_placeholder".localized,
+                text: $viewModel.spicyLyricsApiKey
+            )
+            .foregroundColor(.gray)
+            .autocapitalization(.none)
+            .disableAutocorrection(true)
+
+            // SL 的条款（§3/§12）：key 不许共用；要分发到别人设备上，正解是让每个人**各自**
+            // 拿一份 key（提交 app template），而不是把你的 key 打包发出去。
+            // 所以这里必须**教用户怎么拿**（上游也是这么做的）—— 那句说明里的
+            // 「开发者面板」是可点的，见 `spicyKeyHelpText()`。
+            spicyKeyHelpText()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 「想用自己的密钥」那段说明 —— 把里面那句**开发者面板**做成可点链接。
+    ///
+    /// 做法照上游：文案与链接文本**一起本地化**，再按链接文本自己的 key 在字符串里找那一段
+    /// 贴上 `link`。好处是译文可以自由调整语序，不必维护 `%@` 的位置。
+    ///
+    /// ⚠️ 现在指向的是**面板的 applications 页**：任何账号都能在那里建 application、
+    /// 开 Client access、打开 "Allow requests with no Origin header"，拿到自己的 `sl_pk_`。
+    /// 等我们自己的 **app template** 过审之后，把 `spicyKeyHelpURL` 换成
+    /// `https://developers.spicylyrics.org/catalog/<slug>`、并同步改文案即可 ——
+    /// 那时用户只需点一下 Add（条款 §12 对"要分发的应用"推荐的正是这条）。
+    private func spicyKeyHelpText() -> Text {
+        let raw = "spicylyrics_api_key_description".localized
+        let linkText = "spicylyrics_key_link".localized
+        var attributed = AttributedString(raw)
+
+        if let url = Self.spicyKeyHelpURL, let range = attributed.range(of: linkText) {
+            // 只贴 `link`：SwiftUI 会照 app 的 tint 把这一段画成可点链接，不额外设下划线
+            // （`underlineStyle` 在两个 attribute scope 里类型不同，能不碰就不碰）。
+            attributed[range].link = url
+        } else {
+            // 找不到那一段（比如译文只翻了说明、没照抄那句链接文本）⇒ 退化成纯文本，
+            // **不静默丢掉整句说明**，并把地址原样附在末尾（至少用户能看见/复制）。
+            writeDebugLog("[Settings] spicy key help link text missing in this locale — showing the raw URL")
+            if let url = Self.spicyKeyHelpURL {
+                attributed.append(AttributedString("\n" + url.absoluteString))
+            }
+        }
+
+        return Text(attributed).font(.footnote).foregroundColor(.secondary)
     }
     
     /// Musixmatch 用户令牌输入框。
@@ -101,6 +179,28 @@ extension EeveeLyricsSettingsView {
             
             TextField("user_token_placeholder".localized, text: $viewModel.musixmatchToken)
                 .foregroundColor(.gray)
+
+            // ★ 2026-10-13：把「请求匿名令牌」接回来（见 `AnonymousTokenHelper` 文件头 ——
+            //   没有它，"没填 SpicyLyrics 密钥 → 改用 Musixmatch"这条回退对用户就是空话）。
+            //   只在"还没有合法令牌"时显示：已经有令牌的人不需要它。
+            //   ⚠️ 旧版请求期间会把**整页** `.disabled`；现在只禁这颗按钮。
+            if !viewModel.isMusixmatchTokenValid {
+                Button {
+                    viewModel.requestAnonymousMusixmatchToken()
+                } label: {
+                    HStack(spacing: 8) {
+                        if viewModel.isRequestingMusixmatchToken {
+                            ProgressView().controlSize(.small)
+                        }
+                        Text("request_anonymous_token".localized)
+                    }
+                }
+                .disabled(viewModel.isRequestingMusixmatchToken)
+
+                Text("request_anonymous_token_description".localized)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
         }
         .icon(
             "exclamationmark.circle",

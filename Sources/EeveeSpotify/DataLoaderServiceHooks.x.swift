@@ -5,6 +5,13 @@ import Orion
 public var spotifyAccessToken: String?
 
 // ng（Reborn-ng）歌词仓库（SpicyLyrics 等）通过下面这两个访问器读写 token。
+// ★ 2026-10-13：**SpicyLyrics 已经不再消费它了** —— 那个源搬到了官方 v1 API，
+//   只认自己的 `sl_pk_` key（见 `SpicyLyricsRepository` 文件头），那条路本来就要抓
+//   Spotify 凭据，属于旧 `/query` 时代的产物。
+//   ⇒ 现在这里**没有歌词侧消费者**（`spotifyAccessTokenSnapshot()` 零调用点）。
+//   捕获本身先留着：`spotifyAccessToken` 是 public 既有读取点，而且同处的日志
+//   （token 形状 / 轮换序号，见 `SpotifyTokenOrdinal`）是排查登录态时唯一能看的信号。
+//   ⚠️ 别把"改歌词源"和这里联系起来 —— 两者已经无关。
 // URLSession 回调与歌词仓库跑在不同队列上，直接读写无保护的全局 String 有数据竞争，
 // 这里用锁串行化；`spotifyAccessToken` 变量本身保留，兼容既有读取点。
 private let spotifyAccessTokenLock = NSLock()

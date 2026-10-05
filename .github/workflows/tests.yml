@@ -87,6 +87,23 @@ jobs:
                  -o bundled-configuration-policy-tests
           ./bundled-configuration-policy-tests
 
+      # 2026-10-13：SpicyLyrics 从内部 `/query`（SLObjPack 打包）搬到官方
+      # `GET /v1/lyrics/<id>`（普通 JSON），中间那座桥是 `SLObjPackValue.fromJSON`；
+      # 同时把音节拼接规则抽成 `SpicySyllableText` —— 它是**前瞻**语义
+      # （看前一个音节的 IsPartOfWord），本仓库曾读反，实测 36% 的歌词行会拼错。
+      # 这三个被测文件都是纯 Foundation，所以能进这里；`SpicyLyricsRepository`
+      # 本身带 Orion/UIKit 依赖，进不来。
+      - name: SpicyLyrics v1 JSON mapping + syllable join + attribution
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Repositories/SLObjPack.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsWordDto.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/SpicySyllableText.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsContributor.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/SpicyLyricsAttribution.swift \
+                 Tests/SpicyLyricsJsonMapping/main.swift \
+                 -o spicy-lyrics-json-mapping-tests
+          ./spicy-lyrics-json-mapping-tests
+
       # 唯一一个**不是** swiftc 的测试（纯 Python，不需要工具链）。
       - name: Resolve-configuration snapshot
         run: python3 Tests/ResolveConfigurationSnapshot/test.py

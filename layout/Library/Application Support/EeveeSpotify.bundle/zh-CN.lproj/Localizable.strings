@@ -35,11 +35,27 @@ lyrics_source_description = "Genius：歌词覆盖面最广，但歌词没有时
 lyrics_additional_info = "Genius，NetEase和PetitLyrics的搜索方式是模糊搜索，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
 petitlyrics_description = "PetitLyrics：提供日语歌词。";
 spicylyrics_description = "SpicyLyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
+spicylyrics_api_key = "Spicy Lyrics API 密钥";
+spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
+spicylyrics_api_key_description = "本应用不内置密钥：只有在这里填入你自己的客户端密钥，才会使用 SpicyLyrics。留空则该源被跳过 —— 这一首改用 Musixmatch 取词。想拿密钥：打开 Spicy Lyrics 开发者面板，新建 application，开启 Client access，加一条 allowed origin 并同时打开「Allow requests with no Origin header」，然后按 Create client key，把生成的密钥粘贴到这里。";
+// 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
+spicylyrics_key_link = "Spicy Lyrics 开发者面板";
+spicylyrics_key_invalid = "Spicy Lyrics 密钥被拒绝";
+spicylyrics_key_missing = "未填写 Spicy Lyrics 密钥";
+spicylyrics_key_invalid_popup = "Spicy Lyrics 拒绝了这个 API 密钥（内置密钥可能已被吊销）。可以在「歌词」设置里填入自己的客户端密钥；留空则用回内置密钥。";
+// Spicy Lyrics 的条款（§6）要求：歌词在屏幕上时，署名也得在屏幕上。下面三条进
+// `SpicyLyricsRepository.providerCredit()` 拼出来的那一串（provider + 社区贡献者）。
+lyrics_made_by = "制作者";
+lyrics_uploaded_by = "上传者";
+lyrics_source_unknown = "来源未知";
 netease_description = "NetEase：歌词大部分带时间轴。但对非中国大陆用户的支持较差，且可能出现时间轴不对齐等情况。";
 amll_description = "AMLL：提供高质量逐词歌词和丰富的歌词结构。具体介绍可前往amll.dev查看。";
 
 musixmatch_user_token = "Musixmatch 用户令牌";
 user_token_placeholder = "输入用户令牌或粘贴调试信息";
+request_anonymous_token = "请求匿名令牌";
+request_anonymous_token_description = "点击 “请求匿名令牌” 即可在无需授权的情况下向 Musixmatch 请求令牌。";
+anonymous_token_request_failed = "匿名令牌获取失败。";
 
 
 ngzhwm_amll_preferred = "AMLL优先";

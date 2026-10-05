@@ -457,6 +457,10 @@ enum NowPlayingLyricsPlate {
     private static var coverKey: UInt8 = 0
     private static var toggleKey: UInt8 = 0
     private static var titleMaskKey: UInt8 = 0
+    /// 歌词区底沿那条**署名**（SL 条款 §6 要的可点署名，见 `ensureCreditLabel`）。
+    private static var creditLabelKey: UInt8 = 0
+    /// 记着那条署名（摘的时候不查 `lastPage`，见 `removeCreditLabel`）。
+    private static weak var lastCreditLabel: UILabel?
 
     private static weak var lastPage: UIView?
     private static weak var lastContainer: UIView?
@@ -618,6 +622,8 @@ enum NowPlayingLyricsPlate {
             removeSingleLyric()
             // ★ 2026-10-12：触摸替身也一样（它的 `row` 是别人的视图，不能留着乱转发）。
             removeTitleRelay()
+            // ★ 2026-10-13：署名（挂在页面上的我们自己的 label）同样要摘干净。
+            removeCreditLabel()
             // ★ 2026-10-12：**为什么没参与**要留在日志里（否则"歌词键不见了"没法判）。
             //   一次一页只报一行（`lastEnabledSkipReason`）。
             noteDisabledReason()
@@ -1239,6 +1245,9 @@ enum NowPlayingLyricsPlate {
 
         let container = ensureContainer(in: page, frame: frame)
         applyEdgeFade(to: container)
+        // ★ 2026-10-13：歌词区**底沿**那条可点署名（Spicy Lyrics 条款 §6）。必须在
+        //   `ensureContainer` 之后 —— 它要把自己 `bringSubviewToFront` 到容器上面才点得到。
+        ensureCreditLabel(in: page, lyricsFrame: frame)
         // ★ 2026-10-11：说明文案写在这一块**正中间**（用户原话：「写歌词的正中间最好」）。
         applyNoticeLabel(notice, in: container)
 
@@ -1387,6 +1396,8 @@ enum NowPlayingLyricsPlate {
         }
         lastContainer?.removeFromSuperview()
         lastContainer = nil
+        // ★ 2026-10-13：署名跟着歌词一起收（它只在展开态出现，见 `ensureCreditLabel`）。
+        removeCreditLabel()
         didLogInstall = false
         writeDebugLog("[\(logTag)] collapsed (reason=\(reason))")
     }
@@ -3532,6 +3543,150 @@ enum NowPlayingLyricsPlate {
         return container
     }
 
+    // MARK: - 歌词区底沿的署名（Spicy Lyrics 条款 §6）
+
+    /// 歌词区**底沿**那条小字署名：`Spicy Lyrics · 上传者 X · 制作者 Y`，**可点**。
+    ///
+    /// ## 为什么要有它（用户 2026-10-13 拍板「放 ①」）
+    ///
+    /// Spicy Lyrics 的服务条款把 `/docs/attribution` 定为**条款的一部分**（§6）：
+    /// *"Always name the provider… When `source` is `spicy_lyrics`, credit **and link** the
+    /// uploader, and the maker… Attribution goes wherever the lyrics are."*
+    ///
+    /// 于是我们分三处摆：
+    ///   · **歌手那一行**只放**短名**（`providerSuffix()` → `歌手（Spicy Lyrics）`）——
+    ///     那里塞不下"制作者 / 上传者"，长了会把歌手名挤掉；
+    ///   · **注入 payload 的 `providedBy`** 放**完整纯文本**（Spotify 原生歌词页/卡片底部那一行，
+    ///     点不动，但位置够）；
+    ///   · **这里**放**可点的那一份** —— 条款要的"link"落在这。
+    ///
+    /// ## 位置的两条硬约束
+    ///
+    /// 1. **必须在控制条上沿之上**（`controlBandMidY − controlBandHalfHeight` ≈ 604）。
+    ///    那一条（604…648）是 Spotify 自己的键（收藏 / 分享……），我们的容器在那一带
+    ///    是**放行触摸**的（`applyContainerPassThrough`）；署名若压上去，它会实心吃掉那些键的点击。
+    ///    所以贴着 604 往上摆 —— 正好落在歌词区自己的底部渐隐带里（"底沿"就是那里）。
+    /// 2. **跟着歌词一起出现/收起**：只在展开态的 `layoutAndMount` 里摆，收起与离页由
+    ///    `removeCreditLabel()` 摘掉。没有歌词时 `currentLyricsCreditText()` 为空 ⇒ 它也不会空挂一条。
+    private static func ensureCreditLabel(in page: UIView, lyricsFrame: CGRect) {
+        // 文本由 `currentLyricsCreditText()` 统一拼（自绘歌词页页脚用的是同一份）。
+        let credit = currentLyricsCreditText()
+        guard !credit.isEmpty else {
+            removeCreditLabel()
+            return
+        }
+
+        let label: UILabel
+        if let existing = objc_getAssociatedObject(page, &creditLabelKey) as? UILabel {
+            label = existing
+            if label.superview !== page { page.addSubview(label) }
+        } else {
+            let fresh = UILabel()
+            fresh.font = .systemFont(ofSize: 11, weight: .regular)
+            fresh.textColor = .secondaryLabel
+            fresh.numberOfLines = 1
+            fresh.lineBreakMode = .byTruncatingMiddle
+            fresh.adjustsFontSizeToFitWidth = true
+            fresh.minimumScaleFactor = 0.8
+            fresh.isUserInteractionEnabled = true
+            fresh.accessibilityIdentifier = "eevee-npv-lyrics-credit"
+            fresh.addGestureRecognizer(
+                UITapGestureRecognizer(
+                    target: NowPlayingLyricsCreditTarget.shared,
+                    action: #selector(NowPlayingLyricsCreditTarget.tapped)
+                )
+            )
+            page.addSubview(fresh)
+            objc_setAssociatedObject(page, &creditLabelKey, fresh, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            lastCreditLabel = fresh
+            label = fresh
+        }
+        lastCreditLabel = label
+
+        if label.text != credit { label.text = credit }
+        // 无障碍：有链接就按"链接"播报（与可点这件事保持一致）。
+        label.isAccessibilityElement = true
+        label.accessibilityLabel = credit
+        label.accessibilityTraits = creditLinks().isEmpty ? .staticText : .link
+
+        let height: CGFloat = 14
+        let inset: CGFloat = 2
+        let bottom = (controlBandMidY - controlBandHalfHeight) - 3
+        let target = CGRect(
+            x: lyricsFrame.minX + inset,
+            y: (bottom - height).rounded(),
+            width: max(0, lyricsFrame.width - inset * 2),
+            height: height
+        )
+        if label.frame != target { label.frame = target }
+        // 后写的赢：容器是在我们之前 `bringSubviewToFront` 的，署名要压在它上面才点得到。
+        page.bringSubviewToFront(label)
+    }
+
+    private static func removeCreditLabel() {
+        // ⚠️ 用记下来的那个 `label` 摘，**不查 `lastPage`** —— 离页时 `lastPage` 可能已经换了人，
+        //   查它会留下一条挂在上一页上的孤儿署名。
+        lastCreditLabel?.removeFromSuperview()
+        if let label = lastCreditLabel, let page = label.superview {
+            objc_setAssociatedObject(page, &creditLabelKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        lastCreditLabel = nil
+    }
+
+    /// 可点的链接（顺序 = 显示顺序）：提供者站点 + 每个带 `url` 的贡献者。
+    ///
+    /// 条款 §6 原话是 *"Use the `url` on each contributor as the link target"* ——
+    /// 所以点开的是**他们自己的页面**，不是我们的。
+    static func creditLinks() -> [(title: String, url: URL)] {
+        var links: [(title: String, url: URL)] = []
+        let provider = currentLyricsProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = currentLyricsProviderURL, !provider.isEmpty {
+            links.append((provider, url))
+        }
+        for contributor in currentLyricsContributors {
+            guard let url = contributor.url else { continue }
+            links.append((contributor.role.label + " " + contributor.name, url))
+        }
+        return links
+    }
+
+    /// 点那条署名：一个链接就直接开；多个弹一张 Action Sheet（每条链接一个按钮）。
+    ///
+    /// 为什么不是"整条文字里逐词命中"：那需要把标签拆成多段并做字符级命中测试，
+    /// 而这行字只有一两段链接、点一下就能选 —— 不值得为它引一套富文本命中。
+    static func openCreditLink(_ sender: UIView?) {
+        let links = creditLinks()
+        guard !links.isEmpty else {
+            writeDebugLog("[\(logTag)] credit tapped but nothing is linkable")
+            return
+        }
+        if links.count == 1 {
+            open(links[0].url)
+            return
+        }
+
+        guard let host = sender?.window?.rootViewController ?? lastPage?.window?.rootViewController else {
+            open(links[0].url)
+            return
+        }
+        var top = host
+        while let presented = top.presentedViewController { top = presented }
+
+        let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .alert)
+        for link in links {
+            sheet.addAction(UIAlertAction(title: link.title, style: .default) { _ in
+                NowPlayingLyricsPlate.open(link.url)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel".uiKitLocalized, style: .cancel))
+        top.present(sheet, animated: true)
+    }
+
+    private static func open(_ url: URL) {
+        writeDebugLog("[\(logTag)] opening attribution link \(url.host ?? "?")")
+        onMainThreadSync { UIApplication.shared.open(url) }
+    }
+
     /// 把"控件条那一条要放行触摸"告诉容器（见 `NowPlayingLyricsContainerView`）。
     ///
     /// 放行的范围：从 `controlBandMidY − 22`（≈604）起**到底边**。
@@ -3922,5 +4077,19 @@ final class NowPlayingShareRelayTarget: NSObject {
 
     @objc func tapped() {
         onMainThreadSync { NowPlayingLyricsPlate.relayShareTap() }
+    }
+}
+
+/// 歌词区底沿那条**署名**的点击目标（同上，target 必须是 ObjC 对象）。
+///
+/// 不带参数：多带一个 `sender` 就要写成 `#selector(...tapped(_:))`，两处签名必须一起改，
+/// 而这种"改了选择器忘了改注册"的错只会在运行时炸。署名那条链接取全局状态即可
+/// （`currentLyricsProviderURL` / `currentLyricsContributors`），不需要从手势里拿。
+final class NowPlayingLyricsCreditTarget: NSObject {
+
+    static let shared = NowPlayingLyricsCreditTarget()
+
+    @objc func tapped() {
+        onMainThreadSync { NowPlayingLyricsPlate.openCreditLink(nil) }
     }
 }

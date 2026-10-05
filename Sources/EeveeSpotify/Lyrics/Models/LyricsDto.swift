@@ -50,6 +50,28 @@ struct LyricsDto {
     /// 有默认值，所以各 repository 既有的
     /// `LyricsDto(lines:timeSynced:romanization:…)` 构造方式不受影响。
     var providerName: String = ""
+
+    /// 完整署名（**含社区贡献者**），形如
+    /// `"Spicy Lyrics · 制作者 X · 上传者 Y"`。空 ⇒ 退回 `providerName` / 源名。
+    ///
+    /// ★ 2026-10-13：为什么必须和 `providerName` 分开 —— Spicy Lyrics 的服务条款（§6）
+    /// 要求"回答的 provider"与"社区同步的 uploader/maker"都要展示，而**展示位置不同**：
+    ///   · `providerName`（短）贴在听歌页**歌手那一行**（`NowPlayingLyricsPlate.providerSuffix()`
+    ///     会套一层全角括号），太长会把歌手名挤掉；
+    ///   · `providerCredit`（长）进**注入 payload 的 `providedBy`** —— 那是 Spotify 原生
+    ///     歌词页/卡片底部那一行，有位置放得下。
+    /// 两个都为空时才退回用户选的源名（`toSpotifyLyricsData(source:)`）。
+    var providerCredit: String = ""
+
+    /// 提供者自己的站点。只有能点的地方才用得上（现在是听歌页歌词区底沿那条署名）。
+    var providerURL: URL? = nil
+
+    /// 社区贡献者（Spicy Lyrics 的社区同步才有）。
+    ///
+    /// 与 `providerCredit` 的关系：`providerCredit` 是**纯文本**（进注入 payload 的
+    /// `providedBy`，那一行点不动）；这个数组给**我们自己画的页面**用，
+    /// 条款 §6 要求"用 contributor 的 `url` 当链接目标"就靠它。
+    var providerContributors: [LyricsContributor] = []
     
     func toSpotifyLyricsData(
         source: String,
@@ -93,7 +115,10 @@ struct LyricsDto {
             // 以前这里写 `"\(source) (EeveeSpotify)"`，而 **Spotify 原生歌词页 / 卡片底部那一行
             // 是直接照 payload 的 `providedBy` 显示的** ⇒ 屏幕上就是那个水印。
             // 现在只写**源名**（`"NetEase"`）—— "词是哪来的"这条信息还在，品牌不写了。
-            $0.providedBy = "\(source)"
+            //
+            // ★ 2026-10-13：有**完整署名**（含 Spicy Lyrics 社区同步的 uploader/maker）时
+            // 优先用它 —— 条款 §6 要求这些人被署名，而原生那一行有位置。
+            $0.providedBy = providerCredit.isEmpty ? "\(source)" : providerCredit
         }
         
         if effectiveLines.isEmpty {

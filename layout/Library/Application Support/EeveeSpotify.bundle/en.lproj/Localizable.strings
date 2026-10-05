@@ -41,11 +41,27 @@ Musixmatch: Provides time-synced lyrics for many songs, but you'll need a user t
 lyrics_additional_info = "Genius, NetEase, and PetitLyrics use fuzzy search, so some songs may have display errors or fail to find lyrics.";
 petitlyrics_description = "PetitLyrics: Provides Japanese lyrics.";
 spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
+spicylyrics_api_key = "Spicy Lyrics API Key";
+spicylyrics_api_key_placeholder = "Enter a Spicy client key (sl_pk_...)";
+spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics is only used when you paste your own client key here. Leave it empty and this source is skipped for that track — the lyrics come from Musixmatch instead. To get a key: open the Spicy Lyrics developer dashboard, create an application, switch on Client access, add an allowed origin together with \"Allow requests with no Origin header\", then press Create client key and paste it here.";
+// 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
+spicylyrics_key_link = "Spicy Lyrics developer dashboard";
+spicylyrics_key_invalid = "Spicy Lyrics API key rejected";
+spicylyrics_key_missing = "Spicy Lyrics key not set";
+spicylyrics_key_invalid_popup = "Spicy Lyrics rejected the API key. The built-in key may have been revoked — paste your own client key in Settings > Lyrics (leave it empty to go back to the built-in one).";
+// Spicy Lyrics 的条款（§6）要求：歌词在屏幕上时，署名也得在屏幕上。下面三条进
+// `SpicyLyricsRepository.providerCredit()` 拼出来的那一串（provider + 社区贡献者）。
+lyrics_made_by = "Made by";
+lyrics_uploaded_by = "Uploaded by";
+lyrics_source_unknown = "source unknown";
 netease_description = "NetEase: Most lyrics come with timestamps. However, support for users outside mainland China is weaker, and timestamps may be misaligned.";
 amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
 
 musixmatch_user_token = "Musixmatch User Token";
 user_token_placeholder = "Enter User Token or Paste Debug Info";
+request_anonymous_token = "Request Anonymous Token";
+request_anonymous_token_description = "Tap “Request Anonymous Token” to request a token from Musixmatch without authorization.";
+anonymous_token_request_failed = "Failed to request an anonymous token.";
 
 ngzhwm_amll_preferred = "Prefer AMLL";
 ngzhwm_amll_preferred_description = "For this option to take effect, word-by-word lyrics must be enabled. When enabled, word-by-word lyrics are requested from AMLL first. If AMLL does not return word-by-word lyrics, it falls back to the lyrics source you selected yourself and that source's related settings.";

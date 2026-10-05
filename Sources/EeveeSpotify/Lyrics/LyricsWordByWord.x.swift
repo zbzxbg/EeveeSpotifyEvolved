@@ -70,6 +70,22 @@ var currentLyricsBackgroundColorARGB: UInt32 = 0
 /// 用于 overlay 页脚、以及**播放器页歌手那一行的右边**（`歌手（提供商）`）。
 var currentLyricsProvider: String = ""
 
+/// 提供者站点（可点署名用）。目前只有 Spicy Lyrics 会给，其余源是 `nil`。
+var currentLyricsProviderURL: URL? = nil
+
+/// 社区贡献者（Spicy Lyrics 的社区同步才有）—— 见 `LyricsContributor`。
+///
+/// 用途只有一个：听歌页歌词区底沿那条**可点**署名（`NowPlayingLyricsPlate`）。
+/// 条款 §6 要的"链接"就落在这里。
+var currentLyricsContributors: [LyricsContributor] = []
+
+/// 这一次取词**是不是**"用户选了 SpicyLyrics 但没填客户端密钥 → 自动改用 Musixmatch"。
+///
+/// 每首歌在 `CustomLyrics.loadCustomLyricsForCurrentTrack` 入口重算。
+/// 唯一用途：挡住 Musixmatch 那条"令牌无效，请检查你的令牌"弹窗 —— 用户根本没选过 Musixmatch，
+/// 弹了只会让他去改一个他没打算用的源。
+var spicyLyricsKeyMissingFallback: Bool = false
+
 /// 当前曲目时长（毫秒），由 `getLyricsDataForCurrentTrack` 在处理这次歌词请求时写入。
 ///
 /// 用途：给**无时间轴**的 payload（占位文案、Genius 纯文本）合成行级时间轴 ——

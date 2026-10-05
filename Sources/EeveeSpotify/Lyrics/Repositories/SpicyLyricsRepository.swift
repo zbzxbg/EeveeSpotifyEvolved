@@ -2,14 +2,26 @@ import Foundation
 
 // MARK: - SpicyLyricsRepository
 //
-// Fetches lyrics from api.spicylyrics.org and converts the response into LyricsDto.
+// 走 **SpicyLyrics 官方开发者 API**：`GET https://api.spicylyrics.org/v1/lyrics/<trackId>`
+// + `Authorization: Bearer <key>`（key 见 `SpicyLyricsKey+UserDefaults.swift`）。
 //
-// ── Token availability ───────────────────────────────────────────────────────
-// spotifyAccessToken is captured lazily from Spotify's outgoing requests.
-// On first track load it may be nil. The Spicetify extension uses
-// Platform.GetSpotifyAccessToken() which awaits the token asynchronously.
-// We replicate that by polling spotifyAccessToken for up to 5 seconds before
-// giving up — this prevents an immediate 401 from the API triggering Genius fallback.
+// ── 为什么从 `/query` 搬过来（2026-10-13 实测）────────────────────────────────
+// 旧路是**内部客户端 API** `POST /query`：body 里带 `queries[].variables.auth =
+// "SpicyLyrics-WebAuth"`，并且必须把从 Spotify 请求里抓到的 access token 塞进
+// `SpicyLyrics-WebAuth: Bearer <token>` 头，还要伪装一整套 Spicetify 的
+// Origin / UA / sec-ch-ua 头。实测结论：
+//   · body 形状不对 → HTTP 418「This is the internal client API… use the developer API」；
+//   · 形状对但不带 token → 200 外壳 + `result.data.error = "Missing authorization"`，
+//     且外壳带一条 `_notice`：**只授权官方客户端及其公开 fork 的个人使用，禁止第三方
+//     应用抓取/再分发**。
+// ⇒ 技术上要抓 Spotify 凭据（脆弱）、条款上不被允许。官方 v1 只认我们自己的 key，
+//   不依赖任何 Spotify 凭据，并且是文档明确给出的接入方式。
+//
+// ── 返回格式 ────────────────────────────────────────────────────────────────
+// v1 返回**普通 JSON**（`{"Body": {...}, "Status": 200, "Type": "object"}`），
+// 而旧 `/query` 的内层是 SLObjPack 打包格式。三条解析路径（Syllable / Line / Static）
+// 吃的都是 `SLObjPackValue`，所以在 `SLObjPackValue.fromJSON` 那一层做一次转换，
+// 不维护第二套解析器。`Body.Type` 决定精度：Syllable（逐词）/ Line（逐行）/ Static（无时间轴）。
 //
 // ── iOS 27 crash ─────────────────────────────────────────────────────────────
 // The EXC_BREAKPOINT / _swift_task_checkIsolatedSwift crash is fixed in
@@ -31,94 +43,75 @@ class SpicyLyricsRepository: LyricsRepository {
 
     private let session: URLSession
 
-    private static let apiUrl        = "https://api.spicylyrics.org"
-    private static let authHeaderKey = "SpicyLyrics-WebAuth"
-    // 当前 SpicyLyrics 最新版本（2026-08 确认 6.3.12）。API 会拒绝过旧版本并返回
-    // 「请更新 sl / 重启 Spotify 完成更新」提示（被解析成 2 行 Static 歌词），
-    // 版本号必须保持最新。
-    private static let clientVersion = "6.3.12"
-
-    // MARK: - Token wait
-    //
-    // Poll for spotifyAccessToken up to `timeout` seconds.
-    // Returns the token or nil if not available in time.
-    private func waitForToken(timeout: TimeInterval = 5.0) -> String? {
-        if let token = spotifyAccessTokenSnapshot() { return token }
-
-        let deadline = Date(timeIntervalSinceNow: timeout)
-        while Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.1)
-            if let token = spotifyAccessTokenSnapshot() { return token }
-        }
-        return nil
-    }
+    private static let apiUrl = "https://api.spicylyrics.org/v1/lyrics/"
 
     // MARK: - Network
 
-    private func performQuery(trackId: String) throws -> Data {
-        guard let url = URL(string: "\(SpicyLyricsRepository.apiUrl)/query") else {
+    /// 一次 GET 的产物：响应体 + HTTP 状态码。
+    ///
+    /// ⚠️ 状态码**必须**跟数据一起带出来：v1 把失败原因放在状态码里
+    /// （401 = key 不存在/被吊销，403 = 带 Origin 头且不在白名单，404 = 没这首词的同步，
+    /// 503 = 还在生成）。旧 `/query` 那条路是 200 外壳 + 内层 `httpStatus`，两者不可混用。
+    private struct QueryResult {
+        let data: Data
+        let httpStatus: Int
+    }
+
+    /// 503 = "这首歌的同步还在生成中"，官方语义上会自愈 ⇒ 按 2·1.5^n 退避重试
+    /// （最多 5 次，单次上限 10s）。
+    private static let queuedRetryDelays: [TimeInterval] = {
+        (0 ..< 5).map { attempt in min(10.0, 2.0 * pow(1.5, Double(attempt))) }
+    }()
+
+    private func performQuery(trackId: String) throws -> QueryResult {
+        for (attempt, delay) in ([0.0] + SpicyLyricsRepository.queuedRetryDelays).enumerated() {
+            if delay > 0 {
+                // ⚠️ 不写嵌套双引号字面量（仓库成文规矩）：把 `String(format:)` 先算成变量。
+                let seconds = String(format: "%.1f", delay)
+                writeDebugLog(
+                    "[SpicyLyrics] \(trackId) queued (503), retrying in \(seconds)s "
+                        + "(attempt \(attempt + 1))"
+                )
+                Thread.sleep(forTimeInterval: delay)
+            }
+            let result = try performRequest(trackId: trackId)
+            if result.httpStatus != 503 { return result }
+        }
+        writeDebugLog("[SpicyLyrics] \(trackId) still queued after all retries")
+        throw LyricsError.noSuchSong
+    }
+
+    private func performRequest(trackId: String) throws -> QueryResult {
+        guard let url = URL(string: SpicyLyricsRepository.apiUrl + trackId) else {
             throw LyricsError.decodingError
         }
 
-        let body: [String: Any] = [
-            "queries": [
-                [
-                    "operation": "lyrics",
-                    "variables": [
-                        "id":   trackId,
-                        "auth": SpicyLyricsRepository.authHeaderKey
-                    ]
-                ]
-            ],
-            "client": ["version": SpicyLyricsRepository.clientVersion]
-        ]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json",                   forHTTPHeaderField: "Content-Type")
-        request.setValue(SpicyLyricsRepository.clientVersion, forHTTPHeaderField: "SpicyLyrics-Version")
-
-        // Match the real desktop Spicetify request's identity headers — captured
-        // via mitmproxy from an actual desktop session that returned Syllable
-        // (word-synced) data. Origin/Referer/User-Agent alone got us from Static
-        // to Line — these additional Client Hints / Sec-Fetch headers are the
-        // remaining gap to close, in case the server uses sec-ch-ua-mobile or
-        // sec-ch-ua-platform to decide whether to serve full Syllable data.
-        request.setValue("https://xpui.app.spotify.com",  forHTTPHeaderField: "Origin")
-        request.setValue("https://xpui.app.spotify.com/", forHTTPHeaderField: "Referer")
-        request.setValue(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.179 Spotify/1.2.92.148 Safari/537.36",
-            forHTTPHeaderField: "User-Agent"
-        )
-        request.setValue("\"Windows\"",                      forHTTPHeaderField: "sec-ch-ua-platform")
-        request.setValue("\"Not-A.Brand\";v=\"24\", \"Chromium\";v=\"146\"", forHTTPHeaderField: "sec-ch-ua")
-        request.setValue("?0",                                forHTTPHeaderField: "sec-ch-ua-mobile")
-        request.setValue("*/*",                               forHTTPHeaderField: "Accept")
-        request.setValue("cross-site",                        forHTTPHeaderField: "sec-fetch-site")
-        request.setValue("cors",                              forHTTPHeaderField: "sec-fetch-mode")
-        request.setValue("empty",                             forHTTPHeaderField: "sec-fetch-dest")
-        request.setValue("gzip, deflate, br, zstd",           forHTTPHeaderField: "Accept-Encoding")
-        request.setValue("en-Latn-US,en-US;q=0.9,en-Latn;q=0.8,en;q=0.7", forHTTPHeaderField: "Accept-Language")
-        request.setValue("u=1, i",                            forHTTPHeaderField: "priority")
-
-        // Wait for the Spotify Bearer token — mirrors Platform.GetSpotifyAccessToken()
-        // in the Spicetify extension. Without a valid token the API returns non-200
-        // immediately, which falsely triggers Genius fallback.
-        if let token = waitForToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: SpicyLyricsRepository.authHeaderKey)
-            writeDebugLog("[SpicyLyrics] Using captured token for \(trackId)")
-        } else {
-            writeDebugLog("[SpicyLyrics] No token available for \(trackId) — proceeding unauthenticated")
+        // ⚠️ 没有密钥就**不要发请求**：本仓库不内置默认 key（用户拍板，理由见
+        // `SpicyLyricsKey+UserDefaults.swift` 文件头）。正常流程下调用方（`CustomLyrics`）
+        // 在"没 key"时已经改用 Musixmatch 了，走到这里说明是别处直接调进来 —— 给一句能读懂的原因。
+        let apiKey = UserDefaults.effectiveSpicyLyricsApiKey
+        guard !apiKey.isEmpty else {
+            writeDebugLog("[SpicyLyrics] \(trackId) skipped — no client key is configured")
+            throw LyricsError.missingSpicyKey
         }
 
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        // 只有这一条凭据 —— 不再需要 Spotify 的 access token，也不再伪装浏览器头。
+        // 我们**不带** `Origin`：key 所在的 application 必须打开
+        // "Allow requests with no Origin header"，否则会拿到 403 origin_not_allowed。
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("EeveeSpotify", forHTTPHeaderField: "User-Agent")
 
         let semaphore = DispatchSemaphore(value: 0)
         var responseData: Data?
+        var responseStatus = 0
         var responseError: Error?
 
-        session.dataTask(with: request) { data, _, error in
+        session.dataTask(with: request) { data, response, error in
             responseData = data
+            responseStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
             responseError = error
             semaphore.signal()
         }.resume()
@@ -133,80 +126,154 @@ class SpicyLyricsRepository: LyricsRepository {
             writeDebugLog("[SpicyLyrics] No data for \(trackId)")
             throw LyricsError.decodingError
         }
-        writeDebugLog("[SpicyLyrics] Received \(data.count) bytes for track \(trackId)")
-        return data
+        writeDebugLog("[SpicyLyrics] HTTP \(responseStatus), \(data.count) bytes for \(trackId)")
+        return QueryResult(data: data, httpStatus: responseStatus)
     }
 
     // MARK: - Parse
 
-    private func parseLyricsData(_ data: Data, trackId: String) throws -> LyricsDto {
-        guard
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let queriesRaw = json["queries"] as? [[String: Any]]
-        else {
-            let rawBody = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
-            writeDebugLog("[SpicyLyrics] Malformed envelope for \(trackId): \(rawBody)")
-            throw LyricsError.decodingError
-        }
-
-        // The server may prepend extra entries ahead of the real query result
-        // (e.g. a "_notice" block with no "operationId"/"result"). The real
-        // Spicetify client never assumes index 0 — it looks results up by
-        // operationId via queries.get("0") — so we match that instead of
-        // blindly taking queriesRaw.first.
-        guard
-            let matchedQuery = queriesRaw.first(where: { $0["operationId"] as? String == "0" }),
-            let result = matchedQuery["result"] as? [String: Any]
-        else {
-            let rawBody = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
-            writeDebugLog("[SpicyLyrics] No matching operationId 0 for \(trackId): \(rawBody)")
-            throw LyricsError.decodingError
-        }
-
-        let httpStatus = result["httpStatus"] as? Int ?? 0
-        writeDebugLog("[SpicyLyrics] API status \(httpStatus) for \(trackId)")
-
-        switch httpStatus {
-        case 404:
-            throw LyricsError.noSuchSong
+    private func parseLyricsData(_ result: QueryResult, trackId: String) throws -> LyricsDto {
+        switch result.httpStatus {
         case 200:
             break
         case 401, 403:
-            // Auth failure — token was stale or rejected. Clear it so the next
-            // attempt re-waits for a fresh one.
-            writeDebugLog("[SpicyLyrics] Auth error \(httpStatus) for \(trackId) — clearing cached token")
-            setSpotifyAccessToken(nil)
+            // 401 key_not_found（key 被吊销/写错）；403 origin_not_allowed（只有带 Origin 头
+            // 的请求才可能撞到 —— 我们不发这个头，撞到就说明面板那一项被关了）。
+            // 单独一种错误：混进 noSuchSong 会被当成"这首歌没词"，用户只会去换来源。
+            writeDebugLog(
+                "[SpicyLyrics] \(trackId) key rejected (HTTP \(result.httpStatus)): "
+                    + SpicyLyricsRepository.bodyPreview(result.data)
+            )
+            throw LyricsError.invalidSpicyKey
+        case 400:
+            // invalid_track_id —— 官方要求 22 位 base62（就是 Spotify 曲目 URL 里那串）。
+            // 走到这里说明我们递过去的不是从 Spotify 拿到的 id，属于我方 bug。
+            writeDebugLog(
+                "[SpicyLyrics] \(trackId) invalid track id (HTTP 400): "
+                    + SpicyLyricsRepository.bodyPreview(result.data)
+            )
             throw LyricsError.noSuchSong
+        case 404:
+            writeDebugLog("[SpicyLyrics] \(trackId): HTTP 404, no lyrics for that track")
+            throw LyricsError.noSuchSong
+        case 429:
+            // publishable key 在应用级限流之外还有**每 IP 限流**（官方文档原话）——
+            // 所以它和"这首歌没词"必须分开记：同一个 IP 下多台设备（或运营商 NAT 后面的
+            // 一整片用户）共用同一个出口时，429 是最先撞到的一堵墙。
+            writeDebugLog(
+                "[SpicyLyrics] \(trackId) rate limited (HTTP 429): "
+                    + SpicyLyricsRepository.bodyPreview(result.data)
+            )
+            throw LyricsError.unknownError
+        case 500, 502, 503:
+            // 503 已经在 `performQuery` 里退避重试过了，走到这里说明重试也用完。
+            writeDebugLog(
+                "[SpicyLyrics] \(trackId) server error (HTTP \(result.httpStatus)): "
+                    + SpicyLyricsRepository.bodyPreview(result.data)
+            )
+            throw LyricsError.unknownError
         default:
-            writeDebugLog("[SpicyLyrics] Unexpected status \(httpStatus) for \(trackId)")
+            writeDebugLog(
+                "[SpicyLyrics] \(trackId) unexpected HTTP \(result.httpStatus): "
+                    + SpicyLyricsRepository.bodyPreview(result.data)
+            )
             throw LyricsError.noSuchSong
         }
 
-        guard let rawData = result["data"] else { throw LyricsError.decodingError }
-
-        let packed: SLObjPackValue
-        do {
-            packed = try SLObjPack.unpack(rawData)
-        } catch {
-            writeDebugLog("[SpicyLyrics] SLObjPack error for \(trackId): \(error)")
+        guard let json = try? JSONSerialization.jsonObject(with: result.data) as? [String: Any] else {
+            writeDebugLog(
+                "[SpicyLyrics] \(trackId) invalid JSON: "
+                    + SpicyLyricsRepository.bodyPreview(result.data)
+            )
             throw LyricsError.decodingError
         }
 
-        guard let type = packed["Type"]?.stringValue else {
-            writeDebugLog("[SpicyLyrics] Missing Type for \(trackId)")
+        // v1 的正文在 `Body` 里（外面还有 `Status` / `Type`）。兼容性地也认裸对象。
+        let rootJSON = (json["Body"] as? [String: Any]) ?? json
+        let root = SLObjPackValue.fromJSON(rootJSON)
+
+        guard let type = root["Type"]?.stringValue else {
+            writeDebugLog(
+                "[SpicyLyrics] \(trackId) missing Type: "
+                    + SpicyLyricsRepository.bodyPreview(result.data)
+            )
             throw LyricsError.decodingError
         }
 
-        writeDebugLog("[SpicyLyrics] Lyrics type=\(type) for \(trackId)")
+        // `source` 决定署名（spicy_lyrics / apple_music / spotify），排查时很有用。
+        // ⚠️ 取出来再拼串：`\(root["source"]…)` 是嵌套双引号字面量，仓库规矩不写。
+        let sourceName = root["source"]?.stringValue ?? "?"
+        writeDebugLog("[SpicyLyrics] \(trackId) type=\(type), source=\(sourceName)")
 
+        let dto: LyricsDto
         switch type {
-        case "Syllable": return parseSyllableLyrics(packed)
-        case "Line":     return parseLineLyrics(packed)
-        case "Static":   return parseStaticLyrics(packed)
+        case "Syllable": dto = parseSyllableLyrics(root)
+        case "Line":     dto = parseLineLyrics(root)
+        case "Static":   dto = parseStaticLyrics(root)
         default:
-            writeDebugLog("[SpicyLyrics] Unknown type '\(type)' for \(trackId)")
+            writeDebugLog("[SpicyLyrics] \(trackId) unknown type '\(type)'")
             throw LyricsError.decodingError
         }
+
+        // 署名挂在 dto 上往下走（`CustomLyrics.storeLyricsDto` 只在 dto 没带署名时兜底成源名）。
+        //
+        // ⚠️ 两个字段**分工不同**，别合并：
+        //   · `providerName`（短，如 `Spicy Lyrics`）会被贴到听歌页**歌手那一行**
+        //     （`NowPlayingLyricsPlate.providerSuffix()` 套一层全角括号）—— 长了会把歌手名挤掉；
+        //   · `providerCredit`（长，含"制作者 / 上传者"）进**注入 payload 的 `providedBy`**，
+        //     也就是 Spotify 原生歌词页/卡片底部那一行。
+        var credited = dto
+        credited.providerName = SpicyLyricsRepository.providerName
+        credited.providerURL = SpicyLyricsRepository.providerURL
+        credited.providerContributors = SpicyLyricsAttribution.contributors(
+            attribution: root["UploadAttribution"]
+        )
+        credited.providerCredit = SpicyLyricsRepository.providerCredit(
+            source: root["source"]?.stringValue,
+            attribution: root["UploadAttribution"]
+        )
+        return credited
+    }
+
+    // MARK: - Attribution
+
+    /// 服务名 / 站点 / 贡献者解析都在 `SpicyLyricsAttribution` 里（Foundation-only，CI 直接测它）。
+    /// 这里只留"拼成一行纯文本"这件事 —— 它要用到 `.localized`，进不了 CI 的编译单元。
+    static var providerName: String { SpicyLyricsAttribution.providerName }
+    static var providerURL: URL? { SpicyLyricsAttribution.providerURL }
+
+    /// 按响应的 `source` 拼**纯文本**署名（进注入 payload 的 `providedBy`）。
+    ///
+    /// 这不是"客气一下"：SL 的服务条款把 `/docs/attribution` 定为**条款的一部分**（§6），
+    /// 而 §5 明写"不许删除、模糊或改动署名"。三条硬要求：
+    ///   · 永远要写出**回答的 provider**；
+    ///   · `source == "spicy_lyrics"`（社区同步，词是人做的）时**还要**署名 uploader 与 maker；
+    ///   · 响应里没有 `source` 时要说**来源未知**，不许猜一个安上去。
+    /// 另外"歌词在屏幕上，署名就得在屏幕上（比如页面底部），不许只放进关于页或没人点的 tooltip"。
+    ///
+    /// 这一串进 `LyricsDto.providerCredit` → `toSpotifyLyricsData` 的 `providedBy`
+    /// （**Spotify 原生歌词页/卡片底部那一行**）。听歌页歌手行用的是**短名**
+    /// （`providerName`），歌词区底沿那条可点署名用的是 `providerContributors`，
+    /// 三者分工见 `LyricsDto` 里各字段的说明。
+    static func providerCredit(source: String?, attribution: SLObjPackValue?) -> String {
+        let name = SpicyLyricsAttribution.providerName
+        guard let source = source, !source.isEmpty else {
+            return name + " · " + "lyrics_source_unknown".localized
+        }
+        // apple_music / spotify：商业源只有 provider 可署（它们的响应里也没有 contributor）。
+        guard source == "spicy_lyrics" else { return name }
+
+        var parts = [name]
+        for contributor in SpicyLyricsAttribution.contributors(attribution: attribution) {
+            parts.append(contributor.role.label + " " + contributor.name)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// 只给日志用：截前 200 字符。整份歌词（几十 KB）不许进日志。
+    private static func bodyPreview(_ data: Data) -> String {
+        let raw = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
+        return String(raw.prefix(200))
     }
 
     // MARK: Syllable lyrics
@@ -226,38 +293,11 @@ class SpicyLyricsRepository: LyricsRepository {
             let lineText: String
             var words: [LyricsWordDto]? = nil
             if let syllables = lead["Syllables"]?.arrayValue, !syllables.isEmpty {
-                // Real client rule (Syllable.ts): a syllable with IsPartOfWord=true
-                // attaches directly to the previous syllable (continues the same
-                // word, e.g. "re" + "call" -> "recall"); otherwise it starts a new
-                // word and needs a preceding space. Plain .joined() (no separator)
-                // ignored this entirely, producing "Doyourecall,notlongago?".
-                var text = ""
-                var collected: [LyricsWordDto] = []
-                for syllable in syllables {
-                    guard let syllableText = syllable["Text"]?.stringValue else { continue }
-                    let isPartOfWord = syllable["IsPartOfWord"]?.boolValue ?? false
-                    let start = syllable["StartTime"]?.doubleValue.map { Int($0 * 1000) }
-                    let end = syllable["EndTime"]?.doubleValue.map { Int($0 * 1000) }
-                    if !text.isEmpty && !isPartOfWord {
-                        text += " "
-                    }
-                    text += syllableText
-                    if preserveWords {
-                        // 逐字：每个非空白音节单独作为一个词（含自己的起止时间）；
-                        // 空格 token（" " / "　"）跳过，不参与高亮。
-                        if !syllableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            // 英文词间空格：IsPartOfWord=false 表示「新词」。
-                            // 非首个词时前面补一个空格，和上面 line text 的拼接规则保持一致；
-                            // 日文按词素返回、IsPartOfWord=true（续接），不会触发，保持原样。
-                            let wordText = (!isPartOfWord && !collected.isEmpty) ? " " + syllableText : syllableText
-                            collected.append(
-                                LyricsWordDto(text: wordText, startMs: start ?? 0, endMs: end)
-                            )
-                        }
-                    }
-                }
-                lineText = text
-                words = preserveWords ? collected : nil
+                // 拼接规则整体住在 `SpicySyllableText` 里（含「IsPartOfWord 是前瞻的」
+                // 那条坑；文件头有实测数据）。这里只负责取数据，不重复一份规则 ——
+                // 两份实现分叉过一次，代价是 36% 的歌词行拼错。
+                lineText = SpicySyllableText.joined(syllables)
+                words = preserveWords ? SpicySyllableText.words(syllables) : nil
                 if syllables.contains(where: { ($0["TransliteratedText"]?.stringValue ?? "").isEmpty == false }) {
                     hasRomanized = true
                 }
@@ -305,11 +345,20 @@ class SpicyLyricsRepository: LyricsRepository {
     // MARK: Static lyrics
 
     private func parseStaticLyrics(_ root: SLObjPackValue) -> LyricsDto {
-        let rawLines = root["Lines"]?.arrayValue ?? []
-        let lines = rawLines.compactMap { entry -> LyricsLineDto? in
-            guard let text = entry["Text"]?.stringValue else { return nil }
-            return LyricsLineDto(content: text.lyricsNoteIfEmpty, offsetMs: nil)
+        // Static（无时间轴）的载荷有两种形状 —— 上游同款处理：
+        //   · `Lines: [{ Text }]`（旧 `/query` 时代我们只认这一种）；
+        //   · 或者跟 Syllable/Line 一样走 `Content: [{ Lead: { Text } }]`。
+        // ⚠️ 只认第一种的话，v1 的 Static 曲目会拿到一份**空**歌词 —— 界面上就是"这首歌
+        // 没有歌词"，比显示纯文本更糟。
+        var texts = [String]()
+        if let rawLines = root["Lines"]?.arrayValue {
+            texts = rawLines.compactMap { $0["Text"]?.stringValue }
         }
+        if texts.isEmpty, let content = root["Content"]?.arrayValue {
+            texts = content.compactMap { $0["Lead"]?["Text"]?.stringValue ?? $0["Text"]?.stringValue }
+        }
+
+        let lines = texts.map { LyricsLineDto(content: $0.lyricsNoteIfEmpty, offsetMs: nil) }
         let romanization: LyricsRomanizationStatus = lines.map(\.content).canBeRomanized
             ? .canBeRomanized : .original
         return LyricsDto(lines: lines, timeSynced: false, romanization: romanization)
@@ -327,8 +376,8 @@ class SpicyLyricsRepository: LyricsRepository {
             writeDebugLog("[SpicyLyrics] Empty track ID")
             throw LyricsError.noSuchSong
         }
-        let data = try performQuery(trackId: trackId)
-        var dto = try parseLyricsData(data, trackId: trackId)
+        let result = try performQuery(trackId: trackId)
+        var dto = try parseLyricsData(result, trackId: trackId)
 
         // SpicyLyrics 上游会把部分歌词打码成 `***`。这里按「词数 + 词位置」从其他
         // 未打码的源（LRCLIB / Musixmatch / Genius，见 LyricsUncensorFill）把词补回：

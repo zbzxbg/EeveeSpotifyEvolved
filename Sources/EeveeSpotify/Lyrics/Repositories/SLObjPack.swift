@@ -228,3 +228,38 @@ extension SLObjPackValue {
         return arr[index]
     }
 }
+
+// MARK: - Plain JSON → SLObjPackValue
+
+extension SLObjPackValue {
+    /// 把**普通 JSON** 树搬成 `SLObjPackValue`。
+    ///
+    /// 为什么需要它：官方 v1 API（`GET /v1/lyrics/<id>`）返回的是普通 JSON，
+    /// 而旧 `/query` 的内层是 SLObjPack 打包格式（见上面的 `unpack`）。三条歌词解析路径
+    /// （Syllable / Line / Static）都吃 `SLObjPackValue`，所以在这一层做一次转换，
+    /// 而不是为 v1 再写第二套解析器。
+    static func fromJSON(_ raw: Any) -> SLObjPackValue {
+        switch raw {
+        case is NSNull:
+            return .null
+        case let value as [Any]:
+            return .array(value.map(fromJSON))
+        case let value as [String: Any]:
+            return .object(value.mapValues(fromJSON))
+        case let value as String:
+            return .string(value)
+        case let value as NSNumber:
+            // ⚠️ JSON 的 `true` / `false` 在 Darwin 上也是 NSNumber（`__NSCFBoolean`，
+            // objCType 是 "c"）。不区分的话有两个方向的错：把 `IsPartOfWord: 1` 当成
+            // 数字（逐词断句全错），或者把 `StartTime: 1` 这种整数值当成布尔
+            // （`doubleValue` 拿到 nil，那一行就丢了时间轴）。用 objCType 分开。
+            let objcType = String(cString: value.objCType)
+            if objcType == "c" || objcType == "B" {
+                return .bool(value.boolValue)
+            }
+            return .number(value.doubleValue)
+        default:
+            return .null
+        }
+    }
+}

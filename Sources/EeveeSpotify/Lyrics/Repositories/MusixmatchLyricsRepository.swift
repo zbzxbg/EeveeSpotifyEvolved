@@ -73,12 +73,40 @@ class MusixmatchLyricsRepository: LyricsRepository {
 
     //
 
+    /// 没有 `usertoken` 时换一个**匿名令牌**填上。
+    ///
+    /// 只填一次（填完就进 `UserDefaults.musixmatchToken`），失败**不抛** —— 这次请求照旧发出去，
+    /// 401 由 `getMacroCalls` 那边统一处理（弹窗/清令牌都在那里）。这样"没令牌"和"令牌过期"
+    /// 两条路只有一处决定成败。
+    ///
+    /// ⚠️ 这条路是同步阻塞的（最多 15s，见 `AnonymousTokenHelper.fetchTokenBlocking`）：
+    /// 它跑在歌词取词那条已经阻塞的队列上，不会卡住主线程。
+    private func ensureTokenIfNeeded() {
+        guard UserDefaults.musixmatchToken.isEmpty else { return }
+        // 自动这条路给 6s：外层对 Musixmatch 只有 5s 预算（`CustomLyrics` 的 requestTimeout），
+        // 换到的令牌会落进 UserDefaults —— 就算这一次被外层判超时，下一首也直接有令牌了。
+        guard let token = AnonymousTokenHelper.fetchTokenBlocking(totalBudget: 6) else {
+            writeDebugLog("[Musixmatch] no token, and the anonymous request failed — sending without one")
+            return
+        }
+        UserDefaults.musixmatchToken = token
+        UserDefaults.musixmatchTokenIsAnonymous = true
+        writeDebugLog("[Musixmatch] stored an anonymous token (len=\(token.count))")
+    }
+
     private func perform(
         _ path: String,
         query: [String: Any] = [:]
     ) throws -> Data {
         var stringUrl = "\(apiUrl)\(path)"
         var finalQuery = query
+
+        // ★ 2026-10-13：没有令牌时**自动换一个匿名令牌**再发请求。
+        //
+        // 为什么必须放在这里（而不是只在设置页留一颗按钮）："没填 SpicyLyrics 密钥 → 改用
+        // Musixmatch"是**自动**发生的，用户根本没去过设置页；如果 mxm 这边也因为没有令牌直接
+        // 失败，这条回退对他就是一句空话。见 `AnonymousTokenHelper` 文件头。
+        ensureTokenIfNeeded()
 
         let userToken = UserDefaults.musixmatchToken
         let appId = UIDevice.current.musixmatchAppId
@@ -186,6 +214,21 @@ class MusixmatchLyricsRepository: LyricsRepository {
 
         if statusCode == 401 {
             writeDebugLog("[Musixmatch] 401 — invalid token")
+            // 匿名令牌会过期：是它就把缓存丢掉，**下一次请求会自动换一个新的**。
+            // 用户自己填的令牌 401 了**不能替他清** —— 那是他自己要改的东西，我们只记一行。
+            if UserDefaults.musixmatchTokenIsAnonymous {
+                writeDebugLog(
+                    "[Musixmatch] dropping the expired anonymous token"
+                        + " — the next request will fetch a new one"
+                )
+                UserDefaults.musixmatchToken = ""
+                UserDefaults.musixmatchTokenIsAnonymous = false
+            } else {
+                writeDebugLog(
+                    "[Musixmatch] the token was user-provided — not clearing it"
+                        + " (the user has to replace it in Settings)"
+                )
+            }
             throw LyricsError.invalidMusixmatchToken
         }
 

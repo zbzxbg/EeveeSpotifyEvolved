@@ -8,6 +8,8 @@ struct ModernLyricsGroup: HookGroup { }
 var lyricsState = LyricsLoadingState()
 var hasShownRestrictedPopUp = false
 var hasShownUnauthorizedPopUp = false
+/// 「SpicyLyrics 的 key 被拒」弹窗只弹一次。见 `handleLyricsErrorPopUp`。
+var hasShownSpicyKeyPopUp = false
 
 private let geniusLyricsRepository = GeniusLyricsRepository()
 private let petitLyricsRepository = PetitLyricsRepository()
@@ -85,6 +87,20 @@ private func handleLyricsErrorPopUp(_ error: LyricsError?) {
         } else {
             writeDebugLog("[Lyrics] popup: Musixmatch restricted (already shown once — suppressed)")
         }
+    case .invalidSpicyKey:
+        // key 被 SL 拒了（401 key_not_found / 403 origin_not_allowed）。这是"配置问题"，
+        // 不是"这首歌没词" —— 必须让用户看见一次，否则他只会以为 SL 源没词可用。
+        if !hasShownSpicyKeyPopUp {
+            writeDebugLog("[Lyrics] popup: SpicyLyrics key rejected (first time — showing)")
+            PopUpHelper.showPopUp(
+                delayed: false,
+                message: "spicylyrics_key_invalid_popup".localized,
+                buttonText: "OK".uiKitLocalized
+            )
+            hasShownSpicyKeyPopUp = true
+        } else {
+            writeDebugLog("[Lyrics] popup: SpicyLyrics key rejected (already shown once — suppressed)")
+        }
     default:
         break
     }
@@ -148,6 +164,29 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     lastRequestedLyricsSourceDescription = ""
 
     var source = UserDefaults.lyricsSource
+
+    // ★ 2026-10-13（用户拍板）：**不再内置 Spicy Lyrics 的默认密钥**。用户没填自己的客户端
+    //   密钥时，这一首改用 **Musixmatch** —— 而不是去走 SpicyLyrics 那条内部接口
+    //   `POST /query`：那条路的响应外壳写着只授权官方客户端与其公开 fork，第三方应用用它
+    //   属于条款 §5 的"绕过 key 体系"，而且每首歌都要先抓 Spotify 的 access token。
+    //
+    //   为什么兜底给 Musixmatch：它本来就在多级回退链的第一位
+    //   （`[.musixmatch, .petit, .lrclib, .genius]`），方向与"用户自己选的源失败时"一致。
+    //
+    //   ⚠️ 两个连带后果都必须在代码里处理，否则观感是"设置没生效"：
+    //     ① 屏幕上显示的提供者会变成 Musixmatch —— 这是**对的**，词确实是它给的；
+    //     ② Musixmatch 自己也要令牌，它抛的 `invalidMusixmatchToken` **不许**弹
+    //        "请检查 Musixmatch 令牌"那个窗（用户没选过它），由 `spicyLyricsKeyMissingFallback` 挡。
+    spicyLyricsKeyMissingFallback = false
+    if source == .spicy, !UserDefaults.hasSpicyLyricsApiKey {
+        writeDebugLog(
+            "[Lyrics] SpicyLyrics has no client key — using Musixmatch for this track"
+                + " (the key field is in Settings > Lyrics)"
+        )
+        source = .musixmatch
+        spicyLyricsKeyMissingFallback = true
+    }
+
     if source == .multiLevel {
 
         writeDebugLog("[Lyrics] Multi-level fallback enabled")
@@ -206,6 +245,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
                 return Lyrics.with {
                     $0.data = dto.toSpotifyLyricsData(
+                        // `providedBy` 现在优先用 dto 的 `providerCredit`（含 Spicy Lyrics 的
+                        // 社区贡献者）；这里传的源名只是两者都空时的兜底。
                         source: source.description,
                         useInstrumentalPlaceholder: source != .genius
                     )
@@ -400,7 +441,17 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             if recordFallbackError {
                 if let error = error as? LyricsError {
                     lyricsState.fallbackError = error
-                    handleLyricsErrorPopUp(error)
+                    // ⚠️ "没填 SpicyLyrics 密钥 → 自动改用 Musixmatch"那一档**不许**弹
+                    //    "Musixmatch 令牌无效，请检查你的令牌"：用户根本没选过 Musixmatch，
+                    //    弹了只会让他去改一个他没打算用的源。见 `spicyLyricsKeyMissingFallback`。
+                    if spicyLyricsKeyMissingFallback, error == .invalidMusixmatchToken {
+                        writeDebugLog(
+                            "[Lyrics] Musixmatch unauthorized popup suppressed — the source was"
+                                + " substituted because no SpicyLyrics key is set"
+                        )
+                    } else {
+                        handleLyricsErrorPopUp(error)
+                    }
                 } else {
                     lyricsState.fallbackError = .unknownError
                 }
@@ -663,7 +714,20 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         //   ② 注入 payload 的 `providedBy`（Spotify 原生那一行照它显示）。
         //   （用户 2026-10-11 的新想法是把它写进**歌手那一行的右边**，见
         //    `NowPlayingLyricsPlate.applyProviderToArtistLine`。）
-        dto.providerName = source.description
+        //
+        // ★ 2026-10-13：**仓库自己算好的署名不许被这里盖掉。**
+        //   SpicyLyrics 会在 dto 上写"Spicy Lyrics · 制作者 X · 上传者 Y"
+        //   （见 `SpicyLyricsRepository.providerCredit`）—— SL 的服务条款 §6 要求
+        //   provider + 社区同步的 uploader/maker 全部展示，且"歌词在哪、署名就在哪"。
+        //   以前这里无条件覆盖成 `source.description`，那一串永远显示不出来。
+        //   所以：dto 带了署名就用它的，空的才兜底成源名。
+        dto.providerName = dto.providerName.isEmpty ? source.description : dto.providerName
+
+        // ★ 2026-10-13：同样**不许盖掉**仓库给的完整署名（Spicy Lyrics 的社区贡献者）。
+        //   它只进注入 payload 的 `providedBy`（原生歌词页底部那一行），不贴歌手行。
+        if dto.providerCredit.isEmpty {
+            dto.providerCredit = dto.providerName
+        }
 
         // ★ 2026-10-11（用户）：「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，
         //   不是在原文的上面展示罗马字」。
@@ -699,6 +763,9 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         // ⚠️ 提供者要在**版本号自增之前**写好：观察者（两个 overlay 层）都是
         // 盯着版本号决定要不要重建的，版本一变它们就会立刻读 `currentLyricsProvider`。
         currentLyricsProvider = dto.providerName
+        // 可点署名用的两样：提供者站点 + 社区贡献者（SL 条款 §6 要链接）。
+        currentLyricsProviderURL = dto.providerURL
+        currentLyricsContributors = dto.providerContributors
         currentLyricsVersion += 1
         writeDebugLog("[Lyrics] provider: \(dto.providerName)")
 
@@ -742,6 +809,9 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         // 模型归属也要一起清：留着它会让"这份数据属于哪一首"永远指向上一首。
         currentLyricsDtoTrackId = ""
         currentLyricsProvider = ""
+        // 署名两样也要一起清：留着会让"这首歌没有我们的词"时页面上还挂着上一首的贡献者。
+        currentLyricsProviderURL = nil
+        currentLyricsContributors = []
         currentLyricsVersion += 1
         onMainThreadSync {
             WordByWordHost.shared.clearForUnavailableLyrics()
@@ -769,6 +839,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
         return Lyrics.with {
             $0.data = dto.toSpotifyLyricsData(
+                // 同上：`providedBy` 优先用 dto 的 `providerCredit`，源名只是兜底。
                 source: source.description,
                 useInstrumentalPlaceholder: source != .genius
             )

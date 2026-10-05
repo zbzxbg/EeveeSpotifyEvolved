@@ -94,6 +94,11 @@ struct AppleMusicLyricsPage: View {
     let showsTranslation: Bool
     /// 歌词提供者（形如 `"AMLL"`；★ 2026-10-11 起不带 `(EeveeSpotify)` 后缀）。为空则不显示页脚。
     let provider: String
+    /// **完整署名**（provider + Spicy Lyrics 社区同步的 uploader/maker）。
+    ///
+    /// ★ 2026-10-13：条款 §6 要求"歌词在哪署名就在哪"，所以页脚优先显示它；
+    /// 空（其它歌词源）时退回 `provider`。见 `currentLyricsCreditText()`。
+    let providerCredit: String
     /// 是否显示歌词提供者页脚。内嵌预览容器太小，不显示。
     let showsProviderFooter: Bool
     /// 主色（歌词文字与页脚共用）。
@@ -138,6 +143,7 @@ struct AppleMusicLyricsPage: View {
         showsBackgroundVocals: Bool = true,
         showsTranslation: Bool = false,
         provider: String = "",
+        providerCredit: String = "",
         showsProviderFooter: Bool = false,
         primaryColor: Color = .white,
         headerContent: AnyView? = nil,
@@ -162,6 +168,7 @@ struct AppleMusicLyricsPage: View {
         self.showsBackgroundVocals = showsBackgroundVocals
         self.showsTranslation = showsTranslation
         self.provider = provider
+        self.providerCredit = providerCredit
         self.showsProviderFooter = showsProviderFooter
         self.primaryColor = primaryColor
         self.headerContent = headerContent
@@ -339,7 +346,7 @@ struct AppleMusicLyricsPage: View {
                             //   1. 它不是"唱出来的内容"，不该有时间轴；
                             //   2. 一旦走焦点逻辑，非焦点行的 0.175 透明度 + 3.5pt 模糊
                             //      会把它糊得不可读。
-                            if showsProviderFooter, !provider.isEmpty {
+                            if showsProviderFooter, !displayedProviderCredit.isEmpty {
                                 providerFooter
                             }
                         }
@@ -611,6 +618,11 @@ struct AppleMusicLyricsPage: View {
 
     // MARK: 歌词提供者页脚
 
+    /// 页脚那一行到底显示什么：完整署名优先，退回源名。
+    private var displayedProviderCredit: String {
+        providerCredit.isEmpty ? provider : providerCredit
+    }
+
     /// 静态页脚，**完全不参与**卡拉OK / 焦点 / 模糊那套。
     ///
     /// 参数是刻意定的，别照搬歌词行的取值：
@@ -620,7 +632,9 @@ struct AppleMusicLyricsPage: View {
     ///   · 左对齐 —— 和歌词一致；居中的页脚会读成标题
     ///   · 上间距 24pt —— 和正文拉开，形成独立的"页脚区"
     private var providerFooter: some View {
-        Text("word_by_word_lyrics_provider".localizeWithFormat(provider))
+        // 有完整署名（含 Spicy Lyrics 社区同步的 uploader/maker）就显示它 —— 条款 §6 要的
+        // "歌词在哪署名就在哪"落在这一行；没有就退回源名。
+        Text("word_by_word_lyrics_provider".localizeWithFormat(displayedProviderCredit))
             .font(.system(size: 13))
             .foregroundStyle(primaryColor.opacity(0.35))
             .frame(maxWidth: .infinity, alignment: .leading)
