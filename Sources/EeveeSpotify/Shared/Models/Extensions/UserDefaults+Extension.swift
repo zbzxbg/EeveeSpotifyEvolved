@@ -615,13 +615,17 @@ extension UserDefaults {
     /// 「**隐藏「创建」标签**」—— 用户 2026-10-13 要的：
     /// 「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。即液态玻璃只显示主页，搜索，音乐库三个按键」。
     ///
-    /// **默认开**（就是他要的结果）。做法：把**整颗 arranged subview** 藏掉
-    /// （真机树：`CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，id `TabBar.Item.创建`）——
-    /// `UIStackView` 会把它的位置让给另外三颗 ⇒ 三颗平分整条栏，玻璃上就只有三颗；
-    /// 同时它**收不到点击**（隐藏视图不参与命中测试）⇒ "创建"这个入口真的没了。
+    /// **默认开**（就是他要的结果）。做法：**保住它在 `UIStackView` 里的槽位、只把内容藏起来**
+    /// （`alpha = 0` + 点不到；真机树里它是 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，
+    /// id `TabBar.Item.创建`）——
+    /// ① 因为它**收不到点击**（UIKit 命中测试跳过 alpha < 0.01 的视图），"创建"这个入口真的没了；
+    /// ② 而且**槽位还在** ⇒ 我们自己的几何与 UIKit 画的那块玻璃都照旧按四颗算，
+    ///    **宽度不随这颗开关变**（用户 2026-10-13 第二条要求："关掉创建之后玻璃宽度不变"；
+    ///    早先 `isHidden = true` 的写法会让另外三颗平分整条栏，玻璃从 360 缩到 274）。
     ///
     /// ⚠️ 判据是**类名**而不是文字：文字随语言变（`创建` / `Create`）。
-    /// ⚠️ 与 `tabBarHideLabels` 一样是**可撤销**的：关掉开关把它恢复成原来的 `isHidden`（见 `TabBarGlassPlate`）。
+    /// ⚠️ 与 `tabBarHideLabels` 一样是**可撤销**的：关掉开关把它恢复成原来的 `alpha` 与交互开关
+    /// （见 `TabBarGlassPlate.applyCreateTabVisibility`）。
     static var tabBarHideCreate: Bool {
         get {
             container.object(forKey: tabBarHideCreateKey) as? Bool ?? true

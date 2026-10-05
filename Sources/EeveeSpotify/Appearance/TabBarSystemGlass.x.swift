@@ -19,6 +19,8 @@ import ObjectiveC.runtime
 /// | 现场 | 根因 | 现在的做法 |
 /// |---|---|---|
 /// | **整条栏点不动**（"划不动"） | 我把**整颗 item 视图**按成 `alpha = 0`，而 UIKit 命中测试**跳过 alpha < 0.01 的视图** ⇒ 点击再也落不到 Spotify 那几颗上 | 只藏**图标与文字**这两个子视图，**item 视图本身的 alpha 一个字不动** ⇒ 看不见但照样收触摸 |
+/// | 「关掉创建之后玻璃变窄」（2026-10-13 用户） | 藏「创建」用的是 `isHidden`，`UIStackView` 把那格让给另外三颗 ⇒ UIKit 按 3 颗画玻璃（360→274），迷你条等宽跟随一起缩 | **保住槽位、只藏内容**（只对「创建」那一颗：`alpha = 0` + 点不到）⇒ 几何与宿主仍按"四格"算，**宽度不变**。⚠️ 上一行的教训只针对"**对每一颗都按透明**"，这里只动要它消失的那一颗 |
+/// | 「剩下三颗要**三等分**整块玻璃」（2026-10-13 用户，同一轮追加） | UIKit 对三颗默认 `.centered`：按内容居中、每颗 94 宽、间距 86，**宿主变宽也不拉伸**（日志 71 的 `274×60` 就是这么来的） | 系统栏**只放真正在用的那三颗** + `itemPositioning = .fill` ⇒ 沿宿主（= 按四格算出来的宽度）**等分**，三颗各占 1/3。选中态/转发按 `tag` 找格（`item(at:on:)`），不再按下标 |
 /// | **图标不见了** | 系统栏的 item 只拿到标题（`glyphImage` 没找到），而原图标又被藏了 ⇒ 那行只剩文字 | 先同步、后隐藏：**拿不到图标的那一颗，原图标就不藏**（安全网：绝不留下空行）；并把每颗的 `icon=Y/N` 打进日志 |
 /// | 「隐藏标签栏文字」**不生效** | 文字是**系统栏**画的，而我没读那颗开关 | `tabBarHideLabels` 开着时**不给系统栏标题**（原文字本来就被我们藏了） |
 ///
@@ -235,9 +237,14 @@ enum TabBarSystemGlass {
         //   ⚠️ **必须在下面取 `items` 之前** —— 顺序反了的话，第一拍会按四颗镜像一次。
         TabBarGlassPlate.applyCreateTabVisibility(in: bar)
 
-        // ★ 2026-10-13：**只镜像"看得见的"那几颗** —— 用户要求去掉第 4 颗「创建」之后
-        //   （`TabBarGlassPlate.applyCreateTabVisibility` 把整颗 item 藏了），
-        //   这里就是三颗。编号（`item.tag`）与这一份列表**一一对应**，转发/几何都跟着它走。
+        // ★ 2026-10-13：这里的**输入**是"占着槽位的那几颗"（`visibleItems` = **四格**）。
+        //   藏掉「创建」之后它**仍然占着第 4 格**（`applyCreateTabVisibility` 改成只把它按透明、
+        //   点不到，不再用 `isHidden`）—— 这是**几何**要的：宿主/玻璃的宽度按四格算，
+        //   才不随那颗开关变（日志 70/71 实测：四颗 360×60 → 三颗 274×60；而迷你条按
+        //   `capsuleWidthRatio` 等宽跟随 ⇒ 一起缩，用户报的就是这个）。
+        //   ⚠️ 但**系统栏只放真正在用的那几颗**（`syncItems` 跳过被藏的那一格）+
+        //   `itemPositioning = .fill` ⇒ 三颗把整块玻璃**三等分**（用户第二条要求的下半句）。
+        //   `item.tag` 是"占位列表"里的下标，转发与选中态都按它对齐（见 `item(at:on:)`）。
         let items = TabBarGlassPlate.visibleItems(in: stack)
         guard !items.isEmpty else { return }
 
@@ -414,6 +421,13 @@ enum TabBarSystemGlass {
         systemBar.backgroundImage = UIImage()
         systemBar.shadowImage = UIImage()
         systemBar.isTranslucent = true
+        // ★ 2026-10-13（用户第二条要求的下半句）：**剩下的三颗要三等分整块玻璃**。
+        //   UIKit 对"三颗"默认是 `.centered`：按内容居中、每颗 94 宽、间距 86，
+        //   **不随宿主变宽而拉伸** —— 日志 71 那条 `274×60` 就是这么来的（宿主给到 332 也没用）。
+        //   改成 `.fill`：item 沿整条栏**等分**排布 ⇒ 三颗各占 1/3；
+        //   而玻璃的**宽度**由宿主决定（宿主 = 我们按"四个槽位"算出来的几何，
+        //   因为「创建」那一格只是被藏了内容、槽位还在）⇒ "宽度不变 + 三等分"同时成立。
+        systemBar.itemPositioning = .fill
 
         let relay = TabBarSystemGlassRelay()
         systemBar.delegate = relay
@@ -513,18 +527,18 @@ enum TabBarSystemGlass {
             return .containerControllers(count: controllers.count)
         }
         guard let stack else { return nil }
-        // ⚠️ 只探**看得见的那几颗**：藏起来的「创建」即使读得出转发路也不算数
-        //    （它的下标在镜像列表里不存在 ⇒ 接管了触摸也转发不出去 = 白丢一下）。
+        // ⚠️ 只探**转得出去的**那几颗：被我们藏掉的「创建」即使读得出转发路也不算数
+        //    （它在系统栏那边是 `isEnabled = false`，永远选不到 ⇒ 拿它当判据等于白丢一下）。
         let items = TabBarGlassPlate.visibleItems(in: stack)
-        for (index, item) in items.enumerated() {
+        for (index, item) in items.enumerated() where !TabBarGlassPlate.isMutedTabItem(item) {
             if let recognizer = firstFireableTapRecognizer(in: item, index: index) { return recognizer }
         }
-        for (index, item) in items.enumerated() {
+        for (index, item) in items.enumerated() where !TabBarGlassPlate.isMutedTabItem(item) {
             if let holder = handleTapHolder(in: item) {
                 return .handleTap(index: index, holder: holder.via)
             }
         }
-        for (index, item) in items.enumerated() {
+        for (index, item) in items.enumerated() where !TabBarGlassPlate.isMutedTabItem(item) {
             if let control = subtree(of: item, maxDepth: 6).first(where: { $0 is UIControl }) {
                 return .control(index: index, name: shortName(NSStringFromClass(type(of: control))))
             }
@@ -648,6 +662,8 @@ enum TabBarSystemGlass {
         // ★ 迷你播放条那条要跟**UIKit 真画出来的玻璃**等宽（原来跟的是"我们算出来的胶囊"）——
         //   日志 71 现场：我们算 332、UIKit 真画 274 ⇒ 迷你条 333 与标签栏玻璃对不上，
         //   而且这个数**随颗数变**（三颗更窄）。这里每拍按真画的那块刷新，双条重新等宽。
+        //   ⚠️ 2026-10-13 第二条要求之后：**颗数不再随「创建」开关变**（那一颗保住槽位）⇒
+        //      这个量也不再因为那颗开关而跳（用户报的"迷你条跟着变小"就是这里跟着跳）。
         //   ⚠️ 只读它、**不喂回宿主 frame** ⇒ 不会形成"量一次变一次"的漂移（那正是 v4.6 的教训）。
         //   ⚠️ 这两个量声明在 `TabBarGlassPlate` 里（迷你条读的那一份），**必须带类型名前缀**。
         if let drawn, bar.bounds.width > 1 {
@@ -711,11 +727,18 @@ enum TabBarSystemGlass {
         wanted.reserveCapacity(items.count)
 
         for (index, item) in items.enumerated() {
-            let title = hidesLabels ? nil : labelText(of: item)
-            let image = glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
-            wanted.append(UITabBarItem(title: title, image: image, tag: index))
+            // ★ 被我们"保住槽位、只藏内容"的那一颗（「创建」）：**系统栏不给它 item**。
+            //   它的槽位留在 **Spotify 那条栏**里（撑住我们的几何 ⇒ 宿主/玻璃的宽度不变），
+            //   而系统栏只放**真正在用的那几颗** —— 配合 `itemPositioning = .fill`，
+            //   它们会把整块玻璃**三等分**（用户 2026-10-13 第二条要求）。
+            let muted = TabBarGlassPlate.isMutedTabItem(item)
+            let title = (hidesLabels || muted) ? nil : labelText(of: item)
+            let image = muted ? nil : glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
+            // ⚠️ `icons` / `titles` **每一格都要有**：`hideStockContent` 是按位置跟 `items` 对齐的。
             icons.append(image != nil)
             titles.append(title)
+            guard !muted else { continue }
+            wanted.append(UITabBarItem(title: title, image: image, tag: index))
         }
 
         let mirror = Mirror(icons: icons, titles: titles)
@@ -728,11 +751,26 @@ enum TabBarSystemGlass {
         systemBar.items = wanted
         lastSelectionIndex = -1
         writeDebugLog(
-            "[\(logTag)] items synced — \(wanted.count) item(s); titles \(titles.map { $0 ?? "-" })"
+            "[\(logTag)] items synced — \(wanted.count) item(s) over \(items.count) slot(s)"
+                + (wanted.count < items.count
+                    ? " (the muted Create slot keeps the row at full width; the system bar just"
+                        + " does not get an item for it, so the other tabs split it evenly)"
+                    : "")
+                + "; titles \(titles.map { $0 ?? "-" })"
                 + "; icons \(icons.map { $0 ? "Y" : "N" })"
                 + (hidesLabels ? " (the hide-labels switch is on, so no titles)" : "")
         )
         return mirror
+    }
+
+    /// 按 `tag` 找系统栏上对应的那一格。
+    ///
+    /// ⚠️ **不要用 `items[index]` 直接下标**：被我们藏掉的那一格（「创建」）**不在系统栏的
+    /// item 列表里**（它只留在 Spotify 那条栏里撑着几何 ⇒ 两边下标不再一一对应）。
+    /// `tag` 才是"占着槽位的那几颗"里的下标 —— `forwardSelection` 用的也是同一套。
+    private static func item(at index: Int, on systemBar: UITabBar) -> UITabBarItem? {
+        guard index >= 0 else { return nil }
+        return systemBar.items?.first { $0.tag == index }
     }
 
     // MARK: - ★★ 第二片 ②：把系统栏上的选择**转发**成 Spotify 那一颗的点击
@@ -752,6 +790,12 @@ enum TabBarSystemGlass {
         let index = item.tag
         guard index >= 0, index < items.count else {
             writeDebugLog("[\(logTag)] ⚠️ picked item tag \(index) is out of range (\(items.count) item(s))")
+            return
+        }
+        // ★ 被我们藏掉的那一格（「创建」）**不该被转发**：它现在压根不在系统栏的 item 列表里
+        //   （`syncItems` 跳过它）⇒ 正常永远选不到；这里再兜一道，将来若把它加回来也不会误转发。
+        guard !TabBarGlassPlate.isMutedTabItem(items[index]) else {
+            writeDebugLog("[\(logTag)] picked the muted tab #\(index) — nothing to forward to")
             return
         }
 
@@ -936,9 +980,9 @@ enum TabBarSystemGlass {
         guard isEnabled else { return }
         guard let bar = lastBar,
               let systemBar = objc_getAssociatedObject(bar, &systemBarKey) as? UITabBar,
-              let items = systemBar.items, index >= 0, index < items.count else { return }
+              let target = item(at: index, on: systemBar) else { return }
         lastSelectionIndex = index
-        if systemBar.selectedItem !== items[index] { systemBar.selectedItem = items[index] }
+        if systemBar.selectedItem !== target { systemBar.selectedItem = target }
         mirroredSelections += 1
         guard mirroredSelections <= 3 else { return }
         writeDebugLog("[\(logTag)] bubble mirrored straight away — #\(index) (\(reason); no waiting for the 0.5s tick)")
@@ -1373,15 +1417,16 @@ enum TabBarSystemGlass {
     /// ⇒ 无障碍那条判据在 9.1.88 上**根本不成立**，只有亮度是真的。
     /// 判据只有一处（这里），而且**用了哪条会打进日志**，下一份日志能核对。
     private static func syncSelection(on systemBar: UITabBar, items: [UIView]) {
+        // ⚠️ 按 `tag` 找（被藏掉的那一格不在系统栏的 item 列表里 —— 见 `item(at:on:)`）。
         guard let picked = selectedIndex(items: items),
-              picked.index < (systemBar.items?.count ?? 0) else { return }
+              let target = item(at: picked.index, on: systemBar) else { return }
         if lastSelectionSignal != picked.signal {
             lastSelectionSignal = picked.signal
             writeDebugLog("[\(logTag)] selection signal in use: \(picked.signal)")
         }
         guard picked.index != lastSelectionIndex else { return }
         lastSelectionIndex = picked.index
-        systemBar.selectedItem = systemBar.items?[picked.index]
+        systemBar.selectedItem = target
         writeDebugLog("[\(logTag)] selection → #\(picked.index)")
     }
 

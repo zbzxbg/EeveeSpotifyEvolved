@@ -9,12 +9,13 @@ import ObjectiveC.runtime
 ///
 /// 这个文件现在只剩三件事，**两条玻璃路之外的东西都别再往这里放**：
 ///
-///   ① **几何判据（唯一一处）**：`findTabsStack` 找到四颗（或三颗）那一行，
+///   ① **几何判据（唯一一处）**：`findTabsStack` 找到那一行（**四个槽位**；「创建」被藏掉时
+///      它仍然占着第 4 个槽 —— 见 `applyCreateTabVisibility` 与 `visibleItems`），
 ///      `targetCapsuleRect` 算出"胶囊该在哪、多大"，`capsuleRect` 顺手把宽度报给
 ///      `MiniBarGlass`（两条胶囊等宽，用户 2026-10-02 拍的板）；
 ///      ⇒ **`TabBarSystemGlass` 摆它那条系统栏的宿主就用这一份**（第二片起就是如此）。
-///   ② **标签内容的取舍**：`applyLabelVisibility`（藏文字）+ `applyCreateTabVisibility`（藏「创建」）
-///      + `visibleItems`（"看得见的那几颗"，所有按颗数算的地方都走它）。
+///   ② **标签内容的取舍**：`applyLabelVisibility`（藏文字）+ `applyCreateTabVisibility`（藏「创建」：
+///      **保住槽位、只藏内容**）+ `visibleItems`（"占着槽位的那几颗"，所有按颗数算的地方都走它）。
 ///   ③ **钩子**：`TabBarPlateHook.layoutSubviews`（栏自己每次布局）把这些按顺序跑一遍。
 ///
 /// 删掉的是**画**的那一半：`apply` / `removePlate` / `layering` / `makeGlassView` /
@@ -202,8 +203,9 @@ enum TabBarGlassPlate {
     /// 原来（v4.2）是"四颗离得太开"的修法：外两颗各向内 ~31pt；**真的去收四颗的
     /// `tightenRow` 已随自绘胶囊一起删除**（2026-10-13）—— 现在这个数只参与
     /// `tightenOffsets` → `measure`，也就是"**胶囊按收紧后的版式算多宽**"（见文件头）。
-    /// **只在"看得见的颗数"是 2–4 这个已知形状上生效**（2026-10-13 起按 `visibleItems` 数：
-    /// 藏掉「创建」之后是三颗，见 `applyCreateTabVisibility`）。
+    /// **只在"占着槽位的颗数"是 2–4 这个已知形状上生效**（按 `visibleItems` 数）。
+    /// ⚠️ 2026-10-13 第二条要求之后，藏掉「创建」**不再改变这个数**（四个槽位仍然是四个：
+    /// 它保住槽位、只把内容藏掉）—— 这正是"玻璃宽度不变"的来源。
     private static let tightenFactor: CGFloat = 0.20
 
     /// 允许胶囊最多越出栏顶多少（v4.6 起基本用不到：有文字版式算出来是 `y = -3`）。
@@ -277,8 +279,9 @@ enum TabBarGlassPlate {
     /// 这一轮不收紧（量出来的就是没收紧的布局），`apply` 那边的有界重试会把我们叫回来。
     /// 形状不是"四颗"时同样不动（宁可不动，也别乱动）。
     ///
-    /// ★ 2026-10-13：**按"看得见的颗数"算**（`visibleItems`）—— 藏掉「创建」之后
-    /// 实际是三颗平分整条栏，仍按 4 算的话收紧量会整体错位。
+    /// ★ 2026-10-13：按 `visibleItems` 数算（**占着槽位的那几颗**）。藏掉「创建」之后它
+    /// 仍然占着第 4 格 ⇒ 这里照旧按 4 算，收紧量与"创建还在"时**一模一样**
+    /// （用户第二条要求："关掉创建之后玻璃宽度不变"）。
     @MainActor
     private static func tightenOffsets(in bar: UIView, stack: UIView?) -> [CGFloat] {
         guard let stack, stack.bounds.width > 100 else { return [] }
@@ -336,7 +339,8 @@ enum TabBarGlassPlate {
         var iconRects: [CGRect] = []
         var labelRects: [CGRect] = []
 
-        // ★ 2026-10-13：只量**看得见的**那几颗（藏掉「创建」之后是三颗，见 `visibleItems`）。
+        // ★ 2026-10-13：量**占着槽位的那几颗**（藏掉的「创建」仍然占着第 4 格 ⇒ 四颗，
+        //   宽度因此不随那颗开关变 —— 见 `visibleItems` 与 `applyCreateTabVisibility`）。
         for (index, item) in visibleItems(in: stack).enumerated() {
             let size = item.bounds.size
             // ⚠️ **有一颗还没排（size 0）就整条都不量**：宁可退回老量法（`contentBand`）
@@ -529,11 +533,15 @@ enum TabBarGlassPlate {
 
     // MARK: - ★ 「创建」那一颗（用户 2026-10-13：不要这个功能了）
 
-    /// 我们藏过的 item 的**原** `isHidden`（按对象记：关掉开关要精确还原）。
-    ///
+    /// 我们藏「创建」时动过的两个值（按对象记：关掉开关要**精确还原**）。
+    struct MutedTabState {
+        var alpha: CGFloat
+        var interaction: Bool
+    }
+
     /// ⚠️ 与 `DeclutterChrome` 里那份"被我们藏过的视图"同一个教训：**每个视图记它自己的原值**，
-    ///    不能一律写 `false`（`ObjectIdentifier` 是地址、可能被复用 ⇒ 只在我们自己写入/还原时读它）。
-    private static var hiddenTabItemStates: [ObjectIdentifier: Bool] = [:]
+    ///    不能一律写某个固定值（`ObjectIdentifier` 是地址、可能被复用 ⇒ 只在我们自己写入/还原时读它）。
+    private static var mutedTabItemStates: [ObjectIdentifier: MutedTabState] = [:]
     private static var didReportCreateTab = false
     /// 藏过之后**又被显示回来**的次数（Spotify 的 binder 有可能这么干 —— 与标签文字那条同一个现象）。
     /// 它只是"我们是不是在和别人抢"的证据：**照样每拍再藏一次**（用户要的就是它不在），但会报一行。
@@ -547,10 +555,22 @@ enum TabBarGlassPlate {
     /// 用户原话（2026-10-13）：「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。
     /// 即液态玻璃只显示主页，搜索，音乐库三个按键」。
     ///
-    /// ── 为什么藏**整颗 arranged subview**，而不是只藏它的图标与文字 ──────────────
-    /// 只藏内容的话，那个位置仍然占着宽度、也仍然**收得到点击**（点下去照样弹创建菜单）
-    /// ⇒ "不要这个功能了"没做到。藏整颗之后 `UIStackView` 会把它的位置让出来：
-    /// 剩下三颗平分整条栏，玻璃上就是三颗，而且那一块**不再参与命中测试**。
+    /// ── ★ 2026-10-13（第二条要求）：**「关掉创建之后，液态玻璃的宽度不变」** ──────────
+    /// 原来藏的是**整颗 arranged subview**（`isHidden = true`）：`UIStackView` 会把它的位置
+    /// **让给另外三颗** ⇒ 两条宽度一起缩：
+    ///   · UIKit 画的那块玻璃按 **3 颗**算 —— 日志 70/71 实测 **360×60 → 274×60**；
+    ///   · 我们自己的几何（`tightenOffsets` / `measure` 都走 `visibleItems`）也跟着按 3 颗量，
+    ///     而上面那条迷你播放条按 `capsuleWidthRatio` **等宽跟随** ⇒ 一起缩（用户报的就是这个）。
+    ///
+    /// 现在改成**保住槽位、只把那颗藏起来**：
+    ///   · `alpha = 0` —— 看不见（UIKit 的命中测试本来就跳过 alpha < 0.01 的视图 ⇒ 也点不到）；
+    ///   · `isUserInteractionEnabled = false` —— 显式写死，不依赖上面那条副作用。
+    /// 于是第 4 个槽**仍然在**：`UIStackView` 照旧排四格、几何照旧按四颗量、系统栏照旧镜像四格
+    /// （第四格无图无字、`isEnabled = false`）⇒ **两条胶囊的宽度与"创建还在"时一模一样**。
+    ///
+    /// ⚠️ 别再对**整条栏的每一颗**用这一招：文件头那张事故表里的"整条栏点不动"就是
+    /// `alpha = 0` 按在 item 视图上、UIKit 跳过命中测试造成的。**只对要它消失的那一颗用**，
+    /// 另外三颗的 `alpha` 一个字都不动。
     ///
     /// ── 判据为什么是类名 ────────────────────────────────────────────────────
     /// 真机树（日志 70）：第 4 颗是 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，
@@ -568,23 +588,31 @@ enum TabBarGlassPlate {
         for item in stack.subviews where isCreateTab(item) {
             let identifier = ObjectIdentifier(item)
             if shouldHide {
-                guard !item.isHidden else { continue }
-                if hiddenTabItemStates[identifier] == nil {
-                    hiddenTabItemStates[identifier] = item.isHidden
-                } else {
+                if mutedTabItemStates[identifier] == nil {
+                    mutedTabItemStates[identifier] = MutedTabState(
+                        alpha: item.alpha,
+                        interaction: item.isUserInteractionEnabled
+                    )
+                } else if item.alpha > 0.01 {
                     createTabWriteBacks += 1          // 我们藏过，它又被显示回来了
                 }
-                item.isHidden = true
+                // ★ 保住槽位：**不用 `isHidden`**（那会让 stack 把第 4 格让出去 ⇒ 玻璃变窄）。
+                if item.alpha > 0.01 { item.alpha = 0 }
+                if item.isUserInteractionEnabled { item.isUserInteractionEnabled = false }
                 guard !didReportCreateTab else { continue }
                 didReportCreateTab = true
                 writeDebugLog(
                     "[TabBarPlate] hid the Create tab (\(className(item)))"
-                        + " — the bar keeps three items: Home, Search, Your Library"
+                        + " — its slot stays so the glass keeps its width,"
+                        + " but that tab is invisible and cannot be tapped"
                 )
-            } else if let original = hiddenTabItemStates[identifier] {
-                // 只还原**我们自己藏过的**那一颗（没记过的不碰 —— 宁可保持原生）。
-                hiddenTabItemStates.removeValue(forKey: identifier)
-                if item.isHidden != original { item.isHidden = original }
+            } else if let original = mutedTabItemStates[identifier] {
+                // 只还原**我们自己动过的**那一颗（没记过的不碰 —— 宁可保持原生）。
+                mutedTabItemStates.removeValue(forKey: identifier)
+                if item.alpha != original.alpha { item.alpha = original.alpha }
+                if item.isUserInteractionEnabled != original.interaction {
+                    item.isUserInteractionEnabled = original.interaction
+                }
                 writeDebugLog("[TabBarPlate] the Create tab is back (\(className(item)))")
             }
         }
@@ -594,6 +622,14 @@ enum TabBarGlassPlate {
         writeDebugLog(
             "[TabBarPlate] the Create tab was shown again \(createTabWriteBacks) time(s) — hiding it again on every pass"
         )
+    }
+
+    /// 这一颗是不是**被我们"保住槽位、只藏内容"的那一颗**（「创建」）。
+    /// 系统玻璃那边据此给它一个**空 item**（无图无字、点不动）——槽位照旧占着，玻璃的宽度才不变。
+    /// 见 `applyCreateTabVisibility`。
+    @MainActor
+    static func isMutedTabItem(_ item: UIView) -> Bool {
+        item.alpha < 0.01
     }
 
     /// 设置页拨开关时当场落地（栏不在了就等下一拍 —— 那条栏每次布局都会再走一遍）。
@@ -622,12 +658,18 @@ enum TabBarGlassPlate {
         return found
     }
 
-    /// 标签栏上**真正在用的那几颗**（`isHidden` 的不算）。
+    /// 标签栏上**占着槽位的那几颗**（`isHidden` 的不算）。
     ///
-    /// 为什么需要它：藏掉「创建」之后，它**仍然在 `stack.subviews` 里**
-    /// （隐藏的 arranged subview 不会被移除）⇒ 凡是"按 subviews 数几何 / 编号"的地方
-    /// 都必须走这里，否则三颗的布局会被当成四颗算（胶囊会偏、会宽）。
-    /// 两条路共用这一处判据：系统玻璃镜像几颗、自绘胶囊量几颗，都以它为准。
+    /// ★ 2026-10-13（用户第二条要求："**关掉「创建」之后玻璃宽度不变**"）：藏「创建」的做法
+    /// 从 `isHidden = true` 改成**保住槽位、只把内容藏掉**（`alpha = 0` + 点不到，见
+    /// `applyCreateTabVisibility`）⇒ 它**仍然算在这里面**（四颗）：
+    ///   · 我们自己的几何按四颗量（`tightenOffsets` / `measure`）；
+    ///   · 系统栏也照旧镜像四格（第四格空着、点不动）。
+    /// 两头都不再因为"少了一颗"而缩窄（日志 70/71 实测：四颗 `360×60` → 三颗 `274×60`）。
+    ///
+    /// 为什么需要它：`stack.subviews` 里可能有 Spotify 自己 `isHidden` 掉的颗
+    /// ⇒ 凡是"按颗数几何 / 编号"的地方都必须走这里。
+    /// 两条路共用这一处判据：系统玻璃镜像几格、几何量几颗，都以它为准。
     @MainActor
     static func visibleItems(in stack: UIView) -> [UIView] {
         stack.subviews.filter { !$0.isHidden }
