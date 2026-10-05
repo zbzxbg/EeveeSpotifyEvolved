@@ -363,7 +363,7 @@ extras_title = "扩展功能";
 extras_description = "功能思路来自 spoti.pw。";
 
 // ── 设置根页重排（2026-10-13）：四组的分组标题 + 每一行的副标题 ──
-// 原来的「扩展功能」页是个杂物袋（一行背后 19 个开关 + 8 个子页），已按页面拆开；
+// 原来的「扩展功能」页是个杂物袋（一行背后 24 个开关 + 8 个子页），已按页面拆开；
 // 每个东西搬去了哪，见 EeveeExtrasSettingsView.swift 那个墓碑注释。
 settings_group_playback = "播放与歌词";
 settings_group_appearance = "外观";

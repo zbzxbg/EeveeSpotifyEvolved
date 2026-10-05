@@ -85,6 +85,15 @@ struct EntityPageSettingsView: View {
         .onAppear { shadow = Shadow() }
     }
 
+    /// 本页「重置本页」的作用范围。
+    ///
+    /// ⚠️ `entityPageField` 是**本页的隐藏半边**，页面上**没有**它的开关（那颗「封面取色底」
+    /// 早已并进 `entityPageDissolve`，见上面那节注释；代码里两条路径仍各管各的，
+    /// 唯一的活读点在 `Appearance/EntityPageAppearance.x.swift`）。
+    ///
+    /// 2026-10-13 独立审计把这一条标成了"页面上没有对应开关"，**这里是有意保留的**：
+    /// 这两条键合起来才是这一页的"外观默认值" —— 只重置一半，用户会遇到
+    /// "重置过了但颜色底还是关着"的怪状态。若哪天想只重置看得见的三颗，删掉这一行即可。
     private static let ownedKeys = [
         "playlistSingleCover",
         "entityPageField",

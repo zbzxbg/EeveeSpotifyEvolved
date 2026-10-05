@@ -375,7 +375,7 @@ extras_title = "Extras";
 extras_description = "Features added on top of EeveeSpotify, kept together here so the settings root stays short. The ideas follow spoti.pw; the code is this project's own. Each one has its own page, except the switches above.";
 
 // ── Settings root re-layout (2026-10-13): four group headers + one subtitle per row ──
-// The old "Extras" page was a junk drawer (19 switches + 8 sub-pages behind one row).
+// The old "Extras" page was a junk drawer (24 switches + 8 sub-pages behind one row).
 // It was split by page; see EeveeExtrasSettingsView.swift's tombstone for the mapping.
 settings_group_playback = "Playback & lyrics";
 settings_group_appearance = "Appearance";
