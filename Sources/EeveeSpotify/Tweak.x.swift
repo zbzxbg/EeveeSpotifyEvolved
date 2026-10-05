@@ -289,8 +289,8 @@ func eeveeEnvFlag(_ name: String) -> Bool {
 // 只抓 `_TtC` 开头的 Swift 名，才误判成"不存在"）。
 
 struct EeveeSpotify: Tweak {
-    static let version = "6.6.8"
-    static let buildNumber = "2"
+    static let version = "1.0.0"
+    static let buildNumber = "109"
     static let repoSlug = GeneratedConfig.repoSlug
     
     static var hookTarget: VersionHookTarget {
