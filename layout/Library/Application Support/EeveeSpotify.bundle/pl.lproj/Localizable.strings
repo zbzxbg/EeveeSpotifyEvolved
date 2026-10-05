@@ -46,7 +46,11 @@ LRCLIB: Najbardziej otwarte źródło, oferuje zsynchronizowane teksty. Brakuje 
 
 Musixmatch: Używane przez Spotify, oferuje zsynchronizowane teksty dla wielu utworów. Wymaga tokenu użytkownika.";
 lyrics_additional_info = "Jeśli EeveeSpotify nie znajdzie utworu lub tekstu, pojawi się komunikat \"Nie udało się załadować tekstu\". Teksty z Genius mogą być błędne z powodu sposobu wyszukiwania utworów. W większości przypadków działa to poprawnie.";
-spicylyrics_description = "SpicyLyrics oferuje teksty karaoke słowo po słowie, korzystając z tokenu Spotify. Nie jest wymagana żadna dodatkowa konfiguracja.";
+// ⛔ `spicylyrics_description` 于 2026-10-13 **从这里删除**（不是改词）：
+//    这条波兰语正文写的是"用 Spotify 的 token 取词、不需要额外配置"，而 2026-10-13 起
+//    Spicy Lyrics 改成「用户自己填客户端密钥、官方 v1 接口、不再抓 Spotify token」——
+//    整句的事实全过期了。按本仓库的 l10n 政策（英文由 en.lproj 单点提供、缺键自动回落），
+//    与其留一句把人带偏的译文，不如删掉让它回落英文；将来要重译就照新的 en 那句来。
 petitlyrics_description = "PetitLyrics: Oferuje wiele zsynchronizowanych tekstów japońskich, ale niewiele międzynarodowych.";
 
 musixmatch_user_token = "Token użytkownika Musixmatch";

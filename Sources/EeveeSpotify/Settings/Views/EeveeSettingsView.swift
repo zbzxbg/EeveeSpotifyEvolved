@@ -1,6 +1,25 @@
 import SwiftUI
 import UIKit
 
+/// 设置根页。
+///
+/// ## 2026-10-13 重排（用户：「现在的设置页面的选项…有点乱了」，拍板方案 B）
+///
+/// 重排前：11 行平铺 + 一个「扩展」杂物袋 —— 根页只有 11 行，但「扩展」那一页里塞着
+/// **19 个开关 + 8 个子页入口**（627 行）⇒ 想找"备份/许可/更新"要进两层，
+/// 而"听歌页""标签栏"这种天天用的开关要滚到扩展页第 4、5 节。
+///
+/// 现在：
+///   · 根页分**四组**（播放与歌词 / 外观 / 进阶 / 维护），每一行都带**副标题**
+///     （`NavigationSectionView.subtitle`）—— 一眼能看出这一行进去有什么；
+///   · 那 8 个子页全部提到根页按语义归组，一步可达；
+///   · 「扩展」页里那 24 个开关按**页面**拆成四页：
+///     `NowPlayingSettingsView` / `TabBarAndMiniBarSettingsView` /
+///     `HomeAndLibrarySettingsView` / `EntityPageSettingsView`；
+///   · 四个新页各自带一颗「重置本页」（`SettingsResetSection`）。
+///
+/// ⚠️ 刻意**没有**跟上游那样加 logo 大标题：我们 bundle 里只有 `github.png`，
+/// 上游那个 `EeveeLogo.png` 不是本项目的素材（与 Spicy Lyrics 条款里"图片权利"是同一个坑）。
 struct EeveeSettingsView: View {
     let navigationController: UINavigationController
     static let spotifyAccentColor = Color(hex: "#1ed760")
@@ -31,6 +50,30 @@ struct EeveeSettingsView: View {
         )
         navigationController.pushViewController(viewController, animated: true)
     }
+
+    /// 根页的一行：彩色图标 + 标题 + **灰色副标题** + 右箭头，点开推一个自建页。
+    ///
+    /// 抽成一个函数是因为根页现在有 20 行 —— 每行再手写一遍
+    /// `Button { push… } label: { NavigationSectionView(…) }` 会看不出结构。
+    @ViewBuilder
+    private func settingsRow(
+        color: Color,
+        title: String,
+        subtitle: String,
+        imageSystemName: String,
+        destination: @escaping () -> AnyView
+    ) -> some View {
+        Button {
+            pushSettingsController(with: destination(), title: title.localized)
+        } label: {
+            NavigationSectionView(
+                color: color,
+                title: title.localized,
+                imageSystemName: imageSystemName,
+                subtitle: subtitle.localized
+            )
+        }
+    }
     
     init(navigationController: UINavigationController) {
         self.navigationController = navigationController
@@ -49,140 +92,175 @@ struct EeveeSettingsView: View {
                     }
                 )
             }
-            
-            //
-            
-            Button {
-                pushSettingsController(
-                    with: EeveePatchingSettingsView(),
-                    title: "patching".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: .orange,
-                    title: "patching".localized,
-                    imageSystemName: "hammer.fill"
-                )
-            }
-            
-            Button {
-                pushSettingsController(
-                    with: EeveeLyricsSettingsView(),
-                    title: "lyrics".localized
-                )
-            } label: {
-                NavigationSectionView(
+
+            // ── ① 播放与歌词 ──────────────────────────────────────────────────
+            Section(header: Text("settings_group_playback".localized)) {
+                settingsRow(
                     color: .blue,
-                    title: "lyrics".localized,
+                    title: "lyrics",
+                    subtitle: "settings_sub_lyrics",
                     imageSystemName: "quote.bubble.fill"
-                )
-            }
-            
-            Button {
-                pushSettingsController(
-                    with: EeveeUISettingsView(),
-                    title: "customization".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: Color(hex: "#64D2FF"),
-                    title: "customization".localized,
-                    imageSystemName: "paintpalette.fill"
-                )
-            }
-            
-            Button {
-                pushSettingsController(
-                    with: EeveeExperimentsSettingsView(),
-                    title: "experiments".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: .purple,
-                    title: "experiments".localized,
-                    imageSystemName: "sparkle"
-                )
-            }
+                ) { AnyView(EeveeLyricsSettingsView()) }
 
-            Button {
-                pushSettingsController(
-                    with: SponsorBlockSettingsView(),
-                    title: "sponsorblock".localized
-                )
-            } label: {
-                NavigationSectionView(
+                // 听歌页那一整页开关（原「扩展」页的 `now_playing_section` + 藏 chrome 三颗）。
+                settingsRow(
+                    color: Color(hex: "#0A84FF"),
+                    title: "now_playing_section",
+                    subtitle: "settings_sub_now_playing",
+                    imageSystemName: "music.note.list"
+                ) { AnyView(NowPlayingSettingsView()) }
+
+                settingsRow(
+                    color: .orange,
+                    title: "patching",
+                    subtitle: "settings_sub_patching",
+                    imageSystemName: "hammer.fill"
+                ) { AnyView(EeveePatchingSettingsView()) }
+
+                settingsRow(
                     color: .red,
-                    title: "sponsorblock".localized,
+                    title: "sponsorblock",
+                    subtitle: "settings_sub_sponsorblock",
                     imageSystemName: "forward.end.fill"
-                )
+                ) { AnyView(SponsorBlockSettingsView()) }
             }
 
-            Button {
-                pushSettingsController(
-                    with: EeveeAppIconPickerView(),
-                    title: "appIcon".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: .pink,
-                    title: "appIcon".localized,
-                    imageSystemName: "app.badge.fill"
-                )
-            }
-
-            Button {
-                pushSettingsController(
-                    with: EeveeMiscellaneousSettingsView(),
-                    title: "miscellaneous".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: .gray,
-                    title: "miscellaneous".localized,
-                    imageSystemName: "ellipsis.circle.fill"
-                )
-            }
-
-            // 后加的一批（深色栏 / 隐私 / 触感 / Flag 覆盖）集中一页：根页只多一行，
-            // 功能各进自己的页 —— spoti.pw 的根页就是这个结构（分类在根、功能在子页）。
-            Button {
-                pushSettingsController(
-                    with: EeveeExtrasSettingsView(navigationController: navigationController),
-                    title: "extras_title".localized
-                )
-            } label: {
-                NavigationSectionView(
+            // ── ② 外观 ────────────────────────────────────────────────────────
+            Section(header: Text("settings_group_appearance".localized)) {
+                settingsRow(
                     color: Color(hex: "#5E5CE6"),
-                    title: "extras_title".localized,
-                    imageSystemName: "sparkles"
-                )
+                    title: "tabs_and_mini_bar_title",
+                    subtitle: "settings_sub_tabs",
+                    imageSystemName: "rectangle.on.rectangle"
+                ) { AnyView(TabBarAndMiniBarSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#64D2FF"),
+                    title: "home_and_library_title",
+                    subtitle: "settings_sub_home_library",
+                    imageSystemName: "house.fill"
+                ) { AnyView(HomeAndLibrarySettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#AF52DE"),
+                    title: "entity_page_section",
+                    subtitle: "settings_sub_entity_page",
+                    imageSystemName: "square.stack.3d.up.fill"
+                ) { AnyView(EntityPageSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#64D2FF"),
+                    title: "customization",
+                    subtitle: "settings_sub_customization",
+                    imageSystemName: "paintpalette.fill"
+                ) { AnyView(EeveeUISettingsView()) }
+
+                settingsRow(
+                    color: .pink,
+                    title: "appIcon",
+                    subtitle: "settings_sub_app_icon",
+                    imageSystemName: "app.badge.fill"
+                ) { AnyView(EeveeAppIconPickerView()) }
             }
 
+            // ── ③ 进阶 ────────────────────────────────────────────────────────
+            Section(header: Text("settings_group_advanced".localized)) {
+                settingsRow(
+                    color: .purple,
+                    title: "experiments",
+                    subtitle: "settings_sub_experiments",
+                    imageSystemName: "sparkle"
+                ) { AnyView(EeveeExperimentsSettingsView()) }
+
+                // Flag 覆盖：注入远程开关。⚠️ 它需要 navigationController（页内还要推 flag 目录）。
+                settingsRow(
+                    color: Color(hex: "#5E5CE6"),
+                    title: "flag_override_title",
+                    subtitle: "settings_sub_flags",
+                    imageSystemName: "slider.horizontal.3"
+                ) {
+                    AnyView(EeveeFlagOverrideSettingsView(navigationController: navigationController))
+                }
+
+                settingsRow(
+                    color: Color(hex: "#FF6482"),
+                    title: "reduce_interventions_title",
+                    subtitle: "settings_sub_reduce",
+                    imageSystemName: "bell.slash.fill"
+                ) { AnyView(EeveeReduceInterventionsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#FF375F"),
+                    title: "haptics_title",
+                    subtitle: "settings_sub_haptics",
+                    imageSystemName: "waveform"
+                ) { AnyView(EeveeHapticsSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#FF9F0A"),
+                    title: "blocked_artists_title",
+                    subtitle: "settings_sub_blocked_artists",
+                    imageSystemName: "person.slash.fill"
+                ) { AnyView(EeveeBlockedArtistsSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#30B0C7"),
+                    title: "privacy_title",
+                    subtitle: "settings_sub_privacy",
+                    imageSystemName: "hand.raised.fill"
+                ) { AnyView(EeveePrivacySettingsView()) }
+
+                settingsRow(
+                    color: .gray,
+                    title: "miscellaneous",
+                    subtitle: "settings_sub_misc",
+                    imageSystemName: "ellipsis.circle.fill"
+                ) { AnyView(EeveeMiscellaneousSettingsView()) }
+            }
+
+            // ── ④ 维护 ────────────────────────────────────────────────────────
+            //
             // 「调试」页：只装**排查/验证型**开关（补时间轴 / 补卡片元素 / 强制歌词入口）。
             // 它们以前散在「歌词」页里，和用户真正的偏好混在一起 —— 见
             // `EeveeDebugSettingsViewModel` 的说明。l10n 沿用既有的 `debug_title`。
             //
             // ⚠️ 这**不是**下面那个「Debug」区（日志记录 / 导出 / 清空）的替代品，
             // 两者是并列的：这里是"排查开关"，那里是"日志工具"。
-            Button {
-                pushSettingsController(
-                    with: EeveeDebugSettingsView(),
-                    title: "debug_title".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: Color(hex: "#8E8E93"),
-                    title: "debug_title".localized,
-                    imageSystemName: "wrench.and.screwdriver.fill"
-                )
-            }
+            Section(header: Text("maintenance_section".localized)) {
+                settingsRow(
+                    color: Color(hex: "#64D2FF"),
+                    title: "backup_title",
+                    subtitle: "settings_sub_backup",
+                    imageSystemName: "externaldrive.badge.timemachine"
+                ) { AnyView(EeveeBackupSettingsView()) }
 
-            //
+                settingsRow(
+                    color: Color(hex: "#32ADE6"),
+                    title: "updates_title",
+                    subtitle: "settings_sub_updates",
+                    imageSystemName: "clock.arrow.circlepath"
+                ) { AnyView(EeveeUpdatesSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#8E8E93"),
+                    title: "licenses_title",
+                    subtitle: "settings_sub_licenses",
+                    imageSystemName: "doc.badge.ellipsis"
+                ) { AnyView(EeveeLicensesSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#8E8E93"),
+                    title: "debug_title",
+                    subtitle: "settings_sub_debug",
+                    imageSystemName: "wrench.and.screwdriver.fill"
+                ) { AnyView(EeveeDebugSettingsView()) }
+            }
 
             // （已移除：Reincarnated 的「开发者手记」入口 EeveeDevNoteView ——
             //   它从 SideloadLabs 仓库在线拉取 devnote.txt，内容是"只从官方
             //   Telegram 频道下载 IPA"的提醒，与本仓库无关）
 
+            // ── 日志工具（属于上面「维护」组的延伸，不单独成组）──────────────────
             Section(header: Text("debug_title".localized), footer: Text("enable_log_recording_description".localized)) {
                 Toggle(
                     "enable_log_recording".localized,
@@ -315,8 +393,8 @@ struct EeveeSettingsView: View {
                         // ★ 2026-10-11 修：这里原来是 `resetSubtitle` —— 那个键是
                         // **SponsorBlock「重置」ActionSheet 的 message**（en：「Each is independent.」
                         // / 中文「各项互不影响。」），于是**每一种语言的"完全重置"确认框都在说
-                        // "各项互不影响。"**（真机反馈 + 审计发现，`it` 里甚至因此出现了同一个键
-                        // 的两条不同意译）。
+                        // "各项互不影响。"**（真机反馈 + 审计发现，`it` 里甚至因此出现了同一个键的
+                        // 两条不同意译）。
                         // 改用 `resetFooter`：它就是这条 Section 下面那段**擦除说明**
                         // （"会强制重新登录…清除钥匙串/沙盒/应用组容器…"），各语言都已翻，语义正确。
                         message: "resetFooter".localized,
@@ -354,8 +432,7 @@ struct EeveeSettingsView: View {
         //   · `GroupedListStyle()`（我们原来用的）= **贴边、直角**的分组卡（照片 78 的样子）；
         //   · `InsetGroupedListStyle()` = 每一节左右各内缩 ≈20pt、四角是圆角的卡片，
         //     在 **iOS 26 上系统会把它画成很圆的"胶囊卡片"** —— 就是用户要的那个样子。
-        //   本仓库所有自建设置页统一用这一档（`InsetGroupedListStyle` 是 iOS 14+，
-        //   与我们的最低版本一致；仓库里原本就有 4 个页面在用）。
+        //   本仓库所有自建设置页统一用这一档。
         .listStyle(InsetGroupedListStyle())
         
         .animation(.default, value: isClearingData)

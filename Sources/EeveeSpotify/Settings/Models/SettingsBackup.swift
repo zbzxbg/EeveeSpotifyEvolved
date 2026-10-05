@@ -132,4 +132,26 @@ enum SettingsBackup {
 
         return removed
     }
+
+    /// 只重置**给定这几个键**（设置页页脚那颗「重置本页」，见 `SettingsResetSection`）。
+    ///
+    /// 与上面那颗全局重置同一套语义：**删键**而不是写某个"默认值" —— 键不在以后，
+    /// 各属性的 getter 自然回落到代码里的默认值（有些默认是 `true`，
+    /// 例如 `hideSingalongLine` / `tabBarHideCreate` / `entityPage*`，写死一个 `false`
+    /// 会把这几个开关重置成**错的方向**）。
+    ///
+    /// 仍然只认白名单：传进来的键若不在 `UserDefaults.ownedKeys` 里就跳过（防手滑写错键名，
+    /// 也防将来有人把 Spotify 的键传进来）。
+    @discardableResult
+    static func resetToStock(_ keys: [String], in defaults: UserDefaults = UserDefaults.container) -> Int {
+        let owned = Set(UserDefaults.ownedKeys)
+        var removed = 0
+
+        for key in keys where owned.contains(key) && defaults.object(forKey: key) != nil {
+            defaults.removeObject(forKey: key)
+            removed += 1
+        }
+
+        return removed
+    }
 }

@@ -34,7 +34,11 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     case .notReplaced:
         return "Spotify"
     case .spicy:
-        return "SpicyLyrics"
+        // ★ 2026-10-13（用户）：连写的那版 `SpicyLyrics` 全部改成官方写法 `Spicy Lyrics`。
+        //   这一串有三个去处：来源选择器的标签、署名兜底（`toSpotifyLyricsData` 的
+        //   `providedBy`）、以及日志。SL 的站点 / 条款 / attribution 文档一律写两词；
+        //   API 里的 `spicy_lyrics` 是**字段值**（标识符），不是展示名。
+        return "Spicy Lyrics"
     case .netease:
         return "NetEase"
     case .multiLevel:

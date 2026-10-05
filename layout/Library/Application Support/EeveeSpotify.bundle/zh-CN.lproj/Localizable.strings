@@ -34,15 +34,15 @@ lyrics_source = "歌词来源";
 lyrics_source_description = "Genius：歌词覆盖面最广，但歌词没有时间轴。\nLRCLIB：最开放的服务，提供带时间轴的歌词。但它缺少很多歌曲的歌词。\nMusixmatch：为很多歌曲提供带时间轴的歌词，但需要用户令牌才能使用。";
 lyrics_additional_info = "Genius，NetEase和PetitLyrics的搜索方式是模糊搜索，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
 petitlyrics_description = "PetitLyrics：提供日语歌词。";
-spicylyrics_description = "SpicyLyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
+spicylyrics_description = "Spicy Lyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
 spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
-spicylyrics_api_key_description = "本应用不内置密钥：只有在这里填入你自己的客户端密钥，才会使用 SpicyLyrics。留空则该源被跳过 —— 这一首改用 Musixmatch 取词。想拿密钥：打开 Spicy Lyrics 开发者面板，新建 application，开启 Client access，加一条 allowed origin 并同时打开「Allow requests with no Origin header」，然后按 Create client key，把生成的密钥粘贴到这里。";
+spicylyrics_api_key_description = "本应用不内置密钥：只有在这里填入你自己的客户端密钥，才会使用 Spicy Lyrics。留空则该源被跳过 —— 这一首改用 Musixmatch 取词。想拿密钥：打开 Spicy Lyrics 开发者面板，新建 application，开启 Client access，加一条 allowed origin 并同时打开「Allow requests with no Origin header」，然后按 Create client key，把生成的密钥粘贴到这里。";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
 spicylyrics_key_link = "Spicy Lyrics 开发者面板";
 spicylyrics_key_invalid = "Spicy Lyrics 密钥被拒绝";
 spicylyrics_key_missing = "未填写 Spicy Lyrics 密钥";
-spicylyrics_key_invalid_popup = "Spicy Lyrics 拒绝了这个 API 密钥（内置密钥可能已被吊销）。可以在「歌词」设置里填入自己的客户端密钥；留空则用回内置密钥。";
+spicylyrics_key_invalid_popup = "Spicy Lyrics 拒绝了这个 API 密钥。请到「设置 → 歌词」填入有效的客户端密钥 —— 本应用不内置密钥，没填之前会跳过该源、改用 Musixmatch 取词。";
 // Spicy Lyrics 的条款（§6）要求：歌词在屏幕上时，署名也得在屏幕上。下面三条进
 // `SpicyLyricsRepository.providerCredit()` 拼出来的那一串（provider + 社区贡献者）。
 lyrics_made_by = "制作者";
@@ -134,7 +134,7 @@ payment_notice = "EeveeSpotify 已应用补丁来解锁部分高级功能，免�
 ngzhwm_disable_lyrics_feature = "禁用歌词功能";
 ngzhwm_disable_lyrics_feature_description = "选项开启后会禁用有关于自定义歌词的所有功能。还会阻止Spotify返回其自带的歌词。";
 ngzhwm_word_by_word_lyrics = "开启逐词歌词";
-ngzhwm_word_by_word_lyrics_description = "Musixmatch，PetitLyrics，SpicyLyrics，NetEase，AMLL提供逐词歌词。";
+ngzhwm_word_by_word_lyrics_description = "Musixmatch，PetitLyrics，Spicy Lyrics，NetEase，AMLL提供逐词歌词。";
 ngzhwm_better_word_by_word_lyrics = "更好的逐词歌词";
 ngzhwm_better_word_by_word_lyrics_description = "像Apple Music那样，系统版本最低要求iOS26。";
 word_by_word_lyrics_provider = "逐词歌词提供者：%@";
@@ -361,6 +361,39 @@ amoled = "深色栏底色（仿 Apple Music）";
 
 extras_title = "扩展功能";
 extras_description = "功能思路来自 spoti.pw。";
+
+// ── 设置根页重排（2026-10-13）：四组的分组标题 + 每一行的副标题 ──
+// 原来的「扩展功能」页是个杂物袋（一行背后 19 个开关 + 8 个子页），已按页面拆开；
+// 每个东西搬去了哪，见 EeveeExtrasSettingsView.swift 那个墓碑注释。
+settings_group_playback = "播放与歌词";
+settings_group_appearance = "外观";
+settings_group_advanced = "进阶";
+tabs_and_mini_bar_title = "标签栏与迷你条";
+home_and_library_title = "首页与音乐库";
+settings_sub_lyrics = "来源、逐词、罗马化与译文";
+settings_sub_now_playing = "取色底、一屏布局、单行歌词、音量条";
+settings_sub_patching = "Premium 伪装与配置覆盖";
+settings_sub_sponsorblock = "跳过赞助片段";
+settings_sub_tabs = "玻璃、文字、创建键与迷你条";
+settings_sub_home_library = "大标题、灰纱与首页头部";
+settings_sub_entity_page = "单张封面、取色底、藏掉按键";
+settings_sub_customization = "其它界面细节";
+settings_sub_app_icon = "选择桌面图标";
+settings_sub_experiments = "尚未定性的功能";
+settings_sub_flags = "注入远程开关";
+settings_sub_reduce = "关掉 Spotify 自己的提示";
+settings_sub_haptics = "震动反馈";
+settings_sub_blocked_artists = "跳过来自黑名单艺人的曲目";
+settings_sub_privacy = "遥测拦截与上报";
+settings_sub_misc = "没有其它归属的零碎项";
+settings_sub_backup = "导出 / 导入设置";
+settings_sub_updates = "更新日志与版本检查";
+settings_sub_licenses = "开源许可与致谢";
+settings_sub_debug = "排查开关";
+// 「重置本页」——从旧「扩展」页拆出来的每一页页脚都有一颗（见 SettingsResetSection）。
+settings_reset_page = "重置本页";
+settings_reset_page_footer = "只把本页的选项恢复默认值；其它页面以及 Spotify 自己的设置都不受影响。";
+settings_reset_page_done = "已重置本页 %d 项。";
 
 declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
 hide_mini_player_bar = "隐藏迷你播放条";

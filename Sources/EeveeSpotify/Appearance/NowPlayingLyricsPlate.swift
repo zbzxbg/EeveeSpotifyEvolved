@@ -1237,7 +1237,14 @@ enum NowPlayingLyricsPlate {
         applyProviderToArtistLine(in: page)
 
         // ③ 歌词区：标题之下、进度条之上。
-        let frame = geometry.stage
+        //
+        // ★ 2026-10-13（用户）：「把滚动歌词的下部分抬高，确保歌词不会穿过这个上传者什么的」
+        //   —— 底部先为**底沿那行署名**让出 `stageBottomReserve`（≈62pt，见那几个常量）。
+        //   不让的话最后几行会从署名底下穿过去：照片 98 里罗马字与日文那两行正好压在
+        //   "Spicy Lyrics" 上。收窄容器（而不是只加内部留白）的好处是**底部渐隐带**
+        //   也跟着上移，于是"最后一行淡出"和"署名"不会落在同一块区域里。
+        var frame = geometry.stage
+        frame.size.height = max(0, frame.size.height - Self.stageBottomReserve(for: geometry.stage))
         guard frame.height > livingHeight / 2 else {
             noteSkip("no room between the title and the progress bar (\(Int(frame.height))pt)")
             return false
@@ -3545,6 +3552,26 @@ enum NowPlayingLyricsPlate {
 
     // MARK: - 歌词区底沿的署名（Spicy Lyrics 条款 §6）
 
+    /// 署名那一行的高度 / 距控制条上沿的距离 / 与歌词之间留的空隙。
+    ///
+    /// ★ 2026-10-13（用户）：「把滚动歌词的下部分抬高，确保歌词不会穿过这个上传者什么的」
+    ///   —— 这三个数**同时**决定"歌词区底部要抬高多少"（见 `stageBottomReserve`）：
+    ///   歌词（连同它自己的底部渐隐带）必须止步在署名**上方** `creditGapAboveLyrics` 处。
+    private static let creditHeight: CGFloat = 14
+    private static let creditBottomInset: CGFloat = 3
+    private static let creditGapAboveLyrics: CGFloat = 8
+
+    /// 署名那一行的**顶边**（页面坐标系）。
+    private static var creditTop: CGFloat {
+        controlBandMidY - controlBandHalfHeight - creditBottomInset - creditHeight
+    }
+
+    /// 歌词区底部要为署名让出的高度。stage 本来就比署名低时返回 0 —— **绝不为负**，
+    /// 否则容器会被算成负高（小屏 + 大字号时真的可能量到）。
+    private static func stageBottomReserve(for stage: CGRect) -> CGFloat {
+        max(0, stage.maxY - (creditTop - creditGapAboveLyrics))
+    }
+
     /// 歌词区**底沿**那条小字署名：`Spicy Lyrics · 上传者 X · 制作者 Y`，**可点**。
     ///
     /// ## 为什么要有它（用户 2026-10-13 拍板「放 ①」）
@@ -3567,10 +3594,12 @@ enum NowPlayingLyricsPlate {
     ///    是**放行触摸**的（`applyContainerPassThrough`）；署名若压上去，它会实心吃掉那些键的点击。
     ///    所以贴着 604 往上摆 —— 正好落在歌词区自己的底部渐隐带里（"底沿"就是那里）。
     /// 2. **跟着歌词一起出现/收起**：只在展开态的 `layoutAndMount` 里摆，收起与离页由
-    ///    `removeCreditLabel()` 摘掉。没有歌词时 `currentLyricsCreditText()` 为空 ⇒ 它也不会空挂一条。
+    ///    `removeCreditLabel()` 摘掉。没有歌词时署名文本为空 ⇒ 它也不会空挂一条。
     private static func ensureCreditLabel(in page: UIView, lyricsFrame: CGRect) {
-        // 文本由 `currentLyricsCreditText()` 统一拼（自绘歌词页页脚用的是同一份）。
-        let credit = currentLyricsCreditText()
+        // 文本由 `currentLyricsPlateCreditText()` 拼（**这一行专用**：提供商是 Spicy Lyrics 时
+        // 走那句彩蛋 `Thx,Spicy Lyrics!`，社区贡献者照常接在后面）。
+        // 自绘歌词页页脚用的是不带彩蛋的 `currentLyricsCreditText()` —— 两处共用同一套拼接。
+        let credit = currentLyricsPlateCreditText()
         guard !credit.isEmpty else {
             removeCreditLabel()
             return
@@ -3609,9 +3638,9 @@ enum NowPlayingLyricsPlate {
         label.accessibilityLabel = credit
         label.accessibilityTraits = creditLinks().isEmpty ? .staticText : .link
 
-        let height: CGFloat = 14
+        let height = Self.creditHeight
         let inset: CGFloat = 2
-        let bottom = (controlBandMidY - controlBandHalfHeight) - 3
+        let bottom = (controlBandMidY - controlBandHalfHeight) - Self.creditBottomInset
         let target = CGRect(
             x: lyricsFrame.minX + inset,
             y: (bottom - height).rounded(),
@@ -3692,6 +3721,10 @@ enum NowPlayingLyricsPlate {
     /// 放行的范围：从 `controlBandMidY − 22`（≈604）起**到底边**。
     /// 照片 71 + 日志 56 的实测：收藏键（＋/✓）在 604…648、我们搬过去的分享键同样在 604…648，
     /// 而歌词容器的底边是 641（`lyrics area 20,242,374,399`）⇒ 那一片必须让开。
+    ///
+    /// ★ 2026-10-13：容器底边现在被 `stageBottomReserve` 抬到 ≈579（署名顶边之上），
+    /// **已经不再压住那一条**，所以这里的值通常是 0。留着它是因为这个函数还有别的调用点：
+    /// 版式变了（进度条量不到、走了 `lyricsBottom` 那条退路）时容器仍可能伸进控制条。
     private static func applyContainerPassThrough(to container: UIView, frame: CGRect) {
         guard let plate = container as? NowPlayingLyricsContainerView else { return }
         plate.passThroughBottom = max(0, frame.maxY - (controlBandMidY - controlBandHalfHeight))

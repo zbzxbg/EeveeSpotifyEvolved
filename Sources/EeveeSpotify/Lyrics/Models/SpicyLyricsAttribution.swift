@@ -20,6 +20,17 @@ enum SpicyLyricsAttribution {
     /// 署名的 provider 那一环点它。
     static let providerURL = URL(string: "https://spicylyrics.org")
 
+    /// ★ 2026-10-13（用户）**彩蛋**：听歌页歌词区底沿那行署名，在提供商是 Spicy Lyrics 时
+    /// 不写光秃秃的名字，写成这句感谢。
+    ///
+    /// 三条纪律（别在别处再抄一份）：
+    ///   1. **只做英文** —— 用户明确要求（"这句话只需要英文"），所以刻意**不进 l10n**，
+    ///      任何语言下都显示这一句；
+    ///   2. **名字必须还在**（条款 §6 要求显示提供商）⇒ 是"改写"不是"删掉品牌"；
+    ///   3. 社区同步那两栏（制作者 / 上传者）**仍然照常接在后面** —— 那句要求可点的署名
+    ///      不能因为一个彩蛋被吃掉，拼接逻辑见 `currentLyricsPlateCreditText()`。
+    static let plateEasterEgg = "Thx,Spicy Lyrics!"
+
     /// 从响应的 `UploadAttribution` 取贡献者（`Maker` / `Uploader`）。
     ///
     /// 条款 §6 要的是 *"credit **and link** the uploader, and the maker where one is given.

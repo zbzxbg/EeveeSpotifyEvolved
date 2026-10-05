@@ -40,7 +40,7 @@ LRCLIB: The most open service, offering time-synced lyrics. However, it lacks ly
 Musixmatch: Provides time-synced lyrics for many songs, but you'll need a user token to use this source.";
 lyrics_additional_info = "Genius, NetEase, and PetitLyrics use fuzzy search, so some songs may have display errors or fail to find lyrics.";
 petitlyrics_description = "PetitLyrics: Provides Japanese lyrics.";
-spicylyrics_description = "SpicyLyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
+spicylyrics_description = "Spicy Lyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
 spicylyrics_api_key = "Spicy Lyrics API Key";
 spicylyrics_api_key_placeholder = "Enter a Spicy client key (sl_pk_...)";
 spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics is only used when you paste your own client key here. Leave it empty and this source is skipped for that track — the lyrics come from Musixmatch instead. To get a key: open the Spicy Lyrics developer dashboard, create an application, switch on Client access, add an allowed origin together with \"Allow requests with no Origin header\", then press Create client key and paste it here.";
@@ -48,7 +48,7 @@ spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics is onl
 spicylyrics_key_link = "Spicy Lyrics developer dashboard";
 spicylyrics_key_invalid = "Spicy Lyrics API key rejected";
 spicylyrics_key_missing = "Spicy Lyrics key not set";
-spicylyrics_key_invalid_popup = "Spicy Lyrics rejected the API key. The built-in key may have been revoked — paste your own client key in Settings > Lyrics (leave it empty to go back to the built-in one).";
+spicylyrics_key_invalid_popup = "Spicy Lyrics rejected the API key. Open Settings > Lyrics and paste a valid client key — the app ships no built-in key, so the Spicy Lyrics source stays skipped (and Musixmatch is used) until one is set.";
 // Spicy Lyrics 的条款（§6）要求：歌词在屏幕上时，署名也得在屏幕上。下面三条进
 // `SpicyLyricsRepository.providerCredit()` 拼出来的那一串（provider + 社区贡献者）。
 lyrics_made_by = "Made by";
@@ -142,7 +142,7 @@ payment_notice = "EeveeSpotify applies patches to unlock certain Premium feature
 ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
 ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
 ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";
-ngzhwm_word_by_word_lyrics_description = "Musixmatch, PetitLyrics, SpicyLyrics, NetEase, and AMLL provide word-by-word lyrics services.";
+ngzhwm_word_by_word_lyrics_description = "Musixmatch, PetitLyrics, Spicy Lyrics, NetEase, and AMLL provide word-by-word lyrics services.";
 ngzhwm_better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
 ngzhwm_better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum.";
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
@@ -373,6 +373,39 @@ amoled = "Dark bar chrome (Apple Music style)";
 
 extras_title = "Extras";
 extras_description = "Features added on top of EeveeSpotify, kept together here so the settings root stays short. The ideas follow spoti.pw; the code is this project's own. Each one has its own page, except the switches above.";
+
+// ── Settings root re-layout (2026-10-13): four group headers + one subtitle per row ──
+// The old "Extras" page was a junk drawer (19 switches + 8 sub-pages behind one row).
+// It was split by page; see EeveeExtrasSettingsView.swift's tombstone for the mapping.
+settings_group_playback = "Playback & lyrics";
+settings_group_appearance = "Appearance";
+settings_group_advanced = "Advanced";
+tabs_and_mini_bar_title = "Tab bar & mini player";
+home_and_library_title = "Home & library";
+settings_sub_lyrics = "Sources, word-by-word, romanization, translation";
+settings_sub_now_playing = "Backdrop, one-screen layout, single lyric, volume";
+settings_sub_patching = "Premium spoofing and config overrides";
+settings_sub_sponsorblock = "Skip sponsored segments";
+settings_sub_tabs = "Glass, labels, the Create tab, the mini bar";
+settings_sub_home_library = "Large titles, chrome, home header";
+settings_sub_entity_page = "Single cover, color field, hidden buttons";
+settings_sub_customization = "Other interface details";
+settings_sub_app_icon = "Pick the icon shown on the home screen";
+settings_sub_experiments = "Features that are not settled yet";
+settings_sub_flags = "Inject remote feature flags";
+settings_sub_reduce = "Hide Spotify's own prompts";
+settings_sub_haptics = "Vibration feedback";
+settings_sub_blocked_artists = "Skip tracks from blocked artists";
+settings_sub_privacy = "Telemetry blocking and reporting";
+settings_sub_misc = "Everything that has no other home";
+settings_sub_backup = "Export or import your settings";
+settings_sub_updates = "Changelog and version check";
+settings_sub_licenses = "Open-source notices and credits";
+settings_sub_debug = "Troubleshooting switches";
+// "Reset this page" — one per page split out of the old Extras page (SettingsResetSection).
+settings_reset_page = "Reset This Page";
+settings_reset_page_footer = "Only the options on this page go back to their defaults. Other pages, and Spotify's own settings, are not touched.";
+settings_reset_page_done = "Reset %d option(s) on this page.";
 
 declutter_description = "Hides Spotify's own non-content chrome by class name, taken from the view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
 hide_mini_player_bar = "Hide the mini player bar";
