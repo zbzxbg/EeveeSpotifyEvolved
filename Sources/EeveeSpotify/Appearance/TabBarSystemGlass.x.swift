@@ -529,8 +529,9 @@ enum TabBarSystemGlass {
                 guard recognizer is UITapGestureRecognizer, recognizer.isEnabled else { continue }
                 for pair in pairs(of: recognizer) {
                     guard let action = action(of: pair) else { continue }
+                    // target 是 `nil` **也算数**（日志 71 就是这一种）：见上面那段说明。
                     let target = target(of: pair)
-                    guard target == nil || target!.responds(to: action) else { continue }
+                    if let target, !target.responds(to: action) { continue }
                     return .tapRecognizer(
                         index: index,
                         target: target.map { shortName(NSStringFromClass(type(of: $0))) } ?? "nil (responder chain)",
@@ -623,9 +624,10 @@ enum TabBarSystemGlass {
         //   日志 71 现场：我们算 332、UIKit 真画 274 ⇒ 迷你条 333 与标签栏玻璃对不上，
         //   而且这个数**随颗数变**（三颗更窄）。这里每拍按真画的那块刷新，双条重新等宽。
         //   ⚠️ 只读它、**不喂回宿主 frame** ⇒ 不会形成"量一次变一次"的漂移（那正是 v4.6 的教训）。
+        //   ⚠️ 这两个量声明在 `TabBarGlassPlate` 里（迷你条读的那一份），**必须带类型名前缀**。
         if let drawn, bar.bounds.width > 1 {
-            capsuleWidth = drawn.width
-            capsuleWidthRatio = drawn.width / bar.bounds.width
+            TabBarGlassPlate.capsuleWidth = drawn.width
+            TabBarGlassPlate.capsuleWidthRatio = drawn.width / bar.bounds.width
         }
     }
 
@@ -1058,7 +1060,7 @@ enum TabBarSystemGlass {
                 let recognizerName = shortName(NSStringFromClass(type(of: recognizer)))
                 let viewName = shortName(NSStringFromClass(type(of: view)))
 
-                let pairs = pairs(of: recognizer).enumerated().map { offset, pair -> String in
+                let pairTexts = pairs(of: recognizer).enumerated().map { offset, pair -> String in
                     let pairName = shortName(NSStringFromClass(type(of: pair)))
                     var fields: [String] = []
                     var cls: AnyClass? = type(of: pair)
@@ -1072,9 +1074,16 @@ enum TabBarSystemGlass {
                                 // 只看对象类型（'@'）——`_action` 是 SEL，`object_getIvar` 读它会崩。
                                 guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 0x40,
                                       let name = ivar_getName(ivar) else { continue }
-                                let value = object_getIvar(pair, ivar)
-                                let described = value.map { shortName(NSStringFromClass(type(of: $0))) } ?? "nil"
-                                fields.append("\(String(cString: name))=\(described)")
+                                // ⚠️ `object_getIvar` 返回 `Any?`，**不能**直接 `type(of:)`（那是给类类型的
+                                //    重载，编译器会报 "expected to be instance of class or
+                                //    class-constrained type"）⇒ 先 `as AnyObject` 再取类名。
+                                let field = String(cString: name)
+                                if let raw = object_getIvar(pair, ivar) {
+                                    let object = raw as AnyObject
+                                    fields.append("\(field)=\(shortName(NSStringFromClass(type(of: object))))")
+                                } else {
+                                    fields.append("\(field)=nil")
+                                }
                             }
                         }
                         cls = class_getSuperclass(current)
@@ -1082,7 +1091,7 @@ enum TabBarSystemGlass {
                     }
                     return "#\(offset) \(pairName)[\(fields.joined(separator: " "))]"
                 }
-                pieces.append("\(recognizerName) on \(viewName) { \(pairs.joined(separator: " | ")) }")
+                pieces.append("\(recognizerName) on \(viewName) { \(pairTexts.joined(separator: " | ")) }")
 
                 var chain: [String] = []
                 var responder: UIResponder? = view.next
