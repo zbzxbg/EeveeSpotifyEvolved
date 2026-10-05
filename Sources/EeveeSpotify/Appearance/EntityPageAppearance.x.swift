@@ -86,12 +86,20 @@ enum EntityPageAppearance {
     /// `Components.UI.AddToButton` / `DownloadButton.Granular.None` /
     /// `Components.UI.ContextMenuButton-2iyK0BOpYVMJUpDkAwVhph`（**带一段随机后缀**）/
     /// `Components.UI.WatchFeedEntityExplorerButton` —— 整串比对会漏掉带后缀的那种 ✗。
-    /// 行内那两颗（每行的「+」「…」）**id 还没读到过**，但按同样的片段规则能一起命中；
-    /// 命不中也不会有副作用，而且**藏了哪些 id 会打进日志**，下一份日志就能看到行内那两颗叫什么。
+    ///
+    /// ⛔ **`ContextMenuButton` 故意不在这张名单里**（2026-10-13 自查发现）：
+    /// 它就是**右上那颗「…」**，而 pw 的整套做法**恰恰骑在它上面** ——
+    /// `PlaylistMenu.x` 逐字写着 Spotify 的那七颗 pill 里有五颗
+    /// （`Add / Notes / Video / Edit / Name & details`）**⋯ 菜单本来就有**，
+    /// pw 只把缺的 `Sort` / `Mix` 补进这张 sheet 的 header，点的还是 Spotify 自己那颗 pill。
+    /// ⇒ 把「…」藏掉 = 把我们要往里加东西的那个面板弄没了 ✗（早期的名单里就有它，这里撤回）。
+    ///
+    /// ⚠️ 剩下的三项（AddTo / Download / WatchFeed）**藏之前要确认 ⋯ 里确实有对应的行** ——
+    /// 这正是 pw 反复强调的"只做加法"；行内那两颗（每行的「+」「…」）**id 还没读到过**，
+    /// 命不中也不会有副作用，而且**藏了哪些 id 会打进日志**，下一份日志就能看到它们叫什么。
     private static let chromeIdentifierFragments = [
         "AddToButton",
         "DownloadButton",
-        "ContextMenuButton",
         "WatchFeedEntityExplorerButton",
     ]
     private static var hiddenChrome: [(view: UIView, alpha: CGFloat)] = []
