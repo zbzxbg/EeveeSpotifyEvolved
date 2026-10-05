@@ -178,6 +178,9 @@ enum TabBarSystemGlass {
     /// UIKit 自己留的那圈内边距（**玻璃 = 宿主 − 它**）：**量一次就冻结**，见 `place`。
     private static var glassInsets: UIEdgeInsets?
     private static weak var measuredInsetsBar: UIView?
+    /// 上面那份内边距是**按几颗量**的 —— UIKit 的浮岛玻璃按**内容**定宽，三颗与四颗的常量不同
+    /// （真机日志 71：四颗 21/21、三颗 70/70）⇒ 颗数一变就重量一次。
+    private static var glassInsetsCount = -1
     /// 我们是否已经把触摸交还给 Spotify（交还过就**不再收回**，避免"点一下空一下"）。
     private static var handedBackTouches = false
     /// 从"图标视图"快照出来的图标（按视图缓存：每拍生成新图会让 `syncItems` 永远判成"形状变了"）。
@@ -309,6 +312,7 @@ enum TabBarSystemGlass {
         measuredGlassHeight = 0
         glassInsets = nil
         measuredInsetsBar = nil
+        glassInsetsCount = -1
         handedBackTouches = false
         iconSnapshots.removeAll()
         mirroredSelections = 0
@@ -511,16 +515,25 @@ enum TabBarSystemGlass {
 
     /// 子树里第一颗"**真的点得动**"的 tap 识别器：`_targets` 里至少有一对 target/action 能解出来，
     /// 且那个 target **响应**那个 action。读不出来就返回 nil（= 这条路不能算数）。
+    ///
+    /// ★★ 2026-10-13（**真机日志 71** 纠正）：**target 是 `nil` 也算数** ——
+    /// 这台机器上第 4 颗（现在是第 3 颗）的 tap 识别器逐字是
+    /// `UITapGestureRecognizer[nil-target:handleTap]`：`_action` 读得出来、`_target` 是 `nil`
+    /// （Element 那边大概是"稍后再绑 target"或"走响应链"）。上一版因此判定"没有转发路"
+    /// ⇒ 玻璃从不接管触摸 ⇒ 按压/跟手/拖动全都没有（用户报的"没效果"就是这个）。
+    /// 现在：**只要 action 读得出来**就算有路；`nil` target 那一对在**点击那一刻**再读一次
+    /// （也许那时已经绑上了），仍然 `nil` 就走 `sendAction(to: nil)` 与响应链（见 `fire`）。
     private static func firstFireableTapRecognizer(in item: UIView, index: Int) -> ForwardRoute? {
         for view in subtree(of: item, maxDepth: 6) {
             for recognizer in view.gestureRecognizers ?? [] {
                 guard recognizer is UITapGestureRecognizer, recognizer.isEnabled else { continue }
                 for pair in pairs(of: recognizer) {
-                    guard let target = target(of: pair), let action = action(of: pair),
-                          target.responds(to: action) else { continue }
+                    guard let action = action(of: pair) else { continue }
+                    let target = target(of: pair)
+                    guard target == nil || target!.responds(to: action) else { continue }
                     return .tapRecognizer(
                         index: index,
-                        target: shortName(NSStringFromClass(type(of: target))),
+                        target: target.map { shortName(NSStringFromClass(type(of: $0))) } ?? "nil (responder chain)",
                         action: NSStringFromSelector(action)
                     )
                 }
@@ -563,12 +576,22 @@ enum TabBarSystemGlass {
         guard let host = hostView(for: bar) else { return }
         let target = TabBarGlassPlate.targetCapsuleRect(in: bar) ?? bar.bounds
 
-        // 换了栏（页面重建）就重新量一次。
-        if measuredInsetsBar !== bar {
+        // ★★ 2026-10-13（**真机日志 71** 纠正两处）：
+        //   ① 量内边距时**必须按"看得见的颗数"分家**：四颗那次量到 21/21，藏掉「创建」变三颗之后
+        //      再量是 **70/70** —— UIKit 的浮岛玻璃是**按内容**定宽的（三颗更窄），
+        //      所以"玻璃 = 宿主 − 常量"这个常量**随颗数变**。冻结本身没错（防漂），
+        //      错的是"换形状了还沿用旧常量" ⇒ 这里按颗数重量一次。
+        //   ② 宿主**不许越出栏**：日志 71 里 host 被撑成 `-29,-3,472,81`（栏只有 414），
+        //      越界那 29pt 两边没有任何用途，只会让命中区域跑到栏外。
+        let visibleCount = TabBarGlassPlate.findTabsStack(in: bar)
+            .map { TabBarGlassPlate.visibleItems(in: $0).count } ?? 0
+        if measuredInsetsBar !== bar || glassInsetsCount != visibleCount {
             measuredInsetsBar = bar
             glassInsets = nil
+            glassInsetsCount = visibleCount
         }
-        if glassInsets == nil, let drawn = drawnGlassFrame(in: systemBar, in: bar) {
+        let drawn = drawnGlassFrame(in: systemBar, in: bar)
+        if glassInsets == nil, let drawn {
             let insets = UIEdgeInsets(
                 top: drawn.minY - host.frame.minY,
                 left: drawn.minX - host.frame.minX,
@@ -584,14 +607,26 @@ enum TabBarSystemGlass {
             )
         }
         let insets = glassInsets ?? .zero
-        let frame = CGRect(
+        let wanted = CGRect(
             x: target.minX - insets.left,
             y: target.minY - insets.top,
             width: target.width + insets.left + insets.right,
             height: target.height + insets.top + insets.bottom
         )
+        // ⚠️ 夹回栏里（见上面 ②）：交集为空时退回整条栏，绝不把宿主摆到栏外。
+        let clamped = wanted.intersection(bar.bounds)
+        let frame = clamped.isNull ? bar.bounds : clamped
         if !host.frame.equalTo(frame) { host.frame = frame }
         if !systemBar.frame.equalTo(host.bounds) { systemBar.frame = host.bounds }
+
+        // ★ 迷你播放条那条要跟**UIKit 真画出来的玻璃**等宽（原来跟的是"我们算出来的胶囊"）——
+        //   日志 71 现场：我们算 332、UIKit 真画 274 ⇒ 迷你条 333 与标签栏玻璃对不上，
+        //   而且这个数**随颗数变**（三颗更窄）。这里每拍按真画的那块刷新，双条重新等宽。
+        //   ⚠️ 只读它、**不喂回宿主 frame** ⇒ 不会形成"量一次变一次"的漂移（那正是 v4.6 的教训）。
+        if let drawn, bar.bounds.width > 1 {
+            capsuleWidth = drawn.width
+            capsuleWidthRatio = drawn.width / bar.bounds.width
+        }
     }
 
     // MARK: - ★ 拖动胶囊：**系统自带，我们不碰**（2026-10-13 第三版认识）
@@ -739,6 +774,8 @@ enum TabBarSystemGlass {
             return
         }
         reportForwardFailure(index: index, item: item)
+        // ★ 全失败时把"这颗识别器的 target 藏在哪"摊开一次 —— 见 `reportTapAnatomyOnce`。
+        reportTapAnatomyOnce(item)
         handTouchesBack(to: systemBar, reason: "every route failed on #\(index)")
     }
 
@@ -874,13 +911,25 @@ enum TabBarSystemGlass {
     private static func fire(_ recognizer: UIGestureRecognizer) -> Bool {
         var fired = false
         for pair in pairs(of: recognizer) {
-            guard let target = target(of: pair), let action = action(of: pair) else { continue }
-            guard target.responds(to: action) else { continue }
-            _ = target.perform(action, with: recognizer)
-            writeDebugLog(
-                "[\(logTag)] tap → \(NSStringFromClass(type(of: target))) \(NSStringFromSelector(action))"
-            )
-            fired = true
+            guard let action = action(of: pair) else { continue }
+            if let target = target(of: pair), target.responds(to: action) {
+                _ = target.perform(action, with: recognizer)
+                writeDebugLog(
+                    "[\(logTag)] tap → \(NSStringFromClass(type(of: target))) \(NSStringFromSelector(action))"
+                )
+                fired = true
+                continue
+            }
+            // ★ 2026-10-13（**真机日志 71**）：`_target` 是 `nil` 的那一对 —— 这台机器上就是它
+            //   （`UITapGestureRecognizer[nil-target:handleTap]`）。nil target 的动作按 UIKit 的规矩
+            //   送到**响应者链**上 ⇒ 用 `sendAction(to: nil)` 复现同一条路；返回 `false` 说明没人接，
+            //   交给下面的兜底（`handleTap` 响应链 / 无障碍 / `UIControl`）。
+            if UIApplication.shared.sendAction(action, to: nil, from: recognizer, for: nil) {
+                writeDebugLog(
+                    "[\(logTag)] tap → responder chain \(NSStringFromSelector(action)) (that pair's target is nil)"
+                )
+                fired = true
+            }
         }
         return fired
     }
@@ -936,6 +985,22 @@ enum TabBarSystemGlass {
     /// 所以 `probeForwardRoute` 与 `callHandleTap` 共用这一处。
     private static func handleTapHolder(in item: UIView) -> (holder: NSObject, via: String)? {
         let selector = NSSelectorFromString("handleTap")
+        // ① ★ 2026-10-13（日志 71）：**从"那颗 tap 识别器所在视图"沿响应者链往上找** ——
+        //    `nil`-target 的动作就是走这条链的，所以实现者最可能在这儿。
+        for view in subtree(of: item, maxDepth: 6) {
+            for recognizer in view.gestureRecognizers ?? [] where recognizer is UITapGestureRecognizer {
+                var responder: UIResponder? = view
+                var hops = 0
+                while let current = responder, hops < 12 {
+                    if let object = current as? NSObject, object.responds(to: selector) {
+                        return (object, "responder chain from the tap recogniser's view")
+                    }
+                    responder = current.next
+                    hops += 1
+                }
+            }
+        }
+        // ② 原来的两条：子树里每个视图的 `next`，以及它们（含父类）的 ivar。
         for view in subtree(of: item, maxDepth: 6) {
             if let responder = view.next as? NSObject, responder.responds(to: selector) {
                 return (responder, "responder chain")
@@ -969,6 +1034,71 @@ enum TabBarSystemGlass {
             hops += 1
         }
         return nil
+    }
+
+    /// ★★ 2026-10-13（**真机日志 71** 的直接产物）：把"这颗 tap 识别器到底把 target 藏在哪"
+    /// **一次性摊开** —— 那台机器上它逐字是 `UITapGestureRecognizer[nil-target:handleTap]`。
+    ///
+    /// 打三样（只打一次，就在"五条路全不通"那一刻）：
+    ///   ① 每对 `_targets` 的**类名**与它自己的**对象型 ivar 及取值类名**
+    ///      （`_target` / `_targetWeak` / `_targetRef` … 哪个有值，一眼看出来）；
+    ///   ② 从那颗识别器所在视图沿**响应者链**往上 12 跳的类名，**★ 标出谁响应 `handleTap`**；
+    ///   ③ 同一个视图上还有哪些识别器（顺带）。
+    ///
+    /// ⚠️ 只在第一条"全失败"的点击时打一次；下一次它还是失败，这一行就是下一轮的**唯一**答案。
+    private static var didReportTapAnatomy = false
+
+    private static func reportTapAnatomyOnce(_ item: UIView) {
+        guard !didReportTapAnatomy else { return }
+        didReportTapAnatomy = true
+
+        var pieces: [String] = []
+        for view in subtree(of: item, maxDepth: 6) {
+            for recognizer in view.gestureRecognizers ?? [] where recognizer is UITapGestureRecognizer {
+                let recognizerName = shortName(NSStringFromClass(type(of: recognizer)))
+                let viewName = shortName(NSStringFromClass(type(of: view)))
+
+                let pairs = pairs(of: recognizer).enumerated().map { offset, pair -> String in
+                    let pairName = shortName(NSStringFromClass(type(of: pair)))
+                    var fields: [String] = []
+                    var cls: AnyClass? = type(of: pair)
+                    var hops = 0
+                    while let current = cls, hops < 3 {
+                        var count: UInt32 = 0
+                        if let ivars = class_copyIvarList(current, &count) {
+                            defer { free(ivars) }
+                            for index in 0 ..< Int(count) {
+                                let ivar = ivars[index]
+                                // 只看对象类型（'@'）——`_action` 是 SEL，`object_getIvar` 读它会崩。
+                                guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 0x40,
+                                      let name = ivar_getName(ivar) else { continue }
+                                let value = object_getIvar(pair, ivar)
+                                let described = value.map { shortName(NSStringFromClass(type(of: $0))) } ?? "nil"
+                                fields.append("\(String(cString: name))=\(described)")
+                            }
+                        }
+                        cls = class_getSuperclass(current)
+                        hops += 1
+                    }
+                    return "#\(offset) \(pairName)[\(fields.joined(separator: " "))]"
+                }
+                pieces.append("\(recognizerName) on \(viewName) { \(pairs.joined(separator: " | ")) }")
+
+                var chain: [String] = []
+                var responder: UIResponder? = view.next
+                var hops = 0
+                while let current = responder, hops < 12 {
+                    let answers = (current as? NSObject)?.responds(to: NSSelectorFromString("handleTap")) ?? false
+                    chain.append(shortName(NSStringFromClass(type(of: current))) + (answers ? "★" : ""))
+                    responder = current.next
+                    hops += 1
+                }
+                pieces.append("chain from \(viewName): \(chain.joined(separator: " → "))")
+            }
+        }
+        writeDebugLog(
+            "[\(logTag)] tap anatomy — \(pieces.isEmpty ? "no tap recogniser at all" : pieces.joined(separator: "; "))"
+        )
     }
 
     /// 第四路：无障碍激活（最深的那一层先试 —— 真正响应点击的往往是里层那颗）。
