@@ -139,8 +139,11 @@ enum EntityPageAppearance {
 
         if wantsDissolve {
             ensureHero(on: target)
-        } else if hero != nil || concealedCover != nil {
+            // ④ 头部居中（Melox 的三段式）—— 与"模糊底"同属这一颗开关下的"页面样式"。
+            centerHeaderLabels(in: target.page)
+        } else if hero != nil || concealedCover != nil || !centeredLabels.isEmpty {
             removeHero()
+            restoreCentering()
         }
 
         // ③ Spotify 自己那些按键（用户 2026-10-13：「spotify 本身的那些按键都还在，看起来不咋地」）。
@@ -383,6 +386,76 @@ enum EntityPageAppearance {
         return UIImage(cgImage: rendered)
     }
 
+    // MARK: - ④ 头部居中（Melox 的三段式）
+
+    /// Melox / AM 的头部是**居中**的：标题、艺人、元信息各占一行、行行居中。
+    /// Spotify 是**左对齐**（日志 78 的探针逐字：`TitleRow 16,326,192,34`、`ParentRow 16,368,64,24`、
+    /// `MetadataRow 16,400,382,19` —— 全都贴着 x=16 ✗）。
+    ///
+    /// 做法**不动约束、只写属性**（所以可逆、也不会跟 Auto Layout 打架）：
+    ///   · `textAlignment = .center`（换行后也跟着居中）
+    ///   · 再给一个**水平位移**，把这个 label 的中心挪到页面中线
+    ///
+    /// ⚠️ 位移量按 **`label.center`** 算 —— 那个值**不受 transform 影响**（受影响的只有 `frame`）
+    /// ⇒ 每拍重设同一个值是幂等的、**不会累加** ✓（这正是"每拍补一次"能安全用的前提）。
+    private static let centeredIdentifiers = [
+        "CreativeWorkPlatform.Components.UI.PreTitleRow",
+        "CreativeWorkPlatform.Components.UI.TitleRow",
+        "CreativeWorkPlatform.Components.UI.ParentRow",
+        "CreativeWorkPlatform.Components.UI.MetadataRow",
+    ]
+    private static var centeredLabels: [ObjectIdentifier: (label: UILabel, alignment: NSTextAlignment)] = [:]
+    private static var centeredViews: Set<ObjectIdentifier> = []
+
+    private static func centerHeaderLabels(in container: UIView) {
+        var seen = 0
+        var newlyCentered: [String] = []
+
+        func walk(_ node: UIView, _ depth: Int) {
+            guard depth <= clearDepth, seen < clearNodes, centeredLabels.count < 40 else { return }
+            seen += 1
+            let identifier = node.accessibilityIdentifier ?? ""
+            if !identifier.isEmpty, centeredIdentifiers.contains(identifier),
+               let label = node as? UILabel,
+               !centeredViews.contains(ObjectIdentifier(node)) {
+                centeredViews.insert(ObjectIdentifier(node))
+                centeredLabels[ObjectIdentifier(node)] = (label: label, alignment: label.textAlignment)
+                newlyCentered.append(identifier)
+            }
+            for sub in node.subviews { walk(sub, depth + 1) }
+        }
+        walk(container, 0)
+
+        for entry in centeredLabels.values {
+            let label = entry.label
+            if label.textAlignment != .center { label.textAlignment = .center }
+            guard let superview = label.superview else { continue }
+            let middle = container.convert(CGPoint(x: container.bounds.midX, y: 0), to: superview).x
+            let delta = middle - label.center.x
+            if abs(delta) > 0.5 {
+                label.transform = CGAffineTransform(translationX: delta, y: 0)
+            }
+        }
+
+        if !newlyCentered.isEmpty {
+            writeDebugLog(
+                "[\(logTag)] centred \(newlyCentered.count) header row(s) — \(newlyCentered.joined(separator: ", "))"
+                    + " (Spotify leaves them against the left margin; Melox centres them;"
+                    + " alignment and transform both go back when the switch is turned off)"
+            )
+        }
+    }
+
+    private static func restoreCentering() {
+        guard !centeredLabels.isEmpty else { return }
+        for entry in centeredLabels.values {
+            entry.label.textAlignment = entry.alignment
+            entry.label.transform = .identity
+        }
+        centeredLabels.removeAll()
+        centeredViews.removeAll()
+    }
+
     // MARK: - ③ 藏掉 Spotify 自己那些按键
 
     /// AM 的专辑 / 歌单页没有这些：每行的「+」「…」、头部的下载 / 加入 / 菜单 / 观看信息。
@@ -430,6 +503,7 @@ enum EntityPageAppearance {
 
     private static func restore(reason: String) {
         removeHero()
+        restoreCentering()
         restoreChrome(reason: reason)
         field?.removeFromSuperview()
         field = nil
