@@ -382,30 +382,30 @@ blocked_artists_clear_all = "Remove all blocked artists";
 /* MARK: Now playing look (sample) */
 library_section = "Music library";
 tab_bar_glass_section = "Tab bar";
-tab_bar_system_glass = "Use the system glass tab bar";
+tab_bar_system_glass = "Liquid Glass tab bar";
 tab_bar_system_glass_description = "Hides Spotify's own tab bar content and puts a system tab bar over it, so iOS 26 draws the real Liquid Glass: the selection bubble slides between tabs, with refraction and light/dark adaptation. Before the glass takes the touches it checks that a tap on it can still be forwarded to Spotify; when it can, the glass answers the finger and taps work as before, and when it cannot the touches stay with Spotify's own bar. On by default.";
-tab_bar_glass_description = "The tab bar's Liquid Glass is drawn by the system tab bar the last switch here puts over Spotify's own. The two switches above it only decide what that bar shows: its labels, and whether the Create tab stays. The glass itself behaves the way iOS 26 does — press and slide across the tabs and the selection follows the finger.";
+tab_bar_glass_description = "A few settings for the tab bar.";
 library_large_title = "Apple Music style library";
-library_large_title_description = "Restyles Spotify's own library the way Apple Music has it: a bigger title at the leading edge with the avatar moved to the trailing edge, the grey fade at the top edge gone, list covers with Apple's soft continuous corners and a hairline that starts where the text does, and the in-library search field turned into a capsule. Switching it off puts every one of them back.";
+library_large_title_description = "Restyles Spotify's own library the way Apple Music has it.";
 home_section = "Home";
 home_large_title = "Apple Music style home";
-home_large_title_description = "The home page's header the way Apple Music's Listen Now has it: a large title at the leading edge, the avatar at the trailing edge, and both the grey fade at the top edge and the All / Music / Podcasts filter pills gone - those pills filter what Spotify feeds you, Apple Music has nothing like them, and the title takes their place. Switching it off puts everything back.";
+home_large_title_description = "Restyles the home page's header the way Apple Music's Listen Now has it.";
 home_header_title = "Home";
 tab_bar_hide_labels = "Hide tab labels";
 tab_bar_hide_create = "Hide the Create tab";
 
 mini_bar_glass_section = "Mini player";
-mini_bar_glass = "Liquid Glass on the mini player";
+mini_bar_glass = "Liquid Glass mini player";
 mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsule as the tab bar: **same width, same 60 pt height, same corner radius, same material**, keeping the small gap between the two. The width follows the tab bar's capsule (360 pt on this device), so the mini player's own content (artwork, title, buttons, progress line) is scaled down uniformly to fit inside (~86%). While it is on, the solid cover-coloured background is cleared — including right after it appears or a track changes, when Spotify writes it back; switching it off restores everything — glass removed, content back to its original size, background and clipping restored.";
 
 playlist_cover_section = "Playlist covers";
-playlist_single_cover = "One cover instead of four";
-playlist_single_cover_description = "A playlist with no cover of its own gets a mosaic: Spotify builds one image out of the album art of its first four tracks. That image is addressed as mosaic.scdn.co/<size>/<id1><id2><id3><id4>, with the four cover ids packed into the path, and the same address carrying a single id is an ordinary single cover. So this cuts the address down to the first id before the image request is loaded, and Spotify's own single-image path takes over. Only mosaic.scdn.co is touched, and only when the tail of the path really is a run of 40-character ids, so any address it cannot read is left alone. Switching it off changes nothing; covers that were already loaded stay in the image cache until the playlist is opened again.";
+playlist_single_cover = "Replace Spotify's own four-cover mosaic";
+playlist_single_cover_description = "When this option is enabled, Spotify's four-cover mosaic is replaced with the cover of the playlist's first track.";
 
 entity_page_section = "Album & playlist pages";
-entity_page_dissolve = "Melox-style page (blurred cover, centred header)";
-entity_page_hide_chrome = "Hide Spotify's own buttons";
-entity_page_description = "Three things at once, the way Melox and Apple Music have them: the cover is blurred into the page's backdrop and keeps its own sharp copy on top of it, the page keeps the cover's tint all the way down instead of fading to plain black, and the header's title, artist and metadata are centred rather than pinned to the left margin. Nothing is constrained or moved -- everything hidden, cleared or centred is remembered and put back when the switch goes off.";
+entity_page_dissolve = "Blurred cover backdrop + centred header";
+entity_page_hide_chrome = "Hide some of Spotify's buttons";
+entity_page_description = "Both of the features above are still in development and are not recommended.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
