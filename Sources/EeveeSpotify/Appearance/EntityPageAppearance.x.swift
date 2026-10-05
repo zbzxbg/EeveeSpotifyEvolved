@@ -310,22 +310,19 @@ enum EntityPageAppearance {
                 container.insertSubview(view, at: 0)
             }
             hero = view
-            concealSpotifyCover(cover)
+            // ★ 2026-10-13（用户拍板「做成 Melox 那样」，而 Melox 的底子**就是封面模糊化**）：
+            //   Melox 那一页是"**模糊封面当底 + 上面再压一张清晰的居中封面**"⇒ 这里**不再藏原生封面** ✗
+            //   （上一版把它按透明藏掉，只剩一片模糊，反而不像了）。原生那张清晰封面留在原位、
+            //   正好落在这片模糊底之上 —— 这就是截图里的结构。
             writeDebugLog(
                 "[\(logTag)] hero \(frameText(frame)) in \(type(of: container))"
                     + " — the cover \(frameText(cover.convert(cover.bounds, to: container)))"
-                    + " is enlarged and dissolved into the field; Spotify's own cover is concealed"
-                    + " (its alpha \(String(format: "%.2f", cover.alpha)) was remembered and goes back"
-                    + " when the switch is turned off)"
+                    + " is blurred into the page's backdrop, and Spotify's own sharp cover"
+                    + " stays where it is, on top of it (Melox's structure)"
             )
         }
 
         if !view.frame.equalTo(frame) { view.frame = frame }
-
-        // ★ 2026-10-13（**照片 94** 的教训）：**藏封面这件事必须每一拍补一次** ——
-        //   Spotify 自己的布局会把它写回 1（我们只在挂上那一拍置 0，于是它又冒出来了 ✗：
-        //   照片里我们那片化开的颜色上，端端正正又压着它那张小方封面）。
-        if cover.alpha != 0 { cover.alpha = 0 }
 
         // 模糊一次、按"哪张图"缓存（同一张封面不重复跑 CoreImage；失败就退回原图，不能因此不画）。
         if cachedHeroSource !== source {
@@ -367,16 +364,6 @@ enum EntityPageAppearance {
         hero = nil
         cachedHeroSource = nil
         cachedHeroImage = nil
-    }
-
-    private static func concealSpotifyCover(_ cover: UIView) {
-        guard concealedCover == nil else { return }
-        // ⚠️ **读到的 alpha 不可信**（照片 94 的日志里它是 `0.00`，而那张封面明明是可见的；
-        //    探针在另一张图上还读到过 `1.17`）⇒ 只有"明显大于 0"才当原值，否则按 1 记，
-        //    免得关开关时把封面**永久留在透明状态** ✗。
-        let original = cover.alpha > 0.01 ? cover.alpha : 1
-        concealedCover = (view: cover, alpha: original)
-        cover.alpha = 0
     }
 
     /// 封面元素里那张真图。
