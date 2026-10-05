@@ -370,14 +370,14 @@ blocked_artists_clear_all = "清空名单";
 /* MARK: 听歌页外观（样品） */
 library_section = "音乐库";
 tab_bar_glass_section = "标签栏";
-tab_bar_system_glass = "标签栏改用系统玻璃";
+tab_bar_system_glass = "液态玻璃版标签栏";
 tab_bar_system_glass_description = "把 Spotify 自己那条标签栏的内容藏起来，在上面叠一条系统标签栏：iOS 26 会画出真正的液态玻璃，选中气泡在标签之间滑动，带折射与明暗自适应。接管触摸之前会先验证「玻璃上的点击能不能转发给 Spotify」：能转发时玻璃才接得住手指、点击与以前一样；验证不过就把触摸留给 Spotify 自己那条栏。默认开。";
-tab_bar_glass_description = "标签栏的液态玻璃由这一节最后那颗开关叠上去的系统标签栏来画。上面两颗只决定那条栏显示什么：文字，以及「创建」那颗留不留。玻璃本身的行为就是 iOS 26 那套：按住那条栏横着滑，选中态跟着手指走。";
+tab_bar_glass_description = "关于标签栏的一些设置。";
 library_large_title = "Apple Music 式音乐库";
-library_large_title_description = "按 Apple Music 的样子改 Spotify 自己的音乐库：标题变大并靠左、头像挪到右边、顶部灰纱收掉、列表封面换成苹果那种连续圆角、分隔线从文字那一边开始，库内搜索框变成胶囊。关掉全部还原。";
+library_large_title_description = "按 Apple Music 的样子改 Spotify 自己的音乐库。";
 home_section = "主页";
 home_large_title = "Apple Music 式主页";
-home_large_title_description = "按 Apple Music 的「现在就听」改主页头部：大标题贴左、头像靠右，顶部那层灰纱和「全部 / 音乐 / 播客」筛选胶囊一起收掉（那排胶囊是 Spotify 自己的内容筛选，AM 没有，位置让给大标题）。关掉全部还原。";
+home_large_title_description = "按 Apple Music 的「现在就听」改主页头部。";
 home_header_title = "主页";
 
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
@@ -386,17 +386,17 @@ tab_bar_hide_labels = "隐藏标签文字";
 tab_bar_hide_create = "隐藏「创建」标签";
 
 mini_bar_glass_section = "迷你播放条";
-mini_bar_glass = "迷你播放条用液态玻璃";
+mini_bar_glass = "液态玻璃版的迷你播放条";
 mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃。";
 
 playlist_cover_section = "歌单封面";
-playlist_single_cover = "只显示一张封面";
-playlist_single_cover_description = "没有自己封面的歌单，Spotify 会拿前四首歌的专辑封面拼成一张四宫格。那张图的地址是 mosaic.scdn.co/<尺寸>/<id1><id2><id3><id4>，四张封面的 id 直接拼在路径里；而同一个地址只留一个 id 时，回的就是一张普通的单张封面。所以这里在图片请求加载之前把地址截到第一个 id，接下来走的就是 Spotify 自己那条「只有一张」的路。只动 mosaic.scdn.co 这一个域名，而且只在路径末段确实是一串 40 位 id 时才动，看不懂的地址一律放过。关掉开关不做任何改动；已经加载过的封面会留在图片缓存里，重开歌单页才能看到四宫格。";
+playlist_single_cover = "替换Spotify官方的四合一封面";
+playlist_single_cover_description = "选项开启后会替换Spotify四合一的歌单封面展示，替换为歌单第一首歌的封面。 ";
 
 entity_page_section = "专辑 / 歌单页";
-entity_page_dissolve = "Melox 风页面（模糊封面底 + 头部居中）";
-entity_page_hide_chrome = "藏掉 Spotify 自己那些按键";
-entity_page_description = "三件事一起做，就是 Melox 与 Apple Music 那个样子：封面模糊成页面的底、同时上面还留着它自己那张清晰封面；整页保持封面那片颜色、不会褪成纯黑；标题 / 艺人 / 元信息居中，而不是贴着左边。不动任何约束、也不移动任何东西 —— 藏起来的、清掉的、居中过的全部记着，关掉这颗开关就逐项还原。";
+entity_page_dissolve = "模糊封面底 + 头部居中";
+entity_page_hide_chrome = "藏掉Spotify的若干按键";
+entity_page_description = "上述两个功能仍在开发中，不推荐打开。";
 
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";
