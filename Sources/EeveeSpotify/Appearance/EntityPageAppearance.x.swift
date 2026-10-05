@@ -1,3 +1,4 @@
+import CoreImage
 import Foundation
 import UIKit
 
@@ -51,16 +52,24 @@ enum EntityPageAppearance {
     private static let clearNodes = 600
     /// 取色底占页面高度的比例（再往下就是 base surface，看不出接缝）。
     private static let fieldColorEnd: CGFloat = 0.58
-    /// 下缘溶解条的高度 = 封面高度 × 这个比例（上限 90pt）。
-    private static let dissolveRatio: CGFloat = 0.30
-    private static let dissolveMax: CGFloat = 90
+    /// 封面化开成的那片背景占页面高度的比例（pw 那张 playlist 截图约 45%，这里给到 52%）。
+    private static let heroHeightRatio: CGFloat = 0.52
+    /// 高斯模糊半径 —— 底图必须"化开"；直接把清晰封面拉大只会糊成一团 ✗。
+    private static let heroBlurRadius: CGFloat = 28
 
     // MARK: - 状态
 
     private static var timer: Timer?
     private static var currentPage: UIView?
     private static var field: GradientView?
-    private static var dissolve: GradientView?
+    /// 我们自己画的"封面化开"大图（见 `ensureHero`）。
+    private static var hero: UIImageView?
+    /// 被按透明藏起来的 **Spotify 自己那张封面**（记原 alpha，关开关写回）。
+    private static var concealedCover: (view: UIView, alpha: CGFloat)?
+    /// 模糊结果按"哪张图"缓存一次（同一张封面不重复跑 CoreImage）。
+    private static var cachedHeroSource: UIImage?
+    private static var cachedHeroImage: UIImage?
+    private static let ciContext = CIContext(options: nil)
     /// 我们清过的底色（**记原值**：关开关要逐个写回 —— 与 `DeclutterChrome` 同一条纪律）。
     private static var clearedBackgrounds: [(view: UIView, color: UIColor)] = []
     /// 已经清过的**对象**（懒建的 cell 每拍都要查一遍，但只记一次；`ObjectIdentifier` 不做强引用）。
@@ -109,7 +118,9 @@ enum EntityPageAppearance {
 
         guard let target = currentTarget() else {
             // 页面走了：把上一页留下的东西全部还原（切页/退出都不留残迹）。
-            if currentPage != nil || field != nil || dissolve != nil { restore(reason: "left the page") }
+            if currentPage != nil || field != nil || hero != nil || concealedCover != nil {
+                restore(reason: "left the page")
+            }
             return
         }
 
@@ -125,9 +136,9 @@ enum EntityPageAppearance {
         }
 
         if wantsDissolve {
-            ensureDissolve(on: target)
-        } else if dissolve != nil {
-            removeDissolve()
+            ensureHero(on: target)
+        } else if hero != nil || concealedCover != nil {
+            removeHero()
         }
 
         // ③ Spotify 自己那些按键（用户 2026-10-13：「spotify 本身的那些按键都还在，看起来不咋地」）。
@@ -231,47 +242,114 @@ enum EntityPageAppearance {
             && abs(blue - baseSurfaceRGB) < 0.02
     }
 
-    // MARK: - ② 封面下缘溶解
+    // MARK: - ② 封面溶进背景
 
-    private static func ensureDissolve(on target: Target) {
-        guard let color = target.color, let cover = target.cover else { return }
-        let height = min(dissolveMax, max(24, cover.bounds.height * dissolveRatio))
-        let strip: GradientView
+    /// 用户 2026-10-13 指着 pw 的 playlist 截图：「**pw 的做法是把封面溶进背景**」——
+    /// 封面放大铺满页面顶部、向下**化开**成一片颜色，标题与文字就压在这片颜色上
+    /// （pw 的 `Redesigned/Playlist/PlaylistHeader.x` 与 `AlbumHeader.x` 做的同一件事）。
+    ///
+    /// 这里**只做加法、不动布局**：自己画一张大图，垫在 field **之上**、页面内容**之下**；
+    /// 把 Spotify 自己那张小封面**按透明藏起来**（原 alpha 记着，关开关写回）——
+    /// 文字与按钮还在原处，于是正好压在这片化开的颜色上，就是截图里那个样子。
+    private static func ensureHero(on target: Target) {
+        guard let cover = target.cover,
+              let source = coverImage(in: cover) else { return }
+        let container = target.page
 
-        if let dissolve, dissolve.superview === cover {
-            strip = dissolve
+        let height = max(180, min(container.bounds.height * heroHeightRatio, 560))
+        let frame = CGRect(x: 0, y: 0, width: container.bounds.width, height: height)
+
+        let view: UIImageView
+        if let hero, hero.superview === container {
+            view = hero
         } else {
-            removeDissolve()
-            strip = GradientView(frame: CGRect(
-                x: 0,
-                y: max(0, cover.bounds.height - height),
-                width: cover.bounds.width,
-                height: height
-            ))
-            strip.autoresizingMask = [.flexibleWidth, .flexibleTopMargin]
-            strip.isUserInteractionEnabled = false
-            strip.accessibilityIdentifier = "eevee-page-dissolve"
-            cover.addSubview(strip)
-            dissolve = strip
+            removeHero()
+            view = UIImageView()
+            view.contentMode = .scaleAspectFill
+            view.clipsToBounds = true
+            view.isUserInteractionEnabled = false
+            view.accessibilityIdentifier = "eevee-page-hero"
+            if let field, field.superview === container {
+                container.insertSubview(view, aboveSubview: field)
+            } else {
+                container.insertSubview(view, at: 0)
+            }
+            hero = view
+            concealSpotifyCover(cover)
             writeDebugLog(
-                "[\(logTag)] dissolve strip \(frameText(strip.frame)) on \(type(of: cover))"
-                    + " (the cover melts into the field at its bottom edge)"
+                "[\(logTag)] hero \(frameText(frame)) in \(type(of: container))"
+                    + " — the cover \(frameText(cover.convert(cover.bounds, to: container)))"
+                    + " is enlarged and dissolved into the field; Spotify's own cover is concealed"
+                    + " (its alpha \(String(format: "%.2f", cover.alpha)) was remembered and goes back"
+                    + " when the switch is turned off)"
             )
         }
 
-        let layer = strip.gradient
-        layer.startPoint = CGPoint(x: 0.5, y: 0)
-        layer.endPoint = CGPoint(x: 0.5, y: 1)
-        layer.locations = [NSNumber(value: 0), NSNumber(value: 1)]
-        layer.colors = [
-            color.withAlphaComponent(0).cgColor,
-            color.withAlphaComponent(0.96).cgColor,
-        ]
+        if !view.frame.equalTo(frame) { view.frame = frame }
+
+        // 模糊一次、按"哪张图"缓存（同一张封面不重复跑 CoreImage；失败就退回原图，不能因此不画）。
+        if cachedHeroSource !== source {
+            cachedHeroSource = source
+            cachedHeroImage = blurred(source) ?? source
+            view.image = cachedHeroImage
+        }
+
+        // 向下化开：上 55% 不透明 → 底全透明（露出后面那片取色底）。
+        let mask: CAGradientLayer
+        if let existing = view.layer.mask as? CAGradientLayer {
+            mask = existing
+        } else {
+            let layer = CAGradientLayer()
+            layer.startPoint = CGPoint(x: 0.5, y: 0)
+            layer.endPoint = CGPoint(x: 0.5, y: 1)
+            layer.colors = [
+                UIColor.white.cgColor,
+                UIColor.white.cgColor,
+                UIColor.clear.cgColor,
+            ]
+            layer.locations = [
+                NSNumber(value: 0),
+                NSNumber(value: 0.55),
+                NSNumber(value: 1),
+            ]
+            view.layer.mask = layer
+            mask = layer
+        }
+        if !mask.frame.equalTo(view.bounds) { mask.frame = view.bounds }
     }
 
-    private static func removeDissolve() {
-        dissolve?.removeFromSuperview()
-        dissolve = nil
+    private static func removeHero() {
+        if let record = concealedCover {
+            record.view.alpha = record.alpha
+            concealedCover = nil
+        }
+        hero?.removeFromSuperview()
+        hero = nil
+        cachedHeroSource = nil
+        cachedHeroImage = nil
+    }
+
+    private static func concealSpotifyCover(_ cover: UIView) {
+        guard concealedCover == nil else { return }
+        concealedCover = (view: cover, alpha: cover.alpha)
+        cover.alpha = 0
+    }
+
+    /// 封面元素里那张真图。
+    private static func coverImage(in root: UIView) -> UIImage? {
+        firstImageView(in: root)?.image
+    }
+
+    /// 高斯模糊（一次一张封面，缓存住）。失败返回 nil —— 调用方退回原图，**绝不能因为模糊失败就不画**。
+    private static func blurred(_ image: UIImage) -> UIImage? {
+        guard let cgImage = image.cgImage else { return nil }
+        let input = CIImage(cgImage: cgImage)
+        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(heroBlurRadius, forKey: kCIInputRadiusKey)
+        guard let output = filter.outputImage,
+              let rendered = ciContext.createCGImage(output, from: input.extent) else { return nil }
+        return UIImage(cgImage: rendered)
     }
 
     // MARK: - ③ 藏掉 Spotify 自己那些按键
@@ -320,7 +398,7 @@ enum EntityPageAppearance {
     // MARK: - 还原（关开关 / 切页都走这里）
 
     private static func restore(reason: String) {
-        removeDissolve()
+        removeHero()
         restoreChrome(reason: reason)
         field?.removeFromSuperview()
         field = nil
