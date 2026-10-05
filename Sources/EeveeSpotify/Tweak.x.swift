@@ -550,6 +550,14 @@ struct EeveeSpotify: Tweak {
         //   `[selectors]` 桶只给选择器名、不给所属类 ⇒ 只能上设备问一次（不 hook、不调用）。
         ImagePipelineProbe.probeOnce()
 
+        // ★ 2026-10-13 夜：**只读**探针 —— 专辑页 / 歌单页**头部封面到底是哪一个视图**。
+        //   日志 77 把两页的骨架摸清了（专辑页是 `CreativeWorkPlatform` 那一族，且它的 Header
+        //   **跟着滚动淡入淡出**；歌单页是 `Components.Header.UI.ArtworkImage`），
+        //   但**封面那一格没有 id、`ViewTreeDumper` 又在深度 24 截断** ⇒ 树里看不到它。
+        //   这个探针只在两个头部里往下走走、把"像封面的"打出来（不 hook、不改任何东西，
+        //   每种头部最多 3 次就自己停）。拿到那一行才做 hero，不猜。
+        HeaderArtworkProbe.start()
+
         // 隐私 / 触感 / Flag 覆盖都是"默认关、用户自己开"的，所以启动时把**实际生效值**
         // 打出来：排查时"没生效"和"没开"是两件完全不同的事，没有这一行只能靠猜。
         writeDebugLog(

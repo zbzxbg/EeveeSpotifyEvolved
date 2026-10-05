@@ -370,6 +370,22 @@ enum TabBarGlassPlate {
             )
             iconRects.append(contentsOf: iconNodes.map(inBar))
             labelRects.append(contentsOf: labelNodes.map(inBar))
+
+            // ★ 2026-10-13（**真机日志 76** 实测）：藏掉的「创建」那一格**没有任何可量的内容**
+            //   —— 它的图标不是 `EncoreIconView`（树里只有那三颗有：`15.UIImageView@35,12,24,24` ×3），
+            //   于是"四格收紧后的那条带"只剩三颗的宽度 ⇒ 胶囊算成 **274**，而四颗时是 **360** ✗
+            //   （用户要的就是"关掉创建之后宽度不变"）。
+            //   补法：拿**它自己的槽位中心**补一个"图标大小"的矩形 —— 尺寸会被 `unionNormalized`
+            //   归一化到中位数，真正起作用的是那个**中心**（加上四格那套收紧位移 `dx`）。
+            if iconNodes.isEmpty, labelNodes.isEmpty {
+                let synthetic = CGRect(
+                    x: size.width / 2 - 12,
+                    y: size.height / 2 - 12,
+                    width: 24,
+                    height: 24
+                )
+                iconRects.append(inBar(synthetic))
+            }
         }
 
         result.icons = unionNormalized(iconRects)

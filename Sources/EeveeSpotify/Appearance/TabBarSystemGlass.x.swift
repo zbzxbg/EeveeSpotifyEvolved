@@ -422,12 +422,11 @@ enum TabBarSystemGlass {
         systemBar.shadowImage = UIImage()
         systemBar.isTranslucent = true
         // ★ 2026-10-13（用户第二条要求的下半句）：**剩下的三颗要三等分整块玻璃**。
-        //   UIKit 对"三颗"默认是 `.centered`：按内容居中、每颗 94 宽、间距 86，
-        //   **不随宿主变宽而拉伸** —— 日志 71 那条 `274×60` 就是这么来的（宿主给到 332 也没用）。
-        //   改成 `.fill`：item 沿整条栏**等分**排布 ⇒ 三颗各占 1/3；
-        //   而玻璃的**宽度**由宿主决定（宿主 = 我们按"四个槽位"算出来的几何，
-        //   因为「创建」那一格只是被藏了内容、槽位还在）⇒ "宽度不变 + 三等分"同时成立。
-        systemBar.itemPositioning = .fill
+        //   ⚠️ **`.fill` 在 iOS 26 这条新玻璃上不生效**（真机日志 76 实测：三颗仍然每颗 94、
+        //   按内容居中、platter 274），而且 `.fill` 会把 `itemWidth` 一起吃掉
+        //   ⇒ 改用 **`.centered` + `itemWidth`**（每颗宽度 = 目标胶囊宽 / 颗数，见 `place`）：
+        //   三颗的方案就是"各占 1/3"，而且 platter 会跟着 item 宽度回到 360。
+        systemBar.itemPositioning = .centered
 
         let relay = TabBarSystemGlassRelay()
         systemBar.delegate = relay
@@ -615,6 +614,26 @@ enum TabBarSystemGlass {
     private static func place(_ systemBar: UITabBar, in bar: UIView) {
         guard let host = hostView(for: bar) else { return }
         let target = TabBarGlassPlate.targetCapsuleRect(in: bar) ?? bar.bounds
+
+        // ★ 2026-10-13（用户："剩下三颗要**三等分**整块玻璃"）：UIKit 这块浮岛玻璃是
+        //   **按 item 宽度**撑出来的（真机日志 76：三颗 → platter 274；四颗 → 360），
+        //   而 `.fill` 在 iOS 26 这条新玻璃上不生效 ⇒ 只能**把每颗的宽度钉死**：
+        //     每颗宽 = 目标胶囊宽 / 颗数
+        //   ⇒ 三颗时正好把 360 三等分（item 中心 60 / 180 / 300），
+        //     而且 platter 的宽度回到 360（与"创建还在"时一致 —— 用户第一条要求）。
+        //   ⚠️ 幂等：只在真的变了才写（写 `itemWidth` 会触发一次布局 ⇒ 否则每拍互相打）。
+        if let count = systemBar.items?.count, count > 1, target.width > 1 {
+            let wanted = (target.width / CGFloat(count)).rounded()
+            if abs(systemBar.itemWidth - wanted) > 0.5 {
+                systemBar.itemWidth = wanted
+                writeDebugLog(
+                    "[\(logTag)] item width pinned to \(Int(wanted))pt"
+                        + " (\(Int(target.width))pt capsule / \(count) item(s))"
+                        + " — UIKit sizes the glass after the items, so this is what makes"
+                        + " the remaining tabs split it evenly"
+                )
+            }
+        }
 
         // ★★ 2026-10-13（**真机日志 71** 纠正两处）：
         //   ① 量内边距时**必须按"看得见的颗数"分家**：四颗那次量到 21/21，藏掉「创建」变三颗之后
