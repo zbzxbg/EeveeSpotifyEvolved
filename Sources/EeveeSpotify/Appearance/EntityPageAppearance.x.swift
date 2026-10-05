@@ -38,8 +38,6 @@ enum EntityPageAppearance {
 
     static let logTag = "PageField"
 
-    /// Spotify 的 base surface（真机树里处处是 `bg=#121212`）。
-    private static let baseSurfaceRGB: CGFloat = 0x12 / 255
     /// 页面 root 的候选 id（歌单页 root 的 id 还没拿到 ⇒ 用"占满屏"那条几何兜底）。
     private static let pageIdentifiers = ["CreativeWorkPlatform.CreativeWorkTemplateView"]
     /// 封面元素的候选 id。
@@ -192,9 +190,14 @@ enum EntityPageAppearance {
         )
     }
 
-    /// 竖直渐变：顶部是封面取色 → 到 `fieldColorEnd` 处变成 base surface → 到底还是它（看不出接缝）。
+    /// 竖直渐变：顶部是封面取色 → 中段压暗 → **到底仍然留着这片颜色**。
+    ///
+    /// ⚠️ **照片 95-97 的教训**：原来 57% 之后就是纯 `#121212` ⇒ 用户看到的是"**下半部分还是黑的**" ✗。
+    /// pw 的字段是 `bleed = {600, 0, 600, 0}`（**比整页还大一圈**，见 `AlbumField.x` / `PlaylistField.x`），
+    /// 整页都带着那片颜色 ⇒ 这里改成**三段同色相**：取色 → 压暗 → 更暗，全程带色、只是越往下越沉。
     private static func paintField(_ view: GradientView, color: UIColor) {
-        let base = UIColor(red: baseSurfaceRGB, green: baseSurfaceRGB, blue: baseSurfaceRGB, alpha: 1)
+        let middle = tinted(color, atMost: 0.26)
+        let bottom = tinted(color, atMost: 0.14)
         let layer = view.gradient
         layer.startPoint = CGPoint(x: 0.5, y: 0)
         layer.endPoint = CGPoint(x: 0.5, y: 1)
@@ -203,12 +206,33 @@ enum EntityPageAppearance {
             NSNumber(value: Double(fieldColorEnd)),
             NSNumber(value: 1),
         ]
-        layer.colors = [color.cgColor, base.cgColor, base.cgColor]
+        layer.colors = [color.cgColor, middle.cgColor, bottom.cgColor]
         let key = hex(of: color)
         if key != lastLoggedHex {
             lastLoggedHex = key
-            writeDebugLog("[\(logTag)] field colour is now #\(key)")
+            writeDebugLog(
+                "[\(logTag)] field colour is now #\(key) — top \(key),"
+                    + " \(Int(fieldColorEnd * 100))% #\(hex(of: middle)), bottom #\(hex(of: bottom))"
+                    + " (the whole page keeps the cover's tint; it never fades to plain #121212)"
+            )
         }
+    }
+
+    /// 同一**色相**压暗（保住"就是这片颜色"的观感，而不是褪成中性灰 ✗）。
+    private static func tinted(_ color: UIColor, atMost ceiling: CGFloat) -> UIColor {
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return UIColor(white: ceiling, alpha: 1)
+        }
+        return UIColor(
+            hue: hue,
+            saturation: min(1, saturation * 1.05),
+            brightness: min(brightness, ceiling),
+            alpha: 1
+        )
     }
 
     /// **只清那些颜色恰好是 `#121212` 的视图**（pw 的教训：list 与每个 cell 都自己画这层）。
@@ -234,16 +258,23 @@ enum EntityPageAppearance {
         walk(page, 0)
     }
 
+    /// 判"这是不是 Spotify 画的那层 base surface"。
+    ///
+    /// ⚠️ **照片 95-97 的教训**：原来卡在 `#121212` ±0.02 ⇒ **同一列表里有的 cell 被清、有的没被清**,
+    /// 于是出现"一横条一横条"的色差 —— 用户原话「**有几条线，看起来很怪**」✗。
+    /// 改成"**很暗的中性色都算**"（三通道互差 ≤ 0.03、最亮通道 ≤ 0.12）⇒ 一致性回来了。
+    /// （现在字段整页带色，多清一点不会有副作用 ✓。）
     private static func isBaseSurface(_ color: UIColor) -> Bool {
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
-        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return false }
-        return alpha > 0.9
-            && abs(red - baseSurfaceRGB) < 0.02
-            && abs(green - baseSurfaceRGB) < 0.02
-            && abs(blue - baseSurfaceRGB) < 0.02
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha), alpha > 0.9 else {
+            return false
+        }
+        let brightest = max(red, max(green, blue))
+        let darkest = min(red, min(green, blue))
+        return brightest <= 0.12 && (brightest - darkest) <= 0.03
     }
 
     // MARK: - ② 封面溶进背景
