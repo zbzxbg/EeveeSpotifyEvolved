@@ -1,4 +1,16 @@
-TARGET := iphone:clang:latest:14.0
+# ── 最低部署版本：16.1（2026-10-13 从 14.0 提上来）────────────────────────────
+# README 的「System Requirements」一直写的是 **Minimum: iOS 16.1 / Recommended: iOS 26**，
+# 但构建元数据没跟上（这里和 `control` 都还是 14.0）—— 于是编译器把 iOS 15+ 的 API
+# 全部判成不可用，设置页那两处（`AttributedString` 做的可点说明、`ProgressView().controlSize`）
+# 直接报 error。
+#
+# 现在两边对齐到 16.1。连带后果，心里有数即可：
+#   · iOS 14 / 15 的机器装不了（README 本来就这么写的）；
+#   · `EeveeSpotify.hookTarget` 里 `.lastAvailableiOS14`（Spotify 8.9.8）那一档事实上成了死路，
+#     留着无害，将来清理时一起删；
+#   · 旧纪律「禁用 iOS 15+  API（`UIButton.Configuration`、`foregroundStyle`…）」自本条起作废；
+#     `#available(iOS 26.0, *)` 那些门禁**仍然必须留**（26 > 16.1）。
+TARGET := iphone:clang:latest:16.1
 INSTALL_TARGET_PROCESSES = Spotify
 ARCHS = arm64
 
@@ -57,7 +69,7 @@ endif
 # in build-ipa-local.sh and the GitHub workflow. No flags needed here.
 
 # ── 打包依赖：`control` 里的 ${ORION} 是 **theos 的占位符**，不是本仓库的变量 ──
-# `control` 结尾写的是 `Depends: ${ORION}, firmware (>= 14.0)`。这里的 ${ORION}
+# `control` 结尾写的是 `Depends: ${ORION}, firmware (>= 16.1)`。这里的 ${ORION}
 # **不由本 Makefile 定义**（全仓库 grep `ORION =` 会是零命中，那是正常的），
 # 它在 `make package` 时由 theos 自己替换：
 #
@@ -65,7 +77,7 @@ endif
 #     _THEOS_DEB_ORION_DEPENDS := dev.theos.orion (>= 1.0.0)
 #     sed -e 's/\${ORION}/$(_THEOS_DEB_ORION_DEPENDS)/g; …'
 #
-# ⇒ 最终 deb 的 Depends 是 `dev.theos.orion (>= 1.0.0), firmware (>= 14.0)`。
+# ⇒ 最终 deb 的 Depends 是 `dev.theos.orion (>= 1.0.0), firmware (>= 16.1)`。
 # 同一机制还有 ${LIBSWIFT} / ${LIBSWIFT_VERSION}。**不要**把 ORION 定义成本地
 # 变量 —— 那会变成普通 make 变量替换，反而绕过 theos 的版本约束。
 #

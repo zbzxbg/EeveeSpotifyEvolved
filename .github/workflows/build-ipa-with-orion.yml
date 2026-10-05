@@ -267,8 +267,11 @@ jobs:
           echo "Injection manifest:"
           printf '  - %s\n' "${INJECT[@]}"
 
+          # -m 与工程的 iOS 底线保持一致（2026-10-13：15.0 → 16.1）：它把输出 IPA 的
+          # MinimumOSVersion 盖成这个值，而 tweak 的 dylib 现在按 16.1 编译 —— 不一致就会
+          # 出现"iOS 15 装得上、dylib 加载不了"的静默失效。
           cyan -i ${{ github.workspace }}/spotify.ipa -o "$OUT" \
-               -f "${INJECT[@]}" -c 9 -m 15.0 -du
+               -f "${INJECT[@]}" -c 9 -m 16.1 -du
           echo "OUT_IPA=$OUT" >> $GITHUB_ENV
 
       # ── 4. 断言：把静默失败变成显式失败 ──────────────────────────────────
