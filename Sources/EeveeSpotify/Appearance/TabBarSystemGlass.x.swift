@@ -678,17 +678,15 @@ enum TabBarSystemGlass {
         if !host.frame.equalTo(frame) { host.frame = frame }
         if !systemBar.frame.equalTo(host.bounds) { systemBar.frame = host.bounds }
 
-        // ★ 迷你播放条那条要跟**UIKit 真画出来的玻璃**等宽（原来跟的是"我们算出来的胶囊"）——
-        //   日志 71 现场：我们算 332、UIKit 真画 274 ⇒ 迷你条 333 与标签栏玻璃对不上，
-        //   而且这个数**随颗数变**（三颗更窄）。这里每拍按真画的那块刷新，双条重新等宽。
-        //   ⚠️ 2026-10-13 第二条要求之后：**颗数不再随「创建」开关变**（那一颗保住槽位）⇒
-        //      这个量也不再因为那颗开关而跳（用户报的"迷你条跟着变小"就是这里跟着跳）。
-        //   ⚠️ 只读它、**不喂回宿主 frame** ⇒ 不会形成"量一次变一次"的漂移（那正是 v4.6 的教训）。
-        //   ⚠️ 这两个量声明在 `TabBarGlassPlate` 里（迷你条读的那一份），**必须带类型名前缀**。
-        if let drawn, bar.bounds.width > 1 {
-            TabBarGlassPlate.capsuleWidth = drawn.width
-            TabBarGlassPlate.capsuleWidthRatio = drawn.width / bar.bounds.width
-        }
+        // ⛔ 2026-10-13（用户）：「**迷你播放条原本是什么样就什么样，不和下面的一起动**
+        //    （就是原本 300 多的样子，标签栏就现在这个样子不变）」——
+        //    所以**这里不再按"UIKit 真画的那块"刷新** `capsuleWidth` / `capsuleWidthRatio`。
+        //    停掉之后那两个量保持**几何算出来的**那一份（`TabBarGlassPlate.capsuleRect` 里写的：
+        //    = "四格收紧后那条带 + 88"，真机上 360/414 ≈ 0.87）⇒ 迷你条回到原本 ~346pt，
+        //    而且**不再随标签栏玻璃的宽度变**（苹果给三颗的原生宽度是 274，那只是标签栏自己的事）。
+        //
+        //    历史：2026-10-13 第二片曾改成"跟真画的那块等宽"，理由是日志 71 里我们算 332 /
+        //    UIKit 画 274 对不上。现在用户明确要"两条解绑" ⇒ 撤回那一步。
     }
 
     // MARK: - ★ 拖动胶囊：**系统自带，我们不碰**（2026-10-13 第三版认识）
