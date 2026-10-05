@@ -498,6 +498,11 @@ struct EeveeSpotify: Tweak {
         //   ⚠️ 关掉它仍然是"完全不动"（内容与高度精确写回），见
         //   `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()` 的注释。
         UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()
+        // ★ 2026-10-13（用户要求：「**展示罗马化翻译 / 歌词翻译默认开启**」）：把
+        //   「三颗逐语言罗马化开关 = 开」+「不隐藏译文」一次性写进键里 —— **只对没写过的键**，
+        //   已经手动选过的设备保持他自己的选择（与上面那条、以及 Genius 回退那条同一条纪律）。
+        //   ⚠️ 必须写键、不能只改 getter：那三颗键在别处是按**字面量**读的（见该方法上的注释）。
+        NgzhwmSettingsViewModel.applyRomanizationAndTranslationDefaultsIfNeeded()
         // 这一行是"那一轮跑的是哪一档"的标记：玻璃没出现时，先看它是 ON 还是 OFF。
         writeDebugLog("[INIT] tab bar glass: \(UserDefaults.tabBarSystemGlass ? "ON" : "OFF")")
         writeDebugLog("[INIT] Spotify: \(spotifyVersion) (build \(spotifyBuild))")

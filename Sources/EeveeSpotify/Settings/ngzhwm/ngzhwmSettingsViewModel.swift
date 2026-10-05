@@ -97,6 +97,40 @@ class NgzhwmSettingsViewModel: ObservableObject {
         UserDefaults.standard.set(hidden, forKey: neteaseHideTranslationKey)
     }
 
+    /// ★ 2026-10-13（用户要求：「**展示罗马化翻译 / 歌词翻译默认开启**」）——
+    /// 一次性把这两类默认值**写进键里**，且**只对从没写过的键**动手。
+    ///
+    /// ⚠️ 为什么不是"把读取处的默认值改成 true"就完事：三颗罗马化开关在别处是**按字面量键**
+    /// 读的（`LyricLinesAdapter` / `LyricsDto` / 两个歌词源，见上面第 70 行那段说明），
+    /// 只改扩展页那个合成 getter 会做出一个**骗人的开关**（显示开着、歌词里却没有罗马音）✗。
+    /// 写键才是"真开"。
+    ///
+    /// 做法与 `LyricsOptions.applyGeniusFallbackDefaultIfNeeded()` /
+    /// `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()` **完全一致**：
+    /// 只跑一次（marker 记着），之后**尊重用户自己的开关** —— 已经手动关过的键不动。
+    static func applyRomanizationAndTranslationDefaultsIfNeeded() {
+        let marker = "ngzhwm_romanizationTranslationDefaultsApplied"
+        guard !UserDefaults.standard.bool(forKey: marker) else { return }
+        UserDefaults.standard.set(true, forKey: marker)
+
+        // 「展示罗马化歌词」：三颗逐语言开关，只有**从没写过**的才写成开。
+        for key in [japaneseRomanizationKey, chineseRomanizationKey, koreanRomanizationKey]
+        where UserDefaults.standard.object(forKey: key) == nil {
+            UserDefaults.standard.set(true, forKey: key)
+        }
+
+        // 「展示歌词翻译」与「隐藏译文」是**同一个键的反相**（见上面 `setHideTranslation`）
+        // ⇒ 要"默认显示译文"，就是把它写成 false（同样只对没写过的键）。
+        if UserDefaults.standard.object(forKey: neteaseHideTranslationKey) == nil {
+            UserDefaults.standard.set(false, forKey: neteaseHideTranslationKey)
+        }
+
+        writeDebugLog(
+            "[INIT] romanization / translation defaults applied once"
+                + " — only keys that had never been written; a device that chose otherwise keeps its choice"
+        )
+    }
+
     /// 「AMLL 优先」：开启后先向 AMLL 要逐词歌词，没正常返回再回退到用户在
     /// 来源选择器里设置的那个源（连同它的相关设置）。
     ///

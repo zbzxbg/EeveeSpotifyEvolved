@@ -383,7 +383,6 @@ blocked_artists_clear_all = "Remove all blocked artists";
 library_section = "Music library";
 tab_bar_glass_section = "Tab bar";
 tab_bar_system_glass = "Liquid Glass tab bar";
-tab_bar_system_glass_description = "Hides Spotify's own tab bar content and puts a system tab bar over it, so iOS 26 draws the real Liquid Glass: the selection bubble slides between tabs, with refraction and light/dark adaptation. Before the glass takes the touches it checks that a tap on it can still be forwarded to Spotify; when it can, the glass answers the finger and taps work as before, and when it cannot the touches stay with Spotify's own bar. On by default.";
 tab_bar_glass_description = "A few settings for the tab bar.";
 library_large_title = "Apple Music style library";
 library_large_title_description = "Restyles Spotify's own library the way Apple Music has it.";
