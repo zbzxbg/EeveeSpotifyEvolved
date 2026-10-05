@@ -54,8 +54,12 @@ enum EntityPageAppearance {
     private static let fieldColorEnd: CGFloat = 0.58
     /// 封面化开成的那片背景占页面高度的比例（pw 那张 playlist 截图约 45%，这里给到 52%）。
     private static let heroHeightRatio: CGFloat = 0.52
-    /// 高斯模糊半径 —— 底图必须"化开"；直接把清晰封面拉大只会糊成一团 ✗。
-    private static let heroBlurRadius: CGFloat = 28
+    /// 高斯模糊半径 —— **按原图宽度算**，不是固定值。
+    ///
+    /// ⚠️ **照片 93 的教训**：封面原图只有 262px 宽，用固定 **28px** 半径去糊 = 糊掉图宽的 10%
+    /// ⇒ 铺满顶部之后**只剩一片纯色渐变、完全看不出是哪张封面** ✗（用户要的是 pw 那样
+    /// "看得出是这张封面、但化开了"）。改成原图宽度的 **3.5%**（262px ⇒ 约 9px）。
+    private static let heroBlurRatio: CGFloat = 0.035
 
     // MARK: - 状态
 
@@ -287,6 +291,11 @@ enum EntityPageAppearance {
 
         if !view.frame.equalTo(frame) { view.frame = frame }
 
+        // ★ 2026-10-13（**照片 94** 的教训）：**藏封面这件事必须每一拍补一次** ——
+        //   Spotify 自己的布局会把它写回 1（我们只在挂上那一拍置 0，于是它又冒出来了 ✗：
+        //   照片里我们那片化开的颜色上，端端正正又压着它那张小方封面）。
+        if cover.alpha != 0 { cover.alpha = 0 }
+
         // 模糊一次、按"哪张图"缓存（同一张封面不重复跑 CoreImage；失败就退回原图，不能因此不画）。
         if cachedHeroSource !== source {
             cachedHeroSource = source
@@ -331,7 +340,11 @@ enum EntityPageAppearance {
 
     private static func concealSpotifyCover(_ cover: UIView) {
         guard concealedCover == nil else { return }
-        concealedCover = (view: cover, alpha: cover.alpha)
+        // ⚠️ **读到的 alpha 不可信**（照片 94 的日志里它是 `0.00`，而那张封面明明是可见的；
+        //    探针在另一张图上还读到过 `1.17`）⇒ 只有"明显大于 0"才当原值，否则按 1 记，
+        //    免得关开关时把封面**永久留在透明状态** ✗。
+        let original = cover.alpha > 0.01 ? cover.alpha : 1
+        concealedCover = (view: cover, alpha: original)
         cover.alpha = 0
     }
 
@@ -346,7 +359,7 @@ enum EntityPageAppearance {
         let input = CIImage(cgImage: cgImage)
         guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
         filter.setValue(input, forKey: kCIInputImageKey)
-        filter.setValue(heroBlurRadius, forKey: kCIInputRadiusKey)
+        filter.setValue(max(4, image.size.width * heroBlurRatio), forKey: kCIInputRadiusKey)
         guard let output = filter.outputImage,
               let rendered = ciContext.createCGImage(output, from: input.extent) else { return nil }
         return UIImage(cgImage: rendered)

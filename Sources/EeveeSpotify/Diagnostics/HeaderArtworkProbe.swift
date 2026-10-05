@@ -99,6 +99,22 @@ enum HeaderArtworkProbe {
         if candidates.isEmpty {
             writeDebugLog("[HeaderProbe]   candidates: (none — nothing square and large enough in there)")
         }
+
+        // ★ 2026-10-13 追加（**日志 80** 的教训）：**整页里带 id 的视图**也要列出来。
+        //   歌单页的控制行（分享 / ⋯ / 随机 / 播放）、curation pill 行（添加 / 编辑 / 排序 / 姓名和详情）
+        //   与"在此页面上查找"那个搜索框**都不在头部里** ⇒ 只摸头部的话，"藏掉 Spotify 那些按键"
+        //   在歌单页**一个都命中不了**（日志 80 里连一行 `hid … chrome` 都没有 ✗）。
+        //   这里只列 id + 尺寸 + 位置，限深限数。
+        if let page = pageAncestor(of: header, in: window) {
+            var ids: [String] = []
+            var seenIds = 0
+            collectIdentifiers(in: page, of: window, depth: 0, seen: &seenIds, into: &ids)
+            for chunk in chunks(ids, size: 3) {
+                guard lines < maxLines else { break }
+                lines += 1
+                writeDebugLog("[HeaderProbe]   page ids: " + chunk.joined(separator: " | "))
+            }
+        }
     }
 
     /// 子树里"像封面"的那些：**方形且 ≥ 80pt**、类名带 Image/Artwork/Cover、或自带 id。
@@ -133,6 +149,38 @@ enum HeaderArtworkProbe {
     }
 
     // MARK: - 小工具
+
+    /// 头部往上第一个"占满屏"的祖先 = 这一页（与 `EntityPageAppearance.pageRoot` 同一条几何）。
+    private static func pageAncestor(of view: UIView, in window: UIView) -> UIView? {
+        var node: UIView? = view
+        while let current = node, current !== window {
+            let frame = current.convert(current.bounds, to: window)
+            if frame.height >= window.bounds.height * 0.8 { return current }
+            node = current.superview
+        }
+        return nil
+    }
+
+    /// 整页里**带 `accessibilityIdentifier`** 的视图（id + 尺寸 + 位置），限深限数。
+    private static func collectIdentifiers(
+        in node: UIView,
+        of window: UIView,
+        depth: Int,
+        seen: inout Int,
+        into out: inout [String]
+    ) {
+        guard depth <= 12, seen < 400, out.count < 120 else { return }
+        seen += 1
+        if let identifier = node.accessibilityIdentifier, !identifier.isEmpty {
+            let frame = node.convert(node.bounds, to: window)
+            out.append(
+                "\(shortName(String(describing: type(of: node)))) \(rectText(frame)) id=\(identifier)"
+            )
+        }
+        for sub in node.subviews {
+            collectIdentifiers(in: sub, of: window, depth: depth + 1, seen: &seen, into: &out)
+        }
+    }
 
     private static func frontWindow() -> UIWindow? {
         let windows = UIApplication.shared.connectedScenes
