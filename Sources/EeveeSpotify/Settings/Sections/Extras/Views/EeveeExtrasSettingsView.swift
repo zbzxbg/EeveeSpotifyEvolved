@@ -43,7 +43,9 @@ struct EeveeExtrasSettingsView: View {
         var tabBarHideCreate = UserDefaults.tabBarHideCreate
         var miniBarGlass = UserDefaults.miniBarGlass
         // ★ 2026-10-13：歌单封面的「四宫格 → 单张」（第 5 轮那个问题）。
-        var playlistSingleCover = UserDefaults.playlistSingleCover
+        // ★ 2026-10-13：专辑页 / 歌单页的 AM 化（取色底 + 封面下缘溶解）。
+        var entityPageField = UserDefaults.entityPageField
+        var entityPageDissolve = UserDefaults.entityPageDissolve
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
@@ -434,6 +436,32 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.playlistSingleCover,
                         persist: { UserDefaults.playlistSingleCover = $0 }
+                    )
+                )
+            }
+
+            // ★ 2026-10-13（用户：「我就一个要求：**看起来像 Apple Music**」）：专辑页 / 歌单页的 AM 化。
+            //   ① 取色底：页面最底层铺"封面取色 → 向下渐隐成 `#121212`"的竖直渐变
+            //      （**必须先清掉 list / 每个 cell 画的 `#121212` 底色**，否则那层完全看不见 ——
+            //       机制与证据见 `Appearance/EntityPageAppearance.x.swift` 文件头，与 pw 的 `AlbumField` 同路）；
+            //   ② 封面下缘溶解：封面底部压一条渐变，让它"溶"进那片颜色（AM 的招牌动作）。
+            //   两颗各自独立、**默认都开**；关掉即完全还原（清过的底色逐个写回原色）。
+            Section(
+                header: Text("entity_page_section".localized),
+                footer: Text("entity_page_description".localized)
+            ) {
+                Toggle(
+                    "entity_page_field".localized,
+                    isOn: shadowBinding(
+                        \.entityPageField,
+                        persist: { UserDefaults.entityPageField = $0 }
+                    )
+                )
+                Toggle(
+                    "entity_page_dissolve".localized,
+                    isOn: shadowBinding(
+                        \.entityPageDissolve,
+                        persist: { UserDefaults.entityPageDissolve = $0 }
                     )
                 )
             }

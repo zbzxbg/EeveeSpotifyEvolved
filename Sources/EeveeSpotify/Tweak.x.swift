@@ -558,6 +558,14 @@ struct EeveeSpotify: Tweak {
         //   每种头部最多 3 次就自己停）。拿到那一行才做 hero，不猜。
         HeaderArtworkProbe.start()
 
+        // ★ 2026-10-13（用户：「我就一个要求：看起来像 Apple Music」）：
+        //   专辑页 / 歌单页的 **AM 化** —— ① 封面取色底（最底层渐变）② 封面下缘溶解。
+        //   做法照 pw 的 `AlbumField`：铺在页面最底层，而且**必须先清掉 list / 每个 cell 画的
+        //   `#121212` 底色**（不清就完全看不见那层 —— 那条坑的近亲是"整页变黑"）。
+        //   两颗开关各自独立、默认都开；关掉即完全还原。机制与证据见
+        //   `Appearance/EntityPageAppearance.x.swift` 文件头。日志 tag：`[PageField]`。
+        EntityPageAppearance.start()
+
         // 隐私 / 触感 / Flag 覆盖都是"默认关、用户自己开"的，所以启动时把**实际生效值**
         // 打出来：排查时"没生效"和"没开"是两件完全不同的事，没有这一行只能靠猜。
         writeDebugLog(

@@ -49,6 +49,8 @@ extension UserDefaults {
     private static let nowPlayingBlurUnplayedLyricsKey = "nowPlayingBlurUnplayedLyrics"
     private static let lyricsSearchPlaceholderEasterEggKey = "lyricsSearchPlaceholderEasterEgg"
     private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
+    private static let entityPageFieldKey = "entityPageField"
+    private static let entityPageDissolveKey = "entityPageDissolve"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -106,6 +108,8 @@ extension UserDefaults {
         nowPlayingBlurUnplayedLyricsKey,
         lyricsSearchPlaceholderEasterEggKey,
         nowPlayingControlGlyphsKey,
+        entityPageFieldKey,
+        entityPageDissolveKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -674,6 +678,34 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: playlistSingleCoverKey)
+        }
+    }
+
+    // MARK: - 页面取色底（AM 化：专辑页 / 歌单页）
+
+    /// 「**封面取色底**」：专辑页 / 歌单页的最底层铺一层"封面取色 → 向下渐隐成 `#121212`"的竖直渐变。
+    ///
+    /// **默认开** —— 用户 2026-10-13：「我就一个要求：**看起来像 Apple Music**」。
+    /// 机制、证据、以及"**为什么必须先清掉 list / 每个 cell 画的 `#121212` 底色**"（不清就完全看不见）
+    /// 都写在 `Appearance/EntityPageAppearance.x.swift` 的文件头 —— 与 pw 的 `AlbumField` 同一条路。
+    /// 关掉即**完全还原**：清过的底色逐个写回原色、渐变层撤掉。
+    static var entityPageField: Bool {
+        get {
+            container.object(forKey: entityPageFieldKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: entityPageFieldKey)
+        }
+    }
+
+    /// 「**封面下缘溶解**」：封面底部压一条渐变，让它"溶"进那片取色底（AM 的招牌动作）。
+    /// **默认开**，理由同上。关掉即撤掉那一条 —— 原生视图一个字节都不动。
+    static var entityPageDissolve: Bool {
+        get {
+            container.object(forKey: entityPageDissolveKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: entityPageDissolveKey)
         }
     }
 
