@@ -452,13 +452,10 @@ struct EeveeExtrasSettingsView: View {
                 header: Text("entity_page_section".localized),
                 footer: Text("entity_page_description".localized)
             ) {
-                Toggle(
-                    "entity_page_field".localized,
-                    isOn: shadowBinding(
-                        \.entityPageField,
-                        persist: { UserDefaults.entityPageField = $0 }
-                    )
-                )
+                // ★ 2026-10-13（用户：「有些选项可以改改或者删掉了」）：这里原来还有一颗
+                //   「封面取色底」—— 已经**并进下面这一颗**（两者本来就是同一件事的两半：
+                //   都拿封面的颜色铺底），页面那一栏因此从**三颗减到两颗**。
+                //   代码里"整页取色底"与"模糊封面底"两条路径仍各管各的（排查时能只关一半）。
                 Toggle(
                     "entity_page_dissolve".localized,
                     isOn: shadowBinding(

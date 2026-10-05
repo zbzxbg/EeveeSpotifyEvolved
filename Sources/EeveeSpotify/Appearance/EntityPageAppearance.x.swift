@@ -117,13 +117,16 @@ enum EntityPageAppearance {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         writeDebugLog(
-            "[\(logTag)] armed — page field \(UserDefaults.entityPageField ? "ON" : "OFF"),"
-                + " cover dissolve \(UserDefaults.entityPageDissolve ? "ON" : "OFF")"
+            "[\(logTag)] armed — Melox page look \(UserDefaults.entityPageDissolve ? "ON" : "OFF"),"
+                + " hiding Spotify's repeated buttons \(UserDefaults.entityPageHideChrome ? "ON" : "OFF")"
         )
     }
 
     private static func tick() {
-        let wantsField = UserDefaults.entityPageField
+        // ★ 2026-10-13（用户：「有些选项可以改改或者删掉了」）：**「封面取色底」并进这一颗了** ——
+        //   在用户眼里"模糊封面底"与"整页取色底"就是同一件事的两半（都是拿封面的颜色铺底），
+        //   设置页因此从**三颗减到两颗**；代码里两条路径**留着**（要单独排查时能只关一半）。
+        let wantsField = UserDefaults.entityPageDissolve
         let wantsDissolve = UserDefaults.entityPageDissolve
 
         guard let target = currentTarget() else {

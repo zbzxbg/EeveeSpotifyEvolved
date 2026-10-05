@@ -403,10 +403,9 @@ playlist_single_cover = "One cover instead of four";
 playlist_single_cover_description = "A playlist with no cover of its own gets a mosaic: Spotify builds one image out of the album art of its first four tracks. That image is addressed as mosaic.scdn.co/<size>/<id1><id2><id3><id4>, with the four cover ids packed into the path, and the same address carrying a single id is an ordinary single cover. So this cuts the address down to the first id before the image request is loaded, and Spotify's own single-image path takes over. Only mosaic.scdn.co is touched, and only when the tail of the path really is a run of 40-character ids, so any address it cannot read is left alone. Switching it off changes nothing; covers that were already loaded stay in the image cache until the playlist is opened again.";
 
 entity_page_section = "Album & playlist pages";
-entity_page_field = "Colour field taken from the cover";
-entity_page_dissolve = "Let the cover melt into it";
+entity_page_dissolve = "Melox-style page (blurred cover, centred header)";
 entity_page_hide_chrome = "Hide Spotify's own buttons";
-entity_page_description = "What makes those pages look like Apple Music. The colour field is painted behind everything, from the cover's own colour fading down into the base surface; the dissolve is a strip at the cover's bottom edge that melts it into that field; and the buttons Spotify puts on every row and in the header are hidden, the way Apple Music does not show them. Play and shuffle are left alone. Turning any of it off puts back exactly what was there.";
+entity_page_description = "Three things at once, the way Melox and Apple Music have them: the cover is blurred into the page's backdrop and keeps its own sharp copy on top of it, the page keeps the cover's tint all the way down instead of fading to plain black, and the header's title, artist and metadata are centred rather than pinned to the left margin. Nothing is constrained or moved -- everything hidden, cleared or centred is remembered and put back when the switch goes off.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
