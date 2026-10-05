@@ -105,6 +105,26 @@ import ObjectiveC.runtime
 ///
 /// 顺带修掉一处**自相矛盾的日志**：`installed — …` 原来写死 `taking touches…`（见 `logLayoutOnce`）。
 ///
+/// ## ★ 第五片（2026-10-13 同日）：**"拖动胶囊"归苹果，我们一行都不写**
+///
+/// 用户原话：「**GitHub 或者苹果自己总有教里面这个胶囊怎么搞吧，哪来的独立开关**」——
+/// 对，而且这正是第四片那句 `probeForwardRoute` 想买的东西：
+///
+///   · **原生 iOS 26 的液态玻璃标签栏本来就"按住就能滑"** —— 手指一贴上那条栏就能横向滑，
+///     选中镜片**立刻跟手**、松手选中手指下那一颗，**不需要先长按**。
+///     两处独立来源：`liquid_glass_easy` 的 issue #30（作者在 iOS 26 上逐条对比 Apple Music 后写的）
+///     与苹果 WWDC25「Build a UIKit app with the new design」的 Tab views 一章 ——
+///     那一章里标签栏整个是 `UITabBarController` 的系统外观与行为，**没有"自己画胶囊"这条题**。
+///   · 我们唯一要做的，是**别把触摸从系统栏手里拿走**（第四片：玻璃接管触摸）。
+///
+/// ⇒ 于是**曾经写过的两版都删掉了**：
+///   ① 第三片那只 pan（装在 **Spotify 那条栏**上、"滑过哪格切哪格"）—— 用户报的
+///      "不跟手 / 胶囊回弹 / 替用户按按键"就是它；
+///   ② 第五片初稿（照 kumone 的 `GlassTabBar.swift` 装在**我们宿主**上、逐格切 + 一颗独立开关）——
+///      **和系统自己那套重复**，而且系统那套（连续跟手）比我们的逐格跟手更好。
+///   ⚠️ kumone 要自己写，是因为它是 **SwiftUI 自绘**的标签栏（iOS 16–25 没有原生玻璃）；
+///      我们用的是**真系统栏**，所以这件事归 UIKit —— 这也正是"别再自绘"那条纪律的同一件事。
+///
 /// 顺带记两条**实测**（都写进日志了，别再猜）：
 ///   · `accessibilityTraits` 在 Spotify 9.1.88 上**没有** `.selected` 标记（`traits=0x0`）
 ///     ⇒ 选中态**实际靠"谁的文字是白色那颗"**：`主页` 的 label 是 `#FFFFFF`、其余 `#B3B3B3`；
@@ -573,6 +593,30 @@ enum TabBarSystemGlass {
         if !host.frame.equalTo(frame) { host.frame = frame }
         if !systemBar.frame.equalTo(host.bounds) { systemBar.frame = host.bounds }
     }
+
+    // MARK: - ★ 拖动胶囊：**系统自带，我们不碰**（2026-10-13 第三版认识）
+
+    // 用户原话：「**GitHub 或者苹果自己总有教里面这个胶囊怎么搞吧，哪来的独立开关**」——
+    // 对。查证（`Tools/eevee-hookfinder` 之外的外部来源，两处独立）：
+    //
+    //   · **原生 iOS 26 的液态玻璃标签栏本来就能"按住就滑"**：手指一贴上那条栏就能横向滑，
+    //     选中镜片**立刻跟手**、松手选中手指下那一颗 —— 不用先长按。
+    //     原文（`liquid_glass_easy` #30，作者在 iOS 26 上逐条对比后写的）：
+    //     *"you can put your finger on the bar and slide right away, in one motion. The selection
+    //       lens follows the finger immediately, and releasing selects the tab under it."*
+    //   · 苹果的 WWDC25「Build a UIKit app with the new design」里，标签栏（`UITabBarController`）
+    //     整个是系统那一套（浮动玻璃 + 选中镜片 + minimize on scroll）——**没有"自己画胶囊"这条题**。
+    //
+    // ⇒ 结论：**这一层一行代码都不该写**。我们唯一要做的是"别把触摸从系统栏手里拿走"
+    //   （见本文件第四片的 `probeForwardRoute`：玻璃接管触摸 ⇒ 苹果那套交互才有机会发生）。
+    //
+    // ⚠️ 曾经的两版都是错的，别再走回去：
+    //   ① 第一版（第三片）：在 **Spotify 那条栏**上装 pan"滑过哪格切哪格"，每次 `.changed` 都提交
+    //      ⇒ 用户报的"不跟手 / 胶囊回弹 / 替用户按按键"；
+    //   ② 第二版（第五片初稿）：照着 kumone 的 `GlassTabBar.swift` 在**我们宿主**上装 pan、
+    //      逐格切 + 独立开关 ⇒ **与系统自己那套重复**，而系统那套（连续跟手）比我们的更好。
+    //   kumone 之所以要自己写，是因为它是 **SwiftUI 自绘**的标签栏（iOS 16–25，没有原生玻璃）；
+    //   我们用的是**真系统栏**，所以这件事归 UIKit。
 
     /// UIKit 自己画的那块玻璃 —— **只认 `UITabBarPlatterView` 那条线**（栏自己的 platter）。
     ///
