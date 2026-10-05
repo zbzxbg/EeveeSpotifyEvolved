@@ -396,7 +396,8 @@ playlist_single_cover_description = "没有自己封面的歌单，Spotify 会�
 entity_page_section = "专辑 / 歌单页";
 entity_page_field = "封面取色底";
 entity_page_dissolve = "封面下缘溶解";
-entity_page_description = "这两颗就是「看起来像 Apple Music」的那两半。取色底铺在一切的最底层：从封面自己的颜色向下渐隐成页面底色；下缘溶解是封面底部的一条渐变，把封面「溶」进那片颜色里。两颗要一起用，关掉哪一颗都会把动过的东西精确还原。";
+entity_page_hide_chrome = "藏掉 Spotify 自己那些按键";
+entity_page_description = "这三颗就是「看起来像 Apple Music」的全部。取色底铺在一切的最底层：从封面自己的颜色向下渐隐成页面底色；下缘溶解是封面底部的一条渐变，把封面「溶」进那片颜色；再藏掉 Spotify 在每一行和头部放的那些按键（AM 上没有它们）。播放与随机一律不动。关掉哪一颗都会把动过的东西精确还原。";
 
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";

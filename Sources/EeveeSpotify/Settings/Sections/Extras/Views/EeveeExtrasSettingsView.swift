@@ -44,9 +44,10 @@ struct EeveeExtrasSettingsView: View {
         var miniBarGlass = UserDefaults.miniBarGlass
         // ★ 2026-10-13：歌单封面的「四宫格 → 单张」（第 5 轮那个问题）。
         var playlistSingleCover = UserDefaults.playlistSingleCover
-        // ★ 2026-10-13：专辑页 / 歌单页的 AM 化（取色底 + 封面下缘溶解）。
+        // ★ 2026-10-13：专辑页 / 歌单页的 AM 化（取色底 + 封面下缘溶解 + 藏掉 Spotify 那些按键）。
         var entityPageField = UserDefaults.entityPageField
         var entityPageDissolve = UserDefaults.entityPageDissolve
+        var entityPageHideChrome = UserDefaults.entityPageHideChrome
         var nowPlayingBackdrop = UserDefaults.nowPlayingBackdrop
         var nowPlayingOneScreen = UserDefaults.nowPlayingOneScreen
         var nowPlayingVolume = UserDefaults.nowPlayingVolume
@@ -463,6 +464,16 @@ struct EeveeExtrasSettingsView: View {
                     isOn: shadowBinding(
                         \.entityPageDissolve,
                         persist: { UserDefaults.entityPageDissolve = $0 }
+                    )
+                )
+                // ★ 2026-10-13（用户看完真机）：「spotify 本身的那些按键都还在，**看起来不咋地**」
+                //   ⇒ 每行的「+」「…」、头部的下载 / 加入 / 菜单 / 观看信息一律藏掉（AM 上没有它们）。
+                //   **play / shuffle 不动** —— 那是真功能，AM 自己也有。
+                Toggle(
+                    "entity_page_hide_chrome".localized,
+                    isOn: shadowBinding(
+                        \.entityPageHideChrome,
+                        persist: { UserDefaults.entityPageHideChrome = $0 }
                     )
                 )
             }

@@ -51,6 +51,7 @@ extension UserDefaults {
     private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
     private static let entityPageFieldKey = "entityPageField"
     private static let entityPageDissolveKey = "entityPageDissolve"
+    private static let entityPageHideChromeKey = "entityPageHideChrome"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -110,6 +111,7 @@ extension UserDefaults {
         nowPlayingControlGlyphsKey,
         entityPageFieldKey,
         entityPageDissolveKey,
+        entityPageHideChromeKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -706,6 +708,20 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: entityPageDissolveKey)
+        }
+    }
+
+    /// 「**藏掉 Spotify 自己的按键**」：每行的「+」「…」、头部的下载 / 加入 / 菜单 / 观看信息。
+    ///
+    /// **默认开** —— 用户 2026-10-13 看完真机：「spotify 本身的那些按键都还在，**看起来不咋地**」。
+    /// AM 的专辑 / 歌单页没有这些；**play / shuffle 一律不碰**（那是真功能，AM 自己也有）。
+    /// 关掉即逐个写回原 `alpha`（不是一律写 1 —— 有的本来就是半透明）。
+    static var entityPageHideChrome: Bool {
+        get {
+            container.object(forKey: entityPageHideChromeKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: entityPageHideChromeKey)
         }
     }
 

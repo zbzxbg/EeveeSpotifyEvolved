@@ -69,6 +69,23 @@ enum EntityPageAppearance {
     private static let maxCleared = 1200
     /// 「专辑页找到了、但封面图还没加载出来」只报一次（否则那 0.6s 的节拍会刷屏）。
     private static var didReportMissingColour = false
+    /// Spotify 自己的按键里，**这些 id 片段**的一律藏掉（见 `hideChrome`）。
+    ///
+    /// ⚠️ **按片段匹配、不按整串**：真机日志 78 里头部那几颗是
+    /// `Components.UI.AddToButton` / `DownloadButton.Granular.None` /
+    /// `Components.UI.ContextMenuButton-2iyK0BOpYVMJUpDkAwVhph`（**带一段随机后缀**）/
+    /// `Components.UI.WatchFeedEntityExplorerButton` —— 整串比对会漏掉带后缀的那种 ✗。
+    /// 行内那两颗（每行的「+」「…」）**id 还没读到过**，但按同样的片段规则能一起命中；
+    /// 命不中也不会有副作用，而且**藏了哪些 id 会打进日志**，下一份日志就能看到行内那两颗叫什么。
+    private static let chromeIdentifierFragments = [
+        "AddToButton",
+        "DownloadButton",
+        "ContextMenuButton",
+        "WatchFeedEntityExplorerButton",
+    ]
+    private static var hiddenChrome: [(view: UIView, alpha: CGFloat)] = []
+    private static var hiddenChromeViews: Set<ObjectIdentifier> = []
+    private static let maxHiddenChrome = 400
     private static var didReport = false
     private static var lastLoggedHex: String?
 
@@ -111,6 +128,13 @@ enum EntityPageAppearance {
             ensureDissolve(on: target)
         } else if dissolve != nil {
             removeDissolve()
+        }
+
+        // ③ Spotify 自己那些按键（用户 2026-10-13：「spotify 本身的那些按键都还在，看起来不咋地」）。
+        if UserDefaults.entityPageHideChrome {
+            hideChrome(in: target.page)
+        } else if !hiddenChrome.isEmpty {
+            restoreChrome(reason: "chrome switch off")
         }
     }
 
@@ -250,10 +274,54 @@ enum EntityPageAppearance {
         dissolve = nil
     }
 
+    // MARK: - ③ 藏掉 Spotify 自己那些按键
+
+    /// AM 的专辑 / 歌单页没有这些：每行的「+」「…」、头部的下载 / 加入 / 菜单 / 观看信息。
+    ///
+    /// 与清底色同一套纪律：**每拍补一次**（行是懒建的）、按对象只记一次、记原 `alpha` 以便逐个还原。
+    /// **不动 play / shuffle** —— 那两只是真的功能，AM 自己也有（`play` 相关的一律不碰）。
+    private static func hideChrome(in page: UIView) {
+        var seen = 0
+        var newlyHidden: [String] = []
+
+        func walk(_ node: UIView, _ depth: Int) {
+            guard depth <= clearDepth, seen < clearNodes, hiddenChrome.count < maxHiddenChrome else { return }
+            seen += 1
+            if let id = node.accessibilityIdentifier, !id.isEmpty,
+               chromeIdentifierFragments.contains(where: { id.contains($0) }),
+               !hiddenChromeViews.contains(ObjectIdentifier(node)) {
+                hiddenChromeViews.insert(ObjectIdentifier(node))
+                hiddenChrome.append((view: node, alpha: node.alpha))
+                node.alpha = 0
+                newlyHidden.append(id)
+            }
+            for sub in node.subviews { walk(sub, depth + 1) }
+        }
+
+        walk(page, 0)
+
+        if !newlyHidden.isEmpty {
+            writeDebugLog(
+                "[\(logTag)] hid \(newlyHidden.count) chrome view(s) — \(newlyHidden.joined(separator: ", "))"
+                    + "; kept play / shuffle (those are real controls, Apple Music has them too)"
+            )
+        }
+    }
+
+    /// 逐个写回原 `alpha`（不是一律写 1：有的本来就是半透明）。
+    private static func restoreChrome(reason: String) {
+        guard !hiddenChrome.isEmpty else { return }
+        for entry in hiddenChrome { entry.view.alpha = entry.alpha }
+        writeDebugLog("[\(logTag)] restored \(hiddenChrome.count) chrome view(s) (\(reason))")
+        hiddenChrome.removeAll()
+        hiddenChromeViews.removeAll()
+    }
+
     // MARK: - 还原（关开关 / 切页都走这里）
 
     private static func restore(reason: String) {
         removeDissolve()
+        restoreChrome(reason: reason)
         field?.removeFromSuperview()
         field = nil
         if !clearedBackgrounds.isEmpty {
@@ -306,9 +374,29 @@ enum EntityPageAppearance {
         return nil
     }
 
-    /// 从封面元素往上走，找到"宽度接近窗口、且几乎从屏幕顶端开始"的那一层 = 页面 root。
+    /// 从封面元素往上走，找到**真正该垫底的那一层**。
+    ///
+    /// ⚠️ **照片 89 的教训**：那片横在列表中间的灰带，就是"底跟着内容一起滚"的现场 ✗。
+    /// 歌单页的 root 我没有 id（专辑页有），原先按"占满屏"猜 ⇒ 猜中的那一层**在 scroll view 里**
+    /// ⇒ 垫上去的渐变随内容滚，滚到哪就脏到哪。
+    /// 所以改成：先沿着祖先链找到**最外层那个 scroll view**，垫在**它的父视图**上（那一层不滚 ✓）；
+    /// 封面上方本来就不滚的页面（专辑页）才走"占满屏"那条几何。
     private static func pageRoot(from view: UIView, in window: UIView) -> UIView? {
+        var outermostScroll: UIScrollView?
         var node: UIView? = view
+        while let current = node, current !== window {
+            if let scroll = current as? UIScrollView { outermostScroll = scroll }
+            node = current.superview
+        }
+        if let scroll = outermostScroll {
+            if let container = scroll.superview, container.bounds.height >= window.bounds.height * 0.5 {
+                return container
+            }
+            return scroll
+        }
+
+        // 不在 scroll view 里（= 页面本来就不滚）⇒ 沿用"占满屏"那条几何。
+        node = view
         while let current = node, current !== window {
             let frame = current.convert(current.bounds, to: window)
             if frame.width >= window.bounds.width - 1,

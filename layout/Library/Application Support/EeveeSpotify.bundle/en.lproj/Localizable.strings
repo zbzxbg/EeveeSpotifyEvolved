@@ -405,7 +405,8 @@ playlist_single_cover_description = "A playlist with no cover of its own gets a 
 entity_page_section = "Album & playlist pages";
 entity_page_field = "Colour field taken from the cover";
 entity_page_dissolve = "Let the cover melt into it";
-entity_page_description = "The two halves of what makes those pages look like Apple Music. The colour field is painted behind everything, from the cover's own colour fading down into the base surface; the dissolve is a strip at the cover's bottom edge that melts it into that field. Both need to work together, and turning either off puts back exactly what was there.";
+entity_page_hide_chrome = "Hide Spotify's own buttons";
+entity_page_description = "What makes those pages look like Apple Music. The colour field is painted behind everything, from the cover's own colour fading down into the base surface; the dissolve is a strip at the cover's bottom edge that melts it into that field; and the buttons Spotify puts on every row and in the header are hidden, the way Apple Music does not show them. Play and shuffle are left alone. Turning any of it off puts back exactly what was there.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
