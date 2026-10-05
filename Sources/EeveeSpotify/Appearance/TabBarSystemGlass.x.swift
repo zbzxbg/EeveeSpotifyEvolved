@@ -446,6 +446,10 @@ enum TabBarSystemGlass {
         /// ② pw 那条路：item 子树里那颗 tap 识别器的 `_targets` 里有一对**目标真的响应**的
         ///    target/action（`TabBarItemElementUI` 的 `-handleTap` 就是它）。
         case tapRecognizer(index: Int, target: String, action: String)
+        /// ①′ 容器**自己带着的那几个 view controller**（这台机器上容器不是 `UITabBarController`，
+        ///    但日志 67 证明它答 `setSelectedViewController:`）⇒ 直接用它的 setter 换页 ——
+        ///    **完全不依赖 Element 的私有手势**，所以它是日志 72 之后最稳的一条路。
+        case containerControllers(count: Int)
         /// ③ 子树里（响应链或 ivar 上）有对象响应 `-handleTap`。
         case handleTap(index: Int, holder: String)
         /// ⑤ 子树里有 `UIControl`（`sendActions` 能点）。
@@ -458,6 +462,9 @@ enum TabBarSystemGlass {
         switch route {
         case .container(let controllers):
             return "route ① (public) the container is a UITabBarController with \(controllers) view controllers"
+        case .containerControllers(let count):
+            return "route ①′ the container carries \(count) view controllers of its own"
+                + " (it answers setSelectedViewController:)"
         case .tapRecognizer(let index, let target, let action):
             return "route ② (pw's) the tap recogniser on #\(index) fires \(target):\(action)"
         case .handleTap(let index, let holder):
@@ -489,11 +496,20 @@ enum TabBarSystemGlass {
     /// ⚠️ 只探"点得动"这件事；`accessibilityActivate()` 那条**探不出来**（要真调一次才知道），
     ///    所以它只能留在 `forwardTap` 的兜底里，不能当接管触摸的判据。
     private static func probeForwardRoute(in bar: UIView) -> ForwardRoute? {
+        let stack = TabBarGlassPlate.findTabsStack(in: bar)
+        let itemCount = stack.map { TabBarGlassPlate.visibleItems(in: $0).count } ?? 0
         if let container = container(of: bar), let tabs = container as? UITabBarController,
            let controllers = tabs.viewControllers, controllers.count >= 2 {
             return .container(controllers: controllers.count)
         }
-        guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return nil }
+        // ★★ 2026-10-13（**真机日志 72** 之后加的）：容器**自己带着**那几个 VC 那一条。
+        //   它比 route ② 更稳（不碰 Element 的私有手势），所以排在识别器前面。
+        //   ⚠️ 个数必须与"看得见的标签数"一致才敢按下标取（否则可能是别的 VC 数组）。
+        if let container = container(of: bar), let controllers = containerControllers(of: container),
+           itemCount == 0 || controllers.count == itemCount {
+            return .containerControllers(count: controllers.count)
+        }
+        guard let stack else { return nil }
         // ⚠️ 只探**看得见的那几颗**：藏起来的「创建」即使读得出转发路也不算数
         //    （它的下标在镜像列表里不存在 ⇒ 接管了触摸也转发不出去 = 白丢一下）。
         let items = TabBarGlassPlate.visibleItems(in: stack)
@@ -530,8 +546,14 @@ enum TabBarSystemGlass {
                 for pair in pairs(of: recognizer) {
                     guard let action = action(of: pair) else { continue }
                     // target 是 `nil` **也算数**（日志 71 就是这一种）：见上面那段说明。
+                    // ⚠️ 门与 `fire` 保持一致：**runtime 里找得到那个方法**就算数，
+                    //   不再用 `responds(to:)`（日志 72：Element 的 Swift target 过不了那道门）。
                     let target = target(of: pair)
-                    if let target, !target.responds(to: action) { continue }
+                    if let target,
+                       class_getInstanceMethod(type(of: target), action) == nil,
+                       !((target as? NSObject)?.responds(to: action) ?? false) {
+                        continue
+                    }
                     return .tapRecognizer(
                         index: index,
                         target: target.map { shortName(NSStringFromClass(type(of: $0))) } ?? "nil (responder chain)",
@@ -759,6 +781,14 @@ enum TabBarSystemGlass {
             reportForward(index: index, route: "UITabBarController.selectedIndex on Spotify's own container")
             return
         }
+        // ★★ 2026-10-13（**真机日志 72** 之后加的 ①′）：容器**自己带着**那几个 VC 时，
+        //    直接叫它的 `setSelectedViewController:` —— Spotify 内部就是这一步，
+        //    而且**不依赖 Element 的私有手势**（② 那条在这台机器上还得先解决 target 读法）。
+        //    排在 ② 前面是有意的：它能用就先用它。
+        if selectThroughContainerControllers(index: index) {
+            reportForward(index: index, route: "setSelectedViewController: on Spotify's own container")
+            return
+        }
         if fireTapRecognizers(in: item) {
             reportForward(index: index, route: "the item's own tap recognizer")
             return
@@ -792,6 +822,57 @@ enum TabBarSystemGlass {
               index >= 0, index < controllers.count else { return false }
         guard tabs.selectedIndex != index else { return true }
         tabs.selectedIndex = index
+        return true
+    }
+
+    /// ①′ 容器**自己带着**的那几个 VC（`TabBarContainerImpl` 在这台机器上不是 `UITabBarController`，
+    /// 但日志 67 证明它答 `setSelectedViewController:`；数组顺序 = 标签顺序）。
+    ///
+    /// 读法**有界且保守**：只看容器自己（含 3 层父类）的**对象型** ivar（编码 `@`），
+    /// 取第一个"每个元素都是 `UIViewController`"的数组；对不上就返回 nil（绝不瞎猜下标）。
+    /// ⚠️ Swift 的 `Array` 存储不是 `@` ivar ⇒ 天然被过滤掉，不会把裸指针当数组读。
+    private static func containerControllers(of container: UIViewController) -> [UIViewController]? {
+        var cls: AnyClass? = type(of: container)
+        var hops = 0
+        while let current = cls, hops < 3 {
+            var count: UInt32 = 0
+            if let ivars = class_copyIvarList(current, &count) {
+                defer { free(ivars) }
+                for index in 0 ..< Int(count) {
+                    let ivar = ivars[index]
+                    guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 0x40 else { continue }
+                    guard let value = object_getIvar(container, ivar) as? [AnyObject] else { continue }
+                    let controllers = value.compactMap { $0 as? UIViewController }
+                    guard controllers.count == value.count, controllers.count >= 2 else { continue }
+                    return controllers
+                }
+            }
+            cls = class_getSuperclass(current)
+            hops += 1
+        }
+        return nil
+    }
+
+    /// 把 `setSelectedViewController:` 直接叫在容器身上 —— 这就是 Spotify 点标签时内部走的那一步
+    /// （pw 在它身上 hook 的也正是这个方法）。**不碰 Element 的私有手势**，所以最稳。
+    private static func selectThroughContainerControllers(index: Int) -> Bool {
+        guard let bar = lastBar, let container = container(of: bar),
+              let controllers = containerControllers(of: container),
+              index >= 0, index < controllers.count else { return false }
+        // ⚠️ 只有"VC 个数 == 看得见的标签数"才敢按 `index` 取 —— 否则这可能是别的 VC 数组
+        //    （导航栈之类），宁可返回 false 交给下一路，也绝不把页面切到不相干的 controller。
+        let itemCount = TabBarGlassPlate.findTabsStack(in: bar)
+            .map { TabBarGlassPlate.visibleItems(in: $0).count } ?? 0
+        guard itemCount == 0 || controllers.count == itemCount else { return false }
+        let selector = NSSelectorFromString("setSelectedViewController:")
+        guard let method = class_getInstanceMethod(type(of: container), selector) else { return false }
+        typealias ObjectiveCMessage = @convention(c) (AnyObject, Selector, AnyObject) -> Void
+        let send = unsafeBitCast(method_getImplementation(method), to: ObjectiveCMessage.self)
+        send(container, selector, controllers[index])
+        writeDebugLog(
+            "[\(logTag)] tap → the container's own \(controllers.count) view controllers"
+                + " (setSelectedViewController: on #\(index))"
+        )
         return true
     }
 
@@ -914,18 +995,37 @@ enum TabBarSystemGlass {
         var fired = false
         for pair in pairs(of: recognizer) {
             guard let action = action(of: pair) else { continue }
-            if let target = target(of: pair), target.responds(to: action) {
-                _ = target.perform(action, with: recognizer)
-                writeDebugLog(
-                    "[\(logTag)] tap → \(NSStringFromClass(type(of: target))) \(NSStringFromSelector(action))"
-                )
-                fired = true
-                continue
+            if let target = target(of: pair) {
+                // ★★ 2026-10-13（**真机日志 72**）：这里**不能**再用 `responds(to:)` 当门 ——
+                //    这台机器上 target 是 Element 的 Swift 对象（`…19TabBarItemElementUI`），
+                //    `responds` 这一步会把它误判成"不会响应"，于是整条路被跳过（五条全败）。
+                //    改法：**直接用 runtime 找到方法、取 IMP 调** —— 与 UIKit 自己派发这条 action
+                //    是同一件事（选择器是 `handleTap`，无参 ⇒ 只要 self/_cmd 两个寄存器）。
+                if let method = class_getInstanceMethod(type(of: target), action) {
+                    typealias ObjectiveCMessage = @convention(c) (AnyObject, Selector) -> Void
+                    let send = unsafeBitCast(method_getImplementation(method), to: ObjectiveCMessage.self)
+                    send(target, action)
+                    writeDebugLog(
+                        "[\(logTag)] tap → \(shortName(NSStringFromClass(type(of: target))))"
+                            + " \(NSStringFromSelector(action)) (via its IMP)"
+                    )
+                    fired = true
+                    continue
+                }
+                // 退一步：`NSObject` 那一支（`perform` 需要 NSObjectProtocol）。
+                if let performer = target as? NSObject, performer.responds(to: action) {
+                    _ = performer.perform(action, with: recognizer)
+                    writeDebugLog(
+                        "[\(logTag)] tap → \(NSStringFromClass(type(of: performer)))"
+                            + " \(NSStringFromSelector(action)) (via perform)"
+                    )
+                    fired = true
+                    continue
+                }
             }
-            // ★ 2026-10-13（**真机日志 71**）：`_target` 是 `nil` 的那一对 —— 这台机器上就是它
-            //   （`UITapGestureRecognizer[nil-target:handleTap]`）。nil target 的动作按 UIKit 的规矩
-            //   送到**响应者链**上 ⇒ 用 `sendAction(to: nil)` 复现同一条路；返回 `false` 说明没人接，
-            //   交给下面的兜底（`handleTap` 响应链 / 无障碍 / `UIControl`）。
+            // ★ 2026-10-13（**真机日志 71**）：`_target` 是 `nil` 的那一对 —— nil target 的动作
+            //   按 UIKit 的规矩送到**响应者链**上 ⇒ 用 `sendAction(to: nil)` 复现同一条路；
+            //   返回 `false` 说明没人接，交给下面的兜底（`handleTap` 响应链 / 无障碍 / `UIControl`）。
             if UIApplication.shared.sendAction(action, to: nil, from: recognizer, for: nil) {
                 writeDebugLog(
                     "[\(logTag)] tap → responder chain \(NSStringFromSelector(action)) (that pair's target is nil)"
@@ -948,9 +1048,37 @@ enum TabBarSystemGlass {
         return raw
     }
 
-    private static func target(of pair: AnyObject) -> NSObject? {
-        guard let ivar = class_getInstanceVariable(type(of: pair), "_target") else { return nil }
-        return object_getIvar(pair, ivar) as? NSObject
+    /// 读一对 `_targets` 里的 **target**。
+    ///
+    /// ★★ 2026-10-13（**真机日志 72** 纠正）：**不能 `as? NSObject`**！
+    /// 这台机器上 Element 的 target 是 `…19TabBarItemElementUI`（解剖行逐字打出来的），
+    /// 原来那句 `object_getIvar(pair, ivar) as? NSObject` 把它**读成了 nil**
+    /// ⇒ route ② 永远被跳过、`sendAction(to: nil)` 又没人接（解剖行里响应者链一个 ★ 都没有）
+    /// ⇒ 五条全败 ⇒ 第一次松手就把触摸还了回去（= 用户报的"只能拖一次、之后没有拖动动画"）。
+    /// 现在：先按名字找，再**按 ivar 列表扫**（解剖行证明这条路在这台机器上读得出来），
+    /// 一律以 `AnyObject` 返回 —— 是不是 `NSObject` 由调用方按需再判（见 `fire`）。
+    private static func target(of pair: AnyObject) -> AnyObject? {
+        if let ivar = class_getInstanceVariable(type(of: pair), "_target"),
+           let value = object_getIvar(pair, ivar) {
+            return value as AnyObject
+        }
+        var cls: AnyClass? = type(of: pair)
+        var hops = 0
+        while let current = cls, hops < 3 {
+            var count: UInt32 = 0
+            if let ivars = class_copyIvarList(current, &count) {
+                defer { free(ivars) }
+                for index in 0 ..< Int(count) {
+                    let ivar = ivars[index]
+                    guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 0x40,
+                          let name = ivar_getName(ivar), String(cString: name) == "_target" else { continue }
+                    if let value = object_getIvar(pair, ivar) { return value as AnyObject }
+                }
+            }
+            cls = class_getSuperclass(current)
+            hops += 1
+        }
+        return nil
     }
 
     /// `_action` 是 SEL ivar，KVC 读不了（不是对象）⇒ 按 ivar 偏移把指针读出来再转回 `Selector`。
@@ -1089,7 +1217,18 @@ enum TabBarSystemGlass {
                         cls = class_getSuperclass(current)
                         hops += 1
                     }
-                    return "#\(offset) \(pairName)[\(fields.joined(separator: " "))]"
+                    // ★ 除了 ivar，还把**两条判据**一起打出来（下一份日志就不用再猜了）：
+                    //   `imp` = `class_getInstanceMethod(target, action)` 找不找得到（新转发路就靠它）；
+                    //   `responds` = 老那条 `responds(to:)` 门（日志 72 证明它在这台机器上是 false）。
+                    let actionName = action(of: pair).map { NSStringFromSelector($0) } ?? "nil-action"
+                    var verdict = "action=\(actionName)"
+                    if let action = action(of: pair) {
+                        let holder = target(of: pair)
+                        let hasIMP = holder.map { class_getInstanceMethod(type(of: $0), action) != nil } ?? false
+                        let responds = (holder as? NSObject)?.responds(to: action) ?? false
+                        verdict += " imp=\(hasIMP ? "yes" : "no") responds=\(responds ? "yes" : "no")"
+                    }
+                    return "#\(offset) \(pairName)[\(fields.joined(separator: " "))] \(verdict)"
                 }
                 pieces.append("\(recognizerName) on \(viewName) { \(pairTexts.joined(separator: " | ")) }")
 
@@ -1104,6 +1243,39 @@ enum TabBarSystemGlass {
                 }
                 pieces.append("chain from \(viewName): \(chain.joined(separator: " → "))")
             }
+        }
+        // ★ 顺带把**容器**的对象型 ivar 也摊开：如果下一轮 ①′ 还是读不到 VC 数组，
+        //   这一节就是答案（那三个 VC 到底挂在哪儿）。
+        if let bar = lastBar, let container = container(of: bar) {
+            var fields: [String] = []
+            var cls: AnyClass? = type(of: container)
+            var hops = 0
+            while let current = cls, hops < 3 {
+                var count: UInt32 = 0
+                if let ivars = class_copyIvarList(current, &count) {
+                    defer { free(ivars) }
+                    for index in 0 ..< Int(count) {
+                        let ivar = ivars[index]
+                        guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 0x40,
+                              let name = ivar_getName(ivar) else { continue }
+                        let field = String(cString: name)
+                        if let raw = object_getIvar(container, ivar) {
+                            let object = raw as AnyObject
+                            let arrayCount = (object as? [AnyObject])?.count
+                            let described = arrayCount.map { "array(\($0))" }
+                                ?? shortName(NSStringFromClass(type(of: object)))
+                            fields.append("\(field)=\(described)")
+                        } else {
+                            fields.append("\(field)=nil")
+                        }
+                    }
+                }
+                cls = class_getSuperclass(current)
+                hops += 1
+            }
+            pieces.append(
+                "container \(shortName(NSStringFromClass(type(of: container)))) { \(fields.joined(separator: " ")) }"
+            )
         }
         writeDebugLog(
             "[\(logTag)] tap anatomy — \(pieces.isEmpty ? "no tap recogniser at all" : pieces.joined(separator: "; "))"
