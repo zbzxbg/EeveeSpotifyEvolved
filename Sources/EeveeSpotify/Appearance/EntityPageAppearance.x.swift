@@ -52,12 +52,12 @@ enum EntityPageAppearance {
     private static let fieldColorEnd: CGFloat = 0.58
     /// 封面化开成的那片背景占页面高度的比例（pw 那张 playlist 截图约 45%，这里给到 52%）。
     private static let heroHeightRatio: CGFloat = 0.52
-    /// 高斯模糊半径 —— **按原图宽度算**，不是固定值。
-    ///
-    /// ⚠️ **照片 93 的教训**：封面原图只有 262px 宽，用固定 **28px** 半径去糊 = 糊掉图宽的 10%
-    /// ⇒ 铺满顶部之后**只剩一片纯色渐变、完全看不出是哪张封面** ✗（用户要的是 pw 那样
-    /// "看得出是这张封面、但化开了"）。改成原图宽度的 **3.5%**（262px ⇒ 约 9px）。
-    private static let heroBlurRatio: CGFloat = 0.035
+    /// 底子的模糊半径 —— **照 MeloX 的常数**：它是 `filter.radius = 18`，
+    /// 而且作用在"**先缩到最长边 160px**"的那张图上（`makeBlurredBackdrop` ✓）。
+    /// 先缩再糊 = 半径的相对强度可控、也快 ✓。
+    private static let meloxBlurRadius: CGFloat = 18
+    /// 先降采样到的目标最长边（MeloX 的 `downsampled` 就是 `160 / max(width, height)`）。
+    private static let meloxDownsampleEdge: CGFloat = 160
 
     // MARK: - 状态
 
@@ -385,15 +385,38 @@ enum EntityPageAppearance {
         firstImageView(in: root)?.image
     }
 
-    /// 高斯模糊（一次一张封面，缓存住）。失败返回 nil —— 调用方退回原图，**绝不能因为模糊失败就不画**。
+    /// 底子那张模糊封面 —— **照 MeloX 的三步**（`MeloX/Core/Artwork/ArtworkAccentColorProvider.swift`）：
+    ///
+    /// 1. **先把图缩到最长边 160px**（Lanczos，它的 `downsampled`）—— 先缩再糊，半径的相对强度才可控 ✓
+    ///    （我上一版直接糊原图 ✗，只能拿"图宽的百分比"凑半径，效果飘）；
+    /// 2. **`clampedToExtent()` 再糊** —— 不 clamp 的话边缘会被糊成透明，铺满整页时四周发虚 ✗；
+    /// 3. **半径 18**（它的常数 ✓），作用在那张 160px 的图上。
+    ///
+    /// 它算完**按封面 URL 缓存**，整页当背景铺 ✓ —— 我们这里同样按"哪张图"缓存一次 ✓。
     private static func blurred(_ image: UIImage) -> UIImage? {
         guard let cgImage = image.cgImage else { return nil }
-        let input = CIImage(cgImage: cgImage)
-        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
-        filter.setValue(input, forKey: kCIInputImageKey)
-        filter.setValue(max(4, image.size.width * heroBlurRatio), forKey: kCIInputRadiusKey)
+        let source = CIImage(cgImage: cgImage)
+        let sourceExtent = source.extent.integral
+        guard !sourceExtent.isEmpty, !sourceExtent.isInfinite else { return nil }
+
+        // ① 先降采样（最长边 160）—— 与 MeloX 的 `downsampled` 同一件事。
+        var prepared = source
+        let longest = max(sourceExtent.width, sourceExtent.height)
+        if longest > meloxDownsampleEdge, let lanczos = CIFilter(name: "CILanczosScaleTransform") {
+            lanczos.setValue(source, forKey: kCIInputImageKey)
+            lanczos.setValue(meloxDownsampleEdge / longest, forKey: kCIInputScaleKey)
+            lanczos.setValue(1, forKey: kCIInputAspectRatioKey)
+            if let scaled = lanczos.outputImage { prepared = scaled }
+        }
+
+        // ② clamp 边缘 + ③ 半径 18，都作用在那张小图上。
+        let preparedExtent = prepared.extent.integral
+        guard !preparedExtent.isEmpty, !preparedExtent.isInfinite,
+              let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
+        filter.setValue(prepared.clampedToExtent(), forKey: kCIInputImageKey)
+        filter.setValue(meloxBlurRadius, forKey: kCIInputRadiusKey)
         guard let output = filter.outputImage,
-              let rendered = ciContext.createCGImage(output, from: input.extent) else { return nil }
+              let rendered = ciContext.createCGImage(output, from: preparedExtent) else { return nil }
         return UIImage(cgImage: rendered)
     }
 
