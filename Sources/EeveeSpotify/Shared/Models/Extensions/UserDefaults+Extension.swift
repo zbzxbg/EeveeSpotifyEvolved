@@ -700,25 +700,29 @@ extension UserDefaults {
         }
     }
 
-    /// 「**封面下缘溶解**」：封面底部压一条渐变，让它"溶"进那片取色底（AM 的招牌动作）。
-    /// **默认开**，理由同上。关掉即撤掉那一条 —— 原生视图一个字节都不动。
+    /// 「**Melox 风页面**」：模糊封面底 + 整页取色 + 头部居中（原「封面下缘溶解」，
+    /// 名字是历史遗留，行为早已不止"下缘一条"）。
+    ///
+    /// **默认关** —— 2026-10-13 用户要求：「专辑/歌单页的**两个按钮默认关闭**」。
+    /// 只改 fallback、**不动已存的值**：手动开过的设备保持他开的那一档（与 AMLL 那条同一纪律）。
     static var entityPageDissolve: Bool {
         get {
-            container.object(forKey: entityPageDissolveKey) as? Bool ?? true
+            container.object(forKey: entityPageDissolveKey) as? Bool ?? false
         }
         set {
             container.set(newValue, forKey: entityPageDissolveKey)
         }
     }
 
-    /// 「**藏掉 Spotify 自己的按键**」：每行的「+」「…」、头部的下载 / 加入 / 菜单 / 观看信息。
+    /// 「**藏掉 Spotify 自己的按键**」：每行的「+」「…」、头部的下载 / 加入 / 观看信息。
     ///
-    /// **默认开** —— 用户 2026-10-13 看完真机：「spotify 本身的那些按键都还在，**看起来不咋地**」。
-    /// AM 的专辑 / 歌单页没有这些；**play / shuffle 一律不碰**（那是真功能，AM 自己也有）。
-    /// 关掉即逐个写回原 `alpha`（不是一律写 1 —— 有的本来就是半透明）。
+    /// **默认关** —— 2026-10-13 用户要求（同上：「两个按钮默认关闭」）。
+    /// ⛔ **右上那颗「…」永远不碰**：pw 的整套做法就骑在它上面（把 ⋯ 里没有的 Sort/Mix
+    /// 补进它的 sheet）⇒ 把它藏掉等于把要用的面板弄没了 ✗（见 `EntityPageAppearance` 里的名单）。
+    /// **play / shuffle 也一律不碰**（那是真功能）。
     static var entityPageHideChrome: Bool {
         get {
-            container.object(forKey: entityPageHideChromeKey) as? Bool ?? true
+            container.object(forKey: entityPageHideChromeKey) as? Bool ?? false
         }
         set {
             container.set(newValue, forKey: entityPageHideChromeKey)

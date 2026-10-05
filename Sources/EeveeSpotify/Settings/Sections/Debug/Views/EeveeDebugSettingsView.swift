@@ -24,6 +24,11 @@ struct EeveeDebugSettingsView: View {
             // 「转储视图树」：给还没写的界面 hook 铺路（AMOLED / 隐藏区块 / 手势）。
             dumpViewTreeSection()
 
+            // 「转储 customize 响应体」：**2026-10-13 用户要求从主设置页搬过来**，位置就是这里
+            //   —— 「转储视图树」的**下面**、「替换寻找歌词时的占位符」的**上面**。
+            //   它只为一件事存在：换掉随包的 customize 种子快照（见 `SpotifyResponsePatcher`）。
+            dumpCustomizeBodySection()
+
             // 「替换寻找歌词时的占位符」：**彩蛋**（用户 2026-10-12 点名要的），放在上面那一节下面。
             lyricsSearchPlaceholderEasterEggSection()
         }
@@ -61,6 +66,28 @@ struct EeveeDebugSettingsView: View {
             Toggle(
                 "dump_view_tree".localized,
                 isOn: $viewModel.dumpViewTree
+            )
+        }
+    }
+
+    /// 「转储 customize 响应体」—— **2026-10-13 用户要求从主设置页搬进「调试」**，
+    /// 位置：**「转储视图树」下面、「替换寻找歌词时的占位符」上面**。
+    ///
+    /// 背景（原样保留）：flag 改写依赖 customize 的响应体，而 304 无 body 时只能回放种子
+    /// （`SpotifyResponsePatcher.seedCustomizeDataIfNeeded`，用的是 9.1.76 时期转存的 `.bnk`）。
+    /// 打开它 + 用一次「覆盖配置」（清缓存、逼服务器回 200）⇒ 下次启动就能从日志里取到**你这版**的真 body。
+    ///
+    /// ⚠️ 它**不在** `EeveeDebugSettingsViewModel` 里（本页另外两节都在那儿）：只是搬位置，
+    ///    没有新的状态要记，所以照 `EeveeExtrasSettingsView` 的写法直接用 `Binding` 读写 ——
+    ///    免得为一次搬家把 view model 也改一遍。l10n 键与 UserDefaults 键都没变。
+    @ViewBuilder private func dumpCustomizeBodySection() -> some View {
+        Section(footer: Text("dump_customize_body_description".localized)) {
+            Toggle(
+                "dump_customize_body".localized,
+                isOn: Binding<Bool>(
+                    get: { UserDefaults.dumpCustomizeBody },
+                    set: { UserDefaults.dumpCustomizeBody = $0 }
+                )
             )
         }
     }
