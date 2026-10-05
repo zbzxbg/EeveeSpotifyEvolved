@@ -19,9 +19,8 @@ A Spotify iOS tweak: fixed lyrics on Spotify 9.1.88, word-by-word karaoke lyrics
 | Channel | Version | Spotify |
 | --- | --- | --- |
 | Public release | `v1.0.0` | 9.1.88 |
-| Development | `None` | None |
 
-Development version last updated: `2026/10/05`.
+Development last updated: `2026/10/05`.
 
 > [!WARNING]
 > Development versions are not publicly distributed to users.
