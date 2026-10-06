@@ -56,6 +56,15 @@ enum EntityPageHeaderManager {
     private static var cachedBlock: UIView?
     /// ★ 2026-10-13（性能）：上一拍认下的那四个标签（见 `TextViews`）。
     private static var cachedTextViews: TextViews?
+    /// 专辑页那条路（见 `applyToAlbumPage`）：头容器、封面、三个文字容器，以及"kind·日期那行晚到"
+    /// 的重试计数。**全部走缓存** —— 这一拍同样是每帧级的（pw 也是在 `layoutSubviews` 里每拍找，
+    /// 靠它的 `SGRFindByIdentifier` 不再重搜）。
+    private static var cachedAlbumHeader: UIView?
+    private static var cachedAlbumCover: UIView?
+    private static var cachedAlbumTitleRow: UIView?
+    private static var cachedAlbumParentRow: UIView?
+    private static var cachedAlbumMetadata: UIView?
+    private static var albumRetryKey: UInt8 = 0
 
     /// 尾部按钮的兜底字形：**做成常量**（原来每一拍都 `UIImage(systemName:)` 造一张新的，
     /// 而这一拍在折叠的每一帧都会走到 —— 与"字形只取一次"同一条纪律）。
@@ -82,7 +91,7 @@ enum EntityPageHeaderManager {
     private static func applyOnce(in layout: UIView) {
         guard isEnabled, !applying else { return }
         guard layout.bounds.width > 120, layout.bounds.height > 40 else { return }
-        // 只认歌单页（专辑页 v1 不碰）。
+        // 歌单页那条路（专辑页是**另一条路**：`applyToAlbumPage`，挂点也不同 —— 见它的说明）。
         guard let headerRoot = playlistHeaderRoot(of: layout) else { return }
 
         applying = true
@@ -171,7 +180,9 @@ enum EntityPageHeaderManager {
     static func concealPlayButtonIfNeeded(_ view: UIView) {
         guard isEnabled else { return }
         guard view.accessibilityIdentifier == "header-play-button" else { return }
-        guard playlistHeaderRoot(of: view) != nil else { return }
+        // ★ 2026-10-13：**两个页面都藏**（歌单页的头 `PL.Header` / 专辑页的 `CreativeWorkTemplateView`）
+        //   —— 两个页面我们都在行里镜像了这颗 Play。别的页面（艺人页那种浮动 Play）不碰。
+        guard isEntityPage(of: view) else { return }
         eeveeConceal(view)
     }
 
@@ -186,6 +197,206 @@ enum EntityPageHeaderManager {
             node = current.superview
         }
         return nil
+    }
+
+    /// 这是不是**我们接管的那两种页面**里的视图：歌单页判 `PL.Header`，专辑页判页面 root 的 id
+    /// 或它的头容器 —— 三个都在祖先链上，走一次就够（pw 的 `SGRPlaylistHeaderOf` / `SGRAlbumPageOf`
+    /// 也是各走一次祖先链）。
+    private static func isEntityPage(of view: UIView) -> Bool {
+        var node: UIView? = view
+        var level = 0
+        while let current = node, level < 24 {
+            level += 1
+            if let identifier = current.accessibilityIdentifier,
+               identifier == "PL.Header"
+                || identifier == "CreativeWorkPlatform.CreativeWorkTemplateView"
+                || identifier == "CreativeWorkPlatform.Components.UI.CreativeWorkHeader" {
+                return true
+            }
+            node = current.superview
+        }
+        return false
+    }
+
+    // MARK: - 专辑页（**另一条路**）
+
+    /// 专辑页那一拍。**与歌单页不是同一条路** —— 两边的头结构不同，pw 也是分开的两份
+    /// （`Album/AlbumHeader.x` 与 `Playlist/PlaylistHeader.x`）：
+    ///
+    /// ```
+    /// 歌单页（PL.Header）            封面 + **一个** block：标题 / 描述 / 创建者 / 长度 / 操作行
+    /// 专辑页（CreativeWorkHeader）   顶部 group（封面 + 标题 + 艺人）+ 底部 group（kind·日期 + 操作行）
+    /// ```
+    ///
+    /// ⇒ 歌单页那个 `blockIn`（按宽度挑一块）在专辑页会挑到**底部 group**（那里没有标题），
+    /// 所以这里**不挑块**：文字按**明确的 id** 读（`TitleRow` / `ParentRow` / `MetadataRow` ——
+    /// pw 的 `AlbumHeader.x` 用的就是这三个），我们那一份铺在**整个头**上
+    /// （pw 逐字：`setFrame(info, header.bounds)`）。
+    ///
+    /// 挂点是 `CreativeWorkTemplateView.layoutSubviews`（pw 的 `AlbumHeader.x` 也挂这里）。
+    static func applyToAlbumPage(_ page: UIView) {
+        guard isEnabled, !applying else { return }
+        guard page.bounds.width > 120, page.bounds.height > 200 else { return }
+        guard let header = find(
+            "CreativeWorkPlatform.Components.UI.CreativeWorkHeader",
+            in: page,
+            cache: &cachedAlbumHeader
+        ), header.bounds.height > 40 else { return }
+
+        applying = true
+        defer { applying = false }
+
+        let texts = albumTexts(in: header)
+        guard !texts.title.isEmpty else {
+            logOnce("noTitleAlbum", "album page: no title found — leaving Spotify's header alone")
+            return
+        }
+
+        let cover = find(
+            "CreativeWorkPlatform.Components.UI.ArtWorkElement.WithCoverArt",
+            in: header,
+            cache: &cachedAlbumCover
+        )
+
+        let headerView: EntityPageHeaderView
+        if let existing = objc_getAssociatedObject(header, &entityPageHeaderKey) as? EntityPageHeaderView {
+            headerView = existing
+        } else {
+            headerView = EntityPageHeaderView()
+            objc_setAssociatedObject(header, &entityPageHeaderKey, headerView, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        if headerView.superview !== header {
+            header.addSubview(headerView)
+        } else if header.subviews.last !== headerView {
+            header.bringSubviewToFront(headerView)
+        }
+        if headerView.frame != header.bounds { headerView.frame = header.bounds }
+
+        concealAlbumChrome(in: header, avoiding: cover, skipping: headerView)
+
+        headerView.update(title: texts.title, creator: texts.creator, length: texts.length, about: "")
+
+        // Play 与 Shuffle 在**页面上**（浮在右上角，不在头里）—— pw 的 `floatingIn` 逐字：
+        // 只搜页面的直接子视图、且宽度 ≤120 的那些（头 / wash / 列表都是整页宽，走进去等于每拍走整棵树）。
+        let play = findFloating("header-play-button", in: page, cache: &cachedPlay)
+        let shuffle = findFloating("Components.UI.ShuffleButton", in: page, cache: &cachedShuffle)
+        let add = find("Components.UI.AddToButton", in: header, cache: &cachedTrailing)
+        let download = add == nil ? eeveeFindView(header, identifier: "DownloadButton.Granular*") : nil
+        headerView.updateRow(
+            shuffle: shuffle,
+            play: play,
+            trailing: add ?? download,
+            trailingFallback: add != nil ? plusGlyph : downloadGlyph
+        )
+        // 专辑页的"创建者"就是艺人，点它开艺人页 —— pw 逐字：`[info showCreatorLink:parent]`。
+        headerView.updateCreatorLink(
+            find("CreativeWorkPlatform.Components.UI.ParentRow", in: header, cache: &cachedAlbumParentRow)
+        )
+
+        eeveeConceal(play)
+
+        // 那行 kind·日期是 collection view 的 **cell**，晚一拍才建出来（pw 也等：最多 6 次、每次 0.25s）。
+        if texts.length.isEmpty {
+            let tries = (objc_getAssociatedObject(header, &albumRetryKey) as? NSNumber)?.intValue ?? 0
+            if tries < 6 {
+                objc_setAssociatedObject(
+                    header,
+                    &albumRetryKey,
+                    NSNumber(value: tries + 1),
+                    .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+                )
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak page] in
+                    guard let page else { return }
+                    applyToAlbumPage(page)
+                }
+            }
+        }
+
+        logOnce(
+            "appliedAlbum",
+            "album page — title \"\(texts.title)\", artist \"\(texts.creator.isEmpty ? "-" : texts.creator)\""
+                + ", kind \"\(texts.length.isEmpty ? "-" : texts.length)\""
+                + ", shuffle \(shuffle == nil ? "missing" : "ok")"
+                + ", play \(play == nil ? "missing" : "ok")"
+                + ", trailing \(add != nil ? "add" : (download != nil ? "download" : "none"))"
+        )
+    }
+
+    /// 藏掉专辑页头里 Spotify 自己画的东西，**绕开封面那一支**。
+    ///
+    /// ⚠️ 为什么不能像歌单页那样整支藏（`for sub in block.subviews { eeveeConceal(sub) }`）：
+    /// 专辑页的封面与标题**在同一支**里（顶部 group 装着"封面方块 + 标题块"），而封面归
+    /// `EntityPageAppearance.concealNativeCover` 管 —— **那边记了原值**。`eeveeConceal` 不记原值，
+    /// 这边再藏一次就会把"已经藏了"写进对面的原值记录 ⇒ 关掉开关封面再也回不来。
+    ///
+    /// 规则：**含封面的一支只递归、不整支藏**；封面自己跳过；其余整支藏掉。
+    private static func concealAlbumChrome(in root: UIView, avoiding cover: UIView?, skipping ours: UIView) {
+        for sub in root.subviews {
+            if sub === ours { continue }
+            if let cover {
+                if sub === cover { continue }
+                if cover.isDescendant(of: sub) {
+                    concealAlbumChrome(in: sub, avoiding: cover, skipping: ours)
+                    continue
+                }
+            }
+            eeveeConceal(sub)
+        }
+    }
+
+    /// 专辑页的文字：**按明确的 id 读**（pw 的 `applyHeader` 用同样这三个 id）。
+    private static func albumTexts(in header: UIView) -> HeaderTexts {
+        var texts = HeaderTexts()
+
+        if let title = find("CreativeWorkPlatform.Components.UI.TitleRow", in: header, cache: &cachedAlbumTitleRow),
+           let label = firstLabel(in: title, skipping: nil) {
+            texts.title = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        if let parent = find("CreativeWorkPlatform.Components.UI.ParentRow", in: header, cache: &cachedAlbumParentRow) {
+            if let label = firstLabel(in: parent, skipping: nil) {
+                texts.creator = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            } else {
+                texts.creator = parent.accessibilityLabel ?? ""
+            }
+        }
+        if let metadata = find("Components.UI.MetadataRow", in: header, cache: &cachedAlbumMetadata) {
+            texts.length = metadataLine(metadata)
+        }
+
+        // 标题兜底：id 没找到时退回"字号最大的那个标签"（与歌单页同一条兜底）。
+        if texts.title.isEmpty, let label = biggestLabel(in: header, skipping: []) {
+            texts.title = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        return texts
+    }
+
+    /// 专辑页那行是**两格**（kind 与日期各是一个 cell、各一个 label）。
+    /// pw 的 `metadataText` 逐字：按**画出来的顺序**（x 从小到大）读，空格连接。
+    private static func metadataLine(_ root: UIView) -> String {
+        var parts: [(x: CGFloat, text: String)] = []
+        forEachView(root) { view in
+            guard let label = view as? UILabel, label.window != nil else { return }
+            let text = (label.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            parts.append((label.convert(.zero, to: root).x, text))
+        }
+        parts.sort { $0.x < $1.x }
+        return parts.map(\.text).joined(separator: " ")
+    }
+
+    /// pw 的 `floatingIn`（`AlbumHeader.x`）：那两颗浮动控件是**页面的直接子视图、48pt 上下**，
+    /// 而头、wash、列表都是整页宽 —— 只搜"小尺寸的直接子视图"，免得每一拍走一整棵树。
+    private static func findFloating(_ identifier: String, in page: UIView, cache: inout UIView?) -> UIView? {
+        if let cached = cache, cached.window != nil, cached.isDescendant(of: page) { return cached }
+        var found: UIView?
+        for sub in page.subviews where sub.bounds.width <= 120 {
+            if let hit = eeveeFindView(sub, identifier: identifier) {
+                found = hit
+                break
+            }
+        }
+        cache = found
+        return found
     }
 
     /// 那一块"文字 + 控件"：`HeaderContentLayout` 里**宽度接近整页**的那个孩子
@@ -469,6 +680,20 @@ class EntityPagePlayButtonHook: ClassHook<UIView> {
     }
 }
 
+/// ★ 2026-10-13：**专辑页的主挂点**。pw 的 `Album/AlbumHeader.x` 也挂在这一拍上
+/// （它的 `applyPage` 就是从 `%hook _TtC28CreativeWorkPlatform_PageKit24CreativeWorkTemplateView
+/// - (void)layoutSubviews` 进来的）—— 歌单页那个 `HeaderContentLayout` 覆盖的是"那一块"，
+/// 而专辑页要的是**整个头**（标题、艺人、kind·日期和操作行分在两个 group 里）。
+class EntityPageAlbumLayoutHook: ClassHook<UIView> {
+    typealias Group = EntityPageHeaderGroup
+    static let targetName = "_TtC28CreativeWorkPlatform_PageKit24CreativeWorkTemplateView"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        EntityPageHeaderManager.applyToAlbumPage(target)
+    }
+}
+
 func activateEntityPageHeader() {
     // 两个开关共用这一条每帧的布局拍：AM 页头（`entityPageAMHeader`）与"满幅封面 + 取色底"
     // （`entityPageDissolve`）。**任一打开这条钩子就得在**，否则满幅封面那条路又退回 0.6s 的 tick。
@@ -485,9 +710,12 @@ func activateEntityPageHeader() {
     }
 
     EntityPageHeaderGroup().activate()
+    // 专辑页那条路是**可选**的：类不在就只做歌单页（不能因为一个可选的类把整组拖垮）。
+    let album = NSClassFromString(EntityPageAlbumLayoutHook.targetName) != nil
     writeDebugLog(
         "[EntityPageHeader] on — AM header \(EntityPageHeaderManager.isEnabled ? "ON" : "OFF"),"
             + " page look \(EntityPageAppearance.isEnabled ? "ON" : "OFF")"
-            + " (one layout pass drives both; playlist pages only)"
+            + " (one layout pass drives both; playlist pages"
+            + (album ? " + album pages)" : "; the album hook class is missing on this build)")
     )
 }
