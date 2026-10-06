@@ -19,6 +19,7 @@ extension UserDefaults {
     private static let blockTelemetryKey = "blockTelemetry"
     private static let telemetryObserveOnlyKey = "telemetryObserveOnly"
     private static let telemetryExtraKeywordsKey = "telemetryExtraKeywords"
+    private static let blockRatingPromptsKey = "blockRatingPrompts"
     private static let hapticsEnabledKey = "hapticsEnabled"
     private static let hapticsStrengthKey = "hapticsStrength"
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
@@ -78,6 +79,7 @@ extension UserDefaults {
         blockTelemetryKey,
         telemetryObserveOnlyKey,
         telemetryExtraKeywordsKey,
+        blockRatingPromptsKey,
         hapticsEnabledKey,
         hapticsStrengthKey,
         hapticsSurfaceKeywordsKey,
@@ -203,6 +205,23 @@ extension UserDefaults {
         }
         set (cleanShareLinks) {
             container.set(cleanShareLinks, forKey: cleanShareLinksKey)
+        }
+    }
+
+    /// 「阻止评分提示」：拦住 App Store 的系统评分弹窗，**默认关**。
+    ///
+    /// 拦的是 `SKStoreReviewController` 那两个类方法（系统弹窗，不是 Spotify 自己的
+    /// UI），所以与 `UpsellPopupBlocker` 那套弹窗 hook 互不相干 —— 详见
+    /// `RatingPromptBlock.x.swift` 顶部的说明。
+    ///
+    /// ⚠️ **只在启动时读一次**（`RatingPromptBlock.launchEnabled`，hook 组装不装是启动
+    /// 时定的）⇒ 改完要重启，设置页那一行下面配了「立即重启」。
+    static var blockRatingPrompts: Bool {
+        get {
+            container.object(forKey: blockRatingPromptsKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: blockRatingPromptsKey)
         }
     }
 

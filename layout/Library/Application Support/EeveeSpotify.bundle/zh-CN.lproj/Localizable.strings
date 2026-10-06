@@ -188,6 +188,9 @@ musixmatch_token_optional_message = "填自己的用户令牌 = 用你自己账�
 miscellaneous = "杂项设定"; 
 clean_share_links = "移除追踪参数"; 
 clean_share_links_description = "清除网址追踪码";
+block_rating_prompts = "阻止评分提示";
+block_rating_prompts_description = "拦住 App Store 的系统评分弹窗（SKStoreReviewController）——Spotify 听够次数后会弹它。它是系统弹窗、不是 Spotify 自己的界面，所以弹窗拦截那套碰不到它。改完需要重启：hook 是启动时按这个开关决定装不装的。";
+restart_now = "立即重启";
 no_such_song = "未找到歌曲";
 musixmatch_restricted = "受限制";
 invalid_musixmatch_token = "未授权";

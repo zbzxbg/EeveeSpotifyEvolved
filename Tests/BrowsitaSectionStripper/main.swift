@@ -62,4 +62,25 @@ let mixedResult = BrowsitaSectionStripper.strip(mixed, url: scrollURL)
 require(mixedResult != nil && mixedResult!.count < mixed.count,
         "leave-behind section must be removed case-insensitively")
 
+// ── 2026-10-13：`aet.spotify.com`（上游实测的滚动页广告段唯一可靠 wire 标记）──
+//
+// 背景：滚动页广告段的 "Advertisement" 标签是客户端画的，wire 上不出现
+// `sponsored` / `advertisement` 字样，所以这里必须靠广告事件追踪域名命中。
+let adTrackingURL = message(["ordinary section", "https://aet.spotify.com/event/viewability"])
+require(BrowsitaSectionStripper.strip(adTrackingURL, url: scrollURL) != nil,
+        "ad-event tracking host must be removed (the label itself is client-side)")
+
+let adSlashURL = message(["ordinary section", "open.spotify.com/ad/1234"])
+require(BrowsitaSectionStripper.strip(adSlashURL, url: scrollURL) != nil,
+        "open.spotify.com/ad/ links must be removed")
+
+let adTrackingWithKeepWord = message(["filter metadata", "https://aet.spotify.com/clicked"])
+require(BrowsitaSectionStripper.strip(adTrackingWithKeepWord, url: scrollURL) != nil,
+        "the ad-tracking host must win over generic keep markers")
+
+// 反向守卫：新标记不许变成"见 aet 就删" —— 普通单词里也有这三个字母。
+let notAnAdHost = message(["ordinary section", "palette of colors", "aet"])
+require(BrowsitaSectionStripper.strip(notAnAdHost, url: scrollURL) == nil,
+        "the bare substring 'aet' must not drop a section — only the full host does")
+
 print("BrowsitaSectionStripper regression tests passed")

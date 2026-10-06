@@ -9,6 +9,23 @@ enum BrowsitaSectionStripper {
         "sponsored", "marquee", "promoted", "home-ads", "adsproduct",
         "leavebehind", "leave-behind", "premium-upsell", "premium_upsell",
         "premiumupsell", "referralsupsellcard",
+        // ★ 2026-10-13：从上游补的两条（`aet` = Spotify 的广告事件追踪域名）。
+        //
+        // 为什么需要它：滚动页（scrollsita）的广告段里，"Advertisement" 那个标签是
+        // **客户端画**的，wire 上不会出现 `sponsored`/`advertisement` 这类字样 ⇒ 上面
+        // 那串标记一条都命中不了，整段原样放行。上游在 9.1.84 上实测过一条真广告段：
+        // 每个事件带约 20 条 `aet.spotify.com` 追踪 URL（viewability / clicked /
+        // quartiles）；而正常内容的段**从不**带广告追踪 URL，所以这个 host 是那类
+        // 载荷唯一可靠的 wire 标记。
+        //
+        // 我们这边的旁证（`C:\dsh\readlog` 2026-09-30 ~ 10-05 的 80 份真机日志）：
+        // 385 条 `[STRIP] KEEP /scrollsita/...`、`dropped=` 一条都没有、`bail` 零命中
+        // ⇒ 容器解析本身没问题，是**标记表**没命中；其中日志 49 那条 25881B 响应里
+        // 还夹着一个 24279B 的元素被原样放行（形状与上游描述的广告段吻合）。
+        //
+        // ⚠️ 代价：这两条是**硬标记**，命中即整段丢弃（`keepMarkers` 也压不住）。
+        // 若真机上发现误删，先看那行 `[STRIP] DROP ... hits=` 的日志，再删掉本行即可。
+        "aet.spotify.com", "open.spotify.com/ad/",
     ].map { Array($0.utf8) }
 
     // Generic "upsell" metadata is not enough to delete a whole section. It

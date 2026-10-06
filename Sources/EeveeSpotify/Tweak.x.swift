@@ -372,6 +372,11 @@ struct EeveeSpotify: Tweak {
         // 里，只是兜底）。这条**总是装**，开关在运行期读 —— 打开就生效，不必重启。
         activateTelemetryRequestBlock()
 
+        // 阻止 App Store 评分弹窗（`SKStoreReviewController` 那两个类方法）。
+        // ⚠️ 与上面那条相反：这一条**按开关装不装**（开关只在启动时读一次），
+        // 所以设置页那颗开关下面配了「立即重启」。
+        activateRatingPromptBlock()
+
         // ⛔ AMOLED（深色栏底色）已于 2026-10-02 删除。
         // 理由：新设计语言下它每次布局都主动让位（`if NewDesignLanguage.isActive { 记一行; return }`），
         // 是个纯空操作 + 21KB 死代码；只有兼容模式的构建（`liquid_glass=false`）里才活，
