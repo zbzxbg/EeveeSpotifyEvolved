@@ -359,6 +359,36 @@ enum EntityPageHeaderManager {
     ///   · 这里**只用空 mask 藏东西、绝不设 hidden** —— 页头在 `OverflowStackView` 里，
     ///     一行里最"高"的视图被 hidden 时它会 force-unwrap nil 并 trap（见 `eeveeBlank`）；
     ///   · **不要强制** `…context_menu_in_navigation_bar_enabled_artist` 那个 flag（同一个 trap）。
+    /// ## 真机树（**我们自己打的**，2026-09-30，`readlog` 里那份 `creator-page` dump）
+    ///
+    /// 这条路**不是照 pw 的注释猜的**：下面每一行都来自我们自己日志里的实测（`[Tree] #12` 那一份），
+    /// pw 的 `ArtistHeader.x` 只在少数地方与它不同，**以我们这份为准**：
+    ///
+    /// ```
+    /// 14.TemplateView@0,0,414,896,id=creator-page
+    /// 15.UIView@0,0,414,896,id=CreativeWorkPlatform.Tab      ← 和专辑页同一个容器（要清底）
+    /// 16.UIScrollView…id=PCFFTabLayoutViewController.containerScrollView
+    /// 17.UIStackView@0,0,414,1416
+    /// 18.HeaderContainer@0,0,414,520                        ← hero 宿主（420 与 584 两档都出现过）
+    /// 19.ElementView<URL,Any,Any>@0,420,414,100
+    /// 20.ImageHeaderView@0,0,414,100
+    /// 22.ShadowContainer@0,0,414,414,alpha=-0.15,id=Components.Header.UI.ArtworkImage  ← 照片，全宽 414
+    /// 22.GradientView@0,-100,414,200                        ← 照片上那层渐变（同样要藏）
+    /// 22.AdaptiveTitle@0,-154,382,212,id=Encore.AdaptiveTitle   ← 名字
+    /// 21.UIStackView@16,-16,107,24,id=ImageHeaderView.VerifiedBadge
+    /// 23.OBJC_ONLY_Label@0,0,326,18,id=Components.Header.UI.Metadata  ← "xx 月听众"
+    /// 22.OverflowStackView@0,0,290,48                       ← ⚠️ 就是它（在里面 hidden 会 trap）
+    /// 23.ElementView<URL,Any,Any>@0,4,58,40                 ← Follow（`Encore.Button.Secondary`，"关注"）
+    /// 24.EncoreButton@0,0,48,48,id=Components.UI.ContextMenuButton-…
+    /// 22.ElementView<URL,Any,Any>@338,0,68,48               ← play（`header-play-button`）
+    /// 22.HeaderNavigationBar@0,0,414,100 > 23.GradientView@0,0,414,100
+    /// 18.UIView@0,520,414,896,id=PCFFTabLayoutViewController.tabsViewAccessibilityID
+    /// 19.UIView@0,0,414,44,id=Components.UI.TabsSectionHeading  ← Music / Video / Merch
+    /// ```
+    ///
+    /// 与 pw 注释**不同**、以我们实测为准的三处：`HeaderContainer` 是 **520 / 584pt**（pw 写 568）；
+    /// 照片是 **414×414 全宽**（pw 的树里 402 宽）；顺序上 Follow 那一行在 `OverflowStackView` 里 ——
+    /// 也就是"藏 header 里的东西不能碰 hidden"这条**在我们机器上同样成立**，不是 pw 的机器特异。
     static func applyToArtistPage(_ page: UIView) {
         guard isEnabled, !applying else { return }
         guard page.accessibilityIdentifier == "creator-page" else { return }
