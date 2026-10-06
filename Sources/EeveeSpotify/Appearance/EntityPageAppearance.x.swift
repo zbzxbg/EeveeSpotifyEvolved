@@ -131,6 +131,57 @@ enum EntityPageAppearance {
 
     // MARK: - 入口
 
+    static var isEnabled: Bool { UserDefaults.entityPageDissolve }
+
+    /// 缓存"这一拍那棵树里的封面元素"（见 `layoutPass`），省掉每帧一次子树搜索。
+    private static var layoutCoverKey: UInt8 = 0
+
+    /// **每一帧的轻量入口**（从 `HeaderContentLayout.layoutSubviews` 调，见 `EntityPageHeader.x.swift`）。
+    ///
+    /// 治的是用户 2026-10-13 报的：「刚进歌单页的时候，原本有的小歌单封面会短暂展现一会」——
+    /// 我们原来只有 0.6s 的 `Timer` 会调 `concealNativeCover`，而 Spotify 那张 262×262 的封面
+    /// **在第一帧就已经画出来了** ⇒ 最坏 0.6s 的可见窗口。
+    ///
+    /// pw 的 `PlaylistHeader.x` 是从 `HeaderContentLayout.layoutSubviews` 每帧调 `applyHero` 的，
+    /// 而 `applyHero` 的最后一行就是 `conceal(cover)` ⇒ **第一帧就藏**。这里照做，但只做这一件
+    /// **幂等且便宜**的事：取色 / 模糊 / 建 field 那些重活仍留在 `tick` 里（0.6s 一次）。
+    static func layoutPass(in layout: UIView) {
+        guard isEnabled else { return }
+        guard layout.bounds.width > 120, layout.bounds.height > 40 else { return }
+        // ⚠️ **只处理我们确实会铺 hero 的那两种页面**（专辑页 / 歌单页）。
+        //    艺人页的头也是 `HeaderContentLayout`，封面元素也正好叫
+        //    `Components.Header.UI.ArtworkImage`（pw 的 `ArtistHeader.x` 同样这么找）——
+        //    我们**没有**给艺人页铺替补，误藏就是"艺人页照片不见了"。判据只沿祖先链走，
+        //    比 `currentTarget()` 便宜，也足够安全。
+        guard recognizesPage(of: layout) else { return }
+
+        let cover: UIView?
+        if let cached = objc_getAssociatedObject(layout, &layoutCoverKey) as? UIView,
+           cached.window != nil, cached.isDescendant(of: layout) {
+            cover = cached
+        } else {
+            cover = firstView(in: layout, withAnyIdentifier: coverIdentifiers)
+            objc_setAssociatedObject(layout, &layoutCoverKey, cover, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        guard let cover else { return }
+        concealNativeCover(cover)
+    }
+
+    /// `layout` 是不是我们要接管的那两种页面之一：专辑页（页面 root 带 id）或歌单页（页头 id `PL.Header`）。
+    private static func recognizesPage(of layout: UIView) -> Bool {
+        var node: UIView? = layout
+        var level = 0
+        while let current = node, level < 24 {
+            level += 1
+            if let identifier = current.accessibilityIdentifier,
+               pageIdentifiers.contains(identifier) || identifier == "PL.Header" {
+                return true
+            }
+            node = current.superview
+        }
+        return false
+    }
+
     static func start() {
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 0.6, repeats: true) { _ in tick() }
@@ -329,8 +380,12 @@ enum EntityPageAppearance {
     ///   · ② **清晰**那张（`ensureSharpHero`）是**满幅的封面本身**，底部 54% 起化开 ——
     ///     于是"整张封面融进底子"，而不是"模糊底 + 原地一张小卡"。
     private static func ensureHero(on target: Target) {
-        guard let cover = target.cover,
-              let source = coverImage(in: cover) else { return }
+        guard let cover = target.cover else { return }
+        // ★ 2026-10-13：**图还没到也要先把 Spotify 那张小封面藏掉**。原来这里和 `let source`
+        //   一起 guard，于是"封面元素在、图还没加载出来"的那几拍里原生封面一直亮着
+        //   （`layoutPass` 每帧补的那一次能盖住大部分，这里是第二道保险）。
+        concealNativeCover(cover)
+        guard let source = coverImage(in: cover) else { return }
         let container = target.page
 
         let height = max(180, min(container.bounds.height * heroHeightRatio, 560))
@@ -561,7 +616,17 @@ enum EntityPageAppearance {
     /// 让 Spotify 自己那张封面**让位**：**改层不改属性**（Spotify 会用 `setHidden:NO` 把视图写回来）
     /// + 空 mask 双保险（Spotify 不碰 mask）。原值全记在 `concealedNativeCover` 里，关开关原样撤回。
     private static func concealNativeCover(_ cover: UIView) {
-        if concealedNativeCover?.view === cover { return }
+        // ★ 2026-10-13：这一张**已经记过**时每拍补一次 —— Spotify 会在按下 Play 之类的时候用
+        //   `setHidden:NO` 把它写回来（pw 的 `conceal()` 就是每帧无条件补），原来这里直接 return，
+        //   于是"写回来之后就再也不藏了"。但**不再覆盖原值记录**，否则关开关还原时会把我们自己
+        //   写进去的 hidden 当成"Spotify 的原值"。
+        if concealedNativeCover?.view === cover {
+            if !cover.layer.isHidden { cover.layer.isHidden = true }
+            if cover.layer.mask == nil { cover.layer.mask = CALayer() }
+            if cover.isUserInteractionEnabled { cover.isUserInteractionEnabled = false }
+            if !cover.accessibilityElementsHidden { cover.accessibilityElementsHidden = true }
+            return
+        }
         revealNativeCover()
 
         concealedNativeCover = NativeCoverRecord(

@@ -50,6 +50,12 @@ enum EntityPageHeaderManager {
     private static var cachedPlay: UIView?
     private static var cachedTrailing: UIView?
     private static var cachedCreatorLink: UIView?
+    /// ★ 2026-10-13（性能）：封面元素与"那一块文字"也缓存 —— 这两次原来是**每帧**各一次整棵子树搜索
+    /// （`eeveeFindView(layout, "Components.Header.UI.ArtworkImage")` / `blockIn(layout,…)`）。
+    private static var cachedCover: UIView?
+    private static var cachedBlock: UIView?
+    /// ★ 2026-10-13（性能）：上一拍认下的那四个标签（见 `TextViews`）。
+    private static var cachedTextViews: TextViews?
 
     /// 尾部按钮的兜底字形：**做成常量**（原来每一拍都 `UIImage(systemName:)` 造一张新的，
     /// 而这一拍在折叠的每一帧都会走到 —— 与"字形只取一次"同一条纪律）。
@@ -88,8 +94,16 @@ enum EntityPageHeaderManager {
             return view.isKind(of: fullbleedClass)
         }
 
-        let cover = eeveeFindView(layout, identifier: "Components.Header.UI.ArtworkImage") ?? fullbleed
-        guard let block = blockIn(layout, cover: cover, fullbleed: fullbleed) else { return }
+        // ★ 2026-10-13（性能）：这两个原来是每帧各一次整棵子树搜索，走缓存（同上面那五个挂点）。
+        let cover = find("Components.Header.UI.ArtworkImage", in: layout, cache: &cachedCover) ?? fullbleed
+        let block: UIView
+        if let cached = cachedBlock, cached.window != nil, cached.isDescendant(of: layout) {
+            block = cached
+        } else {
+            guard let found = blockIn(layout, cover: cover, fullbleed: fullbleed) else { return }
+            cachedBlock = found
+            block = found
+        }
         guard block.bounds.height > 20 else { return }
 
         let texts = headerTexts(block: block, headerRoot: headerRoot)
@@ -200,23 +214,63 @@ enum EntityPageHeaderManager {
         var about = ""
     }
 
+    /// ★ 2026-10-13（性能）：**上一拍认下的那四个标签**。
+    ///
+    /// 日志 86 逐字：`[Perf][EntityPageHeader] 200 passes, 140.53 ms total, 0.703 ms avg` ——
+    /// 而 `HeaderContentLayout.layoutSubviews` 在页头折叠时**每一帧**都会来（用户那边就是
+    /// 「用较快的速度往下滑，会有渲染跟不上的问题」）。原来每一拍要走 **5~8 次整棵子树遍历**：
+    /// 封面 1 次 + `Metadata*` 最多 3 次 + 脸堆 1 次 + 标题 1 次 + 创建者 1 次，全落在主线程上。
+    ///
+    /// pw 的每一步查找都带 `static char` key（`SGRFindByIdentifier`：命中过就不再搜树）——
+    /// 这里照它的纪律，把**引用**留下，之后每一拍只读 `.text`。
+    /// 引用一旦离开那棵树（Spotify 换了 label、换了页面）就整批作废，重新认一次。
+    private struct TextViews {
+        weak var title: UILabel?
+        weak var creator: UILabel?
+        weak var length: UILabel?
+        weak var about: UILabel?
+    }
+
     /// 文本来源**分两级**（pw 的分法）：标题/描述优先读页面的 view model，创建者与长度读
     /// Spotify 自己那些**被藏起来的标签**（所以语言永远跟着 Spotify 走）。
     ///
     /// ⚠️ 9.1.88 上 model 那条路的存在性**没证实**（`dump-9.1.88.txt` 里没有
     /// `defaultHeaderViewModel` / `playlistName` 这两个名字）⇒ 一律 `responds(to:)` 守卫，
     /// 拿不到就退回标签启发式。**标签兜底才是这里的主路径**。
+    /// ★ 2026-10-13（性能）：上一拍认下的四个标签还在那棵树上 ⇒ **只读 `.text`**（每帧一次，成本≈0）。
+    /// 认不出来（进页面第一拍、或者 Spotify 换了 label）才走下面那条完整的启发式。
     private static func headerTexts(block: UIView, headerRoot: UIView) -> HeaderTexts {
+        if let views = cachedTextViews, let title = views.title, title.isDescendant(of: block) {
+            var texts = HeaderTexts()
+            texts.title = title.text ?? ""
+            texts.creator = views.creator?.text ?? ""
+            texts.length = views.length?.text ?? ""
+            texts.about = views.about?.text ?? ""
+            return texts
+        }
+        let (texts, views) = headerTextsSlow(block: block, headerRoot: headerRoot)
+        cachedTextViews = views
+        return texts
+    }
+
+    /// 完整那条：**只在缓存失效时走**（进页面那一拍、换页面、Spotify 换掉标签）。
+    /// 返回的 `views` 为 `nil` = "这一页的值不完全是标签读来的"（view model 参与了）⇒ 不许走快路。
+    private static func headerTextsSlow(block: UIView, headerRoot: UIView) -> (HeaderTexts, TextViews?) {
         var texts = HeaderTexts()
+        var views = TextViews()
+        var fromModel = false
+
         let model = viewModel(from: headerRoot)
         if let model {
-            texts.title = modelString(model, "playlistName") ?? ""
-            texts.about = plainText(modelString(model, "playlistDescription")) ?? ""
+            if let name = modelString(model, "playlistName") { texts.title = name; fromModel = true }
+            if let about = plainText(modelString(model, "playlistDescription")) { texts.about = about; fromModel = true }
         }
 
-        // 长度：Spotify 自己那行（`Components.Header.UI.Metadata*`）。
-        if let metadata = eeveeFindView(block, identifier: "Components.Header.UI.Metadata*") {
-            texts.length = firstLabelText(in: metadata, skipping: nil) ?? ""
+        // 长度：Spotify 自己那行（`Components.Header.UI.Metadata*`）—— **只查一次**（原来这条最多查三次）。
+        let metadata = metadataView(block)
+        if let metadata, let label = firstLabel(in: metadata, skipping: nil) {
+            texts.length = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            views.length = label
         }
 
         // 创建者：脸堆（FacepileView）那一行里、除了脸堆以外的第一个非空标签。
@@ -228,8 +282,9 @@ enum EntityPageHeaderManager {
             var row: UIView? = facepile.superview
             var level = 0
             while let current = row, current !== block, level < 3 {
-                if let name = firstLabelText(in: current, skipping: facepile) {
-                    texts.creator = name
+                if let label = firstLabel(in: current, skipping: facepile) {
+                    texts.creator = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    views.creator = label
                     break
                 }
                 row = current.superview
@@ -239,29 +294,33 @@ enum EntityPageHeaderManager {
 
         // 标题兜底：block 里**字号最大**的那个标签（页头里最大的字就是标题），
         // 同字号取最靠上的。排除长度那行与创建者那行。
-        if texts.title.isEmpty {
-            texts.title = biggestLabelText(in: block, skipping: [facepile, metadataView(block)]) ?? ""
+        if texts.title.isEmpty, let label = biggestLabel(in: block, skipping: [facepile, metadata]) {
+            texts.title = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            views.title = label
         }
 
         // 描述兜底：只剩**一个**没被认领的标签、而且它够长时才用它（宁可没有，不要贴错）。
         if texts.about.isEmpty {
-            let leftovers = unclaimedLabels(in: block, facepile: facepile, metadata: metadataView(block))
+            let leftovers = unclaimedLabels(in: block, facepile: facepile, metadata: metadata)
             if leftovers.count == 1, let only = leftovers.first,
                let text = only.text?.trimmingCharacters(in: .whitespacesAndNewlines), text.count > 12 {
                 texts.about = text
+                views.about = only
             }
         }
 
-        return texts
+        // view model 参与了 ⇒ 值不是（也不该）从标签读的，快路会读错 ⇒ 这一页禁用快路。
+        return (texts, fromModel ? nil : views)
     }
 
     private static func metadataView(_ block: UIView) -> UIView? {
         eeveeFindView(block, identifier: "Components.Header.UI.Metadata*")
     }
 
-    /// 字号最大的那个标签的文本。
-    private static func biggestLabelText(in root: UIView, skipping skip: [UIView?]) -> String? {
-        var best: (size: CGFloat, y: CGFloat, text: String)?
+    /// 字号最大的那个标签（页头里最大的字就是标题）。返回**标签本身**而不是文本 ——
+    /// 调用方要把它当引用缓存下来，之后每一拍只读 `.text`（见 `TextViews`）。
+    private static func biggestLabel(in root: UIView, skipping skip: [UIView?]) -> UILabel? {
+        var best: (size: CGFloat, y: CGFloat, label: UILabel)?
         forEachView(root) { view in
             guard let label = view as? UILabel else { return }
             for skipped in skip.compactMap({ $0 }) where view.isDescendant(of: skipped) { return }
@@ -271,19 +330,19 @@ enum EntityPageHeaderManager {
             let y = label.convert(.zero, to: root).y
             if let current = best {
                 if size > current.size || (size == current.size && y < current.y) {
-                    best = (size, y, text)
+                    best = (size, y, label)
                 }
             } else {
-                best = (size, y, text)
+                best = (size, y, label)
             }
         }
-        return best?.text
+        return best?.label
     }
 
     /// block 里还没被认领的标签（标题/创建者/长度之外的那些）。
     private static func unclaimedLabels(in block: UIView, facepile: UIView?, metadata: UIView?) -> [UILabel] {
         var labels: [UILabel] = []
-        let biggest = biggestLabelText(in: block, skipping: [facepile, metadata])
+        let biggest = biggestLabel(in: block, skipping: [facepile, metadata])
         var titleTaken = false
         forEachView(block) { view in
             guard let label = view as? UILabel else { return }
@@ -291,19 +350,20 @@ enum EntityPageHeaderManager {
             if let metadata, view.isDescendant(of: metadata) { return }
             let text = (label.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard text.count > 1 else { return }
-            if !titleTaken, text == biggest { titleTaken = true; return }
+            if !titleTaken, let biggest, label === biggest { titleTaken = true; return }
             labels.append(label)
         }
         return labels
     }
 
-    private static func firstLabelText(in root: UIView, skipping skip: UIView?, longerThan minimum: Int = 1) -> String? {
-        var found: String?
+    /// 那一行里第一个非空标签。返回**标签本身**，理由同 `biggestLabel`（引用要留下来当缓存）。
+    private static func firstLabel(in root: UIView, skipping skip: UIView?, longerThan minimum: Int = 1) -> UILabel? {
+        var found: UILabel?
         forEachView(root) { view in
             guard found == nil, let label = view as? UILabel else { return }
             if let skip, view.isDescendant(of: skip) { return }
             let text = (label.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if text.count > minimum { found = text }
+            if text.count > minimum { found = label }
         }
         return found
     }
@@ -389,6 +449,11 @@ class EntityPageHeaderLayoutHook: ClassHook<UIView> {
 
     func layoutSubviews() {
         orig.layoutSubviews()
+        // ★ 2026-10-13：**满幅封面那条路也挂在这一拍上** —— 页面出现的第一帧就把 Spotify 那张
+        //   262×262 的小封面藏掉。原来只有 `EntityPageAppearance` 的 0.6s tick 会藏，
+        //   而第一帧封面已经画出来了 ⇒ 用户看到的"刚进歌单页小封面短暂展现一会"。
+        //   `layoutPass` 是幂等且便宜的（缓存了封面引用），重活仍在 tick 里。
+        EntityPageAppearance.layoutPass(in: target)
         EntityPageHeaderManager.apply(in: target)
     }
 }
@@ -405,7 +470,9 @@ class EntityPagePlayButtonHook: ClassHook<UIView> {
 }
 
 func activateEntityPageHeader() {
-    guard EntityPageHeaderManager.isEnabled else { return }
+    // 两个开关共用这一条每帧的布局拍：AM 页头（`entityPageAMHeader`）与"满幅封面 + 取色底"
+    // （`entityPageDissolve`）。**任一打开这条钩子就得在**，否则满幅封面那条路又退回 0.6s 的 tick。
+    guard EntityPageHeaderManager.isEnabled || EntityPageAppearance.isEnabled else { return }
 
     let required = [
         EntityPageHeaderLayoutHook.targetName,
@@ -418,5 +485,9 @@ func activateEntityPageHeader() {
     }
 
     EntityPageHeaderGroup().activate()
-    writeDebugLog("[EntityPageHeader] on (playlist pages only; album pages untouched in v1)")
+    writeDebugLog(
+        "[EntityPageHeader] on — AM header \(EntityPageHeaderManager.isEnabled ? "ON" : "OFF"),"
+            + " page look \(EntityPageAppearance.isEnabled ? "ON" : "OFF")"
+            + " (one layout pass drives both; playlist pages only)"
+    )
 }

@@ -2,18 +2,38 @@ import Foundation
 import Orion
 import UIKit
 
-/// Home 顶部那排**小卡片**（Liked Songs / 最近播放那些小方框）的底色 —— **从它自己的封面取色**。
+/// Home 顶部那排**小卡片**（Liked Songs / 最近播放那些小方框）—— 照 Apple Music 的"列表行"来：
+/// **封面从卡片边缘内缩一点、带自己的圆角，标题跟着往里挪**，而卡片的底是
+/// **暗面往封面的主色淡淡偏一点**（于是整片网格不是"一格灰 + 白字"）。
 ///
-/// ## 出处
+/// ## 期望效果（用户 2026-10-13：「不知道期望效果是什么记得说」）
 ///
 /// 借鉴 **spoti.pw v0.21.1** 的 `Redesigned/Home/HomeTiles.m`（那一版是 **GPL-3.0**；
-/// v0.22.0 起该仓库改为 PolyForm Strict，**那里的代码不可复制**）。它的原话就是这里的目标：
+/// v0.22.0 起该仓库改为 PolyForm Strict，**那里的代码不可复制**）。它逐字写的就是这里的验收标准：
 ///
-/// > the tile is a **dark surface tinted faintly towards the cover's dominant colour**,
-/// > so the grid is not one grey and white text always reads.
+/// > a shortcut tile the way an Apple list row holds artwork. **The cover sits inset from the tile's
+/// > edges with its own corners, the title follows it in**, and the tile is **a dark surface tinted
+/// > faintly towards the cover's dominant colour**, so **the grid is not one grey and white text always
+/// > reads**. Until the cover has loaded, the tile is the untinted surface.
 ///
-/// 做法也照它：在卡片自己的 fill **之上**插一层我们自己的 `surface`（不吃触摸、不进无障碍），
-/// 于是**标题、播放指示、按钮的点击全都还是 Spotify 的**；底色算一次、按图片缓存。
+/// 拆成三条可验收的：
+///
+/// 1. **封面内缩 + 圆角**（`coverInset = 5`、`coverRadius = 4`）：封面方块绕中心缩小、让出边缘，
+///    标题那一摞跟着左移。这与底色是**两件事**，只做底色是看不出来的 —— 上一版就是只做了底色，
+///    所以用户说"没有期望效果"。
+/// 2. **底色淡染**：暗面朝封面的**主色**（不是平均色）混 35%（主色先压到亮度 0.05）——
+///    "faintly"是故意的：多了白字读不清，少了看着还是一格灰。
+/// 3. **图晚到也跟上**：图没到时是**未染色的暗面**，图到了再淡入。
+///
+/// ## 与 pw 的实现对应
+///
+/// | pw | 这里 |
+/// |---|---|
+/// | `partsOf`：`Encore.ImageView` 里的 `UIImageView` + 它的父视图（方块）+ 第一个与卡等大的子视图（fill）| `coverImageView` / `insetCover` / `surfaceIn` |
+/// | `inset()`：transform 缩放方块 + 兄弟左移 | `insetCover`（逐字照抄常数与算法）|
+/// | `SGRPalette +tintForImage:`：主色（3 位分箱、按覆盖率×饱和度打分）压亮度后混 35% | `dominantColour` / `tint` |
+/// | `NSMapTable weakToStrongObjects` 缓存 + **后台队列**算色 | `tints` / `tintQueue` |
+/// | `SGRObserveImage` 跟图 | 每拍 + 结果回来时再核一次（等效）|
 ///
 /// ## 为什么"结构推断"而不是照抄它那个 id
 ///
@@ -21,40 +41,75 @@ import UIKit
 /// `dump-9.1.88.txt` 里**有这一组类**（`Home_AnchorsAndShortcutsKit22ShortcutsGridElementUI` /
 /// `22ShortcutsCardElementUI` / `26ShortcutsCardDataElementUI`、`Home_ECMKit36ShortcutCardHomePlayingIndicatorView`），
 /// 但**没有任何一次真机转储到过那一格**（转储器 `maxDepth = 24`、Home 内容已在 21~22 层 ⇒ 卡片在 25 层以下，
-/// 根本到不了）。所以这里**认形状不认 id**：近似正方形的小卡、里面有一张图 ——
-/// 认不出就什么都不做（宁可没效果，不要动错图）。第一次命中会把卡片结构打进日志，
-/// 下一轮就能按真机结构收紧。
+/// 根本到不了）。所以这里**认 id + 形状**：日志 86 的 `[HomeTiles] grid … subtree:` 第一行就是
+/// `LegacyUI_ECMCoreKit.InteractableLayoutBackingButton@0,0,187,48,id=Shortcut.Card.Home` ——
+/// **pw 用的那个 id 在我们 9.1.88 上一模一样**。认不出就什么都不做（宁可没效果，不要动错图）。
 enum HomeTileTint {
 
     static var isEnabled: Bool { UserDefaults.homeTileTint }
 
-    /// 底：Spotify 自己的"抬起一层"的深灰。往封面平均色混 `tintAmount`。
+    // MARK: - 常数（pw 的 `HomeTiles.m` / `SGRPalette.m`）
+
+    /// 封面从上/下/左边缘让出这么多（pw 的 `kInset = 5`）。
+    private static let coverInset: CGFloat = 5
+    /// 让出之后封面的圆角（pw 的 `kCoverRadius = 4`）。
+    private static let coverRadius: CGFloat = 4
+    /// 卡片的暗面：Spotify 自己的"抬起一层"的深灰。
     private static let base = UIColor(white: 0.11, alpha: 1)
-    /// 混多少。pw 是 "tinted **faintly**"（淡淡地偏向封面色）—— 多了白字读不清，少了看着还是一格灰。
-    private static let tintAmount: CGFloat = 0.26
+    /// pw 的 `kTintLuminance = 0.05`：主色先压到这个亮度（线性光）。
+    private static let tintLuminance: CGFloat = 0.05
+    /// pw 的 `kTintShare = 0.35`：再按这个比例混进暗面。
+    private static let tintShare: CGFloat = 0.35
+    /// 主色采样边长（pw 的 `kSample = 64`）。
+    private static let sample = 64
+
+    // MARK: - 状态
 
     private static var surfaceKey: UInt8 = 0
-    /// 一张图只算一次（`ObjectIdentifier` 不做强引用）。
-    private static var tints: [ObjectIdentifier: UIColor] = [:]
-    private static let ciContext = CIContext(options: nil)
+    /// 取过的色：**按图片对象**（图活着才留）—— pw 的 `NSMapTable weakToStrongObjectsMapTable`。
+    ///
+    /// ⚠️ 上一版用的是 `[ObjectIdentifier: UIColor]`：`ObjectIdentifier` **不持有**那张图，
+    /// 图被释放之后地址会被下一张图复用 ⇒ 新卡片可能捡到上一张封面的颜色。这里改成弱表。
+    /// **只在主线程读写**（`NSMapTable` 自己不加锁）。
+    private static let tints = NSMapTable<UIImage, UIColor>.weakToStrongObjects()
+    /// 取色在后台（pw 的 `SGRPalette` 有自己的串行队列 `spotifyglass.redesign.palette`）。
+    private static let tintQueue = DispatchQueue(label: "eevee.hometiles.tint", qos: .userInitiated)
+    /// 报过几张（有界：8 张）—— 原来 `logOnce` 只报全局第一张，
+    /// "首页那几个小卡片到底覆盖了几张"从日志里**看不出来**。
+    private static var reported = 0
     private static var logged = Set<String>()
 
-    /// 卡片自己那一拍。
+    // MARK: - 卡片自己那一拍
+
     static func apply(to tile: UIView) {
         guard isEnabled, isTile(tile) else { return }
         guard let cover = coverImageView(in: tile), let image = cover.image else { return }
 
-        let colour = tint(for: image)
+        // ① 封面内缩 + 圆角 + 标题跟移（pw 的 `inset`）—— 与底色无关，是这排卡片的"形"。
+        insetCover(in: tile)
+
         let surface = surfaceIn(tile)
         if surface.superview !== tile { return }
         if surface.frame != tile.bounds { surface.frame = tile.bounds }
-        if surface.backgroundColor != colour { surface.backgroundColor = colour }
 
-        logOnce(
-            "hit",
-            "tile \(shape(tile)) tinted \(hex(colour)) from the cover \(shape(cover))"
-                + " — the tile's own title, indicator and touches are untouched"
-        )
+        if let known = tints.object(forKey: image) {
+            if surface.backgroundColor != known { surface.backgroundColor = known }
+            report(tile: tile, cover: cover, colour: known)
+            return
+        }
+
+        // ② 没算过：**在后台算**，回来时这张卡可能已经换了封面/被复用 ⇒ 核一次再上色。
+        tintQueue.async {
+            let colour = tint(for: image) ?? base
+            DispatchQueue.main.async {
+                tints.setObject(colour, forKey: image)
+                guard isTile(tile),
+                      let current = coverImageView(in: tile)?.image, current === image else { return }
+                let target = surfaceIn(tile)
+                if target.backgroundColor != colour { target.backgroundColor = colour }
+                report(tile: tile, cover: cover, colour: colour)
+            }
+        }
     }
 
     /// 卡片自己那一拍（挂 `InteractableLayoutBackingButton` 那条路）：**先只报一次结构**
@@ -81,7 +136,7 @@ enum HomeTileTint {
         }
     }
 
-    // MARK: - 认那一格（真机结构，日志 85 逐字）
+    // MARK: - 认那一格（真机结构，日志 85/86 逐字）
 
     /// ★ 2026-10-13：**改认 id** —— 日志 85 的 `[HomeTiles] grid … subtree:` 第一行就写着
     /// `LegacyUI_ECMCoreKit.InteractableLayoutBackingButton@0,0,187,48,id=Shortcut.Card.Home`：
@@ -104,6 +159,40 @@ enum HomeTileTint {
         guard let imageView = holder.subviews.compactMap({ $0 as? UIImageView }).first else { return nil }
         guard imageView.image != nil, imageView.bounds.width >= 24, imageView.bounds.height >= 24 else { return nil }
         return imageView
+    }
+
+    // MARK: - 封面内缩（pw 的 `inset`）
+
+    /// 封面方块**绕中心缩放**，从卡片边缘让出 `coverInset`；方块之后那一摞（标题那一行）
+    /// 跟着左移同样的距离。
+    ///
+    /// 用 transform 而**不是** frame：Spotify 的 Auto Layout 不读 transform ⇒ 它的约束一个都不用动
+    /// （pw 逐字：「The inset and the title's move are transforms, which Spotify's layout never reads,
+    /// so its constraints are left as they are」）。所以这是可逆、也不会跟布局打架的做法。
+    private static func insetCover(in tile: UIView) {
+        guard let holder = eeveeFindView(tile, identifier: "Encore.ImageView") else { return }
+        // 那个 48×48、带圆角的方块就是 image holder 的父视图（pw 的 `parts.square = holder.superview`）。
+        guard let square = holder.superview else { return }
+        let side = square.bounds.height
+        guard side > coverInset * 4 else { return }
+
+        let scale = (side - coverInset * 2) / side
+        let shrink = CGAffineTransform(scaleX: scale, y: scale)
+        if square.transform != shrink { square.transform = shrink }
+
+        let layer = square.layer
+        // 圆角是**画**出来的，会跟着 transform 一起缩 ⇒ 除以 scale 才是看上去的那个半径（pw 逐字）。
+        let radius = coverRadius / scale
+        if layer.cornerRadius != radius { layer.cornerRadius = radius }
+        if layer.cornerCurve != .continuous { layer.cornerCurve = .continuous }
+        if !layer.masksToBounds { layer.masksToBounds = true }
+
+        let follow = CGAffineTransform(translationX: -square.bounds.width * (1 - scale) / 2, y: 0)
+        var after = false
+        for sibling in square.superview?.subviews ?? [] {
+            if sibling === square { after = true; continue }
+            if after, sibling.transform != follow { sibling.transform = follow }
+        }
     }
 
     // MARK: - 那一层底色
@@ -138,58 +227,131 @@ enum HomeTileTint {
         return surface
     }
 
-    // MARK: - 取色
+    // MARK: - 取色（pw 的 `SGRPalette`：主色 → 压亮度 → 混进暗面）
 
-    private static func tint(for image: UIImage) -> UIColor {
-        let key = ObjectIdentifier(image)
-        if let cached = tints[key] { return cached }
-        let colour = averageColour(of: image).map { blend(base, toward: $0, amount: tintAmount) } ?? base
-        tints[key] = colour
-        return colour
-    }
-
-    /// 1×1 的 `CIAreaAverage` —— CoreImage 的归约，比逐像素遍历快得多；结果按图片缓存。
-    private static func averageColour(of image: UIImage) -> UIColor? {
+    /// pw 的 `dominantIn`：图缩到 64×64，每通道 **3 位分箱**（512 格），每格按
+    /// `count × (0.25 + 饱和度)` 打分（近黑 ×0.3、近白 ×0.3 降权），取分最高那一格的**平均色**
+    /// —— 平均是在**线性光**里做的。忙乱的封面因此给的是它的**主色**，
+    /// 而不是"整张图平均"出来的那种灰（这正是上一版看不出效果的原因之一）。
+    private static func dominantColour(of image: UIImage) -> UIColor? {
         guard let cgImage = image.cgImage else { return nil }
-        let input = CIImage(cgImage: cgImage)
-        guard !input.extent.isEmpty, !input.extent.isInfinite,
-              let filter = CIFilter(
-                  name: "CIAreaAverage",
-                  parameters: [kCIInputImageKey: input, kCIInputExtentKey: CIVector(cgRect: input.extent)]
-              ),
-              let output = filter.outputImage else { return nil }
+        let side = sample
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        guard drawn else { return nil }
 
-        var bitmap = [UInt8](repeating: 0, count: 4)
-        ciContext.render(
-            output,
-            toBitmap: &bitmap,
-            rowBytes: 4,
-            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-            format: .RGBA8,
-            colorSpace: CGColorSpaceCreateDeviceRGB()
-        )
+        var sums = [Double](repeating: 0, count: 512 * 3)
+        var scores = [Double](repeating: 0, count: 512)
+        var counts = [Int](repeating: 0, count: 512)
+
+        for index in 0..<(side * side) {
+            let pixel = index * 4
+            guard pixels[pixel + 3] >= 128 else { continue }
+            let red = Double(pixels[pixel]) / 255
+            let green = Double(pixels[pixel + 1]) / 255
+            let blue = Double(pixels[pixel + 2]) / 255
+            let bin = Int(pixels[pixel] >> 5) << 6 | Int(pixels[pixel + 1] >> 5) << 3 | Int(pixels[pixel + 2] >> 5)
+            let high = max(red, max(green, blue))
+            let low = min(red, min(green, blue))
+            let saturation = high > 0 ? (high - low) / high : 0
+            scores[bin] += (0.25 + saturation) * (high < 0.12 ? 0.3 : 1) * (low > 0.88 ? 0.3 : 1)
+            counts[bin] += 1
+            sums[bin * 3] += linear(red)
+            sums[bin * 3 + 1] += linear(green)
+            sums[bin * 3 + 2] += linear(blue)
+        }
+
+        var best = 0
+        for index in 1..<512 where scores[index] > scores[best] { best = index }
+        guard counts[best] > 0 else { return nil }
+        let count = Double(counts[best])
         return UIColor(
-            red: CGFloat(bitmap[0]) / 255,
-            green: CGFloat(bitmap[1]) / 255,
-            blue: CGFloat(bitmap[2]) / 255,
+            red: encoded(sums[best * 3] / count),
+            green: encoded(sums[best * 3 + 1] / count),
+            blue: encoded(sums[best * 3 + 2] / count),
             alpha: 1
         )
     }
 
-    private static func blend(_ base: UIColor, toward other: UIColor, amount: CGFloat) -> UIColor {
-        var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
-        var or: CGFloat = 0, og: CGFloat = 0, ob: CGFloat = 0, oa: CGFloat = 0
-        guard base.getRed(&br, green: &bg, blue: &bb, alpha: &ba),
-              other.getRed(&or, green: &og, blue: &ob, alpha: &oa) else { return base }
+    /// pw 的 `tintOf`：主色压到亮度 `tintLuminance`（线性光、三通道**同一系数**，色相不变），
+    /// 再按 `tintShare` 混进暗面。
+    ///
+    /// ⚠️ pw 踩过的坑（它的 issue #36，这里照抄它的处理）：混完**比暗面还暗**的（近黑封面）
+    /// 会让卡片比"未染色的暗面"还黑，一路掉进 AMOLED 的纯黑里 —— 于是"黑方块丢在黑页上"。
+    /// 所以混完比暗面暗就按**同一系数**抬回暗面的亮度（抬不爆：目标是暗面那点亮度）。
+    private static func tint(for image: UIImage) -> UIColor? {
+        guard let dominant = dominantColour(of: image) else { return nil }
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 1
+        guard dominant.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return nil }
+
+        var lr = linear(Double(red)), lg = linear(Double(green)), lb = linear(Double(blue))
+        let luminance = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb
+        if luminance > 0, luminance > Double(tintLuminance) {
+            let scale = Double(tintLuminance) / luminance
+            lr *= scale
+            lg *= scale
+            lb *= scale
+        }
+
+        var baseRed: CGFloat = 0, baseGreen: CGFloat = 0, baseBlue: CGFloat = 0, baseAlpha: CGFloat = 1
+        guard base.getRed(&baseRed, green: &baseGreen, blue: &baseBlue, alpha: &baseAlpha) else { return nil }
+        let share = Double(tintShare)
+        let baseLinear = [linear(Double(baseRed)), linear(Double(baseGreen)), linear(Double(baseBlue))]
+        var mixed = [
+            baseLinear[0] * (1 - share) + lr * share,
+            baseLinear[1] * (1 - share) + lg * share,
+            baseLinear[2] * (1 - share) + lb * share,
+        ]
+
+        let want = 0.2126 * baseLinear[0] + 0.7152 * baseLinear[1] + 0.0722 * baseLinear[2]
+        let have = 0.2126 * mixed[0] + 0.7152 * mixed[1] + 0.0722 * mixed[2]
+        if have <= 0 { return base }
+        if have < want {
+            let lift = want / have
+            mixed = mixed.map { $0 * lift }
+        }
         return UIColor(
-            red: br + (or - br) * amount,
-            green: bg + (og - bg) * amount,
-            blue: bb + (ob - bb) * amount,
+            red: encoded(mixed[0]),
+            green: encoded(mixed[1]),
+            blue: encoded(mixed[2]),
             alpha: 1
         )
+    }
+
+    private static func linear(_ value: Double) -> Double {
+        value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+    }
+
+    private static func encoded(_ value: Double) -> CGFloat {
+        let clamped = max(0, min(1, value))
+        let out = clamped <= 0.0031308 ? clamped * 12.92 : 1.055 * pow(clamped, 1 / 2.4) - 0.055
+        return CGFloat(max(0, min(1, out)))
     }
 
     // MARK: - 诊断
+
+    private static func report(tile: UIView, cover: UIView, colour: UIColor) {
+        guard reported < 8 else { return }
+        reported += 1
+        writeDebugLog(
+            "[HomeTiles] tile \(shape(tile)) tinted \(hex(colour)) from the cover \(shape(cover))"
+                + " — cover inset \(Int(coverInset))pt r=\(Int(coverRadius));"
+                + " title moved in with it (pw's Apple-list-row look)"
+        )
+    }
 
     private static func shape(_ view: UIView) -> String {
         "\(NSStringFromClass(type(of: view))) \(Int(view.bounds.width))x\(Int(view.bounds.height))"
@@ -199,11 +361,6 @@ enum HomeTileTint {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard colour.getRed(&r, green: &g, blue: &b, alpha: &a) else { return "?" }
         return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
-    }
-
-    private static func logOnce(_ key: String, _ message: String) {
-        guard logged.insert(key).inserted else { return }
-        writeDebugLog("[HomeTiles] \(message)")
     }
 
     /// 把网格子树打进日志（有界：24 层 / 40 个节点）。这就是"转储到不了那一格"时的替代品。
@@ -259,12 +416,10 @@ class HomeShortcutGridHook: ClassHook<UIView> {
 /// ★ 2026-10-13（日志 84 之后补的）：Home 那排小卡片在真机上是**这个类** ——
 /// `[ShellDump] LegacyUI_ECMCoreKit.InteractableLayoutBackingButton`（我们自己的日志里有过它），
 /// pw 的树里同一个类带着 `id=Shortcut.Card.Home`。它是**真视图**，所以 `layoutSubviews` 挂得上；
-/// 我第一版挂的 `…ShortcutsCardElementUI` 在 9.1.88 上**不存在**（日志 84：`hooked 1/2`），
-/// 而那个 `…ElementUI` 多半根本不是视图。
+/// 我第一版挂的 `…ShortcutsCardElementUI` 在 9.1.88 上**不存在**（日志 84：`hooked 1/2`）。
 ///
 /// ⚠️ 这个类**别处也在用**（曲库的 116×171 卡片、演出页的 374×346 卡、每行的「…」）——
-/// 所以这里只按**形状**挑（`isTileShaped`：宽 120~340 / 高 40~80 / 里面有图），
-/// 认不出就一个字节都不碰。
+/// 所以这里只按 **id + 尺寸** 挑，认不出就一个字节都不碰。
 class HomeShortcutBackingButtonHook: ClassHook<UIView> {
     typealias Group = HomeShortcutTilesGroup
     static let targetName = "_TtC19LegacyUI_ECMCoreKit31InteractableLayoutBackingButton"
@@ -292,6 +447,8 @@ func activateHomeShortcutTiles() {
     HomeShortcutTilesGroup().activate()
     writeDebugLog(
         "[HomeTiles] on — hooked \(present.count)/\(targets.count)"
-            + " (\(present.joined(separator: ", "))); structure will be logged on the first grid pass"
+            + " (\(present.joined(separator: ", ")));"
+            + " the tile is a dark surface tinted towards the cover's dominant colour,"
+            + " with the cover inset 5pt (pw's Apple-list-row look); structure logged on the first grid pass"
     )
 }
