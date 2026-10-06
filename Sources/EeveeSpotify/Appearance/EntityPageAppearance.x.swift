@@ -351,6 +351,25 @@ enum EntityPageAppearance {
         tonedViews.removeAll()
     }
 
+    /// 把颜色**按倍数压暗**（保留色相与饱和度）。
+    ///
+    /// ★★ 2026-10-06（照片 116/117：「渐变也有问题」，日志 92 逐字 `#B08FA8 → #B08DA7 → #A887A0`）：
+    /// 那三段**几乎是同一个颜色**，所以整页看着是平的。原因是 `tinted` 只设**上限**——
+    /// 基色亮度本来只有 0.65 时，`atMost: 0.88` 等于什么都没做，而 `0.66` 也只压掉一点点。
+    /// 这里改成**乘一个系数**（往上抬不了就往下走），亮底与暗底都能拉开。
+    private static func scaled(_ colour: UIColor, by factor: CGFloat) -> UIColor {
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 1
+        guard colour.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return colour
+        }
+        return UIColor(
+            hue: hue,
+            saturation: saturation,
+            brightness: max(0.04, min(1, brightness * factor)),
+            alpha: 1
+        )
+    }
+
     /// 竖直渐变：顶部是封面取色 → 中段压暗 → **到底仍然留着这片颜色**。
     ///
     /// ⚠️ **照片 95-97 的教训**：原来 57% 之后就是纯 `#121212` ⇒ 用户看到的是"**下半部分还是黑的**" ✗。
@@ -364,8 +383,10 @@ enum EntityPageAppearance {
         //    **封面亮就给亮底**（AM 的艺人页正是这样：白底照片 ⇒ 白底页面 + 黑字），封面暗才压暗。
         //    这也是 `textTone` 反色的依据：底亮了，字才有得反。
         let light = isLight(color)
-        let middle = tinted(color, atMost: light ? 0.88 : 0.42)
-        let bottom = tinted(color, atMost: light ? 0.66 : 0.28)
+        // ★★ 2026-10-06：改用 `scaled`（乘系数）而不是 `tinted`（设上限）——
+        //   上限对"本来就不亮的基色"毫无作用，那正是"渐变看不出渐变"的原因。
+        let middle = scaled(color, by: light ? 0.86 : 0.72)
+        let bottom = scaled(color, by: light ? 0.62 : 0.45)
         let layer = view.gradient
         layer.startPoint = CGPoint(x: 0.5, y: 0)
         layer.endPoint = CGPoint(x: 0.5, y: 1)
