@@ -49,6 +49,9 @@ enum EntityPageHeaderMetrics {
     /// 原来是 pw 的"两颗 44 圆 + 一颗 148×48 的白胶囊"；现在中间那颗**从胶囊变成圆**（去掉"播放"二字）。
     static let rowHeight: CGFloat = 56      // = 两侧小圆的直径
     static let playSide: CGFloat = 84       // = 中间那颗粒子的直径
+    /// ★ 2026-10-13（照 AM）：页头**右上角那颗 `⋯`** 的直径 —— AM 在同一位置放一颗"分享 + ⋯"的
+    /// 玻璃胶囊，与左上角的返回键同高。
+    static let pinnedMoreSide: CGFloat = 44
     /// 两侧按钮那圈**玻璃圆**的直径（= pw 的 `SGRGlassCircleSize`）。
     static let glassCircle: CGFloat = 44
     /// 两侧按钮的字形边长。★ 2026-10-13（用户看真机：「旁边的按键小了点」）：

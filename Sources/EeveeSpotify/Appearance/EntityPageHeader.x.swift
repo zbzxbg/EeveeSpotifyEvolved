@@ -70,6 +70,10 @@ enum EntityPageHeaderManager {
     private static var cachedArtistMeta: UIView?
     private static var cachedArtistCover: UIView?
     private static var cachedArtistFollow: UIView?
+    /// ★ 2026-10-13（照 AM）：右上角那颗 `⋯` —— Spotify 的菜单按钮（`Components.UI.ContextMenuButton-<hash>`）
+    /// 与**我们自己画的那一颗**（`EntityPageHeaderButton` 直接复用：它本来就是"玻璃圆 + 字形 + 转发"）。
+    private static var cachedMore: UIView?
+    private static var pinnedMore: EntityPageHeaderButton?
 
     /// 尾部按钮的兜底字形：**做成常量**（原来每一拍都 `UIImage(systemName:)` 造一张新的，
     /// 而这一拍在折叠的每一帧都会走到 —— 与"字形只取一次"同一条纪律）。
@@ -169,6 +173,9 @@ enum EntityPageHeaderManager {
 
         // Play 在页头的**前景区**，不在 block 里 ⇒ 单独藏一次（它自己那一拍也会再补，见下面的 hook）。
         eeveeConceal(play)
+
+        // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
+        pinMoreButton(in: headerRoot)
 
         logOnce(
             "applied",
@@ -307,6 +314,9 @@ enum EntityPageHeaderManager {
         eeveeConceal(wrapperFor(shuffle, in: page))
         eeveeConceal(wrapperFor(add, in: header))
         eeveeConceal(wrapperFor(download, in: header))
+
+        // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
+        pinMoreButton(in: header)
         logOnce(
             "trailingSource",
             "trailing ← \(add != nil ? "AddToButton" : (download != nil ? "DownloadButton" : "nothing"))"
@@ -467,6 +477,9 @@ enum EntityPageHeaderManager {
         eeveeBlank(shuffle)
         eeveeBlank(follow)
 
+        // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
+        pinMoreButton(in: header)
+
         logOnce(
             "appliedArtist",
             "artist page — name \"\(name)\", meta \"\(meta.isEmpty ? "-" : meta)\""
@@ -587,6 +600,58 @@ enum EntityPageHeaderManager {
             node = current.superview
         }
         return wrapper
+    }
+
+    /// ★ 2026-10-13（照 AM）：把 `⋯` **钉在页头的右上角**。
+    ///
+    /// AM 在那一格放的是一颗"**分享 + ⋯**"的玻璃胶囊；而 **Spotify 的专辑页/艺人页没有独立的分享按钮**
+    /// —— 我们全仓日志里 `ShareButton*`（`ShareButtonNowPlayingView` / `lyrics-share-button`）只出现在
+    /// **听歌页与歌词页**，专辑页与艺人页的分享是 `⋯` 菜单里的一项。所以这里**只做 `⋯` 一颗**，
+    /// 不去造一颗点不动的假分享键（本项目纪律：绝不留下"看得见、点不动"的东西）。
+    ///
+    /// pw 的 `SGRPinnedMore` 是同一件事，它的注释逐字：
+    ///
+    /// > the Kit's pinned ⋯ (`SGRPinnedMore`) draws and fires it from the top trailing corner of the
+    /// > page, level with the back button.
+    ///
+    /// 藏 Spotify 行里那颗走 `wrapperFor`（连它的圆底一起）—— 否则同一页上会出现两颗 `⋯`。
+    private static func pinMoreButton(in headerRoot: UIView) {
+        guard let menu = find("Components.UI.ContextMenuButton*", in: headerRoot, cache: &cachedMore) else {
+            // 这一页没有 `⋯`（或者还没建出来）⇒ 什么都不做，**也不留一颗假的**。
+            return
+        }
+
+        let side = EntityPageHeaderMetrics.pinnedMoreSide
+        let more: EntityPageHeaderButton
+        if let existing = pinnedMore {
+            more = existing
+        } else {
+            more = EntityPageHeaderButton()
+            more.accessibilityIdentifier = "eevee-pinned-more"
+            pinnedMore = more
+            writeDebugLog(
+                "[\(logTag)] pinned the ⋯ into the top trailing corner, level with the back button"
+                    + " (AM's corner; Spotify keeps its own ⋯ hidden in the row)"
+            )
+        }
+        if more.superview !== headerRoot {
+            headerRoot.addSubview(more)
+        } else if headerRoot.subviews.last !== more {
+            headerRoot.bringSubviewToFront(more)
+        }
+
+        // 与左上角那颗返回键同高：页头的 y=0 就是状态栏那一条的上沿，所以要让出安全区。
+        let top = (headerRoot.window?.safeAreaInsets.top ?? 0) + 4
+        let frame = CGRect(
+            x: headerRoot.bounds.width - side - 16,
+            y: top,
+            width: side,
+            height: side
+        )
+        if more.frame != frame { more.frame = frame }
+        more.feed(from: menu)
+
+        eeveeConceal(wrapperFor(menu, in: headerRoot))
     }
 
     /// 专辑页的文字：**按明确的 id 读**（pw 的 `applyHeader` 用同样这三个 id）。
