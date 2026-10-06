@@ -1,7 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// 从**任意视图**打开 EeveeSpotify 设置页 —— 长按标签栏第一颗（主页）时的落点。
+/// 从**任意视图**打开 EeveeSpotify 设置页。
+///
+/// ⚠️ 2026-10-13：**它现在的调用方只有设置列表里那一行**（`pushEeveeSettings`）。原来还有一个
+/// "长按标签栏第一颗（主页）"的入口，**那个功能已按用户要求整体回退** ——
+/// 见 `TabBarSystemGlass.installStockGestures` 里留下的那条结论（重做时**两条栏各装一遍**）。
+/// 这个落点本身与手势无关，留着：将来重做时直接接上就行。
 ///
 /// ## 出处：pw 的 `SGOpenModSettings`
 ///
