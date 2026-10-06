@@ -630,7 +630,7 @@ enum EntityPageHeaderManager {
             more.accessibilityIdentifier = "eevee-pinned-more"
             pinnedMore = more
             writeDebugLog(
-                "[\(logTag)] pinned the ⋯ into the top trailing corner, level with the back button"
+                "[EntityPageHeader] pinned the ⋯ into the top trailing corner, level with the back button"
                     + " (AM's corner; Spotify keeps its own ⋯ hidden in the row)"
             )
         }
