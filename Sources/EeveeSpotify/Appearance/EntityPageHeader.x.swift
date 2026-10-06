@@ -294,6 +294,12 @@ enum EntityPageHeaderManager {
         )
 
         eeveeConceal(play)
+        // ★ 2026-10-13（照片 104：用户「播放按键的右边有按键重合」）：我们镜像的那两颗**再点名藏一次**。
+        //   `concealAlbumChrome` 走的是"整支藏"，理论上已经覆盖它们，但 Spotify 会把按钮**晚一拍**
+        //   加进一支已经藏过的分支里（新视图不受之前那次藏的影响）⇒ Spotify 的 AddToButton 就和我们的
+        //   玻璃圆叠在同一格上。这两颗的 id 是我们逐颗找到的，直接点名最稳（幂等）。
+        eeveeConceal(add)
+        eeveeConceal(download)
 
         // 那行 kind·日期是 collection view 的 **cell**，晚一拍才建出来（pw 也等：最多 6 次、每次 0.25s）。
         if texts.length.isEmpty {

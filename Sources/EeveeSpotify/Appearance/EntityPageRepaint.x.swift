@@ -101,6 +101,55 @@ class PlaylistListBackgroundHook: ClassHook<UIScrollView> {
     }
 }
 
+/// 清一层：它自己 + 它的**直接子视图**（cell 的底通常画在 `contentView` 上，那是直接子视图）。
+func eeveeClearBaseSurface(_ view: UIView) {
+    if let colour = view.backgroundColor, EntityPageRepaint.isBaseSurface(colour.cgColor) {
+        view.backgroundColor = .clear
+    }
+}
+
+/// ★ 2026-10-13（照片 105：专辑页往下滚是**一片黑**）：**专辑页的列表和歌单页那个类不是一个**
+/// （日志 87：`[Tree] … CreativeWorkTemplateListView@0,0,414,896`）。pw 的 `AlbumField.x` 为它单开一个：
+///
+/// > The list paints itself the base surface from its own pass rather than through a layer that the
+/// > repaint hook would hear about, so it is cleared where it is laid out. Its collection view is a
+/// > private class whose name carries a build hash, so the list view around it -- one public name,
+/// > one child -- is where it is cleared.
+///
+/// 没有这一钩，`CALayer` 那道闸门**听不到列表自己那一拍画的底** ⇒ 列表照旧不透明地盖在 field 上。
+class AlbumListBackgroundHook: ClassHook<UIView> {
+    typealias Group = EntityPageRepaintGroup
+    static let targetName = "_TtC32CreativeWorkPlatform_TemplateKit28CreativeWorkTemplateListView"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        guard EntityPageRepaint.root != nil else { return }
+        eeveeClearBaseSurface(target)
+        for sub in target.subviews { eeveeClearBaseSurface(sub) }
+    }
+}
+
+/// 每一行 cell 也自己画底色 —— pw 的 `AlbumField.x` 同样为它单独开了一钩：
+///
+/// > Every cell of the list paints the base surface too, and the repaint hook misses it: a cell is
+/// > painted before it is inside the page, and a reused one brings its old paint with it. On the
+/// > episode page the Episode Transcript row, the empty section under it and the rule under that sat
+/// > on black bands.
+///
+/// ⚠️ 它挂着的是 **`Element_List.CollectionViewCell`**：这个类别处也在用，所以**必须**加
+/// `isDescendant(of: root)` 那道闸门 —— 不在我们接管的页面里的 cell 一个字节都不碰。
+class AlbumCellBackgroundHook: ClassHook<UIView> {
+    typealias Group = EntityPageRepaintGroup
+    static let targetName = "_TtC12Element_List18CollectionViewCell"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        guard let root = EntityPageRepaint.root, target.isDescendant(of: root) else { return }
+        eeveeClearBaseSurface(target)
+        for sub in target.subviews { eeveeClearBaseSurface(sub) }
+    }
+}
+
 func activateEntityPageRepaint() {
     // 底色拦截只为「满幅封面 + 取色底」那颗开关服务（它不在，页面本来就不该被清成透明）。
     guard UserDefaults.entityPageDissolve else {
@@ -111,6 +160,8 @@ func activateEntityPageRepaint() {
     let targets = [
         EntityPageRepaintLayerHook.targetName,
         PlaylistListBackgroundHook.targetName,
+        AlbumListBackgroundHook.targetName,
+        AlbumCellBackgroundHook.targetName,
     ]
     let present = targets.filter { NSClassFromString($0) != nil }
     guard !present.isEmpty else {
@@ -122,6 +173,7 @@ func activateEntityPageRepaint() {
     writeDebugLog(
         "[PageRepaint] on — hooked \(present.count)/\(targets.count)"
             + " (\(present.joined(separator: ", "))): Spotify's base-surface paints inside our page"
-            + " are dropped at the layer, and the playlist list's own pass is cleared where it lays out"
+            + " are dropped at the layer, and the list's own pass (playlist **and** album) is cleared"
+            + " where it lays out, cell by cell"
     )
 }

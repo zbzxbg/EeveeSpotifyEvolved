@@ -77,6 +77,8 @@ enum HomeTileTint {
     /// 报过几张（有界：8 张）—— 原来 `logOnce` 只报全局第一张，
     /// "首页那几个小卡片到底覆盖了几张"从日志里**看不出来**。
     private static var reported = 0
+    /// 报过几片网格的扫描结果（有界：6 片）。
+    private static var gridReports = 0
     private static var logged = Set<String>()
 
     // MARK: - 卡片自己那一拍
@@ -128,11 +130,24 @@ enum HomeTileTint {
 
         var queue: [UIView] = [grid]
         var visited = 0
-        while !queue.isEmpty, visited < 400 {
+        var candidates = 0
+        let before = reported
+        while !queue.isEmpty, visited < 1500 {
             let view = queue.removeFirst()
             visited += 1
+            if isTile(view) { candidates += 1 }
             apply(to: view)
             queue.append(contentsOf: view.subviews)
+        }
+
+        // ★ 2026-10-13：有界地报一次"这一片网格到底扫出了什么" —— 上一版只报第一张卡，
+        //   "首页覆盖了几个方框、为什么其余没变色"从日志里**看不出来**（用户照片里的首页就是这个问题）。
+        if candidates > 0, gridReports < 6 {
+            gridReports += 1
+            writeDebugLog(
+                "[HomeTiles] grid \(shape(grid)) scanned \(visited) node(s) —"
+                    + " \(candidates) view(s) carried the tile id, \(reported - before) newly tinted"
+            )
         }
     }
 
@@ -145,7 +160,11 @@ enum HomeTileTint {
     private static func isTile(_ view: UIView) -> Bool {
         guard view.accessibilityIdentifier == "Shortcut.Card.Home" else { return false }
         let size = view.bounds.size
-        return size.width >= 120 && size.width <= 340 && size.height >= 40 && size.height <= 80
+        // ★ 2026-10-13（用户：「主页的那几个**小方框**还是没变」）：高度上限从 80 放到 200 ——
+        //   80 只够"187×48、带进度条的那种扁卡"（日志 85/86/87 抓到的一直是它），
+        //   而首页还有**方形**的快捷卡片（同样带 `Shortcut.Card.Home` 与 `Encore.ImageView`）
+        //   ⇒ 原来整类被挡在门外，所以"没变"。宽度下限 120 保留（更窄的是图标不是卡片）。
+        return size.width >= 120 && size.width <= 400 && size.height >= 40 && size.height <= 200
     }
 
     /// pw 的 `partsOf` 逐字：封面在 **`Encore.ImageView`** 里面那个 `UIImageView`。
@@ -364,8 +383,12 @@ enum HomeTileTint {
     }
 
     /// 把网格子树打进日志（有界：24 层 / 40 个节点）。这就是"转储到不了那一格"时的替代品。
+    ///
+    /// ★ 2026-10-13：**每一片网格各报一次**（用对象地址做 key）—— 上一版全局只报第一片，
+    /// 于是"首页一共有几片网格、另外几片长什么样"永远看不到（用户报"小方框没变"时无从下手）。
     private static func logStructureOnce(_ grid: UIView) {
-        guard logged.insert("structure").inserted else { return }
+        guard logged.count < 40 else { return }
+        guard logged.insert("structure-\(ObjectIdentifier(grid))").inserted else { return }
 
         var lines: [String] = []
         var queue: [(view: UIView, depth: Int)] = [(grid, 0)]

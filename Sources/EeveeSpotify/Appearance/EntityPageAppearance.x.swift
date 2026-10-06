@@ -454,27 +454,61 @@ enum EntityPageAppearance {
     /// ⚠️ `_backgroundViewContainer` 里那些 wash 的 `GradientView` 必须**一起藏掉**：pw 的 issue #53
     /// 就是"wash 的 alpha 被抬高之后，不透明的一层把整张图整个盖住"。
     private static func ensureSharpHero(cover: UIView, source: UIImage, page: UIView) {
-        guard let plane = washPlane(for: cover), plane.bounds.width > 1 else { return }
+        // ★ 2026-10-13（照片 104：专辑页只有一片颜色、没有封面）：**宿主分两种** ——
+        //   · 歌单页：Spotify 画页面颜色 wash 的那块 plane（pw 的 `PlaylistHeader.x` 做法）；
+        //   · 专辑页：**头自己**（pw 的 `AlbumHeader.x` 逐字：`[header insertSubview:hero atIndex:0]`）。
+        //
+        //   专辑页**没有** `_backgroundViewContainer`（那是歌单页的结构；它的 wash 是页面里那个
+        //   `LegacyUI…HeaderView` + `GradientView`，见 pw 的 `AlbumField.x`）⇒ 原来这里
+        //   `guard let plane … else { return }` 一句直接返回 ⇒ **整条 sharpHero 静默不装**：
+        //   日志 87 里就只剩 `hero …`（模糊底）而**没有** `sharp hero …` 那一行，
+        //   用户看到的正是"只有背景色、没有封面"。
+        let plane = washPlane(for: cover)
+        let albumHeader = firstView(
+            in: page,
+            withAnyIdentifier: ["CreativeWorkPlatform.Components.UI.CreativeWorkHeader"]
+        )
 
-        let layout = headerLayout(of: cover) ?? cover.superview ?? page
+        let host: UIView
+        let layout: UIView
+        let onAlbumPage: Bool
+        if let plane, plane.bounds.width > 1 {
+            host = plane
+            layout = headerLayout(of: cover) ?? cover.superview ?? page
+            onAlbumPage = false
+            concealWash(on: plane)
+        } else if let albumHeader, albumHeader.bounds.height > 40 {
+            host = albumHeader
+            layout = albumHeader
+            onAlbumPage = true
+            concealAlbumWash(in: page)
+        } else {
+            return
+        }
+
         let coverFrame = cover.convert(cover.bounds, to: layout)
-        guard coverFrame.width > 40, coverFrame.height > 40 else { return }
+        // 歌单页那条路要封面已经量好（帧都没量出来就别画）；专辑页铺满整个头，不依赖封面的帧
+        // （它可能这一拍还没布局 —— 那正是原来"专辑页永远等不到"的一部分）。
+        if !onAlbumPage {
+            guard coverFrame.width > 40, coverFrame.height > 40 else { return }
+        }
 
         concealNativeCover(cover)
-        concealWash(on: plane)
 
-        // 高度 = **到过的最深处**（封面底 + 标题那一段），下限 `minHeroHeight`，**只增不减** ——
+        // 高度 = **到过的最深处**，下限 `minHeroHeight`，**只增不减** ——
         // pw：页头还在加载时 block 的位置偏高，取"当前值"会让图够不到标题、中间留一条裸色带。
-        let reach = max(minHeroHeight, coverFrame.maxY + EntityPageHeaderMetrics.titleRise)
-        let previous = (objc_getAssociatedObject(plane, &heroHeightKey) as? NSNumber)?.doubleValue ?? 0
+        let reach = onAlbumPage
+            ? max(minHeroHeight, host.bounds.height)
+            : max(minHeroHeight, coverFrame.maxY + EntityPageHeaderMetrics.titleRise)
+        let previous = (objc_getAssociatedObject(host, &heroHeightKey) as? NSNumber)?.doubleValue ?? 0
         let height = max(previous, reach)
         if height != previous {
-            objc_setAssociatedObject(plane, &heroHeightKey, NSNumber(value: height), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            objc_setAssociatedObject(host, &heroHeightKey, NSNumber(value: height), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
-        let frame = CGRect(x: 0, y: 0, width: plane.bounds.width, height: round(height))
+        let frame = CGRect(x: 0, y: 0, width: host.bounds.width, height: round(height))
 
         let view: UIImageView
-        if let sharpHero, sharpHero.superview === plane {
+        if let sharpHero, sharpHero.superview === host {
             view = sharpHero
         } else {
             sharpHero?.removeFromSuperview()
@@ -483,19 +517,42 @@ enum EntityPageAppearance {
             fresh.clipsToBounds = true
             fresh.isUserInteractionEnabled = false
             fresh.accessibilityIdentifier = "eevee-page-hero-sharp"
-            plane.insertSubview(fresh, at: 0)
+            host.insertSubview(fresh, at: 0)
             sharpHero = fresh
             view = fresh
             writeDebugLog(
-                "[\(logTag)] sharp hero in Spotify's wash plane \(frameText(plane.bounds))"
-                    + " — the cover \(frameText(coverFrame)) measured in the header layout"
-                    + " \(type(of: layout)); the plane carries it, so it moves with Spotify's own layout"
+                "[\(logTag)] sharp hero in \(onAlbumPage ? "the album header" : "Spotify's wash plane")"
+                    + " \(frameText(host.bounds))"
+                    + " — the cover \(frameText(coverFrame)) measured in \(type(of: layout));"
+                    + (onAlbumPage
+                        ? " the header carries it, so it moves with Spotify's own layout"
+                        : " the plane carries it, so it moves with Spotify's own layout")
             )
         }
 
         if !view.frame.equalTo(frame) { view.frame = frame }
         if view.image !== source { view.image = source }
         applyDissolveMask(to: view, opaqueFraction: 0.54)
+    }
+
+    /// 专辑页的 wash：页面里那个 `LegacyUI…HeaderView`（头的高度），里面是 Spotify 的 `GradientView`。
+    ///
+    /// pw 的 `AlbumHeader.x` `applyWash` 逐字：按**类名**找 `HeaderView`（**排除 `NavigationBar`**），
+    /// 藏掉它下面的 `GradientView`。歌单页那块 `_backgroundViewContainer` 在专辑页上不存在 ——
+    /// 两条路各找各的。
+    ///
+    /// ⚠️ 不藏的话它照旧画在我们的图**之上**（pw 的 issue #53 就是"不透明的一层把整张图整个盖住"）。
+    /// 这里直接复用 `concealWash(on:)`：它拿参数的 **superview** 当容器递归 —— 传 GradientView 进去，
+    /// 容器就是那个 HeaderView，正好是它要清的那一块。
+    private static func concealAlbumWash(in page: UIView) {
+        for sub in page.subviews {
+            let name = NSStringFromClass(type(of: sub))
+            guard name.contains("HeaderView"), !name.contains("NavigationBar") else { continue }
+            for inner in sub.subviews where NSStringFromClass(type(of: inner)).contains("GradientView") {
+                concealWash(on: inner)
+                return
+            }
+        }
     }
 
     /// pw 的 `applyBackground` 逐字：沿**封面的祖先链**找 id = `_backgroundViewContainer` 的容器，
