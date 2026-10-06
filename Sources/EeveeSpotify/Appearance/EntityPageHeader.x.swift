@@ -567,7 +567,13 @@ enum EntityPageHeaderManager {
     /// 只藏控件本身的话，那颗按钮的**圆底/边框画在它的父视图上**、还留在原地 ⇒ Spotify 的圆
     /// 与我们的玻璃圆叠在一起，看着就是"两个图标重合"。往上收到"尺寸不再变化"的那一层再藏，
     /// 整个按钮（含圆底）一起消失。
-    private static func wrapperFor(_ control: UIView, in stop: UIView) -> UIView {
+    /// ★ 2026-10-13（用户编译报错：`value of optional type 'UIView?' must be unwrapped`）：
+    /// **参数与返回值都做成可选** —— 调用方那四颗（play / shuffle / add / download）本来就是
+    /// `UIView?`（找不到就是 nil），而 `eeveeConceal` 收的也是 `UIView?`。
+    /// 做成可选之后 `eeveeConceal(wrapperFor(play, in: page))` 一句就合法，
+    /// 不必在四个调用点各写一次 `if let`（那条路还会漏掉其中一个）。
+    private static func wrapperFor(_ control: UIView?, in stop: UIView) -> UIView? {
+        guard let control else { return nil }
         var wrapper = control
         var node: UIView? = control.superview
         // ⚠️ 加一道**层数上限**（pw 没有，但它那边的 `stop` 就是页面）：万一祖先链上连着几层同尺寸的
