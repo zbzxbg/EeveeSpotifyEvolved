@@ -93,8 +93,10 @@ class PlaylistListBackgroundHook: ClassHook<UIScrollView> {
     func layoutSubviews() {
         orig.layoutSubviews()
         guard EntityPageRepaint.root != nil else { return }
-        guard let colour = target.backgroundColor, let cg = colour.cgColor,
-              EntityPageRepaint.isBaseSurface(cg) else { return }
+        // ⚠️ `UIColor.cgColor` 是**非可选**的 `CGColor` ⇒ 不能写 `let cg = colour.cgColor` 那种可选绑定
+        // （第一版就是这么写的，编译器报 "initializer for conditional binding must have Optional type"）。
+        guard let colour = target.backgroundColor else { return }
+        guard EntityPageRepaint.isBaseSurface(colour.cgColor) else { return }
         target.backgroundColor = .clear
     }
 }

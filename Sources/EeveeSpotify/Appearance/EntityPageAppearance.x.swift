@@ -528,13 +528,10 @@ enum EntityPageAppearance {
         concealedWash.removeAll()
     }
 
-    /// Spotify 的"底面色"（`#121212` 一族）—— 与 `ensureField` 清底色用的是同一个判据。
-    private static func isBaseSurface(_ colour: UIColor) -> Bool {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        guard colour.getRed(&r, green: &g, blue: &b, alpha: &a) else { return false }
-        guard a > 0.5 else { return false }
-        return abs(r - g) < 0.02 && abs(g - b) < 0.02 && r < 0.12
-    }
+    // ⚠️ 「底面色」的判据**只留一份**：`isBaseSurface(_:)`（参数是 `UIColor`，在 `clearBaseSurfaces`
+    // 那一节里）。我第一版在这里又写了一份一模一样的 —— Swift 只看签名（`isBaseSurface(_:)`），
+    // 参数名一个 color 一个 colour 也算重复声明，编译器直接报 `invalid redeclaration`。
+
 
     /// 向下化开：上 `opaqueFraction` 不透明 → 底全透明。两张 hero 共用这一份（改一处就够）。
     private static func applyDissolveMask(to view: UIView, opaqueFraction: CGFloat) {
