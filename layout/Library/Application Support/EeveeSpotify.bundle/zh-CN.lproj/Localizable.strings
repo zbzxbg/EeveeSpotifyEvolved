@@ -475,6 +475,10 @@ entity_page_am_header_section = "Apple Music 式页头（歌单）";
 entity_page_am_header = "标题 / 创建者 / Play 胶囊居中";
 entity_page_am_header_description = "把歌单页的页头换成一版 Music app 的：Spotify 那一列整列藏掉，我们自己画 —— 标题、创建者、长度居中，下面一行是 shuffle、白色 Play 胶囊和保存（或下载）按钮。三颗按钮画的是 Spotify 自己的字形、点的是 Spotify 自己的控件，所以动作、状态、语言都留在它那边。专辑页暂时不动。认不出页头时什么都不改。";
 am_header_play = "播放";
+mini_bar_round_artwork = "封面改成圆形";
+home_tile_tint_section = "首页小卡片";
+home_tile_tint = "卡片底色跟着封面走";
+home_tile_tint_description = "首页顶部那排小卡片（喜欢的歌曲、最近播放那些）的底色从它自己的封面取一点色，整片格子就不再是一片灰。标题、播放指示、点击都还是 Spotify 的。认不出卡片时什么都不改。";
 
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";

@@ -98,6 +98,11 @@ enum MiniBarGlassPlate {
         lastHost = host
         let content = findContent(in: host)
 
+        // ★ 2026-10-13（用户看 pw 的截图：「底下迷你播放器的歌曲是圆形的，不是方形的」）：
+        //   封面圆角**独立于这条玻璃开关**（它自己那颗 `miniBarRoundArtwork` 管它自己）——
+        //   所以放在 `isEnabled` 早退**之前**，关掉玻璃照样是圆的。
+        MiniBarArtwork.apply(to: host)
+
         guard isEnabled else {
             removePlate(host: host, content: content ?? lastContent)
             return

@@ -21,6 +21,7 @@ struct HomeAndLibrarySettingsView: View {
         var hideAddToButton = UserDefaults.hideAddToButton
         var libraryLargeTitle = UserDefaults.libraryLargeTitle
         var homeLargeTitle = UserDefaults.homeLargeTitle
+        var homeTileTint = UserDefaults.homeTileTint
     }
 
     var body: some View {
@@ -82,6 +83,25 @@ struct HomeAndLibrarySettingsView: View {
                 )
             }
 
+            // ★ 2026-10-13（用户看 pw 的截图：「那几个小模块是经过处理的（喜欢的歌曲那几个小方框），
+            //   底部的颜色会跟着封面的样子跑」）：把那排小卡片的底色改成**从它自己的封面取色**
+            //   （普通 Spotify 那边这几格是一片灰）。出处 spoti.pw **v0.21.1** 的
+            //   `Redesigned/Home/HomeTiles.m`（GPL-3.0）："a dark surface tinted faintly towards
+            //   the cover's dominant colour"。做法、认形状的判据与"为什么这次是靠日志而不是转储"
+            //   见 `Appearance/HomeShortcutTiles.x.swift` 文件头。
+            Section(
+                header: Text("home_tile_tint_section".localized),
+                footer: Text("home_tile_tint_description".localized)
+            ) {
+                Toggle(
+                    "home_tile_tint".localized,
+                    isOn: settingsShadowBinding($shadow.homeTileTint) { value in
+                        // "下一次布局生效"的语义（卡片自己那一拍会读到它）⇒ 不需要当场落地。
+                        UserDefaults.homeTileTint = value
+                    }
+                )
+            }
+
             SettingsResetSection(
                 keys: Self.ownedKeys,
                 afterReset: {
@@ -102,5 +122,6 @@ struct HomeAndLibrarySettingsView: View {
         "hideAddToButton",
         "libraryLargeTitle",
         "homeLargeTitle",
+        "homeTileTint",
     ]
 }

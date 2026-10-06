@@ -56,6 +56,8 @@ extension UserDefaults {
     private static let amoledThemeKey = "amoledTheme"
     private static let accentColorRGBKey = "accentColorRGB"
     private static let entityPageAMHeaderKey = "entityPageAMHeader"
+    private static let homeTileTintKey = "homeTileTint"
+    private static let miniBarRoundArtworkKey = "miniBarRoundArtwork"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -120,6 +122,8 @@ extension UserDefaults {
         amoledThemeKey,
         accentColorRGBKey,
         entityPageAMHeaderKey,
+        homeTileTintKey,
+        miniBarRoundArtworkKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -425,6 +429,36 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: entityPageAMHeaderKey)
+        }
+    }
+
+    /// Home 顶部那排**小卡片**的底色从各自的封面取色（出处见 `Appearance/HomeShortcutTiles.x.swift`，
+    /// 借鉴 spoti.pw **v0.21.1** 的 `HomeTiles.m`，GPL-3.0）。**默认开**。
+    ///
+    /// ⚠️ 认不出卡片形状就什么都不做 ⇒ 失败的表现是"没生效"，不是"首页坏了"。
+    static var homeTileTint: Bool {
+        get {
+            container.object(forKey: homeTileTintKey) == nil
+                ? true
+                : container.bool(forKey: homeTileTintKey)
+        }
+        set {
+            container.set(newValue, forKey: homeTileTintKey)
+        }
+    }
+
+    /// 迷你播放器左边那张封面做成**圆形**。**默认开**（用户点名要的；
+    /// 上游同款开关叫 `npb_round_artwork`，见 `Appearance/MiniBarArtwork.swift`）。
+    ///
+    /// 与 `miniBarGlass` **互不影响**：关掉玻璃，封面照样是圆的。
+    static var miniBarRoundArtwork: Bool {
+        get {
+            container.object(forKey: miniBarRoundArtworkKey) == nil
+                ? true
+                : container.bool(forKey: miniBarRoundArtworkKey)
+        }
+        set {
+            container.set(newValue, forKey: miniBarRoundArtworkKey)
         }
     }
 

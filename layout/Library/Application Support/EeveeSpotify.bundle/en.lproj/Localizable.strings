@@ -484,6 +484,10 @@ entity_page_am_header_section = "Apple Music header (playlists)";
 entity_page_am_header = "Centred title, creator and Play capsule";
 entity_page_am_header_description = "Replaces Spotify's header on playlist pages: Spotify's column is hidden and a Music-app-style one is drawn in its place, with the title, creator and length centred, then shuffle, a white Play capsule and a save (or download) button. The buttons draw Spotify's own glyphs and fire Spotify's own controls, so actions, state and language stay Spotify's. Album pages are not touched yet. If the header cannot be recognised, nothing changes at all.";
 am_header_play = "Play";
+mini_bar_round_artwork = "Round artwork";
+home_tile_tint_section = "Home shortcut tiles";
+home_tile_tint = "Tile colour follows its cover";
+home_tile_tint_description = "The small tiles at the top of Home (Liked Songs and the recently played ones) take a faint tint from their own cover, so the grid is not one flat grey. The title, the playing indicator and the taps all stay Spotify's. If a tile cannot be recognised, nothing changes.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";

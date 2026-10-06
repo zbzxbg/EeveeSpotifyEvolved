@@ -18,6 +18,7 @@ struct TabBarAndMiniBarSettingsView: View {
         var tabBarHideCreate = UserDefaults.tabBarHideCreate
         var tabBarSystemGlass = UserDefaults.tabBarSystemGlass
         var miniBarGlass = UserDefaults.miniBarGlass
+        var miniBarRoundArtwork = UserDefaults.miniBarRoundArtwork
     }
 
     var body: some View {
@@ -99,6 +100,21 @@ struct TabBarAndMiniBarSettingsView: View {
                         MiniBarGlassPlate.reconcileNow()
                     }
                 )
+
+                // ★ 2026-10-13（用户看 pw 的截图：「底下迷你播放器的歌曲是圆形的，不是方形的。
+                //   我记得上游有这个东西」）：**上游确实有** —— `LiquidGlassOptions.roundArtwork`
+                //   （设置行 `npb_round_artwork`，图标 `circle.fill`），实现就一行：
+                //   `options.roundArtwork ? artwork.bounds.width / 2 : 12`（`GlassNowPlayingBar.x.swift:97`）。
+                //   这里的做法、认图的结构判据与"原值写回"见 `Appearance/MiniBarArtwork.swift`。
+                //   它**独立于上面那条玻璃开关**（关掉玻璃也照样是圆的）。
+                Toggle(
+                    "mini_bar_round_artwork".localized,
+                    isOn: settingsShadowBinding($shadow.miniBarRoundArtwork) { value in
+                        UserDefaults.miniBarRoundArtwork = value
+                        // 当场落地：关掉要把圆角**原样写回**，不用等迷你条下一次布局。
+                        MiniBarGlassPlate.reconcileNow()
+                    }
+                )
             }
 
             SettingsResetSection(
@@ -126,5 +142,6 @@ struct TabBarAndMiniBarSettingsView: View {
         "tabBarHideLabels",
         "tabBarHideCreate",
         "miniBarGlass",
+        "miniBarRoundArtwork",
     ]
 }

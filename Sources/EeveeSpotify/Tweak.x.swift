@@ -440,6 +440,12 @@ struct EeveeSpotify: Tweak {
         //   v1 **只作用于歌单页**，认不出页头就什么都不做（见 `EntityPageHeader.x.swift`）。
         activateEntityPageHeader()
 
+        // ★ 2026-10-13（用户看 pw 的截图）：「Home 那几个小方框的底色会跟着封面的样子跑」——
+        //   借鉴 spoti.pw **v0.21.1** 的 `Redesigned/Home/HomeTiles.m`（GPL-3.0），实现见
+        //   `Appearance/HomeShortcutTiles.x.swift`。认不出卡片就什么都不做，
+        //   第一次命中会把卡片结构打进 `[HomeTiles]` 日志（转储器到不了那一层）。
+        activateHomeShortcutTiles()
+
         // ★ 2026-10-13（用户第 5 轮问的）：「歌单封面是歌单里前四首歌的专辑封面拼成的一张，
         //   有没有办法让它变成一张？」—— 能，而且不用动视图层：
         //   那个四宫格**不是视图拼的**，地址里就串着四张图的 id
