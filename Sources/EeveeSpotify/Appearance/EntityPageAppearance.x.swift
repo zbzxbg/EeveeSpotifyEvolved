@@ -376,7 +376,21 @@ enum EntityPageAppearance {
         }
         let brightest = max(red, max(green, blue))
         let darkest = min(red, min(green, blue))
-        return brightest <= 0.12 && (brightest - darkest) <= 0.03
+        // ★★ 2026-10-13（用户看真机：「你已点赞、艺人之选什么的**都还是黑的**」）：**阈值 0.12 → 0.20**。
+        //
+        //   0.12 只够 `#121212`（列表底，0.071）那一档。而 Spotify 的**卡片**用的是"抬起一层"的
+        //   深灰 `#282828`（**0.157**）—— 我们自己的真机树里逐字写着（艺人页）：
+        //
+        //   ```
+        //   10.CreatorBiographyCardLayout@0,0,374,416,bg=#282828      ← 艺人简介卡
+        //   11.OBJC_ONLY_Label id=Components.UI.CreatorBiographyCard.HeaderLabel
+        //   14.ContainerView   id=Components.UI.CreatorBiographyCard.BiographyLabel
+        //   ```
+        //
+        //   0.157 > 0.12 ⇒ 那些卡片**从来没被清过**；列表底清了、卡片没清 ⇒ 页面底色一变浅，
+        //   卡片就变成一块块深灰（用户照片里"你已点赞"、"艺人之选"、"关于"全是这个问题）。
+        //   0.20 正好收进 `#282828`（0.157）与 `#333333`（0.2），同时仍然要求"近灰"（互差 ≤ 0.03）。
+        return brightest <= 0.20 && (brightest - darkest) <= 0.03
     }
 
     /// ★ 2026-10-13（照片 110：专辑页往下滑**整片黑**）：`clearBaseSurfaces` 只清"**恰好等于** `#121212`"
