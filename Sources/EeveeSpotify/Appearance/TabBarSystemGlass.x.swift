@@ -1870,11 +1870,30 @@ final class TabBarSystemGlassGestureRelay: NSObject {
     /// ⚠️ 坐标按 **Spotify 那条栏**算：`itemIndex` 是照它那几颗的真实 frame 判的，我们的玻璃就是
     /// 照着它摆的（见 `place`）⇒ 手指落在哪条栏上都用同一套坐标。
     @objc func holdHome(_ recognizer: UILongPressGestureRecognizer) {
+        // ★ 2026-10-13：日志 88 里两只手势**都装上了**（`hold installed on our system glass`），
+        //   长按却一行日志都没有 ⇒ 中间某一道 guard 静默返回了。现在每一道都留一行，
+        //   下一份日志能直接指出是哪一道（不用再猜）。
         guard recognizer.state == .began else { return }
         onMainThreadSync {
-            guard let source = recognizer.view else { return }
-            guard let bar = TabBarSystemGlass.barForIndexing(fallback: source) else { return }
-            guard let index = TabBarSystemGlass.itemIndex(at: recognizer.location(in: bar), in: bar) else { return }
+            guard let source = recognizer.view else {
+                writeDebugLog("[\(TabBarSystemGlass.logTag)] hold began but the recogniser has no view")
+                return
+            }
+            guard let bar = TabBarSystemGlass.barForIndexing(fallback: source) else {
+                writeDebugLog(
+                    "[\(TabBarSystemGlass.logTag)] hold began on \(type(of: source)) but no stock bar is known"
+                )
+                return
+            }
+            let point = recognizer.location(in: bar)
+            guard let index = TabBarSystemGlass.itemIndex(at: point, in: bar) else {
+                writeDebugLog(
+                    "[\(TabBarSystemGlass.logTag)] hold began at \(Int(point.x)),\(Int(point.y))"
+                        + " in the stock bar \(Int(bar.bounds.width))x\(Int(bar.bounds.height))"
+                        + " but that point is in no slot"
+                )
+                return
+            }
             guard index == 0 else {
                 writeDebugLog(
                     "[\(TabBarSystemGlass.logTag)] a hold landed on #\(index) — settings open only from a hold on Home"

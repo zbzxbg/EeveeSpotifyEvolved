@@ -91,7 +91,13 @@ enum HomeTileTint {
         //   "图有没有到"是后面的事。原来 `guard let cover …, let image = cover.image` 写在**同一句**里，
         //   于是图还没加载出来的那几张卡**连底色都不装** —— 日志 87 整场只有 1 张 `tinted`，
         //   而首页那一屏有 8 张（照片 106）⇒ 用户看到的就是"一个都没变"。
-        guard let cover = coverImageView(in: tile, requireImage: false) else { return }
+        guard let cover = coverImageView(in: tile, requireImage: false) else {
+            // 还没布好局（日志 85/88 的第一拍整棵子树都是 0×0）—— **安排重试**。
+            // 日志 88 里整场**一行 `tinted` 都没有**，就是卡在这一句直接返回、之后再无机会：
+            // 那张卡的 `layoutSubviews` 不一定会再来一遍。
+            retryLater(tile: tile)
+            return
+        }
 
         // ① 封面内缩 + 圆角 + 标题跟移（pw 的 `inset`）—— 与底色无关，是这排卡片的"形"。
         insetCover(in: tile)

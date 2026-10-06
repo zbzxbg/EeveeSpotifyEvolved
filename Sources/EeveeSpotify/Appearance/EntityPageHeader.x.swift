@@ -339,6 +339,11 @@ enum EntityPageHeaderManager {
     private static func concealAlbumChrome(in root: UIView, avoiding cover: UIView?, skipping ours: UIView) {
         for sub in root.subviews {
             if sub === ours { continue }
+            // ⚠️ **我们自己的满幅封面也在这个头里** —— `EntityPageAppearance` 把 `eevee-page-hero-sharp`
+            //    插在这个头的 index 0（pw 的 `AlbumHeader.x` 同样把 hero 插在头里）。漏掉它就会被下面
+            //    那句 `eeveeConceal` 一起藏掉：日志 88 里 `sharp hero in the album header` 明明装上了，
+            //    画面却是一片颜色、没有封面（照片 107）—— 原因就在这一行。
+            if sub.accessibilityIdentifier == "eevee-page-hero-sharp" { continue }
             if let cover {
                 if sub === cover { continue }
                 if cover.isDescendant(of: sub) {

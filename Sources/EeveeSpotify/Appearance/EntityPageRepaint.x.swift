@@ -101,11 +101,20 @@ class PlaylistListBackgroundHook: ClassHook<UIScrollView> {
     }
 }
 
-/// 清一层：它自己 + 它的**直接子视图**（cell 的底通常画在 `contentView` 上，那是直接子视图）。
-func eeveeClearBaseSurface(_ view: UIView) {
+/// 清一棵子树里"画了底面色"的那些层（**递归、有界**）。
+///
+/// ★ 2026-10-13（照片 108：专辑页往下滚，上半部分带色、`你可能还会喜欢` 以下整片黑）：
+/// 只清"列表自己 + 它的直接子视图"不够 —— 那些 section 的底画在更深的层里，而 `CALayer` 那道闸门
+/// 又听不到它们（它们同样是**在自己的布局回合**画的）。所以这里往下走到 `depth` 层。
+///
+/// 深度取 4：cell 的底通常画在 `contentView`（1 层）或它的子视图（2~3 层）上；再往下是
+/// label / image 那些不可能画底的层，而且这一路在滚动时是**每帧**走的，不能无限深。
+func eeveeClearBaseSurface(_ view: UIView, depth: Int = 0) {
     if let colour = view.backgroundColor, EntityPageRepaint.isBaseSurface(colour.cgColor) {
         view.backgroundColor = .clear
     }
+    guard depth < 4 else { return }
+    for sub in view.subviews { eeveeClearBaseSurface(sub, depth: depth + 1) }
 }
 
 /// ★ 2026-10-13（照片 105：专辑页往下滚是**一片黑**）：**专辑页的列表和歌单页那个类不是一个**
@@ -125,7 +134,6 @@ class AlbumListBackgroundHook: ClassHook<UIView> {
         orig.layoutSubviews()
         guard EntityPageRepaint.root != nil else { return }
         eeveeClearBaseSurface(target)
-        for sub in target.subviews { eeveeClearBaseSurface(sub) }
     }
 }
 
@@ -146,7 +154,6 @@ class AlbumCellBackgroundHook: ClassHook<UIView> {
         orig.layoutSubviews()
         guard let root = EntityPageRepaint.root, target.isDescendant(of: root) else { return }
         eeveeClearBaseSurface(target)
-        for sub in target.subviews { eeveeClearBaseSurface(sub) }
     }
 }
 
