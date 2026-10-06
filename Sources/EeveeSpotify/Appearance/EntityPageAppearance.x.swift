@@ -72,6 +72,10 @@ enum EntityPageAppearance {
     private static var heroHeightKey: UInt8 = 0
     /// hero 的最小高度（pw 的 `kMinHero = 120`）：比这矮就不画，免得出来一条细带。
     private static let minHeroHeight: CGFloat = 120
+    /// 被我们藏掉的 wash 视图（**记原值**，关开关原样撤回）—— 见 `concealWash` / `revealWash`。
+    private static var concealedWash: [
+        (view: UIView, layerHidden: Bool, hadMask: Bool, interactive: Bool, accessibilityHidden: Bool)
+    ] = []
     /// Spotify 自己那张封面 —— 被我们**让位**藏起来的那张。
     ///
     /// ⚠️ 记的是"**我们改了什么**"，关开关时只撤回这些（Spotify 自己的 hidden 一律不碰）——
@@ -461,12 +465,72 @@ enum EntityPageAppearance {
         return nil
     }
 
-    /// 把 wash 的 `GradientView` 藏掉（pw 的 issue #53：不藏就会有一层不透明的洗色把图整个盖住）。
+    /// 把 wash 的 `GradientView` 藏掉。
+    ///
+    /// ★ 2026-10-13 **第二版**（用户照片 101：整片空泥棕、清晰封面完全看不见）：第一版只看了
+    /// **直接子视图**（`container.subviews`），而 Spotify 那层洗色在更深的地方 ⇒ 它照旧画在我们的图
+    /// 之上，把整张封面盖掉。pw 的 `applyBackground` 用的是 **`SGForEachView(container, …)`（递归）** ——
+    /// 这里照它改成递归，并且**跳过我们自己的 hero 及其子树**（pw 同样跳：
+    /// `if (hero && (v == hero || [v isDescendantOfView:hero])) return;`）。
+    ///
+    /// pw 在同一段里还会把"底色漆"从容器里每个视图上擦掉（issue #53：wash 的 alpha 被抬高后
+    /// 不透明的一层会盖住图），这里一并做，并且**把原值记下来**（我们有开关，关掉要还原）。
     private static func concealWash(on plane: UIView) {
         guard let container = plane.superview else { return }
-        for view in container.subviews where view !== plane {
-            if NSStringFromClass(type(of: view)).contains("GradientView") { eeveeConceal(view) }
+
+        var queue: [UIView] = [container]
+        var visited = 0
+        while !queue.isEmpty, visited < 200 {
+            let view = queue.removeFirst()
+            visited += 1
+            queue.append(contentsOf: view.subviews)
+
+            if let hero = sharpHero, view === hero || view.isDescendant(of: hero) { continue }
+            if view === plane { continue }
+
+            if NSStringFromClass(type(of: view)).contains("GradientView") {
+                recordWash(view)
+                continue
+            }
+
+            // 底色漆（Spotify 的 base surface）：擦成透明，原色记着。
+            if let colour = view.backgroundColor, isBaseSurface(colour) {
+                clearedBackgrounds.append((view: view, color: colour))
+                view.backgroundColor = .clear
+            }
         }
+    }
+
+    /// 记下一个被我们藏掉的 wash 视图（**只记我们改的那几样**，见 `revealWash`）。
+    private static func recordWash(_ view: UIView) {
+        guard !concealedWash.contains(where: { $0.view === view }) else { return }
+        concealedWash.append(
+            (view: view,
+             layerHidden: view.layer.isHidden,
+             hadMask: view.layer.mask != nil,
+             interactive: view.isUserInteractionEnabled,
+             accessibilityHidden: view.accessibilityElementsHidden)
+        )
+        eeveeConceal(view)
+    }
+
+    /// 原样撤回（开关关掉 / 离开页面时）。
+    private static func revealWash() {
+        for record in concealedWash {
+            record.view.layer.isHidden = record.layerHidden
+            if !record.hadMask { record.view.layer.mask = nil }
+            record.view.isUserInteractionEnabled = record.interactive
+            record.view.accessibilityElementsHidden = record.accessibilityHidden
+        }
+        concealedWash.removeAll()
+    }
+
+    /// Spotify 的"底面色"（`#121212` 一族）—— 与 `ensureField` 清底色用的是同一个判据。
+    private static func isBaseSurface(_ colour: UIColor) -> Bool {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard colour.getRed(&r, green: &g, blue: &b, alpha: &a) else { return false }
+        guard a > 0.5 else { return false }
+        return abs(r - g) < 0.02 && abs(g - b) < 0.02 && r < 0.12
     }
 
     /// 向下化开：上 `opaqueFraction` 不透明 → 底全透明。两张 hero 共用这一份（改一处就够）。
@@ -525,6 +589,7 @@ enum EntityPageAppearance {
 
     private static func removeHero() {
         revealNativeCover()
+        revealWash()
         // 单调高度是记在**那块 plane** 上的（换页面时 plane 可能被复用）⇒ 撤的时候一起清掉，
         // 否则下一个页面的 hero 会一上来就是上一个页面那么高。
         if let plane = sharpHero?.superview {
