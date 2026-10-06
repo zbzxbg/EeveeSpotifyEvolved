@@ -377,6 +377,12 @@ struct EeveeSpotify: Tweak {
         // 所以设置页那颗开关下面配了「立即重启」。
         activateRatingPromptBlock()
 
+        // ★ 2026-10-13：主题换色（AMOLED 纯黑 + 强调色）—— 在**颜色出生点**装 swizzle
+        //   （`Sources/EeveeSpotifyC/ColorSwap.m`，C 侧 `dispatch_once`）。
+        //   ⚠️ 必须**早装**：它管的是"之后创建的颜色"，晚装就会有一批界面用旧色画完。
+        //   与上面两条一样是"启动时按开关决定装不装" ⇒ 改完要重启。
+        activateTheme()
+
         // ⛔ AMOLED（深色栏底色）已于 2026-10-02 删除。
         // 理由：新设计语言下它每次布局都主动让位（`if NewDesignLanguage.isActive { 记一行; return }`），
         // 是个纯空操作 + 21KB 死代码；只有兼容模式的构建（`liquid_glass=false`）里才活，

@@ -53,6 +53,8 @@ extension UserDefaults {
     private static let entityPageFieldKey = "entityPageField"
     private static let entityPageDissolveKey = "entityPageDissolve"
     private static let entityPageHideChromeKey = "entityPageHideChrome"
+    private static let amoledThemeKey = "amoledTheme"
+    private static let accentColorRGBKey = "accentColorRGB"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -114,6 +116,8 @@ extension UserDefaults {
         entityPageFieldKey,
         entityPageDissolveKey,
         entityPageHideChromeKey,
+        amoledThemeKey,
+        accentColorRGBKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -365,6 +369,41 @@ extension UserDefaults {
 
     // ⛔「深色栏底色」(amoledEnabled) 已于 2026-10-02 删除：
     // 新设计语言下它每次布局都主动让位，是个纯空操作。
+    //
+    // ★ 2026-10-13：**另一个** AMOLED 回来了（键名刻意不同，见下）——
+    // 它是全局换色而不是给某条栏涂底，机制在 `Sources/EeveeSpotifyC/ColorSwap.m`。
+
+    /// 「AMOLED 纯黑」：把 Spotify 的 #121212 底色换成纯黑（保留 alpha）。默认关。
+    ///
+    /// ⚠️ 与那个被删的 `amoledEnabled` **不是一回事**：那个只给旧设计语言的导航/标签栏涂底。
+    /// 键名换成新的，就是为了避免设备上存量的旧值把纯黑主题悄悄打开。
+    ///
+    /// ⚠️ **只在启动时读一次**（`Theme.launchAmoled`，C 侧还是 `dispatch_once`）⇒ 改完要重启，
+    /// 设置页那颗开关下面配了「立即重启」。
+    static var amoledTheme: Bool {
+        get {
+            container.object(forKey: amoledThemeKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: amoledThemeKey)
+        }
+    }
+
+    /// 「强调色」（`0xRRGGBB`）：把 Spotify 的品牌绿换成它。`-1` = 不换（保持 Spotify 绿）。
+    ///
+    /// 与 `amoledTheme` 同样**只在启动时读一次** ⇒ 改完要重启。
+    static var accentColorRGB: Int {
+        get {
+            container.object(forKey: accentColorRGBKey) as? Int ?? -1
+        }
+        set {
+            if newValue < 0 {
+                container.removeObject(forKey: accentColorRGBKey)
+            } else {
+                container.set(newValue, forKey: accentColorRGBKey)
+            }
+        }
+    }
 
     // MARK: - 清爽（Declutter）
 

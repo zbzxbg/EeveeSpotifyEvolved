@@ -364,7 +364,10 @@ dump_view_tree = "转储视图树";
 dump_view_tree_description = "把当前屏幕的视图结构每 2 秒写一行进调试日志。";
 
 /* MARK: 外观 */
-amoled = "深色栏底色（仿 Apple Music）";
+theme_section = "主题";
+theme_description = "给 Spotify 整页换色：底色 #121212 换成纯黑、品牌绿换成你选的强调色。改完需要重启。";
+amoled = "纯黑（AMOLED）";
+accent_color = "强调色";
 
 extras_title = "扩展功能";
 extras_description = "功能思路来自 spoti.pw。";

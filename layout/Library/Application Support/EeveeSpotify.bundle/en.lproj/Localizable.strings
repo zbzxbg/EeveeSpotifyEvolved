@@ -376,7 +376,10 @@ dump_view_tree = "Dump the view tree";
 dump_view_tree_description = "Writes the current screen's view structure to the debug log as one line per screen, every 2 seconds (20 lines max per launch, and only when the structure changes). Read-only: it never changes a view, never registers a gesture and never enumerates classes at runtime. It takes effect immediately, and log recording under Debug must be on. Use it to collect the class names for hooks that are not written yet.";
 
 /* MARK: Appearance */
-amoled = "Dark bar chrome (Apple Music style)";
+theme_section = "Theme";
+theme_description = "Recolours Spotify itself: the #121212 surfaces become true black, and the brand green becomes your accent colour. Needs a restart.";
+amoled = "Pure black (AMOLED)";
+accent_color = "Accent colour";
 
 extras_title = "Extras";
 extras_description = "Features added on top of EeveeSpotify, kept together here so the settings root stays short. The ideas follow spoti.pw; the code is this project's own. Each one has its own page, except the switches above.";
