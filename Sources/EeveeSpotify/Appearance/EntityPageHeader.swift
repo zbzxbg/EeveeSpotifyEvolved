@@ -44,7 +44,11 @@ enum EntityPageHeaderMetrics {
     static let aboutAbove: CGFloat = 14     // 按钮行与描述之间
     static let bottom: CGFloat = 14         // 内容底边距视图底
     static let titleRise: CGFloat = 56      // 封面要伸到内容顶部往下这么多（hero 用）
-    static let rowHeight: CGFloat = 48      // = pw 的 `SGRActionHeight`
+    /// ★ 2026-10-13（用户给了 8 张 AM 艺人页，photo_1/3/5/7）：三颗的**尺寸关系**照 Apple Music 来
+    /// —— 两侧是**小圆**（`ⓘ` 与 `☆`，≈56pt），中间是**大一档的圆**（纯白 `▶`，≈80pt）。
+    /// 原来是 pw 的"两颗 44 圆 + 一颗 148×48 的白胶囊"；现在中间那颗**从胶囊变成圆**（去掉"播放"二字）。
+    static let rowHeight: CGFloat = 56      // = 两侧小圆的直径
+    static let playSide: CGFloat = 84       // = 中间那颗粒子的直径
     /// 两侧按钮那圈**玻璃圆**的直径（= pw 的 `SGRGlassCircleSize`）。
     static let glassCircle: CGFloat = 44
     /// 两侧按钮的字形边长。★ 2026-10-13（用户看真机：「旁边的按键小了点」）：
@@ -342,19 +346,24 @@ final class EntityPageHeaderPlay: UIControl {
     override func layoutSubviews() {
         super.layoutSubviews()
         layer.cornerRadius = bounds.height / 2
-        // 玻璃铺满整颗胶囊（圆角跟胶囊走）。
+        // 玻璃铺满整颗（圆角跟形状走）。
         if let glass {
             if glass.frame != bounds { glass.frame = bounds }
             glass.layer.cornerRadius = bounds.height / 2
         }
 
-        // [字形][6pt][Play] 整体居中
-        // ★ 2026-10-13（用户：「这 播放 旁边的播放图标太小了吧」）：20 → 24 ——
-        // 那颗 ▶ 原来比 17pt 的文字还轻，与中间那颗白胶囊的分量不配。
-        let glyphSide: CGFloat = 24
+        // ★ 2026-10-13（照 AM）：**形状决定形态**。布局那边给的是正方形（`playSide`，84pt）时，
+        //   它就是 AM 那颗"大圆 ▶"——**没有"播放"两个字**；给的是扁的（旧的 148×48）时，
+        //   还是 pw 那颗"▶ 播放"胶囊。两种形态共用这一份代码，不用开关、也不会两处漂。
+        let isCircle = abs(bounds.width - bounds.height) < 8
+        if wordLabel.isHidden != isCircle { wordLabel.isHidden = isCircle }
+
+        // [字形][6pt][Play] 整体居中（圆形态里只剩字形，自然就是居中的）
+        // ★ 字形跟着形状走：圆形态 34pt（AM 那颗 ▶ 约占圆的 40%），胶囊形态仍是 24pt。
+        let glyphSide: CGFloat = isCircle ? 34 : 24
         let glyphWidth = glyphView.image == nil ? 0 : glyphSide
-        let spacing: CGFloat = glyphWidth > 0 ? 6 : 0
-        let wordWidth = ceil(wordLabel.sizeThatFits(
+        let spacing: CGFloat = (!isCircle && glyphWidth > 0) ? 6 : 0
+        let wordWidth = isCircle ? 0 : ceil(wordLabel.sizeThatFits(
             CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
         ).width)
         let total = glyphWidth + spacing + wordWidth
@@ -372,8 +381,11 @@ final class EntityPageHeaderPlay: UIControl {
 /// 那一块文字与按钮。输入永远是"文本 + Spotify 自己的控件"，自己不持有任何 Spotify 状态。
 final class EntityPageHeaderView: UIView {
 
+    /// ★ 2026-10-13（AM 的标题**很大** —— photo_1 里 `Abel Tesfaye` 一个人占掉大半个屏宽）：
+    /// 22 → **34**，缩放基准同时从 `.title2` 换成 `.largeTitle`（`makeLabel` 走 `UIFontMetrics`，
+    /// 基准不换的话辅助功能字号下的比例会不对）。
     private let titleLabel = EntityPageHeaderView.makeLabel(
-        style: .title2, size: 22, weight: .bold, color: .label, lines: 2, alignment: .center
+        style: .largeTitle, size: 34, weight: .bold, color: .label, lines: 2, alignment: .center
     )
     private let creatorLabel = EntityPageHeaderView.makeLabel(
         style: .body, size: 17, weight: .regular, color: .secondaryLabel, lines: 1, alignment: .center
@@ -502,7 +514,8 @@ final class EntityPageHeaderView: UIView {
             previous = label
         }
         if previous != nil { height += EntityPageHeaderMetrics.rowAbove }
-        height += EntityPageHeaderMetrics.rowHeight
+        // ★ 2026-10-13（照 AM）：按钮行的高度取三颗里**最高**的那颗（中间那颗比两侧大一档）。
+        height += max(EntityPageHeaderMetrics.rowHeight, EntityPageHeaderMetrics.playSide)
         if !aboutLabel.isHidden {
             height += EntityPageHeaderMetrics.aboutAbove
             height += ceil(aboutLabel.sizeThatFits(CGSize(width: text, height: .greatestFiniteMagnitude)).height)
@@ -528,9 +541,17 @@ final class EntityPageHeaderView: UIView {
         if previous != nil { y += EntityPageHeaderMetrics.rowAbove }
 
         // Play 始终在页面正中，另两颗挂在它两侧 —— 少一颗也不动位置。
+        //
+        // ★ 2026-10-13（照 AM）：中间那颗**大一档**（84 vs 两侧 56），三颗要**圆心同高**
+        //   ⇒ 中间那颗往上抬 `(big - side) / 2`，两侧才与它的圆心齐平。
         let side = EntityPageHeaderMetrics.rowHeight
-        let playWidth = EntityPageHeaderMetrics.playMinWidth
-        let play = CGRect(x: round((width - playWidth) / 2), y: y, width: playWidth, height: side)
+        let big = EntityPageHeaderMetrics.playSide
+        let play = CGRect(
+            x: round((width - big) / 2),
+            y: y - (big - side) / 2,
+            width: big,
+            height: big
+        )
         playButton.frame = play
         shuffleButton.frame = CGRect(
             x: play.minX - EntityPageHeaderMetrics.rowSpacing - side, y: y, width: side, height: side
@@ -538,7 +559,7 @@ final class EntityPageHeaderView: UIView {
         trailingButton.frame = CGRect(
             x: play.maxX + EntityPageHeaderMetrics.rowSpacing, y: y, width: side, height: side
         )
-        y += side
+        y += max(side, big)
 
         if !aboutLabel.isHidden {
             y += EntityPageHeaderMetrics.aboutAbove
