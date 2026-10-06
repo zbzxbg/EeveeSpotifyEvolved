@@ -52,11 +52,17 @@ enum EntityPageRepaint {
     }
 
     /// 与 `EntityPageAppearance` 清底色同一个判据：近黑、近灰、不透明。
+    ///
+    /// ★★ 2026-10-06（照片 111/113：照片区是浅的、**下面"你已点赞"与"热门"整片还是黑的**）：
+    /// 阈值 `0.12` 只够 `#121212`（列表底，0.071）；Spotify 的**卡片**是"抬起一层"的 `#282828`
+    /// （**0.157**）—— 这一档原来被放过去了。而**列表与 cell 的底是它们在自己的布局回合画的**，
+    /// 页面上那趟每 0.6s 的扫描（`depth ≤ 7`）够不到 ⇒ 真正拦得住它们的**只有这一道全局钩子**，
+    /// 所以阈值必须和 `EntityPageAppearance.isBaseSurface` 一样放到 0.20。
     static func isBaseSurface(_ color: CGColor) -> Bool {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard UIColor(cgColor: color).getRed(&r, green: &g, blue: &b, alpha: &a) else { return false }
         guard a > 0.5 else { return false }
-        return abs(r - g) < 0.02 && abs(g - b) < 0.02 && r < 0.12
+        return abs(r - g) < 0.02 && abs(g - b) < 0.02 && r < 0.20
     }
 }
 

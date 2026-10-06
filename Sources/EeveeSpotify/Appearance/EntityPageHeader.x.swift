@@ -707,6 +707,30 @@ enum EntityPageHeaderManager {
         return parts.map(\.text).joined(separator: " ")
     }
 
+    /// 从 `root` 往下找**第一个真正的控件**（`UIControl`，含自身）。
+    ///
+    /// ★★ 2026-10-06（照片 113 + 用户报的三件事其实是**同一个**根因）：
+    ///   · 专辑页的**随机播放点了没反应**；
+    ///   · 艺人页的**播放键没反应**；
+    ///   · 右边那颗**关注没有点击反馈**（"加入了音乐库会变绿"—— 状态本来是有的）。
+    ///
+    /// 因为 `findFloating` 在页面上按 id 找到的往往是**外面那层 `ElementView<…>` 包装**
+    /// （我们自己的树里那一行全是 `ElementView<URL, Any, Any>`），而不是能响应 `sendActions` /
+    /// `handleTap` 的那颗按钮：转发打在包装上 = 没反应；`(source as? UIControl)?.isSelected`
+    /// 也恒为假 ⇒ 永远不变绿。**歌单页没有这个问题**，因为它从页头里按 id 直接拿到了真控件。
+    private static func firstControl(in root: UIView) -> UIView? {
+        if root is UIControl { return root }
+        var queue: [UIView] = root.subviews
+        var visited = 0
+        while !queue.isEmpty, visited < 400 {
+            let view = queue.removeFirst()
+            visited += 1
+            if view is UIControl { return view }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
     /// pw 的 `floatingIn`（`AlbumHeader.x`）：那两颗浮动控件是**页面的直接子视图、48pt 上下**，
     /// 而头、wash、列表都是整页宽 —— 只搜"小尺寸的直接子视图"，免得每一拍走一整棵树。
     private static func findFloating(_ identifier: String, in page: UIView, cache: inout UIView?) -> UIView? {
@@ -714,7 +738,9 @@ enum EntityPageHeaderManager {
         var found: UIView?
         for sub in page.subviews where sub.bounds.width <= 120 {
             if let hit = eeveeFindView(sub, identifier: identifier) {
-                found = hit
+                // ★ 钻到真正的控件（见 `firstControl`）：命中的若是包装层，点了就是没反应。
+                //   缓存里存的**也是钻过之后的那一个**，所以每拍不会重走这一趟。
+                found = firstControl(in: hit) ?? hit
                 break
             }
         }

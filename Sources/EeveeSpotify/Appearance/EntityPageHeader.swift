@@ -361,9 +361,16 @@ final class EntityPageHeaderPlay: UIControl {
         let isCircle = abs(bounds.width - bounds.height) < 8
         if wordLabel.isHidden != isCircle { wordLabel.isHidden = isCircle }
 
+        // 形状决定底色：AM 那颗是**纯白**（照片 113 里我们这颗是"白 90% + 玻璃" ⇒ 在亮照片上
+        // 灰得看不出来）；胶囊形态仍留一点透明，好让底下的封面透出来（pw 的做法）。
+        let wanted: UIColor = isCircle ? .white : UIColor.white.withAlphaComponent(0.9)
+        if backgroundColor != wanted { backgroundColor = wanted }
+        glass?.alpha = isCircle ? 0 : 1
+
         // [字形][6pt][Play] 整体居中（圆形态里只剩字形，自然就是居中的）
-        // ★ 字形跟着形状走：圆形态 34pt（AM 那颗 ▶ 约占圆的 40%），胶囊形态仍是 24pt。
-        let glyphSide: CGFloat = isCircle ? 34 : 24
+        // ★★ 2026-10-06（用户：「那个大暂停是没问题，但是**里面的符号太小了**」）：
+        //   圆形态 34 → **44**（AM 那颗 ▶ 约占圆的一半多一点），胶囊形态仍是 24。
+        let glyphSide: CGFloat = isCircle ? 44 : 24
         let glyphWidth = glyphView.image == nil ? 0 : glyphSide
         let spacing: CGFloat = (!isCircle && glyphWidth > 0) ? 6 : 0
         let wordWidth = isCircle ? 0 : ceil(wordLabel.sizeThatFits(
