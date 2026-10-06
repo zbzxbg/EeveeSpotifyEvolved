@@ -10,10 +10,11 @@ import UIKit
 /// 一页里滚很久。现在按**页面**拆开：听歌页 / 标签栏与迷你条 / 首页与音乐库 /
 /// 歌单与专辑页，四个都在根页上一步可达。
 ///
-/// 本页三节：
+/// 本页四节：
 ///   · `now_playing_section` —— 听歌页自己的九个开关（取色底 / 一屏 / 音量条 /
 ///     歌词进播放器 / 单行歌词 / 罗马化 / 译文 / 未播放行模糊 / 控制键字形）；
-///   · `declutter_description` —— 按类名藏 Spotify 自己的 chrome（迷你条/跟唱行/胶囊）。
+///   · `declutter_description` —— 按类名藏 Spotify 自己的 chrome（迷你条/跟唱行/胶囊）；
+///   · `player_cards_section` —— 听歌页**卡片类**清爽（一张卡一个键 + 一颗总开关）。
 ///
 /// ⚠️ 罗马化与译文那两颗读的是**歌词页那批键**（`NgzhwmSettingsViewModel` 的
 /// `anyRomanizationEnabled` / `isNeteaseHideTranslationEnabled`），两面永远同步。
@@ -37,6 +38,9 @@ struct NowPlayingSettingsView: View {
         var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
         var hideSingalongLine = UserDefaults.hideSingalongLine
         var hideNowPlayingPills = UserDefaults.hideNowPlayingPills
+        /// 听歌页卡片那批（总开关 + 一张卡一个键）。用一个字典装：加卡片不用改这里。
+        var hidePlayerCards = PlayerCardsDeclutter.masterHidden
+        var playerCards: [PlayerCard: Bool] = PlayerCardsDeclutter.snapshot()
     }
 
     var body: some View {
@@ -217,6 +221,40 @@ struct NowPlayingSettingsView: View {
                 )
             }
 
+            // ★ 2026-10-13（用户拍板）：听歌页**卡片类**清爽。
+            //
+            // 上游那套 `PlayerHideSettingsView` 一共 18 颗（含 6 颗按钮）；我们只取卡片，
+            // 因为"藏掉按钮 = 功能没了"，而其中几颗（分享 / 队列 / Connect / 收藏）用户
+            // 2026-10-11 亲手点名在用。判据、marker 表、缓存与"折成 0 高"的做法全写在
+            // `Appearance/PlayerDeclutter.x.swift`，这里只摆开关。
+            Section(
+                header: Text("player_cards_section".localized),
+                footer: Text("player_cards_description".localized)
+            ) {
+                Toggle(
+                    "hide_player_cards".localized,
+                    isOn: settingsShadowBinding($shadow.hidePlayerCards) { value in
+                        PlayerCardsDeclutter.masterHidden = value
+                        // 卡片是滚动列表的 cell，改完要让那一列重新问一次尺寸。
+                        PlayerCardsDeclutter.refresh()
+                    }
+                )
+
+                // 总开关开着就不再摆那 10 行（与上游一致）：既是省一屏，也免得两个入口
+                // 看起来在互相打架。
+                if !shadow.hidePlayerCards {
+                    ForEach(PlayerCard.allCases, id: \.self) { card in
+                        Toggle(
+                            card.labelKey.localized,
+                            isOn: settingsShadowBinding(cardBinding(card)) { value in
+                                PlayerCardsDeclutter.setHidden(card, value)
+                                PlayerCardsDeclutter.refresh()
+                            }
+                        )
+                    }
+                }
+            }
+
             // ⛔「双击手势」整节已于 2026-10-04 删除（用户拍板：先删掉，之后再搞）。
             //   它不是"坏了"才删：切歌那条路日志 8/17 证明能用；删是因为 ——
             //   ① 手势挂在页面根视图上，**在播放键上方双击也会跳歌**（本该是播放/暂停）；
@@ -256,6 +294,8 @@ struct NowPlayingSettingsView: View {
                     // 歌词那几档：`reapply()` 自己按当前设置重建容器/指纹。
                     NowPlayingLyricsPlate.reapply()
                     DeclutterChrome.reconcileNow()
+                    // 卡片那批：让听歌页那列 cell 重新问一次尺寸（开关值已经删回默认了）。
+                    PlayerCardsDeclutter.refresh()
                 }
             )
         }
@@ -281,4 +321,15 @@ struct NowPlayingSettingsView: View {
         "hideSingalongLine",
         "hideNowPlayingPills",
     ]
+    // 听歌页卡片那批（11 个键）由 `PlayerCard` / `PlayerCardsDeclutter` 自己拥有：
+    // 加一张卡片只改那一处，这里跟着走 —— 本页的「重置本页」因此不会漏键。
+    + PlayerCardsDeclutter.allKeys
+
+    /// 某一张卡片的影子值绑定（键在 `PlayerCard.key`，值在 `Shadow.playerCards` 字典里）。
+    private func cardBinding(_ card: PlayerCard) -> Binding<Bool> {
+        Binding(
+            get: { shadow.playerCards[card] ?? false },
+            set: { shadow.playerCards[card] = $0 }
+        )
+    }
 }

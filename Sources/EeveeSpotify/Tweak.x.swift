@@ -412,6 +412,13 @@ struct EeveeSpotify: Tweak {
         // 清爽开关（迷你播放条 / 标签栏渐隐 / free-tier 提示条）。同上：总是装、实时读。
         activateDeclutterChrome()
 
+        // ★ 2026-10-13：听歌页**卡片类**清爽（歌词卡 / 了解艺人 / 相关视频 / SongDNA /
+        //   现场演出 / 观看流 / 发行倒计时 / 制作名单 / 周边 / 推荐内容，外加一颗总开关）。
+        //   与上面那条不同：这些是滚动列表的 cell，"藏"要拦布局去**折成 0 高**，
+        //   所以单独一条 hook（`Appearance/PlayerDeclutter.x.swift`）。
+        //   按钮类（shuffle/repeat/addTo/queue/share/connect）**故意不做** —— 藏了功能就没了。
+        activatePlayerCardsDeclutter()
+
         // 播放器控制键的字形替换（藏原生图标 + 叠自己的字形，原生按钮留着）。
         // 做法照 spoti.pw v0.21.1 的 `PlayerControls.x`（GPL-3.0），见 `NowPlayingControlsPlate` 文件头。
         activateNowPlayingControls()
