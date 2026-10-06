@@ -45,7 +45,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 ### Lyrics
 
 - **Seven sources** — Spicy Lyrics, NetEase Cloud Music, AMLL, Musixmatch, PetitLyrics, LRCLIB and Genius, or Spotify's own lyrics.
-- **Multi-level fallback** as a single switch: `Musixmatch → PetitLyrics → LRCLIB → Genius`.
+- You can also choose a **lyrics fallback chain**: `Musixmatch → PetitLyrics → LRCLIB → Genius`.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling, not just line sync.
 - **Apple Music–style lyrics page** — spring-driven line focus, glow reveal and its own typography pass.
 - **Romanization** — Chinese, Korean and Japanese can be shown or hidden independently.
@@ -69,13 +69,6 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - Blocked artists, skipped automatically.
 - Player haptics.
 
-### Settings, privacy and tooling
-
-- Settings root reorganised into four groups — Playback & Lyrics, Appearance, Advanced, Maintenance — with a subtitle on every row; each page has its own "reset this page".
-- Log recording with **redaction before sharing**: credentials and device identifiers are stripped at the write site, and the exported copy never silently falls back to the plaintext log.
-- Diagnostics: view-tree dump, class dumper, and a per-frame performance meter.
-- Settings backup/restore, GitHub release update check, remote **flag overrides** with a searchable catalog, and 27 locales.
-
 > [!TIP]
 > If unexpected issues occur on the Now Playing page, such as lyrics not showing or outdated song teaser cards, simply exit the Now Playing page and re-enter it to resolve the issue. (This only applies to users who have not enabled "Hide Spotify song Now Playing modules".)
 
@@ -86,9 +79,6 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 | Public release | [`v1.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases/tag/v1.0.0) | 9.1.88 |
 
 Development last updated: `2026/10/13`.
-
-> [!NOTE]
-> `main` is ahead of the last public release. The download on the releases page is built from the `v1.0.0` tag; work that landed after it — the Spicy Lyrics rework, Apple Music–style entity-page headers, AMOLED and the accent colour, rating-prompt/ClientMessagingPlatform blocking, the diagnostics tooling — is **not** in that `.deb` yet.
 
 > [!WARNING]
 > Development versions are not publicly distributed to users.
