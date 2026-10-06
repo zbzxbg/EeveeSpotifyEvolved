@@ -508,22 +508,15 @@ enum EntityPageAppearance {
         let container = target.page
 
         let height = max(180, min(container.bounds.height * heroHeightRatio, 560))
-        // ★ 2026-10-13（用户：「专辑封面直接铺到手机顶部…所有 app 都会留一块缓冲区（刘海、灵动岛、
-        //   状态栏）」）：**专辑页从状态栏下面开始**。pw 的专辑页也是这样 —— 它的树注释逐字：
-        //   `UIView {0, 78} the top inset, the status bar and the navigation bar's room`，
-        //   hero 就插在那个头里，所以封面本来就避开了状态栏那一条。
-        //   歌单页**不动**：pw 的歌单页是铺到顶的（hero 在 wash plane 里，plane 从 y=-134 起）。
-        let onAlbumPage = firstView(
-            in: container,
-            withAnyIdentifier: ["CreativeWorkPlatform.Components.UI.CreativeWorkHeader"]
-        ) != nil
-        let topInset = onAlbumPage ? container.safeAreaInsets.top : 0
-        let frame = CGRect(
-            x: 0,
-            y: topInset,
-            width: container.bounds.width,
-            height: max(minHeroHeight, height - topInset)
-        )
+        // ★★ 2026-10-06（用户看真机：「专辑页上面是有缓冲了，但是缓冲**没有和封面上部分接上**，
+        //    而且这个缓冲区**可能太大了**」）：**那条缓冲撤掉** —— 照片**铺到顶**。
+        //
+        //    缓冲区的正解不是"把照片往下挪"，而是"**照片铺满、内容避让**"：AM 的艺人页就是照片从
+        //    屏幕最顶开始画、状态栏直接压在上面（`am1` 逐字如此），而标题与按钮本来就在页头底部、
+        //    返回键是 Spotify 自己的（它会自己避让安全区）。
+        //    上一版让照片的 y 让出 `safeAreaInsets.top`（≈59pt）⇒ 顶上露出一条**取色底**，
+        //    照片与它之间那道缝就是用户看到的"没接上"。
+        let frame = CGRect(x: 0, y: 0, width: container.bounds.width, height: height)
 
         let view: UIImageView
         if let hero, hero.superview === container {
@@ -613,8 +606,9 @@ enum EntityPageAppearance {
         let layout: UIView
         /// 高度按**宿主**算、且**不要求封面已经量好**（专辑页与艺人页：封面可能这一拍还没布局）。
         let fillsHost: Bool
-        /// 顶部留出状态栏那一条。**只有专辑页**：pw 的歌单页（plane 从 y=-134 起）与艺人页
-        /// （那张照片就是 container 的第一个子视图）都是铺到顶的。
+        /// 顶部留出状态栏那一条。★ 2026-10-06：**现在是恒 false** —— 用户看真机后确认
+        /// "缓冲没和封面接上、而且太大"，而 AM 与歌单页都是铺到顶的（见 `ensureHero` 里那段说明）。
+        /// 留这个变量只是把"要不要缓冲"这件事写在一个地方，方便将来再翻。
         let wantsTopInset: Bool
 
         if let plane, plane.bounds.width > 1 {
@@ -627,7 +621,7 @@ enum EntityPageAppearance {
             host = albumHeader
             layout = albumHeader
             fillsHost = true
-            wantsTopInset = true
+            wantsTopInset = false
             concealAlbumWash(in: page)
         } else if let artistContainer, artistContainer.bounds.height > 40 {
             host = artistContainer
