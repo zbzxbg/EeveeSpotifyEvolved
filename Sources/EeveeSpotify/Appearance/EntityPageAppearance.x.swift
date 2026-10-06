@@ -127,6 +127,8 @@ enum EntityPageAppearance {
     private static var hiddenChromeViews: Set<ObjectIdentifier> = []
     private static let maxHiddenChrome = 400
     private static var didReport = false
+    /// "清掉了一个页面容器"只报一次（见 `clearPageContainers`）。
+    private static var didReportContainerClear = false
     private static var lastLoggedHex: String?
 
     // MARK: - 入口
@@ -267,6 +269,8 @@ enum EntityPageAppearance {
         //   `#121212`，把 field **重新盖住**（pw 那边也是持续在清：它的注释点名 list 与每个 cell）。
         //   已经清过的按对象记住，不会重复记、也不会重复写。
         clearBaseSurfaces(in: page)
+        // ★ 2026-10-13（照片 110）：**页面直接子视图那一层也要清** —— 见 `clearPageContainers`。
+        clearPageContainers(in: page)
 
         guard !didReport else { return }
         didReport = true
@@ -285,8 +289,11 @@ enum EntityPageAppearance {
     /// pw 的字段是 `bleed = {600, 0, 600, 0}`（**比整页还大一圈**，见 `AlbumField.x` / `PlaylistField.x`），
     /// 整页都带着那片颜色 ⇒ 这里改成**三段同色相**：取色 → 压暗 → 更暗，全程带色、只是越往下越沉。
     private static func paintField(_ view: GradientView, color: UIColor) {
-        let middle = tinted(color, atMost: 0.26)
-        let bottom = tinted(color, atMost: 0.14)
+        // ★ 2026-10-13（照片 110：「专辑页往下滑，是全黑的，没有颜色」）：两个上限原来分别是
+        //   0.26 / 0.14 —— 14% 亮度基本就是黑，所以越往下越"没颜色"。抬到 0.42 / 0.28：
+        //   全程看得出是封面的色相，到底仍然是"这片颜色"而不是 #121212。
+        let middle = tinted(color, atMost: 0.42)
+        let bottom = tinted(color, atMost: 0.28)
         let layer = view.gradient
         layer.startPoint = CGPoint(x: 0.5, y: 0)
         layer.endPoint = CGPoint(x: 0.5, y: 1)
@@ -366,6 +373,32 @@ enum EntityPageAppearance {
         return brightest <= 0.12 && (brightest - darkest) <= 0.03
     }
 
+    /// ★ 2026-10-13（照片 110：专辑页往下滑**整片黑**）：`clearBaseSurfaces` 只清"**恰好等于** `#121212`"
+    /// 而且只走到 `depth ≤ 7` —— 而盖住 field 的那一层是**页面的直接子视图**（列表的祖先容器，
+    /// 也就是 pw 树里那个 `CreativeWorkPlatform.Tab`）：它比 7 层浅，但颜色不是 `#121212`，
+    /// 所以日志 89 那行 `cleared 0 base-surface background(s)` 一个都没命中，它就一直不透明地压着 field。
+    ///
+    /// 这里对**页面的每个直接子视图**单独来一遍，判据放宽到"近黑近灰"，而且**不递归**
+    /// （只清容器那一层，不碰内容，免得把 cell 里该有的深色也清掉）。
+    private static func clearPageContainers(in page: UIView) {
+        for sub in page.subviews where sub !== field {
+            guard let colour = sub.backgroundColor else { continue }
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            guard colour.getRed(&red, green: &green, blue: &blue, alpha: &alpha), alpha > 0.5 else { continue }
+            let brightest = max(red, max(green, blue))
+            let darkest = min(red, min(green, blue))
+            guard brightest <= 0.25, (brightest - darkest) <= 0.04 else { continue }
+            if !didReportContainerClear {
+                didReportContainerClear = true
+                writeDebugLog(
+                    "[\(logTag)] cleared a page container: \(type(of: sub)) \(frameText(sub.frame))"
+                        + " had \(hex(of: colour)) — that was the layer covering the field"
+                )
+            }
+            sub.backgroundColor = .clear
+        }
+    }
+
     // MARK: - ② 封面溶进背景
 
     /// 用户 2026-10-13 指着 pw 的 playlist 截图：「**pw 的做法是把封面溶进背景**」——
@@ -389,7 +422,22 @@ enum EntityPageAppearance {
         let container = target.page
 
         let height = max(180, min(container.bounds.height * heroHeightRatio, 560))
-        let frame = CGRect(x: 0, y: 0, width: container.bounds.width, height: height)
+        // ★ 2026-10-13（用户：「专辑封面直接铺到手机顶部…所有 app 都会留一块缓冲区（刘海、灵动岛、
+        //   状态栏）」）：**专辑页从状态栏下面开始**。pw 的专辑页也是这样 —— 它的树注释逐字：
+        //   `UIView {0, 78} the top inset, the status bar and the navigation bar's room`，
+        //   hero 就插在那个头里，所以封面本来就避开了状态栏那一条。
+        //   歌单页**不动**：pw 的歌单页是铺到顶的（hero 在 wash plane 里，plane 从 y=-134 起）。
+        let onAlbumPage = firstView(
+            in: container,
+            withAnyIdentifier: ["CreativeWorkPlatform.Components.UI.CreativeWorkHeader"]
+        ) != nil
+        let topInset = onAlbumPage ? container.safeAreaInsets.top : 0
+        let frame = CGRect(
+            x: 0,
+            y: topInset,
+            width: container.bounds.width,
+            height: max(minHeroHeight, height - topInset)
+        )
 
         let view: UIImageView
         if let hero, hero.superview === container {

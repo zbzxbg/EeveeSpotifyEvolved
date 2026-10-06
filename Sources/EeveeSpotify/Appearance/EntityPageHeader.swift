@@ -49,8 +49,9 @@ enum EntityPageHeaderMetrics {
     static let glassCircle: CGFloat = 44
     /// 两侧按钮的字形边长。★ 2026-10-13（用户看真机：「旁边的按键小了点」）：
     /// 原来是"按 48pt 的 27% 内缩"≈26pt，看着比中间那颗胶囊轻 —— pw 是 44pt 玻璃圆里放字形，
-    /// 所以这里改成**固定 22pt 字形 + 44pt 玻璃圆**，与 Music app 的分量对齐。
-    static let glyphSide: CGFloat = 22
+    /// 所以这里改成**固定字形 + 44pt 玻璃圆**，与 Music app 的分量对齐。
+    /// ★ 同日再调（用户：「这播放旁边的播放图标太小了吧」）：22 → **24**。
+    static let glyphSide: CGFloat = 24
 }
 
 /// 浅色玻璃（Play 胶囊里那片）。**探测式**，与 `GlassCapsule.makeGlassView` 同一套手法
@@ -314,7 +315,9 @@ final class EntityPageHeaderPlay: UIControl {
         }
 
         // [字形][6pt][Play] 整体居中
-        let glyphSide: CGFloat = 20
+        // ★ 2026-10-13（用户：「这 播放 旁边的播放图标太小了吧」）：20 → 24 ——
+        // 那颗 ▶ 原来比 17pt 的文字还轻，与中间那颗白胶囊的分量不配。
+        let glyphSide: CGFloat = 24
         let glyphWidth = glyphView.image == nil ? 0 : glyphSide
         let spacing: CGFloat = glyphWidth > 0 ? 6 : 0
         let wordWidth = ceil(wordLabel.sizeThatFits(

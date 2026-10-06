@@ -293,13 +293,22 @@ enum EntityPageHeaderManager {
             find("CreativeWorkPlatform.Components.UI.ParentRow", in: header, cache: &cachedAlbumParentRow)
         )
 
-        eeveeConceal(play)
-        // ★ 2026-10-13（照片 104：用户「播放按键的右边有按键重合」）：我们镜像的那两颗**再点名藏一次**。
-        //   `concealAlbumChrome` 走的是"整支藏"，理论上已经覆盖它们，但 Spotify 会把按钮**晚一拍**
-        //   加进一支已经藏过的分支里（新视图不受之前那次藏的影响）⇒ Spotify 的 AddToButton 就和我们的
-        //   玻璃圆叠在同一格上。这两颗的 id 是我们逐颗找到的，直接点名最稳（幂等）。
-        eeveeConceal(add)
-        eeveeConceal(download)
+        // ★ 2026-10-13（用户：「这播放旁边的图标是重合的还没修吗」）：三颗**都藏"包着它的最外层等尺寸
+        //   视图"**（pw 的 `wrapperFor`）—— 见那个函数的说明。另外把 shuffle 也一起藏：我们那一行里
+        //   本来就有它（左边那颗），Spotify 原生那颗**一直没被藏过**，与我们的叠在同一格。
+        //   顺便把 trailing 的源与字形打进日志：用户说右边那颗"看起来像随机播放的图标"，
+        //   这一行能直接分辨是"取错了源"还是"取错了字形"。
+        eeveeConceal(wrapperFor(play, in: page))
+        eeveeConceal(wrapperFor(shuffle, in: page))
+        eeveeConceal(wrapperFor(add, in: header))
+        eeveeConceal(wrapperFor(download, in: header))
+        logOnce(
+            "trailingSource",
+            "trailing ← \(add != nil ? "AddToButton" : (download != nil ? "DownloadButton" : "nothing"))"
+                + " (id \(add?.accessibilityIdentifier ?? download?.accessibilityIdentifier ?? "-"))"
+                + ", glyph \(eeveeGlyph(of: add ?? download) == nil ? "none" : "taken"),"
+                + " shuffle \(shuffle == nil ? "missing" : "found")"
+        )
 
         // 那行 kind·日期是 collection view 的 **cell**，晚一拍才建出来（pw 也等：最多 6 次、每次 0.25s）。
         if texts.length.isEmpty {
@@ -353,6 +362,31 @@ enum EntityPageHeaderManager {
             }
             eeveeConceal(sub)
         }
+    }
+
+    /// **往上找"仍然恰好包着这个控件"的最外层视图** —— pw 的 `wrapperFor`（`AlbumHeader.x`）逐字：
+    ///
+    /// > The outermost view that still wraps the control exactly: the element view Spotify's layout
+    /// > places, so concealing it leaves the control itself alone to be read and fired.
+    ///
+    /// ★ 2026-10-13（用户：「这播放旁边的图标是重合的还没修吗…」）：**这才是"重合"的正解**。
+    /// 只藏控件本身的话，那颗按钮的**圆底/边框画在它的父视图上**、还留在原地 ⇒ Spotify 的圆
+    /// 与我们的玻璃圆叠在一起，看着就是"两个图标重合"。往上收到"尺寸不再变化"的那一层再藏，
+    /// 整个按钮（含圆底）一起消失。
+    private static func wrapperFor(_ control: UIView, in stop: UIView) -> UIView {
+        var wrapper = control
+        var node: UIView? = control.superview
+        // ⚠️ 加一道**层数上限**（pw 没有，但它那边的 `stop` 就是页面）：万一祖先链上连着几层同尺寸的
+        //    包装容器，走到页面那一层就会把**整页**藏掉 —— 那是灾难性的。5 层足够收住一颗按钮。
+        var levels = 0
+        while let current = node, current !== stop, levels < 5 {
+            levels += 1
+            if abs(current.bounds.width - control.bounds.width) > 4 { break }
+            if abs(current.bounds.height - control.bounds.height) > 4 { break }
+            wrapper = current
+            node = current.superview
+        }
+        return wrapper
     }
 
     /// 专辑页的文字：**按明确的 id 读**（pw 的 `applyHeader` 用同样这三个 id）。
