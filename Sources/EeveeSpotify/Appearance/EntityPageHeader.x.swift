@@ -70,6 +70,8 @@ enum EntityPageHeaderManager {
     private static var cachedArtistMeta: UIView?
     private static var cachedArtistCover: UIView?
     private static var cachedArtistFollow: UIView?
+    /// 艺人页左边那颗 `i` 的转发目标：**艺人简介卡**（`CreatorBiographyCard`）。
+    private static var cachedArtistBio: UIView?
     /// ★ 2026-10-13（照 AM）：右上角那颗 `⋯` —— Spotify 的菜单按钮（`Components.UI.ContextMenuButton-<hash>`）
     /// 与**我们自己画的那一颗**（`EntityPageHeaderButton` 直接复用：它本来就是"玻璃圆 + 字形 + 转发"）。
     private static var cachedMore: UIView?
@@ -464,18 +466,32 @@ enum EntityPageHeaderManager {
         ) ?? eeveeFindView(header, identifier: "FollowButton*")
         // Follow 是**文字按钮**（"关注" / "已关注"），取不到字形 ⇒ 用一对 SF Symbol 兜底，
         // 而且按它的选中态换字形 —— 状态因此看得见（pw 那边直接读它的字，这里读者是图标）。
+        // ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：照 AM 换成 Info。
+        //
+        //   AM 的三颗是 **Info / Play / Favorite**，Spotify 侧的 Info 就是**艺人简介卡** ——
+        //   我们自己的树里逐字写着（`[Tree] 10.CreatorBiographyCardLayout@0,0,374,416,bg=#282828`，
+        //   子视图 `…CreatorBiographyCard.HeaderLabel` / `.BiographyLabel`），点它会展开发简介。
+        //   所以左边那颗**不再镜像 shuffle**，改成镜像那颗简介卡；卡上没有图标可镜像，字形显式给
+        //   `info.circle`（`setLeadingGlyph`）。找不到简介卡时**退回 shuffle**，不留一颗死按钮。
+        let info = find("Components.UI.CreatorBiographyCard*", in: page, cache: &cachedArtistBio)
+        let leading = info.flatMap { firstControl(in: $0) }
+
         let followed = (follow as? UIControl)?.isSelected ?? false
         headerView.updateRow(
-            shuffle: shuffle,
+            shuffle: leading ?? shuffle,
             play: play,
             trailing: follow,
             trailingFallback: UIImage(systemName: followed ? "checkmark" : "person.badge.plus")
         )
+        if leading != nil {
+            headerView.setLeadingGlyph(UIImage(systemName: "info.circle"))
+        }
         headerView.updateCreatorLink(nil)
 
         eeveeBlank(play)
         eeveeBlank(shuffle)
         eeveeBlank(follow)
+        eeveeBlank(leading)
 
         // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
         pinMoreButton(in: header)

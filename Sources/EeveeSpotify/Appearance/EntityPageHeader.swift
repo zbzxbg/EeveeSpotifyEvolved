@@ -495,6 +495,13 @@ final class EntityPageHeaderView: UIView {
         }
     }
 
+    /// ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：
+    /// 左边那颗（AM 的 **Info**）在 Spotify 侧对应的是**艺人简介卡**，那颗卡上没有图标可镜像
+    /// ⇒ 由调用方**显式给一个**字形（`info.circle`）。中间与右边那两颗不经过这里。
+    func setLeadingGlyph(_ glyph: UIImage?) {
+        shuffleButton.fallbackGlyph = glyph
+    }
+
     /// 创建者那一行可点（点开作者页）：`control` 是 Spotify 自己那个按钮，被藏着只负责响应。
     func updateCreatorLink(_ control: UIView?) {
         creatorLink = control
