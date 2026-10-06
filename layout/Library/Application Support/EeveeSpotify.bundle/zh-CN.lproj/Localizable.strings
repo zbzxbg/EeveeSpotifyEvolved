@@ -37,9 +37,9 @@ petitlyrics_description = "PetitLyrics：提供日语歌词。";
 spicylyrics_description = "Spicy Lyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
 spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
-spicylyrics_api_key_description = "本应用不内置密钥：只有在这里填入你自己的客户端密钥，才会使用 Spicy Lyrics。留空则该源被跳过 —— 这一首改用 Musixmatch 取词。想拿密钥：打开 Spicy Lyrics 开发者面板，新建 application，开启 Client access，加一条 allowed origin 并同时打开「Allow requests with no Origin header」，然后按 Create client key，把生成的密钥粘贴到这里。";
+spicylyrics_api_key_description = "本应用不内置密钥：只有在这里填入你自己的客户端密钥，才会使用 Spicy Lyrics。留空则该源被跳过 —— 这一首改用 Musixmatch 取词。想拿密钥：在 Spicy Lyrics 上添加本应用（登录或注册一个免费账号，按「Add」，复制它给出的客户端密钥即可）。不需要自己创建 application。";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
-spicylyrics_key_link = "Spicy Lyrics 开发者面板";
+spicylyrics_key_link = "在 Spicy Lyrics 上添加本应用";
 spicylyrics_key_invalid = "Spicy Lyrics 密钥被拒绝";
 spicylyrics_key_missing = "未填写 Spicy Lyrics 密钥";
 spicylyrics_key_invalid_popup = "Spicy Lyrics 拒绝了这个 API 密钥。请到「设置 → 歌词」填入有效的客户端密钥 —— 本应用不内置密钥，没填之前会跳过该源、改用 Musixmatch 取词。";
@@ -181,6 +181,10 @@ no_log_to_clear_ok = "确定";
 /* MARK: Keys required by Reincarnated features kept in this fork */
 enter_user_token = "输入用户令牌";
 enter_user_token_message = "为了使用 Musixmatch，需要从官方应用程序中检索你的用户令牌。从 AppStore 下载 Musixmatch，注册后转到 “设置” > “获取帮助” > “复制调试信息”，并将其粘贴在此处。你也可以使用 MitM 提取令牌。";
+// ★ 2026-10-13：匿名令牌接回来之后，选中 Musixmatch 时那颗弹窗改成**可选**的
+// （旧键 `enter_user_token` / `enter_user_token_message` 留着不动，其它语言仍在用）。
+musixmatch_token_optional_title = "Musixmatch 令牌（可选）";
+musixmatch_token_optional_message = "填自己的用户令牌 = 用你自己账号的额度。留空即可 —— 应用会自己申请一个匿名令牌，你什么都不用做就能用 Musixmatch。";
 miscellaneous = "杂项设定"; 
 clean_share_links = "移除追踪参数"; 
 clean_share_links_description = "清除网址追踪码";

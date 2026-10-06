@@ -2,29 +2,28 @@ import SwiftUI
 
 extension EeveeLyricsSettingsView {
 
-    /// 选中 Musixmatch 但还没有合法令牌时的手动填写弹窗。
+    /// 选中 Musixmatch 但还没有合法令牌时的**可选**填写弹窗。
     ///
-    /// ⚠️ 这个弹窗**不再提供**「请求匿名令牌」那个选项 —— 匿名令牌整条路径已移除。
-    /// 原来的签名是 `showMusixmatchTokenAlert(_ oldSource:, _ showAnonymousTokenOption:)`，
-    /// 第二个参数只用来决定"要不要多一个匿名令牌按钮 + 多一段说明文案"，
-    /// 按钮没了它就没有任何作用，一并删掉（少一个恒为常量的参数）。
+    /// ★ 2026-10-13（匿名令牌接回来之后）：这个弹窗**不再强制**，也**不再回退来源选择**。
+    ///   · 匿名令牌那条路是自动的（`AnonymousTokenHelper` → 取词时
+    ///     `MusixmatchLyricsRepository.ensureTokenIfNeeded()` 自己换一个），
+    ///     所以"没有令牌"根本不影响能不能用 Musixmatch；
+    ///   · 填自己的令牌 = 用**自己账号的额度**，这是唯一需要它的场景；
+    ///   · 因此取消、或粘进来的东西识别不出令牌，都**保留 Musixmatch 这个选择**
+    ///     （旧版会把来源改回去，等于"选了 Musixmatch 却不让你用"——与自动路径自相矛盾）。
     ///
-    /// 保留的是**手动填令牌**这条路，它是现在唯一的令牌来源：
-    ///   · 从 Musixmatch 官方 App 的「设置 > 获取帮助 > 复制调试信息」里整段粘进来
-    ///     （`getMusixmatchTokenFromDebugInfo` 会从 `[UserToken]: xxx` 里抠出来）；
-    ///   · 或者直接贴 54 位小写十六进制的令牌。
-    /// 两者都识别不了就还原原来的来源选择 —— 不留下"选了 Musixmatch 但其实没令牌"的状态。
+    /// 两种粘贴形态都认（`getMusixmatchTokenFromDebugInfo` / `getMusixmatchToken`）：
+    ///   · Musixmatch 官方 App 里「设置 > 获取帮助 > 复制调试信息」整段；
+    ///   · 或者直接贴 54 位小写十六进制令牌。
     ///
-    /// ⚠️⚠️ **它以前从来没被调用过。** 唯一的调用点是
-    /// `EeveeLyricsSettingsView.swift` 里的
-    /// `.onReceive(viewModel.musixmatchTokenInputAlertPublisher)`，
-    /// 而那个 `PassthroughSubject` 全工程**没有任何一处 `send`** ——
-    /// 也就是说"选了 Musixmatch 却没有令牌"时根本不会提示，只在来源页
-    /// 留一个红色感叹号。现在改由 `lyricsSourceBinding` 在选中的那一刻直接调用。
-    func showMusixmatchTokenAlert(_ oldSource: LyricsSource) {
+    /// ⚠️ 历史：这个弹窗**曾经从来没被调用过** —— 唯一的调用点是
+    /// `EeveeLyricsSettingsView.swift` 里 `.onReceive(viewModel.musixmatchTokenInputAlertPublisher)`，
+    /// 而那个 `PassthroughSubject` 全工程没有任何一处 `send`。
+    /// 现在由 `lyricsSourceBinding` 在选中的那一刻直接调用，那个死订阅没有带回来。
+    func showMusixmatchTokenAlert() {
         let alert = UIAlertController(
-            title: "enter_user_token".localized,
-            message: "enter_user_token_message".localized,
+            title: "musixmatch_token_optional_title".localized,
+            message: "musixmatch_token_optional_message".localized,
             preferredStyle: .alert
         )
 
@@ -32,23 +31,22 @@ extension EeveeLyricsSettingsView {
             textField.placeholder = "---- Debug Info ---- [Device]: \(UIDevice.current.isIpad ? "iPad" : "iPhone")"
         }
 
-        alert.addAction(UIAlertAction(title: "Cancel".uiKitLocalized, style: .cancel) { _ in
-            viewModel.lyricsSource = oldSource
-        })
+        // 取消 = 什么都不做（**不回退来源**）：匿名令牌会在取词时自动换一个。
+        alert.addAction(UIAlertAction(title: "Cancel".uiKitLocalized, style: .cancel))
 
         alert.addAction(UIAlertAction(title: "OK".uiKitLocalized, style: .default) { _ in
-            let text = alert.textFields!.first!.text!
+            let text = alert.textFields?.first?.text ?? ""
 
+            // 识别不出就当用户没填：**仍然保留 Musixmatch**，不打断他的选择。
             guard let token =
                 viewModel.getMusixmatchTokenFromDebugInfo(text)
                 ?? viewModel.getMusixmatchToken(text)
             else {
-                viewModel.lyricsSource = oldSource
                 return
             }
 
             viewModel.musixmatchToken = token
-            UserDefaults.lyricsSource = .musixmatch
+            UserDefaults.musixmatchTokenIsAnonymous = false
         })
 
         WindowHelper.shared.present(alert)

@@ -43,9 +43,9 @@ petitlyrics_description = "PetitLyrics: Provides Japanese lyrics.";
 spicylyrics_description = "Spicy Lyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
 spicylyrics_api_key = "Spicy Lyrics API Key";
 spicylyrics_api_key_placeholder = "Enter a Spicy client key (sl_pk_...)";
-spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics is only used when you paste your own client key here. Leave it empty and this source is skipped for that track — the lyrics come from Musixmatch instead. To get a key: open the Spicy Lyrics developer dashboard, create an application, switch on Client access, add an allowed origin together with \"Allow requests with no Origin header\", then press Create client key and paste it here.";
+spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics is only used when you paste your own client key here. Leave it empty and this source is skipped for that track — the lyrics come from Musixmatch instead. To get a key: Add this app on Spicy Lyrics (sign in or create a free account, press Add, then copy the client key it gives you). You do not need to create an application.";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
-spicylyrics_key_link = "Spicy Lyrics developer dashboard";
+spicylyrics_key_link = "Add this app on Spicy Lyrics";
 spicylyrics_key_invalid = "Spicy Lyrics API key rejected";
 spicylyrics_key_missing = "Spicy Lyrics key not set";
 spicylyrics_key_invalid_popup = "Spicy Lyrics rejected the API key. Open Settings > Lyrics and paste a valid client key — the app ships no built-in key, so the Spicy Lyrics source stays skipped (and Musixmatch is used) until one is set.";
@@ -193,6 +193,10 @@ true_shuffle = "True Shuffle";
 true_shuffle_dec = "Blocks Spotify's free-tier Smart Shuffle from mixing recommended tracks into your queue. Shuffle stays inside the playlist. ";
 enter_user_token = "Enter User Token";
 enter_user_token_message = "In order to use Musixmatch, you need to retrieve your user token from the official app. Download Musixmatch from the App Store, sign up, then go to Settings > Get help > Copy debug info, and paste it here. You can also extract the token using MITM.";
+// ★ 2026-10-13：匿名令牌接回来之后，选中 Musixmatch 时那颗弹窗改成**可选**的
+// （旧键 `enter_user_token` / `enter_user_token_message` 留着不动，其它语言仍在用）。
+musixmatch_token_optional_title = "Musixmatch token (optional)";
+musixmatch_token_optional_message = "Paste your own user token to use your account's own quota. Leave it empty and the app will request an anonymous token by itself — you do not need to do anything to use Musixmatch.";
 miscellaneous = "Miscellaneous";
 clean_share_links = "Clean Share Links";
 clean_share_links_description = "Removes the \"si\" tracking parameter from shared Spotify links, so they don't reveal which device or account the link came from.";

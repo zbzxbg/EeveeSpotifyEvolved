@@ -4,25 +4,35 @@ extension EeveeLyricsSettingsView {
 
     /// 「想用自己的 Spicy Lyrics 密钥」那个入口的地址。
     ///
-    /// ⚠️ 现在指**面板的 applications 页**：任何账号都能在那里建 application、开 Client access、
-    /// 打开 "Allow requests with no Origin header"，然后 Create client key 拿到自己的 `sl_pk_`。
+    /// ★ 2026-10-13：**我们自己的 app template 过审了**（提交与审核过程见那几轮讨论），
+    /// 所以这里指向**目录页**而不是面板的 applications 页。用户要做的事只剩三步：
+    ///   1. 打开这个目录页；
+    ///   2. 「Sign in or create an account」——页面原话 *"You only need an account;
+    ///      you do not need to create an application."*（**不用建 application**，
+    ///      也不用管 Client access / allowed origin / no-Origin 那些开关，模板里已经定好了）；
+    ///   3. 按 Add → 页面给出 **Client key**（"You get: Client key"）→ 粘回本页输入框。
     ///
-    /// ★ 等我们自己的 **app template** 过审之后，把这里换成
-    /// `https://developers.spicylyrics.org/catalog/<slug>`，用户就只需点一下 Add
-    /// —— 条款 §12 对"要分发到别人设备上的应用"推荐的正是这条，§3 也明写不许共用密钥。
+    /// 为什么这样最合规：条款 §12 对"要分发到别人设备上的应用"推荐的就是这条，§3 也不许共用
+    /// 密钥 —— 模板让**每个人拿到自己的一份**，且每人各自有速率上限（不会挤在同一个 key 上）。
     ///
-    /// 上游的做法可以对照：他们直接指向自己提交的模板
-    /// （`https://developers.spicylyrics.org/catalog/eeveespotifyreincarnated`），
-    /// 并在文案里一步一步教用户点哪里。
-    private static let spicyKeyHelpURL = URL(string: "https://developers.spicylyrics.org/dashboard/applications")
+    /// 上游的对照：他们指向自己的模板
+    /// `https://developers.spicylyrics.org/catalog/eeveespotifyreincarnated`，做法相同。
+    ///
+    /// ⚠️ 仍然保留"自己建 application"这条后路（面板 → applications，开 Client access +
+    /// 允许无 Origin 头）—— 想用自己额度、或目录页临时不可用时，用户仍然能拿到 `sl_pk_`；
+    /// 文案里没有提它，是因为三步那条路对绝大多数人更短。
+    private static let spicyKeyHelpURL = URL(string: "https://developers.spicylyrics.org/catalog/eeveespotifyevolved")
 
-    /// 来源选择器的绑定：额外负责"选中 Musixmatch 但还没令牌"时的手动填写提示。
+    /// 来源选择器的绑定：额外负责"选中 Musixmatch 但还没有令牌"时的手动填写提示。
     ///
     /// 为什么要有它：以前这个提示挂在一个**从来没被 `send` 过**的
     /// `musixmatchTokenInputAlertPublisher` 上（见 `showMusixmatchTokenAlert` 的说明），
     /// 于是选了 Musixmatch 只会看到来源页一个红色感叹号，弹窗永远不出现。
-    /// 现在把提示放在"用户真的选中那一刻"，并且**不阻断选择**：
-    /// 弹窗只是提醒你现在必须手填令牌（匿名令牌那条路已经删掉）。
+    /// 现在把提示放在"用户真的选中那一刻"。
+    ///
+    /// ★ 2026-10-13：**弹窗不再"不填就回退选择"** —— 匿名令牌那条路已经接回来了
+    /// （`AnonymousTokenHelper`：取词时自动换一个，见 `MusixmatchLyricsRepository.ensureTokenIfNeeded`），
+    /// 填自己的令牌只是"想用自己的额度"。所以取消/填错都**保留** Musixmatch 这个选择。
     ///
     /// 用 `viewModel.lyricsSource` 作为"旧值"而不是 `UserDefaults.lyricsSource`：
     /// 后者是持久化的那份，`$lyricsSource` 的 `didSet` 才写它，两者在某些时序上会不一致。
@@ -30,11 +40,10 @@ extension EeveeLyricsSettingsView {
         Binding(
             get: { viewModel.lyricsSource },
             set: { newSource in
-                let oldSource = viewModel.lyricsSource
                 viewModel.lyricsSource = newSource
 
                 if newSource == .musixmatch, !viewModel.isMusixmatchTokenValid {
-                    showMusixmatchTokenAlert(oldSource)
+                    showMusixmatchTokenAlert()
                 }
             }
         )
