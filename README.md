@@ -85,7 +85,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 | --- | --- | --- |
 | Public release | [`v1.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases/tag/v1.0.0) | 9.1.88 |
 
-Development last updated: `2026/10/13`.
+Development last updated: `2026/10/06`.
 
 > [!NOTE]
 > `main` is ahead of the last public release. The download on the releases page is built from the `v1.0.0` tag; work that landed after it — the Spicy Lyrics rework, Apple Music–style entity-page headers, AMOLED and the accent colour, rating-prompt/ClientMessagingPlatform blocking, the diagnostics tooling — is **not** in that `.deb` yet.
