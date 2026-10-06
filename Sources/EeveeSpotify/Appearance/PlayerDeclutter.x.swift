@@ -142,6 +142,10 @@ enum PlayerCardsDeclutter {
     private static let retryWindow: CFTimeInterval = 5
     private static var logged = Set<String>()
 
+    /// 判定成本计量：`shouldCollapse` **每一格每一拍**都会被问（所以才要那层缓存），
+    /// 真实开销值得能从日志里看到 —— 每 50 / 200 / 800… 次报一行累计与均值。
+    static let meter = PerfMeter("PlayerCards")
+
     /// 最近一次判定过的格子 —— 只用来在 `refresh()` 里找到"那个" collection view。
     private static weak var lastCell: UICollectionViewCell?
 
@@ -254,7 +258,8 @@ class PlayerCardCellHook: ClassHook<UICollectionViewCell> {
         _ attributes: UICollectionViewLayoutAttributes
     ) -> UICollectionViewLayoutAttributes {
         let result = orig.preferredLayoutAttributesFittingAttributes(attributes)
-        guard PlayerCardsDeclutter.shouldCollapse(target) else { return result }
+        let collapse = PlayerCardsDeclutter.meter.measure { PlayerCardsDeclutter.shouldCollapse(target) }
+        guard collapse else { return result }
         result.size = CGSize(width: result.size.width, height: 0)
         // 折起来之后内容仍在视图里，不裁剪的话会溢到相邻格子上。
         target.clipsToBounds = true

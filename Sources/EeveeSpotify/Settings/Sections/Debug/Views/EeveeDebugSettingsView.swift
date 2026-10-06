@@ -12,6 +12,10 @@ import SwiftUI
 struct EeveeDebugSettingsView: View {
     @StateObject var viewModel = EeveeDebugSettingsViewModel()
 
+    /// 「转储某个类」那个输入框的内容（本页唯一一处不需要 view model 的状态，
+    /// 照 `dumpCustomizeBodySection` 的先例直接用 `@State`）。
+    @State private var dumpClassName = ""
+
     var body: some View {
         List {
             // 「补充模块5」：往元素列表里补 `5`。
@@ -23,6 +27,10 @@ struct EeveeDebugSettingsView: View {
 
             // 「转储视图树」：给还没写的界面 hook 铺路（AMOLED / 隐藏区块 / 手势）。
             dumpViewTreeSection()
+
+            // 「转储某个类的方法/ivar」：与上面同一目的、答的是另一半问题
+            //   —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
+            dumpClassSection()
 
             // 「转储 customize 响应体」：**2026-10-13 用户要求从主设置页搬过来**，位置就是这里
             //   —— 「转储视图树」的**下面**、「替换寻找歌词时的占位符」的**上面**。
@@ -67,6 +75,27 @@ struct EeveeDebugSettingsView: View {
                 "dump_view_tree".localized,
                 isOn: $viewModel.dumpViewTree
             )
+        }
+    }
+
+    /// 「转储某个类」—— 把类名 + 方法表 + ivar 表写进调试日志（见 `ClassDumper`）。
+    ///
+    /// 与上面那节的分工：`ViewTreeDumper` 答"谁在谁里面"，这里答"这个类里有什么"。
+    /// 界面工作反复卡在后者上（AMOLED 的导航栏、隐藏区块、播放器手势都卡过）。
+    ///
+    /// ⚠️ 只读：runtime 反射**枚举**而已，找到的方法一个都不会被调用 ——
+    /// 猜 `value(forKey:)` 在键不存在时会抛不可捕获的异常、把 Spotify 直接弄崩。
+    /// 同样属于"验证完就删"的临时工具（本页定位）。
+    @ViewBuilder private func dumpClassSection() -> some View {
+        Section(footer: Text("dump_class_description".localized)) {
+            TextField("dump_class_placeholder".localized, text: $dumpClassName)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+
+            Button("dump_class_action".localized) {
+                ClassDumper.dump(name: dumpClassName)
+            }
+            .disabled(dumpClassName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 

@@ -374,6 +374,9 @@ flag_note_canvas_lyrics = "Draws lyrics over the Canvas video.";
 flag_catalog_unsupported = "not editable yet";
 dump_view_tree = "Dump the view tree";
 dump_view_tree_description = "Writes the current screen's view structure to the debug log as one line per screen, every 2 seconds (20 lines max per launch, and only when the structure changes). Read-only: it never changes a view, never registers a gesture and never enumerates classes at runtime. It takes effect immediately, and log recording under Debug must be on. Use it to collect the class names for hooks that are not written yet.";
+dump_class_description = "Writes one class's name, method list and ivars (with their type encodings) to the debug log. Both spellings of the name work: the runtime name, or Module.Class. Read-only: the runtime is only asked to enumerate, and none of the selectors it finds is ever called. Use it when you need to know what is inside a view or controller whose name you already have.";
+dump_class_placeholder = "Class name";
+dump_class_action = "Dump this class";
 
 /* MARK: Appearance */
 theme_section = "Theme";
