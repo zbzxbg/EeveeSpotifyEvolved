@@ -119,7 +119,14 @@ func eeveeClearBaseSurface(_ view: UIView, depth: Int = 0) {
     if let colour = view.backgroundColor, EntityPageRepaint.isBaseSurface(colour.cgColor) {
         view.backgroundColor = .clear
     }
-    guard depth < 4 else { return }
+    // ★★ 2026-10-06（日志 92 逐字：`cleared 0 base-surface background(s)` —— 页面上一个底都没清到，
+    //    而屏幕上明明是"你已点赞 / 显示更多"那一片黑）：**直接画在 layer 上的底色也要清**。
+    //    我们的 `CALayer` 钩子只在"**写入的那一刻**"拦得住；页面是在我们接管**之前**就建好的、
+    //    那些 layer 早就画上了，钩子一概听不到。所以这里两种都要看。
+    if let layerColour = view.layer.backgroundColor, EntityPageRepaint.isBaseSurface(layerColour) {
+        view.layer.backgroundColor = nil
+    }
+    guard depth < 8 else { return }
     for sub in view.subviews { eeveeClearBaseSurface(sub, depth: depth + 1) }
 }
 

@@ -368,9 +368,9 @@ final class EntityPageHeaderPlay: UIControl {
         glass?.alpha = isCircle ? 0 : 1
 
         // [字形][6pt][Play] 整体居中（圆形态里只剩字形，自然就是居中的）
-        // ★★ 2026-10-06（用户：「那个大暂停是没问题，但是**里面的符号太小了**」）：
-        //   圆形态 34 → **44**（AM 那颗 ▶ 约占圆的一半多一点），胶囊形态仍是 24。
-        let glyphSide: CGFloat = isCircle ? 44 : 24
+        // ★★ 2026-10-06（用户：「播放按钮里面的按键**不够大**」）：圆形态 44 → **52**
+        //   （AM 那颗 ▶ 占到圆的一半以上），胶囊形态仍是 24。
+        let glyphSide: CGFloat = isCircle ? 52 : 24
         let glyphWidth = glyphView.image == nil ? 0 : glyphSide
         let spacing: CGFloat = (!isCircle && glyphWidth > 0) ? 6 : 0
         let wordWidth = isCircle ? 0 : ceil(wordLabel.sizeThatFits(

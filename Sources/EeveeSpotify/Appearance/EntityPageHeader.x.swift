@@ -72,6 +72,11 @@ enum EntityPageHeaderManager {
     private static var cachedArtistFollow: UIView?
     /// 艺人页左边那颗 `i` 的转发目标：**艺人简介卡**（`CreatorBiographyCard`）。
     private static var cachedArtistBio: UIView?
+    /// ★★ 2026-10-06（照片 115-117：「**旁边还是随机播放**」）：简介卡是**懒加载**的（页面滚到
+    /// "关于"那一段才建），所以某一拍找不到它**不能**就退回 shuffle —— 那样用户看到的就永远是
+    /// shuffle。这里把**找到过的那颗控件**用 weak 记住（weak：上一页释放后自动失效，
+    /// 下一页找到就替换），于是"只要见过一次 Info，之后每一拍都还是 Info"。
+    private static weak var artistBioControl: UIView?
     /// ★ 2026-10-13（照 AM）：右上角那颗 `⋯` —— Spotify 的菜单按钮（`Components.UI.ContextMenuButton-<hash>`）
     /// 与**我们自己画的那一颗**（`EntityPageHeaderButton` 直接复用：它本来就是"玻璃圆 + 字形 + 转发"）。
     private static var cachedMore: UIView?
@@ -474,7 +479,10 @@ enum EntityPageHeaderManager {
         //   所以左边那颗**不再镜像 shuffle**，改成镜像那颗简介卡；卡上没有图标可镜像，字形显式给
         //   `info.circle`（`setLeadingGlyph`）。找不到简介卡时**退回 shuffle**，不留一颗死按钮。
         let info = find("Components.UI.CreatorBiographyCard*", in: page, cache: &cachedArtistBio)
-        let leading = info.flatMap { firstControl(in: $0) }
+        if let info, let control = firstControl(in: info) { artistBioControl = control }
+        // ★★ 2026-10-06：**记住找到过的那颗**（见 `artistBioControl`）—— 简介卡懒加载，
+        //    某一拍没有它不代表该退回 shuffle。
+        let leading = artistBioControl
 
         let followed = (follow as? UIControl)?.isSelected ?? false
         headerView.updateRow(
