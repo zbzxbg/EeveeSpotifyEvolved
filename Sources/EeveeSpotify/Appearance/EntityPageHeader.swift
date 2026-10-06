@@ -161,15 +161,49 @@ func eeveeFindView(_ root: UIView?, identifier: String, maxNodes: Int = 5000) ->
 ///
 /// **只发一个事件**：注册了 `primaryActionTriggered` 就发它，否则发 `touchUpInside`
 /// —— 两个都发会把开关按两下（等于没按）。
+///
+/// ★★★ 2026-10-06（日志 93：**几百行** `shuffle tapped — source found`，而随机播放毫无动静）：
+/// 原来的第一句是 `guard let control = control as? UIControl else { return false }` —— 而 Spotify 的
+/// shuffle / play 是 `Encore.Button` 一族，**不是 `UIControl`**（它们的点击挂在
+/// `UITapGestureRecognizer` 上）⇒ 这一句把转发整个吞掉；返回值又没人看 ⇒
+/// **"日志说转发成功了、界面一动不动"**。这就是"专辑页随机播放点不动 / 艺人页播放没反应"的根子。
 @discardableResult
 func eeveeFire(_ control: UIView?) -> Bool {
-    guard let control = control as? UIControl else { return false }
+    guard let control else { return false }
 
-    let hasPrimary = control.allTargets.contains { target in
-        !(control.actions(forTarget: target, forControlEvent: .primaryActionTriggered)?.isEmpty ?? true)
+    if let uiControl = control as? UIControl {
+        let hasPrimary = uiControl.allTargets.contains { target in
+            !(uiControl.actions(forTarget: target, forControlEvent: .primaryActionTriggered)?.isEmpty ?? true)
+        }
+        uiControl.sendActions(for: hasPrimary ? .primaryActionTriggered : .touchUpInside)
+        return true
     }
-    control.sendActions(for: hasPrimary ? .primaryActionTriggered : .touchUpInside)
-    return true
+
+    return eeveeFireGesture(of: control)
+}
+
+/// 读手势识别器的 `_targets` 再调它的 target/action —— pw 与我们的标签栏都用这一招
+/// （`TabBarSystemGlass` 转发点击走的就是它，真机上已验证可行）。
+///
+/// ⚠️ `_targets` 是私有键，所以**先用 `responds(to:)` 确认两个键都在**才去 KVC：KVC 碰未知 key 是
+/// **抛异常**（不是返回 nil），那会直接崩。
+private func eeveeFireGesture(of view: UIView) -> Bool {
+    let targetKey = NSSelectorFromString("target")
+    let actionKey = NSSelectorFromString("action")
+    for recognizer in view.gestureRecognizers ?? [] where recognizer is UITapGestureRecognizer {
+        guard let pairs = recognizer.value(forKey: "_targets") as? [AnyObject] else { continue }
+        for pair in pairs {
+            guard let object = pair as? NSObject,
+                  object.responds(to: targetKey), object.responds(to: actionKey),
+                  let target = object.value(forKey: "target") as? NSObject,
+                  let name = object.value(forKey: "action") as? String else { continue }
+            let selector = NSSelectorFromString(name)
+            guard target.responds(to: selector) else { continue }
+            _ = target.perform(selector, with: recognizer)
+            return true
+        }
+    }
+    return false
 }
 
 /// 从被藏起来的控件上取字形：它自己/子树里的 `UIImageView.image`，或 `UIButton` 的 image。
