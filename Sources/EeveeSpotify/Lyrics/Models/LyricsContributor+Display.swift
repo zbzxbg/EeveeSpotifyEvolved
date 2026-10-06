@@ -13,8 +13,7 @@ extension LyricsContributor.Role {
 
 /// 拼一条**显示用**的署名：提供商 + 社区贡献者，形如 `Spicy Lyrics · 上传者 X · 制作者 Y`。
 ///
-/// 听歌页歌词区底沿那条（`NowPlayingLyricsPlate`）与自绘歌词页页脚（`AppleMusicLyricsPage`）
-/// **共用这一份** —— 两处各拼一份的话，将来条款相关的那半只会有一处跟着改。
+/// 自绘歌词页的**页脚**用这一份（那一页没有歌手行，提供商必须自己写出来）。
 ///
 /// 读的是全局状态（`currentLyricsProvider` / `currentLyricsContributors`），
 /// 它们与"当前渲染的那份 dto"同源同时刻写入（见 `CustomLyrics.storeLyricsDto`）。
@@ -22,28 +21,45 @@ func currentLyricsCreditText() -> String {
     lyricsCreditText()
 }
 
-/// 听歌页歌词区**底沿那一行**专用的署名文本（`NowPlayingLyricsPlate.ensureCreditLabel` 用）。
+/// 听歌页歌词区**底沿那行**专用的署名文本（`NowPlayingLyricsPlate.ensureCreditLabel` 用）。
 ///
-/// 与 `currentLyricsCreditText()` 只差一件事：★ 2026-10-13（用户）的**彩蛋** ——
-/// 提供商是 Spicy Lyrics 时，名字那一节写成 `Thx,Spicy Lyrics!`（见
-/// `SpicyLyricsAttribution.plateEasterEgg`）。
+/// ★ 2026-10-13（用户拍板「方案 1」）：**这一行不再重复提供商**。
 ///
-/// ⚠️ 社区贡献者**照常接在后面**：条款 §6 那句"要显示且可链接上传者/制作者"不能因为
-/// 一个彩蛋被吃掉。所以这一行的形态是
-/// `Thx,Spicy Lyrics! · 上传者 X · 制作者 Y`（没有社区同步时就是单独一句感谢）。
+/// 为什么：提供商的名字已经贴在**歌手那一行**了（`NowPlayingLyricsPlate.providerSuffix()`
+/// → `歌手（Spicy Lyrics）`，那是用户特意选的位置）⇒ 底沿再写一遍只是视觉重复。
+/// 条款 §6 要的两件事在两行里各占一半，仍然都在屏幕上：
+///   · *"Always name the provider"* → 歌手那一行；
+///   · *"credit **and link** the uploader, and the maker"* → **这一行**（可点，
+///     链接见 `NowPlayingLyricsPlate.creditLinks()`）。
+///
+/// 所以这一行的形态是：
+///   · 有社区署名 → `上传者 X · 制作者 Y`；
+///   · 没有社区署名、且提供商是 Spicy Lyrics → 那句彩蛋 `Thx,Spicy Lyrics!`（用户要的）；
+///   · 没有社区署名、且是别的源 → **空**（整条不出现：那些源本来也没有 uploader/maker
+///     可署，而提供商在歌手行上）。
+///
+/// ⚠️ 自绘歌词页页脚走的是**不带这层规则**的 `currentLyricsCreditText()`。
 func currentLyricsPlateCreditText() -> String {
-    let isSpicy = currentLyricsProvider.trimmingCharacters(in: .whitespacesAndNewlines)
-        == SpicyLyricsAttribution.providerName
+    let roles = lyricsRoleText()
+    if !roles.isEmpty { return roles }
 
-    return lyricsCreditText(
-        providerOverride: isSpicy ? SpicyLyricsAttribution.plateEasterEgg : nil
-    )
+    let provider = currentLyricsProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+    return provider == SpicyLyricsAttribution.providerName ? SpicyLyricsAttribution.plateEasterEgg : ""
+}
+
+/// 「上传者 X · 制作者 Y」这一半（没有社区署名时是空串）。
+///
+/// 单独抽出来是因为它现在有两个去处：完整署名（`lyricsCreditText`）与底沿那条
+/// （`currentLyricsPlateCreditText`）—— 两处各拼一份的话，将来条款相关的措辞只会改一处。
+private func lyricsRoleText() -> String {
+    currentLyricsContributors
+        .map { $0.role.label + " " + $0.name }
+        .joined(separator: " · ")
 }
 
 /// 上面两个入口共用的拼接。
 ///
 /// - Parameter providerOverride: 覆盖"提供商"那一节的显示文本（nil = 用 `currentLyricsProvider`）。
-///   只给彩蛋用 —— 别在调用点各拼一份。
 private func lyricsCreditText(providerOverride: String? = nil) -> String {
     var parts: [String] = []
 
@@ -51,9 +67,8 @@ private func lyricsCreditText(providerOverride: String? = nil) -> String {
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !provider.isEmpty { parts.append(provider) }
 
-    for contributor in currentLyricsContributors {
-        parts.append(contributor.role.label + " " + contributor.name)
-    }
+    let roles = lyricsRoleText()
+    if !roles.isEmpty { parts.append(roles) }
 
     return parts.joined(separator: " · ")
 }

@@ -3572,7 +3572,12 @@ enum NowPlayingLyricsPlate {
         max(0, stage.maxY - (creditTop - creditGapAboveLyrics))
     }
 
-    /// 歌词区**底沿**那条小字署名：`Spicy Lyrics · 上传者 X · 制作者 Y`，**可点**。
+    /// 歌词区**底沿**那条小字署名：`上传者 X · 制作者 Y`（没有社区署名时是彩蛋
+    /// `Thx,Spicy Lyrics!`），**可点**。
+    ///
+    /// ★ 2026-10-13（用户拍板「方案 1」）：**不再重复提供商** —— 提供商在歌手那一行，
+    /// 这一行只承担条款里"可链接的上传者/制作者"那半。拼接规则见
+    /// `currentLyricsPlateCreditText()`。
     ///
     /// ## 为什么要有它（用户 2026-10-13 拍板「放 ①」）
     ///
@@ -3596,9 +3601,10 @@ enum NowPlayingLyricsPlate {
     /// 2. **跟着歌词一起出现/收起**：只在展开态的 `layoutAndMount` 里摆，收起与离页由
     ///    `removeCreditLabel()` 摘掉。没有歌词时署名文本为空 ⇒ 它也不会空挂一条。
     private static func ensureCreditLabel(in page: UIView, lyricsFrame: CGRect) {
-        // 文本由 `currentLyricsPlateCreditText()` 拼（**这一行专用**：提供商是 Spicy Lyrics 时
-        // 走那句彩蛋 `Thx,Spicy Lyrics!`，社区贡献者照常接在后面）。
-        // 自绘歌词页页脚用的是不带彩蛋的 `currentLyricsCreditText()` —— 两处共用同一套拼接。
+        // 文本由 `currentLyricsPlateCreditText()` 拼（**这一行专用**：只写"上传者/制作者"，
+        // 提供商留给歌手那一行；没有社区署名时走那句彩蛋 `Thx,Spicy Lyrics!`，别的源留空
+        // ⇒ 这一条整行不出现）。
+        // 自绘歌词页页脚用的是 `currentLyricsCreditText()`（**带**提供商，那一页没有歌手行）。
         let credit = currentLyricsPlateCreditText()
         guard !credit.isEmpty else {
             removeCreditLabel()
@@ -3694,7 +3700,9 @@ enum NowPlayingLyricsPlate {
             return
         }
 
-        guard let host = sender?.window?.rootViewController ?? lastPage?.window?.rootViewController else {
+        guard let host = sender?.window?.rootViewController
+            ?? lastPage?.window?.rootViewController
+            ?? keyWindowRootViewController() else {
             open(links[0].url)
             return
         }
@@ -3709,6 +3717,16 @@ enum NowPlayingLyricsPlate {
         }
         sheet.addAction(UIAlertAction(title: "Cancel".uiKitLocalized, style: .cancel))
         top.present(sheet, animated: true)
+    }
+
+    /// 既没有 sender、也没有记住的听歌页时，退回**当前 key window** 的根控制器。
+    ///
+    /// 谁需要这条路：**自绘歌词页页脚的署名**（`AppleMusicLyricsPage.providerFooter`）。
+    /// 那一页不是本类型记住的 `lastPage`，所以不补这一步的话，多条链接（提供商 + 两个社区
+    /// 贡献者）会**只开出第一条** —— 条款 §6 要的"链接上传者/制作者"就落空了。
+    private static func keyWindowRootViewController() -> UIViewController? {
+        let windows = UIApplication.shared.windows
+        return (windows.first(where: { $0.isKeyWindow }) ?? windows.first)?.rootViewController
     }
 
     private static func open(_ url: URL) {

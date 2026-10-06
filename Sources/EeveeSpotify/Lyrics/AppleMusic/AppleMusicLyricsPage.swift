@@ -634,11 +634,29 @@ struct AppleMusicLyricsPage: View {
     private var providerFooter: some View {
         // 有完整署名（含 Spicy Lyrics 社区同步的 uploader/maker）就显示它 —— 条款 §6 要的
         // "歌词在哪署名就在哪"落在这一行；没有就退回源名。
-        Text("word_by_word_lyrics_provider".localizeWithFormat(displayedProviderCredit))
+        //
+        // ★ 2026-10-13：这一行**做成可点**。条款要的是 *"credit **and link** the uploader,
+        // and the maker"* —— 光显示不算完。链接与听歌页底沿那条共用一套
+        // （`NowPlayingLyricsPlate.creditLinks()`：提供者站点 + 每个带 `url` 的贡献者）；
+        // 一个链接直接开，多个弹一张选择表。
+        //
+        // ⚠️ 这一行与听歌页底沿那条**不同**：这里保留提供商（这一页没有歌手行，
+        // 提供商只能自己写出来）；听歌页底沿只写"上传者/制作者"那半（见
+        // `currentLyricsPlateCreditText()`）。
+        let links = NowPlayingLyricsPlate.creditLinks()
+
+        return Text("word_by_word_lyrics_provider".localizeWithFormat(displayedProviderCredit))
             .font(.system(size: 13))
             .foregroundStyle(primaryColor.opacity(0.35))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 24)
+            // 整行可点：`Text` 默认只有字形区域命中，13pt 的字很难戳中。
+            .contentShape(Rectangle())
+            .onTapGesture {
+                NowPlayingLyricsPlate.openCreditLink(nil)
+            }
+            // 无障碍：有链接就按"链接"播报，与"可点"这件事保持一致。
+            .accessibilityAddTraits(links.isEmpty ? [] : .isLink)
     }
 
     // MARK: 点行跳转
