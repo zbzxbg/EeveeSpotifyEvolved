@@ -66,6 +66,8 @@ enum HomeTileTint {
     // MARK: - 状态
 
     private static var surfaceKey: UInt8 = 0
+    /// "图还没到、等它到了再补一次"的重试计数（见 `retryLater`）。
+    private static var retryKey: UInt8 = 0
     /// 取过的色：**按图片对象**（图活着才留）—— pw 的 `NSMapTable weakToStrongObjectsMapTable`。
     ///
     /// ⚠️ 上一版用的是 `[ObjectIdentifier: UIColor]`：`ObjectIdentifier` **不持有**那张图，
@@ -85,7 +87,11 @@ enum HomeTileTint {
 
     static func apply(to tile: UIView) {
         guard isEnabled, isTile(tile) else { return }
-        guard let cover = coverImageView(in: tile), let image = cover.image else { return }
+        // ★ 2026-10-13（照片 106：那排长方形"感觉没变化"）：**先把这一格认下来、把封面内缩与底色装上**，
+        //   "图有没有到"是后面的事。原来 `guard let cover …, let image = cover.image` 写在**同一句**里，
+        //   于是图还没加载出来的那几张卡**连底色都不装** —— 日志 87 整场只有 1 张 `tinted`，
+        //   而首页那一屏有 8 张（照片 106）⇒ 用户看到的就是"一个都没变"。
+        guard let cover = coverImageView(in: tile, requireImage: false) else { return }
 
         // ① 封面内缩 + 圆角 + 标题跟移（pw 的 `inset`）—— 与底色无关，是这排卡片的"形"。
         insetCover(in: tile)
@@ -94,13 +100,19 @@ enum HomeTileTint {
         if surface.superview !== tile { return }
         if surface.frame != tile.bounds { surface.frame = tile.bounds }
 
+        // ② 图还没到：底色先放着（未染色的暗面），等它到了再补一次。
+        guard let image = cover.image else {
+            retryLater(tile: tile)
+            return
+        }
+
         if let known = tints.object(forKey: image) {
             if surface.backgroundColor != known { surface.backgroundColor = known }
             report(tile: tile, cover: cover, colour: known)
             return
         }
 
-        // ② 没算过：**在后台算**，回来时这张卡可能已经换了封面/被复用 ⇒ 核一次再上色。
+        // ③ 没算过：**在后台算**，回来时这张卡可能已经换了封面/被复用 ⇒ 核一次再上色。
         tintQueue.async {
             let colour = tint(for: image) ?? base
             DispatchQueue.main.async {
@@ -111,6 +123,21 @@ enum HomeTileTint {
                 if target.backgroundColor != colour { target.backgroundColor = colour }
                 report(tile: tile, cover: cover, colour: colour)
             }
+        }
+    }
+
+    /// 图晚到时补一次（最多 6 次、每次 0.35s）。
+    ///
+    /// pw 那边靠 `SGRObserveImage(cover, …)` 跟着图走；我们没有 image 观察器，而这张卡的
+    /// `layoutSubviews` **不一定**在图到了之后再走一遍（图加载不改变布局）——
+    /// 照片 106 里 8 张卡的封面全都显示出来了，却只有 1 张被染上色，就是这件事。
+    private static func retryLater(tile: UIView) {
+        let tries = (objc_getAssociatedObject(tile, &retryKey) as? NSNumber)?.intValue ?? 0
+        guard tries < 6 else { return }
+        objc_setAssociatedObject(tile, &retryKey, NSNumber(value: tries + 1), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak tile] in
+            guard let tile else { return }
+            apply(to: tile)
         }
     }
 
@@ -167,16 +194,20 @@ enum HomeTileTint {
         return size.width >= 120 && size.width <= 400 && size.height >= 40 && size.height <= 200
     }
 
-    /// pw 的 `partsOf` 逐字：封面在 **`Encore.ImageView`** 里面那个 `UIImageView`。
+    /// 封面那格（pw 的 `partsOf`：`Encore.ImageView` 里面那个 `UIImageView`）。
     ///
     /// ⚠️ **必须已经布好局**：日志 85 里第一次网格那一拍，整棵子树的 frame 还都是 **0×0**
     /// （`[HomeTiles] tile … tinted #1A1A1A from the cover UIImageView 0x0`），
-    /// 从一张 0×0 的图取平均色 ⇒ 近乎黑 ⇒ 看起来"没变"。所以这里要求封面至少 24pt 宽，
-    /// 没布好就**这一拍不动**，等下面某一拍（或封面图晚到时）再来。
-    private static func coverImageView(in tile: UIView) -> UIImageView? {
+    /// 从一张 0×0 的图取平均色 ⇒ 近乎黑 ⇒ 看起来"没变"。所以这里要求封面至少 24pt 宽。
+    ///
+    /// ★ 2026-10-13：`requireImage = false` 时**图还没到也算数**（只要求"已经布好局"）——
+    /// 调用方先据此把底色装上，图到了再补染。原来这里硬要求 `image != nil`，
+    /// 于是"图还没加载的那几张卡"整条链一句都不走（照片 106 的根因）。
+    private static func coverImageView(in tile: UIView, requireImage: Bool = true) -> UIImageView? {
         guard let holder = eeveeFindView(tile, identifier: "Encore.ImageView") else { return nil }
         guard let imageView = holder.subviews.compactMap({ $0 as? UIImageView }).first else { return nil }
-        guard imageView.image != nil, imageView.bounds.width >= 24, imageView.bounds.height >= 24 else { return nil }
+        guard imageView.bounds.width >= 24, imageView.bounds.height >= 24 else { return nil }
+        if requireImage, imageView.image == nil { return nil }
         return imageView
     }
 

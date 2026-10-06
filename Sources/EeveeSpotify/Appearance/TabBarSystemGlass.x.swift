@@ -447,6 +447,11 @@ enum TabBarSystemGlass {
         systemBar.delegate = relay
         objc_setAssociatedObject(bar, &relayKey, relay, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
+        // ★ 2026-10-13：**手指落在哪条栏上，哪条栏就得有手势** —— 这一档触摸全归系统玻璃
+        //   （日志 87：`the system bar takes the touches`），所以它也要装一份
+        //   （长按主页进设置、以及"点一下立刻对气泡"都靠它，见 `installStockGestures`）。
+        installStockGestures(on: systemBar, label: "our system glass")
+
         host.addSubview(systemBar)
         bar.addSubview(host)
         bar.bringSubviewToFront(host)
@@ -980,7 +985,19 @@ enum TabBarSystemGlass {
     ///   · 每次 `.changed` 都 `mirrorSelection` + `commitSelection` ⇒ **替用户换页**；
     ///   · 提交不了时把气泡**拨回真实那一颗** ⇒ 看到的"胶囊回弹"。
     /// pw 那条栏上**一只手势都没有**（只有"长按主页进设置"），所以这三个症状它一个都没有。
-    private static func installStockGestures(on stockBar: UIView) {
+    /// 装两只手势：**点一下**（只把气泡对过去，不抢触摸）与**长按主页**（进设置页）。
+    ///
+    /// ★ 2026-10-13（用户：「长按主页不会进入 eeveespotify 设置页」）：**两条栏各装一遍**。
+    ///
+    /// 原来只装在 Spotify 自己那条栏上，理由写的是"触摸落在它的子树上，装在它身上的识别器一样收得到" ——
+    /// **那是错的**。日志 87 逐字：`the system bar takes the touches (that is what makes the glass answer
+    /// a finger)` ⇒ 这一档手指全落在**我们的系统玻璃**上，Spotify 那条栏上的识别器**一次都没收到**
+    /// （同一份日志里连 `first tap seen` 都没有，那只"点一下"也一样从没生效过）。
+    ///
+    /// pw 正是两边各装一只（`Native/Navbar/TabBarHooks.x` 装 Spotify 的栏、
+    /// `Redesigned/Navbar/TabBar.x` 装它自己的系统栏）—— 这里照做：
+    /// 系统玻璃接触摸时由它那一只负责，没接管触摸的那一档由 Spotify 那条栏那一只负责。
+    private static func installStockGestures(on stockBar: UIView, label: String = "Spotify's own bar") {
         if objc_getAssociatedObject(stockBar, &stockTapKey) == nil {
             let tap = UITapGestureRecognizer(
                 target: TabBarSystemGlassGestureRelay.shared,
@@ -994,8 +1011,9 @@ enum TabBarSystemGlass {
             //   ⇒ 要么手势没装、要么装了没收到触摸、要么收到了但算不出第几颗。
             //   有这一行 + `first tap seen` 一行，下一份日志就能把三者分开。
             writeDebugLog(
-                "[\(logTag)] tap recogniser installed on Spotify's own bar — it does not cancel touches,"
-                    + " so Spotify still switches the page; we only mirror the bubble at once. Waiting for the first tap."
+                "[\(logTag)] tap recogniser installed on \(label) — it does not cancel touches,"
+                    + " so Spotify still switches the page; we only mirror the bubble at once."
+                    + " Waiting for the first tap."
             )
         }
 
@@ -1018,7 +1036,7 @@ enum TabBarSystemGlass {
             hold.minimumPressDuration = 0.5
             stockBar.addGestureRecognizer(hold)
             objc_setAssociatedObject(stockBar, &stockHoldKey, hold, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            writeDebugLog("[\(logTag)] hold installed on Spotify's own bar — hold Home to open EeveeSpotify settings")
+            writeDebugLog("[\(logTag)] hold installed on \(label) — hold Home to open EeveeSpotify settings")
         }
     }
 
