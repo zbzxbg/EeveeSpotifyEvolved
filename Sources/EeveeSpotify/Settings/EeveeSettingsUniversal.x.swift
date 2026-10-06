@@ -219,29 +219,9 @@ private func findFirstCollectionView(in view: UIView) -> UICollectionView? {
 }
 
 private func pushEeveeSettings(from vc: UIViewController) {
+    // ★ 2026-10-13：页面本体与那颗 GitHub 按钮现在只有**一份**（`EeveeSettingsLauncher.makePage`）——
+    //   长按标签栏主页那条路用的是同一个，两处因此不会漂。
     guard let nav = vc.navigationController else { return }
-    let host = EeveeSettingsViewController(
-        vc.view.bounds,
-        settingsView: AnyView(EeveeSettingsView(navigationController: nav)),
-        navigationTitle: "EeveeSpotify"
-    )
-
-    let subButton = UIButton(type: .system)
-    if let bundleImage = BundleHelper.shared.uiImage("hex"), bundleImage.size != .zero {
-        subButton.setImage(bundleImage.withRenderingMode(.alwaysOriginal), for: .normal)
-    } else {
-        subButton.setImage(UIImage(systemName: "globe"), for: .normal)
-    }
-    subButton.tintColor = .white
-    subButton.addAction(UIAction { [weak host] _ in
-        host?.openRepositoryUrl(subButton)
-    }, for: .touchUpInside)
-
-    let menuBarItem = UIBarButtonItem(customView: subButton)
-    menuBarItem.customView?.heightAnchor.constraint(equalToConstant: 22).isActive = true
-    menuBarItem.customView?.widthAnchor.constraint(equalToConstant: 22).isActive = true
-    host.navigationItem.rightBarButtonItem = menuBarItem
-
-    nav.pushViewController(host, animated: true)
+    nav.pushViewController(EeveeSettingsLauncher.makePage(in: nav, size: vc.view.bounds), animated: true)
 }
 

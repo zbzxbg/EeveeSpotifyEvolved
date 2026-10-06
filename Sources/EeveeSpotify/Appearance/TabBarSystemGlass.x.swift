@@ -1,6 +1,7 @@
 import Foundation
 import Orion
 import UIKit
+import QuartzCore
 import ObjectiveC.runtime
 
 /// 标签栏：**把 Spotify 那条栏的内容藏起来，在它上面叠一条系统 `UITabBar`** ——
@@ -198,6 +199,11 @@ enum TabBarSystemGlass {
     /// 「**不跟手**……**可能有胶囊回弹 / 替用户按按键**的情况」。pw 那条栏上**一只手势都没有**
     /// （除了"长按主页进设置"），"跟手"是系统玻璃自己接住手指之后才有的东西。
     private static var stockTapKey: UInt8 = 0
+    /// ★ 2026-10-13：**长按第一颗（主页）那只**（pw 的招牌动作，见 `installStockGestures`）。
+    private static var stockHoldKey: UInt8 = 0
+    /// 长按主页刚把设置页打开的那一小段时间 —— 这期间**不把"主页被选中"转发给 Spotify**
+    /// （pw 的 `holding` 标志；教训逐字见 `openSettingsFromHold`）。
+    private static var holdHomeUntil: CFTimeInterval = 0
     private static var mirroredSelections = 0
     /// 上一次"探转发路"的时刻（`ProcessInfo.systemUptime`）—— 节流用，见 `probeForwardRouteThrottled`。
     private static var lastProbeAt: TimeInterval = 0
@@ -221,6 +227,12 @@ enum TabBarSystemGlass {
     /// 幂等。由 `TabBarPlateHook.layoutSubviews`（栏自己每次布局）与复查节拍调用。
     static func apply(to bar: UIView) {
         lastBar = bar
+
+        // ★ 2026-10-13：**长按主页进设置与这条玻璃无关** —— pw 的 native 与 redesigned 两条路
+        //   各自都装着它（`Native/Navbar/TabBarHooks.x` / `Redesigned/Navbar/TabBar.x`），
+        //   所以这里在开关判定**之前**就装：关掉玻璃开关的人一样能长按进设置。
+        //   幂等（靠 `stockHoldKey`），重装不会重复打日志。
+        installStockGestures(on: bar)
 
         guard isEnabled else {
             remove(reason: "switch off", in: bar)
@@ -316,6 +328,9 @@ enum TabBarSystemGlass {
                 target.removeGestureRecognizer(tap)
                 objc_setAssociatedObject(target, &stockTapKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
+            // ⚠️ 长按主页那只**故意不在这里摘**：它不属于这条玻璃（见 `apply` 开头），
+            //   而 `remove` 在开关关掉时**每一拍**都会被走到 —— 在这儿摘掉的话，下一拍的 `apply`
+            //   又会装上、还会再打一行日志（刷屏），而功能本身照样在。栏没了手势自然跟着走。
             restoreRoom(in: target)
         }
         restoreStockContent()
@@ -815,6 +830,12 @@ enum TabBarSystemGlass {
             writeDebugLog("[\(logTag)] picked the muted tab #\(index) — nothing to forward to")
             return
         }
+        // ★ 2026-10-13：**长按主页刚把设置页打开**的这一下不能转发出去 —— 主页在自己身上再点一次
+        //   会把刚 push 上去的设置页顶掉（pw 的 `holding` 标志，教训见 `openSettingsFromHold`）。
+        if index == 0, CACurrentMediaTime() < holdHomeUntil {
+            writeDebugLog("[\(logTag)] Home picked right after the hold — not forwarded, the settings page stays")
+            return
+        }
 
         forwardTap(to: items[index], index: index, systemBar: systemBar)
 
@@ -977,6 +998,28 @@ enum TabBarSystemGlass {
                     + " so Spotify still switches the page; we only mirror the bubble at once. Waiting for the first tap."
             )
         }
+
+        // ★ 2026-10-13：**长按第一颗（主页）进 EeveeSpotify 设置页** —— pw 的招牌动作
+        //   （`Redesigned/Navbar/TabBar.x` 的 `held:` 与 `Native/Navbar/TabBarHooks.x` 的 `SGHomeHold`，
+        //    两边最后都是 `SGOpenModSettings(view)`；判据都是"行的第一颗"，见它的 `isHome`）。
+        //
+        //   装在这条 **Spotify 自己的栏**上，理由与那只"点一下"完全相同：触摸落在它的**子树**上
+        //   （我们的宿主、系统玻璃都是它的子视图）时，装在它身上的识别器一样收得到 ⇒
+        //   **不管这一档有没有把触摸交给系统栏，长按都有效**（pw 两条路各装一只，我们一只就够）。
+        //
+        //   `cancelsTouchesInView` 保持默认的 `true`：长按一识别成功就**取消这根手指的其余触摸**
+        //   ⇒ 系统玻璃那颗按钮的 `touchUp` 不再来，松手不会顺带把主页选上
+        //   （pw 在系统栏上还额外用一个 `holding` 标志挡了一道，我们也留了一道，见 `forwardSelection`）。
+        if objc_getAssociatedObject(stockBar, &stockHoldKey) == nil {
+            let hold = UILongPressGestureRecognizer(
+                target: TabBarSystemGlassGestureRelay.shared,
+                action: #selector(TabBarSystemGlassGestureRelay.holdHome(_:))
+            )
+            hold.minimumPressDuration = 0.5
+            stockBar.addGestureRecognizer(hold)
+            objc_setAssociatedObject(stockBar, &stockHoldKey, hold, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            writeDebugLog("[\(logTag)] hold installed on Spotify's own bar — hold Home to open EeveeSpotify settings")
+        }
     }
 
     /// 点击/划动时算"手指在哪一格"（按四颗的 frame 判；落缝里就按 x 等分兜底）。
@@ -1003,6 +1046,30 @@ enum TabBarSystemGlass {
         mirroredSelections += 1
         guard mirroredSelections <= 3 else { return }
         writeDebugLog("[\(logTag)] bubble mirrored straight away — #\(index) (\(reason); no waiting for the 0.5s tick)")
+    }
+
+    /// `itemIndex` 要的那条栏：优先**当前这条**（`lastBar`），拿不到就用调用方给的那个。
+    static func barForIndexing(fallback: UIView) -> UIView? {
+        if let bar = lastBar, bar.window != nil { return bar }
+        return fallback
+    }
+
+    /// ★ 2026-10-13：**长按主页 → 打开 EeveeSpotify 设置页**
+    /// （落点是 `EeveeSettingsLauncher`，做法照 pw 的 `SGOpenModSettings`）。
+    ///
+    /// 打开之后的这一小段时间里**不转发"主页被选中"** —— pw 的教训逐字（`TabBar.x:187`）：
+    ///
+    /// > Home tapped while on Home pops Spotify's stack, which would take Mod Settings straight off it.
+    ///
+    /// 也就是"主页在自己身上再点一次，会把刚 push 上去的设置页顶掉"（设置页就在那个栈上）。
+    /// 长按的 `cancelsTouchesInView` 通常已经吃掉了那一次触摸，但松手的时机不由我们定
+    /// （pw 在系统栏上因此还留了一个 `holding` 标志）—— 所以这里再挡 0.8s，双保险。
+    static func openSettingsFromHold(of bar: UIView) {
+        holdHomeUntil = CACurrentMediaTime() + 0.8
+        guard EeveeSettingsLauncher.open(from: bar, reason: "a hold on the Home tab") else {
+            holdHomeUntil = 0
+            return
+        }
     }
 
     /// 手势**收到了触摸**，但算不出第几颗（= 手势没问题，是"哪一个"的判据不成立）—— 只报一次。
@@ -1774,6 +1841,29 @@ final class TabBarSystemGlassGestureRelay: NSObject {
             }
             TabBarSystemGlass.noteFirstTapSeen()
             TabBarSystemGlass.mirrorSelection(index: index, reason: "a tap on Spotify's own bar")
+        }
+    }
+
+    /// ★ 2026-10-13：**长按第一颗（主页）→ EeveeSpotify 设置页**（pw 的招牌动作）。
+    ///
+    /// 只有落在**第一格**上才算 —— pw 的 `gestureRecognizerShouldBegin:` 用的是同一个判据
+    /// （它的 `isHome` = 行里的第一颗），落别格什么都不做，免得"长按搜索也弹设置"。
+    ///
+    /// ⚠️ 坐标按 **Spotify 那条栏**算：`itemIndex` 是照它那几颗的真实 frame 判的，我们的玻璃就是
+    /// 照着它摆的（见 `place`）⇒ 手指落在哪条栏上都用同一套坐标。
+    @objc func holdHome(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onMainThreadSync {
+            guard let source = recognizer.view else { return }
+            guard let bar = TabBarSystemGlass.barForIndexing(fallback: source) else { return }
+            guard let index = TabBarSystemGlass.itemIndex(at: recognizer.location(in: bar), in: bar) else { return }
+            guard index == 0 else {
+                writeDebugLog(
+                    "[\(TabBarSystemGlass.logTag)] a hold landed on #\(index) — settings open only from a hold on Home"
+                )
+                return
+            }
+            TabBarSystemGlass.openSettingsFromHold(of: bar)
         }
     }
 }
