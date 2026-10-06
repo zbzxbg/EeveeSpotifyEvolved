@@ -446,6 +446,13 @@ struct EeveeSpotify: Tweak {
         //   第一次命中会把卡片结构打进 `[HomeTiles]` 日志（转储器到不了那一层）。
         activateHomeShortcutTiles()
 
+        // ★ 2026-10-13（用户照片 103：「上面能看到一点点全糊封面，但是有条线，割裂感很强」）：
+        //   页头区（我们的模糊底）与列表区（Spotify 自己画的底色）之间那条硬边 —— 照 pw 的
+        //   `Kit/SGRRepaint.x`（GPL-3.0）劫住 `CALayer.setBackgroundColor:`，
+        //   在我们接管的页面里把底面色**丢掉**。事件驱动，比"每 0.6s 走一遍页面"又准又省
+        //   （见 `Appearance/EntityPageRepaint.x.swift` 文件头）。
+        activateEntityPageRepaint()
+
         // ★ 2026-10-13（用户第 5 轮问的）：「歌单封面是歌单里前四首歌的专辑封面拼成的一张，
         //   有没有办法让它变成一张？」—— 能，而且不用动视图层：
         //   那个四宫格**不是视图拼的**，地址里就串着四张图的 id

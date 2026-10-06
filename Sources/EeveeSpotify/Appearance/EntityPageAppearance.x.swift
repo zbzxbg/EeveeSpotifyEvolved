@@ -155,6 +155,8 @@ enum EntityPageAppearance {
             if currentPage != nil || field != nil || hero != nil || sharpHero != nil || concealedNativeCover != nil {
                 restore(reason: "left the page")
             }
+            // 底色拦截器也一起松手（照片 103 的那条硬边就是它要治的：Spotify 重画底色 ⇒ 丢这次写入）。
+            EntityPageRepaint.root = nil
             return
         }
 
@@ -162,6 +164,7 @@ enum EntityPageAppearance {
             restore(reason: "another page")
             currentPage = target.page
         }
+        EntityPageRepaint.root = target.page
 
         if wantsField {
             ensureField(on: target)
