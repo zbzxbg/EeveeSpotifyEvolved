@@ -55,6 +55,7 @@ extension UserDefaults {
     private static let entityPageHideChromeKey = "entityPageHideChrome"
     private static let amoledThemeKey = "amoledTheme"
     private static let accentColorRGBKey = "accentColorRGB"
+    private static let entityPageAMHeaderKey = "entityPageAMHeader"
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
@@ -118,6 +119,7 @@ extension UserDefaults {
         entityPageHideChromeKey,
         amoledThemeKey,
         accentColorRGBKey,
+        entityPageAMHeaderKey,
 
         // 不在上面那批常量里、但同样属于我们的：
         // 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
@@ -402,6 +404,27 @@ extension UserDefaults {
             } else {
                 container.set(newValue, forKey: accentColorRGBKey)
             }
+        }
+    }
+
+    /// 「Apple Music 式页头」（**歌单页**）：把 Spotify 的页头换成一版 AM 形态的 ——
+    /// 标题 / 创建者 / 长度**居中**，下面一行 shuffle + **白色 Play 胶囊** + 尾随按钮。
+    ///
+    /// **默认开**：用户 2026-10-13 的原话是「我就一个要求：看起来像 Apple Music」。
+    ///
+    /// ⚠️ 认不出页头时这一颗**不会做任何事**（一个视图都不藏）⇒ 失败的表现是"没生效"，
+    /// 不是"页面坏了"。v1 **只作用于歌单页**（专辑页用的是同一个布局类，但头部结构不同）。
+    ///
+    /// 出处与判断见 `Appearance/EntityPageHeader.swift` 文件头（借鉴 spoti.pw **v0.21.1**，
+    /// GPL-3.0；v0.22.0 起那份已改为 PolyForm Strict，不可复制）。
+    static var entityPageAMHeader: Bool {
+        get {
+            container.object(forKey: entityPageAMHeaderKey) == nil
+                ? true
+                : container.bool(forKey: entityPageAMHeaderKey)
+        }
+        set {
+            container.set(newValue, forKey: entityPageAMHeaderKey)
         }
     }
 

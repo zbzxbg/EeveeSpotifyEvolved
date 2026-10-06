@@ -16,6 +16,7 @@ struct EntityPageSettingsView: View {
         var playlistSingleCover = UserDefaults.playlistSingleCover
         var entityPageDissolve = UserDefaults.entityPageDissolve
         var entityPageHideChrome = UserDefaults.entityPageHideChrome
+        var entityPageAMHeader = UserDefaults.entityPageAMHeader
     }
 
     var body: some View {
@@ -69,6 +70,25 @@ struct EntityPageSettingsView: View {
                 )
             }
 
+            // ★ 2026-10-13（用户：「我们的观感不好，我想让这些页面看起来像 Apple Music」）：
+            //   把**页头**换成 AM 形态 —— 标题 / 创建者 / 长度居中，下面一行 shuffle + **白色 Play 胶囊**
+            //   + 尾随按钮。做法与"为什么不是摆 Spotify 的控件"见 `Appearance/EntityPageHeader.swift`：
+            //   Spotify 那一列**整列藏掉**（改 layer 的 hidden + 空 mask，一次钉死）、我们自己画，
+            //   三颗按钮**镜像**它的字形并**转发**点击 ⇒ 动作/状态/语言都留在 Spotify 那边。
+            //   **默认开**；v1 **只作用于歌单页**（认不出页头就什么都不做）。
+            Section(
+                header: Text("entity_page_am_header_section".localized),
+                footer: Text("entity_page_am_header_description".localized)
+            ) {
+                Toggle(
+                    "entity_page_am_header".localized,
+                    isOn: settingsShadowBinding($shadow.entityPageAMHeader) { value in
+                        UserDefaults.entityPageAMHeader = value
+                        // "下一次进歌单页时读一次"的语义（hook 本身也是启动时装的）⇒ 不需要当场落地。
+                    }
+                )
+            }
+
             // ⛔「顶部大标题」（旧"样品"开关）已于 2026-10-02 删除：
             // 壳自己会画顶栏标题（`header=ON` 时），那条是**另一套**标题 —— 两个都开就会画两遍。
 
@@ -99,5 +119,6 @@ struct EntityPageSettingsView: View {
         "entityPageField",
         "entityPageDissolve",
         "entityPageHideChrome",
+        "entityPageAMHeader",
     ]
 }

@@ -433,6 +433,13 @@ struct EeveeSpotify: Tweak {
         //   那条每 0.3s 的复查节拍永远追不上"新封面刚建好"的那一帧（见 `CoverFlashGuard.x.swift`）。
         activateCoverFlashGuard()
 
+        // ★ 2026-10-13（用户：「我们的观感不好，我想让这些页面看起来像 Apple Music」）：
+        //   歌单页**页头**换成 AM 形态（标题/创建者/长度居中 + shuffle + 白色 Play 胶囊）。
+        //   借鉴 spoti.pw **v0.21.1**（GPL-3.0）的 `SGRHeaderInfo` 与 `PlaylistHeader.x`，
+        //   实现是本仓库自己的 Swift；目标类与 id 全部用我们自己的真机日志 + dump-9.1.88 核对过。
+        //   v1 **只作用于歌单页**，认不出页头就什么都不做（见 `EntityPageHeader.x.swift`）。
+        activateEntityPageHeader()
+
         // ★ 2026-10-13（用户第 5 轮问的）：「歌单封面是歌单里前四首歌的专辑封面拼成的一张，
         //   有没有办法让它变成一张？」—— 能，而且不用动视图层：
         //   那个四宫格**不是视图拼的**，地址里就串着四张图的 id

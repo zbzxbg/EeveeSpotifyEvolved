@@ -480,6 +480,10 @@ entity_page_section = "Album & playlist pages";
 entity_page_dissolve = "Blurred cover backdrop + centred header";
 entity_page_hide_chrome = "Hide some of Spotify's buttons";
 entity_page_description = "Both of the features above are still in development and are not recommended.";
+entity_page_am_header_section = "Apple Music header (playlists)";
+entity_page_am_header = "Centred title, creator and Play capsule";
+entity_page_am_header_description = "Replaces Spotify's header on playlist pages: Spotify's column is hidden and a Music-app-style one is drawn in its place, with the title, creator and length centred, then shuffle, a white Play capsule and a save (or download) button. The buttons draw Spotify's own glyphs and fire Spotify's own controls, so actions, state and language stay Spotify's. Album pages are not touched yet. If the header cannot be recognised, nothing changes at all.";
+am_header_play = "Play";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";

@@ -471,6 +471,10 @@ entity_page_section = "专辑 / 歌单页";
 entity_page_dissolve = "模糊封面底 + 头部居中";
 entity_page_hide_chrome = "藏掉Spotify的若干按键";
 entity_page_description = "上述两个功能仍在开发中，不推荐打开。";
+entity_page_am_header_section = "Apple Music 式页头（歌单）";
+entity_page_am_header = "标题 / 创建者 / Play 胶囊居中";
+entity_page_am_header_description = "把歌单页的页头换成一版 Music app 的：Spotify 那一列整列藏掉，我们自己画 —— 标题、创建者、长度居中，下面一行是 shuffle、白色 Play 胶囊和保存（或下载）按钮。三颗按钮画的是 Spotify 自己的字形、点的是 Spotify 自己的控件，所以动作、状态、语言都留在它那边。专辑页暂时不动。认不出页头时什么都不改。";
+am_header_play = "播放";
 
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";
