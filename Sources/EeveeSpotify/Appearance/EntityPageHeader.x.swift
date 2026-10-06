@@ -506,7 +506,9 @@ enum EntityPageHeaderManager {
     private static func blankArtistChrome(in root: UIView, avoiding cover: UIView?, skipping ours: UIView) {
         for sub in root.subviews {
             if sub === ours { continue }
-            if sub.accessibilityIdentifier == "eevee-page-hero-sharp" { continue }
+            // ⚠️★ 日志 90：同 `concealAlbumChrome` —— 我们自己的东西（页头、右上角那颗 ⋯、
+            //    满幅封面）一律跳过，否则艺人页上那颗 `⋯` 也是永远 hidden。
+            if isOurs(sub) { continue }
             if let cover {
                 if sub === cover { continue }
                 if cover.isDescendant(of: sub) {
@@ -544,6 +546,19 @@ enum EntityPageHeaderManager {
         logOnce("artistStrip", "artist page: the Music/Video/Merch strip is gone, the Music list moved up \(Int(lift))pt")
     }
 
+    /// 是不是**我们自己**插进 Spotify 视图树里的东西 —— 统一靠 id 前缀 `eevee-` 认。
+    ///
+    /// ★ 2026-10-06（日志 90 抓到）：**藏"头里除我们那份以外的一切"时必须跳过这些**。
+    /// 原来只按两个具体 id 跳（页头 `EntityPageHeaderView` 与满幅封面 `eevee-page-hero-sharp`），
+    /// 于是后加的 `eevee-pinned-more`（右上角那颗 ⋯）被顺手藏了：它在**歌单页**是好的
+    /// （那颗挂在 `PL.Header` 上），一切到**专辑页/艺人页**就永远是 `hidden`
+    /// —— 那两条路每拍都在藏"头里除了页头以外的一切"，而它已经被搬进那棵树里了。
+    ///
+    /// 判据改成前缀之后，以后再往 Spotify 的树里插自己的视图，不用回来补这一行。
+    private static func isOurs(_ view: UIView) -> Bool {
+        (view.accessibilityIdentifier ?? "").hasPrefix("eevee-")
+    }
+
     /// 藏掉专辑页头里 Spotify 自己画的东西，**绕开封面那一支**。
     ///
     /// ⚠️ 为什么不能像歌单页那样整支藏（`for sub in block.subviews { eeveeConceal(sub) }`）：
@@ -555,11 +570,9 @@ enum EntityPageHeaderManager {
     private static func concealAlbumChrome(in root: UIView, avoiding cover: UIView?, skipping ours: UIView) {
         for sub in root.subviews {
             if sub === ours { continue }
-            // ⚠️ **我们自己的满幅封面也在这个头里** —— `EntityPageAppearance` 把 `eevee-page-hero-sharp`
-            //    插在这个头的 index 0（pw 的 `AlbumHeader.x` 同样把 hero 插在头里）。漏掉它就会被下面
-            //    那句 `eeveeConceal` 一起藏掉：日志 88 里 `sharp hero in the album header` 明明装上了，
-            //    画面却是一片颜色、没有封面（照片 107）—— 原因就在这一行。
-            if sub.accessibilityIdentifier == "eevee-page-hero-sharp" { continue }
+            // ⚠️★ 日志 90：**我们自己插的一律跳过**（见 `isOurs`）—— 顺手藏掉 `eevee-pinned-more`
+            //    就是这么发生的。原来这里那一行只跳满幅封面，覆盖不到后加的东西。
+            if isOurs(sub) { continue }
             if let cover {
                 if sub === cover { continue }
                 if cover.isDescendant(of: sub) {
