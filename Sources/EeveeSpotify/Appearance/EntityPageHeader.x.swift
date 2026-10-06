@@ -65,6 +65,11 @@ enum EntityPageHeaderManager {
     private static var cachedAlbumParentRow: UIView?
     private static var cachedAlbumMetadata: UIView?
     private static var albumRetryKey: UInt8 = 0
+    /// 艺人页那条路（见 `applyToArtistPage`）：名字、月听众那行、照片、Follow —— 同样全走缓存。
+    private static var cachedArtistName: UIView?
+    private static var cachedArtistMeta: UIView?
+    private static var cachedArtistCover: UIView?
+    private static var cachedArtistFollow: UIView?
 
     /// 尾部按钮的兜底字形：**做成常量**（原来每一拍都 `UIImage(systemName:)` 造一张新的，
     /// 而这一拍在折叠的每一帧都会走到 —— 与"字形只取一次"同一条纪律）。
@@ -335,6 +340,165 @@ enum EntityPageHeaderManager {
                 + ", play \(play == nil ? "missing" : "ok")"
                 + ", trailing \(add != nil ? "add" : (download != nil ? "download" : "none"))"
         )
+    }
+
+    // MARK: - 艺人页（**第三条路**）
+
+    /// ★ 2026-10-13（用户：「做艺人页，看起来像 Apple Music，或者完全一样，要求优雅」）。
+    /// 照 pw 的 `Artist/ArtistHeader.x`，它开头逐字写着要的东西：
+    ///
+    /// > The photo runs full bleed across the top of the page and dissolves into the page's colour;
+    /// > the name and the monthly listeners are centred on the bottom of that dissolve; and under them
+    /// > one row -- shuffle, a white Play capsule, and Follow.
+    ///
+    /// 页面判据是 **`creator-page`**（pw 的 `ArtistField.x` 里 `kPageIdentifier` 就是这个字符串），
+    /// 页头容器是 `TemplateKit` 的 **`HeaderContainer`** —— 那个容器**身上没有 accessibility id**，
+    /// 只能按类名认（pw 的 `containerOf` 也是这么找的）。
+    ///
+    /// ⚠️ 两个**绝不能动**的地方，都是 pw 用真机崩溃换来的：
+    ///   · 这里**只用空 mask 藏东西、绝不设 hidden** —— 页头在 `OverflowStackView` 里，
+    ///     一行里最"高"的视图被 hidden 时它会 force-unwrap nil 并 trap（见 `eeveeBlank`）；
+    ///   · **不要强制** `…context_menu_in_navigation_bar_enabled_artist` 那个 flag（同一个 trap）。
+    static func applyToArtistPage(_ page: UIView) {
+        guard isEnabled, !applying else { return }
+        guard page.accessibilityIdentifier == "creator-page" else { return }
+        guard page.bounds.width > 120, page.bounds.height > 200 else { return }
+        guard let header = artistHeaderContainer(in: page), header.bounds.height > 80 else { return }
+
+        applying = true
+        defer { applying = false }
+
+        hideArtistTabStrip(in: page)
+
+        // 名字：pw 的树里那是 `UIView {16, 334}` 里的 `Encore.AdaptiveTitle`（45pt）；
+        // 拿不到就退回"字号最大的那个标签"（与歌单页同一条兜底）。
+        var name = ""
+        if let title = find("Encore.AdaptiveTitle", in: header, cache: &cachedArtistName),
+           let label = firstLabel(in: title, skipping: nil) {
+            name = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        if name.isEmpty, let label = biggestLabel(in: header, skipping: []) {
+            name = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        guard !name.isEmpty else {
+            logOnce("noNameArtist", "artist page: no name found — leaving Spotify's header alone")
+            return
+        }
+
+        // 副标题：`Components.Header.UI.Metadata` —— 树里是 "58,4M monthly listeners"。
+        var meta = ""
+        if let metadata = find("Components.Header.UI.Metadata*", in: header, cache: &cachedArtistMeta) {
+            meta = metadataLine(metadata)
+        }
+
+        // 我们那一份：铺在**整个页头容器**上（pw：`setFrame(info, header.bounds)`，内容贴底）。
+        let headerView: EntityPageHeaderView
+        if let existing = objc_getAssociatedObject(header, &entityPageHeaderKey) as? EntityPageHeaderView {
+            headerView = existing
+        } else {
+            headerView = EntityPageHeaderView()
+            objc_setAssociatedObject(header, &entityPageHeaderKey, headerView, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        if headerView.superview !== header {
+            header.addSubview(headerView)
+        } else if header.subviews.last !== headerView {
+            header.bringSubviewToFront(headerView)
+        }
+        if headerView.frame != header.bounds { headerView.frame = header.bounds }
+
+        // Spotify 那一列：**空 mask 藏**（不碰 hidden —— 见函数头那段）。照片归 `EntityPageAppearance`。
+        let cover = find("Components.Header.UI.ArtworkImage", in: header, cache: &cachedArtistCover)
+        blankArtistChrome(in: header, avoiding: cover, skipping: headerView)
+
+        headerView.update(title: name, creator: "", length: meta, about: "")
+
+        // 三颗：shuffle / play / Follow。pw 从**页头**里找它们，但那一行会随 `ImageHeaderView`
+        // 一起缩成 100pt 的导航栏，所以这里和专辑页一样：浮动控件按 `floatingIn` 从**页面**找，
+        // Follow 是页头那一行里的文字按钮，按 pw 给的类名找。
+        let play = find("header-play-button", in: page, cache: &cachedPlay)
+        let shuffle = find("Components.UI.ShuffleButton", in: page, cache: &cachedShuffle)
+        let follow = find(
+            "Curation.FollowButtonElementKit.FollowButton",
+            in: header,
+            cache: &cachedArtistFollow
+        ) ?? eeveeFindView(header, identifier: "FollowButton*")
+        // Follow 是**文字按钮**（"关注" / "已关注"），取不到字形 ⇒ 用一对 SF Symbol 兜底，
+        // 而且按它的选中态换字形 —— 状态因此看得见（pw 那边直接读它的字，这里读者是图标）。
+        let followed = (follow as? UIControl)?.isSelected ?? false
+        headerView.updateRow(
+            shuffle: shuffle,
+            play: play,
+            trailing: follow,
+            trailingFallback: UIImage(systemName: followed ? "checkmark" : "person.badge.plus")
+        )
+        headerView.updateCreatorLink(nil)
+
+        eeveeBlank(play)
+        eeveeBlank(shuffle)
+        eeveeBlank(follow)
+
+        logOnce(
+            "appliedArtist",
+            "artist page — name \"\(name)\", meta \"\(meta.isEmpty ? "-" : meta)\""
+                + ", shuffle \(shuffle == nil ? "missing" : "ok")"
+                + ", play \(play == nil ? "missing" : "ok")"
+                + ", follow \(follow == nil ? "missing" : (followed ? "following" : "follow"))"
+        )
+    }
+
+    /// 艺人页的页头容器：`TemplateKit` 的 `HeaderContainer`（**没有 accessibility id**，按类名认）。
+    private static func artistHeaderContainer(in page: UIView) -> UIView? {
+        var queue: [UIView] = [page]
+        var visited = 0
+        while !queue.isEmpty, visited < 400 {
+            let view = queue.removeFirst()
+            visited += 1
+            if NSStringFromClass(type(of: view)).contains("HeaderContainer") { return view }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    /// 藏掉艺人页头里 Spotify 自己画的东西，**绕开那张照片**，而且**只用空 mask**（见 `eeveeBlank`）。
+    private static func blankArtistChrome(in root: UIView, avoiding cover: UIView?, skipping ours: UIView) {
+        for sub in root.subviews {
+            if sub === ours { continue }
+            if sub.accessibilityIdentifier == "eevee-page-hero-sharp" { continue }
+            if let cover {
+                if sub === cover { continue }
+                if cover.isDescendant(of: sub) {
+                    blankArtistChrome(in: sub, avoiding: cover, skipping: ours)
+                    continue
+                }
+            }
+            eeveeBlank(sub)
+        }
+    }
+
+    /// **歌手页那条 tab 栏（Music / Video / Merch）要走掉** —— pw 的 `ArtistField.x` 逐字：
+    ///
+    /// > The strip is Music, Video and Merch. The Music list is the page the Music app gives an artist:
+    /// > the videos and the merch have their own tabs only so that they can be left out, so the strip
+    /// > goes and the Music list stays. … it goes invisible and the pages under it move up into its
+    /// > place and stop paging.
+    ///
+    /// 用 `alpha = 0`（**不是 hidden**：它在 `AutoLayoutStackView` 里，隐藏会 trap）+ 关交互，
+    /// 再把同层的分页 scroll 整体上移一格的高度、并关掉分页。
+    static func hideArtistTabStrip(in page: UIView) {
+        guard let strip = eeveeFindView(page, identifier: "Components.UI.TabsSectionHeading") else { return }
+        if strip.alpha != 0 { strip.alpha = 0 }
+        if strip.isUserInteractionEnabled { strip.isUserInteractionEnabled = false }
+        strip.accessibilityElementsHidden = true
+
+        let lift = strip.bounds.height
+        guard lift > 0, let parent = strip.superview else { return }
+        for sibling in parent.subviews {
+            guard let pages = sibling as? UIScrollView else { continue }
+            if pages.isScrollEnabled { pages.isScrollEnabled = false }
+            let move = CGAffineTransform(translationX: 0, y: -lift)
+            if pages.transform != move { pages.transform = move }
+        }
+        logOnce("artistStrip", "artist page: the Music/Video/Merch strip is gone, the Music list moved up \(Int(lift))pt")
     }
 
     /// 藏掉专辑页头里 Spotify 自己画的东西，**绕开封面那一支**。
@@ -739,6 +903,18 @@ class EntityPageAlbumLayoutHook: ClassHook<UIView> {
     }
 }
 
+/// ★ 2026-10-13：**艺人页的主挂点**。pw 的 `ArtistField.x` 挂在同一个类上（判据就是页面自己的
+/// `accessibilityIdentifier == "creator-page"`，见 `EntityPageHeaderManager.applyToArtistPage`）。
+class EntityPageArtistLayoutHook: ClassHook<UIView> {
+    typealias Group = EntityPageHeaderGroup
+    static let targetName = "_TtC32CreativeWorkPlatform_TemplateKit12TemplateView"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        EntityPageHeaderManager.applyToArtistPage(target)
+    }
+}
+
 func activateEntityPageHeader() {
     // 两个开关共用这一条每帧的布局拍：AM 页头（`entityPageAMHeader`）与"满幅封面 + 取色底"
     // （`entityPageDissolve`）。**任一打开这条钩子就得在**，否则满幅封面那条路又退回 0.6s 的 tick。
@@ -755,12 +931,14 @@ func activateEntityPageHeader() {
     }
 
     EntityPageHeaderGroup().activate()
-    // 专辑页那条路是**可选**的：类不在就只做歌单页（不能因为一个可选的类把整组拖垮）。
+    // 专辑页 / 艺人页那两条路都是**可选**的：类不在就少做一页（不能因为一个可选的类把整组拖垮）。
     let album = NSClassFromString(EntityPageAlbumLayoutHook.targetName) != nil
+    let artist = NSClassFromString(EntityPageArtistLayoutHook.targetName) != nil
     writeDebugLog(
         "[EntityPageHeader] on — AM header \(EntityPageHeaderManager.isEnabled ? "ON" : "OFF"),"
             + " page look \(EntityPageAppearance.isEnabled ? "ON" : "OFF")"
             + " (one layout pass drives both; playlist pages"
-            + (album ? " + album pages)" : "; the album hook class is missing on this build)")
+            + (album ? " + album pages" : "; album hook missing")
+            + (artist ? " + artist pages)" : "; artist hook missing)")
     )
 }

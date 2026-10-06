@@ -112,6 +112,24 @@ func eeveeConceal(_ view: UIView?) {
     view.accessibilityElementsHidden = true
 }
 
+/// **只加空 mask** 的藏法：视图什么都不画，但 `layer.isHidden` / `view.isHidden` 一个都不碰。
+///
+/// ★ 2026-10-13（艺人页）：什么时候必须用它 —— 视图在 **`OverflowStackView`** 里的时候。
+/// pw 在艺人页踩过这个真机崩溃，注释逐字：
+///
+/// > `ios-creator-impl.context_menu_in_navigation_bar_enabled_artist` moves more out of the header's
+/// > row, and with it gone Spotify's OverflowStackView force-unwraps the tallest view of a line that
+/// > has none and **traps as the page opens** (device crash 2026-09-18 19:09,
+/// > **SIGTRAP in -[OverflowStackView updateConstraints]**).
+///
+/// 空 mask 本身就让视图什么都不画，所以这里少一道 `hidden` 只是少一道保险，**不会漏**。
+func eeveeBlank(_ view: UIView?) {
+    guard let view else { return }
+    if view.layer.mask == nil { view.layer.mask = CALayer() }
+    if view.isUserInteractionEnabled { view.isUserInteractionEnabled = false }
+    view.accessibilityElementsHidden = true
+}
+
 /// 深度优先找第一个（含自身）无障碍 id 匹配的视图。`identifier` 末尾写 `*` 表示前缀匹配
 /// —— Spotify 有些 id 带后缀（如 `DownloadButton.Granular*`、`Components.Header.UI.Metadata*`）。
 func eeveeFindView(_ root: UIView?, identifier: String, maxNodes: Int = 5000) -> UIView? {
@@ -176,7 +194,16 @@ final class EntityPageHeaderButton: UIControl {
     private var glass: UIVisualEffectView?
 
     /// 源控件取不到字形时的兜底（SF Symbol）。
-    var fallbackGlyph: UIImage?
+    ///
+    /// ★ 2026-10-13（艺人页）：**换兜底字形要立刻生效** —— 艺人页那一颗是 Follow（文字按钮，
+    /// `eeveeGlyph` 永远拿不到字形），"未关注 / 已关注"就是靠这里换一对 SF Symbol 表达的；
+    /// 而 `feed(from:)` 在"源没变"时会早退，所以只能在这一侧的 didSet 里补。
+    var fallbackGlyph: UIImage? {
+        didSet {
+            guard glyphView.image == nil, let fallbackGlyph else { return }
+            glyphView.image = fallbackGlyph.withRenderingMode(.alwaysTemplate)
+        }
+    }
     /// 关态颜色 / 开态颜色（开态按源控件的 `isSelected` 判断）。
     var glyphColor: UIColor = .label
     var onGlyphColor: UIColor = .systemGreen

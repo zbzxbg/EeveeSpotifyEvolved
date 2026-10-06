@@ -39,7 +39,14 @@ enum EntityPageAppearance {
     static let logTag = "PageField"
 
     /// 页面 root 的候选 id（歌单页 root 的 id 还没拿到 ⇒ 用"占满屏"那条几何兜底）。
-    private static let pageIdentifiers = ["CreativeWorkPlatform.CreativeWorkTemplateView"]
+    ///
+    /// ★ 2026-10-13（艺人页）：pw 的 `ArtistField.x` 逐字 —— 艺人页是 `TemplateKit.TemplateView`，
+    /// 而它的 `accessibilityIdentifier` 就是 **`creator-page`**（`kPageIdentifier`）。加进来，
+    /// `currentTarget()` 就能像认专辑页一样认它。
+    private static let pageIdentifiers = [
+        "CreativeWorkPlatform.CreativeWorkTemplateView",
+        "creator-page",
+    ]
     /// 封面元素的候选 id。
     private static let coverIdentifiers = [
         "CreativeWorkPlatform.Components.UI.ArtWorkElement.WithCoverArt",
@@ -150,10 +157,9 @@ enum EntityPageAppearance {
     static func layoutPass(in layout: UIView) {
         guard isEnabled else { return }
         guard layout.bounds.width > 120, layout.bounds.height > 40 else { return }
-        // ⚠️ **只处理我们确实会铺 hero 的那两种页面**（专辑页 / 歌单页）。
-        //    艺人页的头也是 `HeaderContentLayout`，封面元素也正好叫
-        //    `Components.Header.UI.ArtworkImage`（pw 的 `ArtistHeader.x` 同样这么找）——
-        //    我们**没有**给艺人页铺替补，误藏就是"艺人页照片不见了"。判据只沿祖先链走，
+        // ⚠️ **只处理我们确实会铺 hero 的那几种页面**（专辑页 / 歌单页 / 艺人页）。
+        //    它们都有 `Components.Header.UI.ArtworkImage` 或 `ArtWorkElement.WithCoverArt` 同名/同形的
+        //    封面元素，判据只看**页面 root 的 id**，所以不会误伤别处。判据只沿祖先链走，
         //    比 `currentTarget()` 便宜，也足够安全。
         guard recognizesPage(of: layout) else { return }
 
@@ -517,27 +523,44 @@ enum EntityPageAppearance {
             withAnyIdentifier: ["CreativeWorkPlatform.Components.UI.CreativeWorkHeader"]
         )
 
+        // ★ 2026-10-13（艺人页）：**第三条宿主**。pw 的 `ArtistHeader.x` 把 hero 挂在 `TemplateKit` 的
+        //    `HeaderContainer` 上（它的 `applyHero(UIView *container, …)`，容器由 `containerOf(header)`
+        //    沿祖先链找"类名含 HeaderContainer"的那一个）。歌单页的 `_backgroundViewContainer`
+        //    与专辑页的 `CreativeWorkHeader` 在艺人页**都不存在**。
+        let artistContainer = ancestor(of: cover, classNameContains: "HeaderContainer")
+
         let host: UIView
         let layout: UIView
-        let onAlbumPage: Bool
+        /// 高度按**宿主**算、且**不要求封面已经量好**（专辑页与艺人页：封面可能这一拍还没布局）。
+        let fillsHost: Bool
+        /// 顶部留出状态栏那一条。**只有专辑页**：pw 的歌单页（plane 从 y=-134 起）与艺人页
+        /// （那张照片就是 container 的第一个子视图）都是铺到顶的。
+        let wantsTopInset: Bool
+
         if let plane, plane.bounds.width > 1 {
             host = plane
             layout = headerLayout(of: cover) ?? cover.superview ?? page
-            onAlbumPage = false
+            fillsHost = false
+            wantsTopInset = false
             concealWash(on: plane)
         } else if let albumHeader, albumHeader.bounds.height > 40 {
             host = albumHeader
             layout = albumHeader
-            onAlbumPage = true
+            fillsHost = true
+            wantsTopInset = true
             concealAlbumWash(in: page)
+        } else if let artistContainer, artistContainer.bounds.height > 40 {
+            host = artistContainer
+            layout = artistContainer
+            fillsHost = true
+            wantsTopInset = false
         } else {
             return
         }
 
         let coverFrame = cover.convert(cover.bounds, to: layout)
-        // 歌单页那条路要封面已经量好（帧都没量出来就别画）；专辑页铺满整个头，不依赖封面的帧
-        // （它可能这一拍还没布局 —— 那正是原来"专辑页永远等不到"的一部分）。
-        if !onAlbumPage {
+        // 歌单页那条路要封面已经量好（帧都没量出来就别画）；另外两条铺满整个宿主，不依赖封面的帧。
+        if !fillsHost {
             guard coverFrame.width > 40, coverFrame.height > 40 else { return }
         }
 
@@ -545,7 +568,7 @@ enum EntityPageAppearance {
 
         // 高度 = **到过的最深处**，下限 `minHeroHeight`，**只增不减** ——
         // pw：页头还在加载时 block 的位置偏高，取"当前值"会让图够不到标题、中间留一条裸色带。
-        let reach = onAlbumPage
+        let reach = fillsHost
             ? max(minHeroHeight, host.bounds.height)
             : max(minHeroHeight, coverFrame.maxY + EntityPageHeaderMetrics.titleRise)
         let previous = (objc_getAssociatedObject(host, &heroHeightKey) as? NSNumber)?.doubleValue ?? 0
@@ -553,7 +576,14 @@ enum EntityPageAppearance {
         if height != previous {
             objc_setAssociatedObject(host, &heroHeightKey, NSNumber(value: height), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
-        let frame = CGRect(x: 0, y: 0, width: host.bounds.width, height: round(height))
+        // 缓冲（只有专辑页要，见 `wantsTopInset`）：把图从状态栏下面开始画。
+        let topInset = wantsTopInset ? page.safeAreaInsets.top : 0
+        let frame = CGRect(
+            x: 0,
+            y: topInset,
+            width: host.bounds.width,
+            height: max(minHeroHeight, round(height) - topInset)
+        )
 
         let view: UIImageView
         if let sharpHero, sharpHero.superview === host {
@@ -569,12 +599,10 @@ enum EntityPageAppearance {
             sharpHero = fresh
             view = fresh
             writeDebugLog(
-                "[\(logTag)] sharp hero in \(onAlbumPage ? "the album header" : "Spotify's wash plane")"
-                    + " \(frameText(host.bounds))"
+                "[\(logTag)] sharp hero in \(type(of: host)) \(frameText(host.bounds))"
+                    + " at \(frameText(frame))"
                     + " — the cover \(frameText(coverFrame)) measured in \(type(of: layout));"
-                    + (onAlbumPage
-                        ? " the header carries it, so it moves with Spotify's own layout"
-                        : " the plane carries it, so it moves with Spotify's own layout")
+                    + " the host carries it, so it moves with Spotify's own layout"
             )
         }
 
@@ -623,6 +651,21 @@ enum EntityPageAppearance {
         var node: UIView? = cover
         while let current = node {
             if NSStringFromClass(type(of: current)).contains("HeaderContentLayout") { return current }
+            node = current.superview
+        }
+        return nil
+    }
+
+    /// 沿祖先链找**类名里含** `needle` 的那个视图。
+    ///
+    /// pw 的 `containerOf` / `SGRPlaylistPageOf` 都是这个形状：艺人页的页头容器（`HeaderContainer`）
+    /// 与别的页面那些"认 id"的容器不同，**它身上没有 accessibility id**，只有类名可用。
+    private static func ancestor(of view: UIView, classNameContains needle: String) -> UIView? {
+        var node: UIView? = view.superview
+        var level = 0
+        while let current = node, level < 16 {
+            level += 1
+            if NSStringFromClass(type(of: current)).contains(needle) { return current }
             node = current.superview
         }
         return nil
@@ -725,8 +768,16 @@ enum EntityPageAppearance {
         //   `setHidden:NO` 把它写回来（pw 的 `conceal()` 就是每帧无条件补），原来这里直接 return，
         //   于是"写回来之后就再也不藏了"。但**不再覆盖原值记录**，否则关开关还原时会把我们自己
         //   写进去的 hidden 当成"Spotify 的原值"。
+        // ⚠️★ 2026-10-13（艺人页）：**在 `OverflowStackView` 里只能加空 mask、绝不能碰 hidden**。
+        //    pw 在艺人页踩过这个坑，它的注释逐字：
+        //    > `ios-creator-impl.context_menu_in_navigation_bar_enabled_artist` moves more out of the
+        //    > header's row, and with it gone Spotify's OverflowStackView force-unwraps the tallest view
+        //    > of a line that has none and traps as the page opens
+        //    > (device crash 2026-09-18 19:09, SIGTRAP in -[OverflowStackView updateConstraints]).
+        //    空 mask 本身就能让视图什么都不画，所以少一个 hidden 只是少一道保险，不会漏。
+        let canHide = ancestor(of: cover, classNameContains: "OverflowStackView") == nil
         if concealedNativeCover?.view === cover {
-            if !cover.layer.isHidden { cover.layer.isHidden = true }
+            if canHide, !cover.layer.isHidden { cover.layer.isHidden = true }
             if cover.layer.mask == nil { cover.layer.mask = CALayer() }
             if cover.isUserInteractionEnabled { cover.isUserInteractionEnabled = false }
             if !cover.accessibilityElementsHidden { cover.accessibilityElementsHidden = true }
@@ -741,7 +792,7 @@ enum EntityPageAppearance {
             interactive: cover.isUserInteractionEnabled,
             accessibilityHidden: cover.accessibilityElementsHidden
         )
-        cover.layer.isHidden = true
+        if canHide { cover.layer.isHidden = true }
         if cover.layer.mask == nil { cover.layer.mask = CALayer() }
         cover.isUserInteractionEnabled = false
         cover.accessibilityElementsHidden = true
