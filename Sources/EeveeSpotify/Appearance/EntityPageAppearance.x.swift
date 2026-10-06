@@ -278,6 +278,10 @@ enum EntityPageAppearance {
         // ★ 2026-10-13（照片 110）：**页面直接子视图那一层也要清** —— 见 `clearPageContainers`。
         clearPageContainers(in: page)
 
+        // ★★ 2026-10-06：**浅底时把文字翻成深色** —— 见 `textTone`（你报的"浅色背景下看不清
+        //    账号名字 / 本月有 xxx 听众"）。与清底色同一条纪律：**每一拍补一次**。
+        textTone(in: page, isLight: isLight(color))
+
         guard !didReport else { return }
         didReport = true
         writeDebugLog(
@@ -289,6 +293,64 @@ enum EntityPageAppearance {
         )
     }
 
+    /// 这片颜色**亮不亮**（决定底色往上抬还是往下压、也决定文字要不要反色）。
+    private static func isLight(_ colour: UIColor) -> Bool {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 1
+        guard colour.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return false }
+        return (0.299 * red + 0.587 * green + 0.114 * blue) > 0.55
+    }
+
+    /// ★★ 2026-10-06（用户：「在浅色背景下，**看不清账号名字 / 本月有 xxx 听众** 这种信息」，
+    /// 照片 111 就是那张白底专辑的白字）：**浅底时把页面里的浅色文字翻成深色**。
+    ///
+    /// 判据只有一条：我们铺的那块取色底**亮不亮**（`isLight`）。亮 ⇒ 白字改成近黑；
+    /// 暗 ⇒ 一个字都不动（Spotify 本来就是白字）。
+    ///
+    /// ⚠️ 两条纪律与"清底色"完全一样：
+    ///   · Spotify **每一拍都会把文字色写回去** ⇒ 这里也是**每一拍补一次**；
+    ///   · 只改**本来就亮的**字（`white > 0.62`）—— 绿色的"正在播放"、彩色的标签一律不碰
+    ///     （`getWhite` 对彩色返回 false，天然被排除）。
+    ///
+    /// 记原值是为了**撤得干净**：底一变暗（或页面换掉），`restoreTextTone` 逐个写回。
+    private static var tonedLabels: [(label: UILabel, color: UIColor)] = []
+    private static var tonedViews: Set<ObjectIdentifier> = []
+    private static let maxToned = 400
+
+    private static func textTone(in page: UIView, isLight light: Bool) {
+        guard light else {
+            restoreTextTone()
+            return
+        }
+        var seen = 0
+        func walk(_ node: UIView, _ depth: Int) {
+            guard depth <= 5, seen < clearNodes, tonedLabels.count < maxToned else { return }
+            seen += 1
+            if let label = node as? UILabel, !(node is UIButton) {
+                var white: CGFloat = 0, alpha: CGFloat = 1
+                if label.textColor.getWhite(&white, alpha: &alpha), alpha > 0.5, white > 0.62 {
+                    let identifier = ObjectIdentifier(label)
+                    if !tonedViews.contains(identifier) {
+                        tonedViews.insert(identifier)
+                        tonedLabels.append((label, label.textColor))
+                    }
+                    let dark = UIColor(white: 0.09, alpha: 1)
+                    if label.textColor != dark { label.textColor = dark }
+                }
+            }
+            for sub in node.subviews { walk(sub, depth + 1) }
+        }
+        walk(page, 0)
+    }
+
+    private static func restoreTextTone() {
+        guard !tonedLabels.isEmpty else { return }
+        for entry in tonedLabels where entry.label.textColor != entry.color {
+            entry.label.textColor = entry.color
+        }
+        tonedLabels.removeAll()
+        tonedViews.removeAll()
+    }
+
     /// 竖直渐变：顶部是封面取色 → 中段压暗 → **到底仍然留着这片颜色**。
     ///
     /// ⚠️ **照片 95-97 的教训**：原来 57% 之后就是纯 `#121212` ⇒ 用户看到的是"**下半部分还是黑的**" ✗。
@@ -298,8 +360,12 @@ enum EntityPageAppearance {
         // ★ 2026-10-13（照片 110：「专辑页往下滑，是全黑的，没有颜色」）：两个上限原来分别是
         //   0.26 / 0.14 —— 14% 亮度基本就是黑，所以越往下越"没颜色"。抬到 0.42 / 0.28：
         //   全程看得出是封面的色相，到底仍然是"这片颜色"而不是 #121212。
-        let middle = tinted(color, atMost: 0.42)
-        let bottom = tinted(color, atMost: 0.28)
+        // ★★ 2026-10-06（照片 111：白底封面 + 白字标题 ⇒ 什么都看不见）：**不再一律压暗** ——
+        //    **封面亮就给亮底**（AM 的艺人页正是这样：白底照片 ⇒ 白底页面 + 黑字），封面暗才压暗。
+        //    这也是 `textTone` 反色的依据：底亮了，字才有得反。
+        let light = isLight(color)
+        let middle = tinted(color, atMost: light ? 0.88 : 0.42)
+        let bottom = tinted(color, atMost: light ? 0.66 : 0.28)
         let layer = view.gradient
         layer.startPoint = CGPoint(x: 0.5, y: 0)
         layer.endPoint = CGPoint(x: 0.5, y: 1)
