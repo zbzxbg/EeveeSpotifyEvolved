@@ -57,6 +57,14 @@ enum HomeTileTint {
         )
     }
 
+    /// 卡片自己那一拍（挂 `InteractableLayoutBackingButton` 那条路）：**先只报一次结构**
+    /// —— 盲写代码时这是唯一能拿到真机结构的途径（转储器到不了那一层）—— 再按形状决定要不要上色。
+    static func applyToCard(_ view: UIView) {
+        guard isEnabled, isTileShaped(view) else { return }
+        logStructureOnce(view)
+        apply(to: view)
+    }
+
     /// 网格那一拍：孩子自己不报的话，从这里扫一遍（并**把看到的结构打进日志**，
     /// 这就是这轮没有转储可用时的替代品）。
     static func applyToGrid(_ grid: UIView) {
@@ -245,10 +253,30 @@ class HomeShortcutGridHook: ClassHook<UIView> {
     }
 }
 
+/// ★ 2026-10-13（日志 84 之后补的）：Home 那排小卡片在真机上是**这个类** ——
+/// `[ShellDump] LegacyUI_ECMCoreKit.InteractableLayoutBackingButton`（我们自己的日志里有过它），
+/// pw 的树里同一个类带着 `id=Shortcut.Card.Home`。它是**真视图**，所以 `layoutSubviews` 挂得上；
+/// 我第一版挂的 `…ShortcutsCardElementUI` 在 9.1.88 上**不存在**（日志 84：`hooked 1/2`），
+/// 而那个 `…ElementUI` 多半根本不是视图。
+///
+/// ⚠️ 这个类**别处也在用**（曲库的 116×171 卡片、演出页的 374×346 卡、每行的「…」）——
+/// 所以这里只按**形状**挑（`isTileShaped`：宽 120~340 / 高 40~80 / 里面有图），
+/// 认不出就一个字节都不碰。
+class HomeShortcutBackingButtonHook: ClassHook<UIView> {
+    typealias Group = HomeShortcutTilesGroup
+    static let targetName = "_TtC19LegacyUI_ECMCoreKit31InteractableLayoutBackingButton"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        HomeTileTint.applyToCard(target)
+    }
+}
+
 func activateHomeShortcutTiles() {
     guard HomeTileTint.isEnabled else { return }
 
     let targets = [
+        HomeShortcutBackingButtonHook.targetName,
         HomeShortcutCardHook.targetName,
         HomeShortcutGridHook.targetName,
     ]

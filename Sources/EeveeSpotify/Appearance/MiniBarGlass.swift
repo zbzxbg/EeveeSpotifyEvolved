@@ -101,7 +101,9 @@ enum MiniBarGlassPlate {
         // ★ 2026-10-13（用户看 pw 的截图：「底下迷你播放器的歌曲是圆形的，不是方形的」）：
         //   封面圆角**独立于这条玻璃开关**（它自己那颗 `miniBarRoundArtwork` 管它自己）——
         //   所以放在 `isEnabled` 早退**之前**，关掉玻璃照样是圆的。
-        MiniBarArtwork.apply(to: host)
+        //   ⚠️ 传的是 **content**（`id=SPTNowPlayingBar` 那个），不是外层 host ——
+        //   圆封面的"贴左"判据要相对它算（日志 84 那次失败就是这个原因，见 `MiniBarArtwork`）。
+        MiniBarArtwork.apply(to: content ?? host)
 
         guard isEnabled else {
             removePlate(host: host, content: content ?? lastContent)

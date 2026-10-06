@@ -36,14 +36,24 @@ enum MiniBarArtwork {
     /// 改过的那几个视图（weak，视图换掉自动失效）。
     private static let touched = NSHashTable<UIView>.weakObjects()
     private static var didLog = false
+    /// "没认出来"只报一次（见 `logMissOnce`）。
+    private static var didLogMiss = false
 
-    /// 每一拍调（`MiniBarGlass.apply(to:)` 里），**幂等**：圆角已经对了就一个字节都不碰。
-    static func apply(to host: UIView) {
+    /// - Parameter content: **必须是迷你条内容视图**（`id=SPTNowPlayingBar` 那个，即
+    ///   `MiniBarGlass.findContent` 找到的那一个），不是外层 host。
+    ///
+    ///   ⚠️ 第一版我传的是 host，然后判据写成"在 host 坐标里 x ≤ 16" —— 而 host 里迷你条本身在
+    ///   **x = 26** 上（日志 84 的 `SPTNowPlayingBar@26,3,344,48`），算出来必然 > 16 ⇒ 永远认不出；
+    ///   更糟的是**失败时一行都不打**（日志 84 里 `[MiniBarArt]` 完全缺席）。两处都修在这里。
+    static func apply(to content: UIView) {
         guard isEnabled else {
             revert()
             return
         }
-        guard let artwork = findArtwork(in: host) else { return }
+        guard let artwork = findArtwork(in: content) else {
+            logMissOnce(in: content)
+            return
+        }
         round(artwork)
         // 有些版本图在子视图上、父层不裁 ⇒ 子层也一起圆（只对"和父层差不多大的"那层动手）。
         for sub in artwork.subviews where sub.bounds.width >= artwork.bounds.width * 0.8 {
@@ -74,6 +84,7 @@ enum MiniBarArtwork {
             objc_setAssociatedObject(view, &roundedKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         didLog = false
+        didLogMiss = false
     }
 
     // MARK: - 认那一张图
@@ -103,21 +114,55 @@ enum MiniBarArtwork {
         if view.layer.cornerCurve != .circular { view.layer.cornerCurve = .circular }
     }
 
-    /// 候选：近似正方形、边长 32~56、里面有图；取 host 坐标里**最靠左**的那个。
-    private static func findArtwork(in host: UIView) -> UIView? {
+    /// 认不出时报一次，**并把方形候选打出来** —— 盲写代码时这就是下一轮的依据。
+    private static func logMissOnce(in root: UIView) {
+        guard !didLogMiss else { return }
+        didLogMiss = true
+
+        var candidates: [String] = []
+        var queue: [UIView] = [root]
+        var visited = 0
+        while !queue.isEmpty, visited < 300, candidates.count < 6 {
+            let view = queue.removeFirst()
+            visited += 1
+            let size = view.bounds.size
+            if abs(size.width - size.height) <= 2, size.width >= 24, size.width <= 72 {
+                let frame = view.convert(view.bounds, to: root)
+                candidates.append(
+                    "\(NSStringFromClass(type(of: view)))"
+                        + " \(Int(size.width))x\(Int(size.height))"
+                        + "@\(Int(frame.minX)),\(Int(frame.minY))"
+                        + " image=\(containsImage(view) ? "yes" : "no")"
+                )
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+
+        writeDebugLog(
+            "[MiniBarArt] no artwork found in \(NSStringFromClass(type(of: root)))"
+                + " \(Int(root.bounds.width))x\(Int(root.bounds.height))"
+                + " — square candidates: " + (candidates.isEmpty ? "none" : candidates.joined(separator: " | "))
+        )
+    }
+
+    /// 候选：近似正方形、边长 32~56、里面有图；取**最靠左**的那个（迷你条里只有封面贴左边）。
+    ///
+    /// ⚠️ 判据里**没有绝对 x 阈值**：上一版写了 `x ≤ 16`，而坐标是相对外层 host 算的
+    /// （迷你条在 host 里位于 x = 26），因此恒不成立 —— 那就是它没生效的原因。
+    private static func findArtwork(in root: UIView) -> UIView? {
         var best: (view: UIView, minX: CGFloat)?
 
-        var queue: [UIView] = [host]
+        var queue: [UIView] = [root]
         var visited = 0
-        while !queue.isEmpty, visited < 300 {
+        while !queue.isEmpty, visited < 400 {
             let view = queue.removeFirst()
             visited += 1
 
             let size = view.bounds.size
             let square = abs(size.width - size.height) <= 2
             if square, size.width >= 32, size.width <= 56, containsImage(view) {
-                let frame = view.convert(view.bounds, to: host)
-                if frame.minX <= 16, best == nil || frame.minX < best!.minX {
+                let frame = view.convert(view.bounds, to: root)
+                if frame.minX < root.bounds.width / 2, best == nil || frame.minX < best!.minX {
                     best = (view, frame.minX)
                 }
             }
