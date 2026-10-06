@@ -77,18 +77,45 @@ enum ClassDumper {
 
     /// 按**类名**转储（「调试」页那个输入框用）。
     ///
-    /// 类名两种写法都收：运行期名（`_TtC23NavigationUI_TabBarImpl10TabBarView`）或
-    /// 点号记法（`NavigationUI_TabBarImpl.TabBarView`）—— 后者是我们日志里更常见的写法。
+    /// 为什么不能只认运行期名：Swift 类的运行期名是 **mangled** 的
+    /// （`_TtC35CreativeWorkCommons_CoverArtTiltKit16CoverArtTiltView`），而
+    /// `ViewTreeDumper` 打出来的是**短名**（`CoverArtTiltView`），日志里转手时常见的又是
+    /// `Module.Class` 记法 —— 让人去手拼 mangled 名是不现实的。
+    ///
+    /// 所以解析顺序是：**精确名** → 短名后缀 → `Module.Class`（模块段出现、类名段结尾）。
+    /// 匹配到的真实类名会写进日志，所以"它到底挑了谁"永远看得见。
     static func dump(name rawName: String) {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             writeDebugLog("[Dump] no class name given")
             return
         }
-        guard let cls = NSClassFromString(name) else {
-            writeDebugLog("[Dump] \(name): not registered in this Spotify build")
+        guard let cls = resolveClass(named: name) else {
+            writeDebugLog("[Dump] \(name): not found (tried the exact name, then a suffix match)")
             return
         }
         dump(name, class: cls)
+    }
+
+    /// 三种写法都收，顺序见 `dump(name:)` 的说明。
+    private static func resolveClass(named name: String) -> AnyClass? {
+        if let cls = NSClassFromString(name) { return cls }
+
+        let snapshot = tweakClassSnapshot()
+        if let cls = snapshot[name] { return cls }
+
+        // `Module.Class`：mangled 名里模块与类名**紧挨着**（中间只有长度数字），
+        // 所以"含模块段 且 以类名段结尾"就是它。
+        if name.contains(".") {
+            let parts = name.split(separator: ".")
+            if parts.count == 2,
+               let match = snapshot.first(where: {
+                   $0.key.hasSuffix(String(parts[1])) && $0.key.contains(String(parts[0]))
+               }) {
+                return match.value
+            }
+        }
+
+        return snapshot.first(where: { $0.key.hasSuffix(name) })?.value
     }
 }

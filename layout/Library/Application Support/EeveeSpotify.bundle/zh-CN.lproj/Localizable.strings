@@ -362,7 +362,7 @@ flag_note_canvas_lyrics = "把歌词画在 Canvas 视频上。";
 flag_catalog_unsupported = "暂不支持";
 dump_view_tree = "转储视图树";
 dump_view_tree_description = "把当前屏幕的视图结构每 2 秒写一行进调试日志。";
-dump_class_description = "把某一个类的名字、方法表和 ivar 表（含类型编码）写进调试日志。类名两种写法都收：运行期名，或 Module.Class。只读：只让 runtime 枚举，找到的方法一个都不会被调用。已经知道类名、但想知道它里面有什么时用它。";
+dump_class_description = "把某一个类的名字、方法表和 ivar 表（含类型编码）写进调试日志。类名三种写法都收：运行期名、视图树日志里那种短名，或 Module.Class。只读：只让 runtime 枚举，找到的方法一个都不会被调用。";
 dump_class_placeholder = "类名";
 dump_class_action = "转储这个类";
 

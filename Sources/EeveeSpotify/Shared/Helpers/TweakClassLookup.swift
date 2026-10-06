@@ -21,12 +21,13 @@ import ObjectiveC.runtime
 private var tweakClassCache: [String: AnyClass] = [:]
 private var tweakClassCacheBuilt = false
 
-func findTweakClass(_ name: String) -> AnyClass? {
-    if let cls = NSClassFromString(name) { return cls }
-    if tweakClassCacheBuilt { return tweakClassCache[name] }
+/// 全类名 → 类 的快照（**只扫一次**，之后复用）。给需要"模糊匹配"的调用方用
+/// （例如 `ClassDumper` 拿短名去后缀匹配）。裸缓冲区的理由见文件头。
+func tweakClassSnapshot() -> [String: AnyClass] {
+    if tweakClassCacheBuilt { return tweakClassCache }
 
     let total = objc_getClassList(nil, 0)
-    guard total > 0 else { return nil }
+    guard total > 0 else { return tweakClassCache }
 
     let buffer = UnsafeMutablePointer<AnyClass>.allocate(capacity: Int(total))
     defer { buffer.deallocate() }
@@ -42,5 +43,10 @@ func findTweakClass(_ name: String) -> AnyClass? {
     }
 
     tweakClassCacheBuilt = true
-    return tweakClassCache[name]
+    return tweakClassCache
+}
+
+func findTweakClass(_ name: String) -> AnyClass? {
+    if let cls = NSClassFromString(name) { return cls }
+    return tweakClassSnapshot()[name]
 }
