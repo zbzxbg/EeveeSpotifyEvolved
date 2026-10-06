@@ -15,7 +15,7 @@
   这些全是**同一个原因**的下游连锁 —— 很容易被误判成"Orion 宏坏了 / 注入没生效"，
   于是花时间去查构建系统。其实编译器说得没错：那个编译单元里根本没有这些类型。
 
-本脚本检查四件事（都是纯文本规则，不是编译器）：
+本脚本检查五件事（都是纯文本规则，不是编译器）：
   1. 用到 Orion 类型（HookGroup / ClassHook / IvarHook / FunctionHook …）的文件，
      必须有 `import Orion`；
   2. `ClassHook` 里 override 的方法体内必须调用 `orig.<同名>(...)` —— 不调等于把原实现吃掉；
@@ -25,6 +25,9 @@
      三处 `self` → `cannot convert value of type 'XHook' to expected argument type
      'UICollectionViewCell'` / `has no member 'clipsToBounds'`，一路冒泡到 `make` exit 2、
      deb 没生成）。允许 `self.target`、`self.orig`，以及**本类自己声明**的成员。
+  5. ★ 2026-10-13 新增：**hook 类不能是 `final` / `private` / `fileprivate`** ——
+     Orion 要为它生成胶水子类，实测编译直接报
+     `A class hook cannot be private, fileprivate, or final`（一次白跑 15 分钟的 IPA）。
 
 用法：
     python Tools/eevee-hookfinder/orion_hook_guard.py            # 扫 Sources/EeveeSpotify
@@ -48,7 +51,14 @@ ORION_TYPE_HINTS = (
 )
 
 IMPORT_ORION = re.compile(r"(?m)^\s*import\s+Orion\s*$")
-CLASS_HOOK = re.compile(r"class\s+(\w+)\s*:\s*ClassHook\s*<")
+# ⚠️ 修饰符也要抓：Orion 拒绝 private / fileprivate / final 的 hook 类（规则 5）。
+#    修饰符可以有多个、顺序任意（`private final class` / `final class`），所以先整段抓下来再拆。
+CLASS_HOOK = re.compile(
+    r"(?P<mods>(?:\b(?:final|private|fileprivate|public|open|internal)\s+)*)"
+    r"class\s+(?P<name>\w+)\s*:\s*ClassHook\s*<"
+)
+# Orion 生成胶水子类时必需的可见性/继承性 —— 这三个都会直接编译失败。
+FORBIDDEN_HOOK_MODIFIERS = {"final", "private", "fileprivate"}
 GROUP_ALIAS = re.compile(r"typealias\s+Group\s*=\s*(\w+)")
 # ⚠️ `{ }` 与 `{}` 两种写法都有（`struct X: HookGroup {}` / `struct X: HookGroup { }`），
 #    漏掉一种就会把存在的定义判成"找不到"（第一版就是这么误报的）。
@@ -132,8 +142,18 @@ def check_file(path: Path, defined_groups: set[str]) -> list[str]:
         )
 
     for match in CLASS_HOOK.finditer(src):
-        name = match.group(1)
+        name = match.group("name")
         body = class_body(src, match)
+
+        # ── 规则 5：hook 类不能是 final / private / fileprivate ──────────────
+        bad_mods = set(match.group("mods").split()) & FORBIDDEN_HOOK_MODIFIERS
+        if bad_mods:
+            problems.append(
+                f"{path}: hook 类 `{name}` 带了 {' / '.join(sorted(bad_mods))} —— "
+                "Orion 要为它生成胶水子类，编译会直接报 "
+                "`A class hook cannot be private, fileprivate, or final`；"
+                "去掉这些修饰符（`class " + name + ": ClassHook<…>`）"
+            )
 
         for alias in GROUP_ALIAS.finditer(body):
             group = alias.group(1)

@@ -3,6 +3,10 @@ import Orion
 import UIKit
 import ObjectiveC.runtime
 
+/// 关联对象的键。**必须放在文件作用域**：`&变量` 取到的地址要稳定且唯一，
+/// 这是本仓库既有的写法（见 `DeclutterChrome.x.swift` 的 `declutterHiddenByUsKey`）。
+private var entityPageHeaderKey: UInt8 = 0
+
 /// 页头替换：找到歌单页头、把 Spotify 那一列藏掉、把我们自己的（`EntityPageHeaderView`）摆上去。
 ///
 /// ## 为什么挂 `HeaderContentLayout`
@@ -30,7 +34,6 @@ enum EntityPageHeaderManager {
 
     static var isEnabled: Bool { UserDefaults.entityPageAMHeader }
 
-    private static var headerKey: UInt8 = 0
     private static var applying = false
     private static var logged = Set<String>()
 
@@ -64,11 +67,11 @@ enum EntityPageHeaderManager {
 
         // 我们那一份：挂在 **headerRoot** 上（block 万一被换掉，同一份跟着搬过去，不会画两份）。
         let header: EntityPageHeaderView
-        if let existing = objc_getAssociatedObject(headerRoot, &headerKey) as? EntityPageHeaderView {
+        if let existing = objc_getAssociatedObject(headerRoot, &entityPageHeaderKey) as? EntityPageHeaderView {
             header = existing
         } else {
             header = EntityPageHeaderView()
-            objc_setAssociatedObject(headerRoot, &headerKey, header, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            objc_setAssociatedObject(headerRoot, &entityPageHeaderKey, header, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
 
         if header.superview !== block {
@@ -340,7 +343,11 @@ enum EntityPageHeaderManager {
 struct EntityPageHeaderGroup: HookGroup {}
 
 /// 主挂点：那一块的布局视图每一拍都会走这里。
-final class EntityPageHeaderLayoutHook: ClassHook<UIView> {
+///
+/// ⚠️ hook 类**不能加 `final`/`private`/`fileprivate`** —— Orion 会生成自己的胶水子类，
+/// 2026-10-13 实测报错：`A class hook cannot be private, fileprivate, or final`。
+/// 本机 `orion_hook_guard.py` 已加这条规则（规则 5）。
+class EntityPageHeaderLayoutHook: ClassHook<UIView> {
     typealias Group = EntityPageHeaderGroup
     static let targetName = "_TtC28EncoreConsumerMobile_BaseKit19HeaderContentLayout"
 
@@ -351,7 +358,7 @@ final class EntityPageHeaderLayoutHook: ClassHook<UIView> {
 }
 
 /// Spotify 自己那颗 Play：会在前景区晚一步出现，所以它自己那一拍也要补一次。
-final class EntityPagePlayButtonHook: ClassHook<UIView> {
+class EntityPagePlayButtonHook: ClassHook<UIView> {
     typealias Group = EntityPageHeaderGroup
     static let targetName = "_TtC28EncoreConsumerMobile_BaseKit14PlayButtonView"
 
