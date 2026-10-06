@@ -180,6 +180,9 @@ final class EntityPageHeaderButton: UIControl {
     /// 关态颜色 / 开态颜色（开态按源控件的 `isSelected` 判断）。
     var glyphColor: UIColor = .label
     var onGlyphColor: UIColor = .systemGreen
+    /// 这颗按钮的**身份**（`shuffle` / `trailing`）—— 只进日志：用户报"右边那颗和别的按钮重合"时，
+    /// 日志里必须能分清他说的是哪一颗（见 `updateRow` 与 `tapped`）。
+    var role = "side button"
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -220,7 +223,11 @@ final class EntityPageHeaderButton: UIControl {
 
     @objc private func tapped() {
         refreshTint()
-        writeDebugLog("[EntityPageHeader] header button tapped (source \(source == nil ? "missing" : "found"))")
+        writeDebugLog(
+            "[EntityPageHeader] \(role) tapped — source \(source == nil ? "missing" : "found")"
+                + " (id \(source?.accessibilityIdentifier ?? "-")),"
+                + " glyph \(glyphView.image == nil ? "none" : "set")"
+        )
         _ = eeveeFire(source)
     }
 
@@ -418,6 +425,11 @@ final class EntityPageHeaderView: UIView {
 
     /// 三颗按钮各认一个 Spotify 控件；`nil` = 那颗不显示。
     func updateRow(shuffle: UIView?, play: UIView?, trailing: UIView?, trailingFallback: UIImage?) {
+        // ★ 2026-10-13：给两颗按钮**标身份** —— 日志 89 只有一行 `header button tapped (source found)`，
+        //   分不出用户点的是左边那颗还是右边那颗（他报告"右边那颗和原生按钮重合"时，
+        //   这一条恰恰是最该看清的）。下一份日志会写成 `tapped (role trailing, source …)`。
+        shuffleButton.role = "shuffle"
+        trailingButton.role = "trailing"
         trailingButton.fallbackGlyph = trailingFallback
         shuffleButton.feed(from: shuffle)
         if let play { playButton.feed(from: play) }
