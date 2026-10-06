@@ -468,7 +468,7 @@ playlist_single_cover = "替换Spotify官方的四合一封面";
 playlist_single_cover_description = "选项开启后会替换Spotify四合一的歌单封面展示，替换为歌单第一首歌的封面。 ";
 
 entity_page_section = "专辑 / 歌单页";
-entity_page_dissolve = "模糊封面底 + 头部居中";
+entity_page_dissolve = "满幅封面化进底色 + 页头居中";
 entity_page_hide_chrome = "藏掉Spotify的若干按键";
 entity_page_description = "上述两个功能仍在开发中，不推荐打开。";
 entity_page_am_header_section = "Apple Music 式页头（歌单）";

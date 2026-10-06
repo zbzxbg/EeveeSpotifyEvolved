@@ -477,7 +477,7 @@ playlist_single_cover = "Replace Spotify's own four-cover mosaic";
 playlist_single_cover_description = "When this option is enabled, Spotify's four-cover mosaic is replaced with the cover of the playlist's first track.";
 
 entity_page_section = "Album & playlist pages";
-entity_page_dissolve = "Blurred cover backdrop + centred header";
+entity_page_dissolve = "Full-bleed cover dissolving into the page colour, plus a centred header";
 entity_page_hide_chrome = "Hide some of Spotify's buttons";
 entity_page_description = "Both of the features above are still in development and are not recommended.";
 entity_page_am_header_section = "Apple Music header (playlists)";

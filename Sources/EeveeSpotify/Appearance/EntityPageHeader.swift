@@ -44,7 +44,52 @@ enum EntityPageHeaderMetrics {
     static let aboutAbove: CGFloat = 14     // 按钮行与描述之间
     static let bottom: CGFloat = 14         // 内容底边距视图底
     static let titleRise: CGFloat = 56      // 封面要伸到内容顶部往下这么多（hero 用）
-    static let rowHeight: CGFloat = 48
+    static let rowHeight: CGFloat = 48      // = pw 的 `SGRActionHeight`
+    /// 两侧按钮那圈**玻璃圆**的直径（= pw 的 `SGRGlassCircleSize`）。
+    static let glassCircle: CGFloat = 44
+    /// 两侧按钮的字形边长。★ 2026-10-13（用户看真机：「旁边的按键小了点」）：
+    /// 原来是"按 48pt 的 27% 内缩"≈26pt，看着比中间那颗胶囊轻 —— pw 是 44pt 玻璃圆里放字形，
+    /// 所以这里改成**固定 22pt 字形 + 44pt 玻璃圆**，与 Music app 的分量对齐。
+    static let glyphSide: CGFloat = 22
+}
+
+/// 浅色玻璃（Play 胶囊里那片）。**探测式**，与 `GlassCapsule.makeGlassView` 同一套手法
+/// —— 那一条是给深色标签栏用的（材质兜底是 dark），这颗胶囊要浅色，所以另开一个：
+/// iOS 26 有 `UIGlassEffect` 就用真玻璃（带折射与边缘高光），否则退浅色材质。
+///
+/// 返回的视图**不吃触摸**（它只是底），点击由外面的 `UIControl` 收。
+private func eeveeMakeLightGlassView(interactive: Bool) -> UIVisualEffectView {
+    let view = UIVisualEffectView(effect: nil)
+
+    if let glassType = NSClassFromString("UIGlassEffect") as? UIVisualEffect.Type {
+        let effect = glassType.init()
+        // `isInteractive` 要先探 getter/setter 再写 —— KVC 碰未知 key 会抛异常（崩）。
+        if interactive, let object = effect as? NSObject,
+           object.responds(to: NSSelectorFromString("isInteractive")),
+           object.responds(to: NSSelectorFromString("setInteractive:")) {
+            object.setValue(true, forKey: "interactive")
+        }
+        view.effect = effect
+    } else {
+        view.effect = UIBlurEffect(style: .systemUltraThinMaterialLight)
+    }
+
+    view.isUserInteractionEnabled = false
+    view.clipsToBounds = true
+    view.layer.cornerCurve = .continuous
+    view.layer.borderWidth = 0.75
+    view.layer.borderColor = UIColor.white.withAlphaComponent(0.32).cgColor
+    return view
+}
+
+/// 造一个"里面嵌着玻璃"的容器（pw 的 `SGRGlassInside` / `SGRGlassCapsuleInside` 同一件事）。
+/// 玻璃铺满、圆角跟着容器；返回玻璃视图，调用方在 `layoutSubviews` 里让它跟着 bounds 走。
+private func eeveeInsertGlass(in host: UIView, interactive: Bool) -> UIVisualEffectView {
+    let glass = eeveeMakeLightGlassView(interactive: interactive)
+    glass.frame = host.bounds
+    glass.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    host.insertSubview(glass, at: 0)
+    return glass
 }
 
 // MARK: - 藏 / 找 / 点
@@ -126,6 +171,8 @@ final class EntityPageHeaderButton: UIControl {
 
     private let glyphView = UIImageView()
     private weak var source: UIView?
+    /// 那圈玻璃（44pt 圆，见 `layoutSubviews`）。
+    private var glass: UIVisualEffectView?
 
     /// 源控件取不到字形时的兜底（SF Symbol）。
     var fallbackGlyph: UIImage?
@@ -137,6 +184,11 @@ final class EntityPageHeaderButton: UIControl {
         super.init(frame: frame)
         glyphView.contentMode = .scaleAspectFit
         glyphView.isUserInteractionEnabled = false
+        // ★ 2026-10-13（用户：「旁边的按键小了点」）：两侧按钮嵌一圈玻璃圆（pw 的 `SGRGlassInside`
+        //   用的就是 `SGRGlassCircleSize = 44`）—— 字形 22pt 落在 44pt 玻璃圆里，分量才对得上
+        //   中间那颗胶囊。
+        _ = eeveeInsertGlass(in: self, interactive: false)
+        glass = subviews.first as? UIVisualEffectView
         addSubview(glyphView)
         addTarget(self, action: #selector(tapped), for: .touchUpInside)
         isAccessibilityElement = true
@@ -167,8 +219,26 @@ final class EntityPageHeaderButton: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let inset = bounds.height * 0.27        // 48pt 的按钮 → 约 26pt 的字形
-        glyphView.frame = bounds.insetBy(dx: inset, dy: inset)
+        // 玻璃圆居中（`glassCircle`，比按钮矮 4pt 留出边距），字形固定 `glyphSide` 落在它中间。
+        let circle = min(EntityPageHeaderMetrics.glassCircle, min(bounds.width, bounds.height))
+        let glassFrame = CGRect(
+            x: round((bounds.width - circle) / 2),
+            y: round((bounds.height - circle) / 2),
+            width: circle,
+            height: circle
+        )
+        if let glass {
+            if glass.frame != glassFrame { glass.frame = glassFrame }
+            glass.layer.cornerRadius = circle / 2
+        }
+
+        let side = EntityPageHeaderMetrics.glyphSide
+        glyphView.frame = CGRect(
+            x: round((bounds.width - side) / 2),
+            y: round((bounds.height - side) / 2),
+            width: side,
+            height: side
+        )
     }
 }
 
@@ -178,11 +248,20 @@ final class EntityPageHeaderPlay: UIControl {
     private let glyphView = UIImageView()
     private let wordLabel = UILabel()
     private weak var source: UIView?
+    /// 胶囊里那片玻璃（见 `init`）。
+    private var glass: UIVisualEffectView?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = .white
+        // ★ 2026-10-13（用户看真机：「播放那个不是液态玻璃」）：pw 的 `SGRPlayCapsule` 是
+        //   **白底 + 里面再嵌一片玻璃**（v0.21.1 的 `SGRGlassCapsuleInside(self, &kCapsuleGlassKey,
+        //   bounds.size, YES)`，interactive 打开），所以这里照做：白底留一点透明（让玻璃有东西
+        //   可折射：底下的封面与取色底），玻璃嵌在最底层，字形与文字保持黑色（浅玻璃上才读得清）。
+        //   iOS 26 以下拿不到 `UIGlassEffect` 时退浅色材质 —— 见 `eeveeMakeLightGlassView`。
+        backgroundColor = UIColor.white.withAlphaComponent(0.9)
         layer.masksToBounds = true
+        _ = eeveeInsertGlass(in: self, interactive: true)
+        glass = subviews.first as? UIVisualEffectView
 
         glyphView.contentMode = .scaleAspectFit
         glyphView.tintColor = .black
@@ -219,6 +298,11 @@ final class EntityPageHeaderPlay: UIControl {
     override func layoutSubviews() {
         super.layoutSubviews()
         layer.cornerRadius = bounds.height / 2
+        // 玻璃铺满整颗胶囊（圆角跟胶囊走）。
+        if let glass {
+            if glass.frame != bounds { glass.frame = bounds }
+            glass.layer.cornerRadius = bounds.height / 2
+        }
 
         // [字形][6pt][Play] 整体居中
         let glyphSide: CGFloat = 20

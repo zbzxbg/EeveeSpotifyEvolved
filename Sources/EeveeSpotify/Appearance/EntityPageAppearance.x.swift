@@ -64,10 +64,23 @@ enum EntityPageAppearance {
     private static var timer: Timer?
     private static var currentPage: UIView?
     private static var field: GradientView?
-    /// 我们自己画的"封面化开"大图（见 `ensureHero`）。
+    /// 底子那张**模糊**封面（见 `ensureHero` ①）。
     private static var hero: UIImageView?
-    /// 被按透明藏起来的 **Spotify 自己那张封面**（记原 alpha，关开关写回）。
-    private static var concealedCover: (view: UIView, alpha: CGFloat)?
+    /// ★ 2026-10-13：铺在最上面的那张**清晰满幅**封面（见 `ensureHero` ②）。
+    private static var sharpHero: UIImageView?
+    /// Spotify 自己那张封面 —— 被我们**让位**藏起来的那张。
+    ///
+    /// ⚠️ 记的是"**我们改了什么**"，关开关时只撤回这些（Spotify 自己的 hidden 一律不碰）——
+    /// 与 `DeclutterChrome` 同一条纪律。
+    private static var concealedNativeCover: NativeCoverRecord?
+
+    private struct NativeCoverRecord {
+        let view: UIView
+        let layerHidden: Bool
+        let hadMask: Bool
+        let interactive: Bool
+        let accessibilityHidden: Bool
+    }
     /// 模糊结果按"哪张图"缓存一次（同一张封面不重复跑 CoreImage）。
     private static var cachedHeroSource: UIImage?
     private static var cachedHeroImage: UIImage?
@@ -131,7 +144,7 @@ enum EntityPageAppearance {
 
         guard let target = currentTarget() else {
             // 页面走了：把上一页留下的东西全部还原（切页/退出都不留残迹）。
-            if currentPage != nil || field != nil || hero != nil || concealedCover != nil {
+            if currentPage != nil || field != nil || hero != nil || sharpHero != nil || concealedNativeCover != nil {
                 restore(reason: "left the page")
             }
             return
@@ -152,7 +165,7 @@ enum EntityPageAppearance {
             ensureHero(on: target)
             // ④ 头部居中（Melox 的三段式）—— 与"模糊底"同属这一颗开关下的"页面样式"。
             centerHeaderLabels(in: target.page)
-        } else if hero != nil || concealedCover != nil || !centeredLabels.isEmpty {
+        } else if hero != nil || sharpHero != nil || concealedNativeCover != nil || !centeredLabels.isEmpty {
             removeHero()
             restoreCentering()
         }
@@ -297,9 +310,13 @@ enum EntityPageAppearance {
     /// 封面放大铺满页面顶部、向下**化开**成一片颜色，标题与文字就压在这片颜色上
     /// （pw 的 `Redesigned/Playlist/PlaylistHeader.x` 与 `AlbumHeader.x` 做的同一件事）。
     ///
-    /// 这里**只做加法、不动布局**：自己画一张大图，垫在 field **之上**、页面内容**之下**；
-    /// 把 Spotify 自己那张小封面**按透明藏起来**（原 alpha 记着，关开关写回）——
-    /// 文字与按钮还在原处，于是正好压在这片化开的颜色上，就是截图里那个样子。
+    /// 这里**只做加法、不动布局**：自己画大图，垫在 field **之上**、页面内容**之下** ——
+    /// 文字与按钮还在原处，于是正好压在这片化开的颜色上。
+    ///
+    /// 两张图，各管一半：
+    ///   · ① **模糊**那张（本函数）铺满页面顶部，负责"化开之后露出来的那片颜色"；
+    ///   · ② **清晰**那张（`ensureSharpHero`）是**满幅的封面本身**，底部 54% 起化开 ——
+    ///     于是"整张封面融进底子"，而不是"模糊底 + 原地一张小卡"。
     private static func ensureHero(on target: Target) {
         guard let cover = target.cover,
               let source = coverImage(in: cover) else { return }
@@ -324,15 +341,10 @@ enum EntityPageAppearance {
                 container.insertSubview(view, at: 0)
             }
             hero = view
-            // ★ 2026-10-13（用户拍板「做成 Melox 那样」，而 Melox 的底子**就是封面模糊化**）：
-            //   Melox 那一页是"**模糊封面当底 + 上面再压一张清晰的居中封面**"⇒ 这里**不再藏原生封面** ✗
-            //   （上一版把它按透明藏掉，只剩一片模糊，反而不像了）。原生那张清晰封面留在原位、
-            //   正好落在这片模糊底之上 —— 这就是截图里的结构。
             writeDebugLog(
                 "[\(logTag)] hero \(frameText(frame)) in \(type(of: container))"
-                    + " — the cover \(frameText(cover.convert(cover.bounds, to: container)))"
-                    + " is blurred into the page's backdrop, and Spotify's own sharp cover"
-                    + " stays where it is, on top of it (Melox's structure)"
+                    + " — blurred backdrop for the colour the dissolve fades into;"
+                    + " the sharp full-bleed cover goes on top of it (see `ensureSharpHero`)"
             )
         }
 
@@ -345,7 +357,61 @@ enum EntityPageAppearance {
             view.image = cachedHeroImage
         }
 
-        // 向下化开：上 55% 不透明 → 底全透明（露出后面那片取色底）。
+        // 向下化开：上 54% 不透明 → 底全透明（露出后面那片取色底/模糊底）。
+        applyDissolveMask(to: view, opaqueFraction: 0.54)
+
+        // ② ★ 2026-10-13（用户看真机后：「也不是把封面整个融进底子」）：
+        //    **把清晰的封面本身铺成满幅**、底部化进下面那片颜色 —— 这才是 pw 的结构
+        //    （`PlaylistHeader.x`：the cover runs full bleed across the top of the page and
+        //    dissolves into the page's colour）。上一版是"模糊底 + 原地一张小卡"的 Melox 结构，
+        //    而用户要的是"整张封面融进去" ⇒ Spotify 自己那张小封面**让位**（按层藏，可原样撤回）。
+        ensureSharpHero(in: container, cover: cover, source: source)
+    }
+
+    /// 满幅那张清晰封面。方图铺满页宽（`scaleAspectFill` 因此不裁内容），**高 = 页宽** ——
+    /// 这样它自然伸到标题那一片，底部约 46% 的化开区正好落在标题/创建者/按钮之后
+    /// （pw 的 `kDissolve = 0.46` 是**封面高度**的比例）。
+    private static func ensureSharpHero(in container: UIView, cover: UIView, source: UIImage) {
+        let coverFrame = cover.convert(cover.bounds, to: container)
+        guard coverFrame.width > 40, coverFrame.height > 40 else { return }
+
+        concealNativeCover(cover)
+
+        let side = container.bounds.width
+        let frame = CGRect(x: 0, y: coverFrame.minY, width: side, height: side)
+
+        let view: UIImageView
+        if let sharpHero, sharpHero.superview === container {
+            view = sharpHero
+        } else {
+            sharpHero?.removeFromSuperview()
+            let fresh = UIImageView()
+            fresh.contentMode = .scaleAspectFill
+            fresh.clipsToBounds = true
+            fresh.isUserInteractionEnabled = false
+            fresh.accessibilityIdentifier = "eevee-page-hero-sharp"
+            if let hero, hero.superview === container {
+                container.insertSubview(fresh, aboveSubview: hero)
+            } else if let field, field.superview === container {
+                container.insertSubview(fresh, aboveSubview: field)
+            } else {
+                container.insertSubview(fresh, at: 0)
+            }
+            sharpHero = fresh
+            view = fresh
+            writeDebugLog(
+                "[\(logTag)] sharp hero \(frameText(frame)) — the cover \(frameText(coverFrame))"
+                    + " is laid full bleed and dissolves into the colour below (pw's structure)"
+            )
+        }
+
+        if !view.frame.equalTo(frame) { view.frame = frame }
+        if view.image !== source { view.image = source }
+        applyDissolveMask(to: view, opaqueFraction: 0.54)
+    }
+
+    /// 向下化开：上 `opaqueFraction` 不透明 → 底全透明。两张 hero 共用这一份（改一处就够）。
+    private static func applyDissolveMask(to view: UIView, opaqueFraction: CGFloat) {
         let mask: CAGradientLayer
         if let existing = view.layer.mask as? CAGradientLayer {
             mask = existing
@@ -360,7 +426,7 @@ enum EntityPageAppearance {
             ]
             layer.locations = [
                 NSNumber(value: 0),
-                NSNumber(value: 0.55),
+                NSNumber(value: opaqueFraction),
                 NSNumber(value: 1),
             ]
             view.layer.mask = layer
@@ -369,11 +435,39 @@ enum EntityPageAppearance {
         if !mask.frame.equalTo(view.bounds) { mask.frame = view.bounds }
     }
 
+    /// 让 Spotify 自己那张封面**让位**：**改层不改属性**（Spotify 会用 `setHidden:NO` 把视图写回来）
+    /// + 空 mask 双保险（Spotify 不碰 mask）。原值全记在 `concealedNativeCover` 里，关开关原样撤回。
+    private static func concealNativeCover(_ cover: UIView) {
+        if concealedNativeCover?.view === cover { return }
+        revealNativeCover()
+
+        concealedNativeCover = NativeCoverRecord(
+            view: cover,
+            layerHidden: cover.layer.isHidden,
+            hadMask: cover.layer.mask != nil,
+            interactive: cover.isUserInteractionEnabled,
+            accessibilityHidden: cover.accessibilityElementsHidden
+        )
+        cover.layer.isHidden = true
+        if cover.layer.mask == nil { cover.layer.mask = CALayer() }
+        cover.isUserInteractionEnabled = false
+        cover.accessibilityElementsHidden = true
+    }
+
+    /// 只撤回**我们**改的那几样（Spotify 自己的 hidden 不碰）。
+    private static func revealNativeCover() {
+        guard let record = concealedNativeCover else { return }
+        record.view.layer.isHidden = record.layerHidden
+        if !record.hadMask { record.view.layer.mask = nil }
+        record.view.isUserInteractionEnabled = record.interactive
+        record.view.accessibilityElementsHidden = record.accessibilityHidden
+        concealedNativeCover = nil
+    }
+
     private static func removeHero() {
-        if let record = concealedCover {
-            record.view.alpha = record.alpha
-            concealedCover = nil
-        }
+        revealNativeCover()
+        sharpHero?.removeFromSuperview()
+        sharpHero = nil
         hero?.removeFromSuperview()
         hero = nil
         cachedHeroSource = nil
