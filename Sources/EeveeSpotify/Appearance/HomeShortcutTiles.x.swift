@@ -41,7 +41,7 @@ enum HomeTileTint {
 
     /// 卡片自己那一拍。
     static func apply(to tile: UIView) {
-        guard isEnabled, isTileShaped(tile) else { return }
+        guard isEnabled, isTile(tile) else { return }
         guard let cover = coverImageView(in: tile), let image = cover.image else { return }
 
         let colour = tint(for: image)
@@ -60,7 +60,7 @@ enum HomeTileTint {
     /// 卡片自己那一拍（挂 `InteractableLayoutBackingButton` 那条路）：**先只报一次结构**
     /// —— 盲写代码时这是唯一能拿到真机结构的途径（转储器到不了那一层）—— 再按形状决定要不要上色。
     static func applyToCard(_ view: UIView) {
-        guard isEnabled, isTileShaped(view) else { return }
+        guard isEnabled, isTile(view) else { return }
         logStructureOnce(view)
         apply(to: view)
     }
@@ -81,26 +81,29 @@ enum HomeTileTint {
         }
     }
 
-    // MARK: - 认形状
+    // MARK: - 认那一格（真机结构，日志 85 逐字）
 
-    /// 小卡片的形状：宽 120~340、高 40~80（真机上 Home 那排是 181×48 那种），而且里面有一张图。
-    private static func isTileShaped(_ view: UIView) -> Bool {
+    /// ★ 2026-10-13：**改认 id** —— 日志 85 的 `[HomeTiles] grid … subtree:` 第一行就写着
+    /// `LegacyUI_ECMCoreKit.InteractableLayoutBackingButton@0,0,187,48,id=Shortcut.Card.Home`：
+    /// **pw 用的那个 id 在我们 9.1.88 上一模一样**（它树注释里的 `InteractableLayoutBackingButton
+    /// id=Shortcut.Card.Home 181x48` 就是同一格）。⇒ 不再靠形状猜，直接认它。
+    private static func isTile(_ view: UIView) -> Bool {
+        guard view.accessibilityIdentifier == "Shortcut.Card.Home" else { return false }
         let size = view.bounds.size
-        guard size.width >= 120, size.width <= 340, size.height >= 40, size.height <= 80 else { return false }
-        return coverImageView(in: view) != nil
+        return size.width >= 120 && size.width <= 340 && size.height >= 40 && size.height <= 80
     }
 
-    /// 卡片里那张封面图。取**第一个有图**的 `UIImageView`（占位图时期没有图 ⇒ 自动跳过）。
-    private static func coverImageView(in root: UIView) -> UIImageView? {
-        var queue: [UIView] = [root]
-        var visited = 0
-        while !queue.isEmpty, visited < 200 {
-            let view = queue.removeFirst()
-            visited += 1
-            if let imageView = view as? UIImageView, imageView.image != nil { return imageView }
-            queue.append(contentsOf: view.subviews)
-        }
-        return nil
+    /// pw 的 `partsOf` 逐字：封面在 **`Encore.ImageView`** 里面那个 `UIImageView`。
+    ///
+    /// ⚠️ **必须已经布好局**：日志 85 里第一次网格那一拍，整棵子树的 frame 还都是 **0×0**
+    /// （`[HomeTiles] tile … tinted #1A1A1A from the cover UIImageView 0x0`），
+    /// 从一张 0×0 的图取平均色 ⇒ 近乎黑 ⇒ 看起来"没变"。所以这里要求封面至少 24pt 宽，
+    /// 没布好就**这一拍不动**，等下面某一拍（或封面图晚到时）再来。
+    private static func coverImageView(in tile: UIView) -> UIImageView? {
+        guard let holder = eeveeFindView(tile, identifier: "Encore.ImageView") else { return nil }
+        guard let imageView = holder.subviews.compactMap({ $0 as? UIImageView }).first else { return nil }
+        guard imageView.image != nil, imageView.bounds.width >= 24, imageView.bounds.height >= 24 else { return nil }
+        return imageView
     }
 
     // MARK: - 那一层底色
