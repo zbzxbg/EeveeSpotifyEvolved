@@ -198,12 +198,18 @@ final class EntityPageHeaderButton: UIControl {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     /// 认一个 Spotify 的控件：记引用、取字形、取标签（顺带把无障碍名字带过来）。
+    ///
+    /// ★ 2026-10-13（性能）：**同一个源控件只取一次字形** —— 这一拍在页头折叠的每一帧都会走到，
+    /// 而"取字形"要遍历源控件的子树、还会 `withRenderingMode` 造一张新图。
     func feed(from control: UIView?) {
+        let sameSource = (source as? NSObject) === (control as? NSObject)
         source = control
-        let glyph = eeveeGlyph(of: control) ?? fallbackGlyph
-        glyphView.image = glyph?.withRenderingMode(.alwaysTemplate)
         accessibilityLabel = control?.accessibilityLabel ?? accessibilityLabel
         refreshTint()
+        guard !sameSource || glyphView.image == nil else { return }
+
+        let glyph = eeveeGlyph(of: control) ?? fallbackGlyph
+        glyphView.image = glyph?.withRenderingMode(.alwaysTemplate)
     }
 
     private func refreshTint() {
@@ -284,7 +290,10 @@ final class EntityPageHeaderPlay: UIControl {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func feed(from control: UIView?) {
+        let sameSource = (source as? NSObject) === (control as? NSObject)
         source = control
+        // 同一个源控件就不重复取字形（见上面 `EntityPageHeaderButton.feed` 的说明）。
+        guard !sameSource || glyphView.image == nil else { return }
         if let glyph = eeveeGlyph(of: control) {
             glyphView.image = glyph.withRenderingMode(.alwaysTemplate)
         }

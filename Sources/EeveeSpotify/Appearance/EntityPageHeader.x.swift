@@ -37,10 +37,43 @@ enum EntityPageHeaderManager {
     private static var applying = false
     private static var logged = Set<String>()
 
+    /// 每一拍的耗时（50 / 200 / 800 拍各报一次）。
+    private static let meter = PerfMeter("EntityPageHeader")
+
+    /// 页头每一拍要用的那几个视图**缓存下来**。
+    ///
+    /// ★ 2026-10-13（用户：「用较快的速度往下滑，会有渲染跟不上的问题」）：pw 的 `SGRFindByIdentifier`
+    /// 带一个 `static char` key —— **命中一次之后每一拍只做一次"还在不在"的检查**，不再走子树。
+    /// 我们原来是每拍 **5 次全树 BFS**（shuffle / play / save / download / 协作者）+ 3~4 次文本遍历，
+    /// 而页头在快速滑动时**每一帧**都在折叠（`layoutSubviews` 每帧一次）⇒ 那些搜索全落在主线程上。
+    private static var cachedShuffle: UIView?
+    private static var cachedPlay: UIView?
+    private static var cachedTrailing: UIView?
+    private static var cachedCreatorLink: UIView?
+
+    /// 尾部按钮的兜底字形：**做成常量**（原来每一拍都 `UIImage(systemName:)` 造一张新的，
+    /// 而这一拍在折叠的每一帧都会走到 —— 与"字形只取一次"同一条纪律）。
+    private static let plusGlyph = UIImage(systemName: "plus")
+    private static let downloadGlyph = UIImage(systemName: "arrow.down")
+
+    /// 先看缓存（**还要在原来那棵树里、还在窗口上**），没有再搜。
+    private static func find(_ identifier: String, in root: UIView, cache: inout UIView?) -> UIView? {
+        if let cached = cache, cached.window != nil, cached.isDescendant(of: root) { return cached }
+        let found = eeveeFindView(root, identifier: identifier)
+        cache = found
+        return found
+    }
+
     // MARK: - 入口
 
-    /// 从 `HeaderContentLayout` 的 `layoutSubviews` 调用。
+    /// 从 `HeaderContentLayout` 的 `layoutSubviews` 调用 —— **快速滑动时每一帧一次**，
+    /// 所以整段用 `PerfMeter` 记着：50 / 200 / 800 拍各报一次"一次多少毫秒"，
+    /// 下一份日志就能直接回答"是不是我们拖慢的"，而不是靠猜。
     static func apply(in layout: UIView) {
+        meter.measure { applyOnce(in: layout) }
+    }
+
+    private static func applyOnce(in layout: UIView) {
         guard isEnabled, !applying else { return }
         guard layout.bounds.width > 120, layout.bounds.height > 40 else { return }
         // 只认歌单页（专辑页 v1 不碰）。
@@ -91,17 +124,20 @@ enum EntityPageHeaderManager {
 
         header.update(title: texts.title, creator: texts.creator, length: texts.length, about: texts.about)
 
-        let shuffle = eeveeFindView(block, identifier: "Components.UI.ShuffleButton")
-        let play = eeveeFindView(headerRoot, identifier: "header-play-button")
-        let save = eeveeFindView(block, identifier: "Components.UI.AddToButton")
+        // ★ 五个挂点全部走缓存（pw 的 `SGRFindByIdentifier` 同一条纪律）：命中过就不再搜树。
+        let shuffle = find("Components.UI.ShuffleButton", in: block, cache: &cachedShuffle)
+        let play = find("header-play-button", in: headerRoot, cache: &cachedPlay)
+        let save = find("Components.UI.AddToButton", in: block, cache: &cachedTrailing)
         let download = save == nil ? eeveeFindView(block, identifier: "DownloadButton.Granular*") : nil
         header.updateRow(
             shuffle: shuffle,
             play: play,
             trailing: save ?? download,
-            trailingFallback: UIImage(systemName: save != nil ? "plus" : "arrow.down")
+            trailingFallback: save != nil ? plusGlyph : downloadGlyph
         )
-        header.updateCreatorLink(eeveeFindView(block, identifier: "Components.PlaylistHeader.collaboratorsButton"))
+        header.updateCreatorLink(
+            find("Components.PlaylistHeader.collaboratorsButton", in: block, cache: &cachedCreatorLink)
+        )
 
         // Play 在页头的**前景区**，不在 block 里 ⇒ 单独藏一次（它自己那一拍也会再补，见下面的 hook）。
         eeveeConceal(play)
