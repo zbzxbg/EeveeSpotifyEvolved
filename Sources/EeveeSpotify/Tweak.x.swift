@@ -476,6 +476,13 @@ struct EeveeSpotify: Tweak {
         // Spotify 9.1.x. Each target is runtime-gated for minor-version safety.
         activateUpsellServiceBlocker()
 
+        // ★ 2026-10-13：CMP（ClientMessagingPlatform）营销面的**呈现侧**兜底 ——
+        //   全屏「welcome back / 2 个月 Premium」接管、「Final call」首页横幅。
+        //   请求侧已经在 `URL+Extension.isPendragonFetchMessageList` 拦了，但**已落盘**的
+        //   消息还会弹 ⇒ 这一层管它们。7 个目标类已用 dump-9.1.88 逐条核对过，
+        //   每个都带"类/方法存在性"检查，缺了只记日志、不影响其余 hook。
+        activateClientMessagingPlatformBlocker()
+
         // Block upsell components injected into Hub/home JSON (e.g. upgrade banners).
         if NSClassFromString("HUBViewModelBuilderImplementation") != nil {
             AdBlockerGroup().activate()
