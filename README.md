@@ -131,9 +131,6 @@ ALLOW_LIQUID_GLASS=0 ./build-ipa-local.sh /path/to/Spotify-vanilla.ipa
 
 Some of the modified features in this fork have been verified to work in this environment. (Because there are quite a few features, I can't test them all by myself.)
 
-## Contributing
-
-Bug reports, fixes and translations are welcome — read [CONTRIBUTING.md](CONTRIBUTING.md) first. For UI strings, [TRANSLATING.md](TRANSLATING.md) explains the workflow, the rules, and the `Tools/l10n_lint.py` checker that validates a translation before you open a PR. Known issues are collected in [common_issues.md](common_issues.md).
 
 ## Acknowledgements
 
