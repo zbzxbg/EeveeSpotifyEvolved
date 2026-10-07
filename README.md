@@ -89,7 +89,7 @@ Development last updated: `2026/10/06`.
 
 ## Install
 
-Download the latest `.deb` from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases/latest) if you are jailbroken, or build your own IPA below.
+Download the latest `.deb` from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases) if you are jailbroken, or build your own IPA below.
 
 | Install method | Artifact | Why |
 | --- | --- | --- |
