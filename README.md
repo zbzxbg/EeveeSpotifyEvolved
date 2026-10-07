@@ -40,7 +40,6 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 > [!IMPORTANT]
 > After testing, this modified version can reliably display lyrics for every song on Spotify 9.1.88, including when the Genius fallback is enabled.
 
-## Features
 
 ### Lyrics
 
@@ -52,21 +51,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 ### Look and feel
 
-- The Now Playing page rebuilt as one screen, with glass plates for lyrics and controls.
-- Liquid-glass tab bar and mini-player capsule.
-- Apple Music–style headers on playlist, album and artist pages, over a blurred artwork backdrop.
-- Playlists show a **single cover** instead of the four-tile mosaic.
-- **AMOLED true black** and a custom accent colour.
-- App icon picker.
-
-### Player, library and interruptions
-
-- Premium patching (inherited from upstream) — Spotify's account/bootstrap responses are rewritten client-side.
-- Ad and upsell blocking across hubs, sponsored banners, pop-ups and the Jam/download upsell services; rating prompts and the ClientMessagingPlatform marketing surfaces are suppressed too.
-- True shuffle, track rows on artist pages, liked-songs enabler, offline helpers.
-- SponsorBlock for podcast episodes, including segment reporting.
-- Blocked artists, skipped automatically.
-- Player haptics.
+- In one sentence: make Spotify look like Apple Music (this feature is under development…)
 
 > [!TIP]
 > If unexpected issues occur on the Now Playing page, such as lyrics not showing or outdated song teaser cards, simply exit the Now Playing page and re-enter it to resolve the issue. (This only applies to users who have not enabled "Hide Spotify song Now Playing modules".)
