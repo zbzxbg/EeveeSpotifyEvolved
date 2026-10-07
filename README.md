@@ -44,7 +44,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 ### Lyrics
 
-- **Seven sources** — Spicy Lyrics, NetEase Cloud Music, AMLL, Musixmatch, PetitLyrics, LRCLIB and Genius, or Spotify's own lyrics.
+- **Seven sources** — Spicy Lyrics, NetEase Cloud Music, AMLL, Musixmatch, PetitLyrics, LRCLIB and Genius.
 - You can also choose a **lyrics fallback chain**: `Musixmatch → PetitLyrics → LRCLIB → Genius`.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling, not just line sync.
 - **Apple Music–style lyrics page** — spring-driven line focus, glow reveal and its own typography pass.
