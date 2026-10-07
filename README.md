@@ -137,11 +137,11 @@ Some of the modified features in this fork have been verified to work in this en
 (The code from the following projects has been modified to fit this project.)
 
 - Thanks to [whoeevee](https://github.com/whoeevee) for creating the original EeveeSpotify project.
-- Thanks to [SideloadLabs](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) for creating the SpicyLyrics lyrics provider, as well as the logging and export functionality.
-- Thanks to the [MeloX](https://github.com/youshen2/MeloX) project for the inspiration behind this project's karaoke lyrics feature.
-- Thanks to [spoti.pw](https://spoti.pw) for the liquid glass pages. Code and design from **v0.21.1 and earlier** (GPL-3.0, © Vojtěch Škopek) are **reused and modified** here (2026-10-03 onward) — full notice in-app under "Licenses". v0.22.0+ is PolyForm Strict: none of its source was read or reused.
-- [kumone](https://github.com/missuo/kumone) — source of layout ideas for the Now Playing page and main pages.
-- The app icons under `Assets/AppIcon/` are not my work: they come from upstream [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and are re-distributed unchanged. Several are fan-made derivatives of third-party logos or characters; rights holders can open an issue and they will be removed.
+- The Spicy Lyrics lyrics provider, as well as the logging and export functionality, comes from [SideloadLabs](https://github.com/SideloadLabs/EeveeSpotifyReincarnated).
+- The karaoke lyrics design was inspired by [MeloX](https://github.com/youshen2/MeloX).
+- The liquid glass-related design was inspired by [spoti.pw](https://spoti.pw). Code from v0.21.1 and earlier (GPL-3.0, © Vojtěch Škopek) is used; the full notice is available in-app under "Licenses". v0.22.0+ is PolyForm Strict: none of its source code was read or reused.
+- The layout design of the Now Playing page and the main pages was inspired by [kumone](https://github.com/missuo/kumone).
+- The artist page design was inspired by Apple Music from Apple Inc.
 
 ## Reverse-engineered Data and Takedowns
 
