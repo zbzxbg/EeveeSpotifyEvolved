@@ -83,12 +83,15 @@ enum EntityPageAppearance {
     private static var heroHeightKey: UInt8 = 0
     /// hero 的最小高度（pw 的 `kMinHero = 120`）：比这矮就不画，免得出来一条细带。
     private static let minHeroHeight: CGFloat = 120
-    /// ★ 2026-10-17：**顶部那一条"纱"** —— 用户点名要的"缓冲区"，见 `ensureScrim`。
+    /// ★ 2026-10-17：**顶上那一条"带"** —— 用**这个页面的取色**画，照片从它里面化出来（见 `ensureScrim`）。
     private static var scrim: GradientView?
-    /// 纱在最上面那一端的不透明度（往下线性化到 0）。
-    private static let scrimTopAlpha: CGFloat = 0.5
-    /// 纱在"安全区顶"之外还要往下化开多少 —— 不留这一截的话，安全区底沿会看到一条硬边。
+    /// 那一条里**完全不透明**的那一段占多高：`0.55 × (安全区顶 + 22)` ≈ 45pt ⇒ 正好盖住灵动岛/状态栏
+    /// 那一条；剩下那截是"照片从色里长出来"的渐变，所以它既是缓冲区、也是渐变（用户两轮要的是同一件事）。
+    private static let scrimSolidFraction: CGFloat = 0.55
+    /// 那一条在"安全区顶"之外还要往下化开多少 —— 不留这一截的话，色带底沿会看到一条硬边。
     private static let scrimExtraFade: CGFloat = 22
+    /// 那一条**当前用着哪个颜色**（`#RRGGBB`）：换封面才重写 layer，0.6s 那一拍不重复写。
+    private static var scrimColourKey: String?
     /// 被我们藏掉的 wash 视图（**记原值**，关开关原样撤回）—— 见 `concealWash` / `revealWash`。
     private static var concealedWash: [
         (view: UIView, layerHidden: Bool, hadMask: Bool, interactive: Bool, accessibilityHidden: Bool)
@@ -292,7 +295,14 @@ enum EntityPageAppearance {
 
         // ★★ 2026-10-06：**浅底时把文字翻成深色** —— 见 `textTone`（你报的"浅色背景下看不清
         //    账号名字 / 本月有 xxx 听众"）。与清底色同一条纪律：**每一拍补一次**。
-        textTone(in: page, isLight: isLight(color))
+        let light = isLight(color)
+        textTone(in: page, isLight: light)
+
+        // ★★ 2026-10-17：**状态栏也跟着翻** —— AM 的 118（亮底）是黑字、119（暗棕底）是白字，
+        //    它就是靠这一条解决"照片铺到顶"的（不是靠留白）。我们原来一处都没碰过状态栏，
+        //    于是在亮封面上白字直接消失（用户照片 115 的现场）。
+        //    判据**复用同一个 `isLight`**，不另立阈值；值没变时 `apply` 只是一次比较。
+        EntityPageStatusBar.apply(light ? .darkContent : .lightContent)
 
         guard !didReport else { return }
         didReport = true
@@ -591,7 +601,7 @@ enum EntityPageAppearance {
         //    （`PlaylistHeader.x`：the cover runs full bleed across the top of the page and
         //    dissolves into the page's colour）。上一版是"模糊底 + 原地一张小卡"的 Melox 结构，
         //    而用户要的是"整张封面融进去" ⇒ Spotify 自己那张小封面**让位**（按层藏，可原样撤回）。
-        ensureSharpHero(cover: cover, source: source, page: container)
+        ensureSharpHero(cover: cover, source: source, page: container, colour: target.color)
     }
 
     /// 满幅那张清晰封面。
@@ -613,7 +623,7 @@ enum EntityPageAppearance {
     ///
     /// ⚠️ `_backgroundViewContainer` 里那些 wash 的 `GradientView` 必须**一起藏掉**：pw 的 issue #53
     /// 就是"wash 的 alpha 被抬高之后，不透明的一层把整张图整个盖住"。
-    private static func ensureSharpHero(cover: UIView, source: UIImage, page: UIView) {
+    private static func ensureSharpHero(cover: UIView, source: UIImage, page: UIView, colour: UIColor?) {
         // ★ 2026-10-13（照片 104：专辑页只有一片颜色、没有封面）：**宿主分两种** ——
         //   · 歌单页：Spotify 画页面颜色 wash 的那块 plane（pw 的 `PlaylistHeader.x` 做法）；
         //   · 专辑页：**头自己**（pw 的 `AlbumHeader.x` 逐字：`[header insertSubview:hero atIndex:0]`）。
@@ -720,59 +730,57 @@ enum EntityPageAppearance {
         if view.image !== source { view.image = source }
         applyDissolveMask(to: view, opaqueFraction: 0.54)
 
-        // ★ 2026-10-17：照片**照旧铺到顶**，只在这里加"顶上那一条纱" —— 用户拍板的方案 A。
-        ensureScrim(in: host, above: view, page: page)
+        // ★ 2026-10-17：照片**照旧铺到顶**，顶上那条由**页面取色**去化（不是黑纱）—— 见 `ensureScrim`。
+        ensureScrim(in: host, above: view, page: page, colour: colour)
     }
 
-    /// ★★ 2026-10-17（用户）：「歌曲页/艺人页的封面是直接铺到手机顶部的，但是所有的 app 都会在上面
-    /// 留一块缓冲区（因为有刘海屏、灵动岛、系统图标挡着）但是我们没有缓冲区（**pw 有没有这个缓冲？**）
-    /// 怎么搞好」。
+    /// ★★ 2026-10-17（用户，第二轮 —— 看了 AM 的艺人页截图 118/119 之后）：
+    /// 「am 是这么处理的：**用渐变来处理**，而往下滚就**一直保持渐变之后的颜色**。我们不是这个设计吧？
+    /// 能不能做成这样。而且渐变之后的颜色**会根据艺人变化**的。比如 nanatsukaze 的就是淡灰色，
+    /// 杰克逊的就是棕色。」
     ///
-    /// ## 先回答"pw 有没有"：**没有**
+    /// ## 先厘清：这三句里有两句我们**早就是**了
     ///
-    /// pw（GPL 的 v0.21.1 那份）三条页头是同一句 —— 横 0、**纵 0**：
+    /// 真机日志逐字（`eeveespotify_debug_shared 93.log`）：
     ///
-    /// | 页 | 位置 | 那一行 |
-    /// |---|---|---|
-    /// | 歌单 | `Redesigned/Playlist/PlaylistHeader.x:231` | `CGRectMake(0, 0, plane.bounds.size.width, bottom)` |
-    /// | 专辑 | `Redesigned/Album/AlbumHeader.x:253` | `CGRectMake(0, 0, header.bounds.size.width, height)` |
-    /// | 艺人 | `Redesigned/Artist/ArtistHeader.x:219` | `CGRectMake(0, 0, container.bounds.size.width, height)` |
+    /// ```
+    /// [PageField] field colour is now #F2F7FB — top F2F7FB, 57% #D7DCE0, bottom #A1A5A8   ← Nanatsukaze 艺人页
+    /// [PageField] field on TemplateView 0,0,414,896 ← cover colour #F2F7FB               ← field 是页面根的子视图
+    /// [PageField] sharp hero in HeaderContainer 0,0,414,520 at 0,0,414,520
+    /// ```
     ///
-    /// 整份 pw 里 `safeAreaInsets` 只出现在 Navbar/TabBar、PlayerFooter、PageTransition 三处，
-    /// **页头一处都没有** ⇒ 它也只保证**内容**避让（标题按钮贴页头底部、返回键用 Spotify 自己的）。
-    /// Apple Music 同样：`am1.png`（AM 的 ROSALÍA 艺人页）那张照片就是从屏幕最顶画的，
-    /// 状态栏 `12:27` 直接压在照片上。pw 唯一沾边的是 `Native/Appearance/EdgeEffect.x` ——
-    /// 把每个 scroll view 的 iOS 26 `topEdgeEffect.style` 设成 `softStyle`（导航栏下一条细的
-    /// 渐隐模糊带），**那是纱、不是给图让位**。
+    /// ⇒ ① **渐变**：`paintField` 就是一条整页的取色渐变，照片再"化"进它（`applyDissolveMask`）；
+    ///    ② **往下滚保持**：field 挂在**页面根**上（不在 scroll view 里）⇒ 内容滚、颜色不动；
+    ///    ③ **随艺人变**：颜色是每页从封面/照片当场算的（`averageColor`），Nanatsukaze 的底正是
+    ///      `#A1A5A8`（淡灰 ✓），另一张是 `#B08FA8`（粉紫 ✓）。这三条**不用改**。
     ///
-    /// ⇒ 「所有 app 都留缓冲」这句对**图**不成立、对**内容**成立；而内容避让我们早就在做了
-    /// （`EntityPageHeader.pinMoreButton`：`window.safeAreaInsets.top + 4`）。
+    /// ## 真正缺的两件（这一轮补的就是它们）
     ///
-    /// ## 但用户看到的症状是真的
+    /// **① 顶上那一条不是黑的。** 上一版我按"方案 A"盖了一条 **黑 → 透明** 的纱（用户当时选的就是
+    /// 它）—— 但 AM 不是这么干的：AM 顶上那一条**就是页面自己的颜色**，照片从这片颜色里"长"出来。
+    /// 改成取色之后，同一条纱自动变成"这个艺人的颜色"，与下面 field 的顶色**一模一样**（
+    /// `paintField` 的 0 号色就是它）⇒ 纱和 field 之间不可能有接缝。
     ///
-    /// 照片 115（"你已点赞"、白底封面）里**状态栏整个消失** —— 本 app 的状态栏常驻浅色内容
-    /// （白字），压在亮封面上就是"白压白"；照片 117（单曲 Asuka）也糊。这才是要治的东西。
+    /// **② 状态栏明暗要跟着翻。** AM 的 118（Nanatsukaze）状态栏是**黑字**、119（Michael Jackson）
+    /// 是**白字** —— 它就是靠这个解决"照片铺到顶"的，而不是靠留白。我们这边原来一处都没碰过状态栏
+    /// ⇒ 亮封面上白字直接消失（照片 115 就是这个现场）。现在 `EntityPageStatusBar` 接手。
     ///
-    /// ## 做法（用户二选一里选的 A：**顶部叠一层纱**，不是把图往下挪）
+    /// ## 形状
     ///
-    /// 照片照旧铺到顶 → 在最上面盖一条 **黑 → 透明** 的竖直渐变，高 `安全区顶 + 22`。
+    /// * 高 = `安全区顶 + 22`（与安全区同高那一段**不透明**，正好盖住灵动岛/状态栏那一条；
+    ///   最后一截化开，照片从色里长出来 ⇒ 既是"缓冲区"也是"渐变"）。
+    /// * 颜色 = 这个页面的取色（`colour`），取不到就不画（别用黑色顶替 —— 那正是上一版的问题）。
+    /// * 插在 **`hero` 正上方、宿主的其余子视图之下**（`insertSubview(_:aboveSubview:)`）⇒
+    ///   Spotify 自己的返回键、我们 pinned 的 ⋯、页头那些文字都在它**上面**，谁都不会被压暗。
+    /// * 锚在宿主 y=0（跟着照片滚）。滚下去之后那一条由 Spotify 自己收起来的导航栏接手。
     ///
-    /// · **为什么是黑、而且不跟封面明暗翻转**：状态栏是白字，只有把底下压暗才读得清；
-    ///   亮封面（浅底 + `textTone` 反色那一档）压成中灰，也仍然落在"白字可读"的那一侧。
-    ///   真要"浅底配深色状态栏"就得去 hook `preferredStatusBarStyle`（`App` 侧的事），
-    ///   那是**另一件事**，没有混进这一条改动里。
-    /// · **为什么插在 `hero` 正上方**（`insertSubview(_:aboveSubview:)` 而不是 `addSubview`）：
-    ///   于是它落在 `spotify 自己的返回键` 与 `我们 pinned 的 ⋯`、页头那些文字的**下面** ——
-    ///   谁都不会被压暗（艺人页那三个东西都是 `header` 自己的子视图）。
-    /// · **为什么锚在宿主 y=0、而不是每次都按屏幕位置算**：宿主顶边静止时就是屏幕顶边，
-    ///   所以静止态两种算法等价；锚在图上则**跟着图一起滚**（等于"照片顶上本来就有一条暗边"），
-    ///   不依赖 0.6s 那一拍、不会滞后。滚下去之后那一条由 **Spotify 自己的收起来的导航栏**
-    ///   接手（pw 的 `ArtistHeader.x` 那句 "the soft top edge every redesigned page has"，
-    ///   我们这边真机照片 116 里那条浅色导航栏就是它）。
-    ///
-    /// ⚠️ 与 `wantsTopInset`（真正的"把图往下挪"）**不是一回事**：那条 2026-10-06 被用户否过
-    /// （"缓冲没和封面接上、而且太大"），现在仍然恒 `false`，只在 `ensureSharpHero` 里留作记录。
-    private static func ensureScrim(in host: UIView, above hero: UIView, page: UIView) {
+    /// ⚠️ 与 `wantsTopInset`（真正把图往下挪）仍**不是一回事**：那条 2026-10-06 被用户否过
+    /// （"缓冲没和封面接上、而且太大"），现在仍然恒 `false`。
+    private static func ensureScrim(in host: UIView, above hero: UIView, page: UIView, colour: UIColor?) {
+        // 取不到颜色就**什么都不画**：宁可没有这一条，也不能拿一个错的颜色顶上去
+        // （黑纱就是这么来的，AM 那边根本没有那一层）。
+        guard let colour else { return }
+
         let view: GradientView
         if let scrim, scrim.superview === host {
             view = scrim
@@ -784,19 +792,31 @@ enum EntityPageAppearance {
             let gradient = fresh.gradient
             gradient.startPoint = CGPoint(x: 0.5, y: 0)
             gradient.endPoint = CGPoint(x: 0.5, y: 1)
-            gradient.colors = [
-                UIColor.black.withAlphaComponent(scrimTopAlpha).cgColor,
-                UIColor.black.withAlphaComponent(0).cgColor,
-            ]
-            gradient.locations = [NSNumber(value: 0), NSNumber(value: 1)]
             host.insertSubview(fresh, aboveSubview: hero)
             scrim = fresh
             view = fresh
             writeDebugLog(
-                "[\(logTag)] top scrim in \(type(of: host)) — cover stays full bleed to the top;"
-                    + " a black→clear fade over the status bar keeps it readable (option A,"
-                    + " the user's call: pw has no such inset at all)"
+                "[\(logTag)] top band in \(type(of: host)) — the cover still runs full bleed to the top;"
+                    + " the page's own colour holds the top \(Int(scrimSolidFraction * 100))% of it and"
+                    + " dissolves into the picture below (AM's look, and the status bar flips with it)"
             )
+        }
+
+        // 颜色只在"换了一张封面"时才重写（每 0.6s 走一趟，不能每拍都写 layer）。
+        let key = hex(of: colour)
+        if key != scrimColourKey {
+            scrimColourKey = key
+            let gradient = view.gradient
+            gradient.colors = [
+                colour.withAlphaComponent(1).cgColor,
+                colour.withAlphaComponent(1).cgColor,
+                colour.withAlphaComponent(0).cgColor,
+            ]
+            gradient.locations = [
+                NSNumber(value: 0),
+                NSNumber(value: Double(scrimSolidFraction)),
+                NSNumber(value: 1),
+            ]
         }
 
         let safeTop = resolvedSafeAreaTop(in: host, page: page)
@@ -816,6 +836,7 @@ enum EntityPageAppearance {
     private static func removeScrim() {
         scrim?.removeFromSuperview()
         scrim = nil
+        scrimColourKey = nil
     }
 
     /// 专辑页的 wash：页面里那个 `LegacyUI…HeaderView`（头的高度），里面是 Spotify 的 `GradientView`。
@@ -1194,6 +1215,8 @@ enum EntityPageAppearance {
 
     private static func restore(reason: String) {
         removeHero()
+        // 状态栏还回 app 自己那一档（我们只在"这个页面的取色"这件事上有意见）。
+        EntityPageStatusBar.release()
         restoreCentering()
         restoreChrome(reason: reason)
         field?.removeFromSuperview()
@@ -1319,7 +1342,8 @@ enum EntityPageAppearance {
 
     // MARK: - 小工具
 
-    private static func frontWindow() -> UIWindow? {
+    /// 最前面那个有内容的窗口（`EntityPageStatusBar` 也要用同一个判据，所以它是 internal 的）。
+    static func frontWindow() -> UIWindow? {
         let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }

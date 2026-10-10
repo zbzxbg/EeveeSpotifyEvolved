@@ -453,6 +453,16 @@ struct EeveeSpotify: Tweak {
         //   （见 `Appearance/EntityPageRepaint.x.swift` 文件头）。
         activateEntityPageRepaint()
 
+        // ★ 2026-10-17（用户给了两张 AM 艺人页截图 118/119：「am 是这么处理的：用渐变来处理，而往下滚
+        //   就一直保持渐变之后的颜色…而且渐变之后的颜色会根据艺人变化」）：
+        //   日志证明"渐变 / 往下滚保持 / 随艺人变"这三条我们**早就有**（`[PageField] field colour is
+        //   now #F2F7FB … bottom #A1A5A8` 就是 Nanatsukaze 那页的淡灰底）。真正缺的是 **AM 解决
+        //   "照片铺到顶"的办法：翻状态栏**（118 黑字 / 119 白字）—— 我们原来一处都没碰过它
+        //   ⇒ 亮封面上白字直接消失（照片 115）。挂点与实测依据见
+        //   `Appearance/EntityPageStatusBar.x.swift` 文件头（Info.plist 没有关掉 VC 控制、
+        //   二进制里 `statusBarStyle` 0 命中）。
+        activateEntityPageStatusBar()
+
         // ★ 2026-10-13（用户第 5 轮问的）：「歌单封面是歌单里前四首歌的专辑封面拼成的一张，
         //   有没有办法让它变成一张？」—— 能，而且不用动视图层：
         //   那个四宫格**不是视图拼的**，地址里就串着四张图的 id
