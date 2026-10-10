@@ -253,7 +253,31 @@ func eeveeFire(_ control: UIView?) -> String? {
     }
 
     // ② 手势：先自己，再（有界地）往下钻子树。
-    return eeveeFireGesture(in: control)
+    if let fired = eeveeFireGesture(in: control) { return fired }
+
+    // ③ ★★ 2026-10-10（**日志 96 是判决**）：有界地再往上看两层。
+    //
+    //    现场：用户**自己**点艺人页的"关于艺人"那一块，页面**真的跳走了**
+    //    （`12:39:04 [PageField] restored 2 background(s) (left the page)`，而且新页面不是我们
+    //    接管的三页 ⇒ 是独立的 `Creator_BiographyPageImpl.BiographyViewController`）。
+    //    而我们把点击转发给 `SPTArtistAboutBiographyView` 本身时什么都不发生 ⇒ **tap 挂在包着它
+    //    的那一层上**（ElementKit 的包装层），而那正是我先前**故意不找**的方向。
+    //
+    //    ⚠️ 两道闸门（只在"自己+子树都没有"时才走到这里，而且最多两层）：
+    //      · **不碰 `UIScrollView`** —— 那上面的 tap 是"点空白关页面"那一类；
+    //      · **不碰比目标宽太多的容器** —— 免得点到整页/整段那一级。
+    var ancestor = control.superview
+    var levels = 0
+    while let current = ancestor, levels < 2 {
+        let tooWide = current.bounds.width > control.bounds.width * 1.6 + 40
+        if !tooWide, !(current is UIScrollView),
+           let fired = eeveeFireRecognizers(of: current) {
+            return "ancestor\(levels + 1).\(fired)"
+        }
+        ancestor = current.superview
+        levels += 1
+    }
+    return nil
 }
 
 /// `sendActions` 候选事件。**顺序有讲究**：`primaryActionTriggered` 是 iOS 14+ 那个"主操作"
