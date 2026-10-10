@@ -50,7 +50,6 @@ extension UserDefaults {
     private static let nowPlayingBlurUnplayedLyricsKey = "nowPlayingBlurUnplayedLyrics"
     private static let lyricsSearchPlaceholderEasterEggKey = "lyricsSearchPlaceholderEasterEgg"
     private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
-    private static let entityPageFieldKey = "entityPageField"
     private static let entityPageDissolveKey = "entityPageDissolve"
     private static let entityPageHideChromeKey = "entityPageHideChrome"
     private static let amoledThemeKey = "amoledTheme"
@@ -116,7 +115,6 @@ extension UserDefaults {
         nowPlayingBlurUnplayedLyricsKey,
         lyricsSearchPlaceholderEasterEggKey,
         nowPlayingControlGlyphsKey,
-        entityPageFieldKey,
         entityPageDissolveKey,
         entityPageHideChromeKey,
         amoledThemeKey,
@@ -803,23 +801,10 @@ extension UserDefaults {
 
     // MARK: - 页面取色底（AM 化：专辑页 / 歌单页）
 
-    /// 「**封面取色底**」：专辑页 / 歌单页的最底层铺一层"封面取色 → 向下渐隐成 `#121212`"的竖直渐变。
-    ///
-    /// **默认开** —— 用户 2026-10-13：「我就一个要求：**看起来像 Apple Music**」。
-    /// 机制、证据、以及"**为什么必须先清掉 list / 每个 cell 画的 `#121212` 底色**"（不清就完全看不见）
-    /// 都写在 `Appearance/EntityPageAppearance.x.swift` 的文件头 —— 与 pw 的 `AlbumField` 同一条路。
-    /// 关掉即**完全还原**：清过的底色逐个写回原色、渐变层撤掉。
-    static var entityPageField: Bool {
-        get {
-            container.object(forKey: entityPageFieldKey) as? Bool ?? true
-        }
-        set {
-            container.set(newValue, forKey: entityPageFieldKey)
-        }
-    }
-
-    /// 「**Melox 风页面**」：模糊封面底 + 整页取色 + 头部居中（原「封面下缘溶解」，
+    /// 「**Melox 风页面**」：模糊封面底 + 整页取色（原「封面下缘溶解」，
     /// 名字是历史遗留，行为早已不止"下缘一条"）。
+    /// ★ 2026-10-14：「头部居中」那条**已删** —— 它只对艺人页跑，而名单里 4 个 id 全是
+    /// 专辑页的 ⇒ 从未命中过（详见 `Appearance/EntityPageAppearance.x.swift` 的 `tick()`）。
     ///
     /// **默认关** —— 2026-10-13 用户要求：「专辑/歌单页的**两个按钮默认关闭**」。
     /// 只改 fallback、**不动已存的值**：手动开过的设备保持他开的那一档（与 AMLL 那条同一纪律）。

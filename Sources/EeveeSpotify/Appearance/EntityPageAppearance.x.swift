@@ -29,10 +29,11 @@ import UIKit
 ///
 /// ── 开关 ─────────────────────────────────────────────────────────────────
 ///
-/// 扩展功能 →「**页面取色底（AM 化）**」两颗，各自独立：
-///   · 「封面取色底」`UserDefaults.entityPageField`（默认开）
-///   · 「封面下缘溶解」`UserDefaults.entityPageDissolve`（默认开）
-/// 两颗都关掉 = **一个字节都不改**（清过的底色逐个写回、两层视图撤掉）。
+/// 扩展功能 →「**Melox 风页面**」**一颗**（`UserDefaults.entityPageDissolve`，默认**关**）——
+/// 它内部同时管"取色底"与"模糊封面底 / 下缘溶解"两条路径（`tick()` 里的 `wantsField` /
+/// `wantsDissolve`），用户侧只有这一颗。
+/// ★ 2026-10-14：老键 `entityPageField`（原「封面取色底」那颗）**已删除** —— 它早已零读取端。
+/// 这一颗关掉 = **一个字节都不改**（清过的底色逐个写回、两层视图撤掉）。
 /// 日志 tag：`[PageField]`。
 ///
 /// ★ 2026-10-17：**顶部那一条"纱"**（`ensureScrim`）跟着「封面下缘溶解」这颗开关走 ——
@@ -309,6 +310,10 @@ enum EntityPageAppearance {
         // ★ 2026-10-13（用户：「有些选项可以改改或者删掉了」）：**「封面取色底」并进这一颗了** ——
         //   在用户眼里"模糊封面底"与"整页取色底"就是同一件事的两半（都是拿封面的颜色铺底），
         //   设置页因此从**三颗减到两颗**；代码里两条路径**留着**（要单独排查时能只关一半）。
+        // ★ 2026-10-14 实话：下面这两行**同源** —— 读的都是 `entityPageDissolve`；老键
+        //   `entityPageField` **已删除**（它零读取端，而且 `:173` 的 `isEnabled` 才是整条入口的
+        //   闸门 ⇒ 就算把这一行改回老键也救不回）。留两个变量**只为**让"取色底"与"模糊封面底"
+        //   两条路径在代码里各管各的（要单独关一半时改对应那一行即可），行为与拆分前一致。
         let wantsField = UserDefaults.entityPageDissolve
         let wantsDissolve = UserDefaults.entityPageDissolve
 
@@ -341,11 +346,12 @@ enum EntityPageAppearance {
             //    **清晰满幅封面 + 顶带只有艺人页**（用户拍板选 A：专辑/歌单留 Spotify 自己那张卡片）。
             let sharp = target.kind == .artist
             ensureHero(on: target, sharpCover: sharp)
-            if sharp {
-                // ④ 头部居中（Melox 的三段式）—— 与"模糊底"同属这一颗开关下的"页面样式"。
-                centerHeaderLabels(in: target.page)
-            } else {
-                if !centeredLabels.isEmpty { restoreCentering() }
+            // ★ 2026-10-14：这里原来还有一条"头部居中"（`centerHeaderLabels`）—— **已删**：
+            //    它只在这个艺人页（`sharp`）分支里跑，可名单里那 4 个 id 全是**专辑页**的
+            //    `CreativeWorkPlatform.Components.UI.{PreTitleRow,TitleRow,ParentRow,MetadataRow}`
+            //    ⇒ 在艺人页上一行都命不中，从 2026-10-18 起就是空转（日志里永远不会有
+            //    `[PageField]` 的"头部居中"记录）；AM 式页头另有实现（见 `EntityPageHeader.x.swift`）。
+            if !sharp {
                 // 卡片圆角照 AM（连续圆角 8，原生只有 4）。
                 roundCoverCard(target.cover)
                 // ★★★ 2026-10-17（**照片 126 是判决**）：页面那条**不是从上到下**的暗棕渐变，
@@ -357,7 +363,6 @@ enum EntityPageAppearance {
             }
         } else {
             removeHero()
-            restoreCentering()
         }
 
         // ③ Spotify 自己那些按键（用户 2026-10-13：「spotify 本身的那些按键都还在，看起来不咋地」）。
@@ -1296,76 +1301,6 @@ enum EntityPageAppearance {
         return UIImage(cgImage: rendered)
     }
 
-    // MARK: - ④ 头部居中（Melox 的三段式）
-
-    /// Melox / AM 的头部是**居中**的：标题、艺人、元信息各占一行、行行居中。
-    /// Spotify 是**左对齐**（日志 78 的探针逐字：`TitleRow 16,326,192,34`、`ParentRow 16,368,64,24`、
-    /// `MetadataRow 16,400,382,19` —— 全都贴着 x=16 ✗）。
-    ///
-    /// 做法**不动约束、只写属性**（所以可逆、也不会跟 Auto Layout 打架）：
-    ///   · `textAlignment = .center`（换行后也跟着居中）
-    ///   · 再给一个**水平位移**，把这个 label 的中心挪到页面中线
-    ///
-    /// ⚠️ 位移量按 **`label.center`** 算 —— 那个值**不受 transform 影响**（受影响的只有 `frame`）
-    /// ⇒ 每拍重设同一个值是幂等的、**不会累加** ✓（这正是"每拍补一次"能安全用的前提）。
-    private static let centeredIdentifiers = [
-        "CreativeWorkPlatform.Components.UI.PreTitleRow",
-        "CreativeWorkPlatform.Components.UI.TitleRow",
-        "CreativeWorkPlatform.Components.UI.ParentRow",
-        "CreativeWorkPlatform.Components.UI.MetadataRow",
-    ]
-    private static var centeredLabels: [ObjectIdentifier: (label: UILabel, alignment: NSTextAlignment)] = [:]
-    private static var centeredViews: Set<ObjectIdentifier> = []
-
-    private static func centerHeaderLabels(in container: UIView) {
-        var seen = 0
-        var newlyCentered: [String] = []
-
-        func walk(_ node: UIView, _ depth: Int) {
-            guard depth <= clearDepth, seen < clearNodes, centeredLabels.count < 40 else { return }
-            seen += 1
-            let identifier = node.accessibilityIdentifier ?? ""
-            if !identifier.isEmpty, centeredIdentifiers.contains(identifier),
-               let label = node as? UILabel,
-               !centeredViews.contains(ObjectIdentifier(node)) {
-                centeredViews.insert(ObjectIdentifier(node))
-                centeredLabels[ObjectIdentifier(node)] = (label: label, alignment: label.textAlignment)
-                newlyCentered.append(identifier)
-            }
-            for sub in node.subviews { walk(sub, depth + 1) }
-        }
-        walk(container, 0)
-
-        for entry in centeredLabels.values {
-            let label = entry.label
-            if label.textAlignment != .center { label.textAlignment = .center }
-            guard let superview = label.superview else { continue }
-            let middle = container.convert(CGPoint(x: container.bounds.midX, y: 0), to: superview).x
-            let delta = middle - label.center.x
-            if abs(delta) > 0.5 {
-                label.transform = CGAffineTransform(translationX: delta, y: 0)
-            }
-        }
-
-        if !newlyCentered.isEmpty {
-            writeDebugLog(
-                "[\(logTag)] centred \(newlyCentered.count) header row(s) — \(newlyCentered.joined(separator: ", "))"
-                    + " (Spotify leaves them against the left margin; Melox centres them;"
-                    + " alignment and transform both go back when the switch is turned off)"
-            )
-        }
-    }
-
-    private static func restoreCentering() {
-        guard !centeredLabels.isEmpty else { return }
-        for entry in centeredLabels.values {
-            entry.label.textAlignment = entry.alignment
-            entry.label.transform = .identity
-        }
-        centeredLabels.removeAll()
-        centeredViews.removeAll()
-    }
-
     // MARK: - ③ 藏掉 Spotify 自己那些按键
 
     /// AM 的专辑 / 歌单页没有这些：每行的「+」「…」、头部的下载 / 加入 / 菜单 / 观看信息。
@@ -1416,7 +1351,6 @@ enum EntityPageAppearance {
         restoreCoverRounding()
         // 状态栏还回 app 自己那一档（我们只在"这个页面的取色"这件事上有意见）。
         EntityPageStatusBar.release()
-        restoreCentering()
         restoreChrome(reason: reason)
         field?.removeFromSuperview()
         field = nil

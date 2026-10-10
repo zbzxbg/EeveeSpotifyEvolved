@@ -619,11 +619,14 @@ struct EeveeSpotify: Tweak {
         HeaderArtworkProbe.start()
 
         // ★ 2026-10-13（用户：「我就一个要求：看起来像 Apple Music」）：
-        //   专辑页 / 歌单页的 **AM 化** —— ① 封面取色底（最底层渐变）② 封面下缘溶解。
+        //   专辑页 / 歌单页的 **AM 化** —— ① 取色底（最底层渐变）② 封面下缘溶解。
         //   做法照 pw 的 `AlbumField`：铺在页面最底层，而且**必须先清掉 list / 每个 cell 画的
         //   `#121212` 底色**（不清就完全看不见那层 —— 那条坑的近亲是"整页变黑"）。
-        //   两颗开关各自独立、默认都开；关掉即完全还原。机制与证据见
-        //   `Appearance/EntityPageAppearance.x.swift` 文件头。日志 tag：`[PageField]`。
+        //   ★ 2026-10-14 更正（原文写"两颗开关各自独立、**默认都开**"，两处都与代码不符）：
+        //     · 用户侧**只有一颗**（`entityPageDissolve`）—— "封面取色底"那条路径已并进它，
+        //       且 `EntityPageAppearance.x.swift:317` 读的也是同一个键（老键 `entityPageField` 已删）；
+        //     · `entityPageDissolve` 默认是 **false**（`UserDefaults+Extension.swift` 里的 `?? false`）。
+        //   机制与证据见 `Appearance/EntityPageAppearance.x.swift` 文件头。日志 tag：`[PageField]`。
         EntityPageAppearance.start()
 
         // 隐私 / 触感 / Flag 覆盖都是"默认关、用户自己开"的，所以启动时把**实际生效值**

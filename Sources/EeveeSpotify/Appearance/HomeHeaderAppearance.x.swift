@@ -38,8 +38,26 @@ import ObjectiveC.runtime
 ///   4. **所有事情都做在页面的 `viewDidLayoutSubviews` 里**（pw 同款）：主页的头部**随滚动动**
 ///      ⇒ 音乐库那套"头部静止 + 0.5s 复查"在这里**不成立**；页面的布局回合在滑动每一步都会来。
 ///
-/// ⚠️ 与「隐藏主页头部」那颗开关（`DeclutterChrome.hideHomeHeader`）的关系：那颗开着时整个 header 被隐掉
-///    ⇒ 我们**让位**（标题挂在一个看不见的容器上没意义），并在日志里说一次。
+/// ⚠️ 与「隐藏主页头部」那颗开关（`DeclutterChrome.hideHomeHeader`）的关系 ——
+///    ★ 2026-10-14（用户批准"隐藏态不留灰纱"之后定的）：**「隐藏」是一个独立状态**，
+///    不再挂在 `homeLargeTitle` 后面；让位**只让"画"那一半，灰纱照收**。
+///    · **让位**：不建标题、不动那一行与 pills、不碰 RTL —— header 被 `DeclutterChrome` 设成
+///      `isHidden = true`（`DeclutterChrome.x.swift:382-388`，视图**还在树里**）⇒ 往一个看不见的
+///      容器上画标题没有意义，还会跟 Spotify 自己的隐藏逻辑打架；
+///    · **灰纱照收**（`clearScrim`）：灰纱与 header **同父、是兄弟**（上面的真机树 + `clearScrim`
+///      的注释），`DeclutterChrome` 藏的是 header **自己** ⇒ 谁都不会顺手带走灰纱。
+///      让位若排在 `clearScrim` **之前**，用户看到的就是"顶部条没了、灰纱还在"—— 那正是这次修的。
+///    · **可逆**：`clearScrim` 把原 alpha 记进 `vanishedViews`，切回「原样」时 `restore(in:)`
+///      会原样写回 ⇒ 灰纱不会被"粘死"。
+///    ⚠️ 为什么隐藏分支要排在 `isEnabled`（= `homeLargeTitle`）**之前**：设置页的三态是
+///      「原样 = 两颗都 false / AM 式 = `homeLargeTitle == true` / **隐藏 = `hideHomeHeader == true`，
+///      `homeLargeTitle` 的值被忽略**」（`Settings/Sections/HomeLibrary/Views/HomeAndLibrarySettingsView.swift`
+///      文件头 + `HomeHeaderStyle`）。而那个选择器可以从「原样」（它会写 `homeLargeTitle = false`）
+///      **直接切到「隐藏」** ⇒ `false + true` 不是历史值、是今天就到的组合；
+///      隐藏行为若还看 `homeLargeTitle`，"顶部条没了、灰纱还在"就会在这个组合里复发。
+///    ⚠️ 隐藏态**不调 `restore(in:)`**：`restore` 会把灰纱 alpha 还回去（= 灰纱又出现，正好是
+///      要修的那一件）；标题/RTL/pills 那三件在 hidden 的 header 里反正看不见，留着还能让
+///      「隐藏 → AM 式」不用重建。切到「原样」时才走 `restore`（那条路一个字没动）。
 struct HomeHeaderAppearanceGroup: HookGroup {}
 
 enum HomeHeaderMetrics {
@@ -75,18 +93,16 @@ enum HomeHeaderAppearance {
     /// 由页面 VC 的 `viewDidLayoutSubviews` 调用（**滑动每一步都会来**）。幂等。
     @MainActor
     static func apply(to page: UIView) {
-        guard isEnabled else {
-            restore(in: page)
+        // ★ 2026-10-14：隐藏态**单独一条**、排在 `isEnabled` 前面（理由见文件头那段 ⚠️）：
+        //   「隐藏」= `hideHomeHeader == true`，`homeLargeTitle` 的值**被忽略**。
+        //   ⚠️ 这里读的是同一个键、而且是一个纯读（`UserDefaults+Extension.swift:532-539`）⇒
+        //   它为 false 时，下面每一步与改动前是**同一条语句、同一个顺序**（等价性逐条见交接报告）。
+        if UserDefaults.hideHomeHeader {
+            standDown(in: page)
             return
         }
-        // 「隐藏主页头部」开着 ⇒ 让位（那颗开关会把整个 header 藏掉）。
-        guard !UserDefaults.hideHomeHeader else {
-            if !didLogStandDown {
-                didLogStandDown = true
-                writeDebugLog(
-                    "[Home] standing down — the hide-home-header switch owns this header, so the Apple Music title would sit on a hidden view"
-                )
-            }
+        guard isEnabled else {
+            restore(in: page)
             return
         }
         guard let header = findView(in: page, where: { className($0).contains("HomeHeaderView") }) else {
@@ -97,6 +113,29 @@ enum HomeHeaderAppearance {
             return
         }
         layout(header: header)
+    }
+
+    /// 「隐藏主页头部」开着 ⇒ 让位：**只让"画"这一半，灰纱照收**（理由见文件头那段 ⚠️）。
+    ///
+    /// 找 header 用的是与 `layout(header:)` **同一条判据**；**不**扫整页找 `GradientView`
+    /// （`clearScrim` 上面那段写了理由：扫整页会碰到别的页面的灰纱）。`DeclutterChrome` 是
+    /// `view.isHidden = true`、视图**还在树里**（`DeclutterChrome.x.swift:382-388`）⇒ 照样找得到。
+    /// ⚠️ 拿不到 header（页面还没建好）时什么都不做：那一拍的灰纱不收，下一个布局回合还会再来
+    ///    （页面的 `viewDidLayoutSubviews` + header 自己那一拍）—— 与改动前一致（改动前连找都不找）。
+    /// ⚠️ 也**不**在这里删我们画过的标题 / 翻回 RTL：它们都在那个 hidden 的 header 里，看不见；
+    ///    留着反而让「隐藏 → AM 式」这一跳不用重建（切「原样」时由 `restore(in:)` 收尾）。
+    @MainActor
+    private static func standDown(in page: UIView) {
+        if !didLogStandDown {
+            didLogStandDown = true
+            writeDebugLog(
+                "[Home] standing down — the hide-home-header switch owns this header,"
+                    + " so the Apple Music title would sit on a hidden view; scrim still collected"
+                    + " (it is the header's sibling, not its child)"
+            )
+        }
+        guard let header = findView(in: page, where: { className($0).contains("HomeHeaderView") }) else { return }
+        clearScrim(around: header)
     }
 
     @MainActor

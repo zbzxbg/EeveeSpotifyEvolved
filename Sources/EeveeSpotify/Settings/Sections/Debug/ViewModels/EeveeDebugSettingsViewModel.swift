@@ -38,10 +38,27 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         }
     }
 
-    /// 「把服务端那条 `lyrics_entry_point_enabled` 钉成 true」。同上：默认开。
+    /// 「把服务端那条 `lyrics_entry_point_enabled` 钉成 true」。默认开。
     ///
-    /// 这一条**还没有结论**：那次 A/B 是空跑（customize 走 304 无 body，flag 替换
-    /// 那段代码整段没执行）。所以它现在是"待验证"，不是"待删除"。
+    /// ★ 2026-10-14 重新定性（用户问「这颗开关还有用吗」时查清的）：
+    /// **它不再是"待验证的 A/B 开关"，而是那次"没歌词"事故的保险丝。**
+    ///
+    /// 经过：2026-10-12 用户报「退出重进 Spotify 大概率突然无法播放任何歌词、
+    /// 开覆盖配置也只能好一小会」。根因是这条替换当时是 `.setBool`（**只钉已下发的值、
+    /// 绝不新增**）—— 只要某一份 customize payload 没带这条 flag，这一枪就**静默**落空，
+    /// 而服务端那份的取值是 false ⇒ 歌词入口整个消失。升级成 `.forceBool(true)`
+    /// （命中就钉住、没下发就**补一条**）之后问题消失。
+    ///
+    /// 所以**关掉这颗开关 = 回退到 10-12 那次"没歌词"的形状**，不再是中性的 A/B：
+    ///   · 门禁在 `DynamicPremium+ModifyingFunctions.swift:746-751`（整条跳过）；
+    ///   · 日志会打 `[Flags] lyrics_entry_point_enabled — SKIPPED (switch off, A/B)`
+    ///     —— 那句里的 `A/B` 是历史措辞，**现在读作"你主动关掉了保险丝"**。
+    ///
+    /// 早先那句「这次 A/B 是空跑（customize 走 304 无 body，flag 替换整段没执行）」
+    /// 只在当时成立：它说明**那一次实验没拿到数据**，不代表这个开关没用。
+    ///
+    /// ⇒ 结论：**留着**（别删），但也别把它当"实验"关掉；真要让它回到"实验"语义，
+    /// 得先确认服务端现在每份 payload 都带这条 flag。
     @Published var lyricsEntryPointFlag = NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced {
         didSet {
             UserDefaults.standard.set(

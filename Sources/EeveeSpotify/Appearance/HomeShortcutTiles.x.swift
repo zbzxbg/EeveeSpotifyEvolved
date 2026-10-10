@@ -48,6 +48,21 @@ enum HomeTileTint {
 
     static var isEnabled: Bool { UserDefaults.homeTileTint }
 
+    /// **启动时的值**（第一帧就定下来），给设置页的 `RestartSection` 判"要不要提示重启"用。
+    ///
+    /// 为什么必须单独存一份：这个钩子组是**启动时按当时的值决定装不装**的 ——
+    /// `Tweak.x.swift` 在启动流程里调 `activateHomeShortcutTiles()`，里面第一句就是
+    /// `guard HomeTileTint.isEnabled else { return }`（本文件文末），而
+    /// `HomeShortcutTilesGroup().activate()` 只在那一次跑。
+    /// ⇒ 凡是"启动时是关的"这一场，整个 hook group 根本不装，之后再打开这颗开关也收不到
+    /// 那些布局回合，**必须重启**；反之（启动时是开的、后来关掉再开回来）钩子一直在，不用重启。
+    /// 判据只有"当前值 ≠ 启动值"这一个 —— 与 `RatingPromptBlock.launchEnabled`
+    /// （`RatingPromptBlock.x.swift:40`）同一套写法，`RestartSection` 的文件头也是这么要求的。
+    ///
+    /// ⚠️ `static let` 是**惰性**的：第一次读它的地方就是"启动流程里那次 activate"
+    ///    （见上），所以它拿到的确实是启动值，而不是"用户进设置页时的值"。
+    static let launchEnabled = UserDefaults.homeTileTint
+
     // MARK: - 常数（pw 的 `HomeTiles.m` / `SGRPalette.m`）
 
     /// 封面从上/下/左边缘让出这么多（pw 的 `kInset = 5`）。
@@ -491,7 +506,12 @@ class HomeShortcutBackingButtonHook: ClassHook<UIView> {
 }
 
 func activateHomeShortcutTiles() {
-    guard HomeTileTint.isEnabled else { return }
+    // ⚠️ 这里读的是 **`launchEnabled`（启动快照）而不是 `isEnabled`** ——
+    //    两个值在这一刻必然相等，但**读快照才能保证那个 `static let` 就在启动流程里被求值**
+    //    （它是惰性的）。设置页的 `RestartSection` 拿"当前值 ≠ 启动值"当判据，
+    //    如果这里不先读一次，快照就可能被推迟到"用户进设置页"那一刻才定下来，判据会失真。
+    //    —— 与 `RatingPromptBlock.launchEnabled` / `activateRatingPromptBlock()` 同一套写法。
+    guard HomeTileTint.launchEnabled else { return }
 
     let targets = [
         HomeShortcutBackingButtonHook.targetName,

@@ -192,6 +192,12 @@ struct NowPlayingSettingsView: View {
             }
 
             Section(footer: Text("declutter_description".localized)) {
+                // ⚠️ 这一颗属于「迷你播放条那一族」（五颗，分布清单见
+                //    `Settings/Sections/TabBar/Views/TabBarAndMiniBarSettingsView.swift` 文件头）：
+                //    本页只放**藏整条**这一颗 —— 玻璃与圆封面在「标签栏与迷你条」页，
+                //    设备按钮与加号在「首页与音乐库」页。
+                //    2026-10-14 拍板**不搬家**（移动 Toggle 会改掉用户找开关的路径，属结构批）
+                //    ⇒ 只在这里交叉说明，好让"为什么它不在迷你条那一页"有个答案。
                 Toggle(
                     "hide_mini_player_bar".localized,
                     isOn: settingsShadowBinding($shadow.hideMiniPlayerBar) { value in

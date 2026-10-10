@@ -9,6 +9,22 @@ import UIKit
 /// 两节：
 ///   · `tab_bar_glass_section` —— 藏文字 / 藏「创建」/ 改用系统玻璃；
 ///   · `mini_bar_glass_section` —— 迷你条玻璃（与上面那条同高同材质）。
+///
+/// ── 「迷你播放条那一族」五颗开关的分布（2026-10-14 登记族属，**不搬家**）──────────────
+///
+/// 这一族管的是同一条迷你播放条（以及它和播放器共用的那几颗控件），但五颗**分散在三页**：
+///   · `hide_mini_player_bar`   —— **听歌页** `declutter_description` 那一节（藏整条）；
+///   · `mini_bar_glass`         —— **本页**第二节（那条胶囊换玻璃）；
+///   · `mini_bar_round_artwork` —— **本页**第二节（左边封面改圆形，**独立于**玻璃那颗）；
+///   · `hide_connect_button`    —— **首页与音乐库页**第一节（藏设备/输出切换按钮 ——
+///     它**迷你条与播放器共用**，所以是"所有传输条上都不显示"）；
+///   · `hide_add_to_button`     —— 同一节（藏加号，与设备按钮同级）。
+///
+/// 分散**不是**因为功能分家，而是因为 l10n 里能用的分节标题只有那三个
+/// （`mini_bar_glass_section` / `declutter_description` / `declutter_home_player_section`）。
+/// 要真正归到一处，要么**跨页搬 Toggle**、要么**新造/合并分节标题**：前者会改掉用户找开关的
+/// 路径、后者要动键，两样都不在这一批里（2026-10-14 用户批的是"说明 / 分区 / 注释"）。
+/// ⇒ 本批**不动 Toggle 的位置**，只把族属与各自的落点写清楚。
 struct TabBarAndMiniBarSettingsView: View {
 
     @State private var shadow = Shadow()
@@ -88,6 +104,12 @@ struct TabBarAndMiniBarSettingsView: View {
 
             // 迷你播放条：用户 2026-10-02 点名要的（照片 33：那条实心封面色底太扎眼）。
             // 与上面那条**同高同材质**，宽度贴它自己的内容 —— 两条胶囊之间的间隙保持不动。
+            //
+            // 本节两颗是"迷你播放条那一族"的五分之二（完整清单见文件头）：
+            //   · 两颗**互不影响** —— `mini_bar_round_artwork` 关掉玻璃也照样是圆的；
+            //   · **两颗默认都开**（默认值在 `UserDefaults+Extension.swift` 的
+            //     `miniBarGlass` / `miniBarRoundArtwork`，都是 `nil ⇒ true`）；
+            //     想"回到 Spotify 原样"得各自关一次（或走下面那颗「重置本页」）。
             Section(
                 header: Text("mini_bar_glass_section".localized),
                 footer: Text("mini_bar_glass_description".localized)

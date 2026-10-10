@@ -27,5 +27,9 @@
 //     · 影子值绑定 → `Settings/Views/SettingsShadowBinding.swift`
 //     · 重置本页   → `Settings/Views/SettingsResetSection.swift`
 //
-// l10n 里 `extras_title` / `extras_description` 两条**暂时闲置**（页面没了，键先留着：
-// 各语言都已翻译，删键要同时改所有 locale，将来若再需要"杂物袋"可以直接复用）。
+// l10n 里 `extras_title` / `extras_description` 两条：**2026-10-14 已删**
+// （原先写的是"暂时闲置、键先留着"）。删的理由是审计查证过它们**零读者**
+// （全仓 grep 两个键名只有 .strings 自己命中），而且只存在于 en + zh-CN，
+// 留着只会让"英文单点提供"的词典里多两条永远显示不出来的行。
+// 将来若真要再做一个"杂物袋"页，把这两条加回 en.lproj + zh-CN.lproj 即可
+// （其余 25 个 locale 从来没翻过它们，所以不需要动）。

@@ -179,9 +179,15 @@ extension EeveeLyricsSettingsView {
     
     /// Musixmatch 用户令牌输入框。
     ///
-    /// ⚠️ 这里原来还有一个「请求匿名令牌」按钮（`requestAnonymousMusixmatchToken()`，
-    /// 带转圈状态与整页 `.disabled`）—— 已整体移除。现在令牌**只能手填**，
-    /// 所以那一行红色感叹号的意义更直接了：没填或填错，Musixmatch 就用不了。
+    /// ⚠️ 这里的注释在 2026-10-14 改过一次：原先写"「请求匿名令牌」按钮已整体移除、
+    /// 现在令牌**只能手填**"，但**下面 `:196-212` 又把它接回来了**（2026-10-13），
+    /// 文档与代码不一致。当前实况是：
+    ///   · 令牌**可以**手填（这一栏）；
+    ///   · 没填 / 填得不合法时，多出一颗「请求匿名令牌」按钮（只在
+    ///     `!viewModel.isMusixmatchTokenValid` 时显示）；
+    ///   · 请求期间只禁**那颗按钮**（旧版会把整页 `.disabled`）。
+    /// 见 `AnonymousTokenHelper` 文件头：没有匿名令牌这条退路，
+    /// "没填 SpicyLyrics 密钥 ⇒ 本首改用 Musixmatch"对用户就是一句空话。
     @ViewBuilder private func musixmatchTokenField() -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("musixmatch_user_token".localized)
