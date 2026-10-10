@@ -489,6 +489,9 @@ enum EntityPageHeaderManager {
             header.bringSubviewToFront(headerView)
         }
         if headerView.frame != header.bounds { headerView.frame = header.bounds }
+        // ★★ 2026-10-17：**只有这一页的页头会缩**（520 → 100pt 的导航栏）⇒ 也只有这一页要那条
+        //    "装不下就渐隐让位"。歌单/专辑页的页头是定高的，给它打开只会把整块内容弄没（照片 124）。
+        headerView.fadesWhenTight = true
 
         // Spotify 那一列：**空 mask 藏**（不碰 hidden —— 见函数头那段）。照片归 `EntityPageAppearance`。
         let cover = find("Components.Header.UI.ArtworkImage", in: header, cache: &cachedArtistCover)

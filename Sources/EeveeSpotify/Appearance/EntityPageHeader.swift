@@ -822,6 +822,15 @@ final class EntityPageHeaderView: UIView {
         return height
     }
 
+    /// ★ 2026-10-17：**只在会缩的页头上启用**上面那条渐隐。
+    ///
+    /// ⚠️ 照片 124 的教训：这条本来是给**艺人页**写的（那边 `HeaderContainer` 会从 520pt 缩到 100pt
+    /// 的导航栏），但我无条件打开了 —— 而歌单页的 `PL.Header` **根本不会缩**，于是某一拍
+    /// `bounds.height` 还没定下来时算出的 `fade = 0` 被留在那儿，**整块页头（标题 + 三颗按钮）
+    /// 就此消失**，只剩 Spotify 自己的搜索框和 pill 行露在外面。
+    /// ⇒ 改成一个显式开关，只有 `applyToArtistPage` 打开它。
+    var fadesWhenTight = false
+
     override func layoutSubviews() {
         super.layoutSubviews()
 
@@ -835,10 +844,14 @@ final class EntityPageHeaderView: UIView {
         //    ⇒ 页头矮到装不下这一块时，它整体**渐隐让位**（AM 里就是"跟着页头一起滚走"）：
         //      `room ≥ 32pt` 全亮、`room ≤ 0` 全隐、中间线性。用 `alpha` 而不是 `isHidden`，
         //      免得折叠过程中一闪一闪。
-        let needed = contentHeight(forWidth: bounds.width) + EntityPageHeaderMetrics.bottom
-        let room = bounds.height - needed
-        let fade = max(0, min(1, room / 32))
-        if alpha != fade { alpha = fade }
+        if fadesWhenTight {
+            let needed = contentHeight(forWidth: bounds.width) + EntityPageHeaderMetrics.bottom
+            let room = bounds.height - needed
+            let fade = max(0, min(1, room / 32))
+            if alpha != fade { alpha = fade }
+        } else if alpha != 1 {
+            alpha = 1
+        }
 
         let width = bounds.width
         let text = max(0, width - 2 * EntityPageHeaderMetrics.side)
