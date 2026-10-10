@@ -473,10 +473,10 @@ entity_page_am_header_section = "Apple Music 式页头（歌单）";
 entity_page_am_header = "标题 / 创建者 / Play 胶囊居中";
 entity_page_am_header_description = "效果可能不明显。";
 am_header_play = "播放";
-mini_bar_round_artwork = "封面改成圆形";
+mini_bar_round_artwork = "专辑样式改圆形";
 home_tile_tint_section = "首页小卡片";
-home_tile_tint = "卡片底色跟着封面走";
-home_tile_tint_description = "首页顶部那排小卡片（喜欢的歌曲、最近播放那些）的底色从它自己的封面取一点色，整片格子就不再是一片灰。标题、播放指示、点击都还是 Spotify 的。认不出卡片时什么都不改。";
+home_tile_tint = "更好的首页小卡片";
+home_tile_tint_description = "选项开启后会给原灰色底替换为与封面展示相近的颜色。。";
 
 flag_override_mode_number = "写入数字";
 flag_override_number_placeholder = "数字（例如 30）";
@@ -543,7 +543,7 @@ licenses_kumone_detail = "「整页取色底」的配方来自 kumone—— LGPL
 // 键名跟着它所控制的那条 flag 走，对照 `KnownFlagCatalog`。
 reduce_interventions_title = "减少打扰";
 reduce_interventions_master = "一键关掉全部提示";
-reduce_interventions_master_description = "Spotify 自己这个模块的总开关。想一次全关，开它就够。";
+reduce_interventions_master_description = "关闭Spotify提示模块的总开关。";
 reduce_interventions_master_footer = "这些开关写的是 Spotify flag 覆盖，重启 Spotify 后生效。";
 reduce_interventions_tips_section = "逐条关闭";
 reduce_interventions_tips_footer = "每行都标出它关的是哪条 flag。若某条提示还在，说明这个版本读的不是那条 —— 去看调试日志里的 [Flags] 行。";
