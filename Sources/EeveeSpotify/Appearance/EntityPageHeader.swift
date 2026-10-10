@@ -825,6 +825,21 @@ final class EntityPageHeaderView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
 
+        // ★★ 2026-10-17（用户：「歌单页的图标似乎**没下沉**」；照片 121 是现场：那一行三颗按钮浮在
+        //    **收起来的导航栏**上、和 "AKIRVTXNSHI" 叠在一起）：
+        //
+        //    这一整块是**贴着页头底部**排的（`y = bounds.height - bottom - contentHeight`），而页头会随
+        //    滚动从 520pt 缩到 100pt 的导航栏 ⇒ 内容放不下时 `y` 变成负数，标题与按钮就**溢出到页头
+        //    上方**，正好压在 Spotify 自己的导航栏上 ✗。
+        //
+        //    ⇒ 页头矮到装不下这一块时，它整体**渐隐让位**（AM 里就是"跟着页头一起滚走"）：
+        //      `room ≥ 32pt` 全亮、`room ≤ 0` 全隐、中间线性。用 `alpha` 而不是 `isHidden`，
+        //      免得折叠过程中一闪一闪。
+        let needed = contentHeight(forWidth: bounds.width) + EntityPageHeaderMetrics.bottom
+        let room = bounds.height - needed
+        let fade = max(0, min(1, room / 32))
+        if alpha != fade { alpha = fade }
+
         let width = bounds.width
         let text = max(0, width - 2 * EntityPageHeaderMetrics.side)
         var y = round(bounds.height - EntityPageHeaderMetrics.bottom - contentHeight(forWidth: width))

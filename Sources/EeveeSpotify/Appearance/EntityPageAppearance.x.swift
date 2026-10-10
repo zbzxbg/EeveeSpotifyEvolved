@@ -57,8 +57,13 @@ enum EntityPageAppearance {
         "Components.Header.UI.ArtworkImage",
     ]
     /// 清底色时往下走几层 / 最多看多少个节点（**宁可漏，不可错**）。
-    private static let clearDepth = 7
-    private static let clearNodes = 600
+    ///
+    /// ★★ 2026-10-17（照片 121：艺人页的「你已点赞」整行还是黑的、「显示更多」那条黑带）：
+    /// 7 层 / 600 个节点**够不到列表里的 cell**（艺人页那一棵比专辑页深），所以那些底色一直没被清到。
+    /// 抬到 12 层 / 1500 个节点，并且**连 `layer.backgroundColor` 一起清**（`Label`/cell 的底有画在
+    /// layer 上的，见 `eeveeClearBaseSurface` 里那段说明）。
+    private static let clearDepth = 12
+    private static let clearNodes = 1500
     /// 取色底占页面高度的比例（再往下就是 base surface，看不出接缝）。
     private static let fieldColorEnd: CGFloat = 0.58
     /// 封面化开成的那片背景占页面高度的比例（pw 那张 playlist 截图约 45%，这里给到 52%）。
@@ -115,6 +120,14 @@ enum EntityPageAppearance {
     private static let ciContext = CIContext(options: nil)
     /// 我们清过的底色（**记原值**：关开关要逐个写回 —— 与 `DeclutterChrome` 同一条纪律）。
     private static var clearedBackgrounds: [(view: UIView, color: UIColor)] = []
+    /// ★ 2026-10-17：**画在 layer 上的**那批底色，分开记（还原时写回的是 `CGColor`，不是 `UIColor`）。
+    private static var clearedLayerBackgrounds: [(layer: CALayer, color: CGColor)] = []
+    /// ★ 2026-10-17：收掉的「ScrollFadeMask」—— 记两种形态（它是视图 / 它是某个 layer 的 mask）。
+    private static var hiddenFadeViews: [(view: UIView, layerHidden: Bool)] = []
+    private static var removedFadeMasks: [(layer: CALayer, mask: CALayer)] = []
+    private static var fadeMaskViews: Set<ObjectIdentifier> = []
+    private static var fadeMaskLayers: Set<ObjectIdentifier> = []
+    private static var clearedLayerViews: Set<ObjectIdentifier> = []
     /// 已经清过的**对象**（懒建的 cell 每拍都要查一遍，但只记一次；`ObjectIdentifier` 不做强引用）。
     private static var clearedViews: Set<ObjectIdentifier> = []
     /// 上面两张表的上限（封死，不让它随着滚动无限长）。
@@ -463,10 +476,44 @@ enum EntityPageAppearance {
                 clearedBackgrounds.append((view: node, color: color))
                 node.backgroundColor = .clear
             }
+            // ★★ 2026-10-17（照片 121）：**画在 layer 上的底也要清**。列表与 cell 的底常常是直接写在
+            //    `layer.backgroundColor` 上的（`eeveeClearBaseSurface` 里那条注释说过同一件事），
+            //    只清 `view.backgroundColor` 会漏掉一整片 —— 而「ScrollFadeMask」把内容渐隐掉之后，
+            //    露出来的正好就是它 ⇒ 用户看到的「显示更多」那条黑带。
+            if let layerColor = node.layer.backgroundColor,
+               isBaseSurface(UIColor(cgColor: layerColor)),
+               !clearedLayerViews.contains(identifier) {
+                clearedLayerViews.insert(identifier)
+                clearedLayerBackgrounds.append((layer: node.layer, color: layerColor))
+                node.layer.backgroundColor = nil
+            }
+            collectFadeMask(node, identifier: identifier)
             for sub in node.subviews { walk(sub, depth + 1) }
         }
 
         walk(page, 0)
+    }
+
+    /// 收掉 Spotify 给"可滚动的一段"画的**渐隐遮罩**。
+    ///
+    /// ★★ 2026-10-17（照片 121：「显示更多」那一带的颜色不对，把热门歌曲十首歌展开之后就好了）：
+    /// 那个渐隐的真类是 `EntitySegments_ScrollGradientViewKit.ScrollFadeMask`（`dump-9.1.88.txt:12488`）。
+    /// 它把 section 底部的内容渐隐掉 —— 而在我们接管的页面上，**渐隐之后露出来的是列表自己的底色**
+    /// （见上面那段：那层底没被清掉就是黑的）⇒ 用户看到的是一条越来越黑的黑带。
+    /// 两种形态都要处理：它可能是**视图**，也可能是某个 layer 的 **mask**。
+    private static func collectFadeMask(_ node: UIView, identifier: ObjectIdentifier) {
+        if NSStringFromClass(type(of: node)).contains("ScrollFadeMask"), !fadeMaskViews.contains(identifier) {
+            fadeMaskViews.insert(identifier)
+            hiddenFadeViews.append((view: node, layerHidden: node.layer.isHidden))
+            node.layer.isHidden = true
+        }
+        if let mask = node.layer.mask,
+           NSStringFromClass(type(of: mask)).contains("ScrollFadeMask"),
+           !fadeMaskLayers.contains(identifier) {
+            fadeMaskLayers.insert(identifier)
+            removedFadeMasks.append((layer: node.layer, mask: mask))
+            node.layer.mask = nil
+        }
     }
 
     /// 判"这是不是 Spotify 画的那层 base surface"。
@@ -1227,6 +1274,16 @@ enum EntityPageAppearance {
                 "[\(logTag)] restored \(clearedBackgrounds.count) background(s) (\(reason))"
             )
         }
+        // ★ 2026-10-17：layer 上那批 + 两种 fade 形态也逐个写回（与上面同一条纪律）。
+        for entry in clearedLayerBackgrounds { entry.layer.backgroundColor = entry.color }
+        for entry in hiddenFadeViews { entry.view.layer.isHidden = entry.layerHidden }
+        for entry in removedFadeMasks { entry.layer.mask = entry.mask }
+        clearedLayerBackgrounds.removeAll()
+        hiddenFadeViews.removeAll()
+        removedFadeMasks.removeAll()
+        fadeMaskViews.removeAll()
+        fadeMaskLayers.removeAll()
+        clearedLayerViews.removeAll()
         clearedBackgrounds.removeAll()
         clearedViews.removeAll()
         currentPage = nil
