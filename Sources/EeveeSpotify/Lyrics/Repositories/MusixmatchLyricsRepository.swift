@@ -4,6 +4,16 @@ import UIKit
 class MusixmatchLyricsRepository: LyricsRepository {
     private let apiUrl = "https://apic.musixmatch.com"
 
+    /// 这一行是不是**间奏行**（整行只有 ♪ ♫ ♬ ♩ ♭ ♯ 这类音乐符号，或者本来就是空白）。
+    ///
+    /// ★ 2026-10-18：判据只看内容本身、与旧开关无关 —— 间奏行现在**无条件剔除**
+    /// （用户拍板 A：「把原本有的间奏全部删掉」），见下面处理 `lyricsLines` 那一段的说明。
+    private func isMxmInterludeRow(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        return trimmed.allSatisfy { "♪♫♬♩♭♯".contains($0) }
+    }
+
     private var shouldRemoveMxmInterludeSymbol: Bool {
         UserDefaults.standard.bool(forKey: NgzhwmSettingsViewModel.removeMxmInterludeSymbolKey)
     }
@@ -594,14 +604,33 @@ class MusixmatchLyricsRepository: LyricsRepository {
                 }
             }
 
-            if shouldRemoveMxmInterludeSymbol {
-                for index in lyricsLines.indices {
-                    lyricsLines[index].content = cleanedMxmLyricsText(lyricsLines[index].content)
-                }
-                // 官方罗马字那一份同样清洗：否则原行被清成空、罗马字那行还挂着个 `♪`。
+            // ★★★ 2026-10-18（用户拍板 A：「**把原本有的间奏全部删掉**」）：
+            //   间奏行**整行删掉**，不再是"把 ♪ 清成空白、保留位置"。与网易云那一刀同一条纪律：
+            //   间奏由**时间间隙**去推（`LyricInterludeTimeline`），不靠一个占位行；
+            //   而空行在 AM 渲染层里照样占一行高度，看着就是"漏了一句词"✗。
+            //
+            //   ⚠️ 三份数组是**按下标一一对应**的（`lyricsLines` / `officialRomanizedLines` /
+            //      `translation.lines`）⇒ 剔行必须**一起剔**，否则罗马字与翻译会整体错位一行
+            //      （那正是用户报过的"某行翻译跑到上一行"这一类现象的同族）。
+            let keep = lyricsLines.indices.filter { !isMxmInterludeRow(lyricsLines[$0].content) }
+            let droppedRows = lyricsLines.count - keep.count
+            if droppedRows > 0 {
+                lyricsLines = keep.map { lyricsLines[$0] }
                 if !officialRomanizedLines.isEmpty {
-                    officialRomanizedLines = officialRomanizedLines.map { cleanedMxmLyricsText($0) }
+                    officialRomanizedLines = keep.map {
+                        $0 < officialRomanizedLines.count ? officialRomanizedLines[$0] : ""
+                    }
                 }
+                if let existing = translation {
+                    translation = LyricsTranslationDto(
+                        languageCode: existing.languageCode,
+                        lines: keep.compactMap { $0 < existing.lines.count ? existing.lines[$0] : nil }
+                    )
+                }
+                writeDebugLog(
+                    "[Musixmatch] dropped \(droppedRows) interlude row(s) — \(lyricsLines.count) line(s)"
+                        + " left; romanization and translation dropped in step"
+                )
             }
 
             if didReplaceAnyLine {
