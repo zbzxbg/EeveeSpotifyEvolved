@@ -263,6 +263,82 @@ struct AppleMusicLyricsPage: View {
     /// 预览传一个更大的值（更晚开始淡出），把带子压回合理高度。
     var fadeBottomOpaqueRatio: CGFloat = 0.86
 
+    // MARK: 间奏行（三个呼吸点）
+
+    /// 这一首的间奏。**每首歌只推一次**，见 `refreshInterludes`。
+    @State private var interludes: [LyricInterlude] = []
+
+    /// `displayBeforeLyricID → 间奏`：间奏行驻留在**下一句歌词的上面**
+    /// （MeloX 的 `displayBeforeLyricID`），渲染时按歌词行 id 查一下就知道
+    /// 这一行头上要不要加一条。整页只建一次。
+    @State private var interludeByDisplayLyricID: [LyricLine.ID: LyricInterlude] = [:]
+
+    /// 上一次推间奏时的歌词身份 —— 换歌 / 换源 / 换时间轴后要重推。
+    @State private var interludeLyricsFingerprint: String = ""
+
+    /// 间奏判定的口径：**照 MeloX 的默认值**（`LyricsInterludePreferences`：
+    /// `defaultMode = .automatic`、`defaultMinimumInferredGapDuration = 4.0`）。
+    ///
+    /// ⚠️ 先写死、暂时不做开关：`.automatic(4)` 的含义是"连**推断**出来的 LRC 间隙
+    /// 也算，阈值 4 秒"，这是口味 —— 得先在真机上把 `.preciseTiming`（只认作者时间轴）
+    /// 与它各听一遍，才知道该给用户哪一个。在那之前露一个开关，只是多一个
+    /// 用户不知道该不该动的东西（同「排查型开关」的处置，见 `EeveeDebugSettingsViewModel`）。
+    private static let interludeDetectionPolicy: LyricInterludeDetectionPolicy =
+        .automatic(minimumInferredGapDuration: 4)
+
+    /// 歌词的"身份"：档位 + 行数 + 首尾行 id。换歌、换源、换时间轴都会变。
+    ///
+    /// ⚠️ 带上 `isStatic`：静态档（没有时间轴）**故意不推**间奏（见 `refreshInterludes`），
+    /// 若同一份行从静态档翻成有时间轴那一档，光看行数是发现不了的 —— 那就会停在
+    /// "间奏永远是空的"。带上它之后这个翻转也会触发重推。
+    ///
+    /// ⚠️ 用它而不是直接比较 `lines`：`lines` 是 `[LyricLine]`，逐字段比较一首歌要跑
+    /// 几百次字符串比较，而这一页**每帧**都会求值一次 body；这条只比几个值。
+    ///
+    /// ⚠️ 首尾 id 先取进局部变量：**插值里不要写引号**（`\(x ?? "")` 这种），
+    /// `swift_member_check.py` 的去字符串扫描器遇到它会提前收尾、把后面的英文单词
+    /// 当裸标识符误报（这个坑在 `HANDOFF` 里记着，已经浪费过一次改动）。
+    private var lyricsFingerprint: String {
+        let mode = isStatic ? "static" : "timed"
+        let firstName = lines.first?.id ?? ""
+        let lastName = lines.last?.id ?? ""
+        return "\(mode)|\(lines.count)|\(firstName)|\(lastName)"
+    }
+
+    /// 推一遍间奏（候选 + 按 id 的索引）；歌词没变就直接返回。
+    ///
+    /// 为什么不每帧算：`LyricInterludeTimeline.candidates` 要逐行估"人声唱到哪"
+    /// （字符串操作 + 逐音节取最大值），而这一页每帧都会重新求值一次 body
+    /// （`playbackTime` 是入参，宿主每帧换一个新值）。
+    private func refreshInterludes() {
+        let fingerprint = lyricsFingerprint
+        guard fingerprint != interludeLyricsFingerprint else { return }
+        interludeLyricsFingerprint = fingerprint
+
+        // 静态档（没有时间轴）不推：那些合成行的时间全是 0，`makeInterlude` 那句
+        // "间隙必须为正"本来就会把它们全挡掉，推出来是一份空数组 —— 这里只是省一次遍历。
+        guard !isStatic else {
+            interludes = []
+            interludeByDisplayLyricID = [:]
+            return
+        }
+
+        let detected = LyricInterludeTimeline.interludes(
+            in: lines,
+            detectionPolicy: Self.interludeDetectionPolicy
+        )
+        interludes = detected
+        interludeByDisplayLyricID = Dictionary(
+            detected.map { ($0.displayBeforeLyricID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        // 诊断行：真机上要能一眼看出"这一首判出来几段间奏"。
+        // ⚠️ 只在**重推**时打（换歌那一次），不是每帧 —— 不然日志会被刷爆。
+        writeDebugLog(
+            "[Interlude] \(detected.count) interlude(s) in \(lines.count) line(s)"
+        )
+    }
+
     /// 当前播放位置（由纯逻辑时间轴给出，不在这里自己算）。
     private var position: LyricPlaybackPosition {
         LyricPlaybackTimeline.position(at: playbackTime, in: lines)
@@ -287,6 +363,12 @@ struct AppleMusicLyricsPage: View {
             // 挂载/切全屏的那一帧会闪一下"竖排字"。
             // 这一帧干脆什么都不画（下一帧宽度就正常了），比画错再改好。
             let hasUsableWidth = availableWidth >= 80
+            // 间奏行这一拍该显示什么 —— 整页算**一次**，别每行各算一遍
+            // （那是 O(间奏数 × 行数)，而这个值对整页是同一个）。
+            let interludePosition = LyricInterludeTimeline.position(
+                at: playbackTime,
+                in: interludes
+            )
             // 自绘壳占掉的高度：从安全区再往里让，避免歌词钻到标题栏/控件栏底下。
             //
             // 62 / 116 是量出来的，不是拍的：
@@ -329,12 +411,21 @@ struct AppleMusicLyricsPage: View {
                                 + max(typography.lineSpacing * 0.6, 4)
                         ) {
                             ForEach(lines) { line in
-                                row(
-                                    for: line,
-                                    position: position,
-                                    availableWidth: availableWidth,
-                                    proxy: proxy
-                                )
+                                // 间奏行驻留在**这一句的上面**（MeloX 的
+                                // `displayBeforeLyricID` 就是这个意思）：没有对应间奏时
+                                // `interludeRow` 一个视图都不产出，布局与改动前逐像素一致。
+                                VStack(alignment: .leading, spacing: 0) {
+                                    interludeRow(
+                                        above: line,
+                                        position: interludePosition
+                                    )
+                                    row(
+                                        for: line,
+                                        position: position,
+                                        availableWidth: availableWidth,
+                                        proxy: proxy
+                                    )
+                                }
                                 .id(line.id)
                             }
 
@@ -362,6 +453,9 @@ struct AppleMusicLyricsPage: View {
                     // 旧 overlay 没这个问题：它首帧 `activeLineIndex = -1`，
                     // 必然走一次 `scrollToLine`。
                     .onAppear {
+                        // 间奏要在这里首推一次：`onChange` 只在值**变化**时触发，
+                        // 而首帧的 `lines` 就是最终值（没有"变化"可等）。
+                        refreshInterludes()
                         // ★ 静态档（没有时间轴）不跟随：整页从**第一行**开始，用户自己滚。
                         guard !isStatic else { return }
                         // 与 onChange 同理：首行之前高亮为 nil，这里要落到**第一行**上，
@@ -374,6 +468,13 @@ struct AppleMusicLyricsPage: View {
                             proxy.scrollTo(id, anchor: .center)
                             lastAutoScrollTime = Date()
                         }
+                    }
+                    // 换歌 / 换源 / 换时间轴 ⇒ 重推间奏。
+                    //
+                    // ⚠️ 必须在**同一页**里处理：这一页不是换一首歌就重建（`NowPlayingLyricsPlate`
+                    // 那层是"就地更新 lines"），只靠 `onAppear` 会让第二首歌继续用第一首的间奏。
+                    .onChange(of: lyricsFingerprint) { _, _ in
+                        refreshInterludes()
                     }
                     .onChange(of: position.highlightedLyricID) { _, newValue in
                         // ★ 静态档不跟随（见 `isStatic`）。
@@ -698,6 +799,32 @@ struct AppleMusicLyricsPage: View {
     }
 
     // MARK: 单行
+
+    /// 某一句歌词**上方**那条间奏行（三个呼吸点）。
+    ///
+    /// 位置沿用 MeloX 的 `displayBeforeLyricID`：间奏行属于**下一句歌词**，
+    /// 也就是"这段没人唱的空白"在谱面上的位置 —— 画在两句之间，不是另起一块。
+    ///
+    /// 这一行没有对应间奏时**一个视图都不产出**（`EmptyView`），所以
+    /// 上面那个 `VStack` 里只剩歌词行本身，布局与"没有这个功能"时完全一致；
+    /// 有间奏时那条 40pt 的驻留行才出现（点阵不亮的时候它占位但不画东西）。
+    ///
+    /// ⚠️ `position` 是从 body 里传下来的**整页唯一那一份**，不要在这里重算
+    /// （见 `interludePosition` 的说明）。
+    @ViewBuilder
+    private func interludeRow(
+        above line: LyricLine,
+        position: LyricInterludePlaybackPosition
+    ) -> some View {
+        if let interlude = interludeByDisplayLyricID[line.id] {
+            AppleMusicInterludeRow(
+                interlude: interlude,
+                position: position,
+                playbackTime: playbackTime,
+                primaryColor: primaryColor
+            )
+        }
+    }
 
     @ViewBuilder
     private func row(

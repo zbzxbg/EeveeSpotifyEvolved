@@ -2,9 +2,9 @@ import Foundation
 
 // 移植自 MeloX `MeloX/Core/Lyrics/LyricInterludeTimeline.swift` 的模型部分（GPL-3.0）。
 //
-// 只移植了模型与呈现位置结构；`LyricInterludeTimeline` 的检测逻辑（间隙阈值、
-// contentEndTime 估算、policy 过滤）等接入间奏功能时再补——现在先把渲染链路跑通，
-// 避免一次性搬入没人调用的死代码。
+// 这个文件**只有模型与呈现位置结构**（谁是谁、这一拍该显示什么）。检测与定位的算法在
+// 隔壁 `LyricInterludeTimeline.swift` —— 2026-10-18 补上，正是这里原先那行
+// "等接入间奏功能时再补"的 TODO；渲染在 `AppleMusicInterludeRow.swift`。
 
 enum LyricInterludeTimingSource: Hashable, Sendable {
     /// YRC 提供了作者标注的行/音节结束时间。
