@@ -470,22 +470,22 @@ mini_bar_glass_section = "Mini player";
 mini_bar_glass = "Liquid Glass mini player";
 mini_bar_glass_description = "Gives the mini player the same Liquid Glass capsule as the tab bar: **same width, same 60 pt height, same corner radius, same material**, keeping the small gap between the two. The width follows the tab bar's capsule (360 pt on this device), so the mini player's own content (artwork, title, buttons, progress line) is scaled down uniformly to fit inside (~86%). While it is on, the solid cover-coloured background is cleared — including right after it appears or a track changes, when Spotify writes it back; switching it off restores everything — glass removed, content back to its original size, background and clipping restored.";
 
-playlist_cover_section = "Playlist covers";
+playlist_cover_section = "Playlist covers (everywhere they appear)";
 playlist_single_cover = "Replace Spotify's own four-cover mosaic";
-playlist_single_cover_description = "When this option is enabled, Spotify's four-cover mosaic is replaced with the cover of the playlist's first track.";
+playlist_single_cover_description = "Replaces Spotify's four-cover mosaic with the cover of the playlist's first track — on the playlist page, in the library grid and rows, and in the Home modules that show playlists. Wherever the mosaic is not used, nothing changes.";
 
-entity_page_section = "Album & playlist pages";
+entity_page_section = "Album, playlist & artist pages";
 entity_page_dissolve = "Full-bleed cover dissolving into the page colour, plus a centred header";
 entity_page_hide_chrome = "Hide some of Spotify's buttons";
 entity_page_description = "Together these two are the Music app's look: the first lays the cover full bleed and dissolves its bottom into the page colour, with the text sitting on that colour; the second hides the buttons Spotify adds (a row's + and ..., and the header's download, add, menu and watch-feed ones). Play and shuffle are never touched.";
-entity_page_am_header_section = "Apple Music header (playlists)";
-entity_page_am_header = "Centred title, creator and Play capsule";
-entity_page_am_header_description = "Replaces Spotify's header on playlist pages: Spotify's column is hidden and a Music-app-style one is drawn in its place, with the title, creator and length centred, then shuffle, a white Play capsule and a save (or download) button. The buttons draw Spotify's own glyphs and fire Spotify's own controls, so actions, state and language stay Spotify's. Album pages are not touched yet. If the header cannot be recognised, nothing changes at all.";
+entity_page_am_header_section = "Apple Music header (album, playlist & artist pages)";
+entity_page_am_header = "Centred title, creator and Play capsule (album, playlist and artist pages)";
+entity_page_am_header_description = "Replaces Spotify's header on album, playlist and artist pages: Spotify's own column is hidden and a Music-app-style one is drawn in its place. Album and playlist pages get the centred title, creator and metadata line (length on playlists, kind and date on albums), then shuffle, a white Play capsule and a save (or download) button; artist pages get their own layout (name, monthly listeners, photo and Follow). The buttons draw Spotify's own glyphs and fire Spotify's own controls, so actions, state and language stay Spotify's. If the header cannot be recognised, nothing changes at all.";
 am_header_play = "Play";
 mini_bar_round_artwork = "Round artwork";
 home_tile_tint_section = "Home shortcut tiles";
 home_tile_tint = "Tile colour follows its cover";
-home_tile_tint_description = "The small tiles at the top of Home (Liked Songs and the recently played ones) take a faint tint from their own cover, so the grid is not one flat grey. The title, the playing indicator and the taps all stay Spotify's. If a tile cannot be recognised, nothing changes.";
+home_tile_tint_description = "The small tiles at the top of Home (Liked Songs and the recently played ones) take a faint tint from their own cover, so the grid is not one flat grey. The title, the playing indicator and the taps all stay Spotify's. If a tile cannot be recognised, nothing changes. Switching it on when it was off at launch needs a restart — the row above offers one exactly then; switching it off stops the tint immediately, though tiles already tinted keep their colour until they are rebuilt.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";

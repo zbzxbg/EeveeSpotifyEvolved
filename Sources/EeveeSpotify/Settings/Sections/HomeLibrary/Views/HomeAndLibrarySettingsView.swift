@@ -250,6 +250,13 @@ struct HomeAndLibrarySettingsView: View {
                     }
                 )
                 .disabled(shadow.hideHomeHeader)
+
+                // ⚠️ 合并成节之后，主页那颗的 footer（`home_large_title_description`）**没有地方显示**了
+                //    —— 一个 Section 只有一条 footer，而那条给了音乐库那句（见本节抬头）。
+                //    这里用该键补一行小字，让"这颗是干什么的"不丢，同时该键不变成死键。
+                Text("home_large_title_description".localized)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
 
             // ★ 2026-10-13（用户看 pw 的截图：「那几个小模块是经过处理的（喜欢的歌曲那几个小方框），
