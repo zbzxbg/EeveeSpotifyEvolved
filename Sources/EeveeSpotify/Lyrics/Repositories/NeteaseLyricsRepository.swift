@@ -1107,11 +1107,11 @@ class NeteaseLyricsRepository: LyricsRepository {
                 }
             }
 
-        // 开关开启时（仅网易云）：删除开头连续的间奏空行（原 ♪ 行），
-        // 让真正的歌词顶到第一行；中间靠下的间奏行保持空白、不清除位置。
-        if shouldRemoveInterludeSymbol {
-            lines = Array(lines.drop(while: { $0.content.isEmpty }))
-        }
+        // ★★ 2026-10-18：**无条件**删掉开头的空行 —— 间奏行已经在上面被整行剔掉了，
+        //    这里兜的是"其他源形态留下的空头"（静态歌词路径会把空行原样收进来）。
+        //    旧版这颗由「删除间奏符号 ♪」开关控制；那颗开关现在无论开还是关都不该再影响结果
+        //    （用户拍板 A：间奏一律删掉），所以这一句不再看它。
+        lines = Array(lines.drop(while: { $0.content.isEmpty }))
 
         // 网易云翻译只有简体中文。开启「不展示网易云歌词翻译」开关时，
         // 跳过翻译层构建，不把简体中文翻译交给上游（不影响中日韩罗马化）。
