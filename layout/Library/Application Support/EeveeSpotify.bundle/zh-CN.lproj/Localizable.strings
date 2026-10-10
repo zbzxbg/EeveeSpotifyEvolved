@@ -37,7 +37,7 @@ petitlyrics_description = "PetitLyrics：提供日语歌词。";
 spicylyrics_description = "Spicy Lyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
 spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
-spicylyrics_api_key_description = "本应用不内置密钥：只有在这里填入你自己的客户端密钥，才会使用 Spicy Lyrics。留空则该源被跳过 —— 这一首改用 Musixmatch 取词。想拿密钥：在 Spicy Lyrics 上添加本应用（登录或注册一个免费账号，按「Add」，复制它给出的客户端密钥即可）。不需要自己创建 application。";
+spicylyrics_api_key_description = "不内置默认密钥：在这里填入你自己的密钥才能使用 Spicy Lyrics。留空则回退到 Musixmatch。密钥获取方法：在 Spicy Lyrics 上同意用户协议，按「Add」，复制它给出的客户端密钥即可。";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
 spicylyrics_key_link = "在 Spicy Lyrics 上添加本应用";
 spicylyrics_key_invalid = "Spicy Lyrics 密钥被拒绝";
@@ -324,9 +324,9 @@ telemetry_refresh_counters = "刷新";
 telemetry_reset_counters = "清零计数";
 haptics_title = "触感";
 haptics_enabled = "播放器控件震动";
-haptics_description = "用系统反馈引擎给 Spotify 播放器控件加震动。打开后需要重启 Spotify —— hook 是启动时装的。强度与「试一下」立即生效。";
-haptics_strength = "强度";
-haptics_test = "试一下";
+haptics_description = "用系统反馈引擎给 Spotify 播放器控件加震动。功能生效需要重启Spotify。";
+haptics_strength = "震动强度";
+haptics_test = "尝试一下？";
 haptics_surface_keywords_section = "控件类名关键词";
 haptics_surface_keywords_description = "用逗号分隔，匹配控件自身及其祖先的类名、以及 accessibility 标识。如果一个都不震，打开下面的记录开关（并在「调试」里打开日志记录），从日志里把真实类名抄进来。";
 haptics_log_controls = "记录被点控件的类名";
@@ -366,7 +366,7 @@ dump_class_action = "转储这个类";
 
 /* MARK: 外观 */
 theme_section = "主题";
-theme_description = "给 Spotify 整页换色：底色 #121212 换成纯黑、品牌绿换成你选的强调色。改完需要重启。";
+theme_description = "选项生效需要重启Spotify(功能未测试)。";
 amoled = "纯黑（AMOLED）";
 accent_color = "强调色";
 
@@ -381,20 +381,20 @@ settings_group_appearance = "外观";
 settings_group_advanced = "进阶";
 tabs_and_mini_bar_title = "标签栏与迷你条";
 home_and_library_title = "首页与音乐库";
-settings_sub_lyrics = "来源、逐词、罗马化与译文";
-settings_sub_now_playing = "取色底、一屏布局、单行歌词、音量条";
-settings_sub_patching = "Premium 伪装与配置覆盖";
+settings_sub_lyrics = "有关于歌词的设置";
+settings_sub_now_playing = "有关于播放页的设置";
+settings_sub_patching = "Premium 补丁与配置覆盖";
 settings_sub_sponsorblock = "跳过赞助片段";
-settings_sub_tabs = "玻璃、文字、创建键与迷你条";
-settings_sub_home_library = "大标题、灰纱与首页头部";
-settings_sub_entity_page = "单张封面、取色底、藏掉按键";
-settings_sub_customization = "其它界面细节";
-settings_sub_app_icon = "选择桌面图标";
+settings_sub_tabs = "标签栏与迷你条的设置";
+settings_sub_home_library = "一些关于观感的设置";
+settings_sub_entity_page = "有关于专辑和歌单页的设置";
+settings_sub_customization = "其它细节";
+settings_sub_app_icon = "选择App图标";
 settings_sub_experiments = "尚未定性的功能";
 settings_sub_flags = "注入远程开关";
-settings_sub_reduce = "关掉 Spotify 自己的提示";
+settings_sub_reduce = "关闭 Spotify 官方提示";
 settings_sub_haptics = "震动反馈";
-settings_sub_blocked_artists = "跳过来自黑名单艺人的曲目";
+settings_sub_blocked_artists = "跳过艺人曲目";
 settings_sub_privacy = "遥测拦截与上报";
 settings_sub_misc = "没有其它归属的零碎项";
 settings_sub_backup = "导出 / 导入设置";
@@ -403,7 +403,7 @@ settings_sub_licenses = "开源许可与致谢";
 settings_sub_debug = "排查开关";
 // 「重置本页」——从旧「扩展」页拆出来的每一页页脚都有一颗（见 SettingsResetSection）。
 settings_reset_page = "重置本页";
-settings_reset_page_footer = "只把本页的选项恢复默认值；其它页面以及 Spotify 自己的设置都不受影响。";
+settings_reset_page_footer = "把本页的选项恢复默认值。";
 settings_reset_page_done = "已重置本页 %d 项。";
 
 declutter_description = "按类名隐藏 Spotify 自己画的非内容部分，类名来自视图树转储。只藏不显：这几处显示与否由 Spotify 自己控制，所以关掉开关后要等它下次自己更新（或重启）才恢复。";
@@ -411,7 +411,7 @@ hide_mini_player_bar = "隐藏迷你播放条";
 hide_singalong_line = "隐藏Spotify官方的单行歌词";
 hide_npv_pills = "隐藏播放器里的切换至视频 / 显示歌词胶囊";
 player_cards_section = "听歌页卡片";
-player_cards_description = "把 Spotify 塞在听歌页滚动列表里的推荐卡折起来（高度置 0，后面的内容顶上来）。这些卡是 Spotify 往这一屏推周边、视频、其他艺人的地方。";
+player_cards_description = "这些功能未测试。";
 hide_player_cards = "隐藏全部卡片";
 player_card_lyricsCard = "歌词卡片";
 player_card_aboutArtist = "了解艺人";
@@ -446,10 +446,10 @@ tab_bar_glass_section = "标签栏";
 tab_bar_system_glass = "液态玻璃版标签栏";
 tab_bar_glass_description = "关于标签栏的一些设置。";
 library_large_title = "Apple Music 式音乐库";
-library_large_title_description = "按 Apple Music 的样子改 Spotify 自己的音乐库。";
+library_large_title_description = "效果可能不明显。";
 home_section = "主页";
 home_large_title = "Apple Music 式主页";
-home_large_title_description = "按 Apple Music 的「现在就听」改主页头部。";
+home_large_title_description = "效果可能不明显。";
 home_header_title = "主页";
 
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
@@ -459,19 +459,19 @@ tab_bar_hide_create = "隐藏「创建」标签";
 
 mini_bar_glass_section = "迷你播放条";
 mini_bar_glass = "液态玻璃版的迷你播放条";
-mini_bar_glass_description = "给迷你播放条铺一层和标签栏同一套的液态玻璃。";
+mini_bar_glass_description = "关于迷你播放条的一些设置。";
 
 playlist_cover_section = "歌单封面";
 playlist_single_cover = "替换Spotify官方的四合一封面";
-playlist_single_cover_description = "选项开启后会替换Spotify四合一的歌单封面展示，替换为歌单第一首歌的封面。 ";
+playlist_single_cover_description = "选项开启后会替换Spotify四合一的歌单封面展示，替换为歌单第一首歌的封面(该功能测试中)。 ";
 
 entity_page_section = "专辑 / 歌单页";
-entity_page_dissolve = "满幅封面化进底色 + 页头居中";
-entity_page_hide_chrome = "藏掉Spotify的若干按键";
-entity_page_description = "这两颗合起来就是 Music app 那一版的样子：第一颗把封面铺成满幅、底部化进页面底色，文字压在这片颜色上；第二颗把 Spotify 自己加的那些按键藏掉（每行的「+」「…」，以及头部的下载、加入、菜单、观看信息）。play 与 shuffle 不动。";
+entity_page_dissolve = "替换Spotify的官方歌词底";
+entity_page_hide_chrome = "隐藏Spotify的若干按键";
+entity_page_description = "功能测试中。";
 entity_page_am_header_section = "Apple Music 式页头（歌单）";
 entity_page_am_header = "标题 / 创建者 / Play 胶囊居中";
-entity_page_am_header_description = "把歌单页的页头换成一版 Music app 的：Spotify 那一列整列藏掉，我们自己画 —— 标题、创建者、长度居中，下面一行是 shuffle、白色 Play 胶囊和保存（或下载）按钮。三颗按钮画的是 Spotify 自己的字形、点的是 Spotify 自己的控件，所以动作、状态、语言都留在它那边。专辑页暂时不动。认不出页头时什么都不改。";
+entity_page_am_header_description = "效果可能不明显。";
 am_header_play = "播放";
 mini_bar_round_artwork = "封面改成圆形";
 home_tile_tint_section = "首页小卡片";
@@ -596,7 +596,7 @@ now_playing_section_description = "你可以在这里调整歌曲播放页的各
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
 // Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift。
 now_playing_one_screen = "隐藏Spotify歌曲播放页模块";
-now_playing_one_screen_description = "把播放器下面那些卡片全折起来、列表钉在顶部：播放器变成一屏、滚不动。歌词卡也会一起被折掉，歌词请从播放器上那颗歌词键进。";
+now_playing_one_screen_description = "播放器下方的各种模块会被全部折叠。";
 now_playing_volume = "展示音量条";
 now_playing_lyrics_in_player = "歌词进播放器";
 now_playing_single_lyric = "封面与歌词键之间显示单行歌词";
