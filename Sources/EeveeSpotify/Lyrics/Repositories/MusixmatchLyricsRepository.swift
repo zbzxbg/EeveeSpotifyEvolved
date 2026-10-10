@@ -14,14 +14,10 @@ class MusixmatchLyricsRepository: LyricsRepository {
         return trimmed.allSatisfy { "♪♫♬♩♭♯".contains($0) }
     }
 
-    private var shouldRemoveMxmInterludeSymbol: Bool {
-        UserDefaults.standard.bool(forKey: NgzhwmSettingsViewModel.removeMxmInterludeSymbolKey)
-    }
-
-    /// ⚠️ 2026-10-18：`shouldRemoveMxmInterludeSymbol` 现在**没有任何调用点**了 —— 间奏行改为
-    /// 无条件剔除（用户拍板 A，见 `isMxmInterludeRow` 与处理 `lyricsLines` 那一段）。
-    /// 这一刀先把**行为**做完；把开关本身（UI 行 / 键 / l10n）摘掉是下一刀的事，
-    /// 所以这里留着它、不做半拉子拆除。
+    /// ⚠️ 2026-10-18：「删除间奏符号 ♪」那颗开关的**读取点已全部撤掉** —— 间奏行改为无条件剔除
+    /// （用户拍板 A，见 `isMxmInterludeRow` 与处理 `lyricsLines` 那一段）。
+    /// 键与 UI 行还在（键定义 `NgzhwmSettingsViewModel.removeMxmInterludeSymbolKey`），
+    /// 拆除它们是单独一刀：漏一处引用是编译错，不做半拉子。
 
     private func cleanedMxmLyricsText(_ text: String) -> String {
         guard shouldRemoveMxmInterludeSymbol, text.contains("♪") else {
