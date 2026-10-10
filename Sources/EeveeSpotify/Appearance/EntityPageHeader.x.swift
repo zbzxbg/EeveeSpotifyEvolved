@@ -95,6 +95,35 @@ enum EntityPageHeaderManager {
         return found
     }
 
+    /// 同 `find`，但**钻到真正能响应点击的那颗控件**上。
+    ///
+    /// ★★ 2026-10-17（用户真机第二轮：「艺人页 / 歌单页的**点击播放**按键没反应」「艺人页左边那颗
+    /// 应该是 `i`…但现在是歌单的**随机播放**按钮，并且点击没反应」「已经关注了但没有绿色描边」）：
+    ///
+    /// 按 id 找到的往往是 `ElementView<URL, Any, Any>` 那层**包装** —— 转发打在包装上就是没反应，
+    /// `isSelected` 也恒假（永远不变绿）。`firstControl` 的注释里逐字写着这件事，但当时**只有专辑页
+    /// 那条路**（`findFloating`）真的钻了进去，歌单页与艺人页的 play / shuffle / follow 全直接
+    /// 拿了包装层 ⇒ 用户看到的就是"日志说转发成功、界面一动不动"。
+    ///
+    /// 两条纪律：
+    ///   · **钻不到就退回原来那个**（宁可保持原样，也不要因为钻而把东西丢掉）；
+    ///   · 钻过一次**把钻到的那个写回缓存** —— 否则每拍都要在包装层里再走一趟子树。
+    private static func findControl(_ identifier: String, in root: UIView, cache: inout UIView?) -> UIView? {
+        let found = find(identifier, in: root, cache: &cache)
+        guard let found, !(found is UIControl) else { return found }
+        guard let control = firstControl(in: found) else { return found }
+        cache = control
+        return control
+    }
+
+    /// 只进日志：这颗控件**是什么类、是不是 `UIControl`** —— "有没有钻到真控件"就是这一行的答案。
+    private static func describe(_ control: UIView?) -> String {
+        guard let control else { return "missing" }
+        let kind = NSStringFromClass(type(of: control))
+        let tag = control is UIControl ? "UIControl" : "wrapper"
+        return "\(kind)[\(tag)]"
+    }
+
     // MARK: - 入口
 
     /// 从 `HeaderContentLayout` 的 `layoutSubviews` 调用 —— **快速滑动时每一帧一次**，
@@ -164,9 +193,11 @@ enum EntityPageHeaderManager {
         header.update(title: texts.title, creator: texts.creator, length: texts.length, about: texts.about)
 
         // ★ 五个挂点全部走缓存（pw 的 `SGRFindByIdentifier` 同一条纪律）：命中过就不再搜树。
-        let shuffle = find("Components.UI.ShuffleButton", in: block, cache: &cachedShuffle)
-        let play = find("header-play-button", in: headerRoot, cache: &cachedPlay)
-        let save = find("Components.UI.AddToButton", in: block, cache: &cachedTrailing)
+        // ★★ 2026-10-17：**这三颗都改成 `findControl`** —— 按 id 拿到的是包装层时，点了没反应
+        //    （用户真机第二轮报的"歌单页点击播放没反应"）。
+        let shuffle = findControl("Components.UI.ShuffleButton", in: block, cache: &cachedShuffle)
+        let play = findControl("header-play-button", in: headerRoot, cache: &cachedPlay)
+        let save = findControl("Components.UI.AddToButton", in: block, cache: &cachedTrailing)
         let download = save == nil ? eeveeFindView(block, identifier: "DownloadButton.Granular*") : nil
         header.updateRow(
             shuffle: shuffle,
@@ -188,8 +219,8 @@ enum EntityPageHeaderManager {
             "applied",
             "applied — title \"\(texts.title)\", creator \"\(texts.creator.isEmpty ? "-" : texts.creator)\""
                 + ", length \"\(texts.length.isEmpty ? "-" : texts.length)\""
-                + ", shuffle \(shuffle == nil ? "missing" : "ok")"
-                + ", play \(play == nil ? "missing" : "ok")"
+                + ", shuffle \(describe(shuffle))"
+                + ", play \(describe(play))"
                 + ", trailing \(save != nil ? "save" : (download != nil ? "download" : "none"))"
         )
     }
@@ -299,7 +330,7 @@ enum EntityPageHeaderManager {
         // 只搜页面的直接子视图、且宽度 ≤120 的那些（头 / wash / 列表都是整页宽，走进去等于每拍走整棵树）。
         let play = findFloating("header-play-button", in: page, cache: &cachedPlay)
         let shuffle = findFloating("Components.UI.ShuffleButton", in: page, cache: &cachedShuffle)
-        let add = find("Components.UI.AddToButton", in: header, cache: &cachedTrailing)
+        let add = findControl("Components.UI.AddToButton", in: header, cache: &cachedTrailing)
         let download = add == nil ? eeveeFindView(header, identifier: "DownloadButton.Granular*") : nil
         headerView.updateRow(
             shuffle: shuffle,
@@ -462,13 +493,17 @@ enum EntityPageHeaderManager {
         // 三颗：shuffle / play / Follow。pw 从**页头**里找它们，但那一行会随 `ImageHeaderView`
         // 一起缩成 100pt 的导航栏，所以这里和专辑页一样：浮动控件按 `floatingIn` 从**页面**找，
         // Follow 是页头那一行里的文字按钮，按 pw 给的类名找。
-        let play = find("header-play-button", in: page, cache: &cachedPlay)
-        let shuffle = find("Components.UI.ShuffleButton", in: page, cache: &cachedShuffle)
-        let follow = find(
+        //
+        // ★★ 2026-10-17（用户真机第二轮：「**点击播放**没反应」「左边应该是 `i` 但现在是**随机播放**
+        //    按钮、点了也没反应」「已关注但没有绿描边」）：三颗**全部改成 `findControl`** —— 按 id
+        //    拿到的都是 `ElementView<…>` 包装层，转发打在包装上 = 没反应，`isSelected` 也恒假。
+        let play = findControl("header-play-button", in: page, cache: &cachedPlay)
+        let shuffle = findControl("Components.UI.ShuffleButton", in: page, cache: &cachedShuffle)
+        let follow = findControl(
             "Curation.FollowButtonElementKit.FollowButton",
             in: header,
             cache: &cachedArtistFollow
-        ) ?? eeveeFindView(header, identifier: "FollowButton*")
+        ) ?? eeveeFindView(header, identifier: "FollowButton*").map { firstControl(in: $0) ?? $0 }
         // Follow 是**文字按钮**（"关注" / "已关注"），取不到字形 ⇒ 用一对 SF Symbol 兜底，
         // 而且按它的选中态换字形 —— 状态因此看得见（pw 那边直接读它的字，这里读者是图标）。
         // ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：照 AM 换成 Info。
@@ -478,13 +513,17 @@ enum EntityPageHeaderManager {
         //   子视图 `…CreatorBiographyCard.HeaderLabel` / `.BiographyLabel`），点它会展开发简介。
         //   所以左边那颗**不再镜像 shuffle**，改成镜像那颗简介卡；卡上没有图标可镜像，字形显式给
         //   `info.circle`（`setLeadingGlyph`）。找不到简介卡时**退回 shuffle**，不留一颗死按钮。
-        let info = find("Components.UI.CreatorBiographyCard*", in: page, cache: &cachedArtistBio)
+        let info = findControl("Components.UI.CreatorBiographyCard*", in: page, cache: &cachedArtistBio)
         if let info, let control = firstControl(in: info) { artistBioControl = control }
         // ★★ 2026-10-06：**记住找到过的那颗**（见 `artistBioControl`）—— 简介卡懒加载，
         //    某一拍没有它不代表该退回 shuffle。
         let leading = artistBioControl
 
-        let followed = (follow as? UIControl)?.isSelected ?? false
+        // ★★ 2026-10-17（用户：「如果艺人已经关注了，它应该是有**绿色描边**的，但现在没有」）：
+        //    判据从"只看 `(follow as? UIControl)?.isSelected`"换成 `eeveeIsOn` —— 三条信号一起看
+        //    （`isSelected` / 无障碍里的 `.selected` / 文字里的"已关注"），并且**四条都进日志**
+        //    （`eeveeOnSignals`），下一份日志就能告诉我们哪一条真的会变。
+        let followed = eeveeIsOn(follow)
         headerView.updateRow(
             shuffle: leading ?? shuffle,
             play: play,
@@ -504,12 +543,20 @@ enum EntityPageHeaderManager {
         // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
         pinMoreButton(in: header)
 
+        // ★★ 2026-10-17：日志要说清三件事 ——
+        //   · **左边那颗到底是谁**（简介卡 / 找不到简介卡退回的 shuffle / 压根没有）；
+        //   · 三颗各自**钻到了什么类**（`[UIControl]` = 真控件、`[wrapper]` = 还是包装层）；
+        //   · follow 的四条状态信号（哪一条真的会随"已关注"变，下一份日志就看出来了）。
+        let leadingKind = leading == nil ? "none" : (leading === shuffle ? "shuffle-fallback" : "bio-card")
+        let followNote = follow == nil ? "missing" : (followed ? "following" : "follow")
         logOnce(
             "appliedArtist",
             "artist page — name \"\(name)\", meta \"\(meta.isEmpty ? "-" : meta)\""
-                + ", shuffle \(shuffle == nil ? "missing" : "ok")"
-                + ", play \(play == nil ? "missing" : "ok")"
-                + ", follow \(follow == nil ? "missing" : (followed ? "following" : "follow"))"
+                + ", leading \(leadingKind)"
+                + ", play \(describe(play))"
+                + ", shuffle \(describe(shuffle))"
+                + ", follow \(followNote) \(describe(follow))"
+                + ", followSignals \(eeveeOnSignals(follow))"
         )
     }
 
@@ -653,7 +700,9 @@ enum EntityPageHeaderManager {
     ///
     /// 藏 Spotify 行里那颗走 `wrapperFor`（连它的圆底一起）—— 否则同一页上会出现两颗 `⋯`。
     private static func pinMoreButton(in headerRoot: UIView) {
-        guard let menu = find("Components.UI.ContextMenuButton*", in: headerRoot, cache: &cachedMore) else {
+        // ★★ 2026-10-17（用户：「歌单页右上角那三个点点击没反应」——他说这个"等会做也行"，
+        //    但根因与播放键是同一个：按 id 拿到的是 `ElementView<…>` 包装层）⇒ 一起改成 `findControl`。
+        guard let menu = findControl("Components.UI.ContextMenuButton*", in: headerRoot, cache: &cachedMore) else {
             // 这一页没有 `⋯`（或者还没建出来）⇒ 什么都不做，**也不留一颗假的**。
             return
         }

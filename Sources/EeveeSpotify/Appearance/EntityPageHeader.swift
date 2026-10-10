@@ -157,29 +157,55 @@ func eeveeFindView(_ root: UIView?, identifier: String, maxNodes: Int = 5000) ->
     return nil
 }
 
-/// 以"点一下"的方式触发 Spotify 自己的控件。
+/// 以"点一下"的方式触发 Spotify 自己的控件。**返回真正走通的那条路**（`nil` = 一条都没通）。
 ///
-/// **只发一个事件**：注册了 `primaryActionTriggered` 就发它，否则发 `touchUpInside`
-/// —— 两个都发会把开关按两下（等于没按）。
+/// ## 为什么返回值是"路"而不是 Bool（这是被真机打回来的第二次）
 ///
 /// ★★★ 2026-10-06（日志 93：**几百行** `shuffle tapped — source found`，而随机播放毫无动静）：
-/// 原来的第一句是 `guard let control = control as? UIControl else { return false }` —— 而 Spotify 的
-/// shuffle / play 是 `Encore.Button` 一族，**不是 `UIControl`**（它们的点击挂在
-/// `UITapGestureRecognizer` 上）⇒ 这一句把转发整个吞掉；返回值又没人看 ⇒
-/// **"日志说转发成功了、界面一动不动"**。这就是"专辑页随机播放点不动 / 艺人页播放没反应"的根子。
+/// 旧版第一句是 `guard let control = control as? UIControl else { return false }` —— Spotify 的
+/// shuffle / play 是 `Encore.Button` 一族（点击挂在 `UITapGestureRecognizer` 上）⇒ 这一句把转发
+/// 整个吞掉；返回值又没人看 ⇒ **"日志说转发成功了、界面一动不动"**。
+///
+/// ★★★ 2026-10-17（用户真机第二轮：「艺人页 / 歌单页的**点击播放**按键没反应」「艺人页左边那颗
+/// 应该是 `i`…但现在是歌单的**随机播放**按钮，并且点击没反应」）—— 同样的现场**又复现了**。
+/// 这一版把三件事一起做掉：
+///
+///   ① **UIControl 也要先看有没有 target**：没有 target 的 `UIControl`（`Encore.Button` 正是
+///      如此）`sendActions` 是**空转**，而旧代码会因此 `return true`，把后面那条手势路一起挡掉。
+///   ② **包装层要往下钻**：按 id 找到的常常是 `ElementView<URL, Any, Any>` 那层包装
+///      （本文件 `firstControl` 的注释早就写了），真控件在它里面。调用方现在统一先 `findControl`
+///      钻一次，这里再补一道"子树里找手势"。
+///   ③ **tap recogniser 可能挂在子树里的某个视图上**，不在我们拿到的那一层。
+///
+/// ⚠️ **只走通一条就返回** —— 两条都发 = 一次点击触发两次（等于没点）。
 @discardableResult
-func eeveeFire(_ control: UIView?) -> Bool {
-    guard let control else { return false }
+func eeveeFire(_ control: UIView?) -> String? {
+    guard let control else { return nil }
 
+    // ① 真·UIControl **且确实注册了 target** ⇒ 发那一个事件（顺序按"最可能的"排）。
     if let uiControl = control as? UIControl {
-        let hasPrimary = uiControl.allTargets.contains { target in
-            !(uiControl.actions(forTarget: target, forControlEvent: .primaryActionTriggered)?.isEmpty ?? true)
+        for (event, label) in eeveeFireEvents where eeveeHasTargets(uiControl, event) {
+            uiControl.sendActions(for: event)
+            return "UIControl.\(label)"
         }
-        uiControl.sendActions(for: hasPrimary ? .primaryActionTriggered : .touchUpInside)
-        return true
     }
 
-    return eeveeFireGesture(of: control)
+    // ② 手势：先自己，再（有界地）往下钻子树。
+    return eeveeFireGesture(in: control)
+}
+
+/// `sendActions` 候选事件。**顺序有讲究**：`primaryActionTriggered` 是 iOS 14+ 那个"主操作"
+/// 事件，Spotify 的 Encore 按钮注册的多半是它；`touchUpInside` 是经典那颗。
+private let eeveeFireEvents: [(UIControl.Event, String)] = [
+    (.primaryActionTriggered, "primaryActionTriggered"),
+    (.touchUpInside, "touchUpInside"),
+    (.touchDown, "touchDown"),
+]
+
+private func eeveeHasTargets(_ control: UIControl, _ event: UIControl.Event) -> Bool {
+    control.allTargets.contains { target in
+        !(control.actions(forTarget: target, forControlEvent: event)?.isEmpty ?? true)
+    }
 }
 
 /// 读手势识别器的 `_targets` 再调它的 target/action —— pw 与我们的标签栏都用这一招
@@ -187,7 +213,24 @@ func eeveeFire(_ control: UIView?) -> Bool {
 ///
 /// ⚠️ `_targets` 是私有键，所以**先用 `responds(to:)` 确认两个键都在**才去 KVC：KVC 碰未知 key 是
 /// **抛异常**（不是返回 nil），那会直接崩。
-private func eeveeFireGesture(of view: UIView) -> Bool {
+///
+/// 广度优先、有界（`nodeLimit`）：命中的越浅越可能就是那颗按钮，所以不深挖。
+private func eeveeFireGesture(in root: UIView, depthLimit: Int = 6, nodeLimit: Int = 200) -> String? {
+    var queue: [(view: UIView, depth: Int)] = [(root, 0)]
+    var visited = 0
+    while !queue.isEmpty, visited < nodeLimit {
+        let (view, depth) = queue.removeFirst()
+        visited += 1
+        if let fired = eeveeFireRecognizers(of: view) {
+            return depth == 0 ? "gesture.\(fired)" : "gesture.sub\(depth).\(fired)"
+        }
+        guard depth < depthLimit else { continue }
+        for sub in view.subviews { queue.append((sub, depth + 1)) }
+    }
+    return nil
+}
+
+private func eeveeFireRecognizers(of view: UIView) -> String? {
     let targetKey = NSSelectorFromString("target")
     let actionKey = NSSelectorFromString("action")
     for recognizer in view.gestureRecognizers ?? [] where recognizer is UITapGestureRecognizer {
@@ -200,10 +243,62 @@ private func eeveeFireGesture(of view: UIView) -> Bool {
             let selector = NSSelectorFromString(name)
             guard target.responds(to: selector) else { continue }
             _ = target.perform(selector, with: recognizer)
-            return true
+            return "\(NSStringFromClass(type(of: target))).\(name)"
         }
     }
-    return false
+    return nil
+}
+
+/// 这颗源控件**现在是不是"开"态**（随机播放已开 / 已关注）。
+///
+/// ★★ 2026-10-17（用户：「（关注）功能正常。但是如果艺人已经关注了，它应该是有**绿色描边**的，
+/// 但现在没有」）：旧版只有 `(source as? UIControl)?.isSelected` 一条判据 —— 而按 id 找到的
+/// 常常是 `ElementView<…>` **包装层**（`isSelected` 恒假），于是**永远不变绿**。
+/// `firstControl` 的注释里逐字写着这件事，但 Follow 那颗当时没走它。
+///
+/// 这里把三条能拿到的信号都试一遍，从最标准到最兜底：
+///   ① `UIControl.isSelected`；② `accessibilityTraits` 里的 `.selected`（App 暴露开关态的标准做法）；
+///   ③ **文字里的"已关注"标记**（`Follow` 是文字按钮：关注 ↔ 已关注 / Follow ↔ Following）。
+///
+/// ⚠️ 第 ③ 条是按本仓库已有的两套语言写的（与 `am_header_play` 那类一样直接落在代码里）。
+/// 真实文本会由 `eeveeOnSignals` 打进日志 —— 下一份日志能直接告诉我们哪一条信号真的会变，
+/// 到时候再收窄/扩宽，别靠猜。
+func eeveeIsOn(_ view: UIView?) -> Bool {
+    guard let view else { return false }
+    if let control = view as? UIControl, control.isSelected { return true }
+    if view.accessibilityTraits.contains(.selected) { return true }
+    let text = eeveeControlText(of: view)
+    return eeveeFollowingMarkers.contains { text.localizedCaseInsensitiveContains($0) }
+}
+
+private let eeveeFollowingMarkers = ["已关注", "已追蹤", "Following", "Siguiendo", "Abonniert", "已關注"]
+
+/// 把一条源控件上的**所有**状态信号拼成一行（只进日志，不参与判断）。
+func eeveeOnSignals(_ view: UIView?) -> String {
+    guard let view else { return "source missing" }
+    let selected = (view as? UIControl)?.isSelected ?? false
+    let trait = view.accessibilityTraits.contains(.selected)
+    let text = eeveeControlText(of: view)
+    return "isSelected=\(selected) selectedTrait=\(trait)"
+        + " label=\"\(view.accessibilityLabel ?? "-")\" text=\"\(text)\""
+}
+
+/// 这颗控件子树里第一段非空文字（`Follow` 那种文字按钮的"关注/已关注"就在里面）。
+func eeveeControlText(of root: UIView) -> String {
+    var queue: [UIView] = [root]
+    var visited = 0
+    while !queue.isEmpty, visited < 200 {
+        let view = queue.removeFirst()
+        visited += 1
+        if let label = view as? UILabel, let text = label.text, !text.isEmpty { return text }
+        if let button = view as? UIButton,
+           let text = button.title(for: .normal) ?? button.title(for: .selected), !text.isEmpty {
+            return text
+        }
+        if view !== root, let text = view.accessibilityLabel, !text.isEmpty, view is UIControl { return text }
+        queue.append(contentsOf: view.subviews)
+    }
+    return ""
 }
 
 /// 从被藏起来的控件上取字形：它自己/子树里的 `UIImageView.image`，或 `UIButton` 的 image。
@@ -241,7 +336,13 @@ final class EntityPageHeaderButton: UIControl {
     /// 而 `feed(from:)` 在"源没变"时会早退，所以只能在这一侧的 didSet 里补。
     var fallbackGlyph: UIImage? {
         didSet {
-            guard glyphView.image == nil, let fallbackGlyph else { return }
+            // ★★ 2026-10-17（用户：「艺人页左边应该是一个 `i`…但现在是歌单的**随机播放**按钮」）：
+            //    **显式设的兜底字形必须立刻生效**。旧版这里是 `guard glyphView.image == nil` ——
+            //    而 `applyToArtistPage` 先 `updateRow`（那一刻 leading 还是 shuffle ⇒ `feed` 取到
+            //    shuffle 的字形），随后才 `setLeadingGlyph(info.circle)`，于是被这一句**挡掉**
+            //    ⇒ 那颗按钮永远是随机播放的样子（功能也没接对，见那边的说明）。
+            //    顺序上不会误伤：`updateRow` 里兜底是**先设、后 feed**，真字形仍然赢。
+            guard let fallbackGlyph else { return }
             glyphView.image = fallbackGlyph.withRenderingMode(.alwaysTemplate)
         }
     }
@@ -285,18 +386,31 @@ final class EntityPageHeaderButton: UIControl {
     }
 
     private func refreshTint() {
-        let isOn = (source as? UIControl)?.isSelected ?? false
+        let isOn = eeveeIsOn(source)
         glyphView.tintColor = isOn ? onGlyphColor : glyphColor
+        // ★★ 2026-10-17（用户：「如果艺人已经关注了，它应该是有**绿色描边**的，但现在没有」）：
+        //    Spotify 自己的"已关注"就是**绿字 + 绿描边**，AM 那颗收藏键也是描边态
+        //    ⇒ 把那圈玻璃的边描上（玻璃本身就是那颗 44pt 圆，圆角在 `layoutSubviews` 里跟着走）。
+        if let glass {
+            let width: CGFloat = isOn ? 1.5 : 0
+            if glass.layer.borderWidth != width {
+                glass.layer.borderWidth = width
+                glass.layer.borderColor = isOn ? onGlyphColor.cgColor : nil
+            }
+        }
     }
 
     @objc private func tapped() {
         refreshTint()
+        // ⚠️ 不要在这些字符串**插值里写引号**：`swift_member_check.py` 的去字符串扫描器会提前
+        //    收尾、把剩下的英文当裸标识符误报（2026-10-17 踩过，见 `EntityPageStatusBar`）。先拼好。
+        let path = eeveeFire(source) ?? "NOTHING (no target, no tap recogniser)"
+        let kind = source.map { NSStringFromClass(type(of: $0)) } ?? "-"
+        let isControl = (source as? UIControl) != nil
+        let signals = eeveeOnSignals(source)
         writeDebugLog(
-            "[EntityPageHeader] \(role) tapped — source \(source == nil ? "missing" : "found")"
-                + " (id \(source?.accessibilityIdentifier ?? "-")),"
-                + " glyph \(glyphView.image == nil ? "none" : "set")"
+            "[EntityPageHeader] \(role) tapped — class \(kind), uicontrol=\(isControl), fired: \(path); \(signals)"
         )
-        _ = eeveeFire(source)
     }
 
     override func layoutSubviews() {
@@ -376,8 +490,9 @@ final class EntityPageHeaderPlay: UIControl {
     }
 
     @objc private func tapped() {
-        writeDebugLog("[EntityPageHeader] play capsule tapped (source \(source == nil ? "missing" : "found"))")
-        _ = eeveeFire(source)
+        let path = eeveeFire(source) ?? "NOTHING (no target, no tap recogniser)"
+        let kind = source.map { NSStringFromClass(type(of: $0)) } ?? "-"
+        writeDebugLog("[EntityPageHeader] play capsule tapped — class \(kind), fired: \(path)")
     }
 
     override func layoutSubviews() {
