@@ -150,6 +150,34 @@ class EntityPageStatusBarHook: ClassHook<UIViewController> {
     }
 }
 
+/// ★★ 2026-10-10（**日志 94 那行诊断第一次跑就把答案给了**）：
+///
+/// ```
+/// deciding controller Navigation_PageAPIIntegrationImpl.MusicAppPageHostingViewController
+///   in ContainerUI_RootUIInternalImpl.RootViewController;
+///   `*` marks a class that implements preferredStatusBarStyle itself:
+///   …MusicAppPageHostingViewController
+///     < …IdentifiedPageHostingViewController*      ← 它**自己实现了**
+///     < Tome_PageRuntime.PageHostingViewController
+///     < UIViewController* < UIResponder < NSObject
+/// ```
+///
+/// 带 `*` 的那个类自己实现了 `preferredStatusBarStyle` ⇒ **子类实现优先** ⇒ 挂在 `UIViewController`
+/// 上的那个 swizzle 对 `MusicAppPageHostingViewController` 这一族**是被遮住的**，
+/// 状态栏一个字都不会变（这正是那行诊断存在的理由：把"没生效"和"算错了颜色"分开）。
+///
+/// ⇒ 再挂一层：**就是那个类本身**。两个 hook 同时装着、各管各的（没被我们强制时都原样 `orig`），
+/// 谁也挡不住谁。
+class EntityPageStatusBarHostHook: ClassHook<UIViewController> {
+    typealias Group = EntityPageStatusBarGroup
+    static let targetName = "_TtC33Navigation_PageAPIIntegrationImpl35IdentifiedPageHostingViewController"
+
+    func preferredStatusBarStyle() -> UIStatusBarStyle {
+        if let forced = EntityPageStatusBar.forced { return forced }
+        return orig.preferredStatusBarStyle()
+    }
+}
+
 func activateEntityPageStatusBar() {
     // 与 `EntityPageRepaint` 同一条纪律：状态栏只为「满幅封面 + 取色底」那颗开关服务。
     guard UserDefaults.entityPageDissolve else {
@@ -158,9 +186,12 @@ func activateEntityPageStatusBar() {
     }
 
     EntityPageStatusBarGroup().activate()
+    let host = EntityPageStatusBarHostHook.targetName
+    let hostPresent = NSClassFromString(host) != nil
     writeDebugLog(
         "[\(EntityPageStatusBar.logTag)] on — preferredStatusBarStyle is ours: the status bar follows"
             + " the page's cover colour (AM flips it the same way: dark text on a light artist page,"
-            + " light text on a dark one)"
+            + " light text on a dark one); the page host class \(hostPresent ? "is" : "is NOT")"
+            + " present, so the shadowing hook \(hostPresent ? "is" : "is not") armed too"
     )
 }

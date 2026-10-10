@@ -72,6 +72,8 @@ enum EntityPageHeaderManager {
     private static var cachedArtistFollow: UIView?
     /// 艺人页左边那颗 `i` 的转发目标：**艺人简介卡**（`CreatorBiographyCard`）。
     private static var cachedArtistBio: UIView?
+    /// 「Follow 那颗的子树」只打一次（见 `probeFollowSubtree`）。
+    private static var didProbeFollow = false
     /// ★★ 2026-10-06（照片 115-117：「**旁边还是随机播放**」）：简介卡是**懒加载**的（页面滚到
     /// "关于"那一段才建），所以某一拍找不到它**不能**就退回 shuffle —— 那样用户看到的就永远是
     /// shuffle。这里把**找到过的那颗控件**用 weak 记住（weak：上一页释放后自动失效，
@@ -205,6 +207,8 @@ enum EntityPageHeaderManager {
             trailing: save ?? download,
             trailingFallback: save != nil ? plusGlyph : downloadGlyph
         )
+        // ★ 2026-10-17：长按播放键 = 随机播放（见 `EntityPageHeaderPlay.feedLongPress`）。
+        header.updatePlayLongPress(shuffle)
         header.updateCreatorLink(
             find("Components.PlaylistHeader.collaboratorsButton", in: block, cache: &cachedCreatorLink)
         )
@@ -338,6 +342,8 @@ enum EntityPageHeaderManager {
             trailing: add ?? download,
             trailingFallback: add != nil ? plusGlyph : downloadGlyph
         )
+        // ★ 2026-10-17：长按播放键 = 随机播放（见 `EntityPageHeaderPlay.feedLongPress`）。
+        headerView.updatePlayLongPress(shuffle)
         // 专辑页的"创建者"就是艺人，点它开艺人页 —— pw 逐字：`[info showCreatorLink:parent]`。
         headerView.updateCreatorLink(
             find("CreativeWorkPlatform.Components.UI.ParentRow", in: header, cache: &cachedAlbumParentRow)
@@ -506,16 +512,32 @@ enum EntityPageHeaderManager {
         ) ?? eeveeFindView(header, identifier: "FollowButton*").map { firstControl(in: $0) ?? $0 }
         // Follow 是**文字按钮**（"关注" / "已关注"），取不到字形 ⇒ 用一对 SF Symbol 兜底，
         // 而且按它的选中态换字形 —— 状态因此看得见（pw 那边直接读它的字，这里读者是图标）。
-        // ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：照 AM 换成 Info。
         //
-        //   AM 的三颗是 **Info / Play / Favorite**，Spotify 侧的 Info 就是**艺人简介卡** ——
-        //   我们自己的树里逐字写着（`[Tree] 10.CreatorBiographyCardLayout@0,0,374,416,bg=#282828`，
-        //   子视图 `…CreatorBiographyCard.HeaderLabel` / `.BiographyLabel`），点它会展开发简介。
-        //   所以左边那颗**不再镜像 shuffle**，改成镜像那颗简介卡；卡上没有图标可镜像，字形显式给
-        //   `info.circle`（`setLeadingGlyph`）。找不到简介卡时**退回 shuffle**，不留一颗死按钮。
-        let info = findControl("Components.UI.CreatorBiographyCard*", in: page, cache: &cachedArtistBio)
-        if let info, let control = firstControl(in: info) { artistBioControl = control }
-        // ★★ 2026-10-06：**记住找到过的那颗**（见 `artistBioControl`）—— 简介卡懒加载，
+        // ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：照 AM 换成 Info。
+        // ★★★ 2026-10-17（**日志 94 的 `leading none` + 老树是判决**）：之前找的
+        //   `Components.UI.CreatorBiographyCard*` **是听歌页的"了解艺人"卡**（那一族树行的前缀全是
+        //   `[NPVTree]`），**艺人页上根本没有它** ⇒ 永远退回 shuffle，用户看到的就是随机播放。
+        //   艺人页真正的"关于艺人"是 **`SPTArtistAboutBiographyView`**：
+        //
+        //   ```
+        //   [Tree] #9  14.TemplateView@0,0,414,896,id=creator-page     ← 艺人页根
+        //   [Tree] #9  17.SPTArtistAboutBiographyView@16,82,382,1126   ← 「关于艺人」
+        //   [Tree] #7  20.SPTArtistAboutBiographyView@16,82,382,70     ← 收起态
+        //   ```
+        //
+        //   382 = 414−32（列表行的内缩），两种高度就是"收起 / 展开"。它**没有 accessibility id**，
+        //   只能按**类名**认 ⇒ `eeveeFindView(_:classNameContains:)`。旧 id 那条留着当第二顺位
+        //   （万一别的版本又用回那张卡）。
+        // 缓存失效的三个条件都要看：**没找到过 / 已经不在窗口上 / 换了一页**。
+        let bioStale = cachedArtistBio == nil
+            || cachedArtistBio?.window == nil
+            || !(cachedArtistBio?.isDescendant(of: page) ?? false)
+        if bioStale {
+            cachedArtistBio = eeveeFindView(page, classNameContains: "SPTArtistAboutBiographyView")
+                ?? eeveeFindView(page, identifier: "Components.UI.CreatorBiographyCard*")
+        }
+        if let info = cachedArtistBio, let control = firstControl(in: info) { artistBioControl = control }
+        // ★★ 2026-10-06：**记住找到过的那颗**（见 `artistBioControl`）—— 那一块是懒加载的，
         //    某一拍没有它不代表该退回 shuffle。
         let leading = artistBioControl
 
@@ -530,10 +552,17 @@ enum EntityPageHeaderManager {
             trailing: follow,
             trailingFallback: UIImage(systemName: followed ? "checkmark" : "person.badge.plus")
         )
-        if leading != nil {
-            headerView.setLeadingGlyph(UIImage(systemName: "info.circle"))
-        }
+        // ★★ 2026-10-17：**左边那颗永远是 `i`**（用户点名要的），不再因为"那一块还没建出来"退回
+        //    shuffle 的样子；**动作**落在"关于艺人"上（`setLeadingTarget`），目标没建出来时点它
+        //    只会把页面往下滚一屏去把它滚出来，**绝不退回去做随机播放**。
+        //    随机播放改挂**长按播放键**（见 `updatePlayLongPress`）。
+        headerView.setLeadingTarget(leading, glyph: UIImage(systemName: "info.circle"))
+        headerView.updatePlayLongPress(shuffle)
         headerView.updateCreatorLink(nil)
+
+        // ★ 2026-10-17（日志 94：`followSignals` 四条**全是空的**）：把 Follow 那颗的子树打一次，
+        //   看"已关注"到底画在哪个类上、状态挂在哪个属性上。只打一次。
+        probeFollowSubtree(follow)
 
         eeveeBlank(play)
         eeveeBlank(shuffle)
@@ -547,7 +576,9 @@ enum EntityPageHeaderManager {
         //   · **左边那颗到底是谁**（简介卡 / 找不到简介卡退回的 shuffle / 压根没有）；
         //   · 三颗各自**钻到了什么类**（`[UIControl]` = 真控件、`[wrapper]` = 还是包装层）；
         //   · follow 的四条状态信号（哪一条真的会随"已关注"变，下一份日志就看出来了）。
-        let leadingKind = leading == nil ? "none" : (leading === shuffle ? "shuffle-fallback" : "bio-card")
+        let leadingKind = leading == nil
+            ? "MISSING (button still shows i; tapping scrolls the page to build it)"
+            : (leading === shuffle ? "shuffle-fallback" : "about(SPTArtistAboutBiographyView)")
         let followNote = follow == nil ? "missing" : (followed ? "following" : "follow")
         logOnce(
             "appliedArtist",
@@ -653,6 +684,44 @@ enum EntityPageHeaderManager {
             }
             eeveeConceal(sub)
         }
+    }
+
+    /// ★ 2026-10-17（日志 94：`followSignals isSelected=false selectedTrait=false label="-" text=""`
+    /// —— **四条信号全是空的**，所以绿描边点不亮）：把 Follow 那颗的**子树**打一次，看"已关注"
+    /// 到底画在哪个类上、状态挂在哪个属性上。只打一次，60 个节点以内。
+    ///
+    /// ⚠️ 为什么不能靠猜：`Encore.Button.Secondary` 是 Spotify 自己的按钮，标题可能不是 `UILabel`
+    /// （SwiftUI 宿主 / 自绘都见过），状态也可能既不在 `isSelected` 也不在无障碍特征上。
+    /// 这一行日志一次性把"类名 / id / label / value / 文字 / 选中特征"全列出来。
+    private static func probeFollowSubtree(_ follow: UIView?) {
+        guard !didProbeFollow, let follow else { return }
+        didProbeFollow = true
+
+        var lines: [String] = []
+        var queue: [(view: UIView, depth: Int)] = [(follow, 0)]
+        var visited = 0
+        while !queue.isEmpty, visited < 60 {
+            let (view, depth) = queue.removeFirst()
+            visited += 1
+            let kind = NSStringFromClass(type(of: view))
+            let id = view.accessibilityIdentifier ?? "-"
+            let label = view.accessibilityLabel ?? "-"
+            let value = view.accessibilityValue ?? "-"
+            let selected = view.accessibilityTraits.contains(.selected)
+            var text = "-"
+            if let asLabel = view as? UILabel { text = asLabel.text ?? "-" }
+            if let asButton = view as? UIButton {
+                text = asButton.title(for: .normal) ?? asButton.title(for: .selected) ?? "-"
+            }
+            lines.append(
+                "\(depth):\(kind) id=\(id) label=\(label) value=\(value) text=\(text) sel=\(selected)"
+            )
+            guard depth < 3 else { continue }
+            for sub in view.subviews { queue.append((sub, depth + 1)) }
+        }
+        writeDebugLog(
+            "[EntityPageHeader] follow subtree (\(visited) node(s)): \(lines.joined(separator: " | "))"
+        )
     }
 
     /// **往上找"仍然恰好包着这个控件"的最外层视图** —— pw 的 `wrapperFor`（`AlbumHeader.x`）逐字：

@@ -157,6 +157,68 @@ func eeveeFindView(_ root: UIView?, identifier: String, maxNodes: Int = 5000) ->
     return nil
 }
 
+/// 按**类名片段**找第一个（含自身）视图。
+///
+/// ★★ 2026-10-17：为什么必须有它 —— 艺人页的"关于艺人"是 **`SPTArtistAboutBiographyView`**
+/// （真机树：`[Tree] #9 17.SPTArtistAboutBiographyView@16,82,382,1126`，与 `id=creator-page`
+/// **同一棵树**；382 = 414−32，就是列表行的内缩，日志里量到过 `382,70` 收起 / `382,1126` 展开
+/// 两种高度）。这种老 `SPT*` 视图**一个 accessibility id 都没有** ⇒ 按 id 永远找不到它
+/// （日志 94 的 `leading none` 就是这么来的）。
+func eeveeFindView(_ root: UIView?, classNameContains needle: String, maxNodes: Int = 5000) -> UIView? {
+    guard let root else { return nil }
+    var queue: [UIView] = [root]
+    var visited = 0
+    while !queue.isEmpty, visited < maxNodes {
+        let view = queue.removeFirst()
+        visited += 1
+        if NSStringFromClass(type(of: view)).contains(needle) { return view }
+        queue.append(contentsOf: view.subviews)
+    }
+    return nil
+}
+
+/// 把一个视图滚进它所在那个 `UIScrollView` 的视野。
+///
+/// ★★ 2026-10-17（用户：「点击（`i`）后**跳转到关于艺人模块**」）：艺人页的"关于"在列表很下面
+/// （真机树里那一块展开后 1126pt 高），只把点击转发过去、**不滚动**的话用户什么都看不见 ——
+/// 那个东西确实展开了，但不在屏幕上。
+@discardableResult
+func eeveeScrollIntoView(_ view: UIView, topPadding: CGFloat = 24) -> Bool {
+    var node: UIView? = view.superview
+    while let current = node {
+        if let scroll = current as? UIScrollView {
+            let target = view.convert(view.bounds, to: scroll).insetBy(dx: 0, dy: -topPadding)
+            scroll.scrollRectToVisible(target, animated: true)
+            return true
+        }
+        node = current.superview
+    }
+    return false
+}
+
+/// 从 `view` 往上找**最外层** `UIScrollView`，往下滚一屏。
+///
+/// ★★ 2026-10-17：给艺人页那颗 `i` 兜底 —— "关于艺人"（`SPTArtistAboutBiographyView`）是列表里
+/// 懒加载的一段，页面刚打开时可能还没建出来。这时候点 `i`：**不许退回去做随机播放**，而是把页面
+/// 往下滚一屏，让那一段被建出来；下一拍 `fireTarget` 就有了，再点就是"滚过去 + 展开"。
+@discardableResult
+func eeveeScrollPageDown(from view: UIView) -> Bool {
+    var outermost: UIScrollView?
+    var node: UIView? = view.superview
+    var levels = 0
+    while let current = node, levels < 24 {
+        levels += 1
+        if let scroll = current as? UIScrollView { outermost = scroll }
+        node = current.superview
+    }
+    guard let scroll = outermost, scroll.bounds.height > 1 else { return false }
+    let bottom = max(0, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+    let next = min(bottom, scroll.contentOffset.y + scroll.bounds.height)
+    guard next > scroll.contentOffset.y + 1 else { return false }
+    scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: next), animated: true)
+    return true
+}
+
 /// 以"点一下"的方式触发 Spotify 自己的控件。**返回真正走通的那条路**（`nil` = 一条都没通）。
 ///
 /// ## 为什么返回值是"路"而不是 Bool（这是被真机打回来的第二次）
@@ -353,6 +415,19 @@ final class EntityPageHeaderButton: UIControl {
     /// 日志里必须能分清他说的是哪一颗（见 `updateRow` 与 `tapped`）。
     var role = "side button"
 
+    /// ★★ 2026-10-17（用户：「点击后**跳转到关于艺人模块**」）：这一颗点下去要**先把源滚进视野**
+    /// 再转发 —— 艺人页的"关于"（`SPTArtistAboutBiographyView`）在列表很下面，只转发不滚动的话
+    /// 用户什么都看不见。由调用方按需打开。
+    var scrollsSourceIntoView = false
+
+    /// ★★ 2026-10-17：**真正要转发的目标**（可以不是 `source`）。
+    ///
+    /// 艺人页左边那颗 `i` 就是这样：`source` 只负责"这颗按钮显示什么字形"（找不到"关于艺人"时
+    /// 退回 shuffle 只是为了让按钮**有东西可显示**），而**动作**必须落在"关于艺人"上 ——
+    /// 目标还没有时**宁可只往下滚一屏、也绝不退回去做随机播放**（图标说 `i`、动作却是随机，
+    /// 正是用户上一轮报的那件事）。
+    weak var fireTarget: UIView?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         glyphView.contentMode = .scaleAspectFit
@@ -402,14 +477,31 @@ final class EntityPageHeaderButton: UIControl {
 
     @objc private func tapped() {
         refreshTint()
+
+        // 转发目标：**优先 `fireTarget`**；只有没开"先滚进视野"这一档时才退回 `source`
+        // （否则目标缺失时就会去点那颗只负责显示字形的 shuffle —— 见 `fireTarget` 的说明）。
+        let target = fireTarget ?? (scrollsSourceIntoView ? nil : source)
+        var scrolled = false
+        var path = "NOTHING (no target, no tap recogniser)"
+        if let target {
+            if scrollsSourceIntoView { scrolled = eeveeScrollIntoView(target) }
+            path = eeveeFire(target) ?? path
+        } else if scrollsSourceIntoView {
+            // 目标那一段还没建出来（懒加载）⇒ 把页面往下滚一屏让它出现，**不转发**。
+            scrolled = eeveeScrollPageDown(from: self)
+            path = scrolled
+                ? "NOTHING yet (the target is not built) — scrolled the page a screen to build it"
+                : "NOTHING (the target is not built and the page has nothing to scroll)"
+        }
+
         // ⚠️ 不要在这些字符串**插值里写引号**：`swift_member_check.py` 的去字符串扫描器会提前
         //    收尾、把剩下的英文当裸标识符误报（2026-10-17 踩过，见 `EntityPageStatusBar`）。先拼好。
-        let path = eeveeFire(source) ?? "NOTHING (no target, no tap recogniser)"
-        let kind = source.map { NSStringFromClass(type(of: $0)) } ?? "-"
-        let isControl = (source as? UIControl) != nil
+        let kind = (target ?? source).map { NSStringFromClass(type(of: $0)) } ?? "-"
+        let isControl = (target ?? source) as? UIControl != nil
         let signals = eeveeOnSignals(source)
         writeDebugLog(
-            "[EntityPageHeader] \(role) tapped — class \(kind), uicontrol=\(isControl), fired: \(path); \(signals)"
+            "[EntityPageHeader] \(role) tapped — class \(kind), uicontrol=\(isControl),"
+                + " scrolledIntoView=\(scrolled), fired: \(path); \(signals)"
         )
     }
 
@@ -487,6 +579,30 @@ final class EntityPageHeaderPlay: UIControl {
         if let glyph = eeveeGlyph(of: control) {
             glyphView.image = glyph.withRenderingMode(.alwaysTemplate)
         }
+    }
+
+    /// ★★ 2026-10-17：**长按 = 随机播放**。
+    ///
+    /// 左边那颗位置让给 AM 的 `i`（"关于艺人"）之后，随机播放就没地方点了 —— 用户早就问过
+    /// 「左边还是点不了的随机播放上哪点去」（见 `HANDOFF_2026-10-13_..._EntityPages-AM.md` §四.2），
+    /// 当时定下的方案就是这一条。长按识别成功会**取消**这次触摸 ⇒ `touchUpInside` 不会跟着发，
+    /// 所以"轻点 = 播放、长按 = 随机"不会互相打架。
+    private weak var longPressSource: UIView?
+    private var longPress: UILongPressGestureRecognizer?
+
+    func feedLongPress(_ control: UIView?) {
+        longPressSource = control
+        guard longPress == nil else { return }
+        let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed))
+        press.minimumPressDuration = 0.4
+        addGestureRecognizer(press)
+        longPress = press
+    }
+
+    @objc private func pressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        let path = eeveeFire(longPressSource) ?? "NOTHING (no target, no tap recogniser)"
+        writeDebugLog("[EntityPageHeader] play long-pressed → shuffle fired: \(path)")
     }
 
     @objc private func tapped() {
@@ -644,11 +760,28 @@ final class EntityPageHeaderView: UIView {
         }
     }
 
+    /// ★★ 2026-10-17：**长按播放键 = 随机播放**（见 `EntityPageHeaderPlay.feedLongPress` 的说明）。
+    /// 三个页面都接上：歌单/专辑页左边本来就是 shuffle，多一个入口无害；艺人页那颗位置让给 `i` 之后，
+    /// 这里就是随机播放唯一的入口。
+    func updatePlayLongPress(_ shuffle: UIView?) {
+        playButton.feedLongPress(shuffle)
+    }
+
     /// ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：
     /// 左边那颗（AM 的 **Info**）在 Spotify 侧对应的是**艺人简介卡**，那颗卡上没有图标可镜像
     /// ⇒ 由调用方**显式给一个**字形（`info.circle`）。中间与右边那两颗不经过这里。
     func setLeadingGlyph(_ glyph: UIImage?) {
         shuffleButton.fallbackGlyph = glyph
+    }
+
+    /// ★★ 2026-10-17（用户：「点击（`i`）后**跳转到**关于艺人模块」）：左边那颗点下去要**先把源
+    /// 滚进视野**再转发 —— 艺人页的"关于"（`SPTArtistAboutBiographyView`）在列表很下面。
+    ///
+    /// `target` 为 `nil`（那一块还没建出来）时**动作也不落在 `source` 上**（见 `fireTarget` 的说明）。
+    func setLeadingTarget(_ target: UIView?, glyph: UIImage?) {
+        shuffleButton.fireTarget = target
+        shuffleButton.fallbackGlyph = glyph
+        shuffleButton.scrollsSourceIntoView = true
     }
 
     /// 创建者那一行可点（点开作者页）：`control` 是 Spotify 自己那个按钮，被藏着只负责响应。
