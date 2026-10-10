@@ -138,8 +138,12 @@ struct AppleMusicInterludeDotsPresentation: Equatable, Sendable {
     ///
     /// 每个点都排了 `dotCount` 个事件（"点到第几个"各一次），事件的起点按
     /// `fillStageInterval` 依次推后、再各自错开 `fillStagger` —— 这就是"一个接一个亮起来"
-    /// 的全部来源。目标值分两种：还没轮到自己点亮 → `inactiveDotOpacity`（暗着等），
-    /// 已经轮到 → 1。先点亮的点随后会被下一个事件带回暗档。
+    /// 的全部来源。目标值只有两档：**已经轮到** → 1，**还没轮到** → `inactiveDotOpacity`（暗着等）。
+    ///
+    /// ⚠️ 判据是 `dotIndex < completedCount`：对某个点来说它**一旦为真就永远为真**
+    /// （后面的阶段数只会更大）⇒ 点亮的点**不会**再暗回去。所以看着是：
+    /// 三个点一起从 0 出现（还没轮到的落到 0.1 暗态），然后从左到右逐个变满亮，
+    /// 最后三个都亮着。这是"填充"，不是"跑马灯"。
     private static func fillOpacity(
         at playbackTime: TimeInterval,
         dotIndex: Int,
