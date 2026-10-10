@@ -123,7 +123,8 @@ extension EeveeLyricsSettingsViewModel {
         // 已删除：`$syntheticLineTiming`（2026-09-27）——「补全歌词时间轴」连同它的代码
         // 一起删了（见 `EeveeDebugSettingsViewModel` 顶部说明），不再有任何绑定。
         logBooleanSetting($disableLyricsFeature, "disable lyrics feature")
-        logBooleanSetting($removeMxmInterludeSymbol, "remove interlude symbol")
+        // 已删除（2026-10-18）：`$removeMxmInterludeSymbol` ——「删除间奏符号 ♪」连同它的
+        // 键与 UI 行一起摘掉了（间奏行无条件丢弃），没有可记录的绑定。
         logBooleanSetting($neteaseRomajiLocal, "NetEase romaji display mode")
         logBooleanSetting($neteaseHideTranslation, "hide NetEase translation")
         logBooleanSetting($chineseRomanization, "Chinese romanization")

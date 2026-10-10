@@ -93,7 +93,9 @@ enum LyricsMarkerFilter {
         "^\\[\\s*[^\\p{L}\\p{N}]+\\s*\\]$"
 
     /// 无括号、整行只有符号的占位行：□ ? … — 等。
-    /// 排除音乐符号（♪/♫/♬/♩/♭/♯），因为它们由网易云「删除间奏符号」开关单独控制。
+    /// 排除音乐符号（♪/♫/♬/♩/♭/♯）：那类行归**两个仓库各自的间奏判据**管
+    /// （`NeteaseLyricsRepository.isInterludeRow` / `MusixmatchLyricsRepository.isMxmInterludeRow`，
+    /// 2026-10-18 起无条件整行丢弃），这里不再插一手 —— 两条规则同时删同一行只会让人看不懂是谁删的。
     private static let bareSymbolLinePattern =
         "^[^\\p{L}\\p{N}♪♫♬♩♭♯]+$"
 

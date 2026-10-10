@@ -73,16 +73,9 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
     
-    @Published var removeMxmInterludeSymbol = UserDefaults.standard.bool(
-        forKey: NgzhwmSettingsViewModel.removeMxmInterludeSymbolKey
-    ) {
-        didSet {
-            UserDefaults.standard.set(
-                removeMxmInterludeSymbol,
-                forKey: NgzhwmSettingsViewModel.removeMxmInterludeSymbolKey
-            )
-        }
-    }
+    // 已移除一个开关（2026-10-18）：`removeMxmInterludeSymbol` ——「删除间奏符号 ♪」。
+    // 它读的那个键（`ngzhwm_removeMxmInterludeSymbol`）与 UI 行一起删了，拆除的完整清单
+    // 见 `NgzhwmSettingsViewModel` 顶部；这里只剩这条墓碑，免得下一个人再去找。
     
     @Published var neteaseRomajiLocal = UserDefaults.standard.bool(
         forKey: NgzhwmSettingsViewModel.neteaseRomajiLocalKey
@@ -153,11 +146,11 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             betterWordByWordLyrics,
             wordByWordLyrics,
             amllPreferred,
-            // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`（2026-09-27 已整体删除），
+            // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`（2026-09-27 已整体删除）、
+            // `removeMxmInterludeSymbol`（2026-10-18 已整体删除 —— 间奏行改为无条件丢弃），
             // 以及搬去「调试」页的 `injectLyricsCardElement` / `lyricsEntryPointFlag`
             // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
-            removeMxmInterludeSymbol,
             neteaseRomajiLocal,
             neteaseHideTranslation,
             isMusixmatchTokenValid,

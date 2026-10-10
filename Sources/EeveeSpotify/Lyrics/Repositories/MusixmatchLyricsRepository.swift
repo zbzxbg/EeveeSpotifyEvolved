@@ -8,24 +8,23 @@ class MusixmatchLyricsRepository: LyricsRepository {
     ///
     /// ★ 2026-10-18：判据只看内容本身、与旧开关无关 —— 间奏行现在**无条件剔除**
     /// （用户拍板 A：「把原本有的间奏全部删掉」），见下面处理 `lyricsLines` 那一段的说明。
+    ///
+    /// 两处调用点共用这一条判据：同步档（richsync / subtitle，三份数组按下标一一对应）
+    /// 与非同步档（纯文本，见 `plainLyrics` 那一段）。
     private func isMxmInterludeRow(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
         return trimmed.allSatisfy { "♪♫♬♩♭♯".contains($0) }
     }
 
-    /// ⚠️ 2026-10-18：「删除间奏符号 ♪」那颗开关的**读取点已全部撤掉** —— 间奏行改为无条件剔除
-    /// （用户拍板 A，见 `isMxmInterludeRow` 与处理 `lyricsLines` 那一段）。
-    /// 键与 UI 行还在（键定义 `NgzhwmSettingsViewModel.removeMxmInterludeSymbolKey`），
-    /// 拆除它们是单独一刀：漏一处引用是编译错，不做半拉子。
-
-    private func cleanedMxmLyricsText(_ text: String) -> String {
-        guard shouldRemoveMxmInterludeSymbol, text.contains("♪") else {
-            return text
-        }
-
-        return ""
-    }
+    // ⚠️ 2026-10-18：「删除间奏符号 ♪」那颗开关**整体退役** —— 键 / Toggle / 绑定日志
+    // / l10n 一起摘掉（完整清单见 `NgzhwmSettingsViewModel` 顶部）。
+    //
+    // 这里原先有两个成员：
+    //   · `shouldRemoveMxmInterludeSymbol`（读 `ngzhwm_removeMxmInterludeSymbol`）；
+    //   · `cleanedMxmLyricsText`（开关开着时把**含** ♪ 的行清成空白）。
+    // 它们只服务纯文本档，而"清成空白"恰恰是用户这次否掉的那条路：空行在渲染层里
+    // 照样占一行高度，看着就是"漏了一句词"。纯文本档现在也走**整行丢弃**。
 
     private func isNgzhwmRomanizationEnabled(for romanizationLanguage: String) -> Bool {
         switch romanizationLanguage.lowercased() {
@@ -72,11 +71,13 @@ class MusixmatchLyricsRepository: LyricsRepository {
     private let lyricsCache = NSCache<NSString, CachedLyrics>()
 
     private func getCacheKey(for query: LyricsSearchQuery) -> String {
+        // ★ 2026-10-18：这里原先还带一位「删除间奏符号 ♪」开关 —— 那颗开关已退役
+        // （间奏行无条件丢弃），所以指纹少一位。缓存键变了没有副作用：它只让**升级之后**
+        // 的第一首重新取一遍词，本来就不该跨版本复用旧结果。
         let romanizationSettings = [
             UserDefaults.standard.bool(forKey: "ngzhwm_chineseRomanization"),
             UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization"),
             UserDefaults.standard.bool(forKey: "ngzhwm_koreanRomanization"),
-            shouldRemoveMxmInterludeSymbol,
         ].map { $0 ? "1" : "0" }.joined()
 
         return "\(query.hashValue)_\(selectedLanguage)_\(romanizationSettings)"
@@ -566,9 +567,9 @@ class MusixmatchLyricsRepository: LyricsRepository {
                         lines: lyricsLines.map { line -> String in
                             guard let offset = line.offsetMs,
                                   let t = translatedByOffset[offset] else { return "" }
-                            return (shouldRemoveMxmInterludeSymbol
-                                && t.trimmingCharacters(in: .whitespaces) == "♪")
-                                ? "" : t
+                            // ★ 2026-10-18：不再看「删除间奏符号 ♪」开关（已退役）——
+                            // 整行只有 ♪ 的译文一律清空，与网易云 `buildTranslation` 同一条规则。
+                            return t.trimmingCharacters(in: .whitespaces) == "♪" ? "" : t
                         }
                     )
                 }
@@ -683,10 +684,19 @@ class MusixmatchLyricsRepository: LyricsRepository {
                     throw LyricsError.musixmatchRestricted
                 }
 
+                // ★★ 2026-10-18（用户拍板 A「把原本有的间奏全部删掉」）：纯文本档也改成
+                //   **整行丢弃** —— 与同步档（见下面处理 `lyricsLines` 那一段）、与网易云
+                //   同一条纪律："清成空白"会留下一行占位高度，看着就是漏了一句词。
+                //
+                //   ⚠️ 顺序要紧：判据必须在 `lyricsNoteIfEmpty` **之前**用。那个 helper 会把
+                //   空串换成 "♪"（占位符），先映射一遍就等于"空行统统变成间奏行"，
+                //   而它产出的那个 ♪ 正是用户这次要清掉的东西 ——
+                //   真机上"纯文本歌词里混着一行 ♪"就是这么来的。
                 let plainLines = plainLyrics
                     .components(separatedBy: "\n")
                     .dropLast()
-                    .map { cleanedMxmLyricsText($0.lyricsNoteIfEmpty) }
+                    .filter { !isMxmInterludeRow($0) }
+                    .map { $0.lyricsNoteIfEmpty }
 
                 let lyricsDto = LyricsDto(
                     lines: plainLines.map { LyricsLineDto(content: $0) },

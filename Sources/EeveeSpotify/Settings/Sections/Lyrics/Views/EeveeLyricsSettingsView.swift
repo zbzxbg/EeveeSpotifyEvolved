@@ -60,7 +60,9 @@ struct EeveeLyricsSettingsView: View {
                 }
             }
             
-            removeInterludeSymbolSection()
+            // 已移除一节（2026-10-18）：「删除间奏符号 ♪」那颗 Toggle。
+            // 它的行为已经无条件生效（间奏行整行丢弃），开关留着只是个空壳 ——
+            // 键、属性、绑定日志与 l10n 一起摘掉，理由见 `NgzhwmSettingsViewModel` 顶部。
             
             NonIPadSpacerView()
         }
@@ -199,17 +201,6 @@ struct EeveeLyricsSettingsView: View {
             Toggle(
                 "ngzhwm_netease_hide_translation".localized,
                 isOn: $viewModel.neteaseHideTranslation
-            )
-        }
-    }
-
-    @ViewBuilder private func removeInterludeSymbolSection() -> some View {
-        Section(
-            footer: Text("ngzhwm_remove_interlude_symbol_description".localized)
-        ) {
-            Toggle(
-                "ngzhwm_remove_interlude_symbol".localized,
-                isOn: $viewModel.removeMxmInterludeSymbol
             )
         }
     }

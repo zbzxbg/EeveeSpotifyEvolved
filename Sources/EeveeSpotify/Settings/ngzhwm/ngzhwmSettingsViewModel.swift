@@ -2,7 +2,14 @@ import Foundation
 import Combine
 
 class NgzhwmSettingsViewModel: ObservableObject {
-    static let removeMxmInterludeSymbolKey = "ngzhwm_removeMxmInterludeSymbol"
+    // 已删除一个 key（2026-10-18）：`ngzhwm_removeMxmInterludeSymbol` ——「删除间奏符号 ♪」。
+    //
+    // 为什么删：那颗开关对应的行为**早已是常态**——间奏行现在无条件整行丢弃
+    // （网易云 `isInterludeRow` / MxM `isMxmInterludeRow`，见两个仓库里各自的说明），
+    // 开关开着关着结果一样 ⇒ 它只是个"按了没反应"的空壳，UI 行只会让人白按一次。
+    // 键、Toggle、绑定日志与 l10n 一起摘掉（漏一处引用是编译错，不拆半拉子）。
+    // ⚠️ 它从来没进过 `ownedKeys`，所以备份/重置那三处**不用**改。
+    // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     static let disableLyricsFeatureKey = "ngzhwm_disableLyricsFeature"
     static let neteaseRomajiLocalKey = "ngzhwm_neteaseRomajiLocal"
     static let neteaseHideTranslationKey = "ngzhwm_neteaseHideTranslation"

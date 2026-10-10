@@ -540,21 +540,17 @@ class NeteaseLyricsRepository: LyricsRepository {
         content ~= Self.creditLinePattern
     }
 
-    /// 「删除间奏符号 ♪」开关（与 Musixmatch 共用同一个 ngzhwm 设置项）。
-    private var shouldRemoveInterludeSymbol: Bool {
-        UserDefaults.standard.bool(
-            forKey: NgzhwmSettingsViewModel.removeMxmInterludeSymbolKey
-        )
-    }
-
-    /// 开关开启时，把含 ♪ 的间奏行清成空白（与 MxM 的 cleanedMxmLyricsText 行为一致）。
-    private func cleanedInterludeSymbol(_ text: String) -> String {
-        guard shouldRemoveInterludeSymbol, text.contains("♪") else { return text }
-        return ""
-    }
-
     /// 是否为 ♪ 间奏行：空行，或整行只有 ♪ 符号（含多个 ♪ / 前后空白）。
-    /// 用作翻译错位修复时「哪一行算间奏」的判定。
+    ///
+    /// 两个用途：
+    ///   ① **丢弃**间奏行的判据 —— 用户拍板 A「把原本有的间奏全部删掉」，无条件生效
+    ///      （见下面两处 `.filter { !isInterludeRow(...) }`）；
+    ///   ② 翻译错位修复时「哪一行算间奏」的判定。
+    ///
+    /// ⚠️ 2026-10-18：它不再与任何开关有关。原先那对
+    /// `shouldRemoveInterludeSymbol`（读 `ngzhwm_removeMxmInterludeSymbol`）与
+    /// `cleanedInterludeSymbol`（把含 ♪ 的行清成空白）**已随开关一起删除** ——
+    /// 开关开着关着结果一样，留着就是编译错与"按了没反应"的空壳。
     private func isInterludeRow(_ content: String) -> Bool {
         let trimmed = content.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty || trimmed.allSatisfy { $0 == "♪" }
@@ -707,9 +703,10 @@ class NeteaseLyricsRepository: LyricsRepository {
                 translatedLines.append("")
                 continue
             }
-            // 开关开启时：翻译里 ♪ 单独作为一行的，清成空白（保持行数对齐）。
-            if shouldRemoveInterludeSymbol,
-               translated.trimmingCharacters(in: .whitespaces) == "♪" {
+            // 翻译里 ♪ 单独作为一行的，清成空白（保持行数对齐）——
+            // ★ 2026-10-18：原先由「删除间奏符号 ♪」开关控制，那颗开关已退役，
+            //   这里与主歌词同一条纪律：**无条件**处理。
+            if translated.trimmingCharacters(in: .whitespaces) == "♪" {
                 translatedLines.append("")
             } else {
                 translatedLines.append(translated)
@@ -781,10 +778,10 @@ class NeteaseLyricsRepository: LyricsRepository {
         var filled = 0
         for index in originalLines.indices {
             let text = index < parsed.count ? parsed[index].content : ""
-            // 与 buildTranslation 同一条 ♪ 规则：删间奏开关开启时，整行只有 ♪ 的译文
-            // 清成空白（保持行数与主歌词一致，不能把行挤掉）。
-            if shouldRemoveInterludeSymbol,
-               text.trimmingCharacters(in: .whitespaces) == "♪" {
+            // 与 buildTranslation 同一条 ♪ 规则：整行只有 ♪ 的译文清成空白
+            // （保持行数与主歌词一致，不能把行挤掉）。
+            // ★ 2026-10-18：不再看「删除间奏符号 ♪」开关（已退役）—— 无条件处理。
+            if text.trimmingCharacters(in: .whitespaces) == "♪" {
                 lines.append("")
                 continue
             }
