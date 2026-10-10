@@ -221,6 +221,24 @@ enum EntityPageAppearance {
         return false
     }
 
+    /// 藏掉 **Spotify 自己那层色晕**（歌单页 = `_backgroundViewContainer` 里那块 wash plane；
+    /// 专辑页 = 头里那个 `HeaderView` 下的 `GradientView`）。
+    ///
+    /// ★★★ 2026-10-17（照片 126）：这两处原来写在 `ensureSharpHero` 的分支里 —— 那是"有 hero 时顺手
+    /// 藏掉盖住 hero 的那层"。**撤掉 hero 之后它们就不跑了**，于是 Spotify 那层 wash 直接露面：
+    /// 用户看到的就是"一条**不是从上到下**的暗棕渐变"（Spotify 的 wash 是模糊/径向的，不是我们的线性
+    /// 竖直渐变）。卡片版式下它同样是多余的（底色归我们的 field）⇒ 单独提出来，两条路都调。
+    ///
+    /// 两种形态各找各的，与 `ensureSharpHero` 里的判据完全一样（同一个 `washPlane`）。
+    private static func concealNativeWash(for target: Target) {
+        guard let cover = target.cover else { return }
+        if let plane = washPlane(for: cover), plane.bounds.width > 1 {
+            concealWash(on: plane)
+        } else {
+            concealAlbumWash(in: target.page)
+        }
+    }
+
     /// `layout` 是不是**艺人页**（页面 root 的 id = `creator-page`）。
     ///
     /// ★ 2026-10-17：`layoutPass` 只在这一页上继续藏原生封面（见那里的说明）。
@@ -335,6 +353,14 @@ enum EntityPageAppearance {
             if !centeredLabels.isEmpty { restoreCentering() }
             // 卡片圆角照 AM（连续圆角 8，原生只有 4）。
             roundCoverCard(target.cover)
+
+            // ★★★ 2026-10-17（**照片 126 是判决**）：页面那条**不是从上到下**的暗棕渐变，
+            //    **不是我们的 field** —— 是 **Spotify 自己那层色晕**（`GradientView`，本来就是
+            //    模糊/径向的）。原因：撤掉 hero 之后，`ensureSharpHero` 里那两处"藏掉 Spotify 色晕"
+            //    也跟着不跑了 ✗，于是它露面压在 field 上。
+            //    ⇒ 卡片版式**照样要藏它**（底色归我们的 field）。
+            //    ⚠️ 必须在 `removeHero()`（它内部的 `revealWash()` 会把旧的还回来）**之后**调。
+            concealNativeWash(for: target)
         }
 
         // ③ Spotify 自己那些按键（用户 2026-10-13：「spotify 本身的那些按键都还在，看起来不咋地」）。
