@@ -189,6 +189,11 @@ enum EntityPageAppearance {
         //    比 `currentTarget()` 便宜，也足够安全。
         guard recognizesPage(of: layout) else { return }
 
+        // ★★ 2026-10-17：**只在艺人页上补藏原生封面**。专辑 / 歌单页现在**保留 Spotify 自己那张
+        //    封面卡片**（用户拍板选 A，见 `tick()`）—— 还照旧每帧把它藏掉的话，页面上就一张封面
+        //    都没有了。
+        guard isArtistPage(of: layout) else { return }
+
         let cover: UIView?
         if let cached = objc_getAssociatedObject(layout, &layoutCoverKey) as? UIView,
            cached.window != nil, cached.isDescendant(of: layout) {
@@ -214,6 +219,57 @@ enum EntityPageAppearance {
             node = current.superview
         }
         return false
+    }
+
+    /// `layout` 是不是**艺人页**（页面 root 的 id = `creator-page`）。
+    ///
+    /// ★ 2026-10-17：`layoutPass` 只在这一页上继续藏原生封面（见那里的说明）。
+    private static func isArtistPage(of layout: UIView) -> Bool {
+        var node: UIView? = layout
+        var level = 0
+        while let current = node, level < 24 {
+            level += 1
+            if current.accessibilityIdentifier == "creator-page" { return true }
+            node = current.superview
+        }
+        return false
+    }
+
+    /// AM 的封面卡片是**连续圆角**（原生只有 4）—— 与 `LibraryRowsAppearance` 同一条纪律：
+    /// **记原值**，关开关 / 换页时写回。
+    ///
+    /// ⚠️ 只圆**里面那张图**（`firstImageView`），不碰外面那个可能带阴影的容器 ——
+    /// 给它 `clipsToBounds` 会把阴影一起剪掉。
+    private static var coverRounding: (view: UIView, radius: CGFloat, curve: CALayerCornerCurve, clips: Bool)?
+    private static let coverCornerRadius: CGFloat = 8
+
+    private static func roundCoverCard(_ cover: UIView?) {
+        guard let imageView = cover.flatMap({ firstImageView(in: $0) }) ?? cover as? UIImageView else { return }
+        let side = min(imageView.bounds.width, imageView.bounds.height)
+        guard side > 40 else { return }
+        let radius = min(coverCornerRadius, side / 4)
+
+        if let existing = coverRounding, existing.view === imageView {
+            if abs(imageView.layer.cornerRadius - radius) > 0.1 { imageView.layer.cornerRadius = radius }
+            return
+        }
+        restoreCoverRounding()
+        coverRounding = (imageView, imageView.layer.cornerRadius, imageView.layer.cornerCurve, imageView.clipsToBounds)
+        imageView.layer.cornerRadius = radius
+        imageView.layer.cornerCurve = .continuous
+        imageView.clipsToBounds = true
+        writeDebugLog(
+            "[\(logTag)] artwork card rounded to \(Int(radius))pt continuous (AM's artwork card;"
+                + " Spotify's own square stays where its layout put it)"
+        )
+    }
+
+    private static func restoreCoverRounding() {
+        guard let record = coverRounding else { return }
+        record.view.layer.cornerRadius = record.radius
+        record.view.layer.cornerCurve = record.curve
+        record.view.clipsToBounds = record.clips
+        coverRounding = nil
     }
 
     static func start() {
@@ -258,14 +314,27 @@ enum EntityPageAppearance {
             restore(reason: "field switch off")
         }
 
-        if wantsDissolve {
+        if wantsDissolve, target.kind == .artist {
             ensureHero(on: target)
             // ④ 头部居中（Melox 的三段式）—— 与"模糊底"同属这一颗开关下的"页面样式"。
             centerHeaderLabels(in: target.page)
-        } else if hero != nil || sharpHero != nil || scrim != nil
-            || concealedNativeCover != nil || !centeredLabels.isEmpty {
-            removeHero()
-            restoreCentering()
+        } else {
+            // ★★ 2026-10-17（**用户拍板选 A**，照片 123 是依据）：**AM 的专辑页 / 歌单页不铺封面** ——
+            //    封面是**居中的圆角卡片**，标题 / 艺人 / 元数据 / 按钮全在卡片**下面**，
+            //    底色是取色渐变。只有**艺人页**那张照片是铺到顶的。
+            //
+            //    ⇒ 这两页**根本不用我们画封面**：Spotify 自己那张就是卡片
+            //      （专辑 `ArtWorkElement.WithCoverArt` 248×248 @ 83,62；
+            //        歌单 `Components.Header.UI.ArtworkImage` 262×262 @ 76,62），
+            //      位置与 AM 基本一致。所以这里做的是**减法**：
+            //      撤掉满幅 hero / 模糊底 / 顶带，并且**把原生封面放回来**（不再 `concealNativeCover`）。
+            //      留下的只有：取色底 field + 我们自己那版页头（文字与三颗按钮）+ 状态栏配色。
+            if hero != nil || sharpHero != nil || scrim != nil || concealedNativeCover != nil {
+                removeHero()
+            }
+            if !centeredLabels.isEmpty { restoreCentering() }
+            // 卡片圆角照 AM（连续圆角 8，原生只有 4）。
+            roundCoverCard(target.cover)
         }
 
         // ③ Spotify 自己那些按键（用户 2026-10-13：「spotify 本身的那些按键都还在，看起来不咋地」）。
@@ -1262,6 +1331,7 @@ enum EntityPageAppearance {
 
     private static func restore(reason: String) {
         removeHero()
+        restoreCoverRounding()
         // 状态栏还回 app 自己那一档（我们只在"这个页面的取色"这件事上有意见）。
         EntityPageStatusBar.release()
         restoreCentering()
@@ -1298,7 +1368,13 @@ enum EntityPageAppearance {
         let page: UIView
         let cover: UIView?
         let color: UIColor?
+        /// ★ 2026-10-17：这一页是**艺人页**（照片铺到顶）还是**专辑 / 歌单页**（封面是卡片，不铺）
+        /// —— 用户拍板选 A 之后就靠它分岔，见 `tick()`。
+        let kind: PageKind
     }
+
+    /// 我们接管的三页。只有 `.artist` 铺满幅；另两页照 AM 留 Spotify 自己那张封面卡片。
+    private enum PageKind { case artist, album, playlist }
 
     private static func currentTarget() -> Target? {
         guard let window = frontWindow() else { return nil }
@@ -1317,13 +1393,18 @@ enum EntityPageAppearance {
                         + " — waiting for the artwork, nothing was changed"
                 )
             }
-            return Target(page: page, cover: cover, color: color)
+            return Target(
+                page: page,
+                cover: cover,
+                color: color,
+                kind: page.accessibilityIdentifier == "creator-page" ? .artist : .album
+            )
         }
 
         // 歌单页：root 的 id 还没拿到 ⇒ 从封面元素往上找"占满屏"的那一层。
         if let art = firstView(in: window, withAnyIdentifier: coverIdentifiers),
            let page = pageRoot(from: art, in: window) {
-            return Target(page: page, cover: art, color: coverColor(art))
+            return Target(page: page, cover: art, color: coverColor(art), kind: .playlist)
         }
         return nil
     }
