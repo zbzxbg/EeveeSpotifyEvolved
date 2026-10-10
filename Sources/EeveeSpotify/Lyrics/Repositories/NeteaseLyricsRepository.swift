@@ -1035,9 +1035,18 @@ class NeteaseLyricsRepository: LyricsRepository {
                 // 那行被当正文渲染，跟着歌词列一起滚）。判为标注行的**丢掉整行**，
                 // 而不是留个空行 —— 空行在 AM 渲染层里会占一行高度，看着像"漏了一句"。
                 lines = yrcParsed
+                    // ★★ 2026-10-18（用户拍板：「把**原本有的间奏全部删掉**」）：♪ / `<Music>` 那类
+                    //    **整行丢掉**，而不是"清成空白、保留位置"。
+                    //    判据用现成的 `isInterludeRow`（空行、或整行只有 ♪，含多个 ♪ 与前后空白）。
+                    //
+                    //    为什么丢掉是对的：**间奏不该由一行文字表达** —— AM 那边是三个呼吸点，
+                    //    而"这一行到下一行之间有多久没词"这件事，`LyricInterludeTimeline` 是**按
+                    //    时间间隙**推出来的（Melox 的检测逻辑），不靠一个占位行 ✓。
+                    //    留空行反而有害：AM 渲染层里空行照样占一行高度，看着像漏了一句。
+                    .filter { !isInterludeRow($0.content.lyricsNoteIfEmpty) }
                     .map {
                         LyricsLineDto(
-                            content: cleanedInterludeSymbol($0.content.lyricsNoteIfEmpty),
+                            content: $0.content.lyricsNoteIfEmpty,
                             offsetMs: $0.offsetMs,
                             words: $0.words
                         )
@@ -1085,9 +1094,12 @@ class NeteaseLyricsRepository: LyricsRepository {
                     writeDebugLog("[NetEase] Unsynced lyrics fallback (\(lines.count) line(s))")
                 } else {
                     lines = parsed
+                        // ★★ 2026-10-18：与逐字那条路同一条纪律 —— 间奏行**整行丢掉**
+                        //    （见上面那段说明：间奏交给三个呼吸点与时间间隙，不交给一行文字）。
+                        .filter { !isInterludeRow($0.content.lyricsNoteIfEmpty) }
                         .map {
                             LyricsLineDto(
-                                content: cleanedInterludeSymbol($0.content.lyricsNoteIfEmpty),
+                                content: $0.content.lyricsNoteIfEmpty,
                                 offsetMs: $0.offsetMs
                             )
                         }
