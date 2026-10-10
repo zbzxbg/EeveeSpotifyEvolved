@@ -138,7 +138,7 @@ Some of the modified features in this fork have been verified to work in this en
 
 - Thanks to [whoeevee](https://github.com/whoeevee) for creating the original EeveeSpotify project.
 - The Spicy Lyrics lyrics provider, as well as the logging and export functionality, comes from [SideloadLabs](https://github.com/SideloadLabs/EeveeSpotifyReincarnated).
-- The karaoke lyrics design was inspired by [MeloX](https://github.com/youshen2/MeloX).
+- The inspiration for the karaoke lyrics and interludes came from [MeloX](https://github.com/youshen2/MeloX).
 - The liquid glass-related design was inspired by [spoti.pw](https://spoti.pw). Code from v0.21.1 and earlier (GPL-3.0, © Vojtěch Škopek) is used; the full notice is available in-app under "Licenses". v0.22.0+ is PolyForm Strict: none of its source code was read or reused.
 - The layout design of the Now Playing page and the main pages was inspired by [kumone](https://github.com/missuo/kumone).
 - The artist page design was inspired by Apple Music from Apple Inc.
