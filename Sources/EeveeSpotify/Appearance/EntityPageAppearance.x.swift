@@ -34,6 +34,10 @@ import UIKit
 ///   · 「封面下缘溶解」`UserDefaults.entityPageDissolve`（默认开）
 /// 两颗都关掉 = **一个字节都不改**（清过的底色逐个写回、两层视图撤掉）。
 /// 日志 tag：`[PageField]`。
+///
+/// ★ 2026-10-17：**顶部那一条"纱"**（`ensureScrim`）跟着「封面下缘溶解」这颗开关走 ——
+/// 它是"满幅封面"这套外观的一部分，用户拍板时**没有**要单独一颗开关（他二选一里选的是 A，
+/// 不是"两条都做成开关"的 C）⇒ 不新增 UserDefaults 键、不动 l10n。
 enum EntityPageAppearance {
 
     static let logTag = "PageField"
@@ -79,6 +83,12 @@ enum EntityPageAppearance {
     private static var heroHeightKey: UInt8 = 0
     /// hero 的最小高度（pw 的 `kMinHero = 120`）：比这矮就不画，免得出来一条细带。
     private static let minHeroHeight: CGFloat = 120
+    /// ★ 2026-10-17：**顶部那一条"纱"** —— 用户点名要的"缓冲区"，见 `ensureScrim`。
+    private static var scrim: GradientView?
+    /// 纱在最上面那一端的不透明度（往下线性化到 0）。
+    private static let scrimTopAlpha: CGFloat = 0.5
+    /// 纱在"安全区顶"之外还要往下化开多少 —— 不留这一截的话，安全区底沿会看到一条硬边。
+    private static let scrimExtraFade: CGFloat = 22
     /// 被我们藏掉的 wash 视图（**记原值**，关开关原样撤回）—— 见 `concealWash` / `revealWash`。
     private static var concealedWash: [
         (view: UIView, layerHidden: Bool, hadMask: Bool, interactive: Bool, accessibilityHidden: Bool)
@@ -211,7 +221,8 @@ enum EntityPageAppearance {
 
         guard let target = currentTarget() else {
             // 页面走了：把上一页留下的东西全部还原（切页/退出都不留残迹）。
-            if currentPage != nil || field != nil || hero != nil || sharpHero != nil || concealedNativeCover != nil {
+            if currentPage != nil || field != nil || hero != nil || sharpHero != nil
+                || scrim != nil || concealedNativeCover != nil {
                 restore(reason: "left the page")
             }
             // 底色拦截器也一起松手（照片 103 的那条硬边就是它要治的：Spotify 重画底色 ⇒ 丢这次写入）。
@@ -235,7 +246,8 @@ enum EntityPageAppearance {
             ensureHero(on: target)
             // ④ 头部居中（Melox 的三段式）—— 与"模糊底"同属这一颗开关下的"页面样式"。
             centerHeaderLabels(in: target.page)
-        } else if hero != nil || sharpHero != nil || concealedNativeCover != nil || !centeredLabels.isEmpty {
+        } else if hero != nil || sharpHero != nil || scrim != nil
+            || concealedNativeCover != nil || !centeredLabels.isEmpty {
             removeHero()
             restoreCentering()
         }
@@ -627,9 +639,10 @@ enum EntityPageAppearance {
         let layout: UIView
         /// 高度按**宿主**算、且**不要求封面已经量好**（专辑页与艺人页：封面可能这一拍还没布局）。
         let fillsHost: Bool
-        /// 顶部留出状态栏那一条。★ 2026-10-06：**现在是恒 false** —— 用户看真机后确认
-        /// "缓冲没和封面接上、而且太大"，而 AM 与歌单页都是铺到顶的（见 `ensureHero` 里那段说明）。
-        /// 留这个变量只是把"要不要缓冲"这件事写在一个地方，方便将来再翻。
+        /// 顶部留出状态栏那一条（= 把图**往下挪**，上面露出取色底）。★ 2026-10-06：**恒 false** ——
+        /// 用户看真机后确认"缓冲没和封面接上、而且太大"，而 AM 与歌单页都是铺到顶的。
+        /// ★ 2026-10-17（用户再问"怎么搞好"）：他二选一里选了**方案 A（照片照旧铺到顶 + 顶上叠一层纱）**
+        /// ⇒ 这一条**仍然是 false**，顶上那件事由 `ensureScrim` 做。变量留着只作记录。
         let wantsTopInset: Bool
 
         if let plane, plane.bounds.width > 1 {
@@ -672,6 +685,8 @@ enum EntityPageAppearance {
             objc_setAssociatedObject(host, &heroHeightKey, NSNumber(value: height), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         // 缓冲（只有专辑页要，见 `wantsTopInset`）：把图从状态栏下面开始画。
+        // ★ 2026-10-17：这条**永远是死路** —— 用户二选一里选了方案 A（图照旧铺到顶 + 顶上加纱），
+        //    顶上那件事现在由 `ensureScrim` 做。算式留着，将来真要翻回"把图往下挪"时不用重推。
         let topInset = wantsTopInset ? page.safeAreaInsets.top : 0
         let frame = CGRect(
             x: 0,
@@ -704,6 +719,103 @@ enum EntityPageAppearance {
         if !view.frame.equalTo(frame) { view.frame = frame }
         if view.image !== source { view.image = source }
         applyDissolveMask(to: view, opaqueFraction: 0.54)
+
+        // ★ 2026-10-17：照片**照旧铺到顶**，只在这里加"顶上那一条纱" —— 用户拍板的方案 A。
+        ensureScrim(in: host, above: view, page: page)
+    }
+
+    /// ★★ 2026-10-17（用户）：「歌曲页/艺人页的封面是直接铺到手机顶部的，但是所有的 app 都会在上面
+    /// 留一块缓冲区（因为有刘海屏、灵动岛、系统图标挡着）但是我们没有缓冲区（**pw 有没有这个缓冲？**）
+    /// 怎么搞好」。
+    ///
+    /// ## 先回答"pw 有没有"：**没有**
+    ///
+    /// pw（GPL 的 v0.21.1 那份）三条页头是同一句 —— 横 0、**纵 0**：
+    ///
+    /// | 页 | 位置 | 那一行 |
+    /// |---|---|---|
+    /// | 歌单 | `Redesigned/Playlist/PlaylistHeader.x:231` | `CGRectMake(0, 0, plane.bounds.size.width, bottom)` |
+    /// | 专辑 | `Redesigned/Album/AlbumHeader.x:253` | `CGRectMake(0, 0, header.bounds.size.width, height)` |
+    /// | 艺人 | `Redesigned/Artist/ArtistHeader.x:219` | `CGRectMake(0, 0, container.bounds.size.width, height)` |
+    ///
+    /// 整份 pw 里 `safeAreaInsets` 只出现在 Navbar/TabBar、PlayerFooter、PageTransition 三处，
+    /// **页头一处都没有** ⇒ 它也只保证**内容**避让（标题按钮贴页头底部、返回键用 Spotify 自己的）。
+    /// Apple Music 同样：`am1.png`（AM 的 ROSALÍA 艺人页）那张照片就是从屏幕最顶画的，
+    /// 状态栏 `12:27` 直接压在照片上。pw 唯一沾边的是 `Native/Appearance/EdgeEffect.x` ——
+    /// 把每个 scroll view 的 iOS 26 `topEdgeEffect.style` 设成 `softStyle`（导航栏下一条细的
+    /// 渐隐模糊带），**那是纱、不是给图让位**。
+    ///
+    /// ⇒ 「所有 app 都留缓冲」这句对**图**不成立、对**内容**成立；而内容避让我们早就在做了
+    /// （`EntityPageHeader.pinMoreButton`：`window.safeAreaInsets.top + 4`）。
+    ///
+    /// ## 但用户看到的症状是真的
+    ///
+    /// 照片 115（"你已点赞"、白底封面）里**状态栏整个消失** —— 本 app 的状态栏常驻浅色内容
+    /// （白字），压在亮封面上就是"白压白"；照片 117（单曲 Asuka）也糊。这才是要治的东西。
+    ///
+    /// ## 做法（用户二选一里选的 A：**顶部叠一层纱**，不是把图往下挪）
+    ///
+    /// 照片照旧铺到顶 → 在最上面盖一条 **黑 → 透明** 的竖直渐变，高 `安全区顶 + 22`。
+    ///
+    /// · **为什么是黑、而且不跟封面明暗翻转**：状态栏是白字，只有把底下压暗才读得清；
+    ///   亮封面（浅底 + `textTone` 反色那一档）压成中灰，也仍然落在"白字可读"的那一侧。
+    ///   真要"浅底配深色状态栏"就得去 hook `preferredStatusBarStyle`（`App` 侧的事），
+    ///   那是**另一件事**，没有混进这一条改动里。
+    /// · **为什么插在 `hero` 正上方**（`insertSubview(_:aboveSubview:)` 而不是 `addSubview`）：
+    ///   于是它落在 `spotify 自己的返回键` 与 `我们 pinned 的 ⋯`、页头那些文字的**下面** ——
+    ///   谁都不会被压暗（艺人页那三个东西都是 `header` 自己的子视图）。
+    /// · **为什么锚在宿主 y=0、而不是每次都按屏幕位置算**：宿主顶边静止时就是屏幕顶边，
+    ///   所以静止态两种算法等价；锚在图上则**跟着图一起滚**（等于"照片顶上本来就有一条暗边"），
+    ///   不依赖 0.6s 那一拍、不会滞后。滚下去之后那一条由 **Spotify 自己的收起来的导航栏**
+    ///   接手（pw 的 `ArtistHeader.x` 那句 "the soft top edge every redesigned page has"，
+    ///   我们这边真机照片 116 里那条浅色导航栏就是它）。
+    ///
+    /// ⚠️ 与 `wantsTopInset`（真正的"把图往下挪"）**不是一回事**：那条 2026-10-06 被用户否过
+    /// （"缓冲没和封面接上、而且太大"），现在仍然恒 `false`，只在 `ensureSharpHero` 里留作记录。
+    private static func ensureScrim(in host: UIView, above hero: UIView, page: UIView) {
+        let view: GradientView
+        if let scrim, scrim.superview === host {
+            view = scrim
+        } else {
+            removeScrim()
+            let fresh = GradientView()
+            fresh.isUserInteractionEnabled = false
+            fresh.accessibilityIdentifier = "eevee-page-scrim"
+            let gradient = fresh.gradient
+            gradient.startPoint = CGPoint(x: 0.5, y: 0)
+            gradient.endPoint = CGPoint(x: 0.5, y: 1)
+            gradient.colors = [
+                UIColor.black.withAlphaComponent(scrimTopAlpha).cgColor,
+                UIColor.black.withAlphaComponent(0).cgColor,
+            ]
+            gradient.locations = [NSNumber(value: 0), NSNumber(value: 1)]
+            host.insertSubview(fresh, aboveSubview: hero)
+            scrim = fresh
+            view = fresh
+            writeDebugLog(
+                "[\(logTag)] top scrim in \(type(of: host)) — cover stays full bleed to the top;"
+                    + " a black→clear fade over the status bar keeps it readable (option A,"
+                    + " the user's call: pw has no such inset at all)"
+            )
+        }
+
+        let safeTop = resolvedSafeAreaTop(in: host, page: page)
+        let height = max(12, safeTop + scrimExtraFade)
+        let frame = CGRect(x: 0, y: 0, width: host.bounds.width, height: height)
+        if !view.frame.equalTo(frame) { view.frame = frame }
+    }
+
+    /// 顶上那一条安全区 —— **窗口那一份才是准的**（嵌在别人里的视图常常读到 0，
+    /// 与 `EntityPageHeader.pinMoreButton` / `LyricsWordByWord.resolvedSafeAreaInsets` 同一条纪律）。
+    private static func resolvedSafeAreaTop(in host: UIView, page: UIView) -> CGFloat {
+        if let top = host.window?.safeAreaInsets.top, top > 0 { return top }
+        if host.safeAreaInsets.top > 0 { return host.safeAreaInsets.top }
+        return page.safeAreaInsets.top
+    }
+
+    private static func removeScrim() {
+        scrim?.removeFromSuperview()
+        scrim = nil
     }
 
     /// 专辑页的 wash：页面里那个 `LegacyUI…HeaderView`（头的高度），里面是 Spotify 的 `GradientView`。
@@ -772,7 +884,8 @@ enum EntityPageAppearance {
     /// **直接子视图**（`container.subviews`），而 Spotify 那层洗色在更深的地方 ⇒ 它照旧画在我们的图
     /// 之上，把整张封面盖掉。pw 的 `applyBackground` 用的是 **`SGForEachView(container, …)`（递归）** ——
     /// 这里照它改成递归，并且**跳过我们自己的 hero 及其子树**（pw 同样跳：
-    /// `if (hero && (v == hero || [v isDescendantOfView:hero])) return;`）。
+    /// `if (hero && (v == hero || [v isDescendantOfView:hero])) return;`）——
+    /// ★ 2026-10-17：**顶上那条纱（`scrim`）也一起跳**，理由见下面那一行。
     ///
     /// pw 在同一段里还会把"底色漆"从容器里每个视图上擦掉（issue #53：wash 的 alpha 被抬高后
     /// 不透明的一层会盖住图），这里一并做，并且**把原值记下来**（我们有开关，关掉要还原）。
@@ -787,6 +900,10 @@ enum EntityPageAppearance {
             queue.append(contentsOf: view.subviews)
 
             if let hero = sharpHero, view === hero || view.isDescendant(of: hero) { continue }
+            // ★ 2026-10-17：**顶上那条纱也是 `GradientView`** —— 不跳过的话，这一趟会把它当成
+            //    Spotify 的 wash 藏掉（歌单页那条路每拍都走这里 ⇒ 纱永远不出现）。
+            //    （专辑/艺人页那两条路不用管：它们的"藏"按 `eevee-` 前缀认自己人，见 `isOurs`。）
+            if let scrim, view === scrim { continue }
             if view === plane { continue }
 
             if NSStringFromClass(type(of: view)).contains("GradientView") {
@@ -904,6 +1021,7 @@ enum EntityPageAppearance {
     }
 
     private static func removeHero() {
+        removeScrim()
         revealNativeCover()
         revealWash()
         // 单调高度是记在**那块 plane** 上的（换页面时 plane 可能被复用）⇒ 撤的时候一起清掉，
