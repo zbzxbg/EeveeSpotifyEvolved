@@ -104,6 +104,25 @@ jobs:
                  -o spicy-lyrics-json-mapping-tests
           ./spicy-lyrics-json-mapping-tests
 
+      # 2026-10-18：间奏（三个呼吸点）的**纯逻辑**两层 ——
+      # `LyricInterludeTimeline`（哪两句之间算间奏、这一拍该显示什么）与
+      # `AppleMusicInterludeDotsPresentation`（三个点各多亮、整排缩放/淡出）。
+      # 它们没有任何 UI 依赖，所以能进这里；渲染层 `AppleMusicInterludeRow` 要 SwiftUI，进不来。
+      #
+      # ⚠️ 这一步还有第二重意义：本仓库本机没有 Swift 工具链 ⇒ 这两个**新文件**在打包之前
+      #    没有任何东西编译过它们。这里是唯一能在 IPA 构建之前把它们过一遍 `swiftc` 的地方。
+      - name: Lyric interlude timeline + dots presentation
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/AppleMusic/LyricModels.swift \
+                 Sources/EeveeSpotify/Lyrics/AppleMusic/LyricInterlude.swift \
+                 Sources/EeveeSpotify/Lyrics/AppleMusic/LyricInterludeTimeline.swift \
+                 Sources/EeveeSpotify/Lyrics/AppleMusic/LyricVocalDurationEstimator.swift \
+                 Sources/EeveeSpotify/Lyrics/AppleMusic/AppleMusicInterludeMotionProfile.swift \
+                 Sources/EeveeSpotify/Lyrics/AppleMusic/AppleMusicInterludeDotsPresentation.swift \
+                 Tests/LyricInterludeTimeline/main.swift \
+                 -o lyric-interlude-tests
+          ./lyric-interlude-tests
+
       # 唯一一个**不是** swiftc 的测试（纯 Python，不需要工具链）。
       - name: Resolve-configuration snapshot
         run: python3 Tests/ResolveConfigurationSnapshot/test.py
