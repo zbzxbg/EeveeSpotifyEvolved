@@ -64,6 +64,9 @@ enum EntityPageAppearance {
     /// layer 上的，见 `eeveeClearBaseSurface` 里那段说明）。
     private static let clearDepth = 12
     private static let clearNodes = 1500
+    /// 取色场在页面之外**上下各渗**多少（pw 的 `kBleed = {600, 0, 600, 0}`）—— 给列表顶部/底部的
+    /// 回弹、以及歌单页页头那 134pt 的平移留余量，免得露出底。
+    private static let fieldBleed: CGFloat = 600
     /// 取色底占页面高度的比例（再往下就是 base surface，看不出接缝）。
     private static let fieldColorEnd: CGFloat = 0.58
     /// 封面化开成的那片背景占页面高度的比例（pw 那张 playlist 截图约 45%，这里给到 52%）。
@@ -332,35 +335,29 @@ enum EntityPageAppearance {
             restore(reason: "field switch off")
         }
 
-        if wantsDissolve, target.kind == .artist {
-            ensureHero(on: target)
-            // ④ 头部居中（Melox 的三段式）—— 与"模糊底"同属这一颗开关下的"页面样式"。
-            centerHeaderLabels(in: target.page)
-        } else {
-            // ★★ 2026-10-17（**用户拍板选 A**，照片 123 是依据）：**AM 的专辑页 / 歌单页不铺封面** ——
-            //    封面是**居中的圆角卡片**，标题 / 艺人 / 元数据 / 按钮全在卡片**下面**，
-            //    底色是取色渐变。只有**艺人页**那张照片是铺到顶的。
-            //
-            //    ⇒ 这两页**根本不用我们画封面**：Spotify 自己那张就是卡片
-            //      （专辑 `ArtWorkElement.WithCoverArt` 248×248 @ 83,62；
-            //        歌单 `Components.Header.UI.ArtworkImage` 262×262 @ 76,62），
-            //      位置与 AM 基本一致。所以这里做的是**减法**：
-            //      撤掉满幅 hero / 模糊底 / 顶带，并且**把原生封面放回来**（不再 `concealNativeCover`）。
-            //      留下的只有：取色底 field + 我们自己那版页头（文字与三颗按钮）+ 状态栏配色。
-            if hero != nil || sharpHero != nil || scrim != nil || concealedNativeCover != nil {
-                removeHero()
+        if wantsDissolve {
+            // ★★ 2026-10-18（用户：「看 melox 的歌单页和 am 几乎一模一样，看它的吧」）：
+            //    **两页共用** Melox 那两层（模糊封面 + `取色@34% → 取色` 的 veil）；
+            //    **清晰满幅封面 + 顶带只有艺人页**（用户拍板选 A：专辑/歌单留 Spotify 自己那张卡片）。
+            let sharp = target.kind == .artist
+            ensureHero(on: target, sharpCover: sharp)
+            if sharp {
+                // ④ 头部居中（Melox 的三段式）—— 与"模糊底"同属这一颗开关下的"页面样式"。
+                centerHeaderLabels(in: target.page)
+            } else {
+                if !centeredLabels.isEmpty { restoreCentering() }
+                // 卡片圆角照 AM（连续圆角 8，原生只有 4）。
+                roundCoverCard(target.cover)
+                // ★★★ 2026-10-17（**照片 126 是判决**）：页面那条**不是从上到下**的暗棕渐变，
+                //    **不是我们的 field** —— 是 **Spotify 自己那层色晕**（`GradientView`，本来就是
+                //    模糊/径向的）。原因：撤掉 hero 之后，`ensureSharpHero` 里那两处"藏掉 Spotify 色晕"
+                //    也跟着不跑了 ✗，于是它露面压在 field 上。
+                //    ⇒ 卡片版式**照样要藏它**（底色归我们的 field）。
+                concealNativeWash(for: target)
             }
-            if !centeredLabels.isEmpty { restoreCentering() }
-            // 卡片圆角照 AM（连续圆角 8，原生只有 4）。
-            roundCoverCard(target.cover)
-
-            // ★★★ 2026-10-17（**照片 126 是判决**）：页面那条**不是从上到下**的暗棕渐变，
-            //    **不是我们的 field** —— 是 **Spotify 自己那层色晕**（`GradientView`，本来就是
-            //    模糊/径向的）。原因：撤掉 hero 之后，`ensureSharpHero` 里那两处"藏掉 Spotify 色晕"
-            //    也跟着不跑了 ✗，于是它露面压在 field 上。
-            //    ⇒ 卡片版式**照样要藏它**（底色归我们的 field）。
-            //    ⚠️ 必须在 `removeHero()`（它内部的 `revealWash()` 会把旧的还回来）**之后**调。
-            concealNativeWash(for: target)
+        } else {
+            removeHero()
+            restoreCentering()
         }
 
         // ③ Spotify 自己那些按键（用户 2026-10-13：「spotify 本身的那些按键都还在，看起来不咋地」）。
@@ -390,7 +387,14 @@ enum EntityPageAppearance {
             clearBaseSurfaces(in: page)
         }
 
-        if !view.frame.equalTo(page.bounds) { view.frame = page.bounds }
+        // ★★ 2026-10-18：**上下各渗 600pt**（pw 的 `kBleed = {600, 0, 600, 0}`，见它的
+        //    `PlaylistField.x:23-24`："Above for the bounce at the top of the list, below for the one at
+        //    the end of it"）。歌单页的列表会回弹、页头会平移（静止 −134 → 滚动 −529），
+        //    场正好等于页面时会在那些时刻露出底 ✗。
+        //    ⚠️ 现在这一层是**纯色**，所以渗多少都不会改观感（旧的三段渐变是按高度算 locations 的，
+        //       那时候外扩会把渐变拉稀 —— 这也是为什么现在才敢做）。
+        let painted = page.bounds.insetBy(dx: 0, dy: -fieldBleed)
+        if !view.frame.equalTo(painted) { view.frame = painted }
         paintField(view, color: color)
 
         // ★ 2026-10-13（**日志 79** 实测只有 7 处被清之后发现）：**每一拍都要补清**。
@@ -512,29 +516,77 @@ enum EntityPageAppearance {
         // ★★ 2026-10-06（照片 111：白底封面 + 白字标题 ⇒ 什么都看不见）：**不再一律压暗** ——
         //    **封面亮就给亮底**（AM 的艺人页正是这样：白底照片 ⇒ 白底页面 + 黑字），封面暗才压暗。
         //    这也是 `textTone` 反色的依据：底亮了，字才有得反。
-        let light = isLight(color)
-        // ★★ 2026-10-06：改用 `scaled`（乘系数）而不是 `tinted`（设上限）——
-        //   上限对"本来就不亮的基色"毫无作用，那正是"渐变看不出渐变"的原因。
-        let middle = scaled(color, by: light ? 0.86 : 0.72)
-        let bottom = scaled(color, by: light ? 0.62 : 0.45)
+        // ★★★ 2026-10-18（用户：「我看 melox 的歌单页和 am 几乎一模一样，**看它的吧**」）：
+        //   照 Melox `Features/Playlist/PlaylistDetailContent.swift:441-452` 的三层 ——
+        //   **取色纯色 + 模糊封面 + 一条 `取色@34% → 取色` 的 LinearGradient**（`:237-241` 页头区同一条）。
+        //   ⇒ 这一层（最底）只负责"底色是取色"，**它是纯色、不是渐变**；那条渐变由 `veil` 画在
+        //     模糊封面**之上**（见 `ensureVeil`），跟 Melox 的叠放次序一致。
+        //
+        //   ⚠️ 同时**废止**两件旧做法：
+        //     · "同色相压到 45%"（`scaled(_:by:)` 那一套）—— 我们自己加的，比 Melox 暗、也不是 AM；
+        //     · pw 的 `_black`（`SGRField.m`：clear → 纯黑，按**窗口**高度 0.55→1.0）——
+        //       用户 2026-10-13 明确否过"往下滑是全黑的、没有颜色"，而 Melox 是**渐到取色本身** ✓。
         let layer = view.gradient
         layer.startPoint = CGPoint(x: 0.5, y: 0)
         layer.endPoint = CGPoint(x: 0.5, y: 1)
-        layer.locations = [
-            NSNumber(value: 0),
-            NSNumber(value: Double(fieldColorEnd)),
-            NSNumber(value: 1),
-        ]
-        layer.colors = [color.cgColor, middle.cgColor, bottom.cgColor]
+        layer.locations = [NSNumber(value: 0), NSNumber(value: 1)]
+        layer.colors = [color.cgColor, color.cgColor]
         let key = hex(of: color)
         if key != lastLoggedHex {
             lastLoggedHex = key
             writeDebugLog(
-                "[\(logTag)] field colour is now #\(key) — top \(key),"
-                    + " \(Int(fieldColorEnd * 100))% #\(hex(of: middle)), bottom #\(hex(of: bottom))"
-                    + " (the whole page keeps the cover's tint; it never fades to plain #121212)"
+                "[\(logTag)] field colour is now #\(key) — flat (Melox: solid accent + blurred cover"
+                    + " + a 34%→100% veil of the same colour; nothing fades to black)"
             )
         }
+    }
+
+    /// Melox 的**第三层**：`取色@34% → 取色`，盖在模糊封面**之上**、页面内容**之下**。
+    ///
+    /// ★★ 2026-10-18：这一层就是"往下滑颜色变沉"的**全部来源**（Melox `:441-452` 的
+    /// `LinearGradient(colors: [palette.backgroundColor.opacity(0.34), palette.backgroundColor])`）。
+    /// 它的下端是**不透明的取色** ⇒ 页面下半部分稳定落在"这个封面的颜色"上，
+    /// 不像 pw 那样落到纯黑，也不像我们旧做法那样一路压到 45% 亮度。
+    private static var veil: GradientView?
+    private static var veilColourKey: String?
+
+    private static func ensureVeil(above blurred: UIView, in container: UIView, colour: UIColor?) {
+        guard let colour else { return }
+        let view: GradientView
+        if let veil, veil.superview === container {
+            view = veil
+        } else {
+            removeVeil()
+            let fresh = GradientView()
+            fresh.isUserInteractionEnabled = false
+            fresh.accessibilityIdentifier = "eevee-page-veil"
+            fresh.gradient.startPoint = CGPoint(x: 0.5, y: 0)
+            fresh.gradient.endPoint = CGPoint(x: 0.5, y: 1)
+            fresh.gradient.locations = [NSNumber(value: 0), NSNumber(value: 1)]
+            container.insertSubview(fresh, aboveSubview: blurred)
+            veil = fresh
+            view = fresh
+            writeDebugLog(
+                "[\(logTag)] veil over the blurred cover — Melox's third layer (colour 34% → colour);"
+                    + " this is what makes the page settle into the artwork's colour going down"
+            )
+        }
+        let key = hex(of: colour)
+        if key != veilColourKey {
+            veilColourKey = key
+            view.gradient.colors = [
+                colour.withAlphaComponent(0.34).cgColor,
+                colour.cgColor,
+            ]
+        }
+        let frame = CGRect(x: 0, y: 0, width: container.bounds.width, height: max(1, container.bounds.height))
+        if !view.frame.equalTo(frame) { view.frame = frame }
+    }
+
+    private static func removeVeil() {
+        veil?.removeFromSuperview()
+        veil = nil
+        veilColourKey = nil
     }
 
     /// 同一**色相**压暗（保住"就是这片颜色"的观感，而不是褪成中性灰 ✗）。
@@ -683,7 +735,7 @@ enum EntityPageAppearance {
     ///   · ① **模糊**那张（本函数）铺满页面顶部，负责"化开之后露出来的那片颜色"；
     ///   · ② **清晰**那张（`ensureSharpHero`）是**满幅的封面本身**，底部 54% 起化开 ——
     ///     于是"整张封面融进底子"，而不是"模糊底 + 原地一张小卡"。
-    private static func ensureHero(on target: Target) {
+    private static func ensureHero(on target: Target, sharpCover: Bool) {
         guard let cover = target.cover else { return }
         // ★ 2026-10-13：**图还没到也要先把 Spotify 那张小封面藏掉**。原来这里和 `let source`
         //   一起 guard，于是"封面元素在、图还没加载出来"的那几拍里原生封面一直亮着
@@ -738,11 +790,14 @@ enum EntityPageAppearance {
         // 向下化开：上 54% 不透明 → 底全透明（露出后面那片取色底/模糊底）。
         applyDissolveMask(to: view, opaqueFraction: 0.54)
 
+        // ③ ★★ 2026-10-18（Melox）：**模糊封面之上**盖那条 `取色@34% → 取色` —— 见 `ensureVeil`。
+        ensureVeil(above: view, in: container, colour: target.color)
+
         // ② ★ 2026-10-13（用户看真机后：「也不是把封面整个融进底子」）：
-        //    **把清晰的封面本身铺成满幅**、底部化进下面那片颜色 —— 这才是 pw 的结构
-        //    （`PlaylistHeader.x`：the cover runs full bleed across the top of the page and
-        //    dissolves into the page's colour）。上一版是"模糊底 + 原地一张小卡"的 Melox 结构，
-        //    而用户要的是"整张封面融进去" ⇒ Spotify 自己那张小封面**让位**（按层藏，可原样撤回）。
+        //    **把清晰的封面本身铺成满幅**、底部化进下面那片颜色。
+        // ★★ 2026-10-18（用户拍板选 A，照片 123）：**这一层只有艺人页要** —— 专辑/歌单页照 AM
+        //    保留 Spotify 自己那张封面卡片（248×248 / 262×262），不再铺满幅。
+        guard sharpCover else { return }
         ensureSharpHero(cover: cover, source: source, page: container, colour: target.color)
     }
 
@@ -1185,6 +1240,7 @@ enum EntityPageAppearance {
 
     private static func removeHero() {
         removeScrim()
+        removeVeil()
         revealNativeCover()
         revealWash()
         // 单调高度是记在**那块 plane** 上的（换页面时 plane 可能被复用）⇒ 撤的时候一起清掉，
