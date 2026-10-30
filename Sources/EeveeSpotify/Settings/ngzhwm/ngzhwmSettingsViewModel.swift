@@ -68,40 +68,19 @@ class NgzhwmSettingsViewModel: ObservableObject {
         bool(forKey: wordByWordLyricsKey, defaultValue: true)
     }
 
-    // MARK: - ★ 2026-10-12：扩展那页三颗"总开关"要读写的键
+    // MARK: - ★ 2026-10-12：逐语言罗马化 / 译文的键
 
     /// 三颗**逐语言**罗马化开关（设置 → 歌词 那一页）—— 与 `LyricLinesAdapter
     /// .romanizationSwitchesFingerprint()`、`LyricsDto`、`AmllLyricsMapper`、
     /// `NeteaseLyricsRepository` / `MusixmatchLyricsRepository` 里读的**是同一批键**。
     ///
-    /// ⚠️ 那几处目前仍是**字面量**（本轮没一起改，避免把一次"加开关"扩成一次全仓重构）；
-    ///    集中在这里是为了给扩展页那颗总开关一个**单一实现**，将来收敛只改这一处。
+    /// ⚠️ 那几处目前仍是**字面量**（本轮没一起改，避免把一次"加开关"扩成一次全仓重构）。
     static let japaneseRomanizationKey = "ngzhwm_japaneseRomanization"
     static let chineseRomanizationKey = "ngzhwm_chineseRomanization"
     static let koreanRomanizationKey = "ngzhwm_koreanRomanization"
 
-    /// 三颗逐语言罗马化开关里**有没有开着的**（扩展页那颗「展示罗马化歌词」读它）。
-    static var anyRomanizationEnabled: Bool {
-        UserDefaults.standard.bool(forKey: japaneseRomanizationKey)
-            || UserDefaults.standard.bool(forKey: chineseRomanizationKey)
-            || UserDefaults.standard.bool(forKey: koreanRomanizationKey)
-    }
-
-    /// 一次性把三颗逐语言罗马化开关设成同一个值（扩展页那颗总开关写它）。
-    static func setAllRomanization(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: japaneseRomanizationKey)
-        UserDefaults.standard.set(enabled, forKey: chineseRomanizationKey)
-        UserDefaults.standard.set(enabled, forKey: koreanRomanizationKey)
-    }
-
     static var isNeteaseHideTranslationEnabled: Bool {
         bool(forKey: neteaseHideTranslationKey, defaultValue: !isChineseDevice)
-    }
-
-    /// ★ 2026-10-12：扩展页那颗「展示歌词翻译」写它 —— 与上面**互为反相、键只有一个**
-    /// （所以歌词页那颗「隐藏译文」与扩展页这颗永远同步，不存在两份真相）。
-    static func setHideTranslation(_ hidden: Bool) {
-        UserDefaults.standard.set(hidden, forKey: neteaseHideTranslationKey)
     }
 
     /// ★ 2026-10-13（用户要求：「**展示罗马化翻译 / 歌词翻译默认开启**」）——
@@ -126,7 +105,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
             UserDefaults.standard.set(true, forKey: key)
         }
 
-        // 「展示歌词翻译」与「隐藏译文」是**同一个键的反相**（见上面 `setHideTranslation`）
+        // 「展示歌词翻译」与「隐藏译文」是**同一个键的反相**
         // ⇒ 要"默认显示译文"，就是把它写成 false（同样只对没写过的键）。
         if UserDefaults.standard.object(forKey: neteaseHideTranslationKey) == nil {
             UserDefaults.standard.set(false, forKey: neteaseHideTranslationKey)

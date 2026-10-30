@@ -17,7 +17,7 @@ struct EeveeFlagCatalogView: View {
 
     var body: some View {
         List {
-            Section(footer: Text("flag_catalog_description".localized)) {
+            Section {
                 TextField("flag_catalog_search_placeholder".localized, text: $filter)
             }
 

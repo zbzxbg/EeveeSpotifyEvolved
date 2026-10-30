@@ -78,7 +78,7 @@ struct EeveeLicensesSettingsView: View {
 
     var body: some View {
         List {
-            Section(footer: Text("licenses_footer".localized)) {
+            Section {
                 ForEach(entries) { entry in
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: entry.symbol)

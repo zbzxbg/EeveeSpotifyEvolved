@@ -116,11 +116,45 @@ class PetitLyricsRepository: LyricsRepository {
             
             // Petit 的 starttime/endtime 单位不稳定：行起始时间永远是毫秒（首词 starttime 即绝对 ms），
             // 但词时间在「厘秒格式」下是「相对行首的厘秒差」（存的整数值 = 行首 + 厘秒差，未 ×10）。
-            let centi = Self.isCentiseconds(lyrics.lines)
+            //
+            // ★★ 2026-10-30（日志 999 / yanaginagi「終わりの世界から」）：**单位是逐行混用的**。
+            //   同一份 XML 里第 1 行每字 80（毫秒，80ms/字），第 2 行起每字 15 / 5（厘秒，
+            //   150ms / 50ms/字）。旧代码拿**整首**所有词间隔的中位数（5）判成"厘秒"，
+            //   于是第 1 行被 ×10 拉成 11.3 秒，压过第 2 行的 7.88 秒 ⇒ 两行同时亮、
+            //   逐词前沿也整体错位。单位必须**按行**判，行首始终按毫秒。
+            let timedLines = lyrics.lines.filter { line in
+                if !line.linestring.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return true
+                }
+                // `linestring` 空、但词元素里真有字（异常形态）⇒ 保留，别误删一句。
+                return line.words.contains { word in
+                    !(word.wordstring ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+            }
+            // ★★ 2026-10-30：把"压在前一行尾巴上的短句"并回前一行。
+            //
+            // yanaginagi「終わりの世界から」里第 2 行「よ」被单独成行、起点写成 8120ms，
+            // 而第 1 行按厘秒换算要到 10280ms 才唱完 ⇒ 两行同时亮。这种"≤3 字、≤2 词、
+            // 且起点落在前一行内部超过 0.5s"的行几乎都是上传者拆句/起点填错，
+            // 并回前一行后逐词时间轴正好接上（前一行末尾 = 短句起点），也不会再有两行同亮。
+            let mergedLines = mergeShortOverlaps(timedLines)
+            let mergedCount = timedLines.count - mergedLines.count
+            if mergedCount > 0 {
+                writeDebugLog("[Petit] merged \(mergedCount) short overlapping line(s) into the previous line")
+            }
+            let centiLineCount = mergedLines.filter { Self.isCentiseconds($0) }.count
+            if centiLineCount > 0 {
+                writeDebugLog(
+                    "[Petit] time unit: \(centiLineCount)/\(mergedLines.count) line(s) use centiseconds"
+                        + " (decided per line; line starts stay in milliseconds)"
+                )
+            } else {
+                writeDebugLog("[Petit] time unit: milliseconds (all \(mergedLines.count) line(s))")
+            }
 
             // 诊断：首末行时间跨度（行起始 = 毫秒，不乘任何系数）
-            if let firstLine = lyrics.lines.first?.words.first?.starttime,
-                let lastLine = lyrics.lines.last?.words.first?.starttime
+            if let firstLine = mergedLines.first?.words.first?.starttime,
+                let lastLine = mergedLines.last?.words.first?.starttime
             {
                 writeDebugLog("[Petit] line span: first=\(firstLine)ms last=\(lastLine)ms (\(lyrics.lines.count) lines)")
             }
@@ -134,30 +168,21 @@ class PetitLyricsRepository: LyricsRepository {
             // 认不出它们（它只在"没有词级数据"时才算空白行），DTO 那层的统一筛空行也就漏过去了。
             // 这里在**源头**按 `linestring` 丢掉：间奏交给 AM 那边按"行与行之间的时间间隙"
             // 推出来的三个呼吸点，不交给一行空白。
-            let timedLines = lyrics.lines.filter { line in
-                if !line.linestring.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return true
-                }
-                // `linestring` 空、但词元素里真有字（异常形态）⇒ 保留，别误删一句。
-                return line.words.contains { word in
-                    !(word.wordstring ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                }
-            }
-            let droppedBlankLines = lyrics.lines.count - timedLines.count
+            let droppedBlankLines = lyrics.lines.count - mergedLines.count - mergedCount
             if droppedBlankLines > 0 {
                 writeDebugLog("[Petit] dropped \(droppedBlankLines) blank line(s) (no text)")
             }
-            writeDebugLog("[Petit] Words-synced lyrics — \(timedLines.count) line(s)\(preserveWords ? " (word-by-word preserved)" : "")")
+            writeDebugLog("[Petit] Words-synced lyrics — \(mergedLines.count) line(s)\(preserveWords ? " (word-by-word preserved)" : "")")
             return LyricsDto(
-                lines: timedLines.map {
+                lines: mergedLines.map {
                     LyricsLineDto(
                         content: $0.linestring,
                         offsetMs: $0.words.first?.starttime,
-                        words: preserveWords ? Self.wordDto(for: $0, isCentiseconds: centi) : nil
+                        words: preserveWords ? Self.wordDto(for: $0) : nil
                     )
                 },
                 timeSynced: true,
-                romanization: timedLines.map { $0.linestring }.canBeRomanized
+                romanization: mergedLines.map { $0.linestring }.canBeRomanized
                     ? .canBeRomanized
                     : .original
             )
@@ -182,30 +207,108 @@ class PetitLyricsRepository: LyricsRepository {
 
     private static var didDumpRawXml = false
     private static var didLogDegenerate = false
+    private static var didLogTextMismatch = false
 
-    /// 检测 Petit 词级时间轴的单位：部分歌是厘秒(1/100s)，部分歌是毫秒。
-    /// 依据：词起始时间差的中位数。毫秒解释下中位数 < 50ms（相当于 >20 字/秒，人声不可能），
-    /// 说明实为厘秒。
-    private static func isCentiseconds(_ lines: [PetitLyricsLine]) -> Bool {
+    /// 检测**这一行**词级时间轴的单位：部分行是厘秒(1/100s)，部分行是毫秒。
+    ///
+    /// ★★ 2026-10-30：原来按整首所有词的间隔中位数判，而 Petit 的上传数据**会在同一首里
+    /// 逐行混用单位**（yanaginagi「終わりの世界から」第 1 行 80ms/字，第 2 行起 15/5，
+    /// 即 150ms / 50ms/字）。整首判成厘秒会把第 1 行拉长 10 倍、压到下一行上。
+    ///
+    /// 依据仍然只有一条：毫秒解释下中位数 < 50ms 相当于 >20 字/秒，人声不可能 ⇒ 实为厘秒。
+    /// 单词行没有间隔可判，按毫秒（行首本身就是绝对毫秒，至少不会错到 10 倍）。
+    private static func isCentiseconds(_ line: PetitLyricsLine) -> Bool {
+        // 合并过的行：词时间已经是绝对毫秒，不能再按原始单位换算。
+        guard !line.isNormalized else { return false }
+        let starts = line.words.map { $0.starttime }
+        guard starts.count > 1 else { return false }
         var gaps: [Int] = []
-        for line in lines {
-            let starts = line.words.map { $0.starttime }
-            for i in 1..<starts.count {
-                let gap = starts[i] - starts[i - 1]
-                if gap > 0 { gaps.append(gap) }
-            }
+        for index in 1..<starts.count {
+            let gap = starts[index] - starts[index - 1]
+            if gap > 0 { gaps.append(gap) }
         }
         guard !gaps.isEmpty else { return false }
         let sorted = gaps.sorted()
-        let median = sorted[sorted.count / 2]
-        let centi = median < 50
-        writeDebugLog("[Petit] time unit: \(centi ? "centiseconds" : "milliseconds") — median word gap \(median)")
-        return centi
+        return sorted[sorted.count / 2] < 50
     }
 
-    /// Petit 的 wordsSynced 词元素通常只带 starttime、不带词文本，
-    /// 词文本需从 linestring 推导：先按空白切分；日语无空格时按逐字符切分对齐词数。
-    private static func wordDto(for line: PetitLyricsLine, isCentiseconds: Bool) -> [LyricsWordDto]? {
+    /// 把一个词的时间换算成绝对毫秒（按它所在行的单位）。
+    private static func absoluteWord(
+        _ word: PetitLyricsWord,
+        in line: PetitLyricsLine
+    ) -> PetitLyricsWord {
+        let base = line.words.first?.starttime ?? 0
+        let centi = isCentiseconds(line)
+        func convert(_ raw: Int) -> Int {
+            centi ? base + (raw - base) * 10 : raw
+        }
+        return PetitLyricsWord(
+            starttime: convert(word.starttime),
+            endtime: word.endtime.map { convert($0) },
+            chanum: word.chanum,
+            wordstring: word.wordstring
+        )
+    }
+
+    /// 这一行按自己的单位换算后，最后一个词结束的绝对毫秒。
+    private static func lineEndMs(_ line: PetitLyricsLine) -> Int {
+        guard let first = line.words.first else { return 0 }
+        guard let last = line.words.last else { return first.starttime }
+        let base = first.starttime
+        let raw = last.endtime ?? last.starttime
+        return isCentiseconds(line) ? base + (raw - base) * 10 : raw
+    }
+
+    /// 把"压在前一行尾巴上的短句"并回前一行（判据见调用点）。
+    ///
+    /// 只处理 **≤3 字 / ≤2 词 / 起点落在前一行内部超过 0.5s** 的行 —— 这是上传者拆句
+    /// 或把行首填成上一句开头的典型形态。并入时把短句的每个词平移到前一行末尾，
+    /// 逐词时间轴正好接上，`linestring` 也拼成完整的一句。
+    private static func mergeShortOverlaps(_ lines: [PetitLyricsLine]) -> [PetitLyricsLine] {
+        var result: [PetitLyricsLine] = []
+        for line in lines {
+            guard let previous = result.last else {
+                result.append(line)
+                continue
+            }
+            let previousEnd = lineEndMs(previous)
+            guard let lineStart = line.words.first?.starttime,
+                  lineStart < previousEnd,
+                  previousEnd - lineStart > 500 else {
+                result.append(line)
+                continue
+            }
+            let text = line.linestring.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, text.count <= 3, line.words.count <= 2 else {
+                result.append(line)
+                continue
+            }
+
+            let shift = previousEnd - lineStart
+            var merged = previous
+            merged.isNormalized = true
+            merged.linestring += line.linestring
+            // 先把两边都换成绝对毫秒，再平移短句 —— 合并后的行只保留一套单位。
+            merged.words = previous.words.map { absoluteWord($0, in: previous) }
+                + line.words.map { absoluteWord($0, in: line) }.map { word in
+                    var copy = word
+                    copy.starttime += shift
+                    if let end = copy.endtime { copy.endtime = end + shift }
+                    return copy
+                }
+            result[result.count - 1] = merged
+        }
+        return result
+    }
+
+    /// Petit 的 wordsSynced 词元素带 `wordstring`（词文本，含空格 token）+ starttime + endtime。
+    ///
+    /// ★★ 2026-10-30（用户：「歌词某行缺字」）：渲染层的逐词文本是**用 syllables 拼出来的**
+    /// （`TimedLyricTextBuilder` 的 `characters.map(\.text).joined()`），不是用 `line.content`。
+    /// 所以只要词文本拼起来与 `linestring` 差一个字符，屏幕上就会**真的少一个字**
+    /// （不是高亮没跟上）。这里立一条硬约束：拼出来的文本必须与 `linestring` 逐字相同；
+    /// 不同就返回 nil，让这一行走行级同步、由 `content` 完整显示。
+    private static func wordDto(for line: PetitLyricsLine) -> [LyricsWordDto]? {
         let words = line.words
         guard !words.isEmpty else { return nil }
 
@@ -224,55 +327,48 @@ class PetitLyricsRepository: LyricsRepository {
 
         // 厘秒格式：词时间是「相对行首的厘秒差」（整数值 = 行首 + 厘秒差，未 ×10），换算成绝对毫秒；
         // 毫秒格式：词时间本身就是绝对毫秒。
+        let centi = Self.isCentiseconds(line)
         func convert(_ raw: Int) -> Int {
-            isCentiseconds ? lineOffsetMs + (raw - lineOffsetMs) * 10 : raw
+            centi ? lineOffsetMs + (raw - lineOffsetMs) * 10 : raw
         }
 
-        // Petit 的 word 元素带 wordstring（词文本，含空格 token）+ starttime + endtime
+        func makeWord(_ text: String, _ word: PetitLyricsWord) -> LyricsWordDto {
+            LyricsWordDto(
+                text: text,
+                startMs: convert(word.starttime),
+                endMs: word.endtime.map { convert($0) }
+            )
+        }
+
+        // ① 首选：wordstring 齐全且拼起来与 linestring **逐字相同**。
         if words.allSatisfy({ $0.wordstring != nil }) {
-            return words.map {
-                let raw = $0.wordstring ?? ""
+            let texts = words.map { word -> String in
+                let raw = word.wordstring ?? ""
                 // 空格 token 的 wordstring 是纯空白（可能被解码器 trim 成空串），恢复为空格，
                 // 否则英文词与词会挤在一起
-                let text = raw.isEmpty ? " " : raw
-                return LyricsWordDto(
-                    text: text,
-                    startMs: convert($0.starttime),
-                    endMs: $0.endtime.map { convert($0) }
-                )
+                return raw.isEmpty ? " " : raw
+            }
+            if texts.joined() == line.linestring {
+                return zip(texts, words).map { makeWord($0, $1) }
             }
         }
 
-        // 兜底：wordstring 缺失时按切分对齐词数——
-        // 日文（无空格）按逐字符切，英文按空白切，避免英文被拆成单个字母
-        let tokens: [String]
-        if Self.containsCJK(line.linestring) {
-            tokens = line.linestring.filter { !$0.isWhitespace }.map(String.init)
-        } else {
-            tokens = line.linestring.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        }
-        if tokens.count == words.count {
-            return zip(tokens, words).map { LyricsWordDto(text: $0, startMs: convert($1.starttime)) }
+        // ② 兜底：按 `linestring` 的**字符**逐个对齐（含空格与标点）。
+        //
+        // 只在字符数正好等于词数时用 —— 这样拼出来的文本与 linestring 必然逐字相同，
+        // 不会缺字；词边界与上传者的分词不同时，只是把时间按字数均分，仍比整行强。
+        let characters = Array(line.linestring)
+        if characters.count == words.count {
+            return zip(characters, words).map { makeWord(String($0), $1) }
         }
 
-        writeDebugLog("[Petit] wordstring unavailable — tokens \(tokens.count) vs words \(words.count): \"\(line.linestring.prefix(60))\"")
+        if !Self.didLogTextMismatch {
+            Self.didLogTextMismatch = true
+            writeDebugLog(
+                "[Petit] word text does not match the line — chars \(characters.count) vs words \(words.count)"
+                    + ", line-level only: \"\(line.linestring.prefix(60))\""
+            )
+        }
         return nil
-    }
-
-    /// 是否含 CJK 字符（假名/汉字/韩文）。
-    private static func containsCJK(_ text: String) -> Bool {
-        text.unicodeScalars.contains { scalar in
-            switch scalar.value {
-            case 0x3040...0x30FF,   // 平/片假名
-                 0x3400...0x4DBF,   // CJK 扩展 A
-                 0x4E00...0x9FFF,   // CJK 统一汉字
-                 0xAC00...0xD7AF,   // 韩文谚文
-                 0xF900...0xFAFF,   // CJK 兼容
-                 0xFF66...0xFF9D:   // 半角片假名
-                return true
-            default:
-                return false
-            }
-        }
     }
 }

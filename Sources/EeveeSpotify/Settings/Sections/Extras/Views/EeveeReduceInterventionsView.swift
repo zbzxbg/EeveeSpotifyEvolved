@@ -53,10 +53,7 @@ struct EeveeReduceInterventionsView: View {
             }
 
             // ── 逐条提示。驱动源就是目录，不另维护一份名单 ────────────────────────────
-            Section(
-                header: Text("reduce_interventions_tips_section".localized),
-                footer: Text("reduce_interventions_tips_footer".localized)
-            ) {
+            Section(header: Text("reduce_interventions_tips_section".localized)) {
                 ForEach(Self.interventionRows, id: \.key) { row in
                     toggle(row)
                 }
@@ -64,10 +61,7 @@ struct EeveeReduceInterventionsView: View {
 
             // ── 第二批：别的 scope 里的同类提示（每个 scope 一节，副标题写清是哪条）──────
             ForEach(Self.hintSections, id: \.scope) { section in
-                Section(
-                    header: Text(Self.hintSectionTitleKey(for: section.scope).localized),
-                    footer: Text(Self.hintFooterKey(for: section.scope).localized)
-                ) {
+                Section(header: Text(Self.hintSectionTitleKey(for: section.scope).localized)) {
                     ForEach(section.rows, id: \.key) { row in
                         toggle(row)
                     }
@@ -289,10 +283,6 @@ struct EeveeReduceInterventionsView: View {
     /// 用 scope 的**最后一段**（`ios-feature-yourlibaryx` → `yourlibaryx`）。
     static func hintSectionTitleKey(for scope: String) -> String {
         "reduce_interventions_scope_" + lastScopeSegment(scope)
-    }
-
-    static func hintFooterKey(for scope: String) -> String {
-        "reduce_interventions_scope_" + lastScopeSegment(scope) + "_footer"
     }
 
     private static func lastScopeSegment(_ scope: String) -> String {

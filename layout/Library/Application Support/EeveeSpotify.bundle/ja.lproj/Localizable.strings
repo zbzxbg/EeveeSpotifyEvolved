@@ -132,6 +132,5 @@ payment_notice = "EeveeSpotifyは、無料で一部のプレミアムの機能�
    locale. Values are the English originals (copied verbatim), so runtime behaviour is
    English rather than a raw key name. Translate one, then move it into the matching
    section above and delete it from this block. */
-dump_customize_body_description = "Diagnostic only. Writes the raw configuration response into the debug log so the bundled snapshot can be replaced with your own.";
 
 

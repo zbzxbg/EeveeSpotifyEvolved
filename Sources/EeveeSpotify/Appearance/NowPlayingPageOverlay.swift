@@ -93,14 +93,13 @@ enum NowPlayingPageOverlay {
     private static var didLogInstall = false
 
     /// ★ 2026-10-22：音量条是「修改Spotify听歌页布局」的**二级菜单**项 ⇒
-    /// 总开关关着时它也不该出现（`nowPlayingLayout && nowPlayingVolume`）。
-    /// 关总开关会把音量条一起撤掉，但**不动**这颗子开关存的值（再打开时还是用户上次的选择）。
+    /// 总开关关着时它也不该出现。
     /// ★ 2026-10-23（用户：「全做」）：**iOS 27 版重新带上这一行**（AM 的播放页就有音量条，
-    /// 位置在传输行与工具行之间 —— 见 `ios27VolumeY`）。新版不看「展示音量条」那颗子开关：
-    /// AM 的目标图里它本来就在，少一条反而对不上。
+    /// 位置在传输行与工具行之间 —— 见 `ios27VolumeY`）。
+    /// ★★ 2026-10-30（用户）：「选择沉浸式的那几个按键，全部写默认开启」——
+    /// 二级菜单删除，音量条不再看 `nowPlayingVolume`：任一布局开着就显示。
     static var isEnabled: Bool {
-        UserDefaults.nowPlayingIOS27
-            || (UserDefaults.nowPlayingLayout && UserDefaults.nowPlayingVolume)
+        UserDefaults.nowPlayingIOS27 || UserDefaults.nowPlayingLayout
     }
 
     // MARK: - 对外入口

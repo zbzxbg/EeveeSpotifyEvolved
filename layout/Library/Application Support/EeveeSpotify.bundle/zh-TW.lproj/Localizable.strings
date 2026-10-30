@@ -288,7 +288,6 @@ categoriesSectionDeps1 = "關閉 = 忽略，顯示 = 僅在進度列上顯示片
 ngzhwm_lyrics_unavailable = "未找到歌詞";
 lyrics_no_timeline = "這首歌的歌詞沒有時間軸";
 lyrics_looking_up = "正在尋找歌詞…";
-dump_customize_body_description = "Diagnostic only. Writes the raw configuration response into the debug log so the bundled snapshot can be replaced with your own.";
 tab_bar_hide_labels = "隱藏標籤文字";
 
 mini_bar_glass_section = "迷你播放條";
@@ -297,7 +296,9 @@ mini_bar_glass = "迷你播放條用液態玻璃";
 flag_override_mode_number = "寫入數字";
 flag_override_number_placeholder = "數字（例如 30）";
 flag_group_interventions = "提示與推廣";
-flag_group_interventions_footer = "證據來自 IPA 字面量表（`.spotify-ipa/flag-table.txt`，從 9.1.86 主二進位抽出的 2485 條 scope.name）—— **沒在裝置日誌裡出現過**。點一下會寫一條覆蓋，命中與否看日誌裡的 `[Flags] override … N match(es)`（0 命中時會自行追加一條）。Spotify 管這個模組叫「減少打擾」（`ios-messaging-reduceinterventions-impl`），一條提示一個開關。";
+detailed_logging = "更詳細的日誌記錄";
+flag_group_hints = "更多提示";
+flag_group_hints_footer = "其它 scope 裡的同類提示與推銷。同樣來自 IPA 字面量表，沒在裝置日誌裡出現過。點一下寫一條覆蓋，是否命中看日誌裡的 `[Flags] override … N match(es)`（0 命中時會自行追加一條）。";
 flag_group_chrome = "介面元素與彩蛋";
 flag_group_chrome_footer = "播放列上的元素開關 + 封面。這些是「關掉元素」而不是「藏掉檢視」—— 比清爽開關更省事，也不會和隱藏開關衝突。";
 flag_note_interventions_master = "總開關：關掉它，下面那一批提示由 Spotify 自己統一收手";
@@ -342,7 +343,6 @@ updates_error_network = "連不上 GitHub，檢查網路後重試。";
 updates_error_format = "GitHub 回傳的資料這一頁讀不出來：";
 updates_error_status = "GitHub 介面回了 HTTP %d。";
 licenses_title = "開源授權";
-licenses_footer = "這一頁只寫倉庫裡查得到的事實；沒有隨附授權檔的元件就照實說沒有，不猜 SPDX 名字。";
 licenses_this_repo = "本倉庫";
 licenses_this_repo_detail = "GPL-3.0 —— 完整文本在倉庫根目錄的 LICENSE。";
 licenses_upstream = "上游";

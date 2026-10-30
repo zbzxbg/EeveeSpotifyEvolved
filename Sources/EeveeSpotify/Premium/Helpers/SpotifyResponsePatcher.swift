@@ -211,7 +211,7 @@ enum SpotifyResponsePatcher {
     private static let customizeDumpLimit = 262_144
 
     static func dumpCustomizeBodyIfEnabled(_ buffer: Data) {
-        guard UserDefaults.dumpCustomizeBody else { return }
+        guard UserDefaults.detailedLogging else { return }
         guard !didDumpCustomizeBody else { return }
         didDumpCustomizeBody = true
 

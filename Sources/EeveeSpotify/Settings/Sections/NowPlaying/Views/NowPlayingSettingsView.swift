@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// 「听歌页」——听歌页（Now Playing）上所有属于**我们自己的**开关。
 ///
@@ -22,22 +21,13 @@ import UIKit
 /// > 该功能测试中，不推荐开启。
 ///
 /// 于是本页三节：
-///   · `now_playing_section` —— **听歌页样式三档选择**（Spotify 原生 / 沉浸式 / Apple Music 式）
-///     + 沉浸式那一档的**二级菜单**（音量条 / 罗马化 / 译文 / 未播放行模糊 / 控制键字形）；
-///     ⚠️ 2026-10-23：原来还有「展示（自画）单行歌词」一颗，用户点名整条功能删掉
-///     （代码 / 文案 / 键一起删）。
-///     ★★ 2026-10-25（用户：「给那两个修改的做成这样（类似艺人简介展示）的选择方式」）：
-///     原来这里是**两颗互斥的 Toggle**（「修改Spotify听歌页布局」+「iOS 27 听歌页」），
-///     现在合成一个三档 `Picker`。存储键一个没加、一个没删，见 `NowPlayingStyle`。
-///   · `declutter_description` —— 按类名藏 Spotify 自己的 chrome（迷你条、
-///     以及 ★ 2026-10-17 从「首页与音乐库」搬来的**传输条两颗按钮**：设备/输出切换、加号）。
-///     ⚠️ 原来这一节还有「隐藏官方单行歌词」「隐藏两颗胶囊」两颗 —— 2026-10-22 起
-///     它们进了上面的沉浸式那一档，不再单列。
+///   · `now_playing_section` —— **听歌页样式三档选择**（Spotify 原生 / 沉浸式 / Apple Music 式）。
+///     ★★ 2026-10-30（用户）：「选择沉浸式的那几个按键，全部写默认开启，相关本地化文件删掉」
+///     ⇒ 原来的二级菜单（音量条 / 罗马化 / 译文 / 未播放行模糊 / 控制键字形）整块删除，
+///     这些功能按默认开启落地；罗马化与译文仍可在「设置 → 歌词」里逐语言改。
+///     ★★ 2026-10-25：两颗互斥的 Toggle 合成一个三档 `Picker`，见 `NowPlayingStyle`。
+///   · **清爽** —— 按类名藏 Spotify 自己的 chrome（迷你条、传输条两颗按钮）。
 ///   · `player_cards_section` —— 听歌页**卡片类**清爽（一张卡一个键 + 一颗总开关）。
-///
-/// ⚠️ 罗马化与译文那两颗读的是**歌词页那批键**（`NgzhwmSettingsViewModel` 的
-/// `anyRomanizationEnabled` / `isNeteaseHideTranslationEnabled`），两面永远同步。
-/// 因此它们**不在本页的「重置本页」里** —— 重置本页不该偷偷改掉歌词页的设置。
 struct NowPlayingSettingsView: View {
 
     /// 本页所有开关的**影子值**。为什么需要、怎么用见 `settingsShadowBinding` 的文件头。
@@ -48,13 +38,6 @@ struct NowPlayingSettingsView: View {
         /// （「修改Spotify听歌页布局」+「iOS 27 听歌页」）。取值仍由那两个键推出，
         /// 见 `NowPlayingStyle` 的文件头。
         var style = UserDefaults.nowPlayingStyle
-        // ── 沉浸式的二级菜单（这些只在 `.immersive` 时显示） ──
-        var nowPlayingVolume = UserDefaults.nowPlayingVolume
-        var nowPlayingBlurUnplayedLyrics = UserDefaults.nowPlayingBlurUnplayedLyrics
-        var nowPlayingControlGlyphs = UserDefaults.nowPlayingControlGlyphs
-        // 与「设置 → 歌词」那两颗**同一批键**（不是新造的一套）。
-        var showRomanizedLyrics = NgzhwmSettingsViewModel.anyRomanizationEnabled
-        var showLyricsTranslation = !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled
         // ── 清爽：不属于总开关，各占一行 ──
         var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
         /// ★ 2026-10-17 从「首页与音乐库」搬来（传输条上那两颗按钮，见 declutter 那一节）。
@@ -64,9 +47,6 @@ struct NowPlayingSettingsView: View {
         var hidePlayerCards = PlayerCardsDeclutter.masterHidden
         var playerCards: [PlayerCard: Bool] = PlayerCardsDeclutter.snapshot()
     }
-
-    /// 二级菜单的缩进（只缩文字，右侧那枚切换器仍然贴着行尾）。
-    private static let submenuIndent: CGFloat = 18
 
     var body: some View {
         List {
@@ -102,102 +82,17 @@ struct NowPlayingSettingsView: View {
                         Text(style.titleKey.localized).tag(style)
                     }
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("now_playing_style".localized)
-                        // 选中沉浸式时才把那五件事列出来（它是唯一有二级菜单的一档），
-                        // 文字由五颗旧键的**现有译名**拼成，不维护第二份文案。
-                        if shadow.style == .immersive {
-                            Text(integratedFeaturesText)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
+                    Text("now_playing_style".localized)
                 }
 
-                // 二级菜单：只改各自的键；只有沉浸式那一档才摆出来
-                // （音量条与控制键的 `isEnabled` 里还各带一道总开关的门，见两处注释）。
-                //
-                // ★ 2026-10-23：Apple Music 式那一档不摆 —— 它们全是旧那套「歌词进播放器」
-                // 的子项（新版布局里旧层已经让位）；而音量条在新版里是**自带**的。
-                if shadow.style == .immersive {
-                    // 底部音量条：kumone 播放页下半屏的那一条（Apple Music 没有）。
-                    // 落在**我们自己的透明覆盖层**上（`NowPlayingPageOverlay`），不碰 Spotify 属性。
-                    // ★ 2026-10-22：它现在是二级菜单里**唯一默认关**的一项，并在标签下面
-                    //   写明「该功能测试中，不推荐开启。」（写法照原来 `now_playing_one_screen`
-                    //   的第二行说明）。
-                    Toggle(
-                        isOn: settingsShadowBinding($shadow.nowPlayingVolume) { value in
-                            UserDefaults.nowPlayingVolume = value
-                            // 打开就当场落地（页面还挂着的话），关掉当场把那一层拿走。
-                            if value {
-                                NowPlayingPageOverlay.reapply()
-                            } else {
-                                NowPlayingPageOverlay.remove(reason: "switch off")
-                            }
-                        }
-                    ) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("now_playing_volume".localized)
-                            Text("now_playing_volume_description".localized)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.leading, Self.submenuIndent)
-                    }
+                // ⛔ 2026-10-30（用户）：「选择沉浸式的那几个按键，全部写默认开启，
+                //   相关本地化文件删掉」—— 二级菜单整块删除；音量条 / 未播放行模糊 /
+                //   本地控制键字形 / 罗马化 / 译文现在都按默认开启落地
+                //   （见 `NowPlayingPageOverlay.isEnabled` / `NowPlayingControlsPlate.isEnabled` /
+                //   `AppleMusicLyricsPage` 的模糊判定 / `LyricLinesAdapter` 的 bit 16）。
+                //   罗马化与译文仍可在「设置 → 歌词」里逐语言改，这里不再摆快捷开关。
 
-                    // ★ 2026-10-12（用户）：「我觉得有人不会用这个东西，去用正常的去了」——
-                    // 所以把歌词那两档也给一颗**总开关**，不用先去歌词页翻逐语言那三颗。
-                    // ⚠️ 与 设置 → 歌词 里那几颗**是同一批键**（不是新造的一套）：两面永远同步。
-                    //   · 罗马化：日/中/韩三颗里**有一颗开着**就算开；关掉则三颗全关；
-                    //   · 译文：与歌词页那颗「隐藏译文」互为反相（键只有一个）。
-                    Toggle(
-                        isOn: settingsShadowBinding($shadow.showRomanizedLyrics) { value in
-                            NgzhwmSettingsViewModel.setAllRomanization(value)
-                            // 这个指纹进过宿主的 `isCurrent` ⇒ 下一拍就重建，不用等换歌。
-                            NowPlayingLyricsPlate.reapply()
-                        }
-                    ) {
-                        submenuLabel("show_romanized_lyrics".localized)
-                    }
-
-                    Toggle(
-                        isOn: settingsShadowBinding($shadow.showLyricsTranslation) { value in
-                            NgzhwmSettingsViewModel.setHideTranslation(!value)
-                            NowPlayingLyricsPlate.reapply()
-                        }
-                    ) {
-                        submenuLabel("show_lyrics_translation".localized)
-                    }
-
-                    // ★ 2026-10-12（用户）：「现在是未播放歌词行是模糊不清的，加个功能叫
-                    // **未播放歌词行模糊化**。关闭之后，未当前播放歌词行不模糊化」。
-                    // 关着 = 非当前行只变淡、不发糊；开着（2026-10-22 起的默认）= 回到改动前那条公式。
-                    Toggle(
-                        isOn: settingsShadowBinding($shadow.nowPlayingBlurUnplayedLyrics) { value in
-                            UserDefaults.nowPlayingBlurUnplayedLyrics = value
-                            // 这个开关进了宿主那条指纹 ⇒ 下一拍就重建，不用等换歌。
-                            NowPlayingLyricsPlate.reapply()
-                        }
-                    ) {
-                        submenuLabel("now_playing_blur_unplayed_lyrics".localized)
-                    }
-
-                    // 控制键换成本地字形：原生按钮留着（动作/状态/无障碍全在），
-                    // 只把按钮里的原生图标设成透明、叠一个我们自己的 SF Symbol 字形。
-                    // 做法照 pw v0.21.1 的 `PlayerControls.x`（GPL-3.0）：见 `NowPlayingControlsPlate` 文件头。
-                    Toggle(
-                        isOn: settingsShadowBinding($shadow.nowPlayingControlGlyphs) { value in
-                            UserDefaults.nowPlayingControlGlyphs = value
-                            if value {
-                                NowPlayingControlsPlate.reapply()
-                            } else {
-                                NowPlayingControlsPlate.restore()
-                            }
-                        }
-                    ) {
-                        submenuLabel("now_playing_control_glyphs".localized)
-                    }
-                }
+                // 二级菜单已删除（2026-10-30，见上）。
 
                 // ⛔「禁止回弹」已于 2026-10-03 夜删除（真机日志 41）：
                 // 它把列表的 `alwaysBounceVertical` 关掉，用户实测**开了就划不掉播放器**
@@ -206,7 +101,7 @@ struct NowPlayingSettingsView: View {
                 // 要碰它就得先有办法自己接管关闭手势。理由写在 `NowPlayingOneScreen` 文件头。
             }
 
-            Section(footer: Text("declutter_description".localized)) {
+            Section {
                 // ⚠️ 这一颗属于「迷你播放条那一族」（五颗）：
                 //    藏整条 = 本页；玻璃 + 圆封面 = 「标签栏与迷你条」页；
                 //    设备按钮 + 加号 = **本页**（★ 2026-10-17 从「首页与音乐库」搬来，
@@ -226,7 +121,7 @@ struct NowPlayingSettingsView: View {
                 // ★ 2026-10-17（用户：「有些功能是不是有些该搬家了，比如前三个有关于外观的设置」）：
                 //   这两颗原来摆在「首页与音乐库」页里，但它们藏的是**传输条上的两颗按钮**
                 //   （设备/输出切换、加号）—— 迷你播放条和播放器共用同一套控件，跟首页无关。
-                //   现在与上面那颗同处一节：同一套 `DeclutterChrome` 判据、同一句 footer 说明。
+                //   现在与上面那颗同处一节：同一套 `DeclutterChrome` 判据。
                 //   ⚠️ 中文名「隐藏喜欢按钮」而代码认的是**加号**（`Components.UI.AddToButton`）——
                 //   那是 l10n 的值问题（与 `entity_page_am_header_section` 的「（歌单）」同类），
                 //   本次不动文案，只把开关搬到它真正管的那一屏对应的设置页。
@@ -315,41 +210,15 @@ struct NowPlayingSettingsView: View {
         }
     }
 
-    /// 三档各自的语义（节脚第一段）。`%@` 那一位是沉浸式包含的五件事。
+    /// 三档各自的语义（节脚第一段）。
     ///
     /// ★★ 2026-10-25：选项名只是短词（`Picker` 行尾要显示它），**长句全部放这里** ——
     /// 与「首页顶部样式」那条 footer 同一做法（那边 2026-10-22 就是被 segmented 截断才改的）。
+    ///
+    /// ★ 2026-10-30：沉浸式二级菜单删除后，这段不再拼「包含：…」的五个功能名，
+    /// 直接读一条完整说明（`now_playing_style_description` 里的 `%@` 也一并去掉）。
     private var styleDescriptionText: String {
-        "now_playing_style_description".localizeWithFormat(integratedFeaturesNames)
-    }
-
-    /// 沉浸式那一档包含的五件事（逐项名，用 `·` 连起来）。
-    ///
-    /// 为什么用现成译名拼、而不是再手写一份文案：这五条的名字本来就在词典里（它们以前各占一行），
-    /// 翻译是现成的；以后改其中一条的措辞，这里跟着变，不会出现"设置页说 A、说明书说 B"。
-    private var integratedFeaturesNames: String {
-        [
-            "now_playing_backdrop".localized,
-            "now_playing_one_screen".localized,
-            "hide_singalong_line".localized,
-            "hide_npv_pills".localized,
-            "now_playing_lyrics_in_player".localized,
-        ].joined(separator: " · ")
-    }
-
-    /// 沉浸式那一档的第二行小字（`包含：…。`）—— 只在选中它时显示在选择器标签下面。
-    private var integratedFeaturesText: String {
-        "now_playing_layout_description".localizeWithFormat(integratedFeaturesNames)
-    }
-
-    /// 二级菜单一行的文本（缩进一级，让人一眼看出它挂在总开关下面）。
-    ///
-    /// 传进来的是**已经翻好**的文本：调用点写成 `submenuLabel("…".localized)`，
-    /// 让 l10n 检查仍能把那些键认成"在用的"（`Tools/l10n_lint.py` 只认
-    /// 字面量直接跟 `.localized` 的形状）。
-    private func submenuLabel(_ text: String) -> some View {
-        Text(text)
-            .padding(.leading, Self.submenuIndent)
+        "now_playing_style_description".localized
     }
 
     /// ★★ 2026-10-25（用户拍板 A 方案）：三档选择器的「当场落地 / 还原」。
@@ -447,8 +316,9 @@ struct NowPlayingSettingsView: View {
 
     /// 本页「重置本页」的作用范围。
     ///
-    /// ⚠️ 故意**不含** `showRomanizedLyrics` / `showLyricsTranslation` 背后的那几个歌词页键：
-    /// 那两颗开关是"同一批键的另一个入口"，在听歌页重置它们等于偷偷改掉歌词页的设置。
+    /// ★ 2026-10-30：沉浸式二级菜单删除后，`nowPlayingVolume` /
+    /// `nowPlayingBlurUnplayedLyrics` / `nowPlayingControlGlyphs` 已从本页与 `ownedKeys` 移除；
+    /// 罗马化 / 译文本来就不在本页重置（它们属于歌词页）。
     private static let ownedKeys = [
         // ★ 2026-10-23：新的「iOS 27 听歌页」。
         "nowPlayingIOS27",
@@ -456,10 +326,7 @@ struct NowPlayingSettingsView: View {
         "nowPlayingLayout",
         "nowPlayingBackdrop",
         "nowPlayingOneScreen",
-        "nowPlayingVolume",
         "nowPlayingLyricsInPlayer",
-        "nowPlayingBlurUnplayedLyrics",
-        "nowPlayingControlGlyphs",
         "hideMiniPlayerBar",
         "hideSingalongLine",
         "hideNowPlayingPills",

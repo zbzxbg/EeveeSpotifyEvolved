@@ -330,11 +330,10 @@ extension NowPlayingLyricsPlate {
         case .unavailable:
             return "ngzhwm_lyrics_unavailable".localized
         case .lookingUp:
-            // ★ 用户点名要的**彩蛋**：「正在查找歌词…」→「少女祈祷中…」。
-            //   开关在**调试**页（「替换寻找歌词时的占位符」），**默认关**；全文只此一处。
-            return UserDefaults.lyricsSearchPlaceholderEasterEgg
-                ? "lyrics_looking_up_easter_egg".localized
-                : "lyrics_looking_up".localized
+            // ★ 2026-10-30（用户）：「删除替换寻找歌词时的占位符这个功能」——
+            //   那句「少女祈祷中…」的彩蛋连同调试页开关、UserDefaults 键、l10n 一起删了。
+            //   现在这里永远只写标准的「正在查找歌词…」。
+            return "lyrics_looking_up".localized
         }
     }
 

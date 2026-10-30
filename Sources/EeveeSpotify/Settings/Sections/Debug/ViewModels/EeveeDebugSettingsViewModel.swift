@@ -9,10 +9,12 @@ import Combine
 /// 「歌词」页里，和用户真正的偏好（罗马字、逐词歌词、NetEase 显示方式…）混在一起，
 /// 后果是：用户面对一堆"不该动"的东西，而"哪些是待清理的临时件"完全不可见。
 ///
-/// 目前有两个（全部沿用**原 key**，只是换了容器 ⇒ 设备上已设的值不会丢）：
+/// 目前有两颗 A/B 开关（全部沿用**原 key**，只是换了容器 ⇒ 设备上已设的值不会丢）：
 ///
 ///   · 「给没有歌词卡片的歌曲补一张」`ngzhwm_injectLyricsCardElement`
 ///   · 「歌词入口开关」`ngzhwm_lyricsEntryPointFlag`
+///
+/// 外加一颗「更详细的日志记录」（视图树 + customize 响应体合并，2026-10-30）。
 ///
 /// 已清理掉一个（2026-09-27）：「补全歌词时间轴」`ngzhwm_syntheticLineTiming` ——
 /// 真机 A/B 结论是"关掉之后差不多或略好"，而给纯文本源伪造时间轴本身不合语义，
@@ -68,28 +70,19 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         }
     }
 
-    /// 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志。
+    /// 「更详细的日志记录」：把**视图树**与**customize 响应体**两条转储合到一颗开关。
     ///
-    /// 这是给**还没写的界面 hook** 铺路的工具（AMOLED / 隐藏区块 / 播放器手势都卡在
-    /// "不知道屏幕上是什么类"）。三条纪律见 `ViewTreeDumper`：只读、有界、不做运行时
-    /// 类枚举 —— 最后一条是本仓库两次启动崩溃换来的。
+    /// ★★ 2026-10-30（用户）：「转储视图树，转储响应体两个融合，换成 更详细的日志记录」。
+    ///   底下仍写回原来的 `dumpViewTree` / `dumpCustomizeBody` 两个键
+    ///   （`ViewTreeDumper` / `SpotifyResponsePatcher` 读的还是它们，备份与已设值不受影响），
+    ///   新键 `detailedLogging` 只负责这颗总开关的状态与迁移。
     ///
-    /// 与其它开关不同，这个**打开即生效**：`didSet` 直接调 `applyEnabledState()`，
+    /// 与其它开关不同，这个**打开即生效**：`didSet` 直接调 `ViewTreeDumper.applyEnabledState()`，
     /// 不必重启 Spotify（定时器是运行期起的，不是启动期装的 hook）。
-    @Published var dumpViewTree = UserDefaults.dumpViewTree {
+    @Published var detailedLogging = UserDefaults.detailedLogging {
         didSet {
-            UserDefaults.dumpViewTree = dumpViewTree
+            UserDefaults.detailedLogging = detailedLogging
             ViewTreeDumper.applyEnabledState()
-        }
-    }
-
-    /// 「替换寻找歌词时的占位符」——用户 2026-10-12 点名要的**彩蛋**（放在"转储视图树"下面）。**默认关**。
-    ///
-    /// 这不是排查工具，是本页唯一的"长期住户"（用户要求放这里）；只改一句话，见
-    /// `NowPlayingLyricsPlate.noticeText()` 里"还在查"那一档。
-    @Published var lyricsSearchPlaceholderEasterEgg = UserDefaults.lyricsSearchPlaceholderEasterEgg {
-        didSet {
-            UserDefaults.lyricsSearchPlaceholderEasterEgg = lyricsSearchPlaceholderEasterEgg
         }
     }
 
@@ -99,8 +92,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         [
             injectLyricsCardElement,
             lyricsEntryPointFlag,
-            dumpViewTree,
-            lyricsSearchPlaceholderEasterEgg,
+            detailedLogging,
         ]
     }
 
@@ -115,8 +107,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
     private func setupBindings() {
         logBooleanSetting($injectLyricsCardElement, "inject lyrics card element")
         logBooleanSetting($lyricsEntryPointFlag, "lyrics entry point flag")
-        logBooleanSetting($dumpViewTree, "dump view tree")
-        logBooleanSetting($lyricsSearchPlaceholderEasterEgg, "lyrics search placeholder easter egg")
+        logBooleanSetting($detailedLogging, "detailed logging")
     }
 
     /// 照抄 `EeveeLyricsSettingsViewModel+setupBindings` 的实现与理由：

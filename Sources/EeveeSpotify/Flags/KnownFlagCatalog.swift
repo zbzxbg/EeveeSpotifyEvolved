@@ -153,7 +153,6 @@ enum KnownFlagCatalog {
         // 没有一条是照着名字猜的。
         KnownFlagGroup(
             titleKey: "flag_group_interventions",
-            footerKey: "flag_group_interventions_footer",
             flags: [
                 // 总闸：关掉它，下面这批提示由 Spotify 自己统一收手。
                 KnownFlag("enabled", "ios-messaging-reduceinterventions-impl", observed: "",

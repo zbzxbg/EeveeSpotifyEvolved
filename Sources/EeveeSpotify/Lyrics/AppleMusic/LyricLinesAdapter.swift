@@ -30,7 +30,8 @@ func romanizationSwitchesFingerprint() -> Int {
     if !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled { bits |= 8 }
     // ★ 2026-10-12（用户新加的「未播放歌词行模糊化」）：**同一类开关，同一个理由** ——
     //   它也只写 `UserDefaults`、不让版本号变，不进来就得等换歌才生效（哑开关）。
-    if UserDefaults.nowPlayingBlurUnplayedLyrics { bits |= 16 }
+    // ★ 2026-10-30：二级菜单删除，这一档固定开启（bit 16 永远置位）。
+    bits |= 16
     return bits
 }
 
@@ -185,6 +186,27 @@ extension LyricsDto {
                 duration = LyricVocalDurationEstimator.estimatedDuration(for: line.content)
             }
 
+            // ★★ 2026-10-30（用户：「同时有好几行歌词同时播放」）：**时长不许越过下一行的起点**。
+            //
+            // `LyricPlaybackTimeline` 对 `.precise` 行的判定是 `playbackTime < time + duration`，
+            // 也就是说只要上一行的时长还盖着当前时间，它就会和下一行**同时**留在 active 集合里。
+            // 上游给的时间轴一旦有错（Petit 的厘秒/毫秒混用、AMLL 的长音尾巴），
+            // 屏幕上就是两三行一起亮。这里把显示时长夹到下一行起点；
+            // 行级同步那条本来就是 `nextStartTime - startTime`，等价。
+            //
+            // ⚠️ 只夹「小溢出」（≤ 1s）：Petit 里有**故意的重叠行**（副唱/语气词，
+            //    例如 yanaginagi「終わりの世界から」第 2 行「よ」压在第 1 行尾巴上）。
+            //    大溢出多半是这种分层人声，硬夹会把主行的高亮整段砍掉。
+            let clampedDuration: TimeInterval?
+            if let nextStartTime, let duration {
+                let available = max(nextStartTime - startTime, 0)
+                clampedDuration = duration - available <= 1.0
+                    ? min(duration, available)
+                    : duration
+            } else {
+                clampedDuration = duration
+            }
+
             let translationText: String? = index < translationLines.count
                 ? translationLines[index]
                 : nil
@@ -200,7 +222,7 @@ extension LyricsDto {
             return LyricLine(
                 id: Self.lineID(index: index, startMs: startMs),
                 time: startTime,
-                duration: duration,
+                duration: clampedDuration,
                 timingKind: isPrecise ? .precise : .lineSynchronized,
                 // ★ 必须用 `line.content`，**不要**把 words 拼回来当行文本。
                 //
@@ -324,7 +346,23 @@ extension LyricsDto {
                 wordEnd = nextStartTime
             }
 
-            guard let wordEnd, wordEnd >= wordStart else {
+            // ★★ 2026-10-30：词的结束也不许越过下一行起点（同 `clampedDuration` 那条）。
+            // 否则最后一个词的高亮会在下一行已经开唱后还继续推进，看起来就是两行同时在唱。
+            // ⚠️ 同样只夹小溢出（≤ 1s），大溢出按"故意的重叠行"处理。
+            let resolvedEnd: TimeInterval?
+            if let wordEnd {
+                if let nextStartTime,
+                   wordEnd > nextStartTime,
+                   wordEnd - nextStartTime <= 1.0 {
+                    resolvedEnd = max(wordStart, nextStartTime)
+                } else {
+                    resolvedEnd = wordEnd
+                }
+            } else {
+                resolvedEnd = nil
+            }
+
+            guard let wordEnd = resolvedEnd, wordEnd >= wordStart else {
                 // 时间戳反了（end < start）才是真坏数据，丢这一个词即可。
                 //
                 // 曾经这里写的是 `wordEnd > wordStart` 并把整行作废，结果是：

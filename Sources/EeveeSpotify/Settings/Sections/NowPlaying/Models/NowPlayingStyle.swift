@@ -18,6 +18,9 @@ import Foundation
 /// | `.immersive` | `nowPlayingLayout = true`、`nowPlayingIOS27 = false` | 整页取色底 + 藏官方模块/单行歌词/两颗胶囊 + 歌词进播放器 |
 /// | `.appleMusic` | `nowPlayingIOS27 = true`（`nowPlayingLayout` 的值**被忽略**） | 封面铺满上半屏、歌名压在封面下沿的过渡带，照 iOS 27 的 Apple Music 做的那一版 |
 ///
+/// ★ 2026-10-30（用户）：「听歌页样式那里，默认改成 Apple Music」⇒ `nowPlayingIOS27` 的
+///   默认值改为 `true`，新装/没动过这颗键的用户直接落在 `.appleMusic`。
+///
 /// ## 纪律
 ///
 /// * **不新增存储键**：底下的 `nowPlayingLayout` / `nowPlayingIOS27` 保持原样，

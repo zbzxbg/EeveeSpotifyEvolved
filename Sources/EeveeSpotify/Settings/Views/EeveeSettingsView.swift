@@ -360,11 +360,10 @@ struct EeveeSettingsView: View {
                 }
             }
 
-            // ★ 2026-10-13（用户）：「把转储 customize 响应体**搬到「调试」里面去**，
-            //   放在**转储视图树**的下面、**替换歌词占位符**的上面」
-            //   ⇒ 那一节已整体搬到 `EeveeDebugSettingsView`（位置就在那两节之间）。
-            //   ⚠️ l10n 键（`dump_customize_body` / `dump_customize_body_description`）与
-            //      `UserDefaults.dumpCustomizeBody` **都没变** ⇒ 设备上已设的值原样保留。
+            // ★ 2026-10-13（用户）：「把转储 customize 响应体**搬到「调试」里面去**」
+            //   ⇒ 那一节已整体搬到 `EeveeDebugSettingsView`。
+            // ★★ 2026-10-30：它和「转储视图树」已合并成一颗「更详细的日志记录」；
+            //   底下仍写 `UserDefaults.dumpCustomizeBody` ⇒ 设备上已设的值原样保留。
             
             // 「分享日志前脱敏」：**2026-10-17 用户要求搬进「调试」页**（与三个"转储"放到一条线上：
             //   前面几个是"写进日志"，它是"发出去之前先假名化"）。它只影响**导出**的那一份

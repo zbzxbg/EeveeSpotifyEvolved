@@ -59,7 +59,7 @@ enum ViewTreeDumper {
     static func applyEnabledState() {
         stop()
 
-        guard UserDefaults.dumpViewTree else {
+        guard UserDefaults.detailedLogging else {
             writeDebugLog("[Tree] off")
             return
         }

@@ -192,7 +192,18 @@ enum NowPlayingIOS27 {
     static weak var fieldSolid: UIView?
     /// 封面的**模糊延续**（下半屏那块）：AM 的背景不是纯黑，是同一张封面的模糊拷贝再压暗。
     static weak var fieldBackdrop: UIImageView?
+    /// 封面下沿以下那块"同色尾巴"：从封面底边的颜色渐到黑。
+    ///
+    /// ★★ 2026-10-30（用户：「原封面底部……会有漏出封面底的感觉」）：
+    ///   旧版把整张封面 `scaleAspectFill` 到**整页**，封面底边在屏幕最下面；
+    ///   而锐利封面只到页面 58% ⇒ 它淡出时露出来的是"整张封面被拉高 1.7 倍"的另一份，
+    ///   底边位置对不上，看起来就是封面底又漏了一层。现在模糊底只铺封面矩形，
+    ///   矩形以下交给这条尾巴，边界同色、没有第二张图。
+    static weak var fieldTail: UIView?
+    static var fieldTailGradient: CAGradientLayer?
     static weak var fieldBlack: UIView?
+    /// 近灰封面的模糊底要压暗（否则白封面会把整页洗成灰白）。
+    static var fieldBackdropAlpha: CGFloat = 1
     /// 上一次做模糊底用的源图 + 结果（同一张只算一次）。
     static var lastBackdropSource: UIImage?
     static var lastBackdropImage: UIImage?
@@ -201,6 +212,15 @@ enum NowPlayingIOS27 {
     static weak var titleRow: UIView?
     static var titleRowBase: (ObjectIdentifier, CGAffineTransform)?
     static var titleRowBaseRect: (ObjectIdentifier, CGRect)?
+
+    /// 页内歌词模式下，盖在**原生歌名/艺人**上的透明点击区。
+    ///
+    /// ★★ 2026-10-30（用户：「专辑封面旁边的艺人名字/歌曲名字无法点击」）：
+    ///   Spotify 原生那两行只是 `UILabel`，不是按钮；我们把标题行搬到缩略图旁边之后，
+    ///   它们依旧不吃触摸。这里各盖一颗透明 `UIButton`：点歌名开专辑、点艺人开艺人页，
+    ///   URI 取自当前曲目的 `album_uri` / `artist_uri`（日志 999 的 metadata 键表里有）。
+    static weak var titleTapButton: UIButton?
+    static weak var artistTapButton: UIButton?
 
     /// 被我们**整体上移**的"底部那一坨"，以及它原来的 `transform`（收尾要写回）。
     static weak var bottomStack: UIView?
@@ -395,6 +415,8 @@ enum NowPlayingIOS27 {
             lyricsDissolveView = nil
             lyricsModeRevealed = false
             lyricsRevealPending = false
+            // 歌名/艺人的透明点击区也一起收（它们只在歌词模式里存在）。
+            removeTitleTapTargets()
             // ★ 2026-10-24（用户：「从歌词页面到全溶封面的过渡不是很好」）：
             //   **不要在第一帧就把歌词抽走** —— 它和封面长回去同一段 0.30s 淡出，
             //   淡完再拆容器。快速重开时 `generation` 对不上，这次拆作废（歌词接着淡入）。
@@ -603,6 +625,9 @@ enum NowPlayingIOS27 {
             lyricsModeRevealed = true
             changed = true
         }
+        // ★ 2026-10-30：页内歌词时，歌名/艺人那两行只是原生 label，不吃触摸 ——
+        //   在它们上面各盖一颗透明按钮（点歌名开专辑、点艺人开艺人页）。
+        if placeTitleTapTargets(in: page) { changed = true }
         if placeNavChrome(in: page) { changed = true }
         // 待办 T1：进度条（4pt 轨 + 藏圆钮 + 等宽时间），见 `NowPlayingIOS27+Progress.swift`。
         // 它只换 UISlider 的三张图与两颗标签的字体，不碰几何、不碰手势。
@@ -1310,14 +1335,31 @@ enum NowPlayingIOS27 {
         solid.backgroundColor = .black
         wrapper.addSubview(solid)
 
+        // ★★ 2026-10-30：封面矩形以下那条"同色尾巴"。
+        //   它只负责封面底边到页面底部这一块；顶部颜色 = 封面下沿的均值（`updateField` 写），
+        //   底部渐到黑。这样封面淡出时看到的是同一张图的模糊拷贝 + 同色延续，没有第二层底边。
+        let tail = UIView(frame: .zero)
+        tail.isUserInteractionEnabled = false
+        tail.accessibilityIdentifier = "eevee-ios27-field-tail"
+        let tailGradient = CAGradientLayer()
+        tailGradient.name = "eevee-ios27-field-tail-gradient"
+        tailGradient.startPoint = CGPoint(x: 0.5, y: 0)
+        tailGradient.endPoint = CGPoint(x: 0.5, y: 1)
+        tailGradient.colors = [
+            UIColor.black.cgColor,
+            UIColor.black.cgColor,
+        ]
+        tail.layer.addSublayer(tailGradient)
+        wrapper.addSubview(tail)
+
         // ★ 2026-10-24（用户选 A：「背景改成封面模糊延续」）：封面下方那块不再是纯黑。
         //
         //   之前 2026-10-23 撤回的那一版是"封面下沿的模糊条"（固定 28pt 半径 ⇒ 糊成一块灰）。
         //   这一版换成**整页一张缩到 48pt 再模糊的封面**（`backdrop(from:)`），
         //   它只是"颜色的延续"，没有可辨认的细节，所以不会糊成脏块。
-        //   层级：solid（字段色，兜底）→ backdrop（模糊封面，aspectFill）→ black（渐变纱）
-        //   → 我们那张锐利封面（在 wrapper 之上）。
-        let backdrop = UIImageView(frame: wrapper.bounds)
+        //   层级：solid（字段色，兜底）→ tail（封面下沿的同色尾巴）→ backdrop（模糊封面）
+        //   → black（渐变纱）→ 我们那张锐利封面（在 wrapper 之上）。
+        let backdrop = UIImageView(frame: .zero)
         backdrop.isUserInteractionEnabled = false
         backdrop.contentMode = .scaleAspectFill
         backdrop.clipsToBounds = true
@@ -1346,6 +1388,8 @@ enum NowPlayingIOS27 {
 
         fieldHost = wrapper
         fieldSolid = solid
+        fieldTail = tail
+        fieldTailGradient = tailGradient
         fieldBackdrop = backdrop
         fieldBlack = black
         _ = layoutField(in: wrapper)
@@ -1371,10 +1415,39 @@ enum NowPlayingIOS27 {
             solid.frame = bounds
             changed = true
         }
-        if let backdrop = fieldBackdrop, backdrop.frame != bounds {
-            backdrop.frame = bounds
+
+        // ★★ 2026-10-30：模糊底只铺**封面矩形**，不再铺整页。
+        //   铺整页时 `scaleAspectFill` 会把方图拉高到整页高（896），封面底边跑到屏幕最下面；
+        //   锐利封面在 58% 处淡出，露出来的是另一份"被拉高的封面"，底边位置对不上 ⇒
+        //   用户看到的"封面底漏出来"。铺同一个矩形之后，淡出露出的就是同一块像素的模糊版。
+        let artFrame = fieldArtworkFrame(in: wrapper)
+        if let backdrop = fieldBackdrop, backdrop.frame != artFrame {
+            backdrop.frame = artFrame
             changed = true
         }
+        if let backdrop = fieldBackdrop, backdrop.alpha != fieldBackdropAlpha {
+            backdrop.alpha = fieldBackdropAlpha
+            changed = true
+        }
+
+        if let tail = fieldTail {
+            let tailFrame = CGRect(
+                x: 0,
+                y: artFrame.maxY,
+                width: bounds.width,
+                height: max(0, bounds.maxY - artFrame.maxY)
+            )
+            if tail.frame != tailFrame {
+                tail.frame = tailFrame
+                changed = true
+            }
+            if let gradient = tail.layer.sublayers?.first as? CAGradientLayer,
+               gradient.frame != tail.bounds {
+                gradient.frame = tail.bounds
+                changed = true
+            }
+        }
+
         if let black = fieldBlack, black.frame != bounds {
             black.frame = bounds
             changed = true
@@ -1393,6 +1466,20 @@ enum NowPlayingIOS27 {
         }
 
         return changed
+    }
+
+    /// 封面矩形在 wrapper 里的位置（两者都挂在同一个宿主上）。
+    ///
+    /// 拿不到封面时退回整页 —— 与旧行为一致，至少不会留一块空。
+    private static func fieldArtworkFrame(in wrapper: UIView) -> CGRect {
+        guard let art = artworkView,
+              let host = art.superview,
+              host === wrapper.superview else {
+            return wrapper.bounds
+        }
+        let frame = wrapper.convert(art.frame, from: host)
+        let clipped = frame.intersection(wrapper.bounds)
+        return clipped.isNull || clipped.isEmpty ? wrapper.bounds : clipped
     }
 
     /// 字段色：**按图的身份**重算（同一张图只算一次）；换歌交叉淡入。
@@ -1416,6 +1503,8 @@ enum NowPlayingIOS27 {
         if lastFieldImage === image, fieldSolid != nil { return false }
 
         let colour = fieldColour(from: image)
+        let neutral = isNearNeutral(colour)
+        let edge = edgeColour(from: image)
         lastFieldImage = image
         lastFieldTrackId = NowPlayingLyricsPlate.currentTrackId() ?? ""
         // 模糊底：同一张源图只算一次（换歌才重做）。
@@ -1423,6 +1512,29 @@ enum NowPlayingIOS27 {
             lastBackdropSource = image
             lastBackdropImage = backdrop(from: image)
         }
+
+        // ★★ 2026-10-30（用户：「为什么会有类似白色/灰色的渐变出现」）：
+        //   近灰封面的模糊底就是一张白/灰图，压 42% 黑纱之后仍然是一整片灰白。
+        //   把它的不透明度降下来，让下面的深炭灰 field 透出来。
+        //   有色封面也留 20% 的 field 色透上来（模糊底是"平均色"，field 是"主色"，
+        //   混一点会更接近 AM 那种过饱和的观感，不会灰掉）。
+        fieldBackdropAlpha = neutral ? 0.30 : 0.80
+
+        // 尾巴的顶色 = 模糊底底边的可见颜色。模糊底被 `fieldBackdropAlpha` 压过，
+        // 所以这里要按同一个比例把它和 field 色混一次，边界才不会出现一条色差。
+        let tailTop = blended(edge, with: colour, ratio: 1 - fieldBackdropAlpha)
+        let tailColors: [CGColor] = [
+            tailTop.cgColor,
+            UIColor.black.cgColor,
+        ]
+
+        writeDebugLog(
+            "[\(logTag)] field colour — \(hexString(colour))"
+                + (neutral ? " (near-neutral → deep charcoal)" : "")
+                + " · backdrop \(Int(fieldBackdropAlpha * 100))%"
+                + " · tail top \(hexString(tailTop))"
+        )
+
         // ⚠️ 必须**显式**标成 `() -> Void`。
         //
         // `fieldSolid?.backgroundColor = colour` 是**可选链赋值**，它的值类型是 `Void?`
@@ -1437,6 +1549,8 @@ enum NowPlayingIOS27 {
         let apply: () -> Void = {
             fieldSolid?.backgroundColor = colour
             fieldBackdrop?.image = lastBackdropImage
+            fieldBackdrop?.alpha = fieldBackdropAlpha
+            fieldTailGradient?.colors = tailColors
         }
         // 只对我们自己的 wrapper 做交叉淡入（对外层 cell 做 transition 会连 Spotify 的内容一起快照）。
         if let wrapper = fieldHost, wrapper.window != nil {
@@ -1496,21 +1610,92 @@ enum NowPlayingIOS27 {
         return UIImage(cgImage: cg)
     }
 
-    /// 从封面取"字段色"：**整张图的平均色**，再拉高饱和度、压到白字读得清的亮度。
+    /// 从封面取"字段色"：优先**有饱和度的主色**，取不到才退回整图平均。
     ///
     /// ★ 2026-10-24（用户：「现在这个渐变感觉是灰色的」）：
     ///   以前取的是**封面下沿 30%** 的平均色 —— 而很多封面下沿是白色/灰色（人物脚下、
     ///   唱片行、留白），算出来就是一块灰底，和上半张彩色的封面完全不搭。
     ///   AM 的底色来自**整张图**的平均/主色并刻意过饱和 ⇒ 这里改成整图平均 + ×1.45。
+    ///
+    /// ★★ 2026-10-30（用户：「为什么会有类似白色/灰色的渐变出现」，日志 999 里
+    ///   yanaginagi 那首 Spotify 自己给的 `extracted_color` 就是 **#888888**）：
+    ///   整图平均对"大面积白底 + 一小块彩色"的封面仍然是灰的（白底把彩色稀释掉了）。
+    ///   现在先做一遍**饱和度加权采样**：只累加有颜色、亮度适中的像素，权重 = 饱和度^1.4；
+    ///   采样不到颜色（真·黑白封面）才退回平均色，并且把亮度压到深炭灰，
+    ///   不再用 #888888 那种中灰去铺满整页。
     private static func fieldColour(from image: UIImage) -> UIColor {
-        guard let average = averageColour(of: image) else { return .black }
+        let vibrant = vibrantColour(of: image)
+        guard let base = vibrant ?? averageColour(of: image) else { return .black }
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0
-        average.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+        base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+
+        if saturation < 0.10 {
+            // 真·近灰封面：中灰（#888888）在整页上看就是"没上色的灰雾"，
+            // 压成深炭灰，让白色文字和封面自己成为主角。
+            let dark = min(max(brightness, 0.06), 0.18)
+            return UIColor(white: dark, alpha: 1)
+        }
+
         let boosted = min(maxFieldSaturation, saturation * fieldSaturationBoost)
         return UIColor(
             hue: hue,
             saturation: boosted,
             brightness: min(max(brightness, 0.10), maxFieldBrightness),
+            alpha: 1
+        )
+    }
+
+    /// 饱和度加权的主色（16×16 采样）。采样不到有颜色的像素时返回 nil。
+    ///
+    /// 为什么不用 `CIAreaAverage`：平均会把"白底 + 彩色主体"的封面算成灰。
+    /// 这里按饱和度给每个像素加权，白/黑像素权重趋近 0，彩色主体的色相就浮出来了。
+    private static func vibrantColour(of image: UIImage) -> UIColor? {
+        guard let cgImage = image.cgImage else { return nil }
+        let input = CIImage(cgImage: cgImage)
+        let extent = input.extent
+        guard extent.width > 1, extent.height > 1 else { return nil }
+
+        let side: CGFloat = 16
+        let scale = min(1, side / max(extent.width, extent.height))
+        let small = input.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let width = max(1, Int(small.extent.width.rounded()))
+        let height = max(1, Int(small.extent.height.rounded()))
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = CIContext(options: [.useSoftwareRenderer: false])
+        context.render(
+            small,
+            toBitmap: &pixels,
+            rowBytes: width * 4,
+            bounds: CGRect(x: 0, y: 0, width: width, height: height),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+
+        var red = 0.0, green = 0.0, blue = 0.0, weight = 0.0
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            let alpha = Double(pixels[index + 3]) / 255
+            guard alpha > 0.15 else { continue }
+            let r = Double(pixels[index]) / 255
+            let g = Double(pixels[index + 1]) / 255
+            let b = Double(pixels[index + 2]) / 255
+            let maximum = max(r, g, b)
+            let minimum = min(r, g, b)
+            guard maximum > 0.06, maximum < 0.985 else { continue }
+            let saturation = maximum > 0 ? (maximum - minimum) / maximum : 0
+            guard saturation > 0.12 else { continue }
+            // 亮度离 0.55 越远，权重越低（纯黑/纯白旁边的色块不可靠）。
+            let brightnessWeight = max(0.15, 1 - abs(maximum - 0.55) * 1.4)
+            let pixelWeight = pow(saturation, 1.4) * brightnessWeight
+            red += r * pixelWeight
+            green += g * pixelWeight
+            blue += b * pixelWeight
+            weight += pixelWeight
+        }
+        guard weight > 0.05 else { return nil }
+        return UIColor(
+            red: CGFloat(red / weight),
+            green: CGFloat(green / weight),
+            blue: CGFloat(blue / weight),
             alpha: 1
         )
     }
@@ -1542,6 +1727,61 @@ enum NowPlayingIOS27 {
             green: CGFloat(pixel[1]) / 255,
             blue: CGFloat(pixel[2]) / 255,
             alpha: 1
+        )
+    }
+
+    /// 封面**下沿**那条的平均色 —— 用作尾巴的顶色，让模糊底和尾巴接得上。
+    private static func edgeColour(from image: UIImage) -> UIColor {
+        guard let cgImage = image.cgImage else { return .black }
+        let height = CGFloat(cgImage.height)
+        let width = CGFloat(cgImage.width)
+        let cropHeight = max(1, height * 0.12)
+        let rect = CGRect(x: 0, y: height - cropHeight, width: width, height: cropHeight)
+        guard let cropped = cgImage.cropping(to: rect) else { return .black }
+        let strip = UIImage(
+            cgImage: cropped,
+            scale: image.scale,
+            orientation: image.imageOrientation
+        )
+        return averageColour(of: strip) ?? .black
+    }
+
+    /// 近灰判据（与 `NowPlayingBackdrop` 里那条同一口径）。
+    private static func isNearNeutral(_ colour: UIColor) -> Bool {
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        guard colour.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        else { return true }
+        return saturation < 0.10
+    }
+
+    /// 在 sRGB 里按比例混合两色（`ratio` = 前者占比）。
+    private static func blended(_ first: UIColor, with second: UIColor, ratio: CGFloat) -> UIColor {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        guard first.getRed(&r1, green: &g1, blue: &b1, alpha: &a1),
+              second.getRed(&r2, green: &g2, blue: &b2, alpha: &a2) else {
+            return first
+        }
+        let t = min(max(ratio, 0), 1)
+        return UIColor(
+            red: r1 * t + r2 * (1 - t),
+            green: g1 * t + g2 * (1 - t),
+            blue: b1 * t + b2 * (1 - t),
+            alpha: 1
+        )
+    }
+
+    /// 只给日志用：`#RRGGBB`。
+    private static func hexString(_ colour: UIColor) -> String {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        guard colour.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return "#000000"
+        }
+        return String(
+            format: "#%02X%02X%02X",
+            Int((red * 255).rounded()),
+            Int((green * 255).rounded()),
+            Int((blue * 255).rounded())
         )
     }
 
@@ -1676,6 +1916,138 @@ enum NowPlayingIOS27 {
             )
         }
         return true
+    }
+
+    // MARK: - 歌名 / 艺人点击（页内歌词）
+
+    /// 在原生歌名 / 艺人两行上各盖一颗透明按钮。
+    ///
+    /// 只在**页内歌词已经亮出来**时挂：普通听歌页的标题行离封面很近，
+    /// 原生自己有一套长按/拖拽手势，没必要去抢。
+    @discardableResult
+    private static func placeTitleTapTargets(in page: UIView) -> Bool {
+        guard lyricsModeActive, lyricsModeRevealed else {
+            removeTitleTapTargets()
+            return false
+        }
+        guard let title = labelOnPage(
+            identifier: NowPlayingLyricsPlate.titleLabelIdentifier,
+            in: page
+        ), let artist = labelOnPage(
+            identifier: NowPlayingLyricsPlate.subtitleLabelIdentifier,
+            in: page
+        ) else { return false }
+
+        var changed = false
+        let titleFrame = tapFrame(for: title, in: page)
+        let artistFrame = tapFrame(for: artist, in: page)
+
+        if let button = makeTapTarget(
+            existing: titleTapButton,
+            in: page,
+            frame: titleFrame,
+            identifier: "eevee-ios27-title-tap",
+            action: openCurrentAlbum
+        ) {
+            if titleTapButton !== button { titleTapButton = button; changed = true }
+            if button.frame != titleFrame { button.frame = titleFrame; changed = true }
+        }
+        if let button = makeTapTarget(
+            existing: artistTapButton,
+            in: page,
+            frame: artistFrame,
+            identifier: "eevee-ios27-artist-tap",
+            action: openCurrentArtist
+        ) {
+            if artistTapButton !== button { artistTapButton = button; changed = true }
+            if button.frame != artistFrame { button.frame = artistFrame; changed = true }
+        }
+        return changed
+    }
+
+    /// 返回可复用的按钮；页面换了 / 旧的被摘了就新建一颗。
+    private static func makeTapTarget(
+        existing: UIButton?,
+        in page: UIView,
+        frame: CGRect,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> UIButton? {
+        guard frame.width > 1, frame.height > 1 else { return nil }
+        let button: UIButton
+        if let existing, existing.superview === page {
+            button = existing
+        } else {
+            existing?.removeFromSuperview()
+            button = UIButton(type: .custom)
+            button.backgroundColor = .clear
+            button.accessibilityIdentifier = identifier
+            // 无障碍交给下面原生那两行 label；这颗只是透明命中区，别让读屏多读一条。
+            button.isAccessibilityElement = false
+            button.addAction(
+                UIAction { _ in action() },
+                for: .touchUpInside
+            )
+            page.addSubview(button)
+        }
+        if button.frame != frame { button.frame = frame }
+        if page.subviews.last !== button {
+            page.bringSubviewToFront(button)
+        }
+        return button
+    }
+
+    private static func tapFrame(for label: UILabel, in page: UIView) -> CGRect {
+        let rect = label.convert(label.bounds, to: page).insetBy(dx: -6, dy: -6)
+        return rect.intersection(page.bounds)
+    }
+
+    private static func labelOnPage(identifier: String, in page: UIView) -> UILabel? {
+        var queue: [UIView] = [page]
+        var visited = 0
+        while !queue.isEmpty, visited < 3000 {
+            let view = queue.removeFirst()
+            visited += 1
+            if let label = view as? UILabel,
+               label.accessibilityIdentifier == identifier,
+               isControlOnPage(label, in: page) {
+                return label
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    private static func removeTitleTapTargets() {
+        titleTapButton?.removeFromSuperview()
+        titleTapButton = nil
+        artistTapButton?.removeFromSuperview()
+        artistTapButton = nil
+    }
+
+    private static func openCurrentAlbum() {
+        let metadata = currentTrackMetadata()
+        guard let uri = metadata["album_uri"], !uri.isEmpty else {
+            writeDebugLog("[\(logTag)] title tap — the track has no album_uri, nothing to open")
+            return
+        }
+        writeDebugLog("[\(logTag)] title tap → \(uri)")
+        SpotifyURIOpener.open(uri)
+    }
+
+    private static func openCurrentArtist() {
+        let metadata = currentTrackMetadata()
+        guard let uri = metadata["artist_uri"], !uri.isEmpty else {
+            writeDebugLog("[\(logTag)] artist tap — the track has no artist_uri, nothing to open")
+            return
+        }
+        writeDebugLog("[\(logTag)] artist tap → \(uri)")
+        SpotifyURIOpener.open(uri)
+    }
+
+    private static func currentTrackMetadata() -> [String: String] {
+        let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
+        return track?.metadata() ?? [:]
     }
 
     /// 歌词区**左下角**那块「歌词来源 / 上传者·制作者·翻译者」。
@@ -1837,6 +2209,8 @@ enum NowPlayingIOS27 {
         // 页内歌词先收（它不参与 `hadState` 的账，但必须先拆掉容器与化开层）。
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil
+        // ★ 2026-10-30：歌名/艺人的透明点击区也要一起收，别留在回收的 cell 上。
+        removeTitleTapTargets()
         // ★ 2026-10-24：歌词署名视图也要一起收，别留在回收的 cell 上。
         lyricsCreditView?.removeFromSuperview()
         lyricsCreditView = nil
@@ -1902,6 +2276,7 @@ enum NowPlayingIOS27 {
         titleRow = nil
         titleRowBase = nil
         titleRowBaseRect = nil
+        removeTitleTapTargets()
         bottomStack = nil
         bottomStackBase = nil
         didLogBottomStack = false
@@ -1910,8 +2285,11 @@ enum NowPlayingIOS27 {
         grabber = nil
         fieldHost = nil
         fieldSolid = nil
+        fieldTail = nil
+        fieldTailGradient = nil
         fieldBackdrop = nil
         fieldBlack = nil
+        fieldBackdropAlpha = 1
         lastBackdropSource = nil
         lastBackdropImage = nil
         lastTrackId = ""
@@ -1949,8 +2327,11 @@ enum NowPlayingIOS27 {
         fieldHost?.removeFromSuperview()
         fieldHost = nil
         fieldSolid = nil
+        fieldTail = nil
+        fieldTailGradient = nil
         fieldBackdrop = nil
         fieldBlack = nil
+        fieldBackdropAlpha = 1
     }
 
     private static func teardownArtwork() {

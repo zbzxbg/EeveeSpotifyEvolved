@@ -29,6 +29,8 @@ extension UserDefaults {
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
     private static let hapticsLogControlsKey = "hapticsLogControls"
     private static let dumpViewTreeKey = "dumpViewTree"
+    /// ★ 2026-10-30：把「转储视图树」与「转储 customize 响应体」合成一颗「更详细的日志记录」。
+    private static let detailedLoggingKey = "detailedLogging"
     private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
     private static let hideSingalongLineKey = "hideSingalongLine"
     private static let hideNowPlayingPillsKey = "hideNowPlayingPills"
@@ -52,12 +54,8 @@ extension UserDefaults {
     /// ★ 2026-10-23：新的「iOS 27 听歌页」（满屏封面，`NowPlayingIOS27`）。
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
-    private static let nowPlayingVolumeKey = "nowPlayingVolume"
     private static let nowPlayingLyricsInPlayerKey = "nowPlayingLyricsInPlayer"
     private static let nowPlayingLyricsExpandedKey = "nowPlayingLyricsExpanded"
-    private static let nowPlayingBlurUnplayedLyricsKey = "nowPlayingBlurUnplayedLyrics"
-    private static let lyricsSearchPlaceholderEasterEggKey = "lyricsSearchPlaceholderEasterEgg"
-    private static let nowPlayingControlGlyphsKey = "nowPlayingControlGlyphs"
     private static let entityPageDissolveKey = "entityPageDissolve"
     private static let entityPageHideChromeKey = "entityPageHideChrome"
     private static let amoledThemeKey = "amoledTheme"
@@ -101,6 +99,7 @@ extension UserDefaults {
         hapticsSurfaceKeywordsKey,
         hapticsLogControlsKey,
         dumpViewTreeKey,
+        detailedLoggingKey,
         hideMiniPlayerBarKey,
         hideSingalongLineKey,
         hideNowPlayingPillsKey,
@@ -122,12 +121,8 @@ extension UserDefaults {
         nowPlayingIOS27Key,
         nowPlayingBackdropKey,
         nowPlayingOneScreenKey,
-        nowPlayingVolumeKey,
         nowPlayingLyricsInPlayerKey,
         nowPlayingLyricsExpandedKey,
-        nowPlayingBlurUnplayedLyricsKey,
-        lyricsSearchPlaceholderEasterEggKey,
-        nowPlayingControlGlyphsKey,
         entityPageDissolveKey,
         entityPageHideChromeKey,
         amoledThemeKey,
@@ -393,6 +388,10 @@ extension UserDefaults {
     // MARK: - 视图树转储（Diagnostics）
 
     /// 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志，默认关。
+    ///
+    /// ★★ 2026-10-30：设置页不再单独露这一颗 —— 它与 `dumpCustomizeBody` 合并成
+    /// 「更详细的日志记录」（`detailedLogging`）。这个键保留作**迁移与备份**用，
+    /// `detailedLogging` 的 setter 会把它一起写。
     ///
     /// 用途只有一个：给还没写的界面 hook（AMOLED / 隐藏区块 / 播放器手势）先拿到
     /// 类名与层级。三条纪律见 `ViewTreeDumper` 的说明 —— 只读、有界、不做类枚举。
@@ -932,10 +931,12 @@ extension UserDefaults {
         }
     }
 
-    /// ★ 2026-10-23（用户）：「iOS 27 听歌页」—— Apple Music（iOS 27）那一版的播放页（满屏封面）。**默认关**。
+    /// ★ 2026-10-23（用户）：「iOS 27 听歌页」—— Apple Music（iOS 27）那一版的播放页（满屏封面）。
     ///
-    /// 用户原话（2026-10-23，对 `C:\dsh\am\1.jpg`）：「和现在的 修改spotify布局 这个按钮，
-    /// 直接做新的就好了。」⇒ 它是一颗**独立的开关**，不并入上面那颗总开关。
+    /// ★★ 2026-10-30（用户：「听歌页样式那里，默认改成 Apple Music」）：**默认改为开**。
+    ///   三档 Picker 的优先级见 `NowPlayingStyle`：这一颗开着就是 `.appleMusic`，
+    ///   旧总开关的值被忽略（与 `NowPlayingLyricsPlate.isEnabled` 里 `!nowPlayingIOS27` 那道门一致）。
+    ///   已经手动选过别的档的用户不受影响 —— 他们盘上已有明确的 `false`。
     ///
     /// 两者是**互斥**的两版布局：这颗开着时，旧那套「歌词进播放器」自动让位
     /// （`NowPlayingLyricsPlate.isEnabled` 里那道 `!nowPlayingIOS27` 的门）。
@@ -943,7 +944,7 @@ extension UserDefaults {
     /// 统一看 `nowPlayingAnyLayout`。
     static var nowPlayingIOS27: Bool {
         get {
-            container.object(forKey: nowPlayingIOS27Key) as? Bool ?? false
+            container.object(forKey: nowPlayingIOS27Key) as? Bool ?? true
         }
         set {
             container.set(newValue, forKey: nowPlayingIOS27Key)
@@ -1037,29 +1038,6 @@ extension UserDefaults {
         }
     }
 
-    /// 听歌页底部那条**音量条**（我们自己的一层覆盖层上的第一件控件）。**默认关**。
-    ///
-    /// 它是 kumone 播放页下半屏的辨识度元素之一（Apple Music 没有）。落点与纪律写在
-    /// `NowPlayingPageOverlay` 的文件头：**透明覆盖层 + 只加我们自己的视图 +
-    /// 容器不吃触摸**，关掉 = 把那一层拿掉，天然完全还原。
-    ///
-    /// ★ 2026-10-11（用户）：曾从「默认关」改成「**默认开**」——
-    /// 原话「听歌页的那几个功能**全部默认开启**」。
-    ///
-    /// ★ 2026-10-22（用户）：**又改回默认关**，并且只在这一项下面写
-    /// 「该功能测试中，不推荐开启。」——
-    /// 原话「除了展示音量条这个功能，其他的默认开启」。
-    /// 归属也变了：它现在是「修改Spotify听歌页布局」的**二级菜单**里的一项，
-    /// `NowPlayingPageOverlay.isEnabled` 因此还带一道总开关的门（`nowPlayingLayout`）。
-    static var nowPlayingVolume: Bool {
-        get {
-            container.object(forKey: nowPlayingVolumeKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: nowPlayingVolumeKey)
-        }
-    }
-
     /// 听歌页「**歌词进播放器**」。**默认开**。
     ///
     /// 把**我们自己的**逐词歌词画进播放器中段（`npv.bottomStackView` 之上那块），
@@ -1113,66 +1091,24 @@ extension UserDefaults {
         }
     }
 
-    /// 听歌页「**未播放歌词行模糊化**」—— 非当前播放的歌词行要不要**发糊**。**默认开**。
+    /// 调试页「**更详细的日志记录**」—— 把视图树与 customize 响应体两条转储合成一颗。**默认关**。
     ///
-    /// ★ 2026-10-12（用户原话）：
-    /// > 现在是未播放歌词行是模糊不清的，加个功能叫「未播放歌词行模糊化」。
-    /// > 关闭之后，未当前播放歌词行不模糊化，**默认关闭**。
+    /// ★★ 2026-10-30（用户）：「转储视图树，转储响应体两个融合，换成 更详细的日志记录」。
+    ///   `ViewTreeDumper` / `SpotifyResponsePatcher` 仍读原来的两个键，这里只是把它们
+    ///   **同一拍写成同一个值**，并给设置页一颗单一开关。
     ///
-    /// ★ 2026-10-22（用户）：作为「修改Spotify听歌页布局」二级菜单的一员，
-    /// **默认值改成开** —— 原话「除了展示音量条这个功能，其他的默认开启」。
-    ///
-    /// 关着：非当前行**只变淡、不发糊**（变淡是"焦点"这件事的表达，两边都有）；
-    /// 翻开（默认）：回到改动前那条公式 `maximumNonFocusedBlurRadius × (1 − 焦点强度)`
-    /// （`AppleMusicLyricsPage.blurRadius`）。
-    ///
-    /// ⚠️ 拨开关要**当场生效**：它只写 `UserDefaults`、不会让 `currentLyricsVersion` 变，
-    ///    所以它进的是 `romanizationSwitchesFingerprint()` 那个"要不要重建渲染层"的指纹
-    ///    （与罗马字 / 译文两颗同一个理由；不进去就得等换歌 —— 那正是上一轮修掉的"哑开关"）。
-    static var nowPlayingBlurUnplayedLyrics: Bool {
+    /// 迁移：新键还没写过时，取旧两键的**或** —— 之前只开了其中一个的用户不会因为合并而丢状态。
+    static var detailedLogging: Bool {
         get {
-            container.object(forKey: nowPlayingBlurUnplayedLyricsKey) as? Bool ?? true
+            if let stored = container.object(forKey: detailedLoggingKey) as? Bool {
+                return stored
+            }
+            return dumpViewTree || dumpCustomizeBody
         }
         set {
-            container.set(newValue, forKey: nowPlayingBlurUnplayedLyricsKey)
-        }
-    }
-
-    /// 调试页「**替换寻找歌词时的占位符**」—— 用户 2026-10-12 点名要的**彩蛋**。**默认关**。
-    ///
-    /// 用户原话：
-    /// > 在转储视图树的下面，名字：替换寻找歌词时的占位符。它的作用：正常来讲找歌词的时候，
-    /// > 页面会显示「正在查找歌词...」，换成「少女祈祷中...」。这东西作为一个彩蛋好了。
-    ///
-    /// 开 ⇒ 还在取词时那句占位文本换成 `lyrics_looking_up_easter_egg`
-    /// （改的只有 `NowPlayingLyricsPlate.noticeText()` 里"还在查"那一档，**一处**）。
-    /// 默认关：彩蛋要自己发现，别默认把所有人看到的那句话换掉。
-    static var lyricsSearchPlaceholderEasterEgg: Bool {
-        get {
-            container.object(forKey: lyricsSearchPlaceholderEasterEggKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: lyricsSearchPlaceholderEasterEggKey)
-        }
-    }
-
-    /// 听歌页「**控制键换成本地字形**」（上一首 / 播放暂停 / 下一首）。**默认开**。
-    ///
-    /// 这是照 spoti.pw v0.21.1（GPL-3.0）`PlayerControls.x` 的做法：**原生按钮留着**
-    /// （动作 / 可用状态 / 无障碍 / 手势区全在），只把按钮里原来那个图标**设成透明**，
-    /// 再叠一个我们自己的 SF Symbol 字形（不吃触摸）。播放键底下那层白圆盘一起透明掉 ——
-    /// 照片 40/41（kumone）里是**裸字形**，没有圆盘。
-    ///
-    /// ★ 2026-10-11（用户）：从「默认关」改成「**默认开**」（「听歌页的那几个功能全部默认开启」）。
-    /// 当初默认关的理由是"它改的是**别人按钮的内部**（透明度），这类改动本仓库栽过，
-    /// 先让用户看一眼" —— 现在用户已经看过照片 70/71（三颗键是本地字形）、并点名要开；
-    /// 关掉仍然即把透明度写回并拿走我们的字形（`NowPlayingControlsPlate.restore()`）。
-    static var nowPlayingControlGlyphs: Bool {
-        get {
-            container.object(forKey: nowPlayingControlGlyphsKey) as? Bool ?? true
-        }
-        set {
-            container.set(newValue, forKey: nowPlayingControlGlyphsKey)
+            container.set(newValue, forKey: detailedLoggingKey)
+            container.set(newValue, forKey: dumpViewTreeKey)
+            container.set(newValue, forKey: dumpCustomizeBodyKey)
         }
     }
 
@@ -1221,6 +1157,9 @@ extension UserDefaults {
     /// 就能从调试日志里取到**你自己这版**的真 body（base64），把它转成新的
     /// `.bnk` 换掉旧的即可（见 `SpotifyResponsePatcher.dumpCustomizeBodyIfEnabled`
     /// 的说明，里面有解码命令）。
+    ///
+    /// ★★ 2026-10-30：设置页不再单独露这一颗 —— 它与 `dumpViewTree` 合并成
+    /// 「更详细的日志记录」（`detailedLogging`）。这个键保留作**迁移与备份**用。
     static var dumpCustomizeBody: Bool {
         get {
             container.object(forKey: dumpCustomizeBodyKey) as? Bool ?? false

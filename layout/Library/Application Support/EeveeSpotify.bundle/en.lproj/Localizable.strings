@@ -192,8 +192,6 @@ ngzhwm_japanese_romanization = "Romanize Japanese Lyrics";
 ngzhwm_korean_romanization = "Romanize Korean Lyrics";
 ngzhwm_lyrics_unavailable = "No lyrics found";
 lyrics_looking_up = "Looking for lyrics…";
-lyrics_looking_up_easter_egg = "The girl is praying…";
-lyrics_search_placeholder_easter_egg = "Replace the placeholder shown while looking for lyrics";
 lyrics_no_timeline = "These lyrics have no timing";
 track_mismatch = "The track changed while lyrics were loading. Play it again to fetch lyrics.";
 // Debug
@@ -201,8 +199,6 @@ track_mismatch = "The track changed while lyrics were loading. Play it again to 
 debug_title = "Debug";
 enable_log_recording = "Enable Log Recording";
 enable_log_recording_description = "There's no need to enable log recording for normal use.";
-dump_customize_body = "Dump customize response";
-dump_customize_body_description = "Diagnostic only. Writes the raw configuration response into the debug log so the bundled snapshot can be replaced with your own. Leave it off, and turn it off again once you have the dump.";
 export_debug_log = "Export Debug Log";
 redact_shared_log = "Redact Log Before Sharing";
 redact_shared_log_description = "The exported file hides your listening history (tracks, artists, playlists), track and artwork IDs and device identifiers. Turn this off only when keeping the log for yourself.";
@@ -395,7 +391,6 @@ flag_override_mode_set = "Set value";
 flag_override_value_placeholder = "enum value, e.g. count";
 flag_override_value_required = "Needs a value";
 flag_catalog_section = "Known flags";
-flag_catalog_description = "Names and scopes come from the debug log. Tap a row to add an override (booleans default to off, enum flags keep the value Spotify sent); tap it again to remove it. The green checkmark marks what is overridden; change the exact value on the previous page. Flags whose value was never observed cannot be tapped - write their value on that page instead.";
 flag_catalog_search_placeholder = "Filter by name or scope";
 flag_catalog_empty_result = "No flag matches that filter";
 flag_group_lyrics = "Lyrics";
@@ -404,11 +399,10 @@ flag_group_home = "Home & sharing";
 flag_note_lyrics_v2 = "Spotify's lyrics v2 service — this project's lyrics depend on it. Don't turn it off.";
 flag_note_canvas_lyrics = "Draws lyrics over the Canvas video.";
 flag_catalog_unsupported = "not editable yet";
-dump_view_tree = "Dump the view tree";
-dump_view_tree_description = "Writes the current screen's view structure to the debug log as one line per screen, every 2 seconds (20 lines max per launch, and only when the structure changes). Read-only: it never changes a view, never registers a gesture and never enumerates classes at runtime. It takes effect immediately, and log recording under Debug must be on. Use it to collect the class names for hooks that are not written yet.";
 dump_class_description = "Writes one class's name, method list and ivars (with their type encodings) to the debug log. Three forms of the name work: the runtime name, the short class name that the view-tree dump prints, or Module.Class. Read-only: the runtime is only asked to enumerate, and none of the selectors it finds is ever called.";
 dump_class_placeholder = "Class name";
 dump_class_action = "Dump this class";
+detailed_logging = "More detailed logging";
 
 /* MARK: Appearance */
 theme_section = "Theme";
@@ -448,10 +442,7 @@ settings_reset_page = "Reset This Page";
 settings_reset_page_footer = "Only the options on this page go back to their defaults. Other pages, and Spotify's own settings, are not touched.";
 settings_reset_page_done = "Reset %d option(s) on this page.";
 
-declutter_description = "Hides Spotify's own non-content chrome by class name, taken from the view-tree dumps. It only ever hides, never shows: Spotify toggles these views itself, so after switching one off, the view comes back on its next own update (or on a restart).";
 hide_mini_player_bar = "Hide the mini player bar";
-hide_singalong_line = "Hide Spotify's own one-line lyrics";
-hide_npv_pills = "Hide the Now Playing pills (switch to video / show lyrics)";
 player_cards_section = "Now Playing cards";
 hide_player_cards = "Hide all cards";
 player_card_lyricsCard = "Lyrics card";
@@ -484,7 +475,6 @@ library_section = "Music library";
 tab_bar_glass_section = "Tab bar";
 tab_bar_system_glass = "Liquid Glass tab bar";
 library_large_title = "Apple Music style library";
-home_section = "Home";
 home_large_title = "Apple Music style home";
 home_header_title = "Home";
 home_header_style = "Home header style";
@@ -531,7 +521,8 @@ home_tile_tint_description = "The small tiles at the top of Home (Liked Songs an
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
 flag_group_interventions = "Tips & promos";
-flag_group_interventions_footer = "Evidence: the IPA literal table (.spotify-ipa/flag-table.txt, 2485 scope.name entries pulled from the 9.1.86 binary) — these were never seen in a device log. Tap one to write an override; whether it lands is in the log: `[Flags] override … N match(es)` (on 0 matches it appends its own entry). Spotify calls this module `ios-messaging-reduceinterventions-impl` — one flag per nudge.";
+flag_group_hints = "More tips";
+flag_group_hints_footer = "The same kind of tips and promos, found in other scopes. These are IPA literals too — never seen in a device log. Tap one to write an override; whether it lands is in the log: `[Flags] override … N match(es)` (on 0 matches it appends its own entry).";
 flag_group_chrome = "Chrome & extras";
 flag_group_chrome_footer = "Element switches for the now-playing bar, plus cover art. These turn Spotify's own elements off (rather than hiding the view), so they can't fight the declutter switches.";
 flag_note_interventions_master = "Master switch: turn this off and Spotify drops the whole batch of nudges";
@@ -576,7 +567,6 @@ updates_error_network = "Could not reach GitHub. Check your connection and try a
 updates_error_format = "GitHub answered with something this page could not read:";
 updates_error_status = "The GitHub API answered HTTP %d.";
 licenses_title = "Licenses";
-licenses_footer = "Only facts that can be checked in the repository. Where no license file ships with a bundled component, this page says so instead of guessing an SPDX name.";
 licenses_this_repo = "This repository";
 licenses_this_repo_detail = "GPL-3.0 — the full text is LICENSE in the repository root.";
 licenses_upstream = "Upstream";
@@ -603,7 +593,6 @@ reduce_interventions_master = "Turn all tips off";
 reduce_interventions_master_description = "Spotify's own master switch for this module. Turning it on is the quickest way to stop every tip below at once.";
 reduce_interventions_master_footer = "These switches write Spotify flag overrides. Restart Spotify for them to take effect.";
 reduce_interventions_tips_section = "One switch per tip";
-reduce_interventions_tips_footer = "Each row shows the exact flag it turns off. If a tip still shows up, that flag is not the one this build reads — check the [Flags] lines in the debug log.";
 reduce_interventions_flag_account_switching_tooltip = "Account switching tip";
 reduce_interventions_flag_account_switching_tooltip_description = "The nudge that suggests switching between accounts.";
 reduce_interventions_flag_your_library_ai_playlist_creation_tooltip = "AI playlist creation tip";
@@ -637,13 +626,9 @@ reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card_descrip
 reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled = "\"Pin more items\" banner";
 reduce_interventions_flag_yourlibaryx_pin_more_items_banner_enabled_description = "The banner suggesting you pin more items in Your Library.";
 reduce_interventions_scope_connectnotifications = "Connect";
-reduce_interventions_scope_connectnotifications_footer = "Nudges around connecting to other devices.";
 reduce_interventions_scope_sleeptimer = "Sleep timer";
-reduce_interventions_scope_sleeptimer_footer = "Prompts from the sleep-timer feature.";
 reduce_interventions_scope_predictability = "Device tips";
-reduce_interventions_scope_predictability_footer = "Tips from Spotify's device-predictability experiment.";
 reduce_interventions_scope_yourlibaryx = "Your Library";
-reduce_interventions_scope_yourlibaryx_footer = "Tips, banners and cards shown inside Your Library.";
 
 // ── Now-playing backdrop (2026-10-03) ────────────────────────────────────────
 // Apple-Music-style full-page tint: the page takes its colour from the cover art.
@@ -658,31 +643,17 @@ now_playing_style = "Now-playing style";
 now_playing_style_spotify = "Spotify";
 now_playing_style_immersive = "Immersive";
 now_playing_style_apple_music = "Apple Music style";
-now_playing_style_description = "Spotify = the stock player. Immersive = full-page cover colour, Spotify's modules, the sing-along line and the pills hidden, lyrics in the player (includes: %@). Apple Music style = the artwork fills the top half with the title on the fade band, built after iOS 27's Apple Music; the old lyrics layer steps aside.";
+now_playing_style_description = "Spotify = the stock player. Immersive = full-page cover colour, Spotify's modules, the sing-along line and the pills hidden, lyrics in the player. Apple Music style = the artwork fills the top half with the title on the fade band, built after iOS 27's Apple Music; the old lyrics layer steps aside.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.
-// ⚠️ 2026-10-25: the next three keys are STALE - they named the two toggles that are now
-// the three-way picker above (now_playing_layout = "Immersive", now_playing_ios27 = "Apple
-// Music style"). Kept because deleting a key from en.lproj turns it into an "extra key"
-// error in every other locale; purge all locales at once if they are ever removed.
-now_playing_layout = "Modify the Spotify now-playing layout";
-now_playing_layout_description = "Includes: %@.";
-now_playing_ios27 = "iOS 27 now-playing page (full-bleed artwork)";
-now_playing_ios27_description = "The Apple Music 27 layout: the artwork fills the top half of the screen and the title sits on the fade band under it. The old \"lyrics in the player\" layer steps aside while this is on.";
+// 2026-10-30: the old toggle labels (now_playing_layout / now_playing_ios27 /
+// now_playing_ios27_description) are gone; the picker uses now_playing_style_* instead.
+// These two "layout" keys are still live: the picker's second line and footer reuse them.
 now_playing_layout_footer = "Turning the master switch off restores everything; the hidden official one-line lyrics return after a restart.";
-now_playing_backdrop = "Cover-coloured background";
 // One screen: every card under the player is folded away and the list is pinned to its top,
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
-now_playing_one_screen = "Hide Spotify's now-playing modules";
-now_playing_volume = "Volume slider at the bottom";
-now_playing_volume_description = "This one is still in testing — not recommended.";
-now_playing_lyrics_in_player = "Lyrics in the player";
-show_romanized_lyrics = "Show romanized lyrics";
-show_lyrics_translation = "Show lyric translation";
-now_playing_blur_unplayed_lyrics = "Blur the lines that are not playing";
-now_playing_control_glyphs = "Replace the transport keys with local glyphs";
 apple_music_official_ttml = "Apple Music official TTML lyrics";
 apple_music_official_ttml_description = "Experimental. Turning this on may ignore every lyrics-related setting.";
 apple_music_official_ttml_token = "Apple Music sign-in token (media-user-token)";

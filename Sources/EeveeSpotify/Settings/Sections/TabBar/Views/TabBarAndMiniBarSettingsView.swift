@@ -13,7 +13,7 @@ import UIKit
 /// ── 「迷你播放条那一族」五颗开关的分布（★ 2026-10-17 更新）─────────────────────────────
 ///
 /// 这一族管的是同一条迷你播放条（以及它和播放器共用的那几颗控件），到今天仍**分散在两页**：
-///   · `hide_mini_player_bar`   —— **听歌页** `declutter_description` 那一节（藏整条）；
+///   · `hide_mini_player_bar`   —— **听歌页**「清爽」那一节（藏整条）；
 ///   · `hide_connect_button`    —— **同一节**（藏设备/输出切换按钮 —— 它**迷你条与播放器共用**，
 ///     所以是"所有传输条上都不显示"）；★ 2026-10-17 从「首页与音乐库」搬来；
 ///   · `hide_add_to_button`     —— 同一节（藏加号，与设备按钮同级）；同一天一起搬来；
@@ -24,8 +24,8 @@ import UIKit
 /// 2026-10-17 用户点名（"前三个有关于外观的设置"）之后只搬了**确实错位**的那两颗：
 /// 设备按钮/加号管的是传输条上的两颗按钮，与"首页与音乐库"无关，而它们和
 /// `hide_mini_player_bar` / `hide_singalong_line` / `hide_npv_pills` 走的是**同一套**
-/// `DeclutterChrome.reconcileNow()`、共用同一句 `declutter_description` 说明
-/// ⇒ 搬到那一节之后，"一类开关一处说明"成立了。
+/// `DeclutterChrome.reconcileNow()`、共用同一套 `DeclutterChrome` 判据
+/// ⇒ 搬到那一节之后，"一类开关一处说明"成立（footer 已于 2026-10-30 删除）。
 /// 剩下两页的分布（藏整条在听歌页、玻璃与圆封面在本页）**保持不动**：它们改的是
 /// 迷你条的**材质与形状**，与"藏 chrome"不是一回事，搬过去反而会让本页只剩两行。
 struct TabBarAndMiniBarSettingsView: View {
