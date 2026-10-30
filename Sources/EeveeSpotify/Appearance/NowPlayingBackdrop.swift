@@ -375,36 +375,10 @@ enum NowPlayingBackdrop {
 
     /// 换色。`animated` 走 `CATransaction`（**不是** `UIView.animate` —— 这里动的是
     /// `CAGradientLayer.colors`，是 CALayer 的隐式动画，kumone 的 `.easeInOut(0.8)` 同义）。
-    ///
-    /// ★★ 2026-10-30（用户：「为什么会有类似白色/灰色的渐变出现」）：
-    ///   旧实现的白光晕是**纯白 12%**，压在整页最上层。封面取色一旦偏暗/偏灰
-    ///   （日志 999 里 yanaginagi 那首 Spotify 给的 `extracted_color` 就是 **#888888**），
-    ///   左上角就是一块白蒙蒙的灰雾；而 base 的暗端只是 `darkened(0.35)`，
-    ///   #888888 → #555555，整条渐变从头到尾都是中灰，看着就是"灰底"。
-    ///   现在：
-    ///     · 近灰取色（饱和度 < 0.10）不再当中灰用，压成**深炭灰**，暗端直接到近黑；
-    ///     · 白光晕改成**取色自己的高光**（同色系提亮），近灰时几乎收掉；
-    ///     · 有色封面保留原配方，只是暗端再深一点（0.35 → 0.45），层次更明显。
     private static func applyColors(_ layers: Layers, from base: UIColor, animated: Bool) {
-        let neutral = base.eeveeIsNearNeutral
-        let top = neutral
-            ? UIColor(white: min(max(base.eeveeBrightness, 0.10), 0.20), alpha: 1)
-            : base
-        let bottom = neutral
-            ? UIColor(white: 0.015, alpha: 1)
-            : base.darkened(by: 0.45)
-        let colors: [CGColor] = [top.cgColor, bottom.cgColor]
-
-        let haloHighlight: UIColor
-        if neutral {
-            // 近灰封面：留一点点光，但不再是一层白雾。
-            haloHighlight = UIColor.white.withAlphaComponent(0.035)
-        } else {
-            haloHighlight = top.lightened(by: 0.22).withAlphaComponent(0.10)
-        }
-        let haloColors: [CGColor] = [
-            haloHighlight.cgColor,
-            UIColor.clear.cgColor,
+        let colors: [CGColor] = [
+            base.cgColor,
+            base.darkened(by: 0.35).cgColor,
         ]
 
         CATransaction.begin()
@@ -415,7 +389,6 @@ enum NowPlayingBackdrop {
             CATransaction.setDisableActions(true)
         }
         layers.base.colors = colors
-        layers.halo.colors = haloColors
         CATransaction.commit()
     }
 
@@ -600,31 +573,5 @@ private extension UIColor {
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard getHue(&h, saturation: &s, brightness: &b, alpha: &a) else { return self }
         return UIColor(hue: h, saturation: s, brightness: max(0, b - amount), alpha: a)
-    }
-
-    /// 提高明度（保持色相/饱和度）：白光晕现在用它取"同色高光"。
-    func lightened(by amount: CGFloat) -> UIColor {
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        guard getHue(&h, saturation: &s, brightness: &b, alpha: &a) else { return self }
-        return UIColor(hue: h, saturation: s, brightness: min(1, b + amount), alpha: a)
-    }
-
-    var eeveeBrightness: CGFloat {
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        guard getHue(&h, saturation: &s, brightness: &b, alpha: &a) else { return 0 }
-        return b
-    }
-
-    /// 近灰（含纯白/纯黑）：饱和度低于 0.10 就当作"没有颜色"。
-    ///
-    /// 判据刻意宽松 —— 轻微偏色的封面（米白、冷灰）也按近灰处理，
-    /// 因为它们的饱和度乘 1.45 之后仍然读作灰色，不如直接压深。
-    var eeveeIsNearNeutral: Bool {
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        // `getHue` 对灰度色（UIColor(white:)）会失败 —— 那种本来就是"没有颜色"。
-        guard getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
-            return true
-        }
-        return s < 0.10
     }
 }

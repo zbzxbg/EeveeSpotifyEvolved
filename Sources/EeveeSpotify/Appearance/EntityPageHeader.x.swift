@@ -45,8 +45,6 @@ enum EntityPageHeaderManager {
 
     private static var applying = false
     private static var logged = Set<String>()
-    /// ★ 2026-10-30：认不出页头时只报一次祖先链（This Is / 电台排查用）。
-    private static var didLogNoPlaylistHeader = false
 
     /// 每一拍的耗时（50 / 200 / 800 拍各报一次）。
     private static let meter = PerfMeter("EntityPageHeader")
@@ -65,10 +63,6 @@ enum EntityPageHeaderManager {
     /// （`eeveeFindView(layout, "Components.Header.UI.ArtworkImage")` / `blockIn(layout,…)`）。
     private static var cachedCover: UIView?
     private static var cachedBlock: UIView?
-    /// ★ 2026-10-30：没有 `PL.Header` 的官方生成歌单（This Is / 电台）认下来的页头容器。
-    private static weak var fallbackPlaylistHeaderRoot: UIView?
-    /// 生成歌单探测的节流（类名 BFS 最多 600 节点，不能每帧跑）。
-    private static var lastGeneratedProbeAt: CFAbsoluteTime = 0
     /// ★ 2026-10-18：歌单页头里那个「在此页面上查找」搜索框（AM 页头接管后不该留着）。
     private static var cachedFindField: UIView?
     /// ★ 2026-10-13（性能）：上一拍认下的那四个标签（见 `TextViews`）。
@@ -462,27 +456,7 @@ enum EntityPageHeaderManager {
         guard isEnabled, !applying else { return }
         guard layout.bounds.width > 120, layout.bounds.height > 40 else { return }
         // 歌单页那条路（专辑页是**另一条路**：`applyToAlbumPage`，挂点也不同 —— 见它的说明）。
-        guard let headerRoot = playlistHeaderRoot(of: layout) else {
-            // ★ 2026-10-30：认不出页头时留一行"现场"（只报一次）——
-            //   This Is / 电台页如果还不动，下一次日志里就能看到它的类名与 id。
-            if !didLogNoPlaylistHeader, !isAlbumOrArtistPageAncestor(of: layout) {
-                didLogNoPlaylistHeader = true
-                var ids: [String] = []
-                var node: UIView? = layout
-                var level = 0
-                while let current = node, level < 6 {
-                    let id = current.accessibilityIdentifier ?? "-"
-                    ids.append("\(NSStringFromClass(type(of: current)))(\(id))")
-                    node = current.superview
-                    level += 1
-                }
-                writeDebugLog(
-                    "[EntityPageHeader] no header root — ancestor chain: "
-                        + ids.joined(separator: " ← ")
-                )
-            }
-            return
-        }
+        guard let headerRoot = playlistHeaderRoot(of: layout) else { return }
 
         applying = true
         defer { applying = false }
@@ -499,10 +473,6 @@ enum EntityPageHeaderManager {
         if let cached = cachedBlock, cached.window != nil, cached.isDescendant(of: layout) {
             block = cached
         } else {
-            // ★★ 2026-10-30：官方生成歌单 / 电台的页头不一定是"一个满宽 block"
-            //   （照片 166/167 是封面 + 标题 + 按钮各自成层）。找不到 block 时退回
-            //   **标题所在的那个文字块**；⚠️ 绝不退回整层 —— 下面那轮
-            //   `for sub in block.subviews { eeveeConceal(sub) }` 会把封面一起藏掉。
             guard let found = blockIn(layout, cover: cover, fullbleed: fullbleed) else { return }
             cachedBlock = found
             block = found
@@ -645,127 +615,13 @@ enum EntityPageHeaderManager {
 
     /// 往上找 `PL.Header`（歌单页头那个容器）。找不到就返回 nil ——
     /// **专辑页与别的页面因此完全不受影响**。
-    ///
-    /// ★★ 2026-10-30（用户：「Spotify 官方的 This Is xxx 和电台歌单还没做适配」）：
-    ///   `PL.Header` 只覆盖"普通歌单页"这一种实现。官方生成的歌单（This Is / 电台）
-    ///   在部分版本里换成另一个页头容器（id 里带 Header、或类名带 PlaylistHeader/RadioHeader），
-    ///   于是旧判据直接 return，页头保持 Spotify 原样。
-    ///   这里加一条**保守的兜底**：往上找"id 带 header、且子树里真有封面"的祖先；
-    ///   同时排除专辑页/艺人页（它们有各自那条路）与导航栏（`HeaderNavigationBar` 没有封面）。
-    ///   兜底命中会打一行日志（id + 类名），下一次真机日志就能确认这是不是那两页。
     private static func playlistHeaderRoot(of view: UIView) -> UIView? {
         var node: UIView? = view
         while let current = node {
             if current.accessibilityIdentifier == "PL.Header" { return current }
             node = current.superview
         }
-
-        // 专辑 / 艺人页有各自那条路，别在这里抢。
-        if isAlbumOrArtistPageAncestor(of: view) { return nil }
-
-        if let cached = fallbackPlaylistHeaderRoot,
-           cached.window != nil,
-           view.isDescendant(of: cached) {
-            return cached
-        }
-
-        node = view
-        while let current = node {
-            let identifier = current.accessibilityIdentifier ?? ""
-            let className = NSStringFromClass(type(of: current))
-            let looksLikeHeader =
-                identifier.localizedCaseInsensitiveContains("header")
-                    && !identifier.localizedCaseInsensitiveContains("navigationbar")
-                || className.contains("PlaylistHeader")
-                || className.contains("RadioHeader")
-                || className.contains("HeaderContentLayout")
-            if looksLikeHeader, containsHeaderArtwork(current) {
-                fallbackPlaylistHeaderRoot = current
-                logOnce(
-                    "fallbackPlaylistHeader",
-                    "playlist header: using \(className)"
-                        + " (id \(identifier.isEmpty ? "-" : identifier)) instead of PL.Header"
-                )
-                return current
-            }
-            node = current.superview
-        }
-
-        // ★★ 2026-10-30（照片 166/167）：**官方生成歌单 / 电台**用的是
-        //   `ElementView<PLPlaylistEntityModel, …>` + `EditableHeaderArtworkElement` 那一套，
-        //   页头容器本身没有 `PL.Header`。日志 999 里能看到这两个类名，封面是
-        //   `Components.Header.UI.ArtworkImage`（96×96，居中）。这种情况下直接把
-        //   `HeaderContentLayout` / `SPTFreeTierPlaylistHeader` 这一层当页头容器；
-        //   文字块由 `blockIn` 从"最大的标题"往上找（不会把封面一起藏掉）。
-        let now = CFAbsoluteTimeGetCurrent()
-        if now - lastGeneratedProbeAt >= 0.5 {
-            lastGeneratedProbeAt = now
-            if containsHeaderArtwork(view),
-               isGeneratedPlaylistPage(view),
-               view.bounds.width >= (view.window?.bounds.width ?? view.bounds.width) * 0.8 {
-                fallbackPlaylistHeaderRoot = view
-                logOnce(
-                    "fallbackGeneratedPlaylist",
-                    "generated playlist header: using \(NSStringFromClass(type(of: view)))"
-                        + " (no PL.Header, but it carries a PLPlaylistEntityModel / Station)"
-                )
-                return view
-            }
-        }
         return nil
-    }
-
-    /// 这一页是不是 Spotify 官方生成的歌单 / 电台（`PLPlaylistEntityModel` / `Station`）。
-    ///
-    /// 只看**类名**、只看子树（最多 600 个节点）—— 不用 id，避免换版就失效。
-    private static func isGeneratedPlaylistPage(_ root: UIView) -> Bool {
-        var queue: [UIView] = [root]
-        var visited = 0
-        while !queue.isEmpty, visited < 600 {
-            let view = queue.removeFirst()
-            visited += 1
-            let className = NSStringFromClass(type(of: view))
-            if className.contains("PLPlaylistEntityModel")
-                || className.hasSuffix("Station")
-                || className.contains("StationEntity")
-                || className.contains("RadioStation") {
-                return true
-            }
-            queue.append(contentsOf: view.subviews)
-        }
-        return false
-    }
-
-    /// 兜底页头是否真的装着一张封面（没有封面的 `Header` 多半是导航栏 / 状态栏那一类）。
-    private static func containsHeaderArtwork(_ root: UIView) -> Bool {
-        var queue: [UIView] = [root]
-        var visited = 0
-        while !queue.isEmpty, visited < 400 {
-            let view = queue.removeFirst()
-            visited += 1
-            if let identifier = view.accessibilityIdentifier,
-               identifier == "Components.Header.UI.ArtworkImage"
-                || identifier == "CreativeWorkPlatform.Components.UI.ArtWorkElement.WithCoverArt" {
-                return true
-            }
-            queue.append(contentsOf: view.subviews)
-        }
-        return false
-    }
-
-    private static func isAlbumOrArtistPageAncestor(of view: UIView) -> Bool {
-        var node: UIView? = view
-        var level = 0
-        while let current = node, level < 24 {
-            level += 1
-            if let identifier = current.accessibilityIdentifier,
-               identifier == "CreativeWorkPlatform.CreativeWorkTemplateView"
-                || identifier == "creator-page" {
-                return true
-            }
-            node = current.superview
-        }
-        return false
     }
 
     /// 这是不是**我们接管的那两种页面**里的视图：歌单页判 `PL.Header`，专辑页判页面 root 的 id
@@ -2986,33 +2842,8 @@ enum EntityPageHeaderManager {
         for sub in layout.subviews {
             if sub === cover || sub === fullbleed { continue }
             if sub is EntityPageHeaderView { continue }
-            // ★ 2026-10-30：文字块不能把封面包在里面 —— 下面会把 block 的子视图整批藏掉。
-            if let cover, cover.isDescendant(of: sub) { continue }
             if sub.bounds.width < wide { continue }
             if block == nil || sub.frame.minY > block!.frame.minY { block = sub }
-        }
-
-        // ★★ 2026-10-30：官方生成歌单（This Is / 电台）的页头不一定是"一个满宽 block"，
-        //   可能把标题/创建者拆在几层里。找不到满宽孩子时，用**字号最大的标题**往上爬，
-        //   取第一个"够宽、但不含封面"的祖先当文字块。
-        //   ⚠️ 一旦某一层已经包含封面就停：再往上会把封面也当成"Spotify 的 chrome"藏掉。
-        if block == nil, let label = biggestLabel(in: layout, skipping: [cover, fullbleed]) {
-            var candidate: UIView = label
-            var hops = 0
-            while hops < 8 {
-                // 从 label 的**父层**开始找：block 必须是能装下标题的容器，
-                // 不能是 label 自己（那样下面那轮 `block.subviews` 什么都藏不掉，标题会叠两层）。
-                guard let parent = candidate.superview, parent !== layout else { break }
-                candidate = parent
-                hops += 1
-                let containsCover = cover.map { $0.isDescendant(of: candidate) } ?? false
-                if !containsCover,
-                   candidate.bounds.width >= layout.bounds.width * 0.5,
-                   candidate.bounds.height > 20 {
-                    block = candidate
-                    break
-                }
-            }
         }
         return block
     }
@@ -3248,19 +3079,6 @@ enum EntityPageHeaderManager {
 
 // MARK: - 挂点
 
-/// `AnyClass` 是不是 `UIView` 的子类（`ClassHook<UIView>` 的前提）。
-///
-/// 不用 `cls.isSubclass(of:)`：那个 API 在部分 Swift 版本上只对 `NSObject.Type` 可见，
-/// 这里用运行时父类链，换工具链也不会编不过。
-private func eeveeIsUIViewSubclass(_ cls: AnyClass) -> Bool {
-    var current: AnyClass? = cls
-    while let candidate = current {
-        if ObjectIdentifier(candidate) == ObjectIdentifier(UIView.self) { return true }
-        current = class_getSuperclass(candidate)
-    }
-    return false
-}
-
 func activateEntityPageHeader() {
     // 两个开关共用这一条每帧的布局拍：AM 页头（`entityPageAMHeader`）与"满幅封面 + 取色底"
     // （`entityPageDissolve`）。**任一打开这条钩子就得在**，否则满幅封面那条路又退回 0.6s 的 tick。
@@ -3277,18 +3095,6 @@ func activateEntityPageHeader() {
     }
 
     EntityPageHeaderGroup().activate()
-    // ★★ 2026-10-30：官方生成歌单（This Is / 电台）的备用挂点 —— 类不在就少一条事件线，
-    //    不影响主组（理由见 `EntityPageHeaderExtraGroup`）。
-    if let cls = NSClassFromString(SPTFreeTierPlaylistHeaderLayoutHook.targetName),
-       eeveeIsUIViewSubclass(cls) {
-        EntityPageHeaderExtraGroup().activate()
-        writeDebugLog("[EntityPageHeader] extra hook armed on SPTFreeTierPlaylistHeader")
-    } else {
-        writeDebugLog(
-            "[EntityPageHeader] SPTFreeTierPlaylistHeader is missing (or not a UIView) —"
-                + " This Is / radio pages rely on the HeaderContentLayout pass only"
-        )
-    }
     // 专辑页 / 艺人页那两条路都是**可选**的：类不在就少做一页（不能因为一个可选的类把整组拖垮）。
     let album = NSClassFromString(EntityPageAlbumLayoutHook.targetName) != nil
     let artist = NSClassFromString(EntityPageArtistLayoutHook.targetName) != nil

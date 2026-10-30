@@ -26,26 +26,6 @@ class EntityPageHeaderLayoutHook: ClassHook<UIView> {
     }
 }
 
-/// ★★ 2026-10-30：**官方生成歌单（This Is / 电台）的备用挂点**。
-///
-/// 主挂点 `HeaderContentLayout` 在普通歌单页上每帧都来；但这一版 Spotify 的
-/// 官方生成歌单有一部分走 `SPTFreeTierPlaylistHeader`（类名在二进制里，
-/// 见 `.spotify-ipa/objc-classnames.txt`）。它不一定经过 `HeaderContentLayout`，
-/// 所以单独挂一条 `layoutSubviews`。**单独一组** + 装之前先问 `NSClassFromString`：
-/// 类不在就只是少一条事件线，不连累主组。
-struct EntityPageHeaderExtraGroup: HookGroup {}
-
-class SPTFreeTierPlaylistHeaderLayoutHook: ClassHook<UIView> {
-    typealias Group = EntityPageHeaderExtraGroup
-    static let targetName = "SPTFreeTierPlaylistHeader"
-
-    func layoutSubviews() {
-        orig.layoutSubviews()
-        EntityPageAppearance.layoutPass(in: target)
-        EntityPageHeaderManager.apply(in: target)
-    }
-}
-
 /// Spotify 自己那颗 Play：会在前景区晚一步出现，所以它自己那一拍也要补一次。
 class EntityPagePlayButtonHook: ClassHook<UIView> {
     typealias Group = EntityPageHeaderGroup
