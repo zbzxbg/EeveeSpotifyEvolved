@@ -137,7 +137,7 @@ class PetitLyricsRepository: LyricsRepository {
             // 而第 1 行按厘秒换算要到 10280ms 才唱完 ⇒ 两行同时亮。这种"≤3 字、≤2 词、
             // 且起点落在前一行内部超过 0.5s"的行几乎都是上传者拆句/起点填错，
             // 并回前一行后逐词时间轴正好接上（前一行末尾 = 短句起点），也不会再有两行同亮。
-            let mergedLines = mergeShortOverlaps(timedLines)
+            let mergedLines = Self.mergeShortOverlaps(timedLines)
             let mergedCount = timedLines.count - mergedLines.count
             if mergedCount > 0 {
                 writeDebugLog("[Petit] merged \(mergedCount) short overlapping line(s) into the previous line")
