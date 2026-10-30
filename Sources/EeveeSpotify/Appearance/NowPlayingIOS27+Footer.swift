@@ -29,10 +29,13 @@
 //     （alpha 0.35）并在日志里写明原因，**不做假入口**（这一档按下去就是没反应，
 //     与本仓库"没词时歌词键变灰"的既有做法一致）。
 //
-// ★ 2026-10-24（实验 →「歌词舞台」开着时）：这一套**整条让位** ——
-//   左边那颗不再转发给原生键，改成打开我们自己的全屏歌词窗口（`LyricsStageEntry`，
-//   实现见 `Lyrics/LyricsStage/`）。那时这颗键不依赖 `ShowLyricsButton` 存不存在，
-//   所以「找不到就变暗」那一档也不会出现。没开实验时行为与从前逐字一致。
+// ★ 2026-10-24：iOS 26+ 上这一套**整条让位** —— 左边那颗不再转发给原生键，
+//   改成打开我们自己的页内歌词（`NowPlayingIOS27.toggleLyricsMode`），
+//   所以那颗键不依赖 `ShowLyricsButton` 存不存在，「找不到就变暗」那一档也不会出现。
+//   iOS 26 以下仍走上面那条原生转发。
+//
+// ⛔ 2026-10-30：「更炫酷的逐词歌词」（独立窗口 `LyricsStage`）已整体删除，
+//   这颗键现在只有「页内歌词」一种去向。
 //
 // ⚠️ 分享键的**图形**被藏了，但功能还在：Spotify 的 ⋯ 菜单里有分享
 // （`ShareButtonNowPlayingView` 只是快捷方式）。
@@ -293,10 +296,9 @@ extension NowPlayingIOS27 {
         queue: UIView?
     ) -> Bool {
         // ★★ 2026-10-24（用户：「歌词这部分，不能直接复用吗，iOS 27 这边只需要改动画就好了」）：
-        //   左边这颗气泡**永远**开我们自己的歌词页（正文复用 `AppleMusicLyricsPage`，
-        //   实验开关只决定观感）；iOS 26+ **根本不转发** Spotify 那颗键，所以连找都不用找
+        //   左边这颗气泡**永远**开我们自己的页内歌词（正文复用 `AppleMusicLyricsPage`）；
+        //   iOS 26+ **根本不转发** Spotify 那颗键，所以连找都不用找
         //   —— 省掉每 ~3 秒一次的 2000 节点 BFS。只有 iOS 26 以下才需要它。
-        let stageEnabled = LyricsStageEntry.isEnabled
         // ⚠️ 要认**缓存**：`lyricsEntryTarget` 是节流的，被节流的那一拍返回 nil，
         // 但上一拍已经找到的那颗还在（`lyricsEntryView`）—— 否则那颗键会每 3 秒"失灵 9 拍"、
         // 左边那颗也会跟着一闪一闪。
@@ -304,8 +306,8 @@ extension NowPlayingIOS27 {
             ? nil
             : (lyricsEntryTarget(in: page) ?? lyricsEntryView)
         // 那颗键**永远可点**：
-        //   iOS 26+ ⇒ 我们自己的歌词页；iOS 26 以下 ⇒ 退回 Spotify 那颗 `lyrics-expand-button`。
-        footerLyricsAvailable = canOpenOwnLyricsPage || stageEnabled || lyricsTarget != nil
+        //   iOS 26+ ⇒ 我们自己的页内歌词；iOS 26 以下 ⇒ 退回 Spotify 那颗 `lyrics-expand-button`。
+        footerLyricsAvailable = canOpenOwnLyricsPage || lyricsTarget != nil
 
         // 页面换了（或上一份的宿主没了）⇒ 先把旧字形拆干净，别留在上一页上。
         if footerRelay == nil || footerRelay?.superview !== page {
@@ -443,35 +445,14 @@ extension NowPlayingIOS27 {
         }
         if canOpenOwnLyricsPage {
             // ★★ 2026-10-24（用户：「歌词这部分，不能直接复用吗，iOS 27 这边只需要改动画就好了」）：
-            //   **歌词键永远开我们自己的页**；但两种"我们自己的页"分工不同：
-            //     · 实验「更炫酷的逐词歌词」**开** ⇒ 独立窗口 `LyricsStage`（仿 Folia Tilt，
-            //       `LyricsStageTiltLayout`）；
-            //     · 实验**关**（默认）⇒ iOS 27 页内歌词（缩封面、移标题、铺
-            //       `AppleMusicLyricsPage`），进度/传输/音量/底排保持原样。
-            //   ⚠️ 2026-10-24 之前这里只有页内分支 —— 实验开关实际上**开不出舞台**
-            //   （`LyricsStageEntry.present()` 没有调用点），Folia 重写等于看不到。
-            //   现在按 `stageEnabled` 分流，开关终于有用了。
+            //   **歌词键永远开我们自己的页** —— iOS 27 页内歌词（缩封面、移标题、铺
+            //   `AppleMusicLyricsPage`），进度/传输/音量/底排保持原样。
+            //   ⛔ 2026-10-30：原来这里还有「独立窗口 LyricsStage」那一档，已随
+            //   「更炫酷的逐词歌词」整体删除；现在只剩页内这一条。
             actionZones.append((tapRect(frames[0]), {
-                if stageEnabled {
-                    writeDebugLog("[\(logTag)] lyrics: opening the Folia stage")
-                    // ★ 2026-10-24（用户：「开启更炫酷的逐词歌词以及 iOS27 后，没效果」）：
-                    //   以前这里只是"发个 Task 去开窗口"，窗口建不起来就**什么都没发生**
-                    //   （没有日志、没有回退）。现在同步拿到结果：失败就开页内歌词，
-                    //   保证这颗键在任何情况下都有反应。
-                    if !LyricsStageEntry.present(from: page) {
-                        writeDebugLog(
-                            "[\(logTag)] lyrics: the stage could not open —"
-                                + " opening the in-page lyrics instead"
-                        )
-                        onMainThreadSync {
-                            NowPlayingIOS27.setLyricsMode(true, in: page)
-                        }
-                    }
-                } else {
-                    writeDebugLog("[\(logTag)] lyrics: toggling the iOS 27 in-page lyrics")
-                    onMainThreadSync {
-                        NowPlayingIOS27.toggleLyricsMode(in: page)
-                    }
+                writeDebugLog("[\(logTag)] lyrics: toggling the iOS 27 in-page lyrics")
+                onMainThreadSync {
+                    NowPlayingIOS27.toggleLyricsMode(in: page)
                 }
             }))
         } else if let target = lyricsTarget, let action = tapAction(for: target, label: "lyrics") {
@@ -518,9 +499,7 @@ extension NowPlayingIOS27 {
                     + " \(Int(frames[0].midX))/\(Int(frames[1].midX))/\(Int(frames[2].midX))"
                     + " (y \(Int(midY))); lyrics entry"
                     + (canOpenOwnLyricsPage
-                        ? (stageEnabled
-                            ? " = our lyrics page (Folia tilt look)"
-                            : " = our lyrics page (reusing AppleMusicLyricsPage)")
+                        ? " = our lyrics page (reusing AppleMusicLyricsPage)"
                         : (footerLyricsAvailable
                             ? " = \(name(lyricsTarget))"
                             : " missing (left glyph hidden)"))
@@ -583,7 +562,7 @@ extension NowPlayingIOS27 {
         return nil
     }
 
-    /// 我们自己的歌词页能不能开（`LyricsStage` 是 iOS 26+ 的门）。
+    /// 我们自己的歌词页能不能开（iOS 26+ 的门）。
     static var canOpenOwnLyricsPage: Bool {
         if #available(iOS 26.0, *) { return true }
         return false

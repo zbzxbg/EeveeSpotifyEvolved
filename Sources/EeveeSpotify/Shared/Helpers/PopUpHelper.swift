@@ -16,7 +16,8 @@ struct PopUpHelper {
         buttonText: String,
         secondButtonText: String? = nil,
         onPrimaryClick: (() -> Void)? = nil,
-        onSecondaryClick: (() -> Void)? = nil
+        onSecondaryClick: (() -> Void)? = nil,
+        onPresented: (() -> Void)? = nil
     ) {
         DispatchQueue.main.asyncAfter(deadline: delayed ? .now() + 3.0 : .now()) {
             if isPopUpShowing {
@@ -52,6 +53,9 @@ struct PopUpHelper {
 
             isPopUpShowing.toggle()
             sharedPresenter.presentPopUp(dialog)
+            // 只有真的交给了 presenter 才回调；上面 `isPopUpShowing` 那道 guard 提前
+            // return 时不会走到这里（调用方据此决定"这次算不算提示过"）。
+            onPresented?()
         }
     }
 }

@@ -23,29 +23,19 @@ extension EeveeLyricsSettingsView {
     /// 文案里没有提它，是因为三步那条路对绝大多数人更短。
     private static let spicyKeyHelpURL = URL(string: "https://developers.spicylyrics.org/catalog/eeveespotifyevolved")
 
-    /// 来源选择器的绑定：额外负责"选中 Musixmatch 但还没有令牌"时的手动填写提示。
+    /// 来源选择器的绑定。
     ///
-    /// 为什么要有它：以前这个提示挂在一个**从来没被 `send` 过**的
-    /// `musixmatchTokenInputAlertPublisher` 上（见 `showMusixmatchTokenAlert` 的说明），
-    /// 于是选了 Musixmatch 只会看到来源页一个红色感叹号，弹窗永远不出现。
-    /// 现在把提示放在"用户真的选中那一刻"。
+    /// ⛔ 2026-10-30（用户）：选中 Musixmatch 时那个「填令牌」弹窗**已删除**。
+    ///   令牌输入框就在这个 Picker 下面（`musixmatchTokenField`），没有令牌时取词路径
+    ///   也会自己换一个匿名令牌（`AnonymousTokenHelper`），没必要在选中的那一刻打断用户。
+    ///   这里现在只负责把新来源写回 view model。
     ///
-    /// ★ 2026-10-13：**弹窗不再"不填就回退选择"** —— 匿名令牌那条路已经接回来了
-    /// （`AnonymousTokenHelper`：取词时自动换一个，见 `MusixmatchLyricsRepository.ensureTokenIfNeeded`），
-    /// 填自己的令牌只是"想用自己的额度"。所以取消/填错都**保留** Musixmatch 这个选择。
-    ///
-    /// 用 `viewModel.lyricsSource` 作为"旧值"而不是 `UserDefaults.lyricsSource`：
+    /// 直接读写 `viewModel.lyricsSource`，而不是绑 `UserDefaults.lyricsSource`：
     /// 后者是持久化的那份，`$lyricsSource` 的 `didSet` 才写它，两者在某些时序上会不一致。
     private var lyricsSourceBinding: Binding<LyricsSource> {
         Binding(
             get: { viewModel.lyricsSource },
-            set: { newSource in
-                viewModel.lyricsSource = newSource
-
-                if newSource == .musixmatch, !viewModel.isMusixmatchTokenValid {
-                    showMusixmatchTokenAlert()
-                }
-            }
+            set: { viewModel.lyricsSource = $0 }
         )
     }
 

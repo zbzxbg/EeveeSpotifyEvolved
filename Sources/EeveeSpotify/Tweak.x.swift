@@ -869,5 +869,10 @@ struct EeveeSpotify: Tweak {
         // activateSponsorBlock's `opts.enabled` check, for example), so
         // it's safe to call them unconditionally here too.
         activateSponsorBlock()
+
+        // ★ 2026-10-30（用户）：beta 版首次启动提示 —— 版本号带 `-beta` 时弹一次
+        //   （每个 beta 版本一次）。放在 init 最末尾：前面那些 hook 装完再排弹窗，
+        //   弹窗本身延后 5 秒，等 Spotify 首屏起来（见 `BetaVersionNotice`）。
+        BetaVersionNotice.scheduleIfNeeded()
     }
 }

@@ -102,21 +102,6 @@ struct LyricsTypographyScale {
         supplementalSpacing: 4
     )
 
-    /// ★ 2026-10-24：**歌词页**（`Lyrics/LyricsStage/`）那一档。
-    ///
-    /// 它是一个**独立的全屏窗口**（没有 Spotify 的壳夹在上下），容器比全屏歌词页更宽松，
-    /// 所以：字号 24（全屏 22）、块间距 20（全屏 15），折行与译文间距沿用全屏口径。
-    ///
-    /// ⚠️ 不往 26 以上调：上面 `fullscreen` 那段实测写着"26pt 下长句几乎必然折行"，
-    ///   而这一页要的是"一句话一行"。真要更大字，用 `tilt` 那一档（它一屏只有 4 行）。
-    static let stage = Self(
-        primaryFontSize: 24,
-        supplementalFontSize: 17,
-        lineSpacing: 20,
-        wrappedLineSpacing: 5,
-        supplementalSpacing: 4
-    )
-
     /// ★ 2026-10-11（照片 67 我们 / 照片 68 kumone）：**「歌词进播放器」那一层自己的档**。
     ///
     /// 为什么不能沿用上面两档：这一层既不是"200pt 高的小卡片"（`.preview`），

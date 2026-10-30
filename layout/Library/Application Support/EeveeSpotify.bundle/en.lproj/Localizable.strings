@@ -104,11 +104,6 @@ experiments_page_warning = "Please note: the features below are either untested 
 show_instagram_destination = "Show Instagram Destination";
 show_instagram_destination_description = "Always show the Instagram share destination. %@";
 
-lyrics_stage = "Fancier word-by-word lyrics";
-lyrics_stage_description = "Requires the iOS 27 now-playing layout and iOS 26 or newer. Performance cost goes up noticeably.";
-lyrics_stage_waiting = "Waiting for this track's lyrics...";
-lyrics_stage_no_lyrics = "No lyrics available for this track.";
-
 amll_fuzzy_search = "AMLL fuzzy search";
 amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or the lyrics source is AMLL. AMLL's lookup stops being an exact Spotify-ID match and falls back to a name search. The word-by-word timeline quality and the word-by-word-only rule are unchanged.";
 
@@ -117,6 +112,7 @@ spicy_cross_validation_description = "Fixes the case where the lyrics Spicy Lyri
 
 /* MARK: Premium PopUps */
 
+beta_version_warning = "You are using a beta build. This plugin is updated frequently, so beta features may be unstable. Please use the latest public release, or wait for the next public release.";
 have_premium_popup = "It looks like you have an active Premium subscription, so the tweak won't patch the data or restrict the use of Premium server-sided features. You can manage this in the EeveeSpotify settings.";
 
 high_audio_quality_popup = "Very high audio quality is server-sided and is not available with this tweak.";
@@ -225,10 +221,6 @@ sponsorblock = "SponsorBlock (BETA)";
 appIcon = "App Icon";
 true_shuffle = "True Shuffle";
 true_shuffle_dec = "Blocks Spotify's free-tier Smart Shuffle from mixing recommended tracks into your queue. Shuffle stays inside the playlist. ";
-// ★ 2026-10-13：匿名令牌接回来之后，选中 Musixmatch 时那颗弹窗改成**可选**的
-// （旧键 `enter_user_token` / `enter_user_token_message` 留着不动，其它语言仍在用）。
-musixmatch_token_optional_title = "Musixmatch token (optional)";
-musixmatch_token_optional_message = "Paste your own user token to use your account's own quota. Leave it empty and the app will request an anonymous token by itself — you do not need to do anything to use Musixmatch.";
 miscellaneous = "Miscellaneous";
 clean_share_links = "Clean Share Links";
 clean_share_links_description = "Removes the \"si\" tracking parameter from shared Spotify links, so they don't reveal which device or account the link came from.";

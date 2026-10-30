@@ -98,11 +98,6 @@ experiments_page_warning = "请注意：以下功能要么未经测试，要么�
 show_instagram_destination = "显示 Instagram 分享目标";
 show_instagram_destination_description = "始终把 Instagram 作为分享目标。%@";
 
-lyrics_stage = "更炫酷的逐词歌词";
-lyrics_stage_description = "选项生效需要开启 iOS27 听歌页以及系统版本不低于 iOS26。性能开销会显著上升。";
-lyrics_stage_waiting = "正在等待这一首的歌词……";
-lyrics_stage_no_lyrics = "这一首没有可用的歌词。";
-
 amll_fuzzy_search = "AMLL 模糊搜索";
 amll_fuzzy_search_description = "选项生效需要开启「AMLL 优先」或歌词来源选择 AMLL。选项开启后，AMLL 的歌词搜索会从精确搜索转换为模糊搜索；原有的高质量逐词时间轴与「只接受逐词歌词」的特色不会改变。";
 
@@ -111,6 +106,7 @@ spicy_cross_validation_description = "选项开启后会解决SpicyLyrics返回�
 
 /* MARK: Premium PopUps */
 
+beta_version_warning = "你当前使用的版本为beta版，由于本插件更新速度较快，beta版的功能并不稳定。推荐使用上一个公开发布版或等待下一个公开发布版本。";
 have_premium_popup = "看来您有一个真实有效的 Premium 订阅，因此此插件不会修补数据或限制 Premium 服务器端功能的使用。可以在 EeveeSpotify 设置中管理此操作。";
 
 high_audio_quality_popup = "超高这个播放品质是服务器端的功能，无法通过此插件获得。";
@@ -213,10 +209,6 @@ no_log_to_clear = "无任何日志需要清除。";
 no_log_to_clear_ok = "确定";
 
 /* MARK: Keys required by Reincarnated features kept in this fork */
-// ★ 2026-10-13：匿名令牌接回来之后，选中 Musixmatch 时那颗弹窗改成**可选**的
-// （旧键 `enter_user_token` / `enter_user_token_message` 留着不动，其它语言仍在用）。
-musixmatch_token_optional_title = "Musixmatch 令牌（可选）";
-musixmatch_token_optional_message = "填自己的用户令牌 = 用你自己账号的额度。留空即可 —— 应用会自己申请一个匿名令牌，你什么都不用做就能用 Musixmatch。";
 miscellaneous = "杂项设定"; 
 clean_share_links = "移除追踪参数"; 
 clean_share_links_description = "清除网址追踪码";

@@ -13,8 +13,7 @@ import UIKit
 /// ⚠️ 2026-10-18：「NetEase 交叉验证」与「PetitLyrics 回退 NetEase」两个实验**已整体撤掉**
 ///    （用户拍板：这周关于网易云的改动全部回退，NE 目前只在来源说明里标注"不推荐非中国用户使用"）。
 ///    这一页现在只留 Instagram 分享位、AMLL 模糊搜索、SpicyLyrics 交叉验证、Apple 官方 TTML。
-/// ★ 2026-10-24：加**更炫酷的逐词歌词**（`Lyrics/LyricsStage/`，默认关）——
-///   它是一条整屏型的新界面，符合本页准入条件 ①（还没在真机上定过性）。
+/// ⛔ 2026-10-30：「更炫酷的逐词歌词」（`Lyrics/LyricsStage/`）已按用户要求整体删除。
 struct EeveeExperimentsSettingsView: View {
     @State var experimentsOptions = UserDefaults.experimentsOptions
 
@@ -43,20 +42,6 @@ struct EeveeExperimentsSettingsView: View {
             // （「分享到 LiveContainer」2026-10-17 搬到「杂项设定」。理由见文件头的准入三条：
             //   它的行为早就定死了 —— 链接打不开就转给 LC、失败就把 URL 复制到剪贴板；
             //   真正"没定性"的是 LC 那一侧的私有深链，不是这个开关。）
-
-            // ★★ 2026-10-24（用户）：**更炫酷的逐词歌词**（原名「歌词舞台」）。
-            //   一条整屏型的新界面，还没在真机上定过性 ⇒ 按本页准入条件 ① 放这里，默认关。
-            //   实现见 `Lyrics/LyricsStage/`，设计依据见
-            //   `C:\dsh\me\HANDOFF_2026-10-23_EeveeSpotify-ng_LyricsStage-Folia.md`。
-            //   打开后听歌页（iOS 27 布局）底排左边那颗歌词气泡改成开我们自己的全屏窗口，
-            //   不再转发给 Spotify 的 `ShowLyricsButton`（`NowPlayingIOS27+Footer.swift`）。
-            //   ★ 2026-10-24（用户）：只保留仿 Folia 那一档观感，**样式选择器已删**。
-            Section(footer: Text("lyrics_stage_description".localized)) {
-                Toggle(
-                    "lyrics_stage".localized,
-                    isOn: $experimentsOptions.lyricsStage
-                )
-            }
 
             // ★★ 2026-10-16：这个实验 2026-10-02 删过一次 —— 它当时挂的
             //    `SPTSharingSDK` / `SPTShare_FoundationImplProperties` 只在 Spotify 9.1.0 上存在。
@@ -123,12 +108,6 @@ struct EeveeExperimentsSettingsView: View {
             if options.showInstagramDestination {
                 OfflineHelper.resetData()
             }
-
-            // ★ 2026-10-24：舞台开关关掉时**当场收窗口** —— 它是一扇独立窗口，
-            //   不跟着开关收的话只能等用户自己下拉，那看起来就像"开关没生效"。
-            if !options.lyricsStage {
-                LyricsStageEntry.dismissIfPresented()
-            }
         }
 
                 // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
@@ -151,9 +130,9 @@ struct EeveeExperimentsSettingsView: View {
 
     /// 开关下方那段说明：开关关闭时只讲"这是什么"，打开后再追加"怎么拿令牌"。
     ///
-    /// ⚠️ 2026-10-24：删 `lyricsStageFooter` 时这段被**连带删掉**过（两处 doc 注释都以
-    ///   "开关下方那段说明" 开头，按前缀找区间的脚本认错了起点），CI 报
-    ///   `cannot find 'appleMusicOfficialTtmlFooter' in scope`。恢复时别再按前缀切区间。
+    /// ⚠️ 历史（2026-10-24）：这里曾经因为"按 doc 注释前缀切区间"的脚本认错起点，
+    ///   把本属性连带删掉过，CI 报 `cannot find 'appleMusicOfficialTtmlFooter' in scope`。
+    ///   以后删别的 section 时别再按前缀切区间。
     private var appleMusicOfficialTtmlFooter: String {
         var text = "apple_music_official_ttml_description".localized
 

@@ -31,32 +31,19 @@ struct ExperimentsOptions: Codable, Equatable {
     /// 见 `AppleMusicTtml+UserDefaults.swift`）。没填令牌时这一源直接抛
     /// `.missingAppleMusicToken`，界面上表现为"未找到歌词" + 一次提示弹窗。
     var appleMusicOfficialTtml: Bool
-    /// 「更炫酷的逐词歌词」—— 2026-10-24（用户：功能开关放实验页，名字改成这个）。
-    ///
-    /// 打开后，听歌页（iOS 27 布局）底排左边的歌词气泡**不再转发给 Spotify 的
-    /// `ShowLyricsButton`**，而是打开我们自己的全屏歌词窗口（`Lyrics/LyricsStage/`）。
-    /// 理由见 `C:\dsh\me\HANDOFF_2026-10-23_EeveeSpotify-ng_LyricsStage-Folia.md`
-    /// 第 1 / 7 节：新版页面里没有歌词区，那颗气泡原本只是个“找不到原生键就变暗”的替身。
-    ///
-    /// **默认关**：它是一条整屏型的新界面，还没在真机上定过性（正是「实验」页的准入条件 ①）。
-    /// ★ 2026-10-24（用户）：只保留仿 Folia 的那一档观感（`LyricsStageTiltLayout`），
-    ///   `appleMusic` 那一档已删 —— 正常逐词歌词是进播放器那条线的事，舞台只负责“炫”。
-    var lyricsStage: Bool
 
     init(
         liveContainerSharing: Bool,
         showInstagramDestination: Bool = false,
         amllFuzzySearch: Bool = false,
         spicyLyricsCrossValidation: Bool = false,
-        appleMusicOfficialTtml: Bool = false,
-        lyricsStage: Bool = false
+        appleMusicOfficialTtml: Bool = false
     ) {
         self.liveContainerSharing = liveContainerSharing
         self.showInstagramDestination = showInstagramDestination
         self.amllFuzzySearch = amllFuzzySearch
         self.spicyLyricsCrossValidation = spicyLyricsCrossValidation
         self.appleMusicOfficialTtml = appleMusicOfficialTtml
-        self.lyricsStage = lyricsStage
     }
 
     /// 手写解码：`liveContainerSharing` 之外那些都是**后加的**字段，早期盘上根本没有它们。
@@ -72,6 +59,5 @@ struct ExperimentsOptions: Codable, Equatable {
             ?? false
         appleMusicOfficialTtml = try container.decodeIfPresent(Bool.self, forKey: .appleMusicOfficialTtml)
             ?? false
-        lyricsStage = try container.decodeIfPresent(Bool.self, forKey: .lyricsStage) ?? false
     }
 }
