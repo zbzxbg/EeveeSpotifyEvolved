@@ -32,7 +32,7 @@ do_not_replace_lyrics = "禁用歌词替换功能";
 do_not_replace_lyrics_description = "选项开启后会禁用自定义歌词功能，但不会阻止Spotify返回其自带的歌词。";
 lyrics_source = "歌词来源";
 lyrics_source_description = "Genius：歌词覆盖面最广，但歌词没有时间轴。\nLRCLIB：最开放的服务，提供带时间轴的歌词。但它缺少很多歌曲的歌词。\nMusixmatch：为很多歌曲提供带时间轴的歌词，但需要用户令牌才能使用。";
-lyrics_additional_info = "Genius，NetEase和PetitLyrics的搜索方式是模糊搜索，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
+lyrics_additional_info = "Genius和NetEase的搜索方式是模糊搜索，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
 petitlyrics_description = "PetitLyrics：提供日语歌词。";
 spicylyrics_description = "Spicy Lyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
@@ -99,10 +99,10 @@ show_instagram_destination = "显示 Instagram 分享目标";
 show_instagram_destination_description = "始终把 Instagram 作为分享目标。%@";
 
 amll_fuzzy_search = "AMLL 模糊搜索";
-amll_fuzzy_search_description = "选项生效需要开启「AMLL 优先」或歌词来源选择 AMLL。选项开启后，AMLL 的歌词搜索会从精确搜索转换为模糊搜索；原有的高质量逐词时间轴与「只接受逐词歌词」的特色不会改变。";
+amll_fuzzy_search_description = "选项生效需要开启「AMLL 优先」或歌词来源选择 AMLL。选项开启后AMLL的歌词搜索会从精确搜索转换为模糊搜索。";
 
 spicy_cross_validation = "SpicyLyrics交叉验证";
-spicy_cross_validation_description = "选项开启后会解决SpicyLyrics返回的歌词可能被和谐的问题，歌词请求用时会加长。";
+spicy_cross_validation_description = "选项开启后会解决SpicyLyrics返回的歌词可能被打码和谐的问题，歌词请求用时会加长。";
 
 /* MARK: Premium PopUps */
 
@@ -213,7 +213,7 @@ miscellaneous = "杂项设定";
 clean_share_links = "移除追踪参数"; 
 clean_share_links_description = "清除网址追踪码";
 block_rating_prompts = "阻止评分提示";
-block_rating_prompts_description = "拦住 App Store 的系统评分弹窗（SKStoreReviewController）——Spotify 听够次数后会弹它。它是系统弹窗、不是 Spotify 自己的界面，所以弹窗拦截那套碰不到它。改完需要重启：hook 是启动时按这个开关决定装不装的。";
+block_rating_prompts_description = "拦截 App Store 的系统评分弹窗。更改需要重启Spotify。";
 restart_now = "立即重启";
 no_such_song = "未找到歌曲";
 musixmatch_restricted = "受限制";
@@ -633,26 +633,13 @@ reduce_interventions_scope_predictability_footer = "Spotify「设备预测」那
 reduce_interventions_scope_yourlibaryx = "音乐库";
 reduce_interventions_scope_yourlibaryx_footer = "音乐库里出现的提示、横幅与卡片。";
 
-// ── 听歌页取色底（2026-10-03）────────────────────────────────────────────────
-// 配方（取色渐变，不是模糊）借鉴 kumone（LGPL-3.0 / GPL-3.0），
-// 见 Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift。
+
 now_playing_section = "歌曲播放页";
-// ★ 2026-10-25（用户拍板 A 方案）：两颗互斥的开关合成一个三档选择器
-// （Spotify 原生 / 沉浸式 / Apple Music 式）。选项名**故意短** —— Picker 行尾要显示
-// 当前选中值，长名字在 414pt 上会被截断；长句全放在 now_playing_style_description。
-// ⚠️ 存储键一个没加、一个没删（见 NowPlayingStyle）。
 now_playing_style = "听歌页样式";
-now_playing_style_spotify = "Spotify 原生";
+now_playing_style_spotify = "Spotify原生";
 now_playing_style_immersive = "沉浸式";
 now_playing_style_apple_music = "Apple Music 式";
-now_playing_style_description = "Spotify 原生 = Spotify 默认；沉浸式 = 整页取色底、收起官方模块/单行歌词/两颗胶囊，歌词进播放器（包含：%@）；Apple Music 式 = 封面铺满上半屏、歌名压在封面下沿的过渡带上，照 iOS 27 的 Apple Music 做的那一版，旧那套歌词层自动让位。";
-// ★ 2026-10-22（用户）：上面那五件结构改动整合成这颗总开关，放在本页最上面、默认开启。
-// 第二行小字直接由下面那五条的译名拼出来（见 NowPlayingSettingsView.integratedFeaturesText），
-// 所以那五条文案只有这一份。
-// ⚠️ 2026-10-25：下面三条**已经过期** —— 它们原来是那两颗开关的名字，现在换成了上面那个
-// 三档选择器（now_playing_layout → 「沉浸式」，now_playing_ios27 → 「Apple Music 式」）。
-// 暂时留着：从 en.lproj 删一个键会让它在其它每个语言里变成 "extra key" 错误，
-// 真要清就得所有 locale 一次清干净。
+now_playing_style_description = "若选择Spotify原生、则不更改听歌页。若选择沉浸式，则听歌页仿照kumone。若选择Apple Music式，则听歌页仿照Apple Music。";
 now_playing_layout = "修改Spotify听歌页布局";
 now_playing_layout_description = "包含：%@。";
 now_playing_ios27 = "iOS 27 听歌页（满屏封面）";
