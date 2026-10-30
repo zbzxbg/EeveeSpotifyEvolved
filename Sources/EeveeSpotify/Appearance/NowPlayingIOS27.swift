@@ -210,6 +210,10 @@ enum NowPlayingIOS27 {
     ///   URI 取自当前曲目的 `album_uri` / `artist_uri`（日志 999 的 metadata 键表里有）。
     static weak var titleTapButton: UIButton?
     static weak var artistTapButton: UIButton?
+    /// 只报一次"点击区挂上了"（照片 169 之后：下一次日志能直接确认它在不在）。
+    static var didLogTitleTapTargets = false
+    /// 只报一次"找不到那两行"（同一份日志里能直接分清是"没挂上"还是"点了没反应"）。
+    static var didLogMissingTapLabels = false
 
     /// 被我们**整体上移**的"底部那一坨"，以及它原来的 `transform`（收尾要写回）。
     static weak var bottomStack: UIView?
@@ -1710,7 +1714,13 @@ enum NowPlayingIOS27 {
         ), let artist = labelOnPage(
             identifier: NowPlayingLyricsPlate.subtitleLabelIdentifier,
             in: page
-        ) else { return false }
+        ) else {
+            if !didLogMissingTapLabels {
+                didLogMissingTapLabels = true
+                writeDebugLog("[\(logTag)] title/artist labels not found — no tap targets")
+            }
+            return false
+        }
 
         var changed = false
         let titleFrame = tapFrame(for: title, in: page)
@@ -1763,6 +1773,14 @@ enum NowPlayingIOS27 {
                 for: .touchUpInside
             )
             page.addSubview(button)
+            if !didLogTitleTapTargets {
+                didLogTitleTapTargets = true
+                writeDebugLog(
+                    "[\(logTag)] title/artist tap targets mounted"
+                        + " (title \(Int(titleFrame.width))×\(Int(titleFrame.height)),"
+                        + " artist \(Int(artistFrame.width))×\(Int(artistFrame.height)))"
+                )
+            }
         }
         if button.frame != frame { button.frame = frame }
         if page.subviews.last !== button {
@@ -1799,24 +1817,57 @@ enum NowPlayingIOS27 {
         artistTapButton = nil
     }
 
+    /// 点歌名：打开**当前曲目的专辑**。
+    ///
+    /// ★★ 2026-10-31（照片 169：「选择 Apple Music 式时 Starboy 和艺人名字点不动」）：
+    ///   上一版只用 `album_uri` + `SpotifyURIOpener`，两条都可能空转 ——
+    ///   ① 取不到 metadata（`statefulPlayer` / `loadedTrack` 都拿不到）⇒ 直接 return；
+    ///   ② 链接分发器没抓到 ⇒ `open` 退回 `UIApplication.open(spotify:…)`，对 App 自己
+    ///      就是空操作。两种都表现为"点上去什么都不发生"，而沉浸式那边是**原生**在响应。
+    ///   ⇒ 拿不到 URI / 分发器没就绪时，把这一下**转发给原生标题行**（`eeveeFire`）：
+    ///      沉浸式里它本来就能点，所以这条兜底一定有效。
     private static func openCurrentAlbum() {
-        let metadata = currentTrackMetadata()
-        guard let uri = metadata["album_uri"], !uri.isEmpty else {
-            writeDebugLog("[\(logTag)] title tap — the track has no album_uri, nothing to open")
+        let uri = currentTrackMetadata()["album_uri"]
+        if SpotifyURIOpener.isReady, let uri, !uri.isEmpty {
+            writeDebugLog("[\(logTag)] title tap → \(uri)")
+            SpotifyURIOpener.open(uri)
             return
         }
-        writeDebugLog("[\(logTag)] title tap → \(uri)")
-        SpotifyURIOpener.open(uri)
+        forwardTitleTap(
+            reason: (uri?.isEmpty == false)
+                ? "the link dispatcher is not ready"
+                : "the track has no album_uri"
+        )
     }
 
+    /// 点艺人名：打开**当前曲目的艺人页**（同上，兜底转发原生标题行）。
     private static func openCurrentArtist() {
-        let metadata = currentTrackMetadata()
-        guard let uri = metadata["artist_uri"], !uri.isEmpty else {
-            writeDebugLog("[\(logTag)] artist tap — the track has no artist_uri, nothing to open")
+        let uri = currentTrackMetadata()["artist_uri"]
+        if SpotifyURIOpener.isReady, let uri, !uri.isEmpty {
+            writeDebugLog("[\(logTag)] artist tap → \(uri)")
+            SpotifyURIOpener.open(uri)
             return
         }
-        writeDebugLog("[\(logTag)] artist tap → \(uri)")
-        SpotifyURIOpener.open(uri)
+        forwardTitleTap(
+            reason: (uri?.isEmpty == false)
+                ? "the link dispatcher is not ready"
+                : "the track has no artist_uri"
+        )
+    }
+
+    /// 兜底：把这一下转发给**原生标题行**（沉浸式里点它本来就有反应）。
+    private static func forwardTitleTap(reason: String) {
+        guard let page = lastPage, let row = titleRow ?? titleRowView(in: page) else {
+            writeDebugLog("[\(logTag)] title tap — \(reason), and the native row is not on screen")
+            return
+        }
+        // `eeveeFireWide`：先发控件/手势，再往上两层找"tap 挂在包装层上"的那种
+        //（艺人页那颗 `i` 就是这么找到的，见 `eeveeFireWide` 的说明）。
+        if let fired = eeveeFireWide(row) {
+            writeDebugLog("[\(logTag)] title tap — \(reason), forwarded to the native row (\(fired))")
+        } else {
+            writeDebugLog("[\(logTag)] title tap — \(reason), and the native row fired nothing")
+        }
     }
 
     private static func currentTrackMetadata() -> [String: String] {
@@ -2051,6 +2102,8 @@ enum NowPlayingIOS27 {
         titleRowBase = nil
         titleRowBaseRect = nil
         removeTitleTapTargets()
+        didLogTitleTapTargets = false
+        didLogMissingTapLabels = false
         bottomStack = nil
         bottomStackBase = nil
         didLogBottomStack = false

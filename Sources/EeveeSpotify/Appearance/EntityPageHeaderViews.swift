@@ -526,6 +526,9 @@ final class EntityPageHeaderReleaseCard: UIView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// 上一份数据的指纹（同一份不重画 —— 页头每一拍都会把卡片数据推一次）。
+    private var lastContentSignature: String?
+
     /// 塞一份数据；`nil` 就清空（卡片本身由调用方显隐）。
     ///
     /// - Parameter artwork: 已经拿到的图（"艺人之选"那条从页面里直接读到 `UIImage`）。
@@ -537,6 +540,13 @@ final class EntityPageHeaderReleaseCard: UIView {
         artwork: UIImage?,
         artworkURL: URL?
     ) {
+        // ★ 2026-10-31：卡片挂到页头下面之后，这一条每一拍都会被调（`applyPick` 每拍都跑）——
+        //   不拦一下会每帧取消并重启一次封面下载。
+        let signature = [date ?? "", title, meta ?? "", artworkURL?.absoluteString ?? "-"]
+            .joined(separator: "|")
+        if artwork == nil, signature == lastContentSignature { return }
+        lastContentSignature = signature
+
         dateLabel.text = date
         titleLabel.text = title
         metaLabel.text = meta
@@ -628,8 +638,6 @@ final class EntityPageHeaderView: UIView {
     private let shuffleButton = EntityPageHeaderButton()
     private let playButton = EntityPageHeaderPlay()
     private let trailingButton = EntityPageHeaderButton()
-    /// 「最新发布」小卡片（艺人页）。默认隐藏 —— 只在那页、且数据到了才显示。
-    private let releaseCard = EntityPageHeaderReleaseCard()
 
     /// 创建者那一行背后那个 Spotify 控件（点了打开作者页）——被藏起来、只负责响应。
     private weak var creatorLink: UIView?
@@ -668,15 +676,6 @@ final class EntityPageHeaderView: UIView {
             addSubview(button)
         }
 
-        // ★★ 2026-10-17（用户：图片 136「AM 的那个 最新发布 小卡片」）：卡片贴在按钮行**下面**。
-        //    它是**内容**、不是按钮 —— 不吃触摸，也不参与 `hitTest` 的那条白名单。
-        releaseCard.isHidden = true
-        releaseCard.accessibilityIdentifier = "eevee-entity-header-release"
-        // ★★ 2026-10-17（用户：「点击那个卡片应该是跳转到对应的专辑」）：
-        //    卡片的触摸往上交给 manager —— 由它转发给页面里那张真卡（`handleReleaseCardTap`）。
-        //    `[weak self]`：卡片是本视图的子视图，强引用会成环。
-        releaseCard.onTap = { [weak self] in self?.onReleaseCardTap?() }
-        addSubview(releaseCard)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -758,12 +757,13 @@ final class EntityPageHeaderView: UIView {
     /// ★★ 2026-10-17：**「最新发布」小卡片**（艺人页三颗按钮下面那张）。
     ///
     /// 数据由 `EntityPageHeaderManager` 给（首选**页面自己那一格** —— 见 `captureLatestRelease`；
-    /// 苹果目录只在页面读不到时兜底）。这一侧只管"有没有东西要显示"：`title` 空 ⇒ 藏起来并让排版重算。
+    /// 苹果目录只在页面读不到时兜底）。这一侧只把数据转给 manager —— 卡片**不再画在本视图里**。
     ///
-    /// ★★ 2026-10-17（用户：「点击那个卡片应该是**跳转到对应的专辑**」）：
-    /// `isTappable` 由调用方按**数据来源**决定 —— 来自页面那一格 ⇒ 可点（点击转发给那一格，
-    /// 见 manager 的 `handleReleaseCardTap`）；来自苹果目录 ⇒ **不可点**（那没有 Spotify 目标，
-    /// 不留"看得见、点不动"的控件）。
+    /// ★★ 2026-10-31（照片 168「自画卡片有入侵」）：卡片原来画在**页头内部**（贴底排的最后一项），
+    /// 页头因此要长高 106pt；而 Spotify 的页头是 `UIStackView` 的一个 arranged subview，
+    /// 我们改 `frame` 并不会让下面的列表跟着让位 ⇒ 卡片正好压在列表前两行上。
+    /// 现在卡片挂到**页头下面的那一格**（见 `EntityPageHeaderManager.setReleaseCard`），
+    /// 由 stack 自己把列表推下去；页头高度、标题、三颗、渐变全部回到原位。
     func updateRelease(
         title: String?,
         date: String?,
@@ -772,37 +772,16 @@ final class EntityPageHeaderView: UIView {
         artworkURL: URL? = nil,
         isTappable: Bool = false
     ) {
-        guard let title, !title.isEmpty else {
-            releaseCard.isTappable = false
-            if !releaseCard.isHidden {
-                releaseCard.isHidden = true
-                setNeedsLayout()
-            }
-            return
-        }
-
-        releaseCard.update(
+        EntityPageHeaderManager.setReleaseCard(
+            for: self,
             title: title,
             date: date,
             meta: meta,
             artwork: artwork,
-            artworkURL: artworkURL
+            artworkURL: artworkURL,
+            isTappable: isTappable
         )
-        releaseCard.isTappable = isTappable
-        if releaseCard.isHidden {
-            releaseCard.isHidden = false
-            setNeedsLayout()
-        }
     }
-
-    /// 卡片被点了一下（manager 接上"转发给页面那一格"，见 `handleReleaseCardTap`）。
-    var onReleaseCardTap: (() -> Void)?
-
-    /// 卡片现在是不是显示着（`contentHeight` / `layoutSubviews` 共用这一条判据）。
-    private var showsReleaseCard: Bool { !releaseCard.isHidden }
-
-    /// 外面（`EntityPageHeaderManager`）要据此把**页头容器加高**一张卡的高度。
-    var hasReleaseCard: Bool { !releaseCard.isHidden }
 
     /// ★★ 2026-10-17：**长按播放键 = 随机播放**（见 `EntityPageHeaderPlay.feedLongPress` 的说明）。
     /// 三个页面都接上：歌单/专辑页左边本来就是 shuffle，多一个入口无害；艺人页那颗位置让给 `i` 之后，
@@ -865,10 +844,6 @@ final class EntityPageHeaderView: UIView {
         // ★★ 2026-10-19：中间那颗改回**胶囊**（`playMinWidth` × `rowHeight`），不再比两侧高一档
         //   ⇒ 整行高度就是两侧小圆的直径（见下面 `layoutSubviews` 里那段说明）。
         height += EntityPageHeaderMetrics.rowHeight
-        // ★★ 2026-10-17：「最新发布」卡片占的高度（见 `updateRelease`）。
-        if showsReleaseCard {
-            height += EntityPageHeaderReleaseCard.spacing + EntityPageHeaderReleaseCard.height
-        }
         if !aboutLabel.isHidden {
             height += EntityPageHeaderMetrics.aboutAbove
             height += ceil(aboutLabel.sizeThatFits(CGSize(width: text, height: .greatestFiniteMagnitude)).height)
@@ -970,18 +945,6 @@ final class EntityPageHeaderView: UIView {
             x: play.maxX + EntityPageHeaderMetrics.rowSpacing, y: y, width: side, height: side
         )
         y += side
-
-        // ★★ 2026-10-17：卡片贴在按钮行下面（AM 的 136 就是这个名字 / 三颗 / 卡片 / 列表的顺序）。
-        if showsReleaseCard {
-            y += EntityPageHeaderReleaseCard.spacing
-            releaseCard.frame = CGRect(
-                x: EntityPageHeaderMetrics.side,
-                y: y,
-                width: max(0, width - 2 * EntityPageHeaderMetrics.side),
-                height: EntityPageHeaderReleaseCard.height
-            )
-            y += EntityPageHeaderReleaseCard.height
-        }
 
         if !aboutLabel.isHidden {
             y += EntityPageHeaderMetrics.aboutAbove

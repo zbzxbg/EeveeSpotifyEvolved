@@ -60,6 +60,13 @@ enum SpotifyURIOpener {
     /// 取 3 个参数那条选择器（拼写与 pw 逐字一致）。
     private static let navigateSelectorName = "navigateToURI:options:interactionID:"
 
+    /// 分发器抓到没有。
+    ///
+    /// ★ 2026-10-31（照片 169）：没抓到时 `open` 会退回 `UIApplication.open(spotify:…)` ——
+    /// 对 App 自己那个 scheme 是**空操作**（不会弹、也不会跳）。调用方（听歌页的歌名/艺人点击）
+    /// 据此改走"转发给原生控件"，而不是让用户觉得"点上去没反应"。
+    static var isReady: Bool { dispatcher != nil }
+
     // MARK: - 交给 hook 的那一半
 
     /// `-setMainUILoaded:` 把单例交过来时调用（**主线程**，App 启动阶段）。

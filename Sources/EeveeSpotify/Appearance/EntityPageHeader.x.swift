@@ -1086,13 +1086,11 @@ enum EntityPageHeaderManager {
         //    （见 `startReleasePolling`：这就是"刚进没有、重进才有"的根因）。
         startReleasePolling(in: page, name: name)
         // ★★ 2026-10-17（用户：「点击那个卡片应该是跳转到对应的专辑」）：
-        //    卡片的触摸交给 manager 转发给页面里那一张真卡（`handleReleaseCardTap`）。
-        headerView.onReleaseCardTap = { handleReleaseCardTap() }
+        //    卡片的触摸交给 manager 转发给页面里那一张真卡（`handleReleaseCardTap`）——
+        //    卡片现在挂在页头下面那一格，`onTap` 在 `releaseCardHost(for:)` 里就接好了。
         // ★★ 2026-10-17（用户：图片 145「这里会默认不展开『显示更多』…… 不展开又很难看」）：
         //    进页后替用户点一次那颗展开按钮（原地铺开这一段 → 那条黑带与半截行都不再出现）。
         scheduleSectionExpansion(in: page)
-        // 卡片要占 ~106pt ⇒ 页头容器得跟着长高（用户选 A：卡片画在我们自己的页头里）。
-        makeRoomForReleaseCard(in: header)
 
         // Spotify 那一列：**空 mask 藏**（不碰 hidden —— 见函数头那段）。照片归 `EntityPageAppearance`。
         let cover = find("Components.Header.UI.ArtworkImage", in: header, cache: &cachedArtistCover)
@@ -1710,99 +1708,145 @@ enum EntityPageHeaderManager {
         return true
     }
 
-    /// 卡片高度（含与按钮行之间的间距）—— 页头排版与"页头长高"共用同一个数。
-    private static let releaseCardRoom: CGFloat =
-        EntityPageHeaderReleaseCard.height + EntityPageHeaderReleaseCard.spacing
+    /// 卡片挂在页头**下面**的那一格（见 `setReleaseCard`）。
+    private static weak var releaseCardHost: UIView?
+    /// 那一格的高度（有卡片 106，没有 0 —— 收成 0 时列表自然回到原位）。
+    private static var releaseCardHeight: NSLayoutConstraint?
+    private static weak var releaseCardView: EntityPageHeaderReleaseCard?
+    /// 这一格属于哪一份页头（换页就重建）。
+    private static weak var releaseCardOwner: EntityPageHeaderView?
 
-    private static var headerBaseHeightKey: UInt8 = 0
-    /// 上一拍这张页头上的卡片是显示还是隐藏（只在**状态变化**时强制排一次版）。
-    private static var releaseCardShownKey: UInt8 = 0
-    private static var didLogReleaseRoom = false
-
-    /// ★★ 2026-10-17（用户二选一里选了 **A**：卡片画在我们自己的页头里）：
-    /// 把艺人页的页头容器**加高**一张卡的高度。
+    /// ★★ 2026-10-31（照片 168「自画卡片有入侵」）：**卡片不再画在页头里，而是挂到页头下面那一格**。
     ///
-    /// 为什么必须加高：`EntityPageHeaderView` 是**贴底排**的（`y = bounds.height - contentBottom -
-    /// contentHeight`），内容一旦超过页头高度，整块会**向上溢出**，名字直接被顶出页头上面。
+    /// 现场：卡片原来贴底排在 `EntityPageHeaderView` 内部（`contentHeight` 里多算 106pt），
+    /// 于是「页头容器要长高 106pt」—— 但 Spotify 的艺人页页头是 `UIStackView` 的 arranged subview
+    /// （日志 10 的树：`UIStackView 414×1416` = `HeaderContainer 414×520` + 内容 `414×896`），
+    /// 改 `frame` 不会让 stack 重排 ⇒ 列表仍从 520 开始，卡片正好压在列表前两行上（照片 168）。
     ///
-    /// ⚠️ 容器高度是 Spotify 自己算的 ⇒ 这里只改 `frame`，而且**每一拍补一次**（跟着
-    /// `applyToArtistPage` 的频率）。第一次改时打一行 `[Release] header room — base → wanted`；
-    /// 如果日志里看到它每拍都被写回去，说明那一层归 Auto Layout 管，就得换成
-    /// "卡片挂在页头下缘 + 列表 `contentInset.top`"那条（交接文档 §5.2 的 B 方案）。
-    private static func makeRoomForReleaseCard(in header: UIView) {
-        guard let headerView = objc_getAssociatedObject(header, &entityPageHeaderKey) as? EntityPageHeaderView
-        else { return }
-        guard header.bounds.height > 80 else { return }
-
-        // ★ 2026-10-30：卡片显隐状态**先记**，再决定要不要加高。
-        //   以前顶部 guard 直接要求 `hasReleaseCard`，卡片一藏就整个 return，
-        //   状态永远停在 true ⇒ 下次再显示时判不出"false → true"，不会补 layout。
-        let shown = headerView.hasReleaseCard
-        let previousShown = (objc_getAssociatedObject(header, &releaseCardShownKey) as? NSNumber)?.boolValue
-        var needsLayout = false
-        if previousShown != shown {
-            objc_setAssociatedObject(
-                header,
-                &releaseCardShownKey,
-                NSNumber(value: shown),
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-            needsLayout = true
-        }
-        guard shown else { return }
-
-        // ★ 只按**静止态**的页头量"原本多高"：缩成导航栏（100pt）那一拍量出来的值不能当底，
-        //   否则写回去会把导航栏撑成一屏高。等下一次静止态再量。
-        let stored = (objc_getAssociatedObject(header, &headerBaseHeightKey) as? NSNumber)?.doubleValue
-        let base: CGFloat
-        if let stored, stored > 200 {
-            base = CGFloat(stored)
-        } else if header.bounds.height > 200 {
-            base = header.bounds.height
-            objc_setAssociatedObject(
-                header,
-                &headerBaseHeightKey,
-                NSNumber(value: Double(base)),
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-        } else {
+    /// 现在的做法：在 stack 里**页头之后**插一格（`releaseCardHost`，高度 106），卡片画在那一格里。
+    /// stack 自己会把列表推下去，页头高度 / 标题 / 三颗 / 渐变全部回到原位 —— 不再需要
+    /// `makeRoomForReleaseCard` 那套"加高容器 + 同步 headerView.frame"的补丁。
+    ///
+    /// 认不出 stack（页头不在 stack 里）就只打一行日志、不画卡片：
+    /// 宁可没有卡片，也不要再压住列表。
+    static func setReleaseCard(
+        for headerView: EntityPageHeaderView,
+        title: String?,
+        date: String?,
+        meta: String?,
+        artwork: UIImage? = nil,
+        artworkURL: URL? = nil,
+        isTappable: Bool = false
+    ) {
+        guard let title, !title.isEmpty else {
+            hideReleaseCard()
             return
         }
+        guard let host = releaseCardHost(for: headerView) else {
+            logOnce(
+                "releaseCardNoStack",
+                "release card — the header is not an arranged subview of a stack,"
+                    + " so the card is skipped instead of covering the list"
+            )
+            return
+        }
+        guard let card = releaseCardView else { return }
+        if card.superview !== host { host.addSubview(card) }
+        card.update(
+            title: title,
+            date: date,
+            meta: meta,
+            artwork: artwork,
+            artworkURL: artworkURL
+        )
+        card.isTappable = isTappable
+        if card.isHidden { card.isHidden = false }
+        releaseCardHeight?.constant = EntityPageHeaderReleaseCard.spacing
+            + EntityPageHeaderReleaseCard.height
+    }
 
-        let wanted = base + releaseCardRoom
-        if abs(header.bounds.height - wanted) > 0.5 {
-            var frame = header.frame
-            frame.size.height = wanted
-            header.frame = frame
-            needsLayout = true
+    /// 清掉卡片（换页 / 没数据）：把那一格收成 0 高，列表自然回到原位。
+    private static func hideReleaseCard() {
+        guard let card = releaseCardView else { return }
+        card.isTappable = false
+        if !card.isHidden { card.isHidden = true }
+        if releaseCardHeight?.constant != 0 { releaseCardHeight?.constant = 0 }
+    }
 
-            if !didLogReleaseRoom {
-                didLogReleaseRoom = true
-                writeDebugLog(
-                    "[Release] header room — \(Int(base)) → \(Int(wanted))pt for the card"
-                )
+    /// 页头**下面**那一格（懒建）。返回 nil = 这页头的父层不是 stack，画不了。
+    private static func releaseCardHost(for headerView: EntityPageHeaderView) -> UIView? {
+        guard let container = headerView.superview else { return nil }
+        guard let slot = stackSlot(for: container) else { return nil }
+
+        if let owner = releaseCardOwner, owner !== headerView {
+            // 换了一页 ⇒ 旧那一格留在旧页面的 stack 上，这里重新建一格。
+            releaseCardHost?.removeFromSuperview()
+            releaseCardHost = nil
+            releaseCardHeight = nil
+            releaseCardView?.removeFromSuperview()
+            releaseCardView = nil
+        }
+        releaseCardOwner = headerView
+
+        if let host = releaseCardHost, host.superview === slot.stack {
+            return host
+        }
+
+        let host = UIView()
+        host.backgroundColor = .clear
+        host.accessibilityIdentifier = "eevee-entity-header-release-host"
+        host.translatesAutoresizingMaskIntoConstraints = false
+        let height = host.heightAnchor.constraint(equalToConstant: 0)
+        height.isActive = true
+        let index = min(slot.index + 1, slot.stack.arrangedSubviews.count)
+        slot.stack.insertArrangedSubview(host, at: index)
+        releaseCardHost = host
+        releaseCardHeight = height
+
+        let card = EntityPageHeaderReleaseCard()
+        card.translatesAutoresizingMaskIntoConstraints = false
+        card.accessibilityIdentifier = "eevee-entity-header-release"
+        card.isHidden = true
+        // 点击往上交给 manager —— 由它转发给页面里那张真卡（`handleReleaseCardTap`）。
+        card.onTap = { handleReleaseCardTap() }
+        host.addSubview(card)
+        NSLayoutConstraint.activate([
+            card.leadingAnchor.constraint(
+                equalTo: host.leadingAnchor,
+                constant: EntityPageHeaderMetrics.side
+            ),
+            card.trailingAnchor.constraint(
+                equalTo: host.trailingAnchor,
+                constant: -EntityPageHeaderMetrics.side
+            ),
+            card.topAnchor.constraint(
+                equalTo: host.topAnchor,
+                constant: EntityPageHeaderReleaseCard.spacing
+            ),
+            card.heightAnchor.constraint(equalToConstant: EntityPageHeaderReleaseCard.height),
+        ])
+        releaseCardView = card
+
+        writeDebugLog(
+            "[Release] card host inserted after the header in "
+                + NSStringFromClass(type(of: slot.stack))
+        )
+        return host
+    }
+
+    /// 往上找"把 `container` 当 arranged subview 的那个 stack"。
+    private static func stackSlot(for container: UIView) -> (stack: UIStackView, index: Int)? {
+        var node: UIView? = container
+        var level = 0
+        while let current = node, level < 4 {
+            if let stack = current.superview as? UIStackView,
+               let index = stack.arrangedSubviews.firstIndex(of: current) {
+                return (stack, index)
             }
+            node = current.superview
+            level += 1
         }
-
-        // ★★ 2026-10-30（用户：「注入最新发布卡片之后，会把渐变往上抬，遮住艺人的下半部分」）：
-        //   **页头容器长高了，页头视图本身也必须同一拍跟上**。
-        //   `EntityPageHeaderView` 是贴底排的（`y = bounds.height - contentBottom - contentHeight`）：
-        //   卡片一显出来 `contentHeight` 多 106pt，如果这时页头视图的 frame 还停在 520，
-        //   标题/三颗会**整体上移 106pt**；而满幅照片的化开终点锚在"名字上沿"
-        //   （`EntityPageAppearance.ensureSharpHero`）⇒ 渐变跟着上移，吃掉艺人照片的下半部分。
-        //
-        //   容器加高 + 视图 frame 跟上是同一件事的两半：容器高度 +106 与 contentHeight +106
-        //   互相抵消，标题/三颗/渐变都停在原位，卡片只是落在它们下面。
-        guard needsLayout else { return }
-
-        if headerView.frame != header.bounds {
-            headerView.frame = header.bounds
-        }
-        // 立刻排一次：`updateRelease` 刚把卡片显出来时，`contentHeight` 变了、
-        // 标题上沿还没重算。`ensureSharpHero` 读的是上一次 layout 的 `textTop`，
-        // 这里不落地就会晚一拍、那一拍渐变仍会跳。
-        headerView.setNeedsLayout()
-        headerView.layoutIfNeeded()
+        return nil
     }
 
     /// 每一位艺人只取一次「最新发布」（缓存优先 ⇒ 同步就能画）。
@@ -1932,22 +1976,6 @@ enum EntityPageHeaderManager {
         askSpotifyForLatestRelease(artist: name)
     }
 
-    /// ★★ 2026-10-18（图片 150「只剩半只猫」）：**显卡的那一拍照样把页头补高**。
-    ///
-    /// `EntityPageHeaderView` 是**贴底排**的（`y = bounds.height - contentBottom - contentHeight`）——
-    /// 页头高度不变而内容多了一张卡 ⇒ 姓名与那三颗**整体上移 106pt**。而满幅照片的化开终点
-    /// 锚在"名字上沿"（`EntityPageAppearance.ensureSharpHero`）⇒ 照片被多吃掉一百多 pt，
-    /// 用户看到的就是"只剩半只猫"。
-    ///
-    /// 日志 222 的现场：`[Release] card shows …` 在 **16:12:11**，`[Release] header room — 520 → 626pt`
-    /// 在 **16:12:37** —— 中间 **26 秒**都停在上移的状态（页头稳定之后布局拍就不再来了，
-    /// 而 `makeRoomForReleaseCard` 只在 `applyToArtistPage` 里被调）。
-    /// ⇒ 显卡的那一把顺手补高，两者永远同一拍。
-    private static func growHeaderForReleaseCard(_ headerView: EntityPageHeaderView) {
-        guard let header = headerView.superview else { return }
-        makeRoomForReleaseCard(in: header)
-    }
-
     private static func applyLatestRelease(_ release: ArtistLatestRelease, to headerView: EntityPageHeaderView) {
         let date = release.date.map { ArtistLatestReleaseSource.cardDateFormat.string(from: $0) }
         let meta = release.trackCount > 0
@@ -1961,8 +1989,6 @@ enum EntityPageHeaderManager {
             // 苹果目录里的发布在 Spotify 里没有对应目标 ⇒ **不可点**（不留看得见点不动的控件）。
             isTappable: false
         )
-        // ★★ 2026-10-18：卡片一显出来就把页头补高（否则姓名/三颗上移 106pt，照片被吃掉一半）。
-        growHeaderForReleaseCard(headerView)
     }
 
     /// 页面里读到的卡片（「艺人之选」/「热门新歌」）—— 数据与目标都是那一格 ⇒ **可点**。
@@ -1981,7 +2007,6 @@ enum EntityPageHeaderManager {
             isTappable: releaseCardSource != nil && releaseCardSourceName == currentArtistName
         )
         // ★★ 2026-10-18：同上 —— 页头高度与卡片同一拍补上。
-        growHeaderForReleaseCard(headerView)
     }
 
     // MARK: - 「最新发布」：Spotify Web API 那条线（页面那一行是骨架时的数据源）
@@ -2136,7 +2161,6 @@ enum EntityPageHeaderManager {
         )
         // ★★ 2026-10-18 的纪律：显卡的那一把顺手把页头补高
         //   （否则姓名与三颗整体上移 106pt，满幅照片被吃掉一半）。
-        growHeaderForReleaseCard(headerView)
 
         let dateText = release.dateText ?? "-"
         writeDebugLog(
