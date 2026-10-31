@@ -579,6 +579,7 @@ enum EntityPageHeaderManager {
             cover: fullbleedPicture ?? (cover === fullbleed ? nil : cover),
             headerView: header,
             root: headerRoot,
+            anchored: listTop != nil,
             role: "playlist"
         )
         // 把三段高度打进日志（每页一次）：藏掉某一段之后留下的空白，靠它定位空在哪两段之间。
@@ -904,10 +905,15 @@ enum EntityPageHeaderManager {
     /// 还要**先看我们那一行字在不在页头里**（`root`）：页头收起时整块文字被搬到页头上面（屏幕外），
     /// 那时封面换算出来的底边会落到很远的下方，量出来的"重叠"能有几百 pt ⇒ drop 一路顶到上限，
     /// 内容被推下去一大截。
+    ///
+    /// `anchored`：我们的底边已经被锚在列表第一行上沿（`y = 底边 - 高度`）时，`coverDrop` 已经
+    /// 被那个 `y` 吸收掉了 —— 这时文字的自然位置就是 `headerView.textTop` 本身，**不能再减一次**
+    /// `current`，否则量出来的重叠会多出一个 drop，越量越大。
     private static func probeCoverOverlap(
         cover: UIView?,
         headerView: EntityPageHeaderView,
         root: UIView,
+        anchored: Bool,
         role: String
     ) {
         guard let cover, headerView.bounds.height > 1, headerView.window != nil else { return }
@@ -928,13 +934,17 @@ enum EntityPageHeaderManager {
         // 不能拿 `textTop > 0` 当判据（那种页会被整段跳过）。先问 `hasTitle`，再把 -1 夹成 0 继续量。
         guard headerView.hasTitle else { return }
         let current = coverDrop(of: headerView)
-        let naturalTextTop = max(0, headerView.textTop - current)
-        // 我们那一行字**不在页头里**（收起 / 正在收起）⇒ 没有"被封面压到"这回事，这一拍不动。
-        // 不加这一道，收起时那个换算出来的底边会把这个值顶到上限，内容被推下去一大截。
+        // **两边都在 `root` 里量**。这一条是关键：原来封面换算到 `headerView` 坐标、文字也用它自己的
+        // 坐标，而 `headerView` 的高度里就含 `coverDrop` ⇒ 它一变高，封面的换算值跟着变，"自然位置"
+        // 根本不稳定：量到重叠 → 加 drop → 下一拍量到更大的重叠 → 一路顶到 140pt 上限。
+        // 在 `root` 里量时，文字的绝对位置与 drop 无关（贴底排 + 底边固定）⇒ 量一次就收敛。
+        let naturalTextTop = anchored ? headerView.textTop : max(0, headerView.textTop - current)
         let textTopInRoot = headerView.convert(CGPoint(x: 0, y: naturalTextTop), to: root).y
+        // 我们那一行字**不在页头里**（收起 / 正在收起）⇒ 没有"被封面压到"这回事，这一拍不动。
         guard textTopInRoot >= -1, textTopInRoot <= root.bounds.height else { return }
-        let frame = cover.convert(cover.bounds, to: headerView)
-        guard frame.maxY > naturalTextTop + 1, frame.minY < headerView.bounds.height else {
+        let coverRect = cover.convert(cover.bounds, to: root)
+        let overlap = coverRect.maxY - textTopInRoot
+        guard overlap > 1, coverRect.minY < root.bounds.height else {
             // 自然位置下没有重叠 ⇒ 之前那截 drop 已经不需要了（多半是滚动中途量到的）。
             guard current > 2 else { return }
             objc_setAssociatedObject(
@@ -949,12 +959,11 @@ enum EntityPageHeaderManager {
             )
             return
         }
-        let overlap = frame.maxY - naturalTextTop
         let wanted = min(coverDropLimit, max(0, overlap))
         // 2pt 的滞回 —— 1pt 级的变化不算"需要挪"（那几个 pt 正是抖动的来源）。
         guard abs(wanted - current) > 2 else { return }
-        let coverBottom = Int(frame.maxY.rounded())
-        let textLine = Int(naturalTextTop.rounded())
+        let coverBottom = Int(coverRect.maxY.rounded())
+        let textLine = Int(textTopInRoot.rounded())
         logOnce(
             "coverOverlap_" + role + "_" + String(describing: ObjectIdentifier(headerView)),
             "\(role): the cover reaches \(coverBottom)pt but our text starts at \(textLine)pt"
@@ -1057,7 +1066,7 @@ enum EntityPageHeaderManager {
 
         // z 序与几何两道保险。
         raiseToTop(headerView, in: header, role: "album")
-        probeCoverOverlap(cover: cover, headerView: headerView, root: header, role: "album")
+        probeCoverOverlap(cover: cover, headerView: headerView, root: header, anchored: false, role: "album")
 
         headerView.update(title: texts.title, creator: texts.creator, length: texts.length, about: "")
 
@@ -1281,7 +1290,7 @@ enum EntityPageHeaderManager {
 
         // z 序与几何两道保险。
         raiseToTop(headerView, in: header, role: "artist")
-        probeCoverOverlap(cover: cover, headerView: headerView, root: header, role: "artist")
+        probeCoverOverlap(cover: cover, headerView: headerView, root: header, anchored: false, role: "artist")
 
         // 月听众那行是一颗开关（默认保留）。`meta` 仍算出来给日志用。
         headerView.update(
