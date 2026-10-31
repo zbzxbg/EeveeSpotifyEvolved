@@ -835,6 +835,13 @@ struct EeveeSpotify: Tweak {
             // ① `ExperimentFlagReplacements` 强制那三条服务端 flag（在任何版本都跑）；
             // ② 这里按 9.1.88 的真实形态 hook 那个 init（类/方法对不上就只打一行日志）。
             InstagramShareDestination.activateIfNeeded()
+
+            // ⚠️⚠️ 这个 `return` 把 `init()` 切成了两段 —— 它后面那句 "For other versions"
+            //   底下整段在 **9.1.x（本仓唯一的目标版本）上永远不会执行**。
+            //   已经栽过两次：2026-10-30 的 karaoke / SponsorBlock / 调试探针，以及
+            //   2026-10-30 的 beta 提示（`BetaVersionNotice` 写在函数最末尾 ⇒ 一次都没弹过，
+            //   2026-10-31 已删）。
+            //   ⇒ **凡是"所有版本都要跑"的东西，加在 return 之前（这里），不要只加在函数末尾。**
             return
         }
 
@@ -881,10 +888,5 @@ struct EeveeSpotify: Tweak {
         // activateSponsorBlock's `opts.enabled` check, for example), so
         // it's safe to call them unconditionally here too.
         activateSponsorBlock()
-
-        // ★ 2026-10-30（用户）：beta 版首次启动提示 —— 版本号带 `-beta` 时弹一次
-        //   （每个 beta 版本一次）。放在 init 最末尾：前面那些 hook 装完再排弹窗，
-        //   弹窗本身延后 5 秒，等 Spotify 首屏起来（见 `BetaVersionNotice`）。
-        BetaVersionNotice.scheduleIfNeeded()
     }
 }

@@ -116,7 +116,6 @@ spicy_cross_validation_description = "Fixes the case where the lyrics Spicy Lyri
 
 /* MARK: Premium PopUps */
 
-beta_version_warning = "You are using a beta build. This plugin is updated frequently, so beta features may be unstable. Please use the latest public release, or wait for the next public release.";
 have_premium_popup = "It looks like you have an active Premium subscription, so the tweak won't patch the data or restrict the use of Premium server-sided features. You can manage this in the EeveeSpotify settings.";
 
 high_audio_quality_popup = "Very high audio quality is server-sided and is not available with this tweak.";

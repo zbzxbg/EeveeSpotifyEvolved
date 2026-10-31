@@ -13,10 +13,6 @@ extension UserDefaults {
     /// ★ 2026-10-31：歌词**系统翻译**（Apple `Translation` 框架，纯本地）。见 `LyricsAutoTranslation`。
     private static let lyricsAutoTranslateKey = "lyricsAutoTranslate"
     private static let hasShownCommonIssuesTipKey = "hasShownCommonIssuesTip"
-    /// 上一次弹过 beta 提示的版本号（见 `BetaVersionNotice`）。
-    ///
-    /// 存版本号而不是 Bool：换一个新的 beta 会再提示一次，同一个 beta 反复冷启动只弹一次。
-    private static let hasShownBetaWarningVersionKey = "hasShownBetaWarningVersion"
     private static let hasPatchedBootstrapKey = "eeveeHasPatchedBootstrap"
     private static let iconNamePrettifyKey = "iconNamePrettify"
     private static let cleanShareLinksKey = "cleanShareLinks"
@@ -87,7 +83,6 @@ extension UserDefaults {
         lyricsOptionsKey,
         lyricsAutoTranslateKey,
         hasShownCommonIssuesTipKey,
-        hasShownBetaWarningVersionKey,
         hasPatchedBootstrapKey,
         iconNamePrettifyKey,
         cleanShareLinksKey,
@@ -222,16 +217,6 @@ extension UserDefaults {
         }
         set (hasShownCommonIssuesTip) {
             container.set(hasShownCommonIssuesTip, forKey: hasShownCommonIssuesTipKey)
-        }
-    }
-
-    /// 上一次弹 beta 提示时的版本号；空串表示还没弹过。
-    static var hasShownBetaWarningVersion: String {
-        get {
-            container.string(forKey: hasShownBetaWarningVersionKey) ?? ""
-        }
-        set (hasShownBetaWarningVersion) {
-            container.set(hasShownBetaWarningVersion, forKey: hasShownBetaWarningVersionKey)
         }
     }
 

@@ -110,7 +110,6 @@ spicy_cross_validation_description = "选项开启后会解决SpicyLyrics返回�
 
 /* MARK: Premium PopUps */
 
-beta_version_warning = "你当前使用的版本为beta版，由于本插件更新速度较快，beta版的功能并不稳定。推荐使用上一个公开发布版或等待下一个公开发布版本。";
 have_premium_popup = "看来您有一个真实有效的 Premium 订阅，因此此插件不会修补数据或限制 Premium 服务器端功能的使用。可以在 EeveeSpotify 设置中管理此操作。";
 
 high_audio_quality_popup = "超高这个播放品质是服务器端的功能，无法通过此插件获得。";
