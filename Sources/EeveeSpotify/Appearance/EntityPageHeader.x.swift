@@ -533,19 +533,21 @@ enum EntityPageHeaderManager {
             let needed = header.contentHeight(forWidth: headerRoot.bounds.width) + header.contentBottom
             height = max(height, needed)
         }
-        // **底边锚到"列表第一行上沿"**（只在没有 `PL.Header` 的生成歌单一族上开）。
-        // 那些页头的布局层（`HeaderContentLayout`）比页头真正占的高度高 ⇒ 内容贴着布局底边排、
-        // 就会伸进列表第一行。`visibleCells` 是 collection view 已经量好的格子，直接量它。
-        //
-        // 只在"确实比布局底边高、而且差得不算离谱"时锚过去：量到 0 / 负值或差几百 pt 说明这一拍
-        // 列表还没量好，硬锚会把内容甩到封面上。
-        let rawListTop = isPLHeader ? nil : firstRowTop(around: headerRoot, in: block)
+        // **底边锚到"列表第一行上沿"**（歌单页两种都开：普通歌单与生成歌单）。
+        // 我们这一块是**贴底排**的，底边就是"内容最低能到哪里"：
+        // · 普通歌单：`block` 底边 = `PL.Header` 底边 = 列表起点 ⇒ 用 `block` 底边；
+        //   原来是 `y = 0` + 高度里加 `coverDrop`，那一截会把内容**推到 block 下面的列表里**；
+        // · 生成歌单：`block` 所在的布局层比页头真正占的高度高 ⇒ 拿 `visibleCells` 量到的
+        //   第一行上沿当底边。
+        // 两者取**更小的那个**（内容既不能进列表、也不能掉出块底），`y` 由底边反推 ⇒
+        // `coverDrop` 只让我们的视图向上变高，不再把内容往下推。
+        let rawListTop = firstRowTop(around: headerRoot, in: block)
         let listTop = rawListTop.flatMap { top -> CGFloat? in
             let shift = block.bounds.height - (top + header.contentBottom)
             guard top > 20, shift > 4, shift <= 120 else { return nil }
             return top
         }
-        let bottom = listTop.map { $0 + header.contentBottom } ?? block.bounds.height
+        let bottom = min(block.bounds.height, listTop.map { $0 + header.contentBottom } ?? block.bounds.height)
         if let listTop {
             logOnce(
                 "listAnchor_" + String(describing: ObjectIdentifier(headerRoot)),
@@ -554,18 +556,12 @@ enum EntityPageHeaderManager {
                     + " (\(Int((block.bounds.height - bottom).rounded()))pt up)"
             )
         }
-        // ⚠️ 普通歌单页 `y` **恒为 0**（原来就是这样；`coverDrop` 靠"加高"把文字往下推，
-        // 改成负 y 会把那一段抵消掉）。只有兜底那条路才允许向上长。
         var frame = CGRect(
             x: round(x),
-            y: isPLHeader ? 0 : min(0, bottom - height),
+            y: bottom - height,
             width: headerRoot.bounds.width,
             height: height
         )
-        // 兜底那条路再让底边**精确**落在列表上沿（`min(0, …)` 只是不往上顶，底边本来由高度决定）。
-        if !isPLHeader, listTop != nil {
-            frame.origin.y = bottom - height
-        }
         if header.frame != frame { header.frame = frame }
 
         // z 序与几何两道保险。
@@ -579,7 +575,7 @@ enum EntityPageHeaderManager {
             cover: fullbleedPicture ?? (cover === fullbleed ? nil : cover),
             headerView: header,
             root: headerRoot,
-            anchored: listTop != nil,
+            anchored: true,
             role: "playlist"
         )
         // 把三段高度打进日志（每页一次）：藏掉某一段之后留下的空白，靠它定位空在哪两段之间。
