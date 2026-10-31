@@ -163,7 +163,6 @@ lyrics_source_auto = "自动选择";
 lyrics_source_auto_description = "自动选择:依次查询所有可用歌词源，最后使用当前歌曲下质量最高的歌词。";
 lyrics_source_auto_unavailable = "「自动选择」只在听歌页样式为「沉浸式」或「Apple Music式」时可用。如果要用它，请先在「听歌页」设置里切换样式。";
 lyrics_source_order = "歌词来源顺序";
-lyrics_source_order_section = "按这个顺序询问";
 lyrics_source_order_description = "从上到下依次查询这些来源。";
 lyrics_source_order_reset = "恢复默认顺序";
 lyrics_timing_word = "逐字";
@@ -194,7 +193,6 @@ lyrics_offset_save_song = "保存这条偏移";
 lyrics_offset_autosave_hint = "调整后自动保存";
 lyrics_offset_saved_empty = "还没有保存过歌词偏移。";
 lyrics_offset_saved_only_current = "当前播放这条的偏移已保存在上面一节；其它保存过的条目会列在这里。";
-lyrics_offset_saved_description = "这些值存在本机设置里，备份设置时会一起带走；换歌、换源、重开 App 都还在。";
 romanization_description = "单独设置每种语言的歌词是否罗马化。如果某种语言的歌词未开启罗马化选项，该语言的歌词会直接显示，不进行罗马化。";
 chinese_romanization = "中文歌词罗马化";
 japanese_romanization = "日语歌词罗马化";
@@ -484,7 +482,6 @@ home_large_title = "Apple Music 式主页";
 home_header_title = "主页";
 home_header_style = "首页顶部样式";
 home_header_original = "Spotify原生";
-home_header_style_description = "原样 = Spotify 默认；Apple Music 式 = 大标题样式；隐藏 = 不显示首页顶部条。";
 
 flag_catalog_search_placeholder = "按名称或 scope 过滤";
 flag_catalog_empty_result = "没有匹配的 Flag";
@@ -496,7 +493,7 @@ mini_bar_glass = "迷你播放条用液态玻璃";
 
 playlist_cover_section = "歌单封面";
 playlist_single_cover = "替换Spotify官方的四合一封面";
-playlist_single_cover_description = "选项开启后会替换Spotify四合一的歌单封面展示，替换为歌单第一首歌的封面(该功能测试中)。 ";
+playlist_single_cover_description = "选项开启后会替换Spotify四合一的歌单封面展示，替换为歌单第一首歌的封面。";
 
 entity_page_section = "专辑 / 歌单 / 艺人页";
 entity_page_dissolve = "替换Spotify的官方歌曲底色";
@@ -594,7 +591,7 @@ licenses_163musiclyrics_detail = "网易云 abroad 响应的形态与 cloudsearc
 licenses_lddc = "LDDC · pyqdes";
 licenses_lddc_detail = "酷狗(KRC)与QQ音乐(QRC)歌词解密的密钥字节与 DES 步骤顺序。LDDC 为 GPL-3.0-only，pyqdes 为 MIT。只取了算法，这里的 Swift 实现是自己写的。";
 licenses_taurus = "Taurus";
-licenses_taurus_detail = "「自动优选」的歌词源清单与「按顺序询问、保留最细时间轴」的规则来自 Taurus。Taurus 为 PolyForm Strict 1.0.0，不允许衍生作品：没有复制或翻译任何源码，规则是用 Swift 重写的。";
+licenses_taurus_detail = "「自动选择」的歌词源清单与「按顺序询问、保留最细时间轴」的规则来自 Taurus。Taurus 为 PolyForm Strict 1.0.0，不允许衍生作品：没有复制或翻译任何源码，规则是用 Swift 重写的。";
 
 // ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
 // 这些开关写的是 Spotify 的 **flag 覆盖**（`ios-messaging-reduceinterventions-impl` 那批），

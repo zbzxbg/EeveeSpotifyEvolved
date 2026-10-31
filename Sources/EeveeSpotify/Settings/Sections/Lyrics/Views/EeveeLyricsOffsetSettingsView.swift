@@ -184,10 +184,7 @@ struct EeveeLyricsOffsetSettingsView: View {
         //    （2026-10-23 实测：「incorrect argument label … have 'header:_:footer:'」）。
         Section(
             header: Text("lyrics_offset_saved".localized),
-            footer: VStack(alignment: .leading, spacing: 4) {
-                Text("lyrics_offset_saved_count".localizeWithFormat(savedEntries.count))
-                Text("lyrics_offset_saved_description".localized)
-            }
+            footer: Text("lyrics_offset_saved_count".localizeWithFormat(savedEntries.count))
         ) {
             if savedEntries.isEmpty {
                 Text(currentSongHasOverride

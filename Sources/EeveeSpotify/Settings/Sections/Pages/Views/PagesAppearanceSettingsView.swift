@@ -142,6 +142,9 @@ struct PagesAppearanceSettingsView: View {
             //    `Apple Music...`）：**不要再用 segmented**。三段式在 414pt 上放不下
             //    「Apple Music 式主页」，而且段标签只有状态名、没有"这是在设置什么"的说明。
             //    改成带标签的 Picker（列表里一行，点开才选三个状态）+ footer 解释三档语义。
+            // ★ 2026-10-31（用户：「感觉这三个没用了，代码和本地化都删掉」）：那句 footer
+            //    （`home_header_style_description`）连同键一起删了 —— 三个选项名本身
+            //    （Spotify原生 / Apple Music 式主页 / 隐藏首页顶部条）已经说清了各自是什么。
             Section {
                 Picker(selection: homeHeaderStyleBinding) {
                     Text("home_header_original".localized).tag(HomeHeaderStyle.system)
@@ -150,8 +153,6 @@ struct PagesAppearanceSettingsView: View {
                 } label: {
                     Text("home_header_style".localized)
                 }
-            } footer: {
-                Text("home_header_style_description".localized)
             }
 
             // ── 音乐库 ──────────────────────────────────────────────────────────────

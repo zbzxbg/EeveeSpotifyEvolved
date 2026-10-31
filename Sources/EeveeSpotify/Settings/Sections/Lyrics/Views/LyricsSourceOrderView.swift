@@ -21,6 +21,9 @@ struct LyricsSourceOrderView: View {
 
     var body: some View {
         List {
+            // ★ 2026-10-31（用户：「感觉这三个没用了」）：Section 头那句「按这个顺序询问」
+            //   已删（键 `lyrics_source_order_section` 一并删掉）—— 页标题就叫「歌词来源顺序」，
+            //   头里再写一遍是重复；规则只留 footer 一句。
             Section {
                 ForEach(order, id: \.self) { source in
                     HStack {
@@ -40,8 +43,6 @@ struct LyricsSourceOrderView: View {
                             + order.map(\.description).joined(separator: " → ")
                     )
                 }
-            } header: {
-                Text("lyrics_source_order_section".localized)
             } footer: {
                 Text("lyrics_source_order_description".localized)
             }
