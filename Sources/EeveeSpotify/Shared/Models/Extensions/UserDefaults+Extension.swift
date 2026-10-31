@@ -10,6 +10,8 @@ extension UserDefaults {
     private static let overwriteConfigurationKey = "overwriteConfiguration"
     private static let lyricsColorsKey = "lyricsColors"
     private static let lyricsOptionsKey = "lyricsOptions"
+    /// ★ 2026-10-31：歌词**系统翻译**（Apple `Translation` 框架，纯本地）。见 `LyricsAutoTranslation`。
+    private static let lyricsAutoTranslateKey = "lyricsAutoTranslate"
     private static let hasShownCommonIssuesTipKey = "hasShownCommonIssuesTip"
     /// 上一次弹过 beta 提示的版本号（见 `BetaVersionNotice`）。
     ///
@@ -83,6 +85,7 @@ extension UserDefaults {
         overwriteConfigurationKey,
         lyricsColorsKey,
         lyricsOptionsKey,
+        lyricsAutoTranslateKey,
         hasShownCommonIssuesTipKey,
         hasShownBetaWarningVersionKey,
         hasPatchedBootstrapKey,
@@ -151,6 +154,9 @@ extension UserDefaults {
     // 老备份里还是 `ngzhwm_neteaseOffsetByTrack` / `...TrackTitles` 这两个旧键；
     // 不登记它们，「导入备份」会把那批网易云偏移静默丢掉（迁移只读已经落盘的旧键）。
     + LyricsTimingOffset.legacyOwnedKeys
+    // 「自动优选的来源顺序」（2026-10-31）。键由 `LyricsSourceOrder` 自己拥有 ——
+    // 不登记的话，导入备份时用户排好的顺序会被静默丢掉（备份只碰白名单）。
+    + [LyricsSourceOrder.userDefaultsKey]
 
     static var musixmatchToken: String {
         get {
@@ -861,6 +867,25 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: playlistSingleCoverKey)
+        }
+    }
+
+    // MARK: - 歌词系统翻译（默认关）
+
+    /// 歌词**自动翻译**：源没给译文时，用 Apple 的 `Translation` 框架在手机上翻一遍，
+    /// 每行原文下面多一行译文（渲染层本来就有这条副行，见 `LyricLinesAdapter`）。
+    ///
+    /// **默认关** —— 它要用户自己在「设置 → App → 翻译 → 语言」里先下好两种语言，
+    /// 而且是个会改变歌词版面观感的功能，不该悄悄替所有人打开。
+    ///
+    /// 机制、对齐条件（只处理"每行都有时间轴且已按时间升序"的歌词）见
+    /// `Lyrics/LyricsAutoTranslation.swift` 与 `Lyrics/OnDeviceLyricsTranslation.swift`。
+    static var lyricsAutoTranslate: Bool {
+        get {
+            container.object(forKey: lyricsAutoTranslateKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: lyricsAutoTranslateKey)
         }
     }
 

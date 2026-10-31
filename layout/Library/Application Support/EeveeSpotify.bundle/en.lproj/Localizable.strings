@@ -38,7 +38,7 @@ lyrics_source = "Lyrics Source";
 lyrics_source_description = "Genius: Offers the widest song coverage, but the lyrics are not time-synced.
 LRCLIB: The most open service, offering time-synced lyrics. However, it lacks lyrics for many songs.
 Musixmatch: Provides time-synced lyrics for many songs, but you'll need a user token to use this source.";
-lyrics_additional_info = "Genius, NetEase, and PetitLyrics use fuzzy search, so some songs may have display errors or fail to find lyrics.";
+lyrics_additional_info = "Genius, NetEase, PetitLyrics, BiniLyrics, Unison, QQ Music and KuGou match by title and artist rather than by track ID, so some songs may have display errors or fail to find lyrics.";
 petitlyrics_description = "PetitLyrics: Provides Japanese lyrics.";
 spicylyrics_description = "Spicy Lyrics: Provides word-by-word lyrics and lyrics that some other lyrics sources do not have. Visit spicylyrics.org for more details.";
 spicylyrics_api_key = "Spicy Lyrics API Key";
@@ -58,6 +58,10 @@ lyrics_translated_by = "Translated by";
 lyrics_source_unknown = "source unknown";
 netease_description = "NetEase: Not recommended for users outside mainland China for now — NetEase still has unresolved problems that get in the way of normal use.";
 amll_description = "AMLL: Provides high-quality word-by-word lyrics and rich lyrics structure. Visit amll.dev for more details.";
+bini_description = "BiniLyrics: Apple Music's word-by-word TTML, collected by the community. Matched by title, artist and length.";
+unison_description = "Unison: hand-timed TTML. A small catalog, but the timing is done by hand.";
+qqmusic_description = "QQ Music: word-by-word (QRC) and line-by-line lyrics for the Mandarin and Cantonese catalogs.";
+kugou_description = "KuGou: word-by-word KRC for the Mandarin and Cantonese catalogs.";
 
 musixmatch_user_token = "Musixmatch User Token";
 user_token_placeholder = "Enter User Token or Paste Debug Info";
@@ -65,8 +69,8 @@ request_anonymous_token = "Request Anonymous Token";
 request_anonymous_token_description = "Tap “Request Anonymous Token” to request a token from Musixmatch without authorization.";
 anonymous_token_request_failed = "Failed to request an anonymous token.";
 
-ngzhwm_amll_preferred = "Prefer AMLL";
-ngzhwm_amll_preferred_description = "For this option to take effect, word-by-word lyrics must be enabled. When enabled, word-by-word lyrics are requested from AMLL first. If AMLL does not return word-by-word lyrics, it falls back to the lyrics source you selected yourself and that source's related settings.";
+amll_preferred = "Prefer AMLL";
+amll_preferred_description = "For this option to take effect, word-by-word lyrics must be enabled. When enabled, word-by-word lyrics are requested from AMLL first. If AMLL does not return word-by-word lyrics, it falls back to the lyrics source you selected yourself and that source's related settings.";
 
 genius_fallback = "Genius Fallback";
 genius_fallback_description = "If %@ fails to load, lyrics are loaded from Genius.";
@@ -150,28 +154,42 @@ organize_listening_queue = "Organize listening queue";
 payment_notice = "EeveeSpotify applies patches to unlock certain Premium features. It's free.";
 
 
-// ngzhwm
+// Lyrics options added by this fork. The keys used to carry an "ngzhwm_" prefix;
+// it was dropped on 2026-10-31 (2026-10-31 去掉 ngzhwm_ 前缀), so a key here is
+// just its own name — no prefix to match against.
 
 // `ngzhwm_title` removed: it had no code references, and zh-CN never had it.
-ngzhwm_disable_lyrics_feature = "Disable Lyrics Function";
-ngzhwm_disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
-ngzhwm_word_by_word_lyrics = "Enable Word-by-Word Lyrics";
-ngzhwm_word_by_word_lyrics_description = "Musixmatch, PetitLyrics, Spicy Lyrics, NetEase, and AMLL provide word-by-word lyrics services.";
-ngzhwm_better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
-ngzhwm_better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum.";
+disable_lyrics_feature = "Disable Lyrics Function";
+disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
+word_by_word_lyrics = "Enable Word-by-Word Lyrics";
+word_by_word_lyrics_description = "Musixmatch, PetitLyrics, Spicy Lyrics, NetEase, and AMLL provide word-by-word lyrics services.";
+better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
+better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum.";
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
-ngzhwm_inject_lyrics_card_element = "Add module 5 (the lyrics preview card)";
-ngzhwm_lyrics_entry_point_flag = "Lyrics entry point flag";
-ngzhwm_multi_level_fallback = "Multi-level Fallback";
-ngzhwm_multi_level_fallback_description = "Multi-level Fallback: lyrics are searched through multiple providers in this order: Musixmatch → PetitLyrics → LRCLIB → Genius. Musixmatch and PetitLyrics are given up to 5 seconds each, while LRCLIB and Genius are given up to 3 seconds each; if a provider has not returned lyrics within its time limit, the next provider is queried.";
-ngzhwm_netease_romaji_local = "Modify How NetEase Japanese Romaji Is Displayed";
-ngzhwm_netease_romaji_local_description = "For this option to take effect, \"Romanize Japanese Lyrics\" must be enabled. When this option is enabled, NetEase's Japanese romaji is handled by local Japanese romanization instead of being handed to NetEase. If NetEase returns word-by-word lyrics, this option has no effect.";
-ngzhwm_netease_hide_translation = "Hide NetEase Translation Button";
-ngzhwm_netease_hide_translation_description = "When enabled, the NetEase lyrics source will not display the lyrics translation button.";
+inject_lyrics_card_element = "Add module 5 (the lyrics preview card)";
+lyrics_entry_point_flag = "Lyrics entry point flag";
+lyrics_source_auto = "Auto Select";
+lyrics_source_auto_description = "Auto Select: every available provider is asked one after another, and the finest timing wins — word-by-word beats line-by-line, which beats plain text. A plain-text answer never ends the search. A word-by-word answer is used at once; a line-by-line one is kept while the remaining word-timed providers get up to 4 more seconds, so the lyrics card is not delayed any further. The order can be changed on the Lyrics Source Order page.";
+lyrics_source_auto_unavailable = "Auto Select is only available when the now-playing style is Immersive or Apple Music. Change the style on the Now Playing settings page to use it.";
+lyrics_source_order = "Lyrics Source Order";
+lyrics_source_order_section = "Asked in this order";
+lyrics_source_order_description = "Auto Select asks these providers one after another, from top to bottom. The order only decides who is asked first — it never decides who wins: a word-by-word answer always beats a line-by-line one, which always beats plain text. Drag the handles on the right to reorder.";
+lyrics_source_order_reset = "Reset to Default Order";
+lyrics_timing_word = "Word";
+lyrics_timing_line = "Line";
+lyrics_timing_plain = "Plain";
+netease_romaji_local = "Modify How NetEase Japanese Romaji Is Displayed";
+netease_romaji_local_description = "For this option to take effect, \"Romanize Japanese Lyrics\" must be enabled. When this option is enabled, NetEase's Japanese romaji is handled by local Japanese romanization instead of being handed to NetEase. If NetEase returns word-by-word lyrics, this option has no effect.";
+netease_hide_translation = "Hide NetEase Translation Button";
+netease_hide_translation_description = "When enabled, the NetEase lyrics source will not display the lyrics translation button.";
+lyrics_auto_translate = "Translate Lyrics On This iPhone";
+lyrics_auto_translate_description = "When the lyrics source gives no translation, the song is translated with Apple's Translation framework, on the phone. Nothing leaves the device. Requires iOS 18 or later, and both languages downloaded in Settings → Apps → Translate → Languages. Only songs whose lines are all time-synced are translated; a source's own translation is never replaced.";
 lyrics_offset_current_song = "Current song";
 lyrics_offset_clear_all = "Clear All Lyrics Offsets";
 lyrics_offset_description = "Applies to every lyrics source except Genius. Positive values show lyrics later; each entry is saved per song and per lyrics source, and survives track changes, source changes and restarts.";
 lyrics_offset_title = "Lyrics Offset";
+lyrics_offset_reset = "Reset This Song";
+lyrics_offset_done = "Done";
 settings_sub_lyrics_offset = "Per-song, per-source lyric timing";
 lyrics_offset_no_track = "Nothing to adjust yet — the current track has no lyrics from our sources. Open this page while playing a track whose lyrics load.";
 lyrics_offset_genius_excluded = "Genius does not use lyrics offset: its lyrics have no trustworthy timeline, so shifting them would not line anything up. Switch to another lyrics source to adjust.";
@@ -186,11 +204,11 @@ lyrics_offset_autosave_hint = "saved automatically";
 lyrics_offset_saved_empty = "No saved lyrics offsets yet. Play a track, then use the +/- buttons under Current Song; the value is stored automatically.";
 lyrics_offset_saved_only_current = "The current entry's offset is saved in the section above; other saved entries will be listed here.";
 lyrics_offset_saved_description = "These values live in this device's settings, are included in settings backups, and survive track changes, source changes and app restarts.";
-ngzhwm_romanization_description = "Configure romanization separately for each language. If romanization is not enabled for a language, its lyrics are displayed as-is without romanization.";
-ngzhwm_chinese_romanization = "Romanize Chinese Lyrics";
-ngzhwm_japanese_romanization = "Romanize Japanese Lyrics";
-ngzhwm_korean_romanization = "Romanize Korean Lyrics";
-ngzhwm_lyrics_unavailable = "No lyrics found";
+romanization_description = "Configure romanization separately for each language. If romanization is not enabled for a language, its lyrics are displayed as-is without romanization.";
+chinese_romanization = "Romanize Chinese Lyrics";
+japanese_romanization = "Romanize Japanese Lyrics";
+korean_romanization = "Romanize Korean Lyrics";
+lyrics_unavailable = "No lyrics found";
 lyrics_looking_up = "Looking for lyrics…";
 lyrics_no_timeline = "These lyrics have no timing";
 track_mismatch = "The track changed while lyrics were loading. Play it again to fetch lyrics.";
@@ -583,6 +601,10 @@ licenses_lyricify = "Lyricify Lyrics Helper";
 licenses_lyricify_detail = "The NetEase search strategy (old search first, eapi cloudsearch fallback, the title/artist/album query ladder, and weighted title/artist/album/duration matching) is modelled on WXRIW/Lyricify-Lyrics-Helper, Apache-2.0. No source code was copied.";
 licenses_163musiclyrics = "163MusicLyrics";
 licenses_163musiclyrics_detail = "The NetEase abroad response shape and the cloudsearch endpoint were identified with reference to jitwxs/163MusicLyrics, Apache-2.0. No source code was copied.";
+licenses_lddc = "LDDC · pyqdes";
+licenses_lddc_detail = "The key bytes and the order of the DES steps for the KuGou (KRC) and QQ Music (QRC) lyric decryption. LDDC is GPL-3.0-only, pyqdes is MIT. Only the algorithm was taken; the Swift implementation here is our own.";
+licenses_taurus = "Taurus";
+licenses_taurus_detail = "The list of lyric providers and the ask-in-order, keep-the-finest-timing rule behind Auto Select. Taurus is PolyForm Strict 1.0.0, which does not allow derivative works: no source code was copied or translated, the rules were reimplemented from scratch in Swift.";
 
 // ── Reduce interventions (2026-10-03) ─────────────────────────────────────────
 // These switches write Spotify **flag overrides** (the ios-messaging-reduceinterventions-impl

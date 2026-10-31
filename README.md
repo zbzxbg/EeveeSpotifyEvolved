@@ -4,7 +4,7 @@
 
 Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass look for Spotify on iOS.
 
-[![iOS](https://img.shields.io/badge/iOS-16.1%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
+[![iOS](https://img.shields.io/badge/iOS-17.4%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
 [![Spotify](https://img.shields.io/badge/Spotify-9.1.88-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/License-GPL--3.0-2C6EDB?style=for-the-badge)](LICENSE)
 
@@ -23,8 +23,8 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 ### Lyrics
 
-- **8 sources** — Spicy Lyrics, NetEase, AMLL, Musixmatch, PetitLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
-- **Fallback chain** — pick the order in the lyrics settings.
+- **12 sources** — Spicy Lyrics, AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
+- **Auto Select** — asks the sources in an order you choose and keeps the finest timing: word-by-word beats line-by-line, which beats plain text. A plain-text answer never ends the search.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling.
 - **Romanization** — Chinese, Korean and Japanese can be shown or hidden independently.
 
@@ -37,7 +37,11 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 <details>
 <summary>Lyrics source details</summary>
 
-- The default chain is `Musixmatch → PetitLyrics → LRCLIB → Genius`; you can also choose AMLL first with Genius as fallback.
+- The default order is `AMLL → Spicy Lyrics → PetitLyrics → NetEase → QQ Music → KuGou → Unison → Musixmatch → BiniLyrics → LRCLIB → Genius`. Drag to reorder it under Settings → Lyrics → Lyrics Source Order.
+- The order only decides **who is asked first**; it never decides who wins. A word-by-word answer always beats a line-by-line one, which always beats plain text.
+- With word-by-word lyrics on, Auto Select keeps looking for a word-timed answer for up to 4 seconds after the first line-timed one. That cap exists so the lyrics card is not delayed past the point where it can still be built.
+- Auto Select is only offered when the now-playing style is **Immersive** or **Apple Music**. With Spotify's own layout the lyrics go straight into Spotify's card, so a single source is used instead.
+- Word-timed sources: Spicy Lyrics, AMLL, PetitLyrics, NetEase (yrc), QQ Music (QRC), KuGou (KRC), Unison, Musixmatch (richsync), BiniLyrics, Apple Music TTML. LRCLIB is line-timed, Genius is plain text.
 - The Apple Music official TTML source is under Settings → Experiments. It needs your own `media-user-token`, because Apple has no public lyrics API.
 
 </details>
@@ -74,7 +78,7 @@ The IPA pipelines bundle `Orion.framework` into the app, since a sideloaded app 
 
 ## Requirements
 
-- iOS 16.1 or later (iOS 26+ recommended for the liquid-glass look)
+- iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
 - Spotify 9.1.88 (current public release: [`v1.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases))
 
 Verified on: iPhone 11 · Spotify 9.1.88 · iOS 27.0.1 · certificate-signed · LCSign · rootless deb.
@@ -122,6 +126,8 @@ ALLOW_LIQUID_GLASS=0 ./build-ipa-local.sh /path/to/Spotify-vanilla.ipa
 
 - [whoeevee](https://github.com/whoeevee) — the original EeveeSpotify project.
 - [SideloadLabs](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) — the Spicy Lyrics provider, logging and export.
+- [LDDC](https://github.com/chenmozhijin/LDDC) and [pyqdes](https://github.com/naiyQAQ/pyqdes) — the key bytes and step order for the KuGou (KRC) and QQ Music (QRC) lyric decryption.
+- [Taurus](https://github.com/samj-exe/taurus) — the provider list and the "ask in order, keep the finest timing" idea. Taurus is PolyForm Strict: **no code was copied**; see [docs/CREDITS.md](docs/CREDITS.md).
 
 Full list of credits and licensing notes: [docs/CREDITS.md](docs/CREDITS.md).
 

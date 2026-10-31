@@ -49,7 +49,7 @@ struct EeveeDebugSettingsView: View {
     @ViewBuilder private func injectLyricsCardElementSection() -> some View {
         Section {
             Toggle(
-                "ngzhwm_inject_lyrics_card_element".localized,
+                "inject_lyrics_card_element".localized,
                 isOn: $viewModel.injectLyricsCardElement
             )
         }
@@ -59,7 +59,7 @@ struct EeveeDebugSettingsView: View {
     @ViewBuilder private func lyricsEntryPointFlagSection() -> some View {
         Section {
             Toggle(
-                "ngzhwm_lyrics_entry_point_flag".localized,
+                "lyrics_entry_point_flag".localized,
                 isOn: $viewModel.lyricsEntryPointFlag
             )
         }

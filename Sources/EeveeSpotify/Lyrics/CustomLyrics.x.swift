@@ -53,9 +53,17 @@ private func lyricsRepository(for source: LyricsSource) -> LyricsRepository {
         return NeteaseLyricsRepository.shared
     case .amllTtml:
         return amllTtmlLyricsRepository
+    case .bini:
+        return BiniLyricsRepository.shared
+    case .unison:
+        return UnisonLyricsRepository.shared
+    case .qqMusic:
+        return QQMusicLyricsRepository.shared
+    case .kugou:
+        return KuGouLyricsRepository.shared
     case .appleMusicOfficialTtml:
         return appleMusicTtmlLyricsRepository
-    case .notReplaced, .multiLevel:
+    case .notReplaced, .autoSelect:
         // Never actually reached — callers filter these out beforehand.
         return geniusLyricsRepository
     }
@@ -191,12 +199,12 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     // 已移除：`forcedLyricsPayload` 排障短路（连同它用的 `forcedGoodLines`）。
     // 加入之后出现稳定复现的启动崩溃，见 `UserDefaults+Extension.swift` 末尾的说明。
 
-    // lyricsSource == .multiLevel -> 固定顺序多级回退（并发 + 超时）
+    // lyricsSource == .autoSelect -> 自动优选（按时间轴质量挑，见 `LyricsAutoSelect`）
     // 其它来源 -> 用户选择的单一源 + 可选 Genius 回退
 
     // 署名先清空：否则"上一次问的是谁"会残留到这一次的失败路径上。
     // 两条分支都会在真正发请求之前写回它（单源在 `requestSingleSource` 入口，
-    // 多级回退在下面那一行）。
+    // 自动优选在下面那一行）。
     lastRequestedLyricsSourceDescription = ""
 
     // ★★ 2026-10-17「设置 → 实验 → 启用Apple Music官方TTML歌词」（默认关）：
@@ -205,7 +213,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     //   上面那些设置**一个都不看**：
     //     · 歌词来源（`UserDefaults.lyricsSource`）；
     //     · 「AMLL 优先」、「Genius 回退」；
-    //     · 「多级回退」那条链；
+    //     · 「自动优选」那条链；
     //     · 各来源自己的配置（Spicy key / Musixmatch 令牌 / LRCLIB 地址 …）；
     //     · 本文件里那两个实验（PetitLyrics→NetEase、AMLL 模糊搜索）。
     //   失败也**不兜底**：不切到用户选的源、不兜 Genius —— 这正是设置页那句
@@ -237,8 +245,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     //   `POST /query`：那条路的响应外壳写着只授权官方客户端与其公开 fork，第三方应用用它
     //   属于条款 §5 的"绕过 key 体系"，而且每首歌都要先抓 Spotify 的 access token。
     //
-    //   为什么兜底给 Musixmatch：它本来就在多级回退链的第一位
-    //   （`[.musixmatch, .petit, .lrclib, .genius]`），方向与"用户自己选的源失败时"一致。
+    //   为什么兜底给 Musixmatch：它在自动优选链路里也一直排在前列
+    //   （`LyricsAutoSelect.chain()`），方向与"用户自己选的源失败时"一致。
     //
     //   ⚠️ 两个连带后果都必须在代码里处理，否则观感是"设置没生效"：
     //     ① 屏幕上显示的提供者会变成 Musixmatch —— 这是**对的**，词确实是它给的；
@@ -254,95 +262,19 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         spicyLyricsKeyMissingFallback = true
     }
 
-    if source == .multiLevel {
+    if source == .autoSelect {
 
-        writeDebugLog("[Lyrics] Multi-level fallback enabled")
+        writeDebugLog("[Lyrics] Auto select enabled")
 
         // ⚠️ 这一段**不经过 `requestSingleSource`**，所以必须自己写这个署名 ——
         // 否则它一直是空串，占位 payload 的 `providedBy` 只会显示成裸的
         // "EeveeSpotify"（真机 2026-09-26 日志：`最後の希望 - CYPARISS` 四源全败，
         // 卡片底部只有 `EeveeSpotify`，看不出是哪个环节没找到词）。
-        // 多级回退不是"某一个源"，所以署这条链本身（本地化后 = "多级回退"）。
-        lastRequestedLyricsSourceDescription = LyricsSource.multiLevel.description
+        // 自动优选不是"某一个源"，所以署这条链本身（本地化后 = "自动优选"）。
+        lastRequestedLyricsSourceDescription = LyricsSource.autoSelect.description
 
-        let attempts: [LyricsSource] = [.musixmatch, .petit, .lrclib, .genius]
-        for (index, source) in attempts.enumerated() {
-            writeDebugLog("[Lyrics] Attempt \(index + 1)/\(attempts.count): \(source.description)")
-            let isLastAttempt = index == attempts.count - 1
-            // 每个源的等待上限。⚠️ Genius 从 3s 提到 5s（与 MxM/PL 齐平）：
-            // 它自己最少要打两个接口（`/search/song` → `/songs/{id}`，各自上限 10s），
-            // 3s 那一档经常是"超时被跳过"而不是"被评估"—— 2026-09-26 多级回退那场
-            // （`eeveespotify_debug.log`）里 `[Lyrics] Genius timed out after 3.0s`
-            // 出现两次，而同一场里 Genius 又有正常出词的例子
-            // （`[Genius] Using "Don't Hesitate" — 28 line(s)`）。
-            // 这是**按次随机**的失败源：同一首歌这次被砍、下次可能就答完了，
-            // 表现正是"多级回退的 Genius 一会好使一会不好使"。
-            // 代价：最坏情况这条路的总等待从 16s 变 18s（5+5+3+5），都是上限不是常态。
-            let requestTimeout: TimeInterval = source == .lrclib ? 3.0 : 5.0
-
-            let semaphore = DispatchSemaphore(value: 0)
-            var resultDto: LyricsDto?
-            var requestError: Error?
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    resultDto = try lyricsRepository(for: source).getLyrics(searchQuery, options: options)
-                } catch {
-                    requestError = error
-                }
-                semaphore.signal()
-            }
-
-            let waitResult = semaphore.wait(timeout: .now() + requestTimeout)
-
-            if waitResult == .timedOut {
-                writeDebugLog("[Lyrics] \(source.description) timed out after \(requestTimeout)s")
-                // Genius 失败（含超时）不再兜底为空歌词，统一走下面的抛错逻辑
-                if index == 0 { lyricsState.fallbackError = .unknownError }
-                if isLastAttempt { throw LyricsError.unknownError } else { continue }
-            }
-
-            if let dto = resultDto {
-                writeDebugLog("[Lyrics] \(source.description) returned \(dto.lines.count) line(s)")
-                // 偏移同样在这里施加（与 `makeLyrics` 同一条口径），并用返回的那一份造 payload。
-                let shifted = storeLyricsDto(dto, source: source)
-                lyricsState.isEmpty = dto.lines.isEmpty
-                lyricsState.wasRomanized = dto.romanization == .romanized
-                    || dto.romanization == .canBeRomanized
-                lyricsState.loadedSuccessfully = true
-
-                return Lyrics.with {
-                    $0.data = shifted.toSpotifyLyricsData(
-                        // `providedBy` 现在优先用 dto 的 `providerCredit`（含 Spicy Lyrics 的
-                        // 社区贡献者）；这里传的源名只是两者都空时的兜底。
-                        source: source.description,
-                        useInstrumentalPlaceholder: source != .genius
-                    )
-                }
-            } else if let error = requestError {
-                writeDebugLog("[Lyrics] \(source.description) failed: \(error)")
-                let lyricsError = error as? LyricsError
-                if source != .genius {
-                    if index == 0 { lyricsState.fallbackError = lyricsError ?? .unknownError }
-                    handleLyricsErrorPopUp(lyricsError)
-                }
-
-                // Genius 失败（含查无此曲）直接抛出，不再兜底为空歌词
-                if isLastAttempt {
-                    throw error
-                } else {
-                    continue
-                }
-            } else {
-                if isLastAttempt {
-                    throw LyricsError.unknownError
-                } else {
-                    continue
-                }
-            }
-        }
-
-        throw LyricsError.unknownError
+        let picked = try autoSelectLyrics(searchQuery: searchQuery, options: options)
+        return makeLyrics(from: picked.dto, source: picked.source)
 
     } else {
 
@@ -460,6 +392,148 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     }
     }
 
+    // MARK: - 自动优选（取代多级回退）
+
+    /// 按 `LyricsAutoSelect.chain()` 的顺序逐个问，保留**时间轴最细**的那一份。
+    ///
+    /// 与旧「多级回退」的区别只有一条，但就是这一条：**先答出来的不再等于被采用**。
+    /// 先到的纯文本 / 逐行歌词先留在手里，链路继续往下问 ——
+    /// 直到拿到逐字歌词，或者为「升级」预留的预算用完（见 `LyricsAutoSelect.shouldStop`）。
+    ///
+    /// 为什么不做成并发：这几个仓库各自持有 `URLSession` / `NSCache` / 令牌刷新状态
+    /// （`AnonymousTokenHelper`），并发拉起来要逐个确认线程安全，而真机没法在本机验证。
+    /// 串行 + 预算上限已经能达到「逐字优先」的目的，风险小得多。
+    ///
+    /// - Returns: 保留下来的一份（`dto` 还没施加时间轴偏移 —— 那是 `makeLyrics` 的事）。
+    /// - Throws: 一个源都没答上来时，抛**第一个**错误（保留"为什么没词"的原始原因，
+    ///   而不是统一成 `unknownError`）。
+    private func autoSelectLyrics(
+        searchQuery: LyricsSearchQuery,
+        options: LyricsOptions
+    ) throws -> LyricsAutoSelectPick {
+        let startedAt = Date()
+        let chain = LyricsAutoSelect.chain()
+        var best: LyricsAutoSelectPick?
+        var firstError: Error?
+
+        writeDebugLog(
+            "[Lyrics] auto select chain: \(chain.map(\.description).joined(separator: " → "))"
+                + " (wanted \(LyricsAutoSelect.wantedTier.logName))"
+        )
+
+        for (index, source) in chain.enumerated() {
+            let remaining = Array(chain.dropFirst(index + 1))
+            let elapsed = Date().timeIntervalSince(startedAt)
+
+            if LyricsAutoSelect.shouldStop(best: best, elapsed: elapsed, remaining: remaining) {
+                break
+            }
+
+            // Spicy Lyrics 没有客户端密钥时那条路是**必然失败**的（仓库自己会抛
+            // `missingSpicyKey`）。这里提前跳过，既不产生网络请求，也不在日志里留一行
+            // 看起来像"这个源没词"的失败记录。
+            if source == .spicy, !UserDefaults.hasSpicyLyricsApiKey {
+                writeDebugLog("[Lyrics] auto select: Spicy Lyrics skipped — no client key")
+                continue
+            }
+
+            // 这一跳最多等多久：单源上限、总预算余额、以及（手里已有逐行时的）升级预算，
+            // 三者取最小。少了最后一项，一次慢请求就能把"最多再等 4 秒"变成 9 秒。
+            var timeout = min(
+                LyricsAutoSelect.timeout(for: source),
+                LyricsAutoSelect.totalBudget - elapsed
+            )
+            if let best, best.tier == .line, LyricsAutoSelect.wantsWordTiming {
+                timeout = min(timeout, LyricsAutoSelect.upgradeBudget - elapsed)
+            }
+            guard timeout > 0 else {
+                writeDebugLog("[Lyrics] auto select: budget spent, stopping before \(source.description)")
+                break
+            }
+
+            writeDebugLog(
+                "[Lyrics] auto select \(index + 1)/\(chain.count): \(source.description)"
+                    + " (timeout \(String(format: "%.1f", timeout))s)"
+            )
+
+            let semaphore = DispatchSemaphore(value: 0)
+            var resultDto: LyricsDto?
+            var requestError: Error?
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    resultDto = try lyricsRepository(for: source).getLyrics(searchQuery, options: options)
+                } catch {
+                    requestError = error
+                }
+                semaphore.signal()
+            }
+
+            if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+                writeDebugLog("[Lyrics] auto select: \(source.description) timed out after \(timeout)s")
+                if firstError == nil { firstError = LyricsError.unknownError }
+                continue
+            }
+
+            if let dto = resultDto {
+                // 纯音乐是**结论**，不是"没有词" —— 立刻收工，不必再问后面的源。
+                // （与 Taurus 同一条：`if (fresh.instrumental) { merged.instrumental = YES; finish; }`）
+                if dto.isInstrumental {
+                    writeDebugLog("[Lyrics] auto select: \(source.description) says the track is instrumental")
+                    return LyricsAutoSelectPick(
+                        dto: dto,
+                        source: source,
+                        tier: .untimed,
+                        elapsed: Date().timeIntervalSince(startedAt)
+                    )
+                }
+
+                // 空行 = 这个源其实没答上来（"查无此曲"）。旧的多级回退会把这种答案
+                // 当成成功、直接终止链路 —— 于是后面明明有词的源一个都没被问到。
+                if dto.lines.isEmpty {
+                    writeDebugLog(
+                        "[Lyrics] auto select: \(source.description) returned 0 line(s) — treated as no answer"
+                    )
+                } else {
+                    let tier = LyricsAutoSelect.tier(of: dto)
+                    let pick = LyricsAutoSelectPick(
+                        dto: dto,
+                        source: source,
+                        tier: tier,
+                        elapsed: Date().timeIntervalSince(startedAt)
+                    )
+                    let better = LyricsAutoSelect.isBetter(pick, than: best)
+                    writeDebugLog(
+                        "[Lyrics] auto select: \(source.description) returned \(dto.lines.count) line(s),"
+                            + " \(tier.logName) — \(better ? "kept" : "not better than what we already have")"
+                    )
+                    if better { best = pick }
+                }
+            } else if let requestError {
+                // 自动优选模式下**不弹**任何源自己的配置弹窗：用户没有"选中"过其中任何一个，
+                // 弹一句"请检查 Musixmatch 令牌"只会把他引到一个他没打算用的源上。
+                // （旧的多级回退对第 0 跳弹过，那是个 bug 级的观感问题。）
+                writeDebugLog("[Lyrics] auto select: \(source.description) failed: \(requestError)")
+                if firstError == nil { firstError = requestError }
+            }
+        }
+
+        if let best {
+            writeDebugLog(
+                "[Lyrics] auto select picked \(best.source.description)"
+                    + " (\(best.tier.logName), \(best.dto.lines.count) line(s),"
+                    + " \(String(format: "%.2f", best.elapsed))s)"
+            )
+            return best
+        }
+
+        // 一个源都没答上来。`fallbackError` 决定「报告问题」那颗按钮显不显示，
+        // 所以只在**全军覆没**时写 —— 有结果时写它会让按钮莫名其妙地出现。
+        lyricsState.fallbackError = (firstError as? LyricsError) ?? .unknownError
+        if let firstError { throw firstError }
+        throw LyricsError.unknownError
+    }
+
     // MARK: - 单源请求
 
     /// 一次单源请求的产物：歌词数据 + **实际**产出它的源。
@@ -536,7 +610,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             // 这两件事的不可分读成了"Genius 回退时好时坏"）。
             //
             // 门 1：来源本来就是 Genius —— 回退到自己没有意义（设置页对 Genius /
-            //   多级回退来源也不显示那个开关）。以前这里会真的再打一次 Genius 请求：
+            //   自动优选来源也不显示那个开关）。以前这里会真的再打一次 Genius 请求：
             //   2026-09-26 日志 2 里那句自相矛盾的
             //   `[Lyrics] Genius failed — falling back to Genius` 就是这么来的。
             if source == .genius {
@@ -572,7 +646,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             // 网易云没词 → Genius 搜到 1 条但没可用行 → 卡面却写着
             // `歌词提供者：NetEase`，用户由此以为"根本没回退"。
             //
-            // 口径与成功路径一致：**最后被问的那个源**（多级回退那条约链先例见 §33）。
+            // 口径与成功路径一致：**最后被问的那个源**（多级回退时代留下的同一条口径，见 §33）。
             lastRequestedLyricsSourceDescription = LyricsSource.genius.description
 
             do {
@@ -708,7 +782,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         // 要把提示加回来：恢复下面那行 `LyricsLineDto(content: "…_hint".localized)`，
         // 并在 en / zh-CN 两个 `Localizable.strings` 里补回该 key。
         var placeholderLines = [
-            LyricsLineDto(content: "ngzhwm_lyrics_unavailable".localized)
+            LyricsLineDto(content: "lyrics_unavailable".localized)
         ]
         if let note, !note.isEmpty {
             placeholderLines.append(LyricsLineDto(content: note))
@@ -780,7 +854,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     ///   3. `currentLyricsVersion` 自增并通知逐词 overlay 重挂。
     ///
     /// ⚠️ 为什么返回 dto：注入给 Spotify 的 payload 是由**调用方**用这份 dto 现造的
-    ///    （`makeLyrics` / 多级回退那一段），如果只改 `currentLyricsDto` 而不把平移过的
+    ///    （`makeLyrics` / 自动优选那一段），如果只改 `currentLyricsDto` 而不把平移过的
     ///    那一份交回去，原生歌词页与两个自绘 overlay 会差一个偏移量。
     ///
     /// 以前第 1 步散在 `getLyricsDataForCurrentTrack` 的**末尾**（在 dto 写完之后），
@@ -871,6 +945,13 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         currentLyricsContributors = dto.providerContributors
         currentLyricsVersion += 1
         writeDebugLog("[Lyrics] provider: \(dto.providerName)")
+
+        // ★★ 2026-10-31（用户：「只做系统翻译」）：源**没给译文**、而开关打开时，
+        //   在后台用 Apple 的 `Translation` 框架翻一遍；翻完会自己把 `currentLyricsDto`
+        //   补上 `translation` 并**再加一次**版本号（见 `LyricsAutoTranslation`）。
+        //   ⚠️ 放在版本号自增**之后**：那一拍 overlay 先用原文把版面立起来，
+        //     译文到了只是多一行副行，不会出现"空页等翻译"。
+        LyricsAutoTranslation.considerAfterLoad()
 
         // 数据到达即刷新逐词 overlay：9.1.x 上内嵌宿主是 NPV，
         // 它只在进入正在播放页时出现一次，不会因为这首歌词到了再来一次。

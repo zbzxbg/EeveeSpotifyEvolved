@@ -462,6 +462,18 @@ struct EeveeSpotify: Tweak {
         //   v1 **只作用于歌单页**，认不出页头就什么都不做（见 `EntityPageHeader.x.swift`）。
         activateEntityPageHeader()
 
+        // ★★ 2026-10-31（`Spotify-2026-10-31-094701.ips`）：艺人简介卡里点「翻译」会把 App 打崩 ——
+        //   那张卡直接挂在 window 上、没有 VC 祖先，系统的 `-[UITextInputController _translate:]`
+        //   找不到 VC 就 NSAssert。这条只拦"没有 VC 祖先"的文本框（见 `EntityPageHeaderHooks.x.swift`）。
+        activateArtistBioTranslateGuard()
+
+        // ★★ 2026-10-31（用户：「歌词偏移放到听歌页，右上角那个按钮」）：
+        //   播放页 `⋯` 弹出的是一张 sheet（`ContextMenu_InternalImpl.ContextMenuViewController`）——
+        //   在它的**表尾**挂一行「歌词偏移」，点开一张 ±25ms 的紧凑面板。
+        //   不接管重画整张菜单（那是 taurus 的做法，871 行，换一版就整块失效）；
+        //   认不出「这是播放器的菜单」就什么都不做，只留一行日志。
+        activatePlayerMenuOffsetRow()
+
         // ★ 2026-10-13（用户看 pw 的截图）：「Home 那几个小方框的底色会跟着封面的样子跑」——
         //   借鉴 spoti.pw **v0.21.1** 的 `Redesigned/Home/HomeTiles.m`（GPL-3.0），实现见
         //   `Appearance/HomeShortcutTiles.x.swift`。认不出卡片就什么都不做，

@@ -230,6 +230,21 @@ jobs:
                  -o lrclib-line-splitting-tests
           ./lrclib-line-splitting-tests
 
+      # 2026-10-31：新接的四个源（BiniLyrics / Unison / QQ 音乐 / 酷狗）都是"按名字搜、
+      # 自己在结果里挑一条"。挑错的代价是把**别人的词**配到这首歌上（翻唱 / Live / 同曲异名），
+      # 而且用户看不出来 —— 所以那四条判据（归一化 / 主艺人 / 歌手互相包含 / 时长容差）
+      # 必须钉死。`LyricsMatch.swift` 只依赖 Foundation，所以能进这里。
+      #
+      # ⚠️ 这一步还有第二重意义：本机没有 Swift 工具链，`LyricsMatch.swift` 是这一轮
+      #   新增的文件里唯一能在打包之前被 `swiftc` **类型检查**过的（其余几个都拖着
+      #   LyricsDto / Compression，进不来）。
+      - name: Lyrics match (title / artist / length)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/LyricsMatch.swift \
+                 Tests/LyricsMatch/main.swift \
+                 -o lyrics-match-tests
+          ./lyrics-match-tests
+
       # 2026-10-17：「SpicyLyrics 交叉验证」的**补词判据**（`LyricsCensorFill`）。
       # 三件事必须钉住：
       #   ① 检测正则 —— 上游的 `\b\*{3,}\b` 实测只命中 `f***k`，`my **** line` 一个都

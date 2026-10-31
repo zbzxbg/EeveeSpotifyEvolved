@@ -54,8 +54,28 @@ extension EeveeLyricsSettingsView {
         text.append("\n")
         text.append("amll_description".localized)
 
+        // ★ 2026-10-31：Taurus 有、我们原来缺的四个源。顺序与选择器里一致。
         text.append("\n")
-        text.append("ngzhwm_multi_level_fallback_description".localized)
+        text.append("bini_description".localized)
+
+        text.append("\n")
+        text.append("unison_description".localized)
+
+        text.append("\n")
+        text.append("qqmusic_description".localized)
+
+        text.append("\n")
+        text.append("kugou_description".localized)
+
+        // ★ 2026-10-31（用户）：「听歌页样式是 spotify 原生时，自动优选不可选择」。
+        //   选项本身会被滤掉（见 `lyricsSourceSection`），所以这里也不能再介绍它 ——
+        //   换成一句"为什么没有它"，否则用户只会以为功能丢了。
+        text.append("\n")
+        if LyricsSource.autoSelect.isAvailableInCurrentNowPlayingStyle {
+            text.append("lyrics_source_auto_description".localized)
+        } else {
+            text.append("lyrics_source_auto_unavailable".localized)
+        }
         
         text.append("\n\n")
         text.append("lyrics_additional_info".localized)
@@ -86,22 +106,40 @@ extension EeveeLyricsSettingsView {
                     "lyrics_source".localized,
                     selection: lyricsSourceBinding
                 ) {
-                    ForEach(LyricsSource.allCases, id: \.self) { lyricsSource in
+                    // ★ 2026-10-31：听歌页样式为「Spotify 原生」时**不提供**「自动优选」
+                    //   （`isAvailableInCurrentNowPlayingStyle`）。SwiftUI 的 Picker 不能单独
+                    //   禁用某一行，所以这里直接把它滤掉，并在 footer 里说明原因。
+                    ForEach(
+                        LyricsSource.allCases.filter(\.isAvailableInCurrentNowPlayingStyle),
+                        id: \.self
+                    ) { lyricsSource in
                         Text(lyricsSource.description).tag(lyricsSource)
                     }
                 }
 
-                // 多级回退链路包含 Musixmatch / LRCLIB，所以这两项也要能配置。
-                if viewModel.lyricsSource == .musixmatch || viewModel.lyricsSource == .multiLevel {
+                // ★ 2026-10-31（用户）：「金牛座那边可以自己排序歌词来源」——
+                //   顺序只对「自动优选」有意义，所以只在选中它时出现。
+                if viewModel.lyricsSource == .autoSelect {
+                    NavigationLink(destination: LyricsSourceOrderView()) {
+                        HStack {
+                            Image(systemName: "arrow.up.arrow.down")
+                            Text("lyrics_source_order".localized)
+                        }
+                    }
+                }
+
+                // 自动优选链路包含 Musixmatch / LRCLIB / Spicy Lyrics，
+                // 所以这三项的配置都要能在这里改 —— 否则用户选了「自动优选」
+                // 就再也改不到 MxM 令牌、LRCLIB 地址与 Spicy 密钥了。
+                if viewModel.lyricsSource == .musixmatch || viewModel.lyricsSource == .autoSelect {
                     musixmatchTokenField()
                 }
                 
-                if viewModel.lyricsSource == .lrclib || viewModel.lyricsSource == .multiLevel {
+                if viewModel.lyricsSource == .lrclib || viewModel.lyricsSource == .autoSelect {
                     lrclibURLField()
                 }
 
-                // 只在真的会用到 SpicyLyrics 时给密钥栏（多级回退链路里没有它）。
-                if viewModel.lyricsSource == .spicy {
+                if viewModel.lyricsSource == .spicy || viewModel.lyricsSource == .autoSelect {
                     spicyLyricsKeyField()
                 }
             }

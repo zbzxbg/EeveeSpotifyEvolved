@@ -32,7 +32,7 @@ do_not_replace_lyrics = "禁用歌词替换功能";
 do_not_replace_lyrics_description = "选项开启后会禁用自定义歌词功能，但不会阻止Spotify返回其自带的歌词。";
 lyrics_source = "歌词来源";
 lyrics_source_description = "Genius：歌词覆盖面最广，但歌词没有时间轴。\nLRCLIB：最开放的服务，提供带时间轴的歌词。但它缺少很多歌曲的歌词。\nMusixmatch：为很多歌曲提供带时间轴的歌词，但需要用户令牌才能使用。";
-lyrics_additional_info = "Genius和NetEase的搜索方式是模糊搜索，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
+lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ音乐与酷狗都是按歌名与歌手搜索(不是按曲目ID精确匹配)，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
 petitlyrics_description = "PetitLyrics：提供日语歌词。";
 spicylyrics_description = "Spicy Lyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
@@ -52,6 +52,10 @@ lyrics_translated_by = "翻译者";
 lyrics_source_unknown = "来源未知";
 netease_description = "NetEase：目前不推荐非中国用户使用此歌词来源。因为尚未解决有关于NetEase的一些影响使用的问题。";
 amll_description = "AMLL：提供高质量逐词歌词和丰富的歌词结构。具体介绍可前往amll.dev查看。";
+bini_description = "BiniLyrics：社区收集的 Apple Music 逐字 TTML，按歌名、歌手与时长匹配。";
+unison_description = "Unison：人工打轴的 TTML，曲库小但时间轴准。";
+qqmusic_description = "QQ音乐：国语/粤语曲库的逐字(QRC)与逐行歌词。";
+kugou_description = "酷狗：国语/粤语曲库的逐字歌词(KRC)。";
 
 musixmatch_user_token = "Musixmatch 用户令牌";
 user_token_placeholder = "输入用户令牌或粘贴调试信息";
@@ -60,8 +64,8 @@ request_anonymous_token_description = "点击 “请求匿名令牌” 即可在
 anonymous_token_request_failed = "匿名令牌获取失败。";
 
 
-ngzhwm_amll_preferred = "AMLL优先";
-ngzhwm_amll_preferred_description = "选项生效需要开启逐词歌词。选项开启后会优先向AMLL请求逐词歌词。如果AMLL未返回逐词歌词，则回退用户自己选择的歌词来源和相关设置进行请求。";
+amll_preferred = "AMLL优先";
+amll_preferred_description = "选项生效需要开启逐词歌词。选项开启后会优先向AMLL请求逐词歌词。如果AMLL未返回逐词歌词，则回退用户自己选择的歌词来源和相关设置进行请求。";
 
 genius_fallback = "Genius回退";
 genius_fallback_description = "如果 %@ 未正常加载，将使用 Genius 加载歌词。";
@@ -143,27 +147,40 @@ organize_listening_queue = "整理播放队列";
 payment_notice = "EeveeSpotify 已应用补丁来解锁部分高级功能，免费使用。";
 
 
-// ngzhwm
+// 本分支新增的歌词选项。这些键以前带 `ngzhwm_` 前缀，
+// 2026-10-31 统一去掉了 —— 现在键名就是它自己，没有前缀。
 
-ngzhwm_disable_lyrics_feature = "禁用歌词功能";
-ngzhwm_disable_lyrics_feature_description = "选项开启后会禁用有关于自定义歌词的所有功能。还会阻止Spotify返回其自带的歌词。";
-ngzhwm_word_by_word_lyrics = "开启逐词歌词";
-ngzhwm_word_by_word_lyrics_description = "Musixmatch，PetitLyrics，Spicy Lyrics，NetEase，AMLL提供逐词歌词。";
-ngzhwm_better_word_by_word_lyrics = "更好的逐词歌词";
-ngzhwm_better_word_by_word_lyrics_description = "像Apple Music那样，系统版本最低要求iOS26。";
+disable_lyrics_feature = "禁用歌词功能";
+disable_lyrics_feature_description = "选项开启后会禁用有关于自定义歌词的所有功能。还会阻止Spotify返回其自带的歌词。";
+word_by_word_lyrics = "开启逐词歌词";
+word_by_word_lyrics_description = "Musixmatch，PetitLyrics，Spicy Lyrics，NetEase，AMLL提供逐词歌词。";
+better_word_by_word_lyrics = "更好的逐词歌词";
+better_word_by_word_lyrics_description = "像Apple Music那样，系统版本最低要求iOS26。";
 word_by_word_lyrics_provider = "逐词歌词提供者：%@";
-ngzhwm_inject_lyrics_card_element = "补充模块5";
-ngzhwm_lyrics_entry_point_flag = "歌词入口开关";
-ngzhwm_multi_level_fallback = "多级回退";
-ngzhwm_multi_level_fallback_description = "多级回退:歌词将按照Mxm-PL-LRC-Gen的方式多级回退查询(Mxm和PL最长等待5秒，LRCLIB和Genius最长等待3秒；如果某个来源在对应时间内仍未返回有效歌词，则查询下一个来源)。";
-ngzhwm_netease_romaji_local = "修改NetEase日语罗马字的展示方式";
-ngzhwm_netease_romaji_local_description = "选项生效需要开启\"日语歌词罗马化\"。选项开启后NetEase的日语罗马字会交给本地日语罗马化处理，而不是交给NetEase。如果NetEase返回逐词歌词，此选项将不起作用。";
-ngzhwm_netease_hide_translation = "不展示NetEase的翻译按钮";
-ngzhwm_netease_hide_translation_description = "选项开启后NetEase歌词源不会显示歌词翻译按钮。";
+inject_lyrics_card_element = "补充模块5";
+lyrics_entry_point_flag = "歌词入口开关";
+lyrics_source_auto = "自动优选";
+lyrics_source_auto_description = "自动优选:依次询问所有可用歌词源，保留时间轴最细的一份——逐字优于逐行，逐行优于纯文本；纯文本不会终止查找。拿到逐字歌词立即使用；只有逐行歌词时，最多再给逐字源 4 秒，不会让歌词卡片等更久。顺序可在「歌词来源顺序」页里调整。";
+lyrics_source_auto_unavailable = "「自动优选」只在听歌页样式为「沉浸式」或「Apple Music」时可用。要用它，请先在「听歌页」设置里切换样式。";
+lyrics_source_order = "歌词来源顺序";
+lyrics_source_order_section = "按这个顺序询问";
+lyrics_source_order_description = "「自动优选」从上到下依次询问这些来源。顺序只决定先问谁，不决定谁被采用——逐字永远优于逐行，逐行永远优于纯文本。拖动右侧手柄调整顺序。";
+lyrics_source_order_reset = "恢复默认顺序";
+lyrics_timing_word = "逐字";
+lyrics_timing_line = "逐行";
+lyrics_timing_plain = "纯文本";
+netease_romaji_local = "修改NetEase日语罗马字的展示方式";
+netease_romaji_local_description = "选项生效需要开启\"日语歌词罗马化\"。选项开启后NetEase的日语罗马字会交给本地日语罗马化处理，而不是交给NetEase。如果NetEase返回逐词歌词，此选项将不起作用。";
+netease_hide_translation = "不展示NetEase的翻译按钮";
+netease_hide_translation_description = "选项开启后NetEase歌词源不会显示歌词翻译按钮。";
+lyrics_auto_translate = "在本机翻译歌词";
+lyrics_auto_translate_description = "歌词源没有给出译文时，用苹果的翻译框架在手机上翻一遍，一个字都不出设备。需要 iOS 18 及以上，并先在「设置 → App → 翻译 → 语言」里下好两种语言。只翻「每行都有时间轴」的歌词；歌词源自带的译文不会被替换。";
 lyrics_offset_current_song = "当前歌曲";
 lyrics_offset_clear_all = "清除全部歌词偏移";
 lyrics_offset_description = "对所有歌词源生效（Genius 除外）。正数表示歌词延后显示；每一条都按「歌曲 + 歌词来源」单独保存，换歌、换源、重开 App 都还在。";
 lyrics_offset_title = "歌词偏移";
+lyrics_offset_reset = "重置这一首";
+lyrics_offset_done = "完成";
 settings_sub_lyrics_offset = "按歌曲与来源微调时间轴";
 lyrics_offset_no_track = "当前这首歌还没有可调的偏移：还没拿到我们自己的歌词。播放一首能取到歌词的歌再进来。";
 lyrics_offset_genius_excluded = "Genius 不参与歌词偏移：它的歌词没有可信的时间轴，挪了也对不齐。换一个歌词来源再调。";
@@ -178,11 +195,11 @@ lyrics_offset_autosave_hint = "调整后自动保存";
 lyrics_offset_saved_empty = "还没有保存过歌词偏移。播放一首歌，在上面「当前歌曲」按 ±0.1s 调整，就会自动存到这里。";
 lyrics_offset_saved_only_current = "当前播放这条的偏移已保存在上面一节；其它保存过的条目会列在这里。";
 lyrics_offset_saved_description = "这些值存在本机设置里，备份设置时会一起带走；换歌、换源、重开 App 都还在。";
-ngzhwm_romanization_description = "单独设置每种语言的歌词是否罗马化。如果某种语言的歌词未开启罗马化选项，该语言的歌词会直接显示，不进行罗马化。";
-ngzhwm_chinese_romanization = "中文歌词罗马化";
-ngzhwm_japanese_romanization = "日语歌词罗马化";
-ngzhwm_korean_romanization = "韩语歌词罗马化";
-ngzhwm_lyrics_unavailable = "未找到歌词";
+romanization_description = "单独设置每种语言的歌词是否罗马化。如果某种语言的歌词未开启罗马化选项，该语言的歌词会直接显示，不进行罗马化。";
+chinese_romanization = "中文歌词罗马化";
+japanese_romanization = "日语歌词罗马化";
+korean_romanization = "韩语歌词罗马化";
+lyrics_unavailable = "未找到歌词";
 lyrics_looking_up = "正在查找歌词…";
 lyrics_no_timeline = "这首歌的歌词没有时间轴";
 track_mismatch = "取词期间切了歌，重新播放这一首即可获取歌词。";
@@ -574,6 +591,10 @@ licenses_lyricify = "Lyricify Lyrics Helper";
 licenses_lyricify_detail = "网易云搜索策略（先旧接口、失败退 eapi cloudsearch；标题/歌手/专辑的查询阶梯与加权匹配）参照 WXRIW/Lyricify-Lyrics-Helper，Apache-2.0；未拷贝源码。";
 licenses_163musiclyrics = "163MusicLyrics";
 licenses_163musiclyrics_detail = "网易云 abroad 响应的形态与 cloudsearch 端点参考 jitwxs/163MusicLyrics，Apache-2.0；未拷贝源码。";
+licenses_lddc = "LDDC · pyqdes";
+licenses_lddc_detail = "酷狗(KRC)与QQ音乐(QRC)歌词解密的密钥字节与 DES 步骤顺序。LDDC 为 GPL-3.0-only，pyqdes 为 MIT。只取了算法，这里的 Swift 实现是自己写的。";
+licenses_taurus = "Taurus";
+licenses_taurus_detail = "「自动优选」的歌词源清单与「按顺序询问、保留最细时间轴」的规则来自 Taurus。Taurus 为 PolyForm Strict 1.0.0，不允许衍生作品：没有复制或翻译任何源码，规则是用 Swift 重写的。";
 
 // ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
 // 这些开关写的是 Spotify 的 **flag 覆盖**（`ios-messaging-reduceinterventions-impl` 那批），

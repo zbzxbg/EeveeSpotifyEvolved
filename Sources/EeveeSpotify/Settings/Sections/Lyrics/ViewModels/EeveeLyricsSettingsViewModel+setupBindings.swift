@@ -127,6 +127,7 @@ extension EeveeLyricsSettingsViewModel {
         // 键与 UI 行一起摘掉了（间奏行无条件丢弃），没有可记录的绑定。
         logBooleanSetting($neteaseRomajiLocal, "NetEase romaji display mode")
         logBooleanSetting($neteaseHideTranslation, "hide NetEase translation")
+        logBooleanSetting($lyricsAutoTranslate, "auto-translate lyrics (system)")
         logBooleanSetting($chineseRomanization, "Chinese romanization")
         logBooleanSetting($japaneseRomanization, "Japanese romanization")
         logBooleanSetting($koreanRomanization, "Korean romanization")

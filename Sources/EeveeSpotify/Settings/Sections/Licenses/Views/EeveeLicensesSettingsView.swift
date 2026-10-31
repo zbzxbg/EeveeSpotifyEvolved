@@ -73,6 +73,24 @@ struct EeveeLicensesSettingsView: View {
                 symbol: "music.note.list",
                 color: Color(hex: "#FFD60A")
             ),
+            // 2026-10-31：酷狗 KRC / QQ 音乐 QRC 的解密算法来源。
+            // LDDC 是 GPL-3.0-only、pyqdes 是 MIT —— 都只取了"密钥字节 + 步骤顺序"这个事实，
+            // Swift 实现是自己写的（`KrcText` / `QrcText`），没有搬运代码。
+            Entry(
+                title: "licenses_lddc".localized,
+                detailKey: "licenses_lddc_detail",
+                symbol: "lock.open",
+                color: Color(hex: "#5E5CE6")
+            ),
+            // 2026-10-31：歌词源清单与「自动优选」的调度规则来自 Taurus。
+            // ⚠️ Taurus 是 **PolyForm Strict 1.0.0**（不允许衍生作品）——
+            //   这一条必须写清楚"没有复制代码"，否则看起来像在它的许可下分发。
+            Entry(
+                title: "licenses_taurus".localized,
+                detailKey: "licenses_taurus_detail",
+                symbol: "square.stack.3d.up",
+                color: Color(hex: "#AC8E68")
+            ),
         ]
     }
 

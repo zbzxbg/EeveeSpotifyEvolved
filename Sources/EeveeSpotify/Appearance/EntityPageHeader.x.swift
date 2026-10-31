@@ -63,6 +63,17 @@ enum EntityPageHeaderManager {
     /// （`eeveeFindView(layout, "Components.Header.UI.ArtworkImage")` / `blockIn(layout,…)`）。
     private static var cachedCover: UIView?
     private static var cachedBlock: UIView?
+    /// ★★ 2026-10-31：我们**当前这一页**画出来的那份页头（弱引用）。
+    ///
+    /// 只给 `playlistPageDidLayout` 用：那一拍要判断"主挂点是不是已经在干活" ——
+    /// 已经是（我们那份就挂在这一页里）就什么都不做，免得每 0.5s 白扫一遍整棵页面树。
+    private static weak var currentHeader: EntityPageHeaderView?
+    /// 页面级备用入口的节流（BFS 最多 1500 个节点，不能每帧跑）。
+    private static var lastPlaylistProbe: CFAbsoluteTime = 0
+    /// ★★ 2026-10-31（电台）：页头里那几个大圆头像（见 `headerAvatars`）——
+    /// 这一拍是每帧的，按 `layout` 缓存，换页才重扫。
+    private static weak var artworkScannedLayout: UIView?
+    private static var cachedArtwork: [UIView] = []
     /// ★ 2026-10-18：歌单页头里那个「在此页面上查找」搜索框（AM 页头接管后不该留着）。
     private static var cachedFindField: UIView?
     /// ★ 2026-10-13（性能）：上一拍认下的那四个标签（见 `TextViews`）。
@@ -469,7 +480,7 @@ enum EntityPageHeaderManager {
 
         // ★ 2026-10-13（性能）：这两个原来是每帧各一次整棵子树搜索，走缓存（同上面那五个挂点）。
         let cover = find("Components.Header.UI.ArtworkImage", in: layout, cache: &cachedCover) ?? fullbleed
-        let block: UIView
+        var block: UIView
         if let cached = cachedBlock, cached.window != nil, cached.isDescendant(of: layout) {
             block = cached
         } else {
@@ -479,7 +490,19 @@ enum EntityPageHeaderManager {
         }
         guard block.bounds.height > 20 else { return }
 
-        let texts = headerTexts(block: block, headerRoot: headerRoot)
+        var texts = headerTexts(block: block, headerRoot: headerRoot)
+
+        // ★★ 2026-10-31（电台 / This Is）：按宽度挑出来的"那一块"**不一定装着标题** ——
+        //   电台页头的排版是"头像 / 大标题 / 小圆点 / 创建者 / 按钮行"各成一格，
+        //   挑到按钮行或创建者那格时标题就是空的，于是整页什么都不做（上一轮"没效果"之一）。
+        //   ⇒ 标题读不到时，**换一块再读一次**：从字号最大的标签往上爬（`textBlockAround…`）。
+        if texts.title.isEmpty,
+           let retry = textBlockAroundBiggestLabel(in: layout, cover: cover, fullbleed: fullbleed),
+           retry !== block {
+            block = retry
+            cachedBlock = retry
+            texts = headerTexts(block: block, headerRoot: headerRoot)
+        }
         guard !texts.title.isEmpty else {
             logOnce("noTitle", "no title found — leaving Spotify's header alone")
             return
@@ -493,6 +516,7 @@ enum EntityPageHeaderManager {
             header = EntityPageHeaderView()
             objc_setAssociatedObject(headerRoot, &entityPageHeaderKey, header, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
+        currentHeader = header
 
         if header.superview !== block {
             block.addSubview(header)
@@ -503,12 +527,31 @@ enum EntityPageHeaderManager {
         // 位置：**页面宽度、居中** —— Spotify 的 block 比页面窄（真机 386 / 402）。
         // ★★ 2026-10-18：高度再加上"给封面让出来的那一段"（见 `coverDrop`）——
         //    贴底排 ⇒ 文字整体下移，落在封面下面。
+        //
+        // ★★ 2026-10-31（This Is / 电台）：文字块可能**比我们这一份还矮** ——
+        //    生成歌单的页头是插件拼的，标题那一块常常只有一百来 pt，而我们的内容
+        //    （标题 + 创建者 + 元信息 + 一行按钮 + 描述）要两百多。原来 frame 高度就取
+        //    block 高度 ⇒ 内容从 `y` 为负的位置往上溢出块外，被上层的封面 / 渐变盖住，
+        //    看起来就是"没生效"。
+        //    这里把 frame **向上**补到"内容刚好装下"：贴底排 ⇒ 内容的绝对位置**一个点都不变**，
+        //    只是我们的 bounds 变高（不会被裁剪、`room` 也够了）。块够高时这一句是空转。
+        //
+        //    ⚠️ **只在没有 `PL.Header` 的那条兜底路上开**：普通歌单页的折叠行为已经调好了
+        //    （块矮下去时内容跟着页头一起走），不要因为这一句把它的裁剪边界也改掉。
         let x = -block.convert(.zero, to: headerRoot).x
+        let isPLHeader = headerRoot.accessibilityIdentifier == "PL.Header"
+        var height = block.bounds.height + coverDrop(of: header)
+        if !isPLHeader {
+            let needed = header.contentHeight(forWidth: headerRoot.bounds.width) + header.contentBottom
+            height = max(height, needed)
+        }
+        // ⚠️ 普通歌单页 `y` **恒为 0**（原来就是这样；`coverDrop` 靠"加高"把文字往下推，
+        //    改成负 y 会把那一段抵消掉）。只有兜底那条路才允许向上长。
         let frame = CGRect(
             x: round(x),
-            y: 0,
+            y: isPLHeader ? 0 : min(0, block.bounds.height - height),
             width: headerRoot.bounds.width,
-            height: block.bounds.height + coverDrop(of: header)
+            height: height
         )
         if header.frame != frame { header.frame = frame }
 
@@ -536,7 +579,18 @@ enum EntityPageHeaderManager {
 
         // Spotify 那一列整列藏掉（我们自己的那份除外）。幂等；Spotify 边加载边往里加东西，
         // 所以**每一拍都要重新走一遍**。
-        for sub in block.subviews where sub !== header { eeveeConceal(sub) }
+        //
+        // ★★ 2026-10-31（照片 170：「电台歌单是三个艺人头像，这个怎么处理」）：
+        //   电台页头的"封面"**不是一张图**，是**一行三个大圆头像**（`Encore.AvatarView`，
+        //   `dump-9.1.88.txt:16203`），而且和标题常常同在一个容器里。
+        //   原来这一句是"block 的每个孩子整支藏掉" ⇒ 头像跟着一起没了，那一块变成空白。
+        //   ⇒ 改成 `concealInside(keeping:)`：**逐层往下藏，遇到图片区就绕开**。
+        //   与正常歌单页的"方封面在 block 外面、不参与 conceal"是同一条语义 ——
+        //   电台页只是把那张封面换成了三个头像，位置关系一模一样（图在上、字在下）。
+        let artwork = headerArtwork(in: layout, cover: cover, fullbleed: fullbleed)
+        for sub in block.subviews where sub !== header {
+            concealInside(sub, keeping: artwork)
+        }
 
         // ★★ 2026-10-18（用户：「歌单页的那个**搜索歌单内歌曲框**还在」）：
         //    「在此页面上查找」那颗搜索框在 **PL.Header 里、不在 block 里**（上游
@@ -600,41 +654,176 @@ enum EntityPageHeaderManager {
         )
     }
 
+    /// 歌单页 **VC 自己那一拍**（taurus 的 `PlaylistField.x` 也挂在同一个 VC 上）。
+    ///
+    /// ★★ 2026-10-31（This Is / 电台）：主挂点是 `HeaderContentLayout` —— 只要这一版还用那个
+    /// 布局类，它就每帧都会来。但生成歌单的页头是**插件拼的**（`ThisIsArtistHeaderPluginImpl` /
+    /// `FullBleedHeaderLayoutPluginImpl`），万一某个版本把它们换成了另一套布局类，
+    /// 主挂点就**一次都不会来**，页头再怎么写兜底也没用（这正是上一轮"改了但没效果"最可能的位置）。
+    ///
+    /// 这条入口不依赖布局类：**页面本身布局过**这件事永远会发生。找不到
+    /// `HeaderContentLayout` 就什么都不做；找到了就交给同一条 `apply`。
+    ///
+    /// 代价：一次 BFS（≤1500 节点），**0.5s 一次**、而且"我们那份已经挂在这一页里"就直接返回
+    /// ⇒ 正常页面上它几乎不进 BFS。
+    static func playlistPageDidLayout(_ page: UIView) {
+        guard isEnabled else { return }
+        if let header = currentHeader, header.window != nil, header.isDescendant(of: page) { return }
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastPlaylistProbe >= 0.5 else { return }
+        lastPlaylistProbe = now
+        guard let layout = firstView(withClassName: "HeaderContentLayout", in: page) else {
+            logOnce(
+                "playlistPageNoLayout",
+                "playlist page laid out but has no HeaderContentLayout — the header hook never fires here"
+            )
+            return
+        }
+        apply(in: layout)
+    }
+
     /// `PlayButtonView` 自己的那一拍：页面刚打开时它会**晚一步**进前景区（pw 也遇到：角上先闪一下
     /// Spotify 自己的绿盘）。只有它确实在歌单页头里才藏 —— 专辑页那种浮动 Play 不碰。
     static func concealPlayButtonIfNeeded(_ view: UIView) {
         guard isEnabled else { return }
         guard view.accessibilityIdentifier == "header-play-button" else { return }
-        // ★ 2026-10-13：**两个页面都藏**（歌单页的头 `PL.Header` / 专辑页的 `CreativeWorkTemplateView`）
+        // ★★ 2026-10-13：**两个页面都藏**（歌单页的头 `PL.Header` / 专辑页的 `CreativeWorkTemplateView`）
         //   —— 两个页面我们都在行里镜像了这颗 Play。别的页面（艺人页那种浮动 Play）不碰。
         guard isEntityPage(of: view) else { return }
+        // ★★ 2026-10-31（This Is / 电台）：`isEntityPage` 的判据放宽到"VC 类名是歌单页"之后，
+        //   还得再问一句**我们那份页头真的挂上去了没有** —— 生成歌单的页头是插件拼的，
+        //   万一这一页最后没画成（没标题 / 找不到文字块），把 Spotify 那颗藏掉就是"两个都没有"。
+        //   ⚠️ 三条路（歌单 / 专辑 / 艺人）都会写 `currentHeader`，所以这一句不会误伤那两页。
+        guard let header = currentHeader, header.window != nil else { return }
         eeveeConceal(view)
     }
 
     // MARK: - 找页面 / 找那一块
 
-    /// 往上找 `PL.Header`（歌单页头那个容器）。找不到就返回 nil ——
-    /// **专辑页与别的页面因此完全不受影响**。
+    /// 往上找歌单页头的容器。找不到就返回 nil —— **专辑页与别的页面因此完全不受影响**。
+    ///
+    /// ★★ 2026-10-31（用户：「Spotify 官方的 This Is xxx 和电台歌单还没做适配」）：
+    ///
+    /// 原来只认 `PL.Header`。可那个 id **只是"普通歌单页"那一种实现的标签** ——
+    /// 9.1.88 里官方生成的歌单（This Is / 电台）是由 **slot 插件**拼页头的，符号表里逐字有
+    /// `ListUXPlatformConsumers_ThisIsArtistHeaderPluginImpl28ThisIsHeaderCreatorElementUI`
+    /// （`dump-9.1.88.txt:15289`）、`PlaylistDefaultHeaderImpl23FullBleedPlaylistHeader`
+    /// （:15083）、`FullBleedHeaderLayoutPluginImpl21FullBleedHeaderLayout`（:15394）。
+    /// 这些页头的容器**不带 `PL.Header`** ⇒ 旧判据在 `guard` 那一行就 return，
+    /// 页头保持 Spotify 原样 —— 这就是"没做适配"的真正位置（不是画得不对，是根本没进来）。
+    ///
+    /// ## 参照 taurus 的做法（PolyForm Strict 1.0.0：**只读思路，不抄代码**）
+    ///
+    /// 它的 `SGRPlaylistHeaderOf` **从不看任何 accessibility id** ——
+    /// 沿 responder chain 找**类名含 `FreeTierPlaylist` 的 VC**，页头容器直接取那个 VC 的 view。
+    /// 于是"普通歌单 / This Is / 电台"走的是**同一条**路，一个分支都不用写。
+    ///
+    /// 9.1.88 上没有那个 header VC（见文件头那段：歌单头改由 `ListUXPlatform_FreeTierPlaylistImpl`
+    /// 的 slot/element 拼出来），对应的"页头自己那一层"是 header slot 的宿主
+    /// `…ElementCollectionViewCell`。所以这里按**同一顺序**退，每一档都只看类名：
+    ///
+    ///   ① `PL.Header` —— 普通歌单，**已经真机验证过**，原样保留；
+    ///   ② 最近的 `UICollectionViewCell` 祖先（header slot 的宿主）；
+    ///   ③ `HeaderContentLayout` 自己（挂点就是它，天然在手上）；
+    ///   ④ responder chain 上第一个 VC 的 view（taurus 那一档的等价物）。
+    ///
+    /// ⚠️ ②③④ **全部要先过 `isPlaylistPage`**（VC 类名含 `FreeTierPlaylist`）——
+    /// 专辑页 / 艺人页 / 首页的 `HeaderContentLayout` 因此一个字节都不动。
     private static func playlistHeaderRoot(of view: UIView) -> UIView? {
+        if let root = ancestor(of: view, identifier: "PL.Header") { return root }
+        guard isPlaylistPage(of: view) else { return nil }
+
+        // ② header slot 的宿主 cell（taurus 的 `headerVC.viewIfLoaded` 在这一版的对位）。
         var node: UIView? = view
-        while let current = node {
-            if current.accessibilityIdentifier == "PL.Header" { return current }
+        var level = 0
+        while let current = node, level < 6 {
+            let name = NSStringFromClass(type(of: current))
+            if current is UICollectionViewCell, name.contains("Cell") {
+                logOnce(
+                    "playlistRootCell",
+                    "generated playlist (no PL.Header): header root = \(name)"
+                )
+                return current
+            }
+            node = current.superview
+            level += 1
+        }
+
+        // ③ 挂点自己就是页头那一块的布局视图。
+        if NSStringFromClass(type(of: view)).contains("HeaderContentLayout") {
+            logOnce(
+                "playlistRootLayout",
+                "generated playlist (no PL.Header): header root = HeaderContentLayout itself"
+            )
+            return view
+        }
+
+        // ④ taurus 那一档：responder chain 上第一个 VC 的 view。
+        var responder: UIResponder? = view
+        var hops = 0
+        while let current = responder, hops < 40 {
+            hops += 1
+            if let controller = current as? UIViewController, let root = controller.viewIfLoaded {
+                logOnce(
+                    "playlistRootVC",
+                    "generated playlist (no PL.Header): header root = "
+                        + "\(NSStringFromClass(type(of: controller))).view"
+                )
+                return root
+            }
+            responder = current.next
+        }
+        return nil
+    }
+
+    /// 这一页是不是**歌单页**（普通 / This Is / 电台都算）。
+    ///
+    /// taurus 的判据：responder chain 上**第一个 VC** 的类名含 `FreeTierPlaylist`
+    /// （`SGRPlaylistHeaderOf`）。这里多认一条 `PL.Header` 祖先 —— 普通歌单页那条路
+    /// 已经验证过，不让它因为 VC 换名而失效。
+    ///
+    /// ⚠️ 只看类名、不看 id：`ThisIsArtistHeaderPluginImpl` 那类插件页头**没有** id 可看。
+    /// ⚠️ 判据**故意只收 `FreeTierPlaylist`**：这一条同时管着"要不要藏 Spotify 自己那颗 Play"
+    ///    （`concealPlayButtonIfNeeded`）—— 收得太宽（比如把 `Station` 也算进来），
+    ///    万一那页根本没有我们的页头，就会变成"按钮被藏了、我们那颗又没画"。
+    private static func isPlaylistPage(of view: UIView) -> Bool {
+        if ancestor(of: view, identifier: "PL.Header") != nil { return true }
+        var responder: UIResponder? = view
+        var hops = 0
+        while let current = responder, hops < 60 {
+            hops += 1
+            if current is UIViewController,
+               NSStringFromClass(type(of: current)).contains("FreeTierPlaylist") {
+                return true
+            }
+            responder = current.next
+        }
+        return false
+    }
+
+    /// 沿 superview 链往上找带某个 accessibility id 的祖先（含自己）。
+    private static func ancestor(of view: UIView, identifier: String) -> UIView? {
+        var node: UIView? = view
+        var level = 0
+        while let current = node, level < 40 {
+            level += 1
+            if current.accessibilityIdentifier == identifier { return current }
             node = current.superview
         }
         return nil
     }
 
-    /// 这是不是**我们接管的那两种页面**里的视图：歌单页判 `PL.Header`，专辑页判页面 root 的 id
-    /// 或它的头容器 —— 三个都在祖先链上，走一次就够（pw 的 `SGRPlaylistHeaderOf` / `SGRAlbumPageOf`
-    /// 也是各走一次祖先链）。
+    /// 这是不是**我们接管的那两种页面**里的视图：歌单页判 `PL.Header`（以及生成歌单那条类名判据），
+    /// 专辑页判页面 root 的 id 或它的头容器 —— 都在祖先链上，走一次就够
+    /// （pw 的 `SGRPlaylistHeaderOf` / `SGRAlbumPageOf` 也是各走一次祖先链）。
     private static func isEntityPage(of view: UIView) -> Bool {
+        if isPlaylistPage(of: view) { return true }
         var node: UIView? = view
         var level = 0
         while let current = node, level < 24 {
             level += 1
             if let identifier = current.accessibilityIdentifier,
-               identifier == "PL.Header"
-                || identifier == "CreativeWorkPlatform.CreativeWorkTemplateView"
+               identifier == "CreativeWorkPlatform.CreativeWorkTemplateView"
                 || identifier == "CreativeWorkPlatform.Components.UI.CreativeWorkHeader" {
                 return true
             }
@@ -836,6 +1025,7 @@ enum EntityPageHeaderManager {
         } else if header.subviews.last !== headerView {
             header.bringSubviewToFront(headerView)
         }
+        currentHeader = headerView
         if cover == nil, !didLogAlbumBlindConceal {
             didLogAlbumBlindConceal = true
             writeDebugLog(
@@ -1056,6 +1246,7 @@ enum EntityPageHeaderManager {
             header.bringSubviewToFront(headerView)
         }
         if headerView.frame != header.bounds { headerView.frame = header.bounds }
+        currentHeader = headerView
         // ★★ 2026-10-18：Follow 状态复查要能找回"这一页 / 这个页头"（见 `refreshArtistFollow`）。
         lastArtistPage = page
         lastArtistHeaderView = headerView
@@ -2866,10 +3057,135 @@ enum EntityPageHeaderManager {
         for sub in layout.subviews {
             if sub === cover || sub === fullbleed { continue }
             if sub is EntityPageHeaderView { continue }
+            // ★★ 2026-10-31：文字块**绝不能把封面包在里面** —— 下面那轮
+            //   `for sub in block.subviews { eeveeConceal(sub) }` 会把封面一起藏掉。
+            //   普通歌单页的满宽块本来就不含封面（这一句是空转），但生成歌单的页头
+            //   可能只有"一个大容器"，不挡这一下就会把整页图片藏没。
+            //   ⚠️ 只认**真封面**：`cover` 可能是"找不到封面时的整幅兜底"（`fullbleed`），
+            //      那一层本来就该被跳过（上一句），拿它当判据会把正常块也误杀。
+            if let cover, cover !== fullbleed, cover.isDescendant(of: sub) { continue }
             if sub.bounds.width < wide { continue }
             if block == nil || sub.frame.minY > block!.frame.minY { block = sub }
         }
-        return block
+        if block != nil { return block }
+        return textBlockAroundBiggestLabel(in: layout, cover: cover, fullbleed: fullbleed)
+    }
+
+    /// 从**字号最大的那个标签**往上爬，取第一个"够宽、且不含封面"的祖先当文字块。
+    ///
+    /// 两处用：`blockIn` 找不到满宽孩子时；`applyOnce` 挑出来的那块里**没有标题**时
+    /// （电台页头"头像 / 大标题 / 圆点 / 创建者 / 按钮行"各成一格，很容易挑错）。
+    ///
+    /// ⚠️ 一碰到含封面的那一层就停：再往上会把封面也当成 Spotify 的 chrome 藏掉。
+    private static func textBlockAroundBiggestLabel(
+        in layout: UIView,
+        cover: UIView?,
+        fullbleed: UIView?
+    ) -> UIView? {
+        guard let label = biggestLabel(in: layout, skipping: [cover, fullbleed]) else { return nil }
+        var candidate: UIView = label
+        var hops = 0
+        while hops < 8 {
+            // 从标签的**父层**开始：block 要能装下标题，不能是标签自己
+            // （那样下面那轮 `block.subviews` 什么都藏不掉，标题会叠两层）。
+            guard let parent = candidate.superview, parent !== layout else { break }
+            candidate = parent
+            hops += 1
+            if let cover, cover !== fullbleed, cover.isDescendant(of: candidate) { break }
+            if candidate.bounds.width >= layout.bounds.width * 0.5,
+               candidate.bounds.height > 20 {
+                logOnce(
+                    "blockByLabel",
+                    "text block by label = \(NSStringFromClass(type(of: candidate)))"
+                        + " (no full-width child, or the wide one had no title)"
+                )
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    // MARK: - 图片区（正常歌单 = 一张方封面；电台 = 一行三个大圆头像）
+
+    /// 页头里**不许藏**的那些视图（图片区）。
+    ///
+    /// ★★ 2026-10-31（照片 170 / 171）：
+    ///   · 正常歌单（171）= 一张方封面，元素 id `Components.Header.UI.ArtworkImage`；
+    ///   · 电台（170）= **一行三个大圆头像**（`Encore.AvatarView`，`dump-9.1.88.txt:16203`），
+    ///     左右两张还各自出血到屏幕外。
+    ///   两者在版式里的角色**完全一样**：图在上，标题 / 创建者 / 按钮在下。
+    ///   ⇒ 这里统一成一份"不许藏"的名单，`concealInside` 绕着它走。
+    private static func headerArtwork(in layout: UIView, cover: UIView?, fullbleed: UIView?) -> [UIView] {
+        var artwork: [UIView] = []
+        // ⚠️ 只认**真封面**：`cover` 可能是"找不到封面时的整幅兜底"（`fullbleed`），
+        //    把它算进名单等于整页都不藏。
+        if let cover, cover !== fullbleed { artwork.append(cover) }
+        artwork.append(contentsOf: headerAvatars(in: layout))
+        return artwork
+    }
+
+    /// 页头里那几个**大圆头像**（电台）。
+    ///
+    /// 三条收窄，防止误伤（创建者那行的脸堆里也全是 `AvatarView`）：
+    ///   · **至少 48pt 宽** —— 脸堆里的头像只有 24pt 上下；
+    ///   · 脸堆（`FacepileView`）里的一律不算，哪怕被放大；
+    ///   · 最多收 8 个（电台是三张，留点余量）。
+    ///
+    /// 性能：结果按 `layout` 缓存 —— 这一拍是**每帧**的，不能每帧走一遍 1500 节点的 BFS。
+    private static func headerAvatars(in layout: UIView) -> [UIView] {
+        // ⚠️ 只有"页头已经撑开"（>100pt）才认缓存：第一两拍头像还没量出宽度（0pt），
+        //    那时扫出来的"没有头像"是假结论 —— 缓存住它，头像就永远不会被保护。
+        let settled = layout.bounds.height > 100
+        if settled, artworkScannedLayout === layout,
+           cachedArtwork.allSatisfy({ $0.window != nil }) {
+            return cachedArtwork
+        }
+        var found: [UIView] = []
+        forEachView(layout) { view in
+            guard found.count < 8 else { return }
+            guard NSStringFromClass(type(of: view)).contains("AvatarView") else { return }
+            guard view.bounds.width >= 48 else { return }
+            var node: UIView? = view.superview
+            var level = 0
+            while let current = node, level < 4 {
+                if NSStringFromClass(type(of: current)).contains("Facepile") { return }
+                node = current.superview
+                level += 1
+            }
+            found.append(view)
+        }
+        if settled {
+            artworkScannedLayout = layout
+            cachedArtwork = found
+        }
+        if found.count >= 2 {
+            logOnce(
+                "radioArtwork",
+                "radio header: \(found.count) artist avatar(s) kept as the page artwork"
+                    + " — Spotify's radio header is a row of avatars, not a cover"
+            )
+        }
+        return found
+    }
+
+    /// 藏掉 `view` 这一支，**但绕开 `artwork` 里的图片区**。
+    ///
+    /// `eeveeConceal` 是"整支藏"（`layer.isHidden` + 空 mask）—— 只要这一支里装着头像，
+    /// 整支藏就等于把头像一起删掉。所以这里改成：**容器里有要留的东西就往下走一层**，
+    /// 只藏那些"不含图片区"的孩子。
+    ///
+    /// 最多 8 层；到不了底就整支放过 —— 宁可留一点 Spotify 的 chrome，
+    /// 也不要再让头像消失（照片 170 那一块变空白就是它）。
+    private static func concealInside(_ view: UIView, keeping artwork: [UIView], depth: Int = 0) {
+        if artwork.contains(where: { $0 === view }) { return }
+        guard artwork.contains(where: { $0.isDescendant(of: view) }) else {
+            eeveeConceal(view)
+            return
+        }
+        guard depth < 8 else { return }
+        for sub in view.subviews {
+            concealInside(sub, keeping: artwork, depth: depth + 1)
+        }
     }
 
     // MARK: - 读文字
@@ -2959,6 +3275,24 @@ enum EntityPageHeaderManager {
             }
         }
 
+        // ★★ 2026-10-31（This Is / 电台）：官方生成歌单的创建者**不是脸堆**，而是
+        //   专用插件元素 —— 符号表里逐字有两支：
+        //     · `ListUXPlatformConsumers_ThisIsArtistHeaderPluginImpl28ThisIsHeaderCreatorElementUI`
+        //       （`dump-9.1.88.txt:15289`，This Is xxx）
+        //     · `ListUXPlatformConsumers_EditorialHeaderPluginImpl31EditorialHeaderCreatorElementUI`
+        //       （:15076，编辑歌单 / 电台那一类）
+        //   脸堆那条路在这类页面上永远走空 ⇒ 页头会少一行"Spotify / 艺人"。
+        //   这里按**类名**再找一次（与 taurus 同一条纪律：认类名，不认 id）。
+        if texts.creator.isEmpty {
+            for marker in ["ThisIsHeaderCreator", "EditorialHeaderCreator"] {
+                guard let element = firstView(withClassName: marker, in: block),
+                      let label = firstLabel(in: element, skipping: nil) else { continue }
+                texts.creator = label.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                views.creator = label
+                break
+            }
+        }
+
         // 标题兜底：block 里**字号最大**的那个标签（页头里最大的字就是标题），
         // 同字号取最靠上的。排除长度那行与创建者那行。
         if texts.title.isEmpty, let label = biggestLabel(in: block, skipping: [facepile, metadata]) {
@@ -3031,6 +3365,16 @@ enum EntityPageHeaderManager {
             if let skip, view.isDescendant(of: skip) { return }
             let text = (label.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if text.count > minimum { found = label }
+        }
+        return found
+    }
+
+    /// 子树里**类名**含某一段的第一个视图（不认 accessibility id —— 生成歌单的插件元素没有 id）。
+    private static func firstView(withClassName marker: String, in root: UIView) -> UIView? {
+        var found: UIView?
+        forEachView(root) { view in
+            guard found == nil else { return }
+            if NSStringFromClass(type(of: view)).contains(marker) { found = view }
         }
         return found
     }
@@ -3122,6 +3466,10 @@ func activateEntityPageHeader() {
     // 专辑页 / 艺人页那两条路都是**可选**的：类不在就少做一页（不能因为一个可选的类把整组拖垮）。
     let album = NSClassFromString(EntityPageAlbumLayoutHook.targetName) != nil
     let artist = NSClassFromString(EntityPageArtistLayoutHook.targetName) != nil
+    // ★★ 2026-10-31：**生成歌单（This Is / 电台）的备用入口** —— 同样可选、同样单独一组。
+    //    它不在 = 只影响"页头换了一套布局类名"那种情况；共用组里那几页照常。
+    let playlistPage = NSClassFromString(EntityPagePlaylistPageHook.targetName) != nil
+    if playlistPage { EntityPagePlaylistPageHookGroup().activate() }
     // ★★ 2026-10-18 第二轮：`SPTArtistAboutBiographyView` 那条也是可选的 —— 它不在就等于"关于艺人"
     //    只能靠 `applyToArtistPage` 那条兜底搜索（每页两拍），日志里会写出来。
     //    ★ 2026-10-11（日志 101）：**真正露头的是下面那个 `CreatorBiographyCardLayout`** ——
@@ -3153,5 +3501,6 @@ func activateEntityPageHeader() {
             + (bioCard ? " + card-layout hook on" : " + card-layout hook MISSING")
             + (aboutLoader ? " + about-data hook on" : " + about-data hook MISSING")
             + " (encoding \(aboutEncoding))"
+            + (playlistPage ? "; playlist-page hook on" : "; playlist-page hook MISSING")
     )
 }

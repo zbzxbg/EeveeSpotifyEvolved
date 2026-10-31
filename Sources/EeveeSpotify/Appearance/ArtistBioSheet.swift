@@ -42,13 +42,46 @@ final class ArtistBioSheet: UIView {
     /// 弹一张（同时只留一张：连点两次不会叠）。
     static func present(name: String, text: String?, colour: UIColor?) {
         guard let window = EntityPageAppearance.frontWindow() else { return }
-        current?.removeFromSuperview()
+        dismissCurrent()
 
         let sheet = ArtistBioSheet(frame: window.bounds)
         sheet.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         sheet.build(name: name, text: text, colour: colour)
-        window.addSubview(sheet)
         current = sheet
+
+        // ★★ 2026-10-31（用户：「翻译这东西**之前还是能用的**」——说得对，这是我们的回归）：
+        //
+        //   原来是 `window.addSubview(sheet)`：卡片**裸挂在 window 上**，从正文往上的
+        //   responder chain 是 `UITextView → card → sheet → UIWindow → UIApplication`，
+        //   **一个 VC 都没有**。系统的编辑菜单里那项「翻译」要找一个 VC 来呈现它自己那张卡，
+        //   找不到就让 UIKit 在 `-[UITextInputController _translate:]` 里 NSAssert ⇒ SIGABRT
+        //   （`Spotify-2026-10-31-094701.ips`）。
+        //
+        //   什么时候坏的：2026-10-11 `fd693c8`「our own artist bio sheet」把 Spotify 原生的
+        //   「关于艺人」换成了这张卡 —— 原生那一页**在 VC 里**，所以翻译一直是好的；
+        //   换成我们这张之后才崩。不是系统 bug，是宿主方式不对。
+        //
+        //   ⇒ 现在把它放进一个真正的 `UIViewController` 里再 present（`.overFullScreen`，
+        //     铺满整屏、背后的页面照常可见）。翻译因此恢复；万一拿不到 VC，
+        //     退回老办法 —— 卡片至少能出来（那种情况下翻译仍然拦着，见 `_translate:` 那条 hook）。
+        if let presenter = hostController(for: window) {
+            let host = ArtistBioSheetHost()
+            host.view.backgroundColor = .clear
+            host.modalPresentationStyle = .overFullScreen
+            host.modalTransitionStyle = .crossDissolve
+            host.loadViewIfNeeded()
+            host.view.frame = window.bounds
+            sheet.frame = host.view.bounds
+            host.view.addSubview(sheet)
+            presenter.present(host, animated: false)
+            currentHost = host
+        } else {
+            window.addSubview(sheet)
+            writeDebugLog(
+                "[ArtistBio] no view controller to host the sheet — fell back to the window"
+                    + " (system Translate stays suppressed there)"
+            )
+        }
 
         sheet.alpha = 0
         UIView.animate(withDuration: 0.2) { sheet.alpha = 1 }
@@ -57,9 +90,115 @@ final class ArtistBioSheet: UIView {
         //   现在那一行的内容更全：来源、**走哪条分支**、原生读到几个字，都在 `build` 里打。
     }
 
+    /// 承载简介卡的那个 VC（只在 `present` 期间存在）。
+    private static weak var currentHost: UIViewController?
+
+    /// 简介卡的宿主：**空壳 VC**，存在的唯一理由就是给正文那个 `UITextView` 一个 VC 祖先。
+    ///
+    /// 不覆盖 `preferredStatusBarStyle` / `modalPresentationCapturesStatusBarAppearance`：
+    /// 让**下面那一页**继续管状态栏，观感与"裸挂 window"时完全一致。
+    private final class ArtistBioSheetHost: UIViewController {
+        override func loadView() {
+            let view = UIView()
+            view.backgroundColor = .clear
+            self.view = view
+        }
+    }
+
+    /// 从窗口根 VC 往下找**最上面**那个（已经 present 出来的优先）。
+    private static func hostController(for window: UIWindow) -> UIViewController? {
+        guard var presenter = window.rootViewController else { return nil }
+        while let presented = presenter.presentedViewController, !presented.isBeingDismissed {
+            presenter = presented
+        }
+        // 没上屏的 VC 上 present 会静默失败 —— 那就别用这条路。
+        guard presenter.isViewLoaded, presenter.view.window != nil else { return nil }
+        return presenter
+    }
+
     static func dismissCurrent() {
         current?.removeFromSuperview()
         current = nil
+        // ★ 2026-10-31：卡现在住在 `ArtistBioSheetHost` 里 —— 只把视图摘掉会留下一个
+        //   **透明的空 VC 盖在最上面**（背后的页面就点不动了），所以要把宿主一起 dismiss。
+        guard let host = currentHost else { return }
+        currentHost = nil
+        if host.presentingViewController != nil { host.dismiss(animated: false) }
+    }
+
+    // MARK: - 系统「翻译」那一条（.ips 2026-10-31 09:47:01 的崩溃点）
+
+    /// 这个视图往上有没有 `UIViewController`。
+    ///
+    /// ★★ 2026-10-31（用户：`Spotify-2026-10-31-094701.ips`）：
+    /// 崩溃栈是 `-[UIEditMenuListView _selectItemAtIndexPath:]` → `UICommand perform…`
+    /// → `-[UITextView _translate:]` → `-[UITextInputController _translate:]` → **NSAssert** → SIGABRT。
+    /// 也就是：在正文里选中一段字 → 编辑菜单点「翻译」→ 系统那条路自己断言失败。
+    ///
+    /// 我们这张卡是**直接挂在 window 上**的（`present` 里 `window.addSubview(sheet)`）——
+    /// 从正文往上的 responder chain 是 `UITextView → card → sheet → UIWindow → UIApplication`，
+    /// **一个 VC 都没有**，而系统的翻译要找一个 VC 去呈现它那张卡片。
+    /// ⇒ 这个判据就是那条 hook 的闸门：**只有"没有 VC 祖先"的文本框才拦**。
+    static func hasViewControllerAncestor(_ view: UIView) -> Bool {
+        var responder: UIResponder? = view
+        var hops = 0
+        while let current = responder, hops < 60 {
+            hops += 1
+            if current is UIViewController { return true }
+            responder = current.next
+        }
+        return false
+    }
+
+    /// 这个视图是不是我们这张卡里的（日志归因用）。
+    static func isInsideSheet(_ view: UIView) -> Bool {
+        var node: UIView? = view
+        while let current = node {
+            if current is ArtistBioSheet { return true }
+            node = current.superview
+        }
+        return false
+    }
+
+    private static var didReportForwardedTranslate = false
+
+    /// 放行一次「翻译」时记一行 —— **只在我们这张卡上记**。
+    ///
+    /// 判据用途：卡现在有了宿主 VC，翻译应该恢复。如果**记了这行之后仍然崩**，
+    /// 那份 `.ips` 就证明了"不是 VC 的问题"，下一个方向才是断言正文。
+    static func reportForwardedTranslate(_ view: UIView) {
+        guard !didReportForwardedTranslate, isInsideSheet(view) else { return }
+        didReportForwardedTranslate = true
+        writeDebugLog(
+            "[ArtistBio] Translate forwarded to UIKit from the bio sheet"
+                + " (it now has a host view controller) — if the app still crashes here,"
+                + " the missing view controller was not the cause"
+        )
+    }
+
+    private static var didReportSuppressedTranslate = false
+
+    /// 拦下一次「翻译」只报一行 —— 顺带把**是哪个文本框、挂在谁身上**记下来。
+    ///
+    /// ★ 2026-10-31：这一行是**归因**用的。下一份日志里看到它，就等于确认
+    /// "崩溃的是我们这张卡"；看到别的类名，就说明还有第二个文本框在踩同一个断言。
+    static func reportSuppressedTranslate(_ view: UIView) {
+        guard !didReportSuppressedTranslate else { return }
+        didReportSuppressedTranslate = true
+        var chain: [String] = []
+        var node: UIView? = view
+        var level = 0
+        while let current = node, level < 5 {
+            chain.append(NSStringFromClass(type(of: current)))
+            node = current.superview
+            level += 1
+        }
+        writeDebugLog(
+            "[ArtistBio] suppressed Translate — the sheet is on the window, so it has no view"
+                + " controller to present the system translation UI from"
+                + " (UIKit asserts in -[UITextInputController _translate:]);"
+                + " chain: " + chain.joined(separator: " ← ")
+        )
     }
 
     // MARK: - 搭
@@ -449,8 +588,13 @@ final class ArtistBioSheet: UIView {
             withDuration: 0.18,
             animations: { self.alpha = 0 },
             completion: { _ in
-                self.removeFromSuperview()
-                if ArtistBioSheet.current === self { ArtistBioSheet.current = nil }
+                // ★ 2026-10-31：现在卡住在一个宿主 VC 里 —— 只摘视图会留下一个透明的空 VC
+                //   盖在最上面（背后页面点不动），所以走 `dismissCurrent()` 把宿主一起收。
+                if ArtistBioSheet.current === self {
+                    ArtistBioSheet.dismissCurrent()
+                } else {
+                    self.removeFromSuperview()
+                }
             }
         )
     }

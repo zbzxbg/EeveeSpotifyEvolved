@@ -37,6 +37,29 @@ class EntityPagePlayButtonHook: ClassHook<UIView> {
     }
 }
 
+/// ★★ 2026-10-31：**歌单页 VC 那一拍** —— 生成歌单（This Is / 电台）的备用入口。
+///
+/// taurus 挂的是 `SPTFreeTierPlaylistEncoreHeaderViewController`（header VC）；那个类在 9.1.88
+/// 上不存在（见 `EntityPageHeader.x.swift` 文件头），所以挂**页面 VC 自己**
+/// （`_TtC35ListUXPlatform_FreeTierPlaylistImpl17FTPViewController`，符号表 :11990；
+/// taurus 的 `PlaylistField.x` 也挂在同一个类上做页面底色）。
+///
+/// ⚠️ **单独一组**：这个类换名/不在时，只是少一条"生成歌单"的保险，
+/// 绝不能把共用组里那几页（普通歌单 / 专辑 / 艺人）一起拖下水 —— 与
+/// `ArtistBioCardHookGroup` 同一条纪律。
+struct EntityPagePlaylistPageHookGroup: HookGroup {}
+
+class EntityPagePlaylistPageHook: ClassHook<UIViewController> {
+    typealias Group = EntityPagePlaylistPageHookGroup
+    static let targetName = "_TtC35ListUXPlatform_FreeTierPlaylistImpl17FTPViewController"
+
+    func viewDidLayoutSubviews() {
+        orig.viewDidLayoutSubviews()
+        guard let page = target.viewIfLoaded else { return }
+        EntityPageHeaderManager.playlistPageDidLayout(page)
+    }
+}
+
 /// ★ 2026-10-13：**专辑页的主挂点**。pw 的 `Album/AlbumHeader.x` 也挂在这一拍上
 /// （它的 `applyPage` 就是从 `%hook _TtC28CreativeWorkPlatform_PageKit24CreativeWorkTemplateView
 /// - (void)layoutSubviews` 进来的）—— 歌单页那个 `HeaderContentLayout` 覆盖的是"那一块"，
@@ -188,4 +211,58 @@ class ArtistBiographyCardLayoutHook: ClassHook<UIView> {
         orig.layoutSubviews()
         EntityPageHeaderManager.artistBiographyAppeared(target)
     }
+}
+
+// MARK: - 简介卡里的「翻译」（崩溃修复）
+
+/// ★★ 2026-10-31（`Spotify-2026-10-31-094701.ips`，iOS 27.0.1 / 9.1.88）：
+/// 在艺人简介卡里选中一段字、点编辑菜单里的**「翻译」**，App 直接 SIGABRT。栈逐字：
+///
+/// ```
+/// 12 Foundation  -[NSAssertionHandler handleFailureInMethod:object:file:lineNumber:description:]
+/// 13 UIKitCore   -[UITextInputController _translate:] +340
+/// 14 UIKitCore   -[UITextView _translate:] +64
+/// 15 UIKitCore   -[UIApplication sendAction:to:from:forEvent:]
+/// 16 UIKitCore   -[UICommand _performAction:withSender:target:notifyingStateObservers:]
+/// 21 UIKitCore   -[_UIEditMenuListView _selectItemAtIndexPath:]
+/// ```
+///
+/// **和歌词解析没有关系**（那一栈里一个我们的帧都没有）：崩在系统 `_translate:` 的断言上。
+/// 我们全仓库只建了一个 `UITextView`（`ArtistBioSheet` 的正文），而它**直接挂在 window 上、
+/// 没有 VC 祖先** —— 系统的翻译要找 VC 来呈现那张卡片，找不到就断言。
+///
+/// 闸门只收"**没有 VC 祖先**"这一种（`ArtistBioSheet.hasViewControllerAncestor`）：
+/// Spotify 自己的文本框都在 VC 里，照常放行。
+///
+/// ⚠️ 单独一组 + 装之前先问方法在不在（与 `ArtistBioCardHookGroup` 同一条纪律）：
+/// `_translate:` 是私有方法，换一版没了也只是少这条保险，不能连累页头那一组。
+struct ArtistBioTranslateGuardGroup: HookGroup {}
+
+class UITextViewTranslateGuardHook: ClassHook<UITextView> {
+    typealias Group = ArtistBioTranslateGuardGroup
+    static let targetName = "UITextView"
+
+    /// ⚠️ 参数类型必须是 ObjC 能表示的（Orion 会把它包成 `@objc`）——
+    /// `id` 用 `AnyObject?`，不要用 `Any?`。
+    func _translate(_ sender: AnyObject?) {
+        if !ArtistBioSheet.hasViewControllerAncestor(target) {
+            ArtistBioSheet.reportSuppressedTranslate(target)
+            return
+        }
+        ArtistBioSheet.reportForwardedTranslate(target)
+        orig._translate(sender)
+    }
+}
+
+func activateArtistBioTranslateGuard() {
+    let selector = NSSelectorFromString("_translate:")
+    guard class_getInstanceMethod(UITextView.self, selector) != nil else {
+        writeDebugLog("[ArtistBio] -[UITextView _translate:] missing — translate guard skipped")
+        return
+    }
+    ArtistBioTranslateGuardGroup().activate()
+    writeDebugLog(
+        "[ArtistBio] translate guard on — a text view with no view-controller ancestor"
+            + " (our bio sheet, which lives on the window) will not reach UIKit's -_translate:"
+    )
 }

@@ -118,11 +118,17 @@ struct AppleMusicLyricsOverlayView: View {
     /// ⚠️ 算在这里、而不是当参数从外面传：`body` 每一帧都会被时间轴重新求值，
     /// 于是"在设置里一改、回到播放器立刻生效"，不用等下一次取词。
     private var showsTranslationNow: Bool {
-        guard !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled else { return false }
-        return lines.contains { line in
+        let hasTranslation = lines.contains { line in
             guard let translation = line.translation else { return false }
             return !translation.isEmpty
         }
+        // ★★ 2026-10-31（歌词系统翻译）：**我们自己翻出来的译文**不受下面那条历史口径约束 ——
+        //   那条「隐藏译文」是当年给 NetEase 的按钮写的，默认值还跟设备语言走
+        //   （非中文设备默认隐藏）。用户既然专门打开了「在本机翻译歌词」，
+        //   就该看见结果，否则开关开了却什么都没有。
+        if UserDefaults.lyricsAutoTranslate { return hasTranslation }
+        guard !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled else { return false }
+        return hasTranslation
     }
 
     /// 主色：**白色**。

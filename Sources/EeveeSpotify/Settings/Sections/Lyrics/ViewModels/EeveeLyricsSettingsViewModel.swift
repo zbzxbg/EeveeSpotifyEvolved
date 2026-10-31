@@ -96,6 +96,18 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             )
         }
     }
+
+    /// ★ 2026-10-31：**歌词系统翻译**（Apple `Translation` 框架，纯本地）。
+    ///
+    /// 只给"源自己没给译文"的歌词用；翻完在每行原文下面多一行译文。
+    /// 默认关 —— 它要求用户先在「设置 → App → 翻译 → 语言」里下好两种语言。
+    /// 机制见 `Lyrics/LyricsAutoTranslation.swift`。
+    @Published var lyricsAutoTranslate = UserDefaults.lyricsAutoTranslate {
+        didSet {
+            guard UserDefaults.lyricsAutoTranslate != lyricsAutoTranslate else { return }
+            UserDefaults.lyricsAutoTranslate = lyricsAutoTranslate
+        }
+    }
     
     /// Musixmatch 用户令牌（54 位 hex）。
     ///
@@ -153,6 +165,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             disableLyricsFeature,
             neteaseRomajiLocal,
             neteaseHideTranslation,
+            lyricsAutoTranslate,
             isMusixmatchTokenValid,
             isRequestingMusixmatchToken,
             lrclibURLState,

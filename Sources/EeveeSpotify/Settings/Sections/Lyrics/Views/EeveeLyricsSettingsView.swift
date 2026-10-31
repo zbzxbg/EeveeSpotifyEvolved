@@ -24,7 +24,9 @@ struct EeveeLyricsSettingsView: View {
                 disableLyricsSection()
             }
             
-            if viewModel.lyricsSource == .netease {
+            // ★ 2026-10-31：自动优选链路里也包含 NetEase，所以这两项对它同样要能改 ——
+            //   否则选了「自动优选」的用户永远调不到网易云的罗马字 / 译文行为。
+            if viewModel.lyricsSource == .netease || viewModel.lyricsSource == .autoSelect {
                 neteaseRomajiLocalSection()
                 neteaseHideTranslationSection()
                 // ★ 2026-10-23（用户：「设置页里面放个可点击进去的页面吧」）：歌词偏移
@@ -35,18 +37,18 @@ struct EeveeLyricsSettingsView: View {
             
             if viewModel.lyricsSource != .notReplaced {
                 // 「AMLL 优先」需要有一个「用户自己选的源」作为回退目标，
-                // 所以来源为 Genius / 多级回退 / LRCLIB / AMLL 时不展示。
+                // 所以来源为 Genius / 自动优选 / LRCLIB / AMLL 时不展示。
                 // ★ 2026-10-02 恢复（2026-09-25 曾整段删除）。
                 if viewModel.lyricsSource != .genius
-                    && viewModel.lyricsSource != .multiLevel
+                    && viewModel.lyricsSource != .autoSelect
                     && viewModel.lyricsSource != .lrclib
                     && viewModel.lyricsSource != .amllTtml {
                     amllPreferredSection()
                 }
                 
-                // Genius 回退保持原有条件：多级回退链路本身以 Genius 收尾，
+                // Genius 回退保持原有条件：自动优选链路本身以 Genius 收尾，
                 // 不再重复提供该开关；来源为 Genius 时自己回退给自己没有意义。
-                if viewModel.lyricsSource != .genius && viewModel.lyricsSource != .multiLevel {
+                if viewModel.lyricsSource != .genius && viewModel.lyricsSource != .autoSelect {
                     geniusFallbackSection()
                 }
                 
@@ -58,9 +60,13 @@ struct EeveeLyricsSettingsView: View {
                 // 「隐藏官方歌词」已写死启用（见 `NgzhwmSettingsViewModel` 里那个
                 // getter），不再有开关。
                 romanizationSection()
+
+                // ★ 2026-10-31（用户：「只做系统翻译」）：源没给译文时，用 Apple 的翻译框架
+                //   在手机上翻一遍（纯本地）。只处理"每行都有时间轴"的歌词。
+                lyricsAutoTranslateSection()
                 
-                // 多级回退链路包含 Musixmatch，其语言项同样可配置。
-                if viewModel.lyricsSource == .musixmatch || viewModel.lyricsSource == .multiLevel {
+                // 自动优选链路包含 Musixmatch，其语言项同样可配置。
+                if viewModel.lyricsSource == .musixmatch || viewModel.lyricsSource == .autoSelect {
                     musixmatchLanguageSection()
                 }
             }
@@ -83,10 +89,10 @@ struct EeveeLyricsSettingsView: View {
     
     @ViewBuilder private func wordByWordLyricsSection() -> some View {
         Section(
-            footer: Text("ngzhwm_word_by_word_lyrics_description".localized)
+            footer: Text("word_by_word_lyrics_description".localized)
         ) {
             Toggle(
-                "ngzhwm_word_by_word_lyrics".localized,
+                "word_by_word_lyrics".localized,
                 isOn: $viewModel.wordByWordLyrics
             )
         }
@@ -108,10 +114,10 @@ struct EeveeLyricsSettingsView: View {
     /// 界面上还是旧话"的坑。现在合并成一条。
     @ViewBuilder private func betterWordByWordLyricsSection() -> some View {
         Section(
-            footer: Text("ngzhwm_better_word_by_word_lyrics_description".localized)
+            footer: Text("better_word_by_word_lyrics_description".localized)
         ) {
             Toggle(
-                "ngzhwm_better_word_by_word_lyrics".localized,
+                "better_word_by_word_lyrics".localized,
                 isOn: $viewModel.betterWordByWordLyrics
             )
         }
@@ -119,10 +125,10 @@ struct EeveeLyricsSettingsView: View {
     
     @ViewBuilder private func disableLyricsSection() -> some View {
         Section(
-            footer: Text("ngzhwm_disable_lyrics_feature_description".localized)
+            footer: Text("disable_lyrics_feature_description".localized)
         ) {
             Toggle(
-                "ngzhwm_disable_lyrics_feature".localized,
+                "disable_lyrics_feature".localized,
                 isOn: $viewModel.disableLyricsFeature
             )
         }
@@ -148,22 +154,37 @@ struct EeveeLyricsSettingsView: View {
     @ViewBuilder private func amllPreferredSection() -> some View {
         Section {
             Toggle(
-                "ngzhwm_amll_preferred".localized,
+                "amll_preferred".localized,
                 isOn: $viewModel.amllPreferred
             )
             .disabled(!viewModel.wordByWordLyrics)
         } footer: {
-            Text("ngzhwm_amll_preferred_description".localized)
+            Text("amll_preferred_description".localized)
         }
     }
     
     @ViewBuilder private func romanizationSection() -> some View {
         Section(
-            footer: Text("ngzhwm_romanization_description".localized)
+            footer: Text("romanization_description".localized)
         ) {
-            Toggle("ngzhwm_chinese_romanization".localized, isOn: $viewModel.chineseRomanization)
-            Toggle("ngzhwm_japanese_romanization".localized, isOn: $viewModel.japaneseRomanization)
-            Toggle("ngzhwm_korean_romanization".localized, isOn: $viewModel.koreanRomanization)
+            Toggle("chinese_romanization".localized, isOn: $viewModel.chineseRomanization)
+            Toggle("japanese_romanization".localized, isOn: $viewModel.japaneseRomanization)
+            Toggle("korean_romanization".localized, isOn: $viewModel.koreanRomanization)
+        }
+    }
+
+    /// ★ 2026-10-31：**歌词系统翻译**（Apple `Translation` 框架，纯本地）。
+    ///
+    /// 只对"源自己没给译文"的歌词生效，翻完在每行原文下面多一行译文。
+    /// 要求：iOS 18+，且用户已在「设置 → App → 翻译 → 语言」里下好两种语言。
+    @ViewBuilder private func lyricsAutoTranslateSection() -> some View {
+        Section {
+            Toggle(
+                "lyrics_auto_translate".localized,
+                isOn: $viewModel.lyricsAutoTranslate
+            )
+        } footer: {
+            Text("lyrics_auto_translate_description".localized)
         }
     }
 
@@ -190,10 +211,10 @@ struct EeveeLyricsSettingsView: View {
 
     @ViewBuilder private func neteaseRomajiLocalSection() -> some View {
         Section(
-            footer: Text("ngzhwm_netease_romaji_local_description".localized)
+            footer: Text("netease_romaji_local_description".localized)
         ) {
             Toggle(
-                "ngzhwm_netease_romaji_local".localized,
+                "netease_romaji_local".localized,
                 isOn: $viewModel.neteaseRomajiLocal
             )
         }
@@ -201,10 +222,10 @@ struct EeveeLyricsSettingsView: View {
 
     @ViewBuilder private func neteaseHideTranslationSection() -> some View {
         Section(
-            footer: Text("ngzhwm_netease_hide_translation_description".localized)
+            footer: Text("netease_hide_translation_description".localized)
         ) {
             Toggle(
-                "ngzhwm_netease_hide_translation".localized,
+                "netease_hide_translation".localized,
                 isOn: $viewModel.neteaseHideTranslation
             )
         }

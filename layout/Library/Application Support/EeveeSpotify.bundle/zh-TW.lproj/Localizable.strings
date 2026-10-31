@@ -285,7 +285,7 @@ categoriesSectionDeps1 = "關閉 = 忽略，顯示 = 僅在進度列上顯示片
    locale. Values are the English originals (copied verbatim), so runtime behaviour is
    English rather than a raw key name. Translate one, then move it into the matching
    section above and delete it from this block. */
-ngzhwm_lyrics_unavailable = "未找到歌詞";
+lyrics_unavailable = "未找到歌詞";
 lyrics_no_timeline = "這首歌的歌詞沒有時間軸";
 lyrics_looking_up = "正在尋找歌詞…";
 tab_bar_hide_labels = "隱藏標籤文字";

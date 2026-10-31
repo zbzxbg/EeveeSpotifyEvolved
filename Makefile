@@ -1,16 +1,21 @@
-# ── 最低部署版本：16.1（2026-10-13 从 14.0 提上来）────────────────────────────
-# README 的「System Requirements」一直写的是 **Minimum: iOS 16.1 / Recommended: iOS 26**，
-# 但构建元数据没跟上（这里和 `control` 都还是 14.0）—— 于是编译器把 iOS 15+ 的 API
-# 全部判成不可用，设置页那两处（`AttributedString` 做的可点说明、`ProgressView().controlSize`）
-# 直接报 error。
+# ── 最低部署版本：17.4（2026-10-31 从 16.1 提上来）──────────────────────────
+# README 的「System Requirements」写的是 **Minimum: iOS 17.4 / Recommended: iOS 26**。
 #
-# 现在两边对齐到 16.1。连带后果，心里有数即可：
-#   · iOS 14 / 15 的机器装不了（README 本来就这么写的）；
+# 为什么提到 17.4：
+#   · **歌词系统翻译**用的是 Apple 的 `Translation.framework`，它**从 17.4 才有**。
+#     最低版本低于它时，`import Translation` 的自动链接会让 iOS 16 / 17.0–17.3 的机器
+#     **一启动就崩**（dyld: Library not loaded），只能靠 `-weak_framework` + 关掉自动链接
+#     硬撑 —— 那套参数本身又是构建期的风险。把门槛提到 17.4，框架一定在，
+#     强链接就是安全的，构建参数也回到最朴素的样子。
+#   · 17.4 之前的系统占比已经很低，而本仓库的外观特性大量依赖 iOS 26 的新材质。
+#
+# 连带后果，心里有数即可：
+#   · iOS 14 / 15 / 16 / 17.0–17.3 的机器装不了（`control` 的 `firmware` 会挡住）；
 #   · `EeveeSpotify.hookTarget` 里 `.lastAvailableiOS14`（Spotify 8.9.8）那一档事实上成了死路，
 #     留着无害，将来清理时一起删；
-#   · 旧纪律「禁用 iOS 15+  API（`UIButton.Configuration`、`foregroundStyle`…）」自本条起作废；
-#     `#available(iOS 26.0, *)` 那些门禁**仍然必须留**（26 > 16.1）。
-TARGET := iphone:clang:latest:16.1
+#   · `#available(iOS 18.0, *)` / `#available(iOS 26.0, *)` 那些门禁**仍然必须留**
+#     （18 > 17.4，26 > 17.4）—— 尤其是 `TranslationSession` 的初始化器是 iOS 18 的。
+TARGET := iphone:clang:latest:17.4
 INSTALL_TARGET_PROCESSES = Spotify
 ARCHS = arm64
 
@@ -31,6 +36,16 @@ EeveeSpotify_FILES = $(shell find Sources/EeveeSpotify -name '*.swift') $(shell 
 EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include -Osize
 EeveeSpotify_EXTRA_FRAMEWORKS = EeveeSwiftProtobuf
 EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Os
+
+# ── 系统翻译：Translation.framework 现在是**强链接**（最低版本 17.4 起它一定在）──
+# `Sources/EeveeSpotify/Lyrics/OnDeviceLyricsTranslation.swift` 里有 `import Translation`。
+# 2026-10-31 把最低部署版本提到 17.4 之前，这里曾经要 `-weak_framework Translation` +
+# `-Xfrontend -disable-autolink-framework`：否则 iOS 16 / 17.0–17.3 上 dyld 找不到
+# 这个框架，**App 一启动就崩**。门槛提上去之后那两行**故意删掉了** ——
+# 留着反而多一层构建期风险，而且弱链接会把"框架真的缺了"这件事藏起来。
+# ⚠️ 如果将来把 `TARGET` 调回 17.4 以下，这两行必须一起加回来：
+#     EeveeSpotify_SWIFTFLAGS += -Xfrontend -disable-autolink-framework -Xfrontend Translation
+#     EeveeSpotify_LDFLAGS += -weak_framework Translation
 
 # ── 越狱路径支持（libroot / roothide）───────────────────────────────────────
 # RootHide's compatibility implementation of libroot resolves jailbreak paths
@@ -69,7 +84,7 @@ endif
 # in build-ipa-local.sh and the GitHub workflow. No flags needed here.
 
 # ── 打包依赖：`control` 里的 ${ORION} 是 **theos 的占位符**，不是本仓库的变量 ──
-# `control` 结尾写的是 `Depends: ${ORION}, firmware (>= 16.1)`。这里的 ${ORION}
+# `control` 结尾写的是 `Depends: ${ORION}, firmware (>= 17.4)`。这里的 ${ORION}
 # **不由本 Makefile 定义**（全仓库 grep `ORION =` 会是零命中，那是正常的），
 # 它在 `make package` 时由 theos 自己替换：
 #
@@ -77,7 +92,7 @@ endif
 #     _THEOS_DEB_ORION_DEPENDS := dev.theos.orion (>= 1.0.0)
 #     sed -e 's/\${ORION}/$(_THEOS_DEB_ORION_DEPENDS)/g; …'
 #
-# ⇒ 最终 deb 的 Depends 是 `dev.theos.orion (>= 1.0.0), firmware (>= 16.1)`。
+# ⇒ 最终 deb 的 Depends 是 `dev.theos.orion (>= 1.0.0), firmware (>= 17.4)`。
 # 同一机制还有 ${LIBSWIFT} / ${LIBSWIFT_VERSION}。**不要**把 ORION 定义成本地
 # 变量 —— 那会变成普通 make 变量替换，反而绕过 theos 的版本约束。
 #

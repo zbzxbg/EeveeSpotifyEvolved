@@ -300,7 +300,7 @@ extension NowPlayingLyricsPlate {
     /// 数据喂进去、再把那一档翻成中文文案。四种"没词"必须分开说，混档就是用户能看见的误报：
     ///   · 源**明确**说是纯音乐 ⇒ `song_is_instrumental`（不许拿"查无此歌"冒充它）；
     ///   · **有行、但一行时间都没有**、连文本都提不出来 ⇒ `lyrics_no_timeline`；
-    ///   · 查完了没有 / 转换异常 ⇒ `ngzhwm_lyrics_unavailable`；
+    ///   · 查完了没有 / 转换异常 ⇒ `lyrics_unavailable`；
     ///   · 还在查 ⇒ `lyrics_looking_up`（调试页那颗彩蛋会把文案换掉）。
     ///
     /// ⚠️ 参数按**短路**的顺序算：`hasLines` 为假时不去碰 `currentLines()` / `currentUntimedLines()`
@@ -328,7 +328,7 @@ extension NowPlayingLyricsPlate {
         case .noTimeline:
             return "lyrics_no_timeline".localized
         case .unavailable:
-            return "ngzhwm_lyrics_unavailable".localized
+            return "lyrics_unavailable".localized
         case .lookingUp:
             // ★ 2026-10-30（用户）：「删除替换寻找歌词时的占位符这个功能」——
             //   那句「少女祈祷中…」的彩蛋连同调试页开关、UserDefaults 键、l10n 一起删了。
