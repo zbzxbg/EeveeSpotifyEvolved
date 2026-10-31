@@ -2,20 +2,20 @@ import Foundation
 
 /// 酷狗 —— 中文曲库里少数能给到**逐字**的那一档（KRC）。
 ///
-/// ── 两个请求 ────────────────────────────────────────────────────────────────
-///   1. 搜：`https://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=<歌手 - 歌名>`
-///   2. 下：`https://lyrics.kugou.com/download?ver=1&client=pc&id=&accesskey=&fmt=krc`
+/// ── 两个请求
+/// 1. 搜：`https://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=<歌手 - 歌名>`
+/// 2. 下：`https://lyrics.kugou.com/download?ver=1&client=pc&id=&accesskey=&fmt=krc`
 ///
 /// 搜索回的每条候选带 `id` + `accesskey`，两个都要原样带进下载 —— 少一个就是 404。
 ///
-/// ── 挑候选的三条闸 ──────────────────────────────────────────────────────────
-///   · `product_from == "ugc"` 丢掉：那是用户上传的，错字与错轴极多；
-///   · 标题（去标点后）必须**完全相等**、歌手互相包含；
-///   · 时长差 ≤ 8 秒（KRC 的 duration 是毫秒，比 QQ 的整秒准，但翻唱版差得也多）。
+/// ── 挑候选的三条闸
+/// · `product_from == "ugc"` 丢掉：那是用户上传的，错字与错轴极多；
+/// · 标题（去标点后）必须**完全相等**、歌手互相包含；
+/// · 时长差 ≤ 8 秒（KRC 的 duration 是毫秒，比 QQ 的整秒准，但翻唱版差得也多）。
 /// 通过闸的按"时长最接近"排序，**最多试 3 条**：KRC 偶尔会有"条目在、内容解不开"的，
 /// 试下一条比直接放弃划算；但试太多会把链路拖长。
 ///
-/// ── KRC 怎么解 ──────────────────────────────────────────────────────────────
+/// ── KRC 怎么解
 /// 见 `KrcText`。一句话：base64 → `"krc1"` 魔数 → 16 字节 XOR → zlib 解压 → 逐行解析。
 final class KuGouLyricsRepository: LyricsRepository {
 
@@ -38,7 +38,7 @@ final class KuGouLyricsRepository: LyricsRepository {
         let lead = LyricsMatch.leadArtist(query.primaryArtist)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !LyricsMatch.key(title).isEmpty, !LyricsMatch.key(lead).isEmpty else {
-            writeDebugLog("[KuGou] nothing to search with (empty title or artist)")
+            writeDebugLog("[KuGou] search skipped — empty title or artist")
             throw LyricsError.noSuchSong
         }
 
@@ -67,7 +67,10 @@ final class KuGouLyricsRepository: LyricsRepository {
 
         let fitting = fittingCandidates(in: candidates, title: title, artist: lead, trackMs: trackMs)
         guard !fitting.isEmpty else {
-            writeDebugLog("[KuGou] no recording of \"\(title)\" by \(lead) near \(trackMs / 1000)s")
+            writeDebugLog(
+                "[KuGou] \"\(title)\" — \(lead): no candidate matched the length"
+                    + " (slack \(Self.lengthSlackMs / 1000)s)"
+            )
             throw LyricsError.noSuchSong
         }
 
@@ -107,7 +110,7 @@ final class KuGouLyricsRepository: LyricsRepository {
             guard let id = Self.string(in: entry["id"]), !id.isEmpty,
                   let accessKey = Self.string(in: entry["accesskey"]), !accessKey.isEmpty else { continue }
 
-            // 用户上传的那一批（`ugc`）错字、错轴都多，直接跳过。
+            // 上传的那一批（`ugc`）错字、错轴都多，直接跳过。
             if (entry["product_from"] as? String) == "ugc" { continue }
 
             guard LyricsMatch.key(entry["song"] as? String) == wanted else { continue }

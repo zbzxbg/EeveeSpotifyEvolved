@@ -26,7 +26,7 @@ The following projects shaped this one. Some of their code was modified to fit; 
   - [163MusicLyrics](https://github.com/jitwxs/163MusicLyrics)
 - The QQ Music and KuGou endpoints (`Providers/Web/QQMusic`, `Providers/Web/KuGou`) follow [Lyricify Lyrics Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper).
 - The KuGou (KRC) and QQ Music (QRC) decryption follows [LDDC](https://github.com/chenmozhijin/LDDC) (`core/decryptor/`) and [pyqdes](https://github.com/naiyQAQ/pyqdes) for the key bytes and the order of the DES steps. The implementation here is our own Swift (`KrcText.swift`, `QrcText.swift`) — no code was copied.
-- The BiniLyrics and Unison endpoints, and the rules for picking a candidate (title, artist, length), follow [Taurus](https://github.com/samj-exe/taurus) — see the note on PolyForm Strict below.
+- The BiniLyrics and Unison endpoints came to us by way of [Taurus](https://github.com/samj-exe/taurus); the implementations — candidate gates, response handling, parse path — are our own, written against each service's public API. See the note on PolyForm Strict below.
 - PetitLyrics, Musixmatch, LRCLIB and Genius are spoken to over the services' own public endpoints.
 - The inspiration for the karaoke lyrics and interludes came from [MeloX](https://github.com/youshen2/MeloX).
 
@@ -34,9 +34,10 @@ The following projects shaped this one. Some of their code was modified to fit; 
 
 `Taurus` 0.60.5 is licensed under **PolyForm Strict 1.0.0**, which does not permit distributing modified or derivative versions. **No Taurus source code was copied or translated into this repository.** What was taken is the *approach*, reimplemented from scratch in Swift:
 
-- which provider each of its lyrics sources talks to, and how a candidate is matched (`LyricsMatch.swift`);
+- which provider each of its lyrics sources talks to, and the "word timing first, then closest length" ordering behind the BiniLyrics pick (`BiniLyricsRepository.swift`);
 - the "ask in order, keep the finest timing, stop once something is timed" walk behind **Auto Select** (`LyricsAutoSelect.swift`);
 - how it finds a playlist page's header when the page has none of the usual landmarks — by the view controller's class name rather than by an accessibility id (`EntityPageHeader.playlistHeaderRoot`, `EntityPageHeaderHooks`);
+- the pointer that `TranslationSession` has a public initializer from iOS 26, which is what makes on-device translation usable outside SwiftUI (`OnDeviceLyricsTranslation.swift`);
 - its full takeover of the player menu (`Redesigned/Player/PlayerMenu.x`) was read and deliberately **not** adopted; the lyrics-offset row is appended as a table footer instead (`PlayerMenuOffsetRow.x.swift`).
 
 All of the above was read from a locally supplied copy for reference only. If a rights holder disagrees with this use, open an issue and it will be reworked or removed.

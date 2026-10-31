@@ -162,21 +162,31 @@
 
 ### 3.3b BiniLyrics / Unison（已接入，逐字）
 
-这两个是"社区收的 Apple Music 逐字 TTML"，接口形状几乎一样，都是**一个 GET 拿正文**：
+这两个都是"社区收的 Apple Music 逐字 TTML"，都是**一个 GET 拿正文**，但响应形状不同：
 
 ```
 BiniLyrics  GET https://lyrics-api.binimum.org/?track=<歌名>&artist=<歌手>&duration=<秒>&album=<专辑>
-            → {"results": [{"lyricsUrl": "...ttml", "duration": 213, "timing_type": "word"}]}
+            → {"results": [{"track_name": "…", "artist_name": "…", "lyricsUrl": "...ttml",
+                            "duration": 213, "timing_type": "word", "isrc": "…"}]}
             → 再 GET lyricsUrl 拿 TTML 正文
 
 Unison      GET https://unison.boidu.dev/lyrics?song=<歌名>&artist=<歌手>&duration=<秒>&album=<专辑>
-            → {"data": {"format": "ttml", "lyrics": "<TTML 正文>", "duration": 213,
-                        "syncType": "richsync", "confidence": 0.93}}
+            → {"success": true,
+               "data": {"format": "ttml", "lyrics": "<TTML 正文>", "syncType": "richsync",
+                        "confidence": "high", "song": "…", "artist": "…"}}
+            → 没命中：{"success": false, "error": "…", "code": "NOT_FOUND", "hint": "…"}
 ```
 
-- BiniLyrics 回的是**候选列表**，要自己挑：逐字优先，其次时长更接近，容差 4 秒；
-- Unison 回的是**它自己挑好的最高分**，我们只能再拿时长兜一道（容差 4 秒），
-  而且 `format` 不是 `ttml` 就直接放弃（它也会回 LRC / 纯文本，那两样别的源都有）；
+- BiniLyrics 回的是**候选列表**，要自己挑：先过三道闸（曲名去标点后全等 / 歌手互相包含 /
+  时长 ±4 秒），再按逐字优先、时长更接近排序。**只按时长挑会配到翻唱** ——
+  实测 `Blinding Lights / The Weeknd` 的 20 条结果里有 17 条是别人的版本
+  （187s、221s…），原曲 200s，4 秒容差足够放进一两首；
+- Unison 回的是**它自己挑好的最高分**，外面套一层 `{success, data}` 信封，没命中时没有 `data`。
+  匹配在**服务端**做（公开文档见 `github.com/better-lyrics/unison`）：按 `v` → `isrc` →
+  `song + artist` 的顺序找，歌手按完整署名比，给了 `duration` 就按 **±2 秒**收窄。
+  所以客户端只验三件事：`success`、`format == "ttml"`、能解析出至少一行。
+  ⚠️ **响应里没有 `duration` 字段** —— 早期版本拿它比对，那个分支从来没执行过；
+  `confidence` 也是字符串档位（`low` / `medium` / `high`），不是数字；
 - 两家都不需要鉴权。BiniLyrics 还有一条"按 ISRC 直取"的捷径
   （`https://lrc.red/s/<isrc>.ttml`），但我们手上没有 ISRC，走不了。
 
@@ -230,26 +240,18 @@ token  GET https://music.apple.com/us/browse  → 正则抠 index*.js → 再抠
 
 ---
 
-## 4. 「自动优选」抄了 Taurus 什么
+## 4. 「自动优选」的规则从哪来
 
-Taurus 的 `LyricsSources.m`（`SGLyricsWalk` / `step` / `betterLines`）里，规则只有四条：
+规则是照着 Taurus 的**行为**定的（只读行为，没有引用它的实现）。它那边只有四条：
 
-```objc
-// 1. 按用户排好的顺序逐个问
-provider.ask(query, ^(SGLyricsResult *fresh) {
-    // 2. 纯文本不能终止查找：任何行 > 没有行，细时间轴 > 粗时间轴
-    if (betterLines(merged, fresh)) { … }   // word timed < line timed < untimed（越小越细）
-    if (betterTexts(merged, fresh)) { … }   // 有文本 > 没文本；同步 > 不同步
-    // 3. 纯音乐是结论，立刻收工
-    if (fresh.instrumental) { merged.instrumental = YES; finish(walk); return; }
-    step(walk);
-});
+| # | 规则 | 我们对应的实现 |
+|---|---|---|
+| 1 | 按用户排好的顺序逐个问 | `LyricsSourceOrder.current` + `LyricsAutoSelect.chain()` |
+| 2 | 纯文本不终止查找：有文本 > 没文本，细时间轴 > 粗时间轴 | `LyricsTimingTier`（word > line > untimed），同档先到先得 |
+| 3 | 纯音乐是结论，立刻收工 | `CustomLyrics.autoSelectLyrics` 里的 `isInstrumental` 分支 |
+| 4 | 拿到"有时间轴的正文"就收工 | 停在**想要的那一档**，见下面的分歧 |
 
-// 4. 已经拿到"有时间轴的正文"就收工 —— 因为歌词卡片只等 1 秒左右
-if (merged.synced && merged.texts.count && merged.karaokeLines.count) { finish(walk); return; }
-```
-
-外加三条工程细节，也都照做了：
+外加三条工程细节，按同样的思路处理（都是策略，不是代码）：
 
 - **名字晚到**：搜索型源在曲目还没被播放器命名时先跳过，等按 ID 匹配的源把名字补上再回头问一次。
   我们的 `LyricsSearchQuery` 在请求入口就从 metadata 拿全了，这条不需要。
@@ -258,19 +260,19 @@ if (merged.synced && merged.texts.count && merged.karaokeLines.count) { finish(w
 - **逐首缓存 + 并发去重**：同一首并发来的请求只跑一次链路。
   我们由 `LyricsResponseCache` 的 payload 备忘承担。
 
-**没有照抄的两条**（都是刻意的）：
+**刻意的分歧**（两条）：
 
 - Taurus 停在"第一个有时间轴的答案"，我们停在"**想要的那一档**"：
   逐字开关打开时会为逐字多等最多 4 秒。理由是两边的预算不同 ——
   Taurus 要在 1 秒内把卡片喂出来，我们的响应预算是 18 秒。
-- Taurus 让用户拖动排序来源 —— 这一条**照做了**（2026-10-31 用户提出之后）。
+- Taurus 让用户拖动排序来源 —— 这一条我们也做了（2026-10-31 用户提出之后）。
   我们的实现是 `LyricsSourceOrder` + 设置 → 歌词 → 来源顺序，默认顺序由用户指定：
   `amll → sl → pl → 网易云 → qq → 酷狗 → un → mxm → bini → lrclib → gen`。
   与 Taurus 的差别只有一个：它的顺序同时是"开关列表"（不在列表里 = 关掉），
   我们只做排序 —— 想只用某一个源，上一页的单源选择器已经能做到。
-- 「自动优选」**只在听歌页样式为沉浸式 / Apple Music 时可选**（2026-10-31 用户）。
-  Spotify 原生样式下选项被滤掉，盘上存的值不改，切回沉浸式 / AM 式会自动恢复；
-  那期间按 `LyricsSource.defaultSource` 取词。见 `LyricsSource.isAvailableInCurrentNowPlayingStyle`。
+**另外**：「自动优选」**只在听歌页样式为沉浸式 / Apple Music 时可选**（2026-10-31 用户）。
+Spotify 原生样式下选项被滤掉，盘上存的值不改，切回沉浸式 / AM 式会自动恢复；
+那期间按 `LyricsSource.defaultSource` 取词。见 `LyricsSource.isAvailableInCurrentNowPlayingStyle`。
 
 ---
 

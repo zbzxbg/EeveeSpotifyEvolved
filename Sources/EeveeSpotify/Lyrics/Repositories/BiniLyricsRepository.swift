@@ -1,124 +1,213 @@
 import Foundation
 
-/// BiniLyrics（`lyrics-api.binimum.org`）—— Apple Music 的逐字 TTML 库。
+/// BiniLyrics（`lyrics-api.binimum.org`）—— 按名字搜 Apple Music 逐字 TTML 的社区库。
 ///
-/// ── 它是什么 ────────────────────────────────────────────────────────────────
-/// 社区把 Apple Music 的 `syllable-lyrics` TTML 收下来做成可搜索的接口，按
-/// `track / artist / duration / album` 搜，回一组候选（每条带 `lyricsUrl` 与 `timing_type`），
-/// 再按 URL 取 TTML 正文。
+/// ── 接口
+/// GET /?track=<曲名>&artist=<艺人>[&duration=<秒>][&album=<专辑>]
+/// → {"results": [{"track_name", "artist_name", "duration"(秒), "isrc",
+/// "lyricsUrl", "timing_type": "word" | "line" | "none"}], "total": N}
+/// → 再 GET `lyricsUrl` 拿 TTML 正文（实际就是 `https://lrc.red/s/<isrc>.ttml`）
 ///
-/// ── 为什么值得接 ────────────────────────────────────────────────────────────
-/// 它是"逐字 + 人工校对"的那一档，和 AMLL 同一类，但**按名字搜**而不是按 Spotify ID 查，
-/// 所以 AMLL 库里没有的曲子它可能有。反过来它没有精确 ID，只能靠时长与名字挑候选 ——
-/// 挑错就是把别的录音的词配上来，所以 `bestOf` 那段判据（逐字优先 + 时长容差）不能省。
+/// 不带参数打根路径时，服务自己会回 `{"detail":"provide one of: q / isrc / track(+artist)"}`
+/// —— 这就是它的接口说明。它也接受 `isrc=`，但 `LyricsSearchQuery` 里没有 ISRC
+/// （Spotify 的播放器元数据不保证带），所以这里只走名字搜索。
 ///
-/// ── 没有接的那一半 ──────────────────────────────────────────────────────────
-/// Taurus 还有一条"按 ISRC 直取"的捷径（`https://lrc.red/s/<isrc>.ttml`）。
-/// 我们的 `LyricsSearchQuery` 里**没有 ISRC**（Spotify 的播放器元数据不保证带），
-/// 所以这条走不了；Taurus 在拿不到 ISRC 时也是退回按名字搜，行为一致。
+/// ── 为什么必须自己比标题和歌手
+/// 这个库是**模糊搜索**，一次回 20 条，里面混着大量同曲异人的翻唱。实测
+/// `Blinding Lights / The Weeknd` 的前 20 条里有 17 条是别人的版本
+/// （The Naked and Famous 187s、The Howl & The Hum 221s…），原曲 200s。
+/// 只按时长挑的话，4 秒容差足够让某首翻唱混进来 —— 用户会拿到**另一首歌的词**。
+///
+/// 所以判据是三道闸，缺一不可：
+/// ① 曲名：去标点后**全等**（`LyricsMatch.key`；`晴天` 与 `晴天 (Live)` 因此不同）。
+/// 唯一放宽的是合作署名：`Song (feat. X)` 与 `Song` 视为同一首（见 `titlesMatch`）；
+/// ② 歌手：互相包含（`LyricsMatch.sameArtist`，认 `feat.` 之后的主艺人）；
+/// ③ 时长：±4 秒（`LyricsMatch.lengthMatches`，任一方缺数据就不否决）。
+///
+/// ①② 的代价是**漏配**而不是错配：Spotify 与 Apple 的标题偶尔差一个后缀
+/// （`- Remastered 2011`）就会整条落空。这是有意的 —— 漏了还有下一个源，
+/// 配错了用户是看不出来的。
+///
+/// ── 挑哪一条
+/// 过闸的候选按 `(逐字优先, 时长差更小)` 排序，取第一条。`timing_type` 只参与**排序**，
+/// 不改写 dto：最终是逐字还是逐行，由 `hasUsableWordLevelData` 按解析出来的行判 ——
+/// 那是自动优选与渲染层共用的唯一口径（声明 "word" 而 TTML 里只有 `<p begin>` 的情况确实存在）。
 final class BiniLyricsRepository: LyricsRepository {
 
     static let shared = BiniLyricsRepository()
     private init() {}
 
-    private static let api = "https://lyrics-api.binimum.org/"
+    private static let endpoint = "https://lyrics-api.binimum.org/"
 
-    /// 候选录音与曲目的时长差在几秒内才算同一首。
-    /// 4 秒是 Taurus 用的值：翻唱/伴奏与原版通常差得比这多，而同曲异名的不同母带差得比这少。
-    private static let lengthSlackSeconds = 4
+    /// 秒。翻唱/伴奏与原版通常差得比这多；同曲异名的不同母带差得比这少。
+    private static let lengthToleranceSeconds = 4
+
+    // MARK: - 取词
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         let title = query.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = query.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !artist.isEmpty else {
-            writeDebugLog("[Bini] nothing to search with (empty title or artist)")
+            writeDebugLog("[Bini] search skipped — empty title or artist")
             throw LyricsError.noSuchSong
         }
 
-        let seconds = (query.durationMs ?? 0) / 1000
-
-        var components = URLComponents(string: Self.api)
-        var items = [
-            URLQueryItem(name: "track", value: title),
-            URLQueryItem(name: "artist", value: artist)
-        ]
-        if seconds > 0 { items.append(URLQueryItem(name: "duration", value: String(seconds))) }
-        if let album = query.albumTitle, !album.isEmpty {
-            items.append(URLQueryItem(name: "album", value: album))
+        guard let searchURL = Self.searchURL(title: title, artist: artist, query: query) else {
+            throw LyricsError.decodingError
         }
-        components?.queryItems = items
-        guard let url = components?.url else { throw LyricsError.decodingError }
 
-        writeDebugLog("[Bini] searching \"\(title)\" — \(artist)")
-        guard let root = LyricsSourceHTTP.getJSON(url, tag: "Bini"),
-              let results = LyricsSourceHTTP.dig(root, ["results"]) as? [Any] else {
-            writeDebugLog("[Bini] search returned nothing usable")
+        guard let payload = LyricsSourceHTTP.getJSON(searchURL, tag: "Bini"),
+              let rows = LyricsSourceHTTP.dig(payload, ["results"]) as? [Any] else {
+            writeDebugLog("[Bini] search returned no results array")
             throw LyricsError.noSuchSong
         }
 
-        guard let best = bestCandidate(in: results, trackSeconds: seconds) else {
+        let candidates = rows.compactMap { Self.candidate(from: $0) }
+        let fittingCandidates = Self.fitting(candidates, for: query)
+        guard let pick = fittingCandidates.first else {
             writeDebugLog(
-                "[Bini] no candidate within \(Self.lengthSlackSeconds)s of \(seconds)s"
+                "[Bini] \"\(title)\" — \(artist): \(candidates.count) candidate(s),"
+                    + " none passed title / artist / length"
             )
             throw LyricsError.noSuchSong
         }
 
-        guard let ttml = LyricsSourceHTTP.getText(best.url, tag: "Bini"), !ttml.isEmpty else {
-            writeDebugLog("[Bini] \(best.url.absoluteString) gave no body")
+        writeDebugLog(
+            "[Bini] \"\(title)\" — \(artist): \(fittingCandidates.count)/\(candidates.count) passed,"
+                + " picking \(pick.label)"
+        )
+
+        guard let ttml = LyricsSourceHTTP.getText(pick.url, tag: "Bini"), !ttml.isEmpty else {
+            writeDebugLog("[Bini] \(pick.label): TTML came back empty")
             throw LyricsError.noSuchSong
         }
 
         guard let dto = Self.makeDto(fromTTML: ttml) else {
-            writeDebugLog("[Bini] \(best.url.absoluteString) had nothing the page could show")
+            writeDebugLog("[Bini] \(pick.label): TTML parsed to no lines")
             throw LyricsError.noSuchSong
         }
 
-        writeDebugLog(
-            "[Bini] \"\(title)\" — \(artist): \(dto.lines.count) line(s),"
-                + " \(best.wordTimed ? "word timed" : "line timed")"
-        )
+        writeDebugLog("[Bini] \(pick.label): \(dto.lines.count) line(s)")
         return dto
     }
 
-    /// 逐字优先，其次时长更接近；两条都过不了容差的直接丢掉。
-    ///
-    /// ⚠️ 与 Taurus 的 `bestOf` 逐条对齐：**先判逐字，再判时长**。
-    ///   反过来的话"时长更准的行级"会顶掉"时长差 3 秒的逐字"，
-    ///   而用户开逐字开关要的正是后者。
-    private func bestCandidate(
-        in results: [Any],
-        trackSeconds: Int
-    ) -> (url: URL, wordTimed: Bool, off: Int)? {
-        var best: (url: URL, wordTimed: Bool, off: Int)?
+    // MARK: - 搜索
 
-        for item in results {
-            guard let candidate = item as? [String: Any],
-                  let raw = candidate["lyricsUrl"] as? String,
-                  !raw.isEmpty,
-                  let url = URL(string: raw) else { continue }
+    private static func searchURL(title: String, artist: String, query: LyricsSearchQuery) -> URL? {
+        var components = URLComponents(string: endpoint)
+        var items = [
+            URLQueryItem(name: "track", value: title),
+            URLQueryItem(name: "artist", value: artist)
+        ]
 
-            let length = (candidate["duration"] as? NSNumber)?.intValue ?? 0
-            let off = (trackSeconds > 0 && length > 0) ? abs(length - trackSeconds) : 0
-            if off > Self.lengthSlackSeconds { continue }
-
-            let wordTimed = (candidate["timing_type"] as? String) == "word"
-
-            if let current = best {
-                if current.wordTimed && !wordTimed { continue }
-                if current.wordTimed == wordTimed && off >= current.off { continue }
-            }
-            best = (url, wordTimed, off)
+        // `duration` 是**秒**（接口的 `duration` 字段也是秒）。
+        if let durationMs = query.durationMs, durationMs > 0 {
+            items.append(URLQueryItem(name: "duration", value: String(durationMs / 1000)))
+        }
+        if let album = query.albumTitle, !album.isEmpty {
+            items.append(URLQueryItem(name: "album", value: album))
         }
 
-        return best
+        components?.queryItems = items
+        return components?.url
     }
 
-    /// TTML → dto。解析与映射与 AMLL / Apple Music 官方那两条线**共用同一套**代码。
+    // MARK: - 候选
+    //
+    // 一条搜索结果。`seconds` 为 nil 表示接口没给时长（排序时当作最不接近）。
+    private struct Candidate {
+        let url: URL
+        let trackName: String
+        let artistName: String
+        let seconds: Int?
+        let wordTimed: Bool
+        let isrc: String?
+
+        /// 没有就用 URL 最后一段。
+        var label: String { isrc ?? url.lastPathComponent }
+    }
+
+    private static func candidate(from row: Any) -> Candidate? {
+        guard let entry = row as? [String: Any],
+              let raw = entry["lyricsUrl"] as? String,
+              !raw.isEmpty,
+              let url = URL(string: raw) else { return nil }
+
+        let seconds = (entry["duration"] as? NSNumber)?.intValue
+
+        return Candidate(
+            url: url,
+            trackName: entry["track_name"] as? String ?? "",
+            artistName: entry["artist_name"] as? String ?? "",
+            seconds: (seconds ?? 0) > 0 ? seconds : nil,
+            wordTimed: (entry["timing_type"] as? String) == "word",
+            isrc: entry["isrc"] as? String
+        )
+    }
+
+    /// 过三道闸，再按 (逐字优先, 时长差更小) 排好。第一条就是最该用的那条。
+    private static func fitting(_ candidates: [Candidate], for query: LyricsSearchQuery) -> [Candidate] {
+        let wantedTitles = Set(
+            ([query.title] + query.titleVariants)
+                .map { LyricsMatch.key($0) }
+                .filter { !$0.isEmpty }
+        )
+        let artists = query.allArtistNames
+        let trackMs = query.durationMs
+
+        let passing = candidates.filter { candidate in
+            guard Self.titlesMatch(LyricsMatch.key(candidate.trackName), wanted: wantedTitles) else {
+                return false
+            }
+            guard artists.contains(where: { LyricsMatch.sameArtist(candidate.artistName, $0) }) else {
+                return false
+            }
+            let candidateMs = candidate.seconds.map { $0 * 1000 }
+            return LyricsMatch.lengthMatches(
+                candidateMs,
+                trackMs,
+                slackMs: lengthToleranceSeconds * 1000
+            )
+        }
+
+        return passing.sorted { lhs, rhs in
+            if lhs.wordTimed != rhs.wordTimed { return lhs.wordTimed }
+            return offset(lhs, trackMs) < offset(rhs, trackMs)
+        }
+    }
+
+    /// 曲名是否同一首。
     ///
-    /// ⚠️ 候选声明的 `timing_type` **不改写 dto**：最终是逐字还是逐行，由
-    ///   `hasUsableWordLevelData` 按**解析出来的行**判 —— 那是自动优选与渲染层共用的唯一口径。
-    ///   候选自称 "word" 而 TTML 里只有 `<p begin>` 的情况确实存在（AMLL 也一样），
-    ///   信声明就会做出"标着逐字、实际逐行"的错配。
+    /// 主判据是**全等**（去标点后）。唯一的放宽是合作署名：Apple 常把 `feat.` 写进标题
+    /// （`Song (feat. X)`），Spotify 有时只在艺人字段里写 —— 归一化后是 `songfeatx` 与
+    /// `song`，全等会把同一首歌判成两首。所以允许"多出来的一段以 `feat` / `ft` 开头"。
+    ///
+    /// 不放宽版本后缀：`Song (Live)` / `Song (Remix)` 归一化后多出来的是 `live` / `remix`，
+    /// 那正是最常配错的一类，必须挡在外面。
+    private static func titlesMatch(_ candidateKey: String, wanted: Set<String>) -> Bool {
+        guard !candidateKey.isEmpty else { return false }
+        if wanted.contains(candidateKey) { return true }
+
+        for key in wanted {
+            let longer = key.count >= candidateKey.count ? key : candidateKey
+            let shorter = key.count >= candidateKey.count ? candidateKey : key
+            guard longer.hasPrefix(shorter), longer.count > shorter.count else { continue }
+
+            let extra = longer.dropFirst(shorter.count)
+            if extra.hasPrefix("feat") || extra.hasPrefix("ft") { return true }
+        }
+        return false
+    }
+
+    /// 与曲目的时长差（毫秒）。缺任一侧就是 `.max`，排在所有能算出差值的候选后面。
+    private static func offset(_ candidate: Candidate, _ trackMs: Int?) -> Int {
+        guard let seconds = candidate.seconds, let trackMs, trackMs > 0 else { return .max }
+        return abs(seconds * 1000 - trackMs)
+    }
+
+    // MARK: - 解析
+    //
+    // TTML → dto。解析与映射与 AMLL / Apple Music 官方那两条线**共用同一套**代码。
     private static func makeDto(fromTTML ttml: String) -> LyricsDto? {
         guard let parsed = try? AmllTtmlParser.parse(ttml) else { return nil }
         let dto = AmllLyricsMapper.makeDto(parsed, logTag: "Bini")

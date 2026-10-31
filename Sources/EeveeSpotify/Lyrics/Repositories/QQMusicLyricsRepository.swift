@@ -2,19 +2,19 @@ import Foundation
 
 /// QQ 音乐 —— 中文（国语 / 粤语）曲库，**逐字**（QRC）与逐行（LRC）都有。
 ///
-/// ── 两个请求 ────────────────────────────────────────────────────────────────
-///   1. 搜：`music.search.SearchCgiService / DoSearchForQQMusicDesktop`
-///   2. 词：`music.musichallSong.PlayLyricInfo / GetPlayLyricInfo`
+/// ── 两个请求
+/// 1. 搜：`music.search.SearchCgiService / DoSearchForQQMusicDesktop`
+/// 2. 词：`music.musichallSong.PlayLyricInfo / GetPlayLyricInfo`
 ///
 /// 两个都打 `https://u.y.qq.com/cgi-bin/musicu.fcg`，body 是
 /// `{"comm": {…}, "<模块名>": {module, method, param}}` —— **第二个请求的键是完整模块名**，
 /// 不是 `"req"`，这一点很容易抄错（抄错的表现是永远拿不到 `data`）。
 ///
-/// ── 逐字（QRC）──────────────────────────────────────────────────────────────
-/// ★ 2026-10-31：原来这里带的是 `qrc: 0, crypt: 0`，只取明文 LRC（Taurus 的做法）。
-///   现在改成 `qrc: 1, crypt: 1`：`data["qrc_t"] != 0` 时 `data["lyric"]` 是**加密的 QRC**，
-///   解密与解析在 `QrcText` 里（hex → 3DES → zlib → `词(起始,时长)`）。
-///   解不开 / `qrc_t == 0` 时退回 base64 明文 LRC —— 有些条目确实只有行级。
+/// ── 逐字（QRC）
+/// 原来这里带的是 `qrc: 0, crypt: 0`，只取明文 LRC（Taurus 的做法）。
+/// 现在改成 `qrc: 1, crypt: 1`：`data["qrc_t"] != 0` 时 `data["lyric"]` 是**加密的 QRC**，
+/// 解密与解析在 `QrcText` 里（hex → 3DES → zlib → `词(起始,时长)`）。
+/// 解不开 / `qrc_t == 0` 时退回 base64 明文 LRC —— 有些条目确实只有行级。
 ///
 /// 所以这个源在自动优选里现在是 **word 档**（`canProduceWordTiming == true`），
 /// 具体这一首给到哪一档，由 `hasUsableWordLevelData` 按解析出来的行判。
@@ -39,7 +39,7 @@ final class QQMusicLyricsRepository: LyricsRepository {
         let lead = LyricsMatch.leadArtist(query.primaryArtist)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !LyricsMatch.key(title).isEmpty, !LyricsMatch.key(lead).isEmpty else {
-            writeDebugLog("[QQMusic] nothing to search with (empty title or artist)")
+            writeDebugLog("[QQMusic] search skipped — empty title or artist")
             throw LyricsError.noSuchSong
         }
         guard let url = URL(string: Self.api) else { throw LyricsError.decodingError }
@@ -70,7 +70,10 @@ final class QQMusicLyricsRepository: LyricsRepository {
 
         let list = LyricsSourceHTTP.dig(searchRoot, ["req", "data", "body", "song", "list"]) as? [Any]
         guard let songId = pickSong(in: list ?? [], title: title, artist: lead, seconds: seconds) else {
-            writeDebugLog("[QQMusic] no recording of \"\(title)\" by \(lead) near \(seconds)s")
+            writeDebugLog(
+                "[QQMusic] \"\(title)\" — \(lead): no candidate matched the length"
+                    + " (slack \(Self.lengthSlackSeconds)s)"
+            )
             throw LyricsError.noSuchSong
         }
 
@@ -80,10 +83,10 @@ final class QQMusicLyricsRepository: LyricsRepository {
             Self.lyricKey: [
                 "module": "music.musichallSong.PlayLyricInfo",
                 "method": "GetPlayLyricInfo",
-                // ★ 2026-10-31：从 `qrc: 0` 改成 `qrc: 1, crypt: 1` —— 要逐字。
-                //   参数表照 `chenmozhijin/LDDC` 的 `get_lyrics`（它拿到的是能解开的 QRC）：
-                //   `songName` / `singerName` / `albumName` 是 **base64 的 UTF-8**，
-                //   `interval` 是**秒**，其余几个 `*_t` 是"要不要翻译/罗马音"的开关，这里全关。
+                // 从 `qrc: 0` 改成 `qrc: 1, crypt: 1` —— 要逐字。
+                // 参数表照 `chenmozhijin/LDDC` 的 `get_lyrics`（它拿到的是能解开的 QRC）：
+                // `songName` / `singerName` / `albumName` 是 **base64 的 UTF-8**，
+                // `interval` 是**秒**，其余几个 `*_t` 是"要不要翻译/罗马音"的开关，这里全关。
                 "param": [
                     "albumName": Self.base64(query.albumTitle ?? ""),
                     "crypt": 1,
