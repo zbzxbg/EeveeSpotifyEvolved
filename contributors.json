@@ -1,12 +1,23 @@
 [
     {
-        "title": "Development",
+        "title": "This fork",
         "shuffled": false,
         "contributors": [
             {
                 "usernames": ["zbzxbg"],
                 "displayName": "zbzxbg",
                 "roles": ["Maintainer", "Developer"]
+            }
+        ]
+    },
+    {
+        "title": "Upstream",
+        "shuffled": false,
+        "contributors": [
+            {
+                "usernames": ["whoeevee"],
+                "displayName": "whoeevee",
+                "roles": ["Original Creator", "Former Developer"]
             },
             {
                 "usernames": ["jaydenjcpy"],
@@ -29,14 +40,9 @@
                 "roles": ["EeveeSpotifyRevivedPublic Developer"]
             },
             {
-                "usernames": ["whoeevee"],
-                "displayName": "whoeevee",
-                "roles": ["Original Creator", "Former Developer"]
-            },
-            {
-                "usernames": ["asdfzxcvbn"],
-                "displayName": "asdfzxcvbn",
-                "roles": ["Former Collaborator"]
+                "usernames": ["Spikerko"],
+                "displayName": "Spikerko",
+                "roles": ["Upstream SpicyLyrics Developer"]
             },
             {
                 "usernames": ["estrogencat"],
@@ -44,9 +50,9 @@
                 "roles": ["Upstream Icon Fixes"]
             },
             {
-                "usernames": ["Spikerko"],
-                "displayName": "Spikerko",
-                "roles": ["Upstream SpicyLyrics Developer"]
+                "usernames": ["asdfzxcvbn"],
+                "displayName": "asdfzxcvbn",
+                "roles": ["Former Collaborator"]
             }
         ]
     }
