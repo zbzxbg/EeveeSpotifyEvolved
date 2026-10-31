@@ -83,9 +83,9 @@ The IPA pipelines bundle `Orion.framework` into the app, since a sideloaded app 
 
 **Now Playing misbehaves** (lyrics not showing, or a stale "coming soon" card): leave the Now Playing page and enter it again. This only applies if "Hide Spotify song Now Playing modules" is off.
 
-**Lyrics are missing for one song** — open Settings → Lyrics → Lyrics Source Order and move the source that has them to the top; Auto Select only sees sources that answer for that track.
+**One song has no lyrics** — open Settings → Lyrics → Lyrics Source Order and check that a source which carries it is enabled. Auto Select asks the sources in order and skips any that return nothing, so one gap never blocks the others.
 
-**Something looks stale after an update** — force-quit Spotify once. The tweak runs in-process, so a half-applied update shows the old layout until the next launch.
+**A switch seems to do nothing** — force-quit Spotify once. Hooks are installed at launch, so a setting you just changed applies the next time the app starts.
 
 ## Requirements
 
