@@ -68,13 +68,13 @@ enum EntityPageAppearance {
     /// 照片里那段化开正好卡在 `minMeltSpan` 的下限（90pt）上，看起来像"贴了一条渐变"；
     /// 起点提前一点、下限抬高一截，同一张照片的化开就是 90 → 150pt（见 `minMeltSpan`）。
     /// ⚠️ 别再往 0.66 以上调：那次就是因为起点太高，把猫的下半身整段吃掉。
-    private static let meltStartRatio: CGFloat = 0.60
+    private static let meltStartRatio: CGFloat = 0.50
     /// 化开那一段的**下限**：页头矮的时候别把渐变整成一条硬边。
     ///
     /// （渐变的长度可以再拉大一点）：90 → **150**。
     /// 这一段是**由下方（名字上沿 − `meltGap`）往上量**的，所以抬高它只会把起点往前推、
     /// 把过渡拉长，名字和那三颗按钮仍然落在平色上（那一条没动）。
-    private static let minMeltSpan: CGFloat = 150
+    private static let minMeltSpan: CGFloat = 220
     /// 化开那一段的缓动采样：**两端都要平**（`1 − smoothstep(p)`，9 个等分点）。
     ///
     /// 线性斜坡两端的折角才是'被切断'感的主要来源，和长短关系不大。
@@ -1083,9 +1083,14 @@ enum EntityPageAppearance {
         // pw：页头还在加载时 block 的位置偏高，取"当前值"会让图够不到标题、中间留一条裸色带。
         let imageAspect = source.size.width > 1 ? max(0.4, source.size.height / source.size.width) : 1
         let natural = host.bounds.width * imageAspect
-        let reach = fillsHost
+        var reach = fillsHost
             ? max(minHeroHeight, min(host.bounds.height, natural))
             : max(minHeroHeight, coverFrame.maxY + EntityPageHeaderMetrics.titleRise)
+        // 图够不到我们那一行字时，中间会留一截平色 —— 化开就成了一条"贴上去"的渐变。
+        // 把图往下铺到字的上沿（封顶在宿主高度里），化开就能一路走到字前。
+        if let textTop = ourHeaderTextTop(in: host), textTop > reach {
+            reach = min(host.bounds.height, textTop + meltGap)
+        }
         let previous = (objc_getAssociatedObject(host, &heroHeightKey) as? NSNumber)?.doubleValue ?? 0
         let height = max(previous, reach)
         if height != previous {
@@ -1472,6 +1477,19 @@ enum EntityPageAppearance {
     /// 唯一原因是专辑页没有 `_backgroundViewContainer` 这个起点。
     /// ⇒ 把主体抽成"给一个容器就按歌单那套洗"，专辑页把**页头那一块**当容器传进来
     /// （见 `pageHeaderRoot` 与 `concealAlbumWash` 开头）。
+    /// `view` 是不是在**满幅页头**（`…HeaderFullbleedCentralView`）里。
+    /// 只给"这一条渐变要不要藏"用：那一族页头的渐变是页面的一部分，不是要洗掉的色晕。
+    private static func isInsideFullbleedHeader(_ view: UIView) -> Bool {
+        var node: UIView? = view
+        var levels = 0
+        while let current = node, levels < 8 {
+            if NSStringFromClass(type(of: current)).contains("Fullbleed") { return true }
+            node = current.superview
+            levels += 1
+        }
+        return false
+    }
+
     private static func concealWash(beneath container: UIView, skipping plane: UIView? = nil) {
         var queue: [UIView] = [container]
         var visited = 0
@@ -1488,6 +1506,10 @@ enum EntityPageAppearance {
             if let plane, view === plane { continue }
 
             if NSStringFromClass(type(of: view)).contains("GradientView") {
+                // **满幅页头容器里的渐变不算 wash**：生成歌单（电台 / This Is / 音乐全览）
+                // 靠它把页头颜色化进页面；藏掉之后页头只剩一块硬边纯色。
+                // 判据只认容器类名里的 `Fullbleed`，专辑 / 歌单页那层色晕照旧藏。
+                if isInsideFullbleedHeader(view) { continue }
                 recordWash(view)
                 continue
             }

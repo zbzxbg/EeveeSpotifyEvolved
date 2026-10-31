@@ -473,6 +473,12 @@ enum EntityPageHeaderManager {
         var fullbleedKept: [UIView] = []
         if let fullbleed {
             fullbleedKept = fullbleedArtwork(in: fullbleed)
+            // 认出了图才把**渐变**也加进"不许藏"的名单：那层渐变是页头自己的下缘化开，
+            // 藏掉之后页头就成了一块硬边纯色（"生成歌单没有渐变"就是这么来的）。
+            // ⚠️ 名单为空的"整支放过"安全阀不能被它破坏，所以只在非空时合并。
+            if !fullbleedKept.isEmpty {
+                fullbleedKept += fullbleedGradients(in: fullbleed)
+            }
         }
         let fullbleedPicture = fullbleedKept.first
 
@@ -527,14 +533,39 @@ enum EntityPageHeaderManager {
             let needed = header.contentHeight(forWidth: headerRoot.bounds.width) + header.contentBottom
             height = max(height, needed)
         }
+        // **底边锚到"列表第一行上沿"**（只在没有 `PL.Header` 的生成歌单一族上开）。
+        // 那些页头的布局层（`HeaderContentLayout`）比页头真正占的高度高 ⇒ 内容贴着布局底边排、
+        // 就会伸进列表第一行。`visibleCells` 是 collection view 已经量好的格子，直接量它。
+        //
+        // 只在"确实比布局底边高、而且差得不算离谱"时锚过去：量到 0 / 负值或差几百 pt 说明这一拍
+        // 列表还没量好，硬锚会把内容甩到封面上。
+        let rawListTop = isPLHeader ? nil : firstRowTop(around: headerRoot, in: block)
+        let listTop = rawListTop.flatMap { top -> CGFloat? in
+            let shift = block.bounds.height - (top + header.contentBottom)
+            guard top > 20, shift > 4, shift <= 120 else { return nil }
+            return top
+        }
+        let bottom = listTop.map { $0 + header.contentBottom } ?? block.bounds.height
+        if let listTop {
+            logOnce(
+                "listAnchor_" + String(describing: ObjectIdentifier(headerRoot)),
+                "playlist: the first row starts at \(Int(listTop.rounded()))pt, but the header layout"
+                    + " reaches \(Int(block.bounds.height.rounded()))pt — anchored our block to the row"
+                    + " (\(Int((block.bounds.height - bottom).rounded()))pt up)"
+            )
+        }
         // ⚠️ 普通歌单页 `y` **恒为 0**（原来就是这样；`coverDrop` 靠"加高"把文字往下推，
         // 改成负 y 会把那一段抵消掉）。只有兜底那条路才允许向上长。
-        let frame = CGRect(
+        var frame = CGRect(
             x: round(x),
-            y: isPLHeader ? 0 : min(0, block.bounds.height - height),
+            y: isPLHeader ? 0 : min(0, bottom - height),
             width: headerRoot.bounds.width,
             height: height
         )
+        // 兜底那条路再让底边**精确**落在列表上沿（`min(0, …)` 只是不往上顶，底边本来由高度决定）。
+        if !isPLHeader, listTop != nil {
+            frame.origin.y = bottom - height
+        }
         if header.frame != frame { header.frame = frame }
 
         // z 序与几何两道保险。
@@ -547,6 +578,7 @@ enum EntityPageHeaderManager {
         probeCoverOverlap(
             cover: fullbleedPicture ?? (cover === fullbleed ? nil : cover),
             headerView: header,
+            root: headerRoot,
             role: "playlist"
         )
         // 把三段高度打进日志（每页一次）：藏掉某一段之后留下的空白，靠它定位空在哪两段之间。
@@ -868,7 +900,16 @@ enum EntityPageHeaderManager {
     /// 同一个目标值，不会累加；
     /// · 没有重叠时把 drop **清回 0**（`fullbleed` 那种假重叠已由调用方挡掉，这里清的是
     /// "滚动过程中量到、现在已经不成立"的那一截）。
-    private static func probeCoverOverlap(cover: UIView?, headerView: EntityPageHeaderView, role: String) {
+    ///
+    /// 还要**先看我们那一行字在不在页头里**（`root`）：页头收起时整块文字被搬到页头上面（屏幕外），
+    /// 那时封面换算出来的底边会落到很远的下方，量出来的"重叠"能有几百 pt ⇒ drop 一路顶到上限，
+    /// 内容被推下去一大截。
+    private static func probeCoverOverlap(
+        cover: UIView?,
+        headerView: EntityPageHeaderView,
+        root: UIView,
+        role: String
+    ) {
         guard let cover, headerView.bounds.height > 1, headerView.window != nil else { return }
         // 只在页头高度**稳定**的那一拍量。滚动中页头每帧都在变高/变矮，而这段代码会反过来改
         // 页头高度（`+ coverDrop`）⇒ 量一次、改一次、下一拍又量到不同的值 ⇒ 按钮每帧上下跳。
@@ -888,6 +929,10 @@ enum EntityPageHeaderManager {
         guard headerView.hasTitle else { return }
         let current = coverDrop(of: headerView)
         let naturalTextTop = max(0, headerView.textTop - current)
+        // 我们那一行字**不在页头里**（收起 / 正在收起）⇒ 没有"被封面压到"这回事，这一拍不动。
+        // 不加这一道，收起时那个换算出来的底边会把这个值顶到上限，内容被推下去一大截。
+        let textTopInRoot = headerView.convert(CGPoint(x: 0, y: naturalTextTop), to: root).y
+        guard textTopInRoot >= -1, textTopInRoot <= root.bounds.height else { return }
         let frame = cover.convert(cover.bounds, to: headerView)
         guard frame.maxY > naturalTextTop + 1, frame.minY < headerView.bounds.height else {
             // 自然位置下没有重叠 ⇒ 之前那截 drop 已经不需要了（多半是滚动中途量到的）。
@@ -1012,7 +1057,7 @@ enum EntityPageHeaderManager {
 
         // z 序与几何两道保险。
         raiseToTop(headerView, in: header, role: "album")
-        probeCoverOverlap(cover: cover, headerView: headerView, role: "album")
+        probeCoverOverlap(cover: cover, headerView: headerView, root: header, role: "album")
 
         headerView.update(title: texts.title, creator: texts.creator, length: texts.length, about: "")
 
@@ -1236,7 +1281,7 @@ enum EntityPageHeaderManager {
 
         // z 序与几何两道保险。
         raiseToTop(headerView, in: header, role: "artist")
-        probeCoverOverlap(cover: cover, headerView: headerView, role: "artist")
+        probeCoverOverlap(cover: cover, headerView: headerView, root: header, role: "artist")
 
         // 月听众那行是一颗开关（默认保留）。`meta` 仍算出来给日志用。
         headerView.update(
@@ -2756,6 +2801,36 @@ enum EntityPageHeaderManager {
         eeveeBlank(wrapperFor(menu, in: headerRoot))
     }
 
+    /// **列表第一行的上沿**（换算到 `block` 坐标里）；认不出返回 nil。
+    ///
+    /// 只信 collection view 的 `visibleCells` —— 那些格子的帧是现成的，不需要额外布局，
+    /// 滚动时自然跟着更新。页头自己那一格要排除：它装着 `block`，上沿在页头里面。
+    private static func firstRowTop(around headerRoot: UIView, in block: UIView) -> CGFloat? {
+        guard let collection = eeveeEnclosingCollectionView(of: headerRoot) else { return nil }
+        // 页头那一格的上沿：比它还高的格子（别的 section / 嵌套列表）不算"列表第一行"。
+        var floorY: CGFloat = 0
+        var node: UIView? = headerRoot
+        var levels = 0
+        while let current = node, levels < 8 {
+            if current is UICollectionViewCell {
+                floorY = current.convert(current.bounds, to: block).minY
+                break
+            }
+            node = current.superview
+            levels += 1
+        }
+        var top: CGFloat?
+        for cell in collection.visibleCells {
+            if cell === headerRoot || headerRoot.isDescendant(of: cell) || cell.isDescendant(of: block) {
+                continue
+            }
+            let rect = cell.convert(cell.bounds, to: block)
+            guard rect.height > 1, rect.maxY > 0, rect.minY >= floorY - 1 else { continue }
+            top = min(top ?? .greatestFiniteMagnitude, rect.minY)
+        }
+        return top
+    }
+
     /// **页头那一格有多高**（header slot 的宿主 cell）—— 只给日志用。
     ///
     /// 生成歌单的"按键压到列表第一行"要分清是哪一种：我们的内容比那一格高（`need > host`），
@@ -3058,6 +3133,21 @@ enum EntityPageHeaderManager {
             forEachView(fullbleed) { view in
                 guard NSStringFromClass(type(of: view)).contains("AvatarView"),
                       view.bounds.width >= 48 else { return }
+                kept.append(view)
+            }
+        }
+        return kept
+    }
+
+    /// 满幅页头里**那层渐变**（生成歌单一族靠它把页头颜色化进页面）。
+    ///
+    /// 单独一个函数、**由调用方只在"已经认出了图"时合并**：`concealInside` 的"名单为空 ⇒ 整支放过"
+    /// 是一条安全阀（认不出图时整支不藏，否则会把满幅图一起藏没），不能因为多了一条渐变就失效。
+    private static func fullbleedGradients(in fullbleed: UIView) -> [UIView] {
+        var kept: [UIView] = []
+        forEachView(fullbleed) { view in
+            let name = NSStringFromClass(type(of: view))
+            if name.contains("Gradient") || name.contains("BlurView") {
                 kept.append(view)
             }
         }
