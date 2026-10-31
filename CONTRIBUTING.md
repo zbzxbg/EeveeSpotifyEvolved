@@ -35,4 +35,4 @@ If you are contributing or updating a localization, run the checker and include 
 
 ## Pull requests
 
-This project does not currently support pull requests.
+It wouldn’t be a bad idea to add a bit of your own content to this project. Wouldn’t it?
