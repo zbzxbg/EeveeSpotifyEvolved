@@ -54,6 +54,12 @@ enum EntityPageHeaderManager {
     /// 只给 `playlistPageDidLayout` 用：那一拍判断"主挂点是不是已经在干活" —— 是就什么都不做，
     /// 免得每 0.5s 白扫一遍整棵页面树。
     private static weak var currentHeader: EntityPageHeaderView?
+    /// 那一份页头挂在哪一层 —— `pinMoreButton` 的落点（弱引用：换页 / 页头重建自动失效）。
+    ///
+    /// 存在的唯一理由：`⋯` 挂在 **window** 上，而 `EntityPageAppearance.tick` 每 0.6s 要把它
+    /// 重钉一次（见 `refreshPinnedMore`）。没有这个落点，`⋯` 就只能等下一次**布局回合**
+    /// ——也就是用户划一下 —— 才回来，那正好是"不划动就没有三个点"。
+    private static weak var currentHeaderRoot: UIView?
     /// 页面级备用入口的节流（BFS 最多 1500 个节点，不能每帧跑）。
     private static var lastPlaylistProbe: CFAbsoluteTime = 0
     /// 页头里那几个大圆头像（见 `headerAvatars`）—— 这一拍是每帧的，按 `layout` 缓存，换页才重扫。
@@ -544,13 +550,17 @@ enum EntityPageHeaderManager {
             role: "playlist"
         )
         // 把三段高度打进日志（每页一次）：藏掉某一段之后留下的空白，靠它定位空在哪两段之间。
+        // 后面两个数是给"生成歌单的按键压到列表第一行"留的判据：我们的内容要 `need` 那么高，
+        // 而 Spotify 给页头留的那一格（日志里的 `host`）可能更矮 —— 内容比那一格高就会溢到列表上。
         logOnce(
             "playlistGeom_" + String(describing: ObjectIdentifier(headerRoot)),
             "playlist geometry — PL.Header \(Int(headerRoot.bounds.height.rounded()))pt,"
                 + " block \(Int(block.frame.minY.rounded()))..\(Int(block.frame.maxY.rounded()))pt,"
                 + " our block \(Int(header.frame.minY.rounded()))..\(Int(header.frame.maxY.rounded()))pt,"
                 + " text top \(Int(header.textTop.rounded()))pt,"
-                + " cover bottom \(cover.map { Int($0.convert($0.bounds, to: header).maxY.rounded()) } ?? -1)pt"
+                + " cover bottom \(cover.map { Int($0.convert($0.bounds, to: header).maxY.rounded()) } ?? -1)pt,"
+                + " need \(Int(header.contentHeight(forWidth: headerRoot.bounds.width).rounded()))pt,"
+                + " host \(slotDescription(of: headerRoot))"
         )
 
         // Spotify 那一列整列藏掉（我们自己的那份除外）。幂等；Spotify 边加载边往里加东西，
@@ -2660,6 +2670,9 @@ enum EntityPageHeaderManager {
     ///
     /// 藏 Spotify 行里那颗走 `wrapperFor`（连它的圆底一起）—— 否则同一页上会出现两颗 `⋯`。
     private static func pinMoreButton(in headerRoot: UIView) {
+        // 先记下落点：`EntityPageAppearance.tick` 每 0.6s 靠它重钉（见 `refreshPinnedMore`）。
+        // 放在最前面 —— 这一页的 `⋯` 可能还没建出来，那一拍也得把落点记住。
+        currentHeaderRoot = headerRoot
         // 走 `findControl`：根因与播放键是同一个 —— 按 id 拿到的是 `ElementView<…>` 包装层。
         guard let menu = findControl("Components.UI.ContextMenuButton*", in: headerRoot, cache: &cachedMore) else {
             // 这一页没有 `⋯`（或者还没建出来）⇒ 什么都不做，**也不留一颗假的**。
@@ -2743,6 +2756,25 @@ enum EntityPageHeaderManager {
         eeveeBlank(wrapperFor(menu, in: headerRoot))
     }
 
+    /// **页头那一格有多高**（header slot 的宿主 cell）—— 只给日志用。
+    ///
+    /// 生成歌单的"按键压到列表第一行"要分清是哪一种：我们的内容比那一格高（`need > host`），
+    /// 还是那一格本身就和 `headerRoot` 的高度对不上（排在它后面的列表因此提前开始）。
+    private static func slotDescription(of root: UIView) -> String {
+        var node: UIView? = root
+        var level = 0
+        while let current = node, level < 5 {
+            if current is UICollectionViewCell || current is UITableViewCell {
+                let kind = NSStringFromClass(type(of: current))
+                let frame = current.convert(current.bounds, to: root.window ?? current)
+                return "\(kind) \(Int(frame.minY.rounded()))h\(Int(frame.height.rounded()))"
+            }
+            node = current.superview
+            level += 1
+        }
+        return "none (\(NSStringFromClass(type(of: root))))"
+    }
+
     /// 把隐藏的搜索框那一行的**真实 frame / 父链 / 滚动 offset / topInset** 打一次，
     /// 用来分清"空档是那一行的高度"还是"contentInset 多了一截"，再决定折高度还是改 offset。
     private static func reportPlaylistMetrics(headerRoot: UIView, findField: UIView) {
@@ -2775,6 +2807,11 @@ enum EntityPageHeaderManager {
     }
 
     /// 离开实体页时把挂在 window 上的 `⋯` 收走（见 `pinMoreButton`）。
+    ///
+    /// ⚠️ **不要在这里清 `currentHeaderRoot`**：清掉之后，只有**布局回合**能把它写回来，
+    /// 而 `⋯` 的保活正是为了"没有布局回合"的情形（页面开着不动）——
+    /// 一次弹层（或菜单）把这个按钮收走，就再也不会自己回来 = 又变成"划动才有三个点"。
+    /// 落点失效由 `refreshPinnedMore` 的 `isDescendant(of:)` 判据挡住（换页时它一定不成立）。
     static func removePinnedMore(reason: String = "") {
         guard let more = pinnedMore else { return }
         more.removeFromSuperview()
@@ -2785,6 +2822,64 @@ enum EntityPageHeaderManager {
             "[EntityPageHeader] pinned ⋯ removed"
                 + (reason.isEmpty ? "" : " (\(reason))")
         )
+    }
+
+    /// 「我们那一份页头**现在真的在最前面那一页上**」—— `⋯` 的保活判据。
+    ///
+    /// 只看 `currentHeader.window != nil` 不够：设置页 / 其它弹层是**盖在同一个 window 上**的一层，
+    /// 页头的视图还留在窗口里（只是被盖住）⇒ 判成"还在"就会把那颗 `⋯` 一直提到弹层上面。
+    /// 所以还要沿 responder chain 问一遍"这一页的哪个 VC 弹了东西"。
+    private static func isHeaderOnScreen() -> Bool {
+        guard let header = currentHeader, let window = header.window else { return false }
+        guard !header.isHidden, header.alpha > 0.01 else { return false }
+        guard header.convert(header.bounds, to: window).intersects(window.bounds) else { return false }
+        // 盖着别的页面（设置页 / 弹层）时，`⋯` 不能浮上去。
+        //
+        // ⚠️ 只问 `window.rootViewController.presentedViewController` 不够：弹层可以由**任何一个**
+        // VC 发起（设置页就是从它自己的 VC 弹的）⇒ 从页头往上走 responder chain，碰到每个 VC 都问一遍。
+        var node: UIResponder? = header
+        var hops = 0
+        while let current = node, hops < 80 {
+            hops += 1
+            if let controller = current as? UIViewController {
+                var presented = controller.presentedViewController
+                while let next = presented {
+                    // `⋯` 自己打开的菜单就是一个 presented VC（`ContextMenuViewController`）——
+                    // 那是这颗按钮的菜单，不是"盖住这一页"的另一页：菜单开着时把按钮摘掉，关掉之后
+                    // 又要等下一拍钉回来，用户看到的就是闪一下 ⇒ 这一类 presenter 不算遮挡。
+                    if !NSStringFromClass(type(of: next)).contains("ContextMenu") { return false }
+                    presented = next.presentedViewController
+                }
+            }
+            node = current.next
+        }
+        return true
+    }
+
+    /// **`⋯` 的每拍保活** —— 由 `EntityPageAppearance.tick`（0.6s 一拍）调用。
+    ///
+    /// （歌单右上角是有三个点的，但是只在划动歌单的时候有，不划动就没有了）：
+    /// `⋯` 挂在 window 上，而钉它的 `apply` 只在**布局回合**里跑 —— 停在页面上不动时一个布局回合
+    /// 都没有。旧版 `tick` 那句"没有实体页就收走"用的又是 `EntityPageAppearance.currentTarget()`，
+    /// 它认不出**生成歌单**（电台 / This Is / 音乐全览：页头是插件拼的、封面也没有那两个 id）
+    /// ⇒ 每 0.6s 把 `⋯` 摘一次，只有划动时被 `apply` 重新钉回来，看起来就是"划动才有三个点"。
+    ///
+    /// 现在：页头还在屏上 ⇒ 留在 window 上并**重钉一次**（位置 / z 序 / 源控件都跟着最新状态，
+    /// 幂等）；页头走了（包括被弹层盖住）⇒ 收走。
+    static func refreshPinnedMore() {
+        guard isHeaderOnScreen(),
+              let root = currentHeaderRoot, root.window != nil
+        else {
+            removePinnedMore(reason: "the entity page is gone")
+            return
+        }
+        // 落点必须**恰好装着**我们那一份页头：换页时 `apply` 还没跑、旧落点还在窗口里的话，
+        // 这一句能挡住"把上一页的页头当成这一页"。
+        guard let header = currentHeader, header === root || header.isDescendant(of: root) else {
+            removePinnedMore(reason: "our header is no longer in that root")
+            return
+        }
+        pinMoreButton(in: root)
     }
 
     /// 专辑页的文字：**按明确的 id 读**（`TitleRow` / `ParentRow` / `MetadataRow`）。
@@ -3280,9 +3375,9 @@ enum EntityPageHeaderManager {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func logOnce(_ key: String, _ message: String) {
+    private static func logOnce(_ key: String, _ message: @autoclosure () -> String) {
         guard logged.insert(key).inserted else { return }
-        writeDebugLog("[EntityPageHeader] \(message)")
+        writeDebugLog("[EntityPageHeader] \(message())")
     }
 }
 

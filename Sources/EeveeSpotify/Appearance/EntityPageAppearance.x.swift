@@ -445,16 +445,23 @@ enum EntityPageAppearance {
         let wantsField = UserDefaults.entityPageDissolve
         let wantsDissolve = UserDefaults.entityPageDissolve
 
+        // **`⋯` 的保活放在最前面**（两种分支都要跑）：`⋯` 挂在 window 上、钉它的 `apply` 只在
+        // **布局回合**里跑，而停着不动时一个布局回合都没有。
+        //
+        // ⚠️ 这里以前是"没有实体页就无条件 `removePinnedMore`"，而判据 `currentTarget()` 认不出
+        // **生成歌单**（电台 / This Is / 音乐全览：页头是插件拼的、封面也没有那两个 id）——
+        // 那一页上我们的页头明明在，却每 0.6s 被摘一次、只有划动时被 `apply` 钉回来，
+        // 这就是"歌单右上角是有三个点的，但是只在划动歌单的时候有，不划动就没有了"。
+        // 现在由页头那边按"我们那一份页头还在不在最前面那一页上"决定：在就重钉，走了才收。
+        EntityPageHeaderManager.refreshPinnedMore()
+
         guard let target = currentTarget() else {
             // 页面走了：把上一页留下的东西全部还原（切页/退出都不留残迹）。
             if currentPage != nil || field != nil || sharpHero != nil
                 || scrim != nil || concealedNativeCover != nil {
                 restore(reason: "left the page")
             }
-            // （艺人页右上角的三点功能按钮可能会有残留）：
-            // `⋯` 挂在 **window** 上（见 `pinMoreButton`），不跟页头一起走。这一拍没有
-            // 实体页时无条件收一次（有就摘、没有是空操作），别让它留在下一个页面上。
-            EntityPageHeaderManager.removePinnedMore(reason: "no entity page")
+            // （`⋯` 已经由上面那一句 `refreshPinnedMore` 收尾，见它的说明。）
             // 底色拦截器也一起松手。
             EntityPageRepaint.root = nil
             return
