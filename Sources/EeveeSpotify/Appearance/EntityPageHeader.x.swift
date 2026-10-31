@@ -58,7 +58,7 @@ enum EntityPageHeaderManager {
     ///
     /// 存在的唯一理由：`⋯` 挂在 **window** 上，而 `EntityPageAppearance.tick` 每 0.6s 要把它
     /// 重钉一次（见 `refreshPinnedMore`）。没有这个落点，`⋯` 就只能等下一次**布局回合**
-    /// ——也就是用户划一下 —— 才回来，那正好是"不划动就没有三个点"。
+    /// ——也就是必须有别的交互触发一次布局 —— 才回来。
     private static weak var currentHeaderRoot: UIView?
     /// 页面级备用入口的节流（BFS 最多 1500 个节点，不能每帧跑）。
     private static var lastPlaylistProbe: CFAbsoluteTime = 0
@@ -2810,7 +2810,7 @@ enum EntityPageHeaderManager {
     ///
     /// ⚠️ **不要在这里清 `currentHeaderRoot`**：清掉之后，只有**布局回合**能把它写回来，
     /// 而 `⋯` 的保活正是为了"没有布局回合"的情形（页面开着不动）——
-    /// 一次弹层（或菜单）把这个按钮收走，就再也不会自己回来 = 又变成"划动才有三个点"。
+    /// 一次弹层（或菜单）把这个按钮收走，就再也不会自己回来。
     /// 落点失效由 `refreshPinnedMore` 的 `isDescendant(of:)` 判据挡住（换页时它一定不成立）。
     static func removePinnedMore(reason: String = "") {
         guard let more = pinnedMore else { return }
@@ -2846,7 +2846,7 @@ enum EntityPageHeaderManager {
                 while let next = presented {
                     // `⋯` 自己打开的菜单就是一个 presented VC（`ContextMenuViewController`）——
                     // 那是这颗按钮的菜单，不是"盖住这一页"的另一页：菜单开着时把按钮摘掉，关掉之后
-                    // 又要等下一拍钉回来，用户看到的就是闪一下 ⇒ 这一类 presenter 不算遮挡。
+                    // 又要等下一拍钉回来，中间会闪一下 ⇒ 这一类 presenter 不算遮挡。
                     if !NSStringFromClass(type(of: next)).contains("ContextMenu") { return false }
                     presented = next.presentedViewController
                 }
@@ -2858,11 +2858,10 @@ enum EntityPageHeaderManager {
 
     /// **`⋯` 的每拍保活** —— 由 `EntityPageAppearance.tick`（0.6s 一拍）调用。
     ///
-    /// （歌单右上角是有三个点的，但是只在划动歌单的时候有，不划动就没有了）：
     /// `⋯` 挂在 window 上，而钉它的 `apply` 只在**布局回合**里跑 —— 停在页面上不动时一个布局回合
     /// 都没有。旧版 `tick` 那句"没有实体页就收走"用的又是 `EntityPageAppearance.currentTarget()`，
     /// 它认不出**生成歌单**（电台 / This Is / 音乐全览：页头是插件拼的、封面也没有那两个 id）
-    /// ⇒ 每 0.6s 把 `⋯` 摘一次，只有划动时被 `apply` 重新钉回来，看起来就是"划动才有三个点"。
+    /// ⇒ 每 0.6s 把 `⋯` 摘一次，只有布局回合才被 `apply` 重新钉回来。
     ///
     /// 现在：页头还在屏上 ⇒ 留在 window 上并**重钉一次**（位置 / z 序 / 源控件都跟着最新状态，
     /// 幂等）；页头走了（包括被弹层盖住）⇒ 收走。
