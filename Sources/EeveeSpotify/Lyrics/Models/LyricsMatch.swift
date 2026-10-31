@@ -18,7 +18,8 @@ enum LyricsMatch {
         guard let text, !text.isEmpty else { return "" }
         var dropped = CharacterSet.whitespacesAndNewlines
         dropped.formUnion(.punctuationCharacters)
-        dropped.formUnion(.symbolCharacters)
+        // ⚠️ 是 `.symbols`，不是 `.symbolCharacters` —— 后者不存在（2026-10-31 编译现场）。
+        dropped.formUnion(.symbols)
         return text.lowercased()
             .components(separatedBy: dropped)
             .joined()

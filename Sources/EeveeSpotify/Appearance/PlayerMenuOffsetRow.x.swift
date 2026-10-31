@@ -82,7 +82,15 @@ enum LyricsOffsetMenuRow {
     /// 两条判据取或：正在播放页在屏上；或呈现者链里出现 `NowPlaying` / `NPVScroll` 的类名。
     /// 两条都不成立就当作"别处的上下文菜单"，不碰。
     private static func isPlayerMenu(_ menu: UIViewController) -> Bool {
-        if let page = nowPlayingScrollViewController?.viewIfLoaded, page.window != nil { return true }
+        // ⚠️ `nowPlayingScrollViewController` 的类型是 **`@objc protocol`**，不是 `UIViewController`
+        //   —— 它上面没有 `viewIfLoaded`（2026-10-31 编译现场：`has no member 'viewIfLoaded'`）。
+        //   运行期它就是一个 VC，所以先转成 `UIViewController` 再用 `isViewLoaded`；
+        //   `isViewLoaded` 与 `viewIfLoaded != nil` 等价，**都不会顺手把视图加载出来**。
+        if let page = nowPlayingScrollViewController as? UIViewController,
+           page.isViewLoaded,
+           page.view.window != nil {
+            return true
+        }
         var node: UIViewController? = menu
         var hops = 0
         while let current = node, hops < 12 {
@@ -205,14 +213,17 @@ enum LyricsOffsetMenuRow {
     }
 }
 
-/// 沿 `parentViewController` 走到**最外层**那个 —— 收起 sheet 时要用它。
+/// 沿 `parent` 走到**最外层**那个 —— 收起 sheet 时要用它。
 ///
 /// 为什么不能直接 dismiss 菜单那个 VC：`ContextMenuViewController` 通常只是 sheet 里的子 VC，
 /// 对没被 present 的 VC 调 `dismiss` 在 UIKit 里是**空操作**（taurus 的 `presentedSheet` 也是先走到顶）。
+///
+/// ⚠️ 属性名是 `parent`：`parentViewController` 是它的**旧名**（ObjC 时代），
+///   Swift 里这么写会报 `has been renamed to 'parent'`（2026-10-31 编译现场）。
 private extension UIViewController {
     func topmostPresented() -> UIViewController {
         var top = self
-        while let parent = top.parentViewController { top = parent }
+        while let parent = top.parent { top = parent }
         return top
     }
 }

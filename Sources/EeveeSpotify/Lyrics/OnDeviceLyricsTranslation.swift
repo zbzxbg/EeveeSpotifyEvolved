@@ -17,6 +17,8 @@ import Translation
 /// 它的 `OnDeviceTranslation.swift` 给了两条关键信息，这里按同样的路子自己写：
 ///   1. `TranslationSession(installedSource:target:)` 是**公开初始化器** —— 不必为了拿一个
 ///      会话去挂 SwiftUI 的 `.translationTask`（那本来是这个框架唯一的用法）；
+///      ⚠️ 但它**从 iOS 26.0 才有**（2026-10-31 编译现场：`only available in iOS 26.0 or newer`），
+///      iOS 18~25 上这个框架没有公开的构造入口 —— 所以整条路在那些系统上直接不可用；
 ///   2. `translations(from:)` 一次可以递**一批** `Request`，每条的 `clientIdentifier`
 ///      带着行号回来 ⇒ 按行号填回去，不必依赖返回顺序。
 ///
@@ -30,9 +32,13 @@ import Translation
 ///   · **不碰主线程**：整段在后台跑，结果回主线程再写进 `currentLyricsDto`。
 enum OnDeviceLyricsTranslation {
 
-    /// 这台设备 / 这个系统版本上能不能用（iOS 18 起 `TranslationSession` 才有公开初始化器）。
+    /// 这台设备 / 这个系统版本上能不能用。
+    ///
+    /// ⚠️ 门槛是 **iOS 26**，不是 18：`TranslationSession(installedSource:target:)`
+    /// 这个公开初始化器从 26.0 才有。iOS 18~25 上框架的会话只能由 SwiftUI 的
+    /// `.translationTask` 给，那是另一套写法 —— 在把它做出来之前，这里就是"不可用"。
     static var isAvailable: Bool {
-        if #available(iOS 18.0, *) { return true }
+        if #available(iOS 26.0, *) { return true }
         return false
     }
 
@@ -56,7 +62,14 @@ enum OnDeviceLyricsTranslation {
     }
 
     /// 一行的语言 —— **认不准就当没有**（"yeah" / "oh" 这种短句会被乱猜）。
-    private static func language(of line: String) -> Locale.Language? {
+    ///
+    /// ⚠️ 名字带 `detected` 前缀不是为了好看：叫 `language(of:)` 时它是个
+    ///   `private` 的**极通用名**，而 `swift_member_check` 的规则 ③ 会把"仓库里有人
+    ///   用 private 声明过的名字"当成跨文件裸引用的嫌疑 —— 于是
+    ///   `EeveeLyricsSettingsViewModel+setupBindings.swift` 里那个闭包参数 `language`
+    ///   被误报成"裸引用别的文件的 private 成员"（逻辑测试会红）。
+    ///   私有辅助函数取个不会跟局部变量撞的名字，比让那条规则去理解闭包参数容易得多。
+    private static func detectedLanguage(of line: String) -> Locale.Language? {
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(line)
         guard let (found, chance) = recognizer.languageHypotheses(withMaximum: 1).first,
@@ -74,7 +87,7 @@ enum OnDeviceLyricsTranslation {
     private static func sourceLanguage(of lines: [String], target: Locale.Language) -> Locale.Language? {
         var votes: [String: (language: Locale.Language, count: Int)] = [:]
         for line in Set(lines.map { $0.lowercased() }) where !line.isEmpty {
-            guard let detected = language(of: line),
+            guard let detected = detectedLanguage(of: line),
                   !same(detected, target),
                   let code = detected.languageCode?.identifier else { continue }
             votes[code] = (votes[code]?.language ?? detected, (votes[code]?.count ?? 0) + 1)
@@ -91,7 +104,7 @@ enum OnDeviceLyricsTranslation {
     private static func needsTranslation(_ line: String, target: Locale.Language) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != "♪" else { return false }
-        if let detected = language(of: trimmed), same(detected, target) { return false }
+        if let detected = detectedLanguage(of: trimmed), same(detected, target) { return false }
         return true
     }
 
@@ -99,8 +112,10 @@ enum OnDeviceLyricsTranslation {
     ///
     /// 失败时返回 `(nil, 一句人话)`：调用方只负责把它写进日志 / 提示，不做重试判断。
     static func translate(_ lines: [String], to languageTag: String) async -> (lines: [String]?, message: String?) {
-        guard #available(iOS 18.0, *) else {
-            return (nil, "System translation needs iOS 18 or later.")
+        // ⚠️ 26.0（不是 18.0）：会话的公开初始化器只在这里有，见 `isAvailable` 的说明。
+        //   低于 26 时 `LanguageAvailability` 之类其实也有，但没有会话可建，走到后面也是白跑。
+        guard #available(iOS 26.0, *) else {
+            return (nil, "System translation needs iOS 26 or later.")
         }
         let target = Locale.Language(identifier: languageTag)
         let targetName = displayName(target)

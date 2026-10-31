@@ -1746,6 +1746,17 @@ enum NowPlayingIOS27 {
             if artistTapButton !== button { artistTapButton = button; changed = true }
             if button.frame != artistFrame { button.frame = artistFrame; changed = true }
         }
+
+        // 「挂上了」这条日志放在**这一层**：两个尺寸（`titleFrame` / `artistFrame`）是这里的局部量，
+        // `makeTapTarget` 里根本看不到它们（2026-10-31 编译现场：`cannot find 'titleFrame' in scope`）。
+        if !didLogTitleTapTargets, titleTapButton != nil || artistTapButton != nil {
+            didLogTitleTapTargets = true
+            writeDebugLog(
+                "[\(logTag)] title/artist tap targets mounted"
+                    + " (title \(Int(titleFrame.width))×\(Int(titleFrame.height)),"
+                    + " artist \(Int(artistFrame.width))×\(Int(artistFrame.height)))"
+            )
+        }
         return changed
     }
 
@@ -1773,14 +1784,6 @@ enum NowPlayingIOS27 {
                 for: .touchUpInside
             )
             page.addSubview(button)
-            if !didLogTitleTapTargets {
-                didLogTitleTapTargets = true
-                writeDebugLog(
-                    "[\(logTag)] title/artist tap targets mounted"
-                        + " (title \(Int(titleFrame.width))×\(Int(titleFrame.height)),"
-                        + " artist \(Int(artistFrame.width))×\(Int(artistFrame.height)))"
-                )
-            }
         }
         if button.frame != frame { button.frame = frame }
         if page.subviews.last !== button {

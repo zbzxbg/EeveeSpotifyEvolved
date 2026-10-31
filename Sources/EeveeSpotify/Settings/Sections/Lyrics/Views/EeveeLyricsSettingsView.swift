@@ -176,13 +176,17 @@ struct EeveeLyricsSettingsView: View {
     /// ★ 2026-10-31：**歌词系统翻译**（Apple `Translation` 框架，纯本地）。
     ///
     /// 只对"源自己没给译文"的歌词生效，翻完在每行原文下面多一行译文。
-    /// 要求：iOS 18+，且用户已在「设置 → App → 翻译 → 语言」里下好两种语言。
+    /// 要求：**iOS 26+**（`TranslationSession` 的公开初始化器从 26.0 才有，不是 18），
+    /// 且用户已在「设置 → App → 翻译 → 语言」里下好两种语言。
     @ViewBuilder private func lyricsAutoTranslateSection() -> some View {
         Section {
             Toggle(
                 "lyrics_auto_translate".localized,
                 isOn: $viewModel.lyricsAutoTranslate
             )
+            // ⚠️ iOS 26 以下这颗开关**什么都不做**（`TranslationSession` 没有公开构造入口）。
+            //   置灰而不是藏起来：footer 已经写明版本要求，藏起来只会让人以为功能被删了。
+            .disabled(!OnDeviceLyricsTranslation.isAvailable)
         } footer: {
             Text("lyrics_auto_translate_description".localized)
         }
