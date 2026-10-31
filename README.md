@@ -8,7 +8,7 @@ Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass l
 [![Spotify](https://img.shields.io/badge/Spotify-9.1.88-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/License-GPL--3.0-2C6EDB?style=for-the-badge)](LICENSE)
 
-[Download](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases) · [Features](#features) · [Install](#install) · [Build](#building-an-ipa)
+[Download](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases) · [Features](#features) · [Install](#install) · [Build](docs/BUILDING.md) · [Credits](#credits)
 
 </div>
 
@@ -63,7 +63,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 | SideStore / AltStore / Sideloadly / free or enterprise certificate | `.ipa` (no patch) |
 | LiveContainer | `.ipa` (no patch) |
 
-Get everything from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases), or [build your own IPA](#building-an-ipa).
+Get everything from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases). Building it yourself — from your own decrypted Spotify 9.1.88 IPA, with GitHub Actions or on a Mac — is covered in **[docs/BUILDING.md](docs/BUILDING.md)**.
 
 > [!IMPORTANT]
 > **Jailbroken users:** the `.deb` depends on `dev.theos.orion`. Add <https://repo.theos.dev/> to your package manager first, otherwise the install fails with an unmet dependency.
@@ -75,7 +75,7 @@ The patched IPA injects `zxPluginsInject.dylib`, a sideload shim (keychain acces
 
 Free profiles usually have no wildcard, so the Watch app and native appex have to be stripped (`Tools/strip-ipa.sh`). LiveContainer virtualises keychain, app groups and preferences itself, and the shim on top would conflict. TrollStore doesn't re-sign, so entitlements stay intact.
 
-The IPA pipelines bundle `Orion.framework` into the app, since a sideloaded app has no package manager to resolve dependencies.
+The IPA pipelines bundle `Orion.framework` into the app, since a sideloaded app has no package manager to resolve dependencies. How each of these lands in the build: [docs/BUILDING.md](docs/BUILDING.md).
 
 </details>
 
@@ -83,51 +83,16 @@ The IPA pipelines bundle `Orion.framework` into the app, since a sideloaded app 
 
 **Now Playing misbehaves** (lyrics not showing, or a stale "coming soon" card): leave the Now Playing page and enter it again. This only applies if "Hide Spotify song Now Playing modules" is off.
 
+**Lyrics are missing for one song** — open Settings → Lyrics → Lyrics Source Order and move the source that has them to the top; Auto Select only sees sources that answer for that track.
+
+**Something looks stale after an update** — force-quit Spotify once. The tweak runs in-process, so a half-applied update shows the old layout until the next launch.
+
 ## Requirements
 
 - iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
 - Spotify 9.1.88 (current public release: [`v1.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases))
 
 Verified on: iPhone 11 · Spotify 9.1.88 · iOS 27.0.1 · certificate-signed · LCSign · rootless deb.
-
-## Building an IPA
-
-You supply your own decrypted Spotify IPA. This repository never ships one or says where to get one (see [Legal](#legal)).
-
-> [!WARNING]
-> While `main` is under active development, the `Build .deb` step in the IPA and deb release workflows can fail. That is a known problem in the source at that moment, not something you did wrong. Wait a few hours, pull the latest repository and run the workflow again, or investigate and fix it (pull requests are welcome).
-
-<details>
-<summary>CI (nothing installed locally), or a local build on macOS</summary>
-
-### CI (nothing installed locally)
-
-Actions → **Build IPA — patched (Orion.framework + zxPluginsInject)** or **Build IPA — no patch (Orion.framework)** → Run workflow.
-
-| Input | Meaning |
-| --- | --- |
-| `ipa_url` | **Required.** Direct download URL of your decrypted Spotify IPA. It must return the `.ipa` itself, e.g. `https://example.com/abc.ipa`. Do not use cloud-drive share pages, login-gated links, or links that redirect to a preview page. |
-| `orion_url` | The bundled `Orion.zip`. Defaults to this project's own mirror; leave it alone unless it 404s. |
-| `upload_method` | Where the finished IPA(s) go: `artifacts` (default), `filebin`, or `both`. |
-| `liquid_glass` | On by default. Removes `UIDesignRequiresCompatibility` so iOS 26+ gets the new design language; set it to false to keep Spotify's own compatibility-mode look. |
-
-There is no "compile the tweak only" mode; an empty `ipa_url` fails the download step. A third workflow, **Binary Symbol Diff**, also takes an `ipa_url`, but it diffs a Spotify build against the tracked symbol baseline instead of producing an IPA.
-
-### Locally (macOS)
-
-```
-./setup-build-ipa.sh /path/to/Spotify-vanilla.ipa
-```
-
-`setup-build-ipa.sh` only installs the toolchain (Homebrew packages, `cyan`, `ipapatch`, Theos) and then hands off to `build-ipa-local.sh`, which does the actual work. To run the build directly once the toolchain is in place:
-
-```
-ALLOW_LIQUID_GLASS=0 ./build-ipa-local.sh /path/to/Spotify-vanilla.ipa
-```
-
-`ALLOW_LIQUID_GLASS` is the local equivalent of the CI `liquid_glass` input and defaults to `1` (on); set it to `0` to keep Spotify's compatibility-mode look.
-
-</details>
 
 ## Credits
 
