@@ -192,6 +192,8 @@ enum EntityPageAppearance {
     private static let maxCleared = 1200
     /// 「专辑页找到了、但封面图还没加载出来」只报一次（否则那 0.6s 的节拍会刷屏）。
     private static var didReportMissingColour = false
+    /// 「这一页是**生成歌单**（插件拼页头）、取色底按 VC 那一层铺」只报一次。
+    private static var didReportGenerated = false
     /// Spotify 自己的按键里，**这些 id 片段**的一律藏掉（见 `hideChrome`）。
     ///
     /// `Components.UI.AddToButton` / `DownloadButton.Granular.None` /
@@ -515,20 +517,33 @@ enum EntityPageAppearance {
         }
 
         if wantsDissolve {
-            let sharp = target.kind == .artist
+            // （用户 2026-11-01：「其他的比如自己的歌单 / 专辑页能不能也做封面融底」）——
+            // **能，而且机制早就在**：`ensureSharpHero` 里三条宿主分支（歌单页的 wash plane /
+            // 专辑页的 `CreativeWorkHeader` / 艺人页的 `HeaderContainer`）一直都在，
+            // 只是从 2026-10-10 起被这一行闸在**艺人页**。
+            //
+            // 现在三页都走"满幅封面 + 下缘溶解"：封面卡片让位，同一张图铺满页头上部、
+            // 到我们页头文字的上沿化开，下面接**取色底** ⇒ 白字仍旧压在实色底上（可读性没变）。
+            //
+            // 安全阀：图没到 / 宿主认不出时 `ensureSharpHero` 在 `concealNativeCover` **之前**
+            // 就返回 ⇒ 卡片照旧留着，这一页"什么都不变"。
+            // 要退回卡片版式：把下面这一行改回 `target.kind == .artist` 即可（下面那条 `!sharp`
+            // 分支就是卡片版式的全部，原样保留）。
+            let sharp = true
             ensureHero(on: target, sharpCover: sharp)
             // 这里原来还有一条"头部居中"（`centerHeaderLabels`）—— **已删**：
             // 它只在这个艺人页（`sharp`）分支里跑，可名单里那 4 个 id 全是**专辑页**的
             // `CreativeWorkPlatform.Components.UI.{PreTitleRow,TitleRow,ParentRow,MetadataRow}`
             // ⇒ 在艺人页上一行都命不中，从起就是空转；AM 式页头另有实现（见 `EntityPageHeader.x.swift`）。
             if !sharp {
-                // 卡片圆角照 AM（连续圆角 8，原生只有 4）。
+                // 卡片版式（要退回时用）：只改圆角；底色仍归我们的 field。
                 roundCoverCard(target.cover)
-                // 页面那条**不是从上到下**的暗棕渐变，
-                // **不是我们的 field** —— 是 **Spotify 自己那层色晕**（`GradientView`，本来就是
-                // 模糊/径向的）。原因：撤掉 hero 之后，`ensureSharpHero` 里那两处"藏掉 Spotify 色晕"
-                // 也跟着不跑了 ✗，于是它露面压在 field 上。
-                // ⇒ 卡片版式**照样要藏它**（底色归我们的 field）。
+            }
+            // **两种版式都要藏 Spotify 自己那层色晕**：sharp 那一支只在"宿主认出来"时才藏
+            // （`ensureSharpHero` 里的 `concealWash` / `concealAlbumWash`），宿主认不出就会漏，
+            // 而它是一条**模糊 / 径向**的渐变，压在我们的 field 上就是一整片脏色。
+            // `concealNativeWash` 自己会跳过我们的 hero / scrim，幂等，多叫一次没有代价。
+            if target.kind != .artist {
                 concealNativeWash(for: target)
             }
         } else {
@@ -1736,6 +1751,7 @@ enum EntityPageAppearance {
         currentPage = nil
         didReport = false
         didReportMissingColour = false
+        didReportGenerated = false
         lastLoggedHex = nil
     }
 
@@ -1837,7 +1853,114 @@ enum EntityPageAppearance {
            let page = pageRoot(from: art, in: window) {
             return Target(page: page, cover: art, color: coverColor(art), kind: .playlist)
         }
+
+        // **生成歌单**（电台 / This Is / 音乐全览 / 每日推荐）：页头是 **slot 插件拼的**，
+        // 既没有 `PL.Header`，封面也不叫上面那两个 id ⇒ 前两条都认不出，于是这一页
+        // **一层取色底都没铺**（"这三页的取色底没生效"）。判据放在最后：只有前两条都不成立时才走。
+        if let generated = generatedPlaylistPage(in: window) {
+            return Target(page: generated.page, cover: nil, color: generated.color, kind: .playlist)
+        }
         return nil
+    }
+
+    /// **生成歌单那一族**的页面根与取色。
+    ///
+    /// 页面根 = **VC 自己的 view**（那样一层不跟着内容滚）。⚠️ 这是被真机打回来过的教训：
+    /// 垫在 scroll view 里的那一层会随内容滚，滚到哪就脏到哪（2026-10-13 那条横在列表中间的灰带）。
+    ///
+    /// 取色源 = 页头区里**加载了图、面积最大**的那个 `UIImageView`。电台页的"封面"其实是
+    /// 一行三个圆头像 ⇒ 这里拿到其中一张，颜色仍然取自封面，够用。
+    ///
+    /// 封面视图**故意不交给 `Target.cover`**：`ensureHero` 的卡片分支会给它套 8pt 圆角
+    /// （`roundCoverCard`），而那几张是**圆形头像**，改了就是"圆变方"。
+    private static func generatedPlaylistPage(in window: UIWindow) -> (page: UIView, color: UIColor?)? {
+        guard let controller = frontController(in: window) else { return nil }
+        let name = NSStringFromClass(type(of: controller))
+        guard name.contains("FreeTierPlaylist"), let page = controller.viewIfLoaded else { return nil }
+
+        var best: (view: UIView, area: CGFloat)?
+        var queue: [(view: UIView, depth: Int)] = [(page, 0)]
+        var visited = 0
+        var hasPLHeader = false
+        let headerBottom = page.bounds.height * 0.6
+        while !queue.isEmpty, visited < 600 {
+            let (view, depth) = queue.removeFirst()
+            visited += 1
+            // 普通歌单页也是 `FreeTierPlaylist`，但它有自己的封面 id、上面第二条已经接走了；
+            // 这里再挡一道：这一页里**有 `PL.Header`** 就说明是普通歌单，不抢它的活。
+            // （顺手在同一次走查里查，不再单独搜一遍树。）
+            if view.accessibilityIdentifier == "PL.Header" { hasPLHeader = true }
+            if let imageView = view as? UIImageView, imageView.image != nil, imageView.bounds.width >= 44,
+               imageView.convert(imageView.bounds, to: page).minY < headerBottom {
+                let area = imageView.bounds.width * imageView.bounds.height
+                if area > (best?.area ?? 0) { best = (imageView, area) }
+            }
+            guard depth < 8 else { continue }
+            for sub in view.subviews { queue.append((sub, depth + 1)) }
+        }
+        guard !hasPLHeader else { return nil }
+        // **必须已经有一张够大的图**才认这一页：否则普通歌单页在 `PL.Header` 还没建出来之前
+        // 会被这一条抢先认下（页面根从"最外层 scroll 的父视图"变成 VC 的 view，垫底层换了一级）。
+        // 早一两拍不铺底，比铺错一层便宜。
+        guard let best else { return nil }
+
+        let color = coverColor(best.view)
+        if !didReportGenerated {
+            didReportGenerated = true
+            let width = Int(best.view.bounds.width.rounded())
+            let height = Int(best.view.bounds.height.rounded())
+            let colourText = color.map { "#" + hex(of: $0) } ?? "none"
+            writeDebugLog(
+                "[\(logTag)] generated playlist \(name) — page root is the controller's view,"
+                    + " artwork \(width)x\(height), colour \(colourText)"
+                    + " — this family has no PL.Header and no known artwork id, so the field had never"
+                    + " been painted here"
+            )
+        }
+        return (page, color)
+    }
+
+    /// 窗口**最前面**那一个 VC：presented → tab 选中项 → nav 可见项 → split 最后一项，
+    /// 走不动了再试容器 VC 的最后一个孩子。
+    ///
+    /// ⚠️ **`ContextMenuViewController` 那一类"面板"必须跳过**：`⋯` 打开的菜单就是一个
+    /// presented VC，而它明显不是"另一页"——不跳过的话 `currentTarget()` 会在菜单开着的那几拍变 nil，
+    /// `tick` 就当成"页面走了"：取色底 / hero / 顶纱全撤、`⋯` 也一起被收走，关掉菜单 0.6s 后才恢复
+    /// = 整页闪一下。（这与 `EntityPageHeaderManager.isHeaderOnScreen` 里那条豁免是同一条判据。）
+    private static func frontController(in window: UIWindow) -> UIViewController? {
+        var controller = window.rootViewController
+        var rounds = 0
+        while let current = controller, rounds < 12 {
+            rounds += 1
+            // 走到歌单 VC 就**停在这里**：再往下钻（`children.last`）只会走到它自己的子控制器
+            // （页面里可能挂着一个播放器 / overlay 子 VC），那就不是"这一页"了。
+            if NSStringFromClass(type(of: current)).contains("FreeTierPlaylist") { return current }
+            if let presented = current.presentedViewController,
+               !NSStringFromClass(type(of: presented)).contains("ContextMenu") {
+                controller = presented
+                continue
+            }
+            if let tab = current as? UITabBarController, let selected = tab.selectedViewController {
+                controller = selected
+                continue
+            }
+            if let nav = current as? UINavigationController, let visible = nav.visibleViewController {
+                controller = visible
+                continue
+            }
+            if let split = current as? UISplitViewController, let last = split.viewControllers.last {
+                controller = last
+                continue
+            }
+            // Spotify 的页面外面还套着几层容器 VC（不在上面三类里）⇒ 走最后一个孩子，
+            // 别在容器上停住（停住 = 永远认不出这一页 = 取色底又没生效）。
+            if let child = current.children.last {
+                controller = child
+                continue
+            }
+            break
+        }
+        return controller
     }
 
     /// 从封面元素往上走，找到**真正该垫底的那一层**。
