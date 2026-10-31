@@ -490,6 +490,23 @@ enum EntityPageHeaderManager {
         }
         guard block.bounds.height > 20 else { return }
 
+        // ★★ 2026-10-31（照片 172-174「为什么会有两个同样的字」）：生成歌单（电台 / This Is /
+        //   音乐全纪录）用的是**满幅页头**（`HeaderFullbleedCentralView`）。那个容器里**不只装图**：
+        //   pw 的真机树（`trees/continuous/4.txt:1066`，复刻在它的 `harness/playlist/main.m:525`）里
+        //   它是「图（`…ArtworkWrapper` → `Encore.ImageView`）+ 一道 `GradientView` 渐变 +
+        //   装着 **45pt 白色大标题**的 `AutoLayoutStackView`」——也就是说 Spotify 自己在这个容器里
+        //   画了一遍大标题。我们原来把整支满幅图当"封面"跳过（见 `headerArtwork` 里那句
+        //   「只认真封面，fullbleed 不算」），于是它那行标题永远留了下来，和我们画的标题叠成两个。
+        //   ⇒ 这里先把容器里**那张图**认出来：留着图，同一容器里的渐变和大标题一起藏
+        //   （`concealInside` 本来就是"逐层往下藏、遇到图片绕开"）。
+        //   ⚠️ **认不出图就整支放过** —— 空名单会把满幅图一起藏掉，pw 的原话：
+        //   "leaving a black hero for good, since concealing does not come undone"。
+        var fullbleedKept: [UIView] = []
+        if let fullbleed {
+            fullbleedKept = fullbleedArtwork(in: fullbleed)
+        }
+        let fullbleedPicture = fullbleedKept.first
+
         var texts = headerTexts(block: block, headerRoot: headerRoot)
 
         // ★★ 2026-10-31（电台 / This Is）：按宽度挑出来的"那一块"**不一定装着标题** ——
@@ -561,8 +578,11 @@ enum EntityPageHeaderManager {
         //    `fullbleed` 是"找不到封面时的整幅兜底"（整块页头背景）—— 它的 frame 几乎盖满
         //    整个页头，拿来量"封面压到文字"会得到几百 pt 的假重叠，把我们的内容一路往下推。
         //    几何判据**只认真封面**：找不到就跳过这一支（宁可这一拍不动，也不要把页头撑出边界）。
+        // ★ 2026-10-31：满幅页头要量"图到哪儿了"，量的是**容器里那张图**（`fullbleedPicture`），
+        //   不是整支容器 —— 整支会把渐变和大标题也算进去 ⇒ 几百 pt 的假重叠，把我们的内容一路推下去。
+        //   认不出图时退回原来的"这一支不量"。
         probeCoverOverlap(
-            cover: cover === fullbleed ? nil : cover,
+            cover: fullbleedPicture ?? (cover === fullbleed ? nil : cover),
             headerView: header,
             role: "playlist"
         )
@@ -588,6 +608,19 @@ enum EntityPageHeaderManager {
         //   与正常歌单页的"方封面在 block 外面、不参与 conceal"是同一条语义 ——
         //   电台页只是把那张封面换成了三个头像，位置关系一模一样（图在上、字在下）。
         let artwork = headerArtwork(in: layout, cover: cover, fullbleed: fullbleed)
+        // ★★ 2026-10-31：满幅页头里**同一支容器**装着图和 Spotify 的大标题 —— 只藏标题、留图。
+        //   名单 = 图（`fullbleedArtwork`）+ 上面那份"不许藏"的（头像可能就在这层里：
+        //   电台页的三个圆头像和标题常常同容器，见 `concealInside` 那段说明）。
+        //   名单为空时整支放过（否则满幅图会跟着消失，那是一条不可逆的黑屏）。
+        if let fullbleed, !fullbleedKept.isEmpty {
+            concealInside(fullbleed, keeping: fullbleedKept + artwork)
+            logOnce(
+                "hidFullbleedTitle",
+                "full-bleed header: kept the picture (\(fullbleedKept.count) view(s)) and concealed"
+                    + " everything else in that container — Spotify draws its big title in there,"
+                    + " which is the second copy of the page title"
+            )
+        }
         for sub in block.subviews where sub !== header {
             concealInside(sub, keeping: artwork)
         }
@@ -3122,6 +3155,40 @@ enum EntityPageHeaderManager {
         if let cover, cover !== fullbleed { artwork.append(cover) }
         artwork.append(contentsOf: headerAvatars(in: layout))
         return artwork
+    }
+
+    /// 满幅页头（`HeaderFullbleedCentralView`）里**那张图** —— 除了它，容器里其余的都是
+    /// Spotify 自己的 chrome（渐变 + 大标题），要藏。
+    ///
+    /// 判据按**类名**，三档（前两档都在 9.1.88 的符号表里，见 `C:\dsh\ipa\dump-9.1.88.txt`）：
+    ///   · `:15891` `_TtCC28EncoreConsumerMobile_BaseKit26HeaderFullbleedCentralViewP33_…14ArtworkWrapper`
+    ///     —— 图就装在这个私有嵌套类里（pw 的真机树里对应那一格是 `Encore.ImageView`）；
+    ///   · 某些版本没有 `ArtworkWrapper` ⇒ 退回容器里第一个 `Encore.ImageView`；
+    ///   · 电台那种「图 = 一行三个大圆头像」⇒ 再退回 ≥48pt 的 `AvatarView`。
+    ///
+    /// ⚠️ 三档都落空 ⇒ 返回空数组，调用方**整支放过**。绝不拿"容器里所有图片都留"当兜底：
+    ///    万一标题容器里也带图，那就等于什么都没藏；反过来把名单写宽一点又会把满幅图藏没
+    ///    （pw 记的那条 "black hero for good"）。
+    private static func fullbleedArtwork(in fullbleed: UIView) -> [UIView] {
+        var kept: [UIView] = []
+        forEachView(fullbleed) { view in
+            if NSStringFromClass(type(of: view)).contains("ArtworkWrapper") {
+                kept.append(view)
+            }
+        }
+        if kept.isEmpty, let image = eeveeFindView(fullbleed, identifier: "Encore.ImageView") {
+            kept.append(image)
+        }
+        // 电台那一类：满幅头里没有 `ArtworkWrapper`，图是**一行三个大圆头像**（`Encore.FaceKit.AvatarView`，
+        // `dump-9.1.88.txt:16203`）—— 只在上面两条都落空时才扫，且只认 ≥48pt 的（创建者那行的脸堆小得多）。
+        if kept.isEmpty {
+            forEachView(fullbleed) { view in
+                guard NSStringFromClass(type(of: view)).contains("AvatarView"),
+                      view.bounds.width >= 48 else { return }
+                kept.append(view)
+            }
+        }
+        return kept
     }
 
     /// 页头里那几个**大圆头像**（电台）。
