@@ -69,13 +69,13 @@ Get everything from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/rel
 > **Jailbroken users:** the `.deb` depends on `dev.theos.orion`. Add <https://repo.theos.dev/> to your package manager first, otherwise the install fails with an unmet dependency.
 
 <details>
-<summary>Why different files? (sideload shim, Orion runtime)</summary>
+<summary>Why two IPAs? (pick one, not both)</summary>
 
-The patched IPA injects `zxPluginsInject.dylib`, a sideload shim (keychain access-group rebind, iCloud entitlement neutering, app-group `group.*` stubs). It fixes things that break when an app is re-signed by a different team, so if a sideloaded build misbehaves around login or keychain, try the patched one.
+- **`.ipa` (no patch)** — the plain build. Right for free and enterprise certificates, SideStore, AltStore and Sideloadly.
+- **`-patched.ipa`** — the same build plus `zxPluginsInject.dylib`, a sideload shim that rebinds the keychain access group, neuters iCloud entitlements and stubs app groups. Pick it when a re-signed app misbehaves around login or the keychain. TrollStore doesn't re-sign, so the shim isn't strictly needed there.
+- **LiveContainer** — it virtualises keychain, app groups and preferences itself, so the shim would conflict; use the unpatched `.ipa`.
 
-Free profiles usually have no wildcard, so the Watch app and native appex have to be stripped (`Tools/strip-ipa.sh`). LiveContainer virtualises keychain, app groups and preferences itself, and the shim on top would conflict. TrollStore doesn't re-sign, so entitlements stay intact.
-
-The IPA pipelines bundle `Orion.framework` into the app, since a sideloaded app has no package manager to resolve dependencies. How each of these lands in the build: [docs/BUILDING.md](docs/BUILDING.md).
+Free profiles usually have no wildcard, so both builds ship without the Watch app and the native appex. How each file is produced: [docs/BUILDING.md](docs/BUILDING.md).
 
 </details>
 
