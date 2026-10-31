@@ -4,8 +4,8 @@ extension LyricsSource {
 
     /// 这一项在**当前听歌页样式**下能不能选、会不会生效。
     ///
-    /// ★ 2026-10-31（用户）：「如果听歌页样式那里选择的是 spotify 原生，该自动优选不可选择。
-    ///   此选项只对选择沉浸式/am式生效」。
+    /// 「如果听歌页样式那里选择的是 spotify 原生，该自动优选不可选择。
+    /// 此选项只对选择沉浸式/am式生效」。
     ///
     /// 只挡 `.autoSelect` 一项：单源模式在三种样式下都照常工作（原生听歌页那一侧本来就是
     /// 靠我们注入 payload 换掉 Spotify 自己的歌词，单源一直这么跑）。
@@ -15,7 +15,7 @@ extension LyricsSource {
 
     /// 存的那一项如果当前样式下不能用，退回默认来源 —— **不改写盘上的值**。
     ///
-    /// 为什么不直接改写存储：用户把样式切回沉浸式 / AM 式时，「自动优选」应当**自己回来**。
+    /// 为什么不直接改写存储：自动优选应当**自己回来**。
     /// 覆盖掉存储等于替用户做了选择，而他那次操作只是改了个页面样式。
     var effectiveForCurrentStyle: LyricsSource {
         guard !isAvailableInCurrentNowPlayingStyle else { return self }
@@ -50,7 +50,7 @@ extension UserDefaults {
         get {
             // 一次性迁移：旧的「歌词多级回退」独立开关已并入来源选择器。
             // 若用户此前开着该开关，则切换到 .autoSelect 并清掉旧 key。
-            // （`.autoSelect` 就是 2026-10-31 之前那个 `.multiLevel`，rawValue 没变。）
+            // （`.autoSelect` 就是之前那个 `.multiLevel`，rawValue 没变。）
             if container.bool(forKey: legacyMultiLevelFallbackKey) {
                 container.set(false, forKey: legacyMultiLevelFallbackKey)
                 container.set(LyricsSource.autoSelect.rawValue, forKey: lyricsSourceKey)

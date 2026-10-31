@@ -3,12 +3,12 @@ import Foundation
 /// 上报拦截的执行、计数与「只观察不拦截」模式。
 ///
 /// 两层，分工写死：
-///   · **请求侧**（`TelemetryRequestBlock.x.swift`，挂在 `-[NSURLSessionTask resume]`）
-///     —— 真正"不让它出网"的那一层，也是**唯一**计数、**唯一**打日志的地方；
-///   · **响应侧**（`SpotifyResponsePatcher.shouldBlock`）—— 只做决策。
-///     它被调用时 POST body 早已出网，"丢回复"不叫拦截；留着它是兜底：请求侧 hook
-///     拿不到 URL（极少数 task）、或者开关是在请求飞行途中被打开的，至少别让客户端
-///     再去处理那份回复。
+/// · **请求侧**（`TelemetryRequestBlock.x.swift`，挂在 `-[NSURLSessionTask resume]`）
+/// —— 真正"不让它出网"的那一层，也是**唯一**计数、**唯一**打日志的地方；
+/// · **响应侧**（`SpotifyResponsePatcher.shouldBlock`）—— 只做决策。
+/// 它被调用时 POST body 早已出网，"丢回复"不叫拦截；留着它是兜底：请求侧 hook
+/// 拿不到 URL（极少数 task）、或者开关是在请求飞行途中被打开的，至少别让客户端
+/// 再去处理那份回复。
 ///
 /// 这一层之所以必须存在（静态审查抓出来的）：只有响应侧的实现会把设置页那句
 /// "拦截上报"变成一句空话。
@@ -19,7 +19,7 @@ enum TelemetryBlocker {
     /// 两份日志的去重集合**必须分开**（静态审查抓到的质量缺陷）：观察模式的
     /// 工作流是"先开只观察、抄端点、再开拦截"，如果两份日志共用一个集合，
     /// 一个已经以 `observed` 记过的端点就再也不会以 `cancelled` 出现，
-    /// 用户按日志核对时会以为拦截没生效。
+    /// 按日志核对时会以为拦截没生效。
     private static let logCap = 200
     private static var loggedObserved: Set<String> = []
     private static var loggedCancelled: Set<String> = []
@@ -50,7 +50,7 @@ enum TelemetryBlocker {
         return isTelemetry(url)
     }
 
-    /// 请求侧：返回 true 表示应当 `cancel()` 而不是 `resume()`。
+    /// 请求侧：返回 true 表示应当 `cancel` 而不是 `resume`。
     ///
     /// 观察模式与拦截开关是**两个独立**的模式：只观察时不拦任何东西，只记端点。
     static func shouldBlockRequest(_ url: URL) -> Bool {

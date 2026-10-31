@@ -2,48 +2,16 @@ import Foundation
 import Orion
 import UIKit
 
-/// Home 顶部那排**小卡片**（Liked Songs / 最近播放那些小方框）—— 照 Apple Music 的"列表行"来：
-/// **封面从卡片边缘内缩一点、带自己的圆角，标题跟着往里挪**，而卡片的底是
-/// **暗面往封面的主色淡淡偏一点**（于是整片网格不是"一格灰 + 白字"）。
+/// Home 顶部那排小卡片（Liked Songs / 最近播放那些小方框）：照 Apple Music 的列表行来做。
 ///
-/// ## 期望效果（用户 2026-10-13：「不知道期望效果是什么记得说」）
+/// 三条验收标准：
+/// 1. **封面内缩 + 圆角**（`coverInset = 5`、`coverRadius = 4`）：封面方块绕中心缩小、让出边缘，标题那一摞跟着左移。这与底色是两件事，只做底色是看不出来的。
+/// 2. **底色淡染**：暗面朝封面的**主色**（不是平均色）混 35%（主色先压到亮度 0.05）。"faintly" 是故意的：多了白字读不清，少了看着还是一格灰。
+/// 3. **图晚到也跟上**：图没到时是未染色的暗面，图到了再淡入。
 ///
-/// 借鉴 **spoti.pw v0.21.1** 的 `Redesigned/Home/HomeTiles.m`（那一版是 **GPL-3.0**；
-/// v0.22.0 起该仓库改为 PolyForm Strict，**那里的代码不可复制**）。它逐字写的就是这里的验收标准：
+/// 与 pw v0.21.1 `HomeTiles.m` 的实现对应：`partsOf`（ImageView 里的 `UIImageView` + 父视图方块 + 与卡等大的子视图）→ `coverImageView` / `insetCover` / `surfaceIn`；`inset`（transform 缩放方块 + 兄弟左移）→ `insetCover`；`SGRPalette +tintForImage:`（主色 3 位分箱、按覆盖率×饱和度打分，压亮度后混 35%）→ `dominantColour` / `tint`；`NSMapTable` 缓存 + 后台队列算色 → `tints` / `tintQueue`；`SGRObserveImage` 跟图 → 每拍 + 结果回来时再核一次。
 ///
-/// > a shortcut tile the way an Apple list row holds artwork. **The cover sits inset from the tile's
-/// > edges with its own corners, the title follows it in**, and the tile is **a dark surface tinted
-/// > faintly towards the cover's dominant colour**, so **the grid is not one grey and white text always
-/// > reads**. Until the cover has loaded, the tile is the untinted surface.
-///
-/// 拆成三条可验收的：
-///
-/// 1. **封面内缩 + 圆角**（`coverInset = 5`、`coverRadius = 4`）：封面方块绕中心缩小、让出边缘，
-///    标题那一摞跟着左移。这与底色是**两件事**，只做底色是看不出来的 —— 上一版就是只做了底色，
-///    所以用户说"没有期望效果"。
-/// 2. **底色淡染**：暗面朝封面的**主色**（不是平均色）混 35%（主色先压到亮度 0.05）——
-///    "faintly"是故意的：多了白字读不清，少了看着还是一格灰。
-/// 3. **图晚到也跟上**：图没到时是**未染色的暗面**，图到了再淡入。
-///
-/// ## 与 pw 的实现对应
-///
-/// | pw | 这里 |
-/// |---|---|
-/// | `partsOf`：`Encore.ImageView` 里的 `UIImageView` + 它的父视图（方块）+ 第一个与卡等大的子视图（fill）| `coverImageView` / `insetCover` / `surfaceIn` |
-/// | `inset()`：transform 缩放方块 + 兄弟左移 | `insetCover`（逐字照抄常数与算法）|
-/// | `SGRPalette +tintForImage:`：主色（3 位分箱、按覆盖率×饱和度打分）压亮度后混 35% | `dominantColour` / `tint` |
-/// | `NSMapTable weakToStrongObjects` 缓存 + **后台队列**算色 | `tints` / `tintQueue` |
-/// | `SGRObserveImage` 跟图 | 每拍 + 结果回来时再核一次（等效）|
-///
-/// ## 为什么"结构推断"而不是照抄它那个 id
-///
-/// pw 挂的是 `InteractableLayoutBackingButton id=Shortcut.Card.Home`。我们 9.1.88 的
-/// `dump-9.1.88.txt` 里**有这一组类**（`Home_AnchorsAndShortcutsKit22ShortcutsGridElementUI` /
-/// `22ShortcutsCardElementUI` / `26ShortcutsCardDataElementUI`、`Home_ECMKit36ShortcutCardHomePlayingIndicatorView`），
-/// 但**没有任何一次真机转储到过那一格**（转储器 `maxDepth = 24`、Home 内容已在 21~22 层 ⇒ 卡片在 25 层以下，
-/// 根本到不了）。所以这里**认 id + 形状**：日志 86 的 `[HomeTiles] grid … subtree:` 第一行就是
-/// `LegacyUI_ECMCoreKit.InteractableLayoutBackingButton@0,0,187,48,id=Shortcut.Card.Home` ——
-/// **pw 用的那个 id 在我们 9.1.88 上一模一样**。认不出就什么都不做（宁可没效果，不要动错图）。
+/// 为什么按结构推断而不是照抄 pw 的 `id`：pw 挂的是 `InteractableLayoutBackingButton id=Shortcut.Card.Home`，我们 9.1.88 里**有这一组类**（`Home_AnchorsAndShortcutsKit22ShortcutsGridElementUI` / `22ShortcutsCardElementUI` / `26ShortcutsCardDataElementUI`、`Home_ECMKit36ShortcutCardHomePlayingIndicatorView`），但没有任何一次真机转储到过那一格（转储器 `maxDepth = 24`，卡片在 25 层以下）。真机上那个 id 与 pw 用的**一模一样**（`LegacyUI_ECMCoreKit.InteractableLayoutBackingButton@0,0,187,48,id=Shortcut.Card.Home`），所以按 id + 结构双保险；认不出就什么都不做（宁可没效果，不要动错图）。
 enum HomeTileTint {
 
     static var isEnabled: Bool { UserDefaults.homeTileTint }
@@ -51,21 +19,21 @@ enum HomeTileTint {
     /// **启动时的值**（第一帧就定下来），给设置页的 `RestartSection` 判"要不要提示重启"用。
     ///
     /// 为什么必须单独存一份：这个钩子组是**启动时按当时的值决定装不装**的 ——
-    /// `Tweak.x.swift` 在启动流程里调 `activateHomeShortcutTiles()`，里面第一句就是
+    /// `Tweak.x.swift` 在启动流程里调 `activateHomeShortcutTiles`，里面第一句就是
     /// `guard HomeTileTint.isEnabled else { return }`（本文件文末），而
-    /// `HomeShortcutTilesGroup().activate()` 只在那一次跑。
+    /// `HomeShortcutTilesGroup.activate` 只在那一次跑。
     /// ⇒ 凡是"启动时是关的"这一场，整个 hook group 根本不装，之后再打开这颗开关也收不到
     /// 那些布局回合，**必须重启**；反之（启动时是开的、后来关掉再开回来）钩子一直在，不用重启。
     /// 判据只有"当前值 ≠ 启动值"这一个 —— 与 `RatingPromptBlock.launchEnabled`
     /// （`RatingPromptBlock.x.swift:40`）同一套写法，`RestartSection` 的文件头也是这么要求的。
     ///
     /// ⚠️ `static let` 是**惰性**的：第一次读它的地方就是"启动流程里那次 activate"
-    ///    （见上），所以它拿到的确实是启动值，而不是"用户进设置页时的值"。
+    /// （见上），所以它拿到的确实是启动值，而不是"用户进设置页时的值"。
     static let launchEnabled = UserDefaults.homeTileTint
 
     // MARK: - 常数（pw 的 `HomeTiles.m` / `SGRPalette.m`）
-
-    /// 封面从上/下/左边缘让出这么多（pw 的 `kInset = 5`）。
+    //
+    // 封面从上/下/左边缘让出这么多（pw 的 `kInset = 5`）。
     private static let coverInset: CGFloat = 5
     /// 让出之后封面的圆角（pw 的 `kCoverRadius = 4`）。
     private static let coverRadius: CGFloat = 4
@@ -92,7 +60,6 @@ enum HomeTileTint {
     /// 取色在后台（pw 的 `SGRPalette` 有自己的串行队列 `spotifyglass.redesign.palette`）。
     private static let tintQueue = DispatchQueue(label: "eevee.hometiles.tint", qos: .userInitiated)
     /// 报过几张（有界：8 张）—— 原来 `logOnce` 只报全局第一张，
-    /// "首页那几个小卡片到底覆盖了几张"从日志里**看不出来**。
     private static var reported = 0
     /// 报过几片网格的扫描结果（有界：6 片）。
     private static var gridReports = 0
@@ -102,13 +69,12 @@ enum HomeTileTint {
 
     static func apply(to tile: UIView) {
         guard isEnabled, isTile(tile) else { return }
-        // ★ 2026-10-13（照片 106：那排长方形"感觉没变化"）：**先把这一格认下来、把封面内缩与底色装上**，
-        //   "图有没有到"是后面的事。原来 `guard let cover …, let image = cover.image` 写在**同一句**里，
-        //   于是图还没加载出来的那几张卡**连底色都不装** —— 日志 87 整场只有 1 张 `tinted`，
-        //   而首页那一屏有 8 张（照片 106）⇒ 用户看到的就是"一个都没变"。
+        // **先把这一格认下来、把封面内缩与底色装上**，
+        // "图有没有到"是后面的事。原来 `guard let cover …, let image = cover.image` 写在**同一句**里，
+        // 而首页那一屏有 8 张⇒ 的就是"一个都没变"。
         guard let cover = coverImageView(in: tile, requireImage: false) else {
-            // 还没布好局（日志 85/88 的第一拍整棵子树都是 0×0）—— **安排重试**。
-            // 日志 88 里整场**一行 `tinted` 都没有**，就是卡在这一句直接返回、之后再无机会：
+            // 还没布好局—— **安排重试**。
+            // 就是卡在这一句直接返回、之后再无机会：
             // 那张卡的 `layoutSubviews` 不一定会再来一遍。
             retryLater(tile: tile)
             return
@@ -151,7 +117,7 @@ enum HomeTileTint {
     ///
     /// pw 那边靠 `SGRObserveImage(cover, …)` 跟着图走；我们没有 image 观察器，而这张卡的
     /// `layoutSubviews` **不一定**在图到了之后再走一遍（图加载不改变布局）——
-    /// 照片 106 里 8 张卡的封面全都显示出来了，却只有 1 张被染上色，就是这件事。
+    /// 8 张卡的封面全都显示出来了，却只有 1 张被染上色，就是这件事。
     private static func retryLater(tile: UIView) {
         let tries = (objc_getAssociatedObject(tile, &retryKey) as? NSNumber)?.intValue ?? 0
         guard tries < 6 else { return }
@@ -188,8 +154,7 @@ enum HomeTileTint {
             queue.append(contentsOf: view.subviews)
         }
 
-        // ★ 2026-10-13：有界地报一次"这一片网格到底扫出了什么" —— 上一版只报第一张卡，
-        //   "首页覆盖了几个方框、为什么其余没变色"从日志里**看不出来**（用户照片里的首页就是这个问题）。
+        // 有界地报一次"这一片网格到底扫出了什么" —— 上一版只报第一张卡，
         if candidates > 0, gridReports < 6 {
             gridReports += 1
             writeDebugLog(
@@ -199,31 +164,30 @@ enum HomeTileTint {
         }
     }
 
-    // MARK: - 认那一格（真机结构，日志 85/86 逐字）
-
-    /// ★ 2026-10-13：**改认 id** —— 日志 85 的 `[HomeTiles] grid … subtree:` 第一行就写着
-    /// `LegacyUI_ECMCoreKit.InteractableLayoutBackingButton@0,0,187,48,id=Shortcut.Card.Home`：
-    /// **pw 用的那个 id 在我们 9.1.88 上一模一样**（它树注释里的 `InteractableLayoutBackingButton
-    /// id=Shortcut.Card.Home 181x48` 就是同一格）。⇒ 不再靠形状猜，直接认它。
+    // MARK: - 认那一格
+    //
+    // `LegacyUI_ECMCoreKit.InteractableLayoutBackingButton@0,0,187,48,id=Shortcut.Card.Home`：
+    // **pw 用的那个 id 在我们 9.1.88 上一模一样**（它树注释里的 `InteractableLayoutBackingButton
+    // id=Shortcut.Card.Home 181x48` 就是同一格）。⇒ 不再靠形状猜，直接认它。
     private static func isTile(_ view: UIView) -> Bool {
         guard view.accessibilityIdentifier == "Shortcut.Card.Home" else { return false }
         let size = view.bounds.size
-        // ★ 2026-10-13（用户：「主页的那几个**小方框**还是没变」）：高度上限从 80 放到 200 ——
-        //   80 只够"187×48、带进度条的那种扁卡"（日志 85/86/87 抓到的一直是它），
-        //   而首页还有**方形**的快捷卡片（同样带 `Shortcut.Card.Home` 与 `Encore.ImageView`）
-        //   ⇒ 原来整类被挡在门外，所以"没变"。宽度下限 120 保留（更窄的是图标不是卡片）。
+        // （主页的那几个**小方框**还是没变）：高度上限从 80 放到 200 ——
+        // 80 只够"187×48、带进度条的那种扁卡"，
+        // 而首页还有**方形**的快捷卡片（同样带 `Shortcut.Card.Home` 与 `Encore.ImageView`）
+        // ⇒ 原来整类被挡在门外，所以"没变"。宽度下限 120 保留（更窄的是图标不是卡片）。
         return size.width >= 120 && size.width <= 400 && size.height >= 40 && size.height <= 200
     }
 
     /// 封面那格（pw 的 `partsOf`：`Encore.ImageView` 里面那个 `UIImageView`）。
     ///
-    /// ⚠️ **必须已经布好局**：日志 85 里第一次网格那一拍，整棵子树的 frame 还都是 **0×0**
+    /// 整棵子树的 frame 还都是 **0×0**
     /// （`[HomeTiles] tile … tinted #1A1A1A from the cover UIImageView 0x0`），
     /// 从一张 0×0 的图取平均色 ⇒ 近乎黑 ⇒ 看起来"没变"。所以这里要求封面至少 24pt 宽。
     ///
-    /// ★ 2026-10-13：`requireImage = false` 时**图还没到也算数**（只要求"已经布好局"）——
+    /// `requireImage = false` 时**图还没到也算数**（只要求"已经布好局"）——
     /// 调用方先据此把底色装上，图到了再补染。原来这里硬要求 `image != nil`，
-    /// 于是"图还没加载的那几张卡"整条链一句都不走（照片 106 的根因）。
+    /// 于是"图还没加载的那几张卡"整条链一句都不走。
     private static func coverImageView(in tile: UIView, requireImage: Bool = true) -> UIImageView? {
         guard let holder = eeveeFindView(tile, identifier: "Encore.ImageView") else { return nil }
         guard let imageView = holder.subviews.compactMap({ $0 as? UIImageView }).first else { return nil }
@@ -233,13 +197,13 @@ enum HomeTileTint {
     }
 
     // MARK: - 封面内缩（pw 的 `inset`）
-
-    /// 封面方块**绕中心缩放**，从卡片边缘让出 `coverInset`；方块之后那一摞（标题那一行）
-    /// 跟着左移同样的距离。
-    ///
-    /// 用 transform 而**不是** frame：Spotify 的 Auto Layout 不读 transform ⇒ 它的约束一个都不用动
-    /// （pw 逐字：「The inset and the title's move are transforms, which Spotify's layout never reads,
-    /// so its constraints are left as they are」）。所以这是可逆、也不会跟布局打架的做法。
+    //
+    // 封面方块**绕中心缩放**，从卡片边缘让出 `coverInset`；方块之后那一摞（标题那一行）
+    // 跟着左移同样的距离。
+    //
+    // 用 transform 而**不是** frame：Spotify 的 Auto Layout 不读 transform ⇒ 它的约束一个都不用动
+    // （pw 逐字：「The inset and the title's move are transforms, which Spotify's layout never reads,
+    // so its constraints are left as they are」）。所以这是可逆、也不会跟布局打架的做法。
     private static func insetCover(in tile: UIView) {
         guard let holder = eeveeFindView(tile, identifier: "Encore.ImageView") else { return }
         // 那个 48×48、带圆角的方块就是 image holder 的父视图（pw 的 `parts.square = holder.superview`）。
@@ -267,9 +231,9 @@ enum HomeTileTint {
     }
 
     // MARK: - 那一层底色
-
-    /// 我们插的那一层。**插在卡片自己的 fill 之上**（= 第一个与卡片等大的子视图，pw 的取法），
-    /// 找不到才放最底下 —— 两种都保证"标题/指示/按钮还压在它上面"。
+    //
+    // 我们插的那一层。**插在卡片自己的 fill 之上**（= 第一个与卡片等大的子视图，pw 的取法），
+    // 找不到才放最底下 —— 两种都保证"标题/指示/按钮还压在它上面"。
     private static func surfaceIn(_ tile: UIView) -> UIView {
         if let existing = objc_getAssociatedObject(tile, &surfaceKey) as? UIView {
             if existing.superview !== tile {
@@ -299,11 +263,11 @@ enum HomeTileTint {
     }
 
     // MARK: - 取色（pw 的 `SGRPalette`：主色 → 压亮度 → 混进暗面）
-
-    /// pw 的 `dominantIn`：图缩到 64×64，每通道 **3 位分箱**（512 格），每格按
-    /// `count × (0.25 + 饱和度)` 打分（近黑 ×0.3、近白 ×0.3 降权），取分最高那一格的**平均色**
-    /// —— 平均是在**线性光**里做的。忙乱的封面因此给的是它的**主色**，
-    /// 而不是"整张图平均"出来的那种灰（这正是上一版看不出效果的原因之一）。
+    //
+    // pw 的 `dominantIn`：图缩到 64×64，每通道 **3 位分箱**（512 格），每格按
+    // `count × (0.25 + 饱和度)` 打分（近黑 ×0.3、近白 ×0.3 降权），取分最高那一格的**平均色**
+    // —— 平均是在**线性光**里做的。忙乱的封面因此给的是它的**主色**，
+    // 而不是"整张图平均"出来的那种灰（这正是上一版看不出效果的原因之一）。
     private static func dominantColour(of image: UIImage) -> UIColor? {
         guard let cgImage = image.cgImage else { return nil }
         let side = sample
@@ -436,7 +400,7 @@ enum HomeTileTint {
 
     /// 把网格子树打进日志（有界：24 层 / 40 个节点）。这就是"转储到不了那一格"时的替代品。
     ///
-    /// ★ 2026-10-13：**每一片网格各报一次**（用对象地址做 key）—— 上一版全局只报第一片，
+    /// **每一片网格各报一次**（用对象地址做 key）—— 上一版全局只报第一片，
     /// 于是"首页一共有几片网格、另外几片长什么样"永远看不到（用户报"小方框没变"时无从下手）。
     private static func logStructureOnce(_ grid: UIView) {
         guard logged.count < 40 else { return }
@@ -466,10 +430,10 @@ enum HomeTileTint {
 
 struct HomeShortcutTilesGroup: HookGroup {}
 
-/// ★★ 2026-10-17：**9.1.88 上不存在的两个类**单独一组。
+/// **9.1.88 上不存在的两个类**单独一组。
 ///
 /// 它们原来并进 `HomeShortcutTilesGroup` ⇒ Orion 每次启动都会各刷一条
-/// `[ORION ERROR] Could not compute target class for hook …`（日志 104 实测：3 次启动 × 2 条 = 6 条）。
+/// `[ORION ERROR] Could not compute target class for hook …`。
 /// 平时无害，但**真正装不上的 hook 会被这些噪声埋掉** —— 而这个项目的排障全靠日志。
 /// 现在：两个类都在才装这一组（缺一个就都不装），代码留着给以后版本。
 struct HomeShortcutSpeculativeHookGroup: HookGroup {}
@@ -496,10 +460,10 @@ class HomeShortcutGridHook: ClassHook<UIView> {
     }
 }
 
-/// ★ 2026-10-13（日志 84 之后补的）：Home 那排小卡片在真机上是**这个类** ——
-/// `[ShellDump] LegacyUI_ECMCoreKit.InteractableLayoutBackingButton`（我们自己的日志里有过它），
+/// Home 那排小卡片在真机上是**这个类** ——
+/// `[ShellDump] LegacyUI_ECMCoreKit.InteractableLayoutBackingButton`，
 /// pw 的树里同一个类带着 `id=Shortcut.Card.Home`。它是**真视图**，所以 `layoutSubviews` 挂得上；
-/// 我第一版挂的 `…ShortcutsCardElementUI` 在 9.1.88 上**不存在**（日志 84：`hooked 1/2`）。
+/// 我第一版挂的 `…ShortcutsCardElementUI` 在 9.1.88 上**不存在**。
 ///
 /// ⚠️ 这个类**别处也在用**（曲库的 116×171 卡片、演出页的 374×346 卡、每行的「…」）——
 /// 所以这里只按 **id + 尺寸** 挑，认不出就一个字节都不碰。
@@ -515,10 +479,10 @@ class HomeShortcutBackingButtonHook: ClassHook<UIView> {
 
 func activateHomeShortcutTiles() {
     // ⚠️ 这里读的是 **`launchEnabled`（启动快照）而不是 `isEnabled`** ——
-    //    两个值在这一刻必然相等，但**读快照才能保证那个 `static let` 就在启动流程里被求值**
-    //    （它是惰性的）。设置页的 `RestartSection` 拿"当前值 ≠ 启动值"当判据，
-    //    如果这里不先读一次，快照就可能被推迟到"用户进设置页"那一刻才定下来，判据会失真。
-    //    —— 与 `RatingPromptBlock.launchEnabled` / `activateRatingPromptBlock()` 同一套写法。
+    // 两个值在这一刻必然相等，但**读快照才能保证那个 `static let` 就在启动流程里被求值**
+    // （它是惰性的）。设置页的 `RestartSection` 拿"当前值 ≠ 启动值"当判据，
+    // 如果这里不先读一次，快照就可能被推迟到"用户进设置页"那一刻才定下来，判据会失真。
+    // —— 与 `RatingPromptBlock.launchEnabled` / `activateRatingPromptBlock` 同一套写法。
     guard HomeTileTint.launchEnabled else { return }
 
     let targets = [
@@ -534,7 +498,7 @@ func activateHomeShortcutTiles() {
 
     HomeShortcutTilesGroup().activate()
     // ⚠️ 两个"9.1.88 上不存在"的类**分开装**（见 `HomeShortcutSpeculativeHookGroup`）：
-    //    两个都在才装 —— 否则每条 `[ORION ERROR]` 都会混进真问题的排障视野里。
+    // 两个都在才装 —— 否则每条 `[ORION ERROR]` 都会混进真问题的排障视野里。
     if NSClassFromString(HomeShortcutCardHook.targetName) != nil,
        NSClassFromString(HomeShortcutGridHook.targetName) != nil {
         HomeShortcutSpeculativeHookGroup().activate()

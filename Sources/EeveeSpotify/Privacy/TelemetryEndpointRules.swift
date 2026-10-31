@@ -3,14 +3,14 @@ import Foundation
 /// 「上报 / 遥测」请求的判定规则（**纯函数**，不依赖 UIKit / Orion）。
 ///
 /// 为什么单独成一个类型：
-///   · `Tests/TelemetryClassification` 要能把它单独编进来跑（本机没有 Xcode /
-///     Swift 工具链，测试是在有工具链的机器上一次性 `swiftc` 编译的）；
-///   · 判据只能有一处 —— 设置页对用户说"拦了什么"，凭据就是这里。
+/// · `Tests/TelemetryClassification` 要能把它单独编进来跑（本机没有 Xcode /
+/// Swift 工具链，测试是在有工具链的机器上一次性 `swiftc` 编译的）；
+/// · 判据只能有一处 —— 设置页对"拦了什么"，凭据就是这里。
 ///
 /// 取向是**宁可漏拦，不可误拦**，顺序固定为：
-///   1. 功能白名单：命中 → 一定放行（优先级最高，用户自定义关键词也压不过它）；
-///   2. 已知上报主机 / 上报路径 → 拦；
-///   3. 拿不准 → 不拦。
+/// 1. 功能白名单：命中 → 一定放行（优先级最高，用户自定义关键词也压不过它）；
+/// 2. 已知上报主机 / 上报路径 → 拦；
+/// 3. 拿不准 → 不拦。
 ///
 /// 误拦一次功能请求的表现是"播放 / 登录 / 歌词坏了"；漏拦一次上报只是少省一点流量。
 /// 这两件事的代价不对等，所以规则一律向"放行"倾斜。
@@ -72,12 +72,12 @@ enum TelemetryEndpointRules {
     /// 上报端点的路径片段，**只在 spotify 域下生效**。
     ///
     /// 这一组不是猜的：它来自用户设备 9.1.86 的 `[Traffic]` 调试日志（19 份，
-    /// 2026-09-26 ~ 09-30）里实际发出的请求：
+    /// ~ 09-30）里实际发出的请求：
     ///
-    ///   · `.../gabo-receiver-service/v3/events`、`/public/v3/events` —— 事件上报，
-    ///     响应体恒为 0 字节（纯上行，拦掉不影响任何功能）。
-    ///   · `.../partner-userid/encrypted/crashlytics` —— Crashlytics 归因上行。
-    ///   · `.../partner-userid/encrypted/branch` —— Branch 归因上行。
+    /// · `.../gabo-receiver-service/v3/events`、`/public/v3/events` —— 事件上报，
+    /// 响应体恒为 0 字节（纯上行，拦掉不影响任何功能）。
+    /// · `.../partner-userid/encrypted/crashlytics` —— Crashlytics 归因上行。
+    /// · `.../partner-userid/encrypted/branch` —— Branch 归因上行。
     ///
     /// `partner-userid/encrypted/onetrust` **故意不在这里**：那是 OneTrust 的同意状态，
     /// 拦掉可能影响合规流程，不属于"少省一点流量"能换的。
@@ -95,11 +95,11 @@ enum TelemetryEndpointRules {
     ]
 
     /// 最外层判据，四段顺序写死：
-    ///   1. 精确功能白名单 → 放行（上报表与用户关键词都压不过它）；
-    ///   2. 内置上报表 → 拦；
-    ///   3. 宽泛功能白名单 → 放行（**只**保护功能端点不被用户关键词锁死，
-    ///      不参与第 2 步的判定，所以遮不住上报端点）；
-    ///   4. 用户自定义关键词 → 拦。
+    /// 1. 精确功能白名单 → 放行（上报表与用户关键词都压不过它）；
+    /// 2. 内置上报表 → 拦；
+    /// 3. 宽泛功能白名单 → 放行（**只**保护功能端点不被用户关键词锁死，
+    /// 不参与第 2 步的判定，所以遮不住上报端点）；
+    /// 4. 用户自定义关键词 → 拦。
     static func shouldBlock(_ url: URL, extraKeywords: String) -> Bool {
         if isCoreFunctional(url) { return false }
         if isTelemetry(url) { return true }
@@ -139,7 +139,7 @@ enum TelemetryEndpointRules {
         return telemetryPathTokens.contains { path.contains($0) }
     }
 
-    /// 用户自加的关键词（主机名或路径片段，逗号 / 分号 / 空白 / 换行分隔）。
+    /// 自加的关键词（主机名或路径片段，逗号 / 分号 / 空白 / 换行分隔）。
     ///
     /// 匹配对象是 `host + path`，所以 `"log.spotify.com"` 与 `"/event/v1"`
     /// 两种写法都能用。

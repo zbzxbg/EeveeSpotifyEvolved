@@ -36,7 +36,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
     
-    /// 「AMLL 优先」开关。★ 2026-10-02 恢复（2026-09-25 删过一次）。
+    /// 「AMLL 优先」开关。恢复删过一次）。
     @Published var amllPreferred = NgzhwmSettingsViewModel.isAmllPreferred {
         didSet {
             UserDefaults.standard.set(
@@ -46,20 +46,20 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
 
-    // 已**搬走**两个开关（2026-09-27）：`injectLyricsCardElement` / `lyricsEntryPointFlag`
+    // 已**搬走**两个开关：`injectLyricsCardElement` / `lyricsEntryPointFlag`
     // —— 它们是排查/验证型开关，属性与绑定整体挪到 `EeveeDebugSettingsViewModel`（「调试」页）。
     // UserDefaults key 一字未改，设备上已设的值照旧生效；`[Settings] ... -> ON/OFF`
     // 那两行日志也随绑定一起搬过去了。
-    // 同批**删除**（2026-09-27）：`syntheticLineTiming` ——「补全歌词时间轴」验证完毕
+    // 同批**删除**：`syntheticLineTiming` ——「补全歌词时间轴」验证完毕
     // （关掉后观感差不多或略好，且给纯文本源伪造时间轴不合语义），开关、key、l10n
     // 与那段合成代码一起去掉；只剩占位文案写死补时间轴。
-
-    // 已移除一个开关（2026-09-25）：`hideOfficialLyrics` —— 它对应的行为已经在
+    //
+    // 已移除一个开关：`hideOfficialLyrics` —— 它对应的行为已经在
     // `NgzhwmSettingsViewModel` 里**写死启用**（见那个 getter 的说明），
     // 设置页不再暴露、也不再写 UserDefaults。
-    
+    //
     // 注：背景相关（模糊封面 / 系统材质）**没有** Published 属性 ——
-    // 它们不是用户可选项，而是跟随「更好的逐词歌词」自动启用。
+    // 它们不是更好的逐词歌词自动启用。
     // 见 NgzhwmSettingsViewModel.isLyricsBlurredBackdropEnabled。
     
     @Published var disableLyricsFeature = UserDefaults.standard.bool(
@@ -73,7 +73,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
     
-    // 已移除一个开关（2026-10-18）：`removeMxmInterludeSymbol` ——「删除间奏符号 ♪」。
+    // 已移除一个开关：`removeMxmInterludeSymbol` ——「删除间奏符号 ♪」。
     // 它读的那个键（`ngzhwm_removeMxmInterludeSymbol`）与 UI 行一起删了，拆除的完整清单
     // 见 `NgzhwmSettingsViewModel` 顶部；这里只剩这条墓碑，免得下一个人再去找。
     
@@ -97,10 +97,10 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
 
-    /// ★ 2026-10-31：**歌词系统翻译**（Apple `Translation` 框架，纯本地）。
+    /// **歌词系统翻译**（Apple `Translation` 框架，纯本地）。
     ///
     /// 只给"源自己没给译文"的歌词用；翻完在每行原文下面多一行译文。
-    /// 默认关 —— 它要求用户先在「设置 → App → 翻译 → 语言」里下好两种语言。
+    /// 默认关 —— 它要求设置 → App → 翻译 → 语言里下好两种语言。
     /// 机制见 `Lyrics/LyricsAutoTranslation.swift`。
     @Published var lyricsAutoTranslate = UserDefaults.lyricsAutoTranslate {
         didSet {
@@ -112,33 +112,33 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
     /// Musixmatch 用户令牌（54 位 hex）。
     ///
     /// 两条路：
-    ///   · **手填** —— 从 Musixmatch App 的「设置 → 获取帮助 → 复制调试信息」里抠出来；
-    ///   · **匿名令牌** —— 设置页那颗按钮（`requestAnonymousMusixmatchToken()`），不授权直接换一个。
+    /// · **手填** —— 从 Musixmatch App 的「设置 → 获取帮助 → 复制调试信息」里抠出来；
+    /// · **匿名令牌** —— 设置页那颗按钮（`requestAnonymousMusixmatchToken`），不授权直接换一个。
     ///
-    /// ★ 2026-10-13：匿名那条路**整块接回来了**（提交 `271de5b` 删过它，删的理由见下面那段
+    /// 匿名那条路**整块接回来了**（提交 `271de5b` 删过它，删的理由见下面那段
     /// 历史注释）。它回来的原因很实在：本仓库不再内置 SpicyLyrics 的默认密钥，没填密钥时
     /// 这一首会自动改用 Musixmatch —— 那条回退要成立，mxm 就必须能自己拿到令牌。
     /// 取词路径里还有一处**自动**换令牌（`MusixmatchLyricsRepository.ensureTokenIfNeeded`），
-    /// 用户没来过设置页也能用。
+    /// 没来过设置页也能用。
     ///
     /// 与旧版的差别（删掉的东西**没有**全部带回来）：
-    ///   · `musixmatchTokenInputAlertPublisher` **不恢复** —— 它全工程没有任何地方 `send` 过
-    ///     （`EeveeLyricsSettingsView` 的 `.onReceive` 收不到东西），是死订阅；
-    ///   · `isRequestingMusixmatchToken` 恢复，但只用来给那颗按钮画转圈 + 禁用它自己，
-    ///     **不再整页 `.disabled`**（旧版会让用户在转圈期间连来源都改不了）。
+    /// · `musixmatchTokenInputAlertPublisher` **不恢复** —— 它全工程没有任何地方 `send` 过
+    /// （`EeveeLyricsSettingsView` 的 `.onReceive` 收不到东西），是死订阅；
+    /// · `isRequestingMusixmatchToken` 恢复，但只用来给那颗按钮画转圈 + 禁用它自己，
+    /// **不再整页 `.disabled`**（旧版会让用户在转圈期间连来源都改不了）。
     @Published var musixmatchToken = UserDefaults.musixmatchToken
     var isMusixmatchTokenValid: Bool { getMusixmatchToken(musixmatchToken) != nil }
 
     /// 正在向 Musixmatch 换匿名令牌（设置页那颗按钮画转圈、并禁用它自己）。
     ///
-    /// ★ 2026-10-13：随 `requestAnonymousMusixmatchToken()` 一起接回来（它当初被删的原因见
+    /// 随 `requestAnonymousMusixmatchToken` 一起接回来（它当初被删的原因见
     /// `AnonymousTokenHelper` 文件头）。与旧版的差别：**只禁那颗按钮**，不再整页 `.disabled`
     /// —— 转圈期间用户仍然能改来源。
     @Published var isRequestingMusixmatchToken = false
 
     /// SpicyLyrics 官方 API 的**客户端密钥**（`sl_pk_…`）。
     ///
-    /// ★ 2026-10-13（用户拍板）：**本仓库不内置默认密钥**，所以这一栏是"用 SpicyLyrics 的前提"。
+    /// **本仓库不内置默认密钥**，所以这一栏是"用 SpicyLyrics 的前提"。
     /// **留空时**这一首会自动改用 **Musixmatch**（见 `CustomLyrics.loadCustomLyricsForCurrentTrack`
     /// 里那一段替换）—— 不会去走 SpicyLyrics 那条被条款禁止的内部接口。
     ///
@@ -158,8 +158,8 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             betterWordByWordLyrics,
             wordByWordLyrics,
             amllPreferred,
-            // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`（2026-09-27 已整体删除）、
-            // `removeMxmInterludeSymbol`（2026-10-18 已整体删除 —— 间奏行改为无条件丢弃），
+            // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`已整体删除）、
+            // `removeMxmInterludeSymbol`已整体删除 —— 间奏行改为无条件丢弃），
             // 以及搬去「调试」页的 `injectLyricsCardElement` / `lyricsEntryPointFlag`
             // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
@@ -181,11 +181,11 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
     
     /// 向 Musixmatch 换一个**匿名令牌**并填进上面那个输入框（设置页那颗按钮调它）。
     ///
-    /// ★ 2026-10-13：与 `AnonymousTokenHelper` 一起接回来。三个要点：
-    ///   · 换来的令牌存进**同一个字段**（`UserDefaults.musixmatchToken`），所以输入框会当场显示出来；
-    ///   · 同时把 `musixmatchTokenIsAnonymous` 置位 —— 401 时才知道"该丢掉重换"还是
-    ///     "该让用户自己去改"（见 `MusixmatchLyricsRepository.getMacroCalls` 的 401 分支）；
-    ///   · 失败只弹一次"获取失败"，不改任何状态（用户仍可手填）。
+    /// 与 `AnonymousTokenHelper` 一起接回来。三个要点：
+    /// · 换来的令牌存进**同一个字段**（`UserDefaults.musixmatchToken`），所以输入框会当场显示出来；
+    /// · 同时把 `musixmatchTokenIsAnonymous` 置位 —— 401 时才知道"该丢掉重换"还是
+    /// "该让用户自己去改"（见 `MusixmatchLyricsRepository.getMacroCalls` 的 401 分支）；
+    /// · 失败只弹一次"获取失败"，不改任何状态（用户仍可手填）。
     func requestAnonymousMusixmatchToken() {
         guard !isRequestingMusixmatchToken else { return }
         isRequestingMusixmatchToken = true

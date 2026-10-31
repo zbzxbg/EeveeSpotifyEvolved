@@ -11,7 +11,6 @@ import ObjectiveC.runtime
 extension NowPlayingLyricsPlate {
     /// 我们缩过的那几张封面（**弱引用**：视图被回收就自动出册）+ 各自**自己的**原 transform。
     ///
-    /// 为什么是"复数"：真机日志 57 里**同一页会挑出不同的封面候选**（见 `applyCoverRestingScale`），
     /// 只盯一个对象会让被换下去的那张弹回 366pt。
     static let scaledCovers = NSHashTable<UIView>.weakObjects()
     static var scaledCoverBase: [ObjectIdentifier: CGAffineTransform] = [:]
@@ -19,22 +18,22 @@ extension NowPlayingLyricsPlate {
     /// 每拍把当前那张主封面**缩到 `restingCoverSide`**（见上面那段）。
     ///
     /// ⚠️ 只在真的不一样时才写：`CoverArtTiltView` 那条链上本来就有别人的 transform
-    ///    （倾斜），每拍无条件重写会把它们打断 —— 与 `applyCoverState` 旁边那条教训同源。
+    /// （倾斜），每拍无条件重写会把它们打断 —— 与 `applyCoverState` 旁边那条教训同源。
     static func applyCoverRestingScale(in page: UIView) {
         guard restingCoverSide > 1,
               let list = findByIdentifier(listIdentifier, in: page),
               let cover = visibleCover(in: list, page: page) else { return }
 
-        // ★ 2026-10-12（独立复核）：**只缩"播放器自己那一张"。**
-        //   `visibleCover` 的兜底那两趟能挑到**卡片**的封面（它自己的注释里写着
-        //   "卡片自己的封面不在 `SPTNowPlayingView` 里"）—— 把卡片那张缩了就成了新的 bug。
-        //   挑不到主封面就**什么都不做**（宁可这一拍还是 366pt，也不许缩错对象）。
+        // **只缩"播放器自己那一张"。**
+        // `visibleCover` 的兜底那两趟能挑到**卡片**的封面（它自己的注释里写着
+        // "卡片自己的封面不在 `SPTNowPlayingView` 里"）—— 把卡片那张缩了就成了新的 bug。
+        // 挑不到主封面就**什么都不做**（宁可这一拍还是 366pt，也不许缩错对象）。
         if let owner = findByIdentifier(nowPlayingViewIdentifier, in: page),
            !cover.isDescendant(of: owner) {
             return
         }
 
-        // ★ **按对象记账，而且记的不止一个。**
+        // **按对象记账，而且记的不止一个。**
         //
         // 为什么不是"上一个 / 这一个"两个变量：同一页里**挑中的封面会换** ⇒ 只盯一个对象的话，
         // "这一拍挑中另一个"就会把上一个**还原成 366pt**，而屏幕上正显示的可能正是它 —— 用户会看到
@@ -51,10 +50,10 @@ extension NowPlayingLyricsPlate {
     }
 
     /// 把**这一张**封面当场缩到 `restingCoverSide`（记账 + 缩放）。两个调用点共用：
-    ///   · 0.3s 复查节拍（`applyCoverRestingScale`，兜底）；
-    ///   · 封面自己的 `layoutSubviews`（`coverDidLayOut` 的收起态分支，**换歌那一瞬间**）。
+    /// · 0.3s 复查节拍（`applyCoverRestingScale`，兜底）；
+    /// · 封面自己的 `layoutSubviews`（`coverDidLayOut` 的收起态分支，**换歌那一瞬间**）。
     ///
-    /// ★ 2026-10-22（用户：「听歌的时候，会有 Spotify 大封面闪过」）：原来只有节拍那一条，
+    /// （听歌的时候，会有 Spotify 大封面闪过）：原来只有节拍那一条，
     /// 换歌时新封面先是 366pt，要等下一拍才缩到 242pt ⇒ 那 0~0.3s 就是"大封面闪一下"。
     /// 事件驱动的这一支把空档变成 0；节拍那条继续负责"被 Spotify 写回 transform"的兜底。
     /// `key`/`base` 由调用方传入（节拍那边已经处理过"第一次接管"与出册清理）。
@@ -99,22 +98,22 @@ extension NowPlayingLyricsPlate {
     static func ensureCover(in page: UIView, geometry: Geometry) -> UIView? {
         // 图片从 Spotify 那个 `Encore.ImageView` 里取（它下面挂着真正的 UIImageView）。
         //
-        // ⚠️ **判据必须和 `measure()` 用的是同一个**（`visibleCover`）：页面上 `Encore.ImageView` 有一堆
+        // ⚠️ **判据必须和 `measure` 用的是同一个**（`visibleCover`）：页面上 `Encore.ImageView` 有一堆
         // （48×48 的图标、64×64 的…），按 id 走有界 BFS 取**第一个匹配**往往**不是那张封面** ⇒ 藏错了
         // 一个小图标、缩略图拿到别人的图，而 **Spotify 的封面一直整张露着**（标题与歌词就画在它上面）。
         let list = findByIdentifier(listIdentifier, in: page)
         let source = list.flatMap { visibleCover(in: $0, page: page) }
-        // ★ **先吃缓存**（页面开着的时候就已经认下来的那张），再退回"现在去抓树"。
-        //   后者在真机树里经常还没就绪（`UIImageView(alpha=0.00)`），那正是"点了没反应"的来源。
+        // **先吃缓存**（页面开着的时候就已经认下来的那张），再退回"现在去抓树"。
+        // 后者在真机树里经常还没就绪（`UIImageView(alpha=0.00)`），那正是"点了没反应"的来源。
         var availableImage = rememberArtworkIfNeeded(in: page)
         if availableImage == nil, let source { availableImage = firstImage(in: source) }
         if availableImage == nil, let list { availableImage = anyCoverImage(in: list) }
 
-        // ★★ 2026-10-22（用户：「切歌过程中会有 Spotify 原生封面闪过」）：
-        //    换歌那一两秒里 Spotify 的新封面对象**还没有图**（日志 5：`no image inside that cover view`），
-        //    而展开页已经铺着 ⇒ `layoutAndMount` 失败 ⇒ 原生封面整张露回来，下一拍又藏掉 = 闪一下。
-        //    ⇒ 已经有我们自己那张宿主时，**先留着上一帧的图**把这一拍铺住（同图不同曲也看不出来），
-        //      新图一到就原地替换。只有第一次铺（还没有宿主）才必须等图。
+        // （切歌过程中会有 Spotify 原生封面闪过）：
+        // 换歌那一两秒里 Spotify 的新封面对象**还没有图**，
+        // 而展开页已经铺着 ⇒ `layoutAndMount` 失败 ⇒ 原生封面整张露回来，下一拍又藏掉 = 闪一下。
+        // ⇒ 已经有我们自己那张宿主时，**先留着上一帧的图**把这一拍铺住（同图不同曲也看不出来），
+        // 新图一到就原地替换。只有第一次铺（还没有宿主）才必须等图。
         if let existingHost = coverHost, let existingImage = coverImage {
             if let image = availableImage { existingImage.image = image }
             let coverFrame = geometry.cover
@@ -165,8 +164,8 @@ extension NowPlayingLyricsPlate {
 
         imageView.image = image
 
-        // ★ 布局：**按 Spotify 封面那个大小与位置**（`bounds` + `center`，不用 `frame`）。
-        //   注意这**不是**每拍把封面"摆回去"——动画在 transform 上，所以这里随便重写都不打扰它。
+        // 布局：**按 Spotify 封面那个大小与位置**（`bounds` + `center`，不用 `frame`）。
+        // 注意这**不是**每拍把封面"摆回去"——动画在 transform 上，所以这里随便重写都不打扰它。
         let coverFrame = geometry.cover
         host.bounds = CGRect(origin: .zero, size: coverFrame.size)
         host.center = CGPoint(x: coverFrame.midX, y: coverFrame.midY)
@@ -211,7 +210,7 @@ extension NowPlayingLyricsPlate {
     /// 另外 pw 在 **Reduce Motion** 打开时整段不做动画（`performWithoutAnimation`），这里也照做。
     ///
     /// - Parameter completion: **保证会被调用**（动画结束 / 已经在对的位置 / Reduce Motion 三条路都调）。
-    ///   收起那一路靠它做收尾（撤封面 + 把 Spotify 那条写回）—— 漏调就会永远留着一张封面。
+    /// 收起那一路靠它做收尾（撤封面 + 把 Spotify 那条写回）—— 漏调就会永远留着一张封面。
     static func applyCoverState(
         open: Bool,
         host: UIView,
@@ -267,27 +266,27 @@ extension NowPlayingLyricsPlate {
     /// 被我们按下 `alpha` 的**别人那些视图**（`Encore.ImageView` 壳 + 真正画图的那一层）—— 弱引用名册。
     ///
     /// ⚠️ 两条都踩过，所以形状是这样：
-    ///   ① 名册**必须静态**，不能挂在页面对象上 —— 还原那段以 `guard let page = lastPage` 开头，而
-    ///      `lastPage` 是 **weak**：页面先被释放（或已换成新的一页）时还原**整段跑不到**；而封面的
-    ///      视图住在**会被复用的 cell** 里 ⇒ 复用到下一页时它还是 `alpha = 0` ⇒ **永久空白封面**
-    ///      （本仓库最不能接受的那种失败）。
-    ///   ② 还原**不许写死 `alpha = 1`**：壳原本可能是 0、也可能是 0.5 ⇒ 等于**把别人的值永久改坏**；
-    ///      现在**逐视图记下原值**、按原值写回。
+    /// ① 名册**必须静态**，不能挂在页面对象上 —— 还原那段以 `guard let page = lastPage` 开头，而
+    /// `lastPage` 是 **weak**：页面先被释放（或已换成新的一页）时还原**整段跑不到**；而封面的
+    /// 视图住在**会被复用的 cell** 里 ⇒ 复用到下一页时它还是 `alpha = 0` ⇒ **永久空白封面**
+    /// （本仓库最不能接受的那种失败）。
+    /// ② 还原**不许写死 `alpha = 1`**：壳原本可能是 0、也可能是 0.5 ⇒ 等于**把别人的值永久改坏**；
+    /// 现在**逐视图记下原值**、按原值写回。
     static let hiddenCovers = NSHashTable<UIView>.weakObjects()
     static var hiddenCoverAlphas: [ObjectIdentifier: CGFloat] = [:]
 
     // MARK: - 封面图缓存（**不依赖"点的那一瞬间"**）
-
-    /// 我们按曲目 id 认下来的封面图（最多留 `artworkCacheLimit` 张）。
-    ///
-    /// **为什么要它**：真机树里真正画图的那张常常是 `alpha=0.00` 的壳 + `PlaceholderView`，点"歌词"
-    /// 那一刻 `image` 可能还是 nil ⇒ 只能**拒绝展开**（有日志、不留半成品，但功能会"有时候点了没反应"）。
-    /// 所以改成：**页面开着的时候**（本来就在跑的 0.3s 节拍）顺手把当前这首的封面按曲目 id 存住，
-    /// 点的时候**先用缓存**、树只当兜底 —— **不新增定时器、不新增取景时机。**
-    ///
-    /// ⚠️ 与 pw 还有距离：pw 是**完全自己持有**那张图。要再稳一档就复用仓库既有的
-    /// `LyricsArtworkResolver`（`spotify:image:<hex>` → `https://i.scdn.co/image/<hex>` 这条链它已经
-    /// 走通），但它是**异步**的，要塞进一个同步返回 `Bool` 的 `layoutAndMount` 得先改结构。
+    //
+    // 我们按曲目 id 认下来的封面图（最多留 `artworkCacheLimit` 张）。
+    //
+    // **为什么要它**：真机树里真正画图的那张常常是 `alpha=0.00` 的壳 + `PlaceholderView`，点"歌词"
+    // 那一刻 `image` 可能还是 nil ⇒ 只能**拒绝展开**（有日志、不留半成品，但功能会"有时候点了没反应"）。
+    // 所以改成：**页面开着的时候**（本来就在跑的 0.3s 节拍）顺手把当前这首的封面按曲目 id 存住，
+    // 点的时候**先用缓存**、树只当兜底 —— **不新增定时器、不新增取景时机。**
+    //
+    // ⚠️ 与 pw 还有距离：pw 是**完全自己持有**那张图。要再稳一档就复用仓库既有的
+    // `LyricsArtworkResolver`（`spotify:image:<hex>` → `https://i.scdn.co/image/<hex>` 这条链它已经
+    // 走通），但它是**异步**的，要塞进一个同步返回 `Bool` 的 `layoutAndMount` 得先改结构。
     static let artworkCacheLimit = 8
     static var artworkCache: [String: UIImage] = [:]
     static var artworkCacheOrder: [String] = []
@@ -296,9 +295,9 @@ extension NowPlayingLyricsPlate {
     @discardableResult
     static func rememberArtworkIfNeeded(in page: UIView) -> UIImage? {
         guard let trackId = currentTrackId() else { return nil }
-        // ★ 2026-10-04：缓存里那张**也要够大**才算数 —— 旧版本可能已经把占位图按这一首的 id
-        //   存进来了（真机日志 `remembered this track's artwork 4×4 (cache 1/8)`）。
-        //   直接丢条目、让这一拍重新去树里认；不丢的话用户升级之后**这一首还是**那块灰方块。
+        // 缓存里那张**也要够大**才算数 —— 旧版本可能已经把占位图按这一首的 id
+        // 存进来了（真机日志 `remembered this track's artwork 4×4 (cache 1/8)`）。
+        // 直接丢条目、让这一拍重新去树里认；不丢的话用户升级之后**这一首还是**那块灰方块。
         if let cached = artworkCache[trackId] {
             if isUsableArtwork(cached) { return cached }
             artworkCache.removeValue(forKey: trackId)
@@ -312,14 +311,14 @@ extension NowPlayingLyricsPlate {
             }
         }
 
-        // ★ **换歌那一拍先不信视图树**：`currentTrackId()` 是**立刻**变的，而 Spotify 的
+        // **换歌那一拍先不信视图树**：`currentTrackId` 是**立刻**变的，而 Spotify 的
         // 封面要**晚一点**才换过来 ⇒ 那一拍抓到的还是上一首的图，写进缓存就**永久错**下去
         // （缓存按曲目 id 存，而 `ensureCover` 优先吃缓存）。
         //
         // 所以：曲目 id 刚变的那一拍**只记 id、不认图**，下一拍（≤0.5s）再认 —— 那时图也换
         // 过来了。这一拍 `ensureCover` 退回 `firstImage(in: source)`，也就是**当前树里真实那张**。
         if lastArtworkTrackId != trackId {
-            // ★ 2026-10-09：把**上一首**那张图记下来 —— 下一次真的去抓树时要用它判"树换过来了没有"。
+            // 把**上一首**那张图记下来 —— 下一次真的去抓树时要用它判"树换过来了没有"。
             previousArtworkImage = artworkCache[lastArtworkTrackId]
             staleArtworkTrackId = ""
             artworkTrackChangedAt = CFAbsoluteTimeGetCurrent()
@@ -335,7 +334,7 @@ extension NowPlayingLyricsPlate {
               let source = visibleCover(in: list, page: page),
               let image = firstImage(in: source) ?? anyCoverImage(in: list) else { return nil }
 
-        // ★ **"下一拍树就换过来了"这个假设不成立**：抓到的图可能还是上一首那张，写进新曲目的缓存后
+        // **"下一拍树就换过来了"这个假设不成立**：抓到的图可能还是上一首那张，写进新曲目的缓存后
         // `ensureCover` 优先吃缓存 ⇒ 缩略图一直显示上一首。
         // 判据：抓到的图**和上一首缓存里那张是同一个对象** ⇒ 树还没换过来 ⇒ 这一拍不写缓存
         // （`ensureCover` 退回 `firstImage(in: source)`，同一张，画面对齐；树真换过来后对象不同）。
@@ -356,7 +355,7 @@ extension NowPlayingLyricsPlate {
             return nil
         }
 
-        // ★ 2026-10-04：**够大才配进缓存**（占位图一旦进去就是"永久的错封面"，见 `firstImage`）。
+        // **够大才配进缓存**（占位图一旦进去就是"永久的错封面"，见 `firstImage`）。
         guard isUsableArtwork(image) else {
             noteUnusableArtwork(image, from: source)
             return nil
@@ -401,7 +400,7 @@ extension NowPlayingLyricsPlate {
     /// 按下某个视图的 `alpha`，并**只在第一次**记下它自己的原值（还原时按原值写回，见名册那段）。
     ///
     /// - Parameter restoringTo: 原值读不到 / 还是 0（换歌转场里新封面先以 `alpha = 0` 出现）时，
-    ///   还原成什么。封面 tilt 的"正常可见"就是 1 ⇒ 调用方给 1；别的视图不传，照旧写回原值。
+    /// 还原成什么。封面 tilt 的"正常可见"就是 1 ⇒ 调用方给 1；别的视图不传，照旧写回原值。
     static func hideCoverView(_ view: UIView, restoringTo fallback: CGFloat? = nil) {
         let key = ObjectIdentifier(view)
         if hiddenCoverAlphas[key] == nil {
@@ -428,7 +427,7 @@ extension NowPlayingLyricsPlate {
 
     /// 在壳里找真正的 `UIImageView`（`Encore.ImageView` 自己不画图）。
     ///
-    /// ★ **图也要看尺寸**：壳里除了真正画图的 `UIImageView` 还挂着 `PlaceholderView`（占位图很小，
+    /// **图也要看尺寸**：壳里除了真正画图的 `UIImageView` 还挂着 `PlaceholderView`（占位图很小，
     /// 例如 4×4）—— 小图一旦被当成封面缓存下来，`ensureCover` **每一拍都优先吃缓存** ⇒ 缩略图永远是
     /// 那块灰方块，而且**这一首永久错下去**（缓存按曲目 id 存，LRU 到 8 张才挤掉）。
     /// 所以"**够大才算**"：太小的**跳过、继续往下走**（不是直接返回 nil —— 真图可能是它的兄弟节点）。
@@ -443,7 +442,7 @@ extension NowPlayingLyricsPlate {
         return nil
     }
 
-    /// 封面图的最小边长。真机那份日志里的 `4×4` 就是占位图；而正片封面在真机树里是
+    /// 封面图的最小边长。而正片封面在真机树里是
     /// 366×366 的壳 + 至少 300pt 以上的图 —— 128 这条线把占位图挡在外面，又给"小图放大"
     /// 留足余量（宁可放过一张小图，也不许把占位图当封面）。
     static let minimumArtworkSide: CGFloat = 128
@@ -470,7 +469,7 @@ extension NowPlayingLyricsPlate {
     /// 兜底：在整条列表子树里找**任意一张够大、看得见、真带图的** `UIImageView`。
     /// 判据与 `visibleCover` 同一个量级（≥200pt），走查有界（本仓库纪律）。
     ///
-    /// ⚠️ 2026-10-07：**同样要跳过"被「一屏」折掉的卡"里的图**，而且**同样是两趟**
+    /// ⚠️**同样要跳过"被「一屏」折掉的卡"里的图**，而且**同样是两趟**
     /// （严格找不到就退回旧判据）—— 这一层只负责"好歹给张图"，不许因为新判据而
     /// 从"有图但可能是卡的"变成"一张都没有"（那会让展开直接失败）。
     static func anyCoverImage(in list: UIView) -> UIImage? {

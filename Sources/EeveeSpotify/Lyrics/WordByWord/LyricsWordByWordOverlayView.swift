@@ -31,11 +31,11 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     /// 为什么必须有：这一层在全屏时用的是**不透明**底色（见 `configureBackdropIfNeeded`），
     /// 而它挂在 `vc.view` 的最前面 —— 原生那一页的标题栏、进度条、播放键、
     /// 右上角收起键全被压在下面。不出自己的壳，用户在全屏里就是
-    /// "一个按键都没有"，而且是一屏没有任何元信息的纯歌词（真机截图实证：很难看）。
+    /// "一个按键都没有"，而且是一屏没有任何元信息的纯歌词。
     ///
     /// ⚠️ 壳的内容**不是这里画的**：用的是与「更好的逐词歌词」**同一份** SwiftUI 组件
     /// （`LyricsShellViews.swift`）。自己再手写一套 UIKit 壳的结果，真机对比下来
-    /// 处处对不上（标题偏高、三键太散、上下淡出难看）—— 用户的原话是"直接照抄不好吗"。
+    /// 处处对不上（标题偏高、三键太散、上下淡出难看）—— 是"直接照抄不好吗"。
     /// 这里只管：把它挂上、给它数据、按同样的常数给歌词让位。
     /// 歌词本身的高亮/闪烁与背景仍保持旧层原样。
     var showsPlaybackControls = false {
@@ -48,8 +48,8 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     private var translationLabels: [UILabel] = []
 
     // MARK: 全屏壳（与「更好的逐词歌词」共用同一份组件）
-
-    /// 壳的宿主（顶部条 + 底部条两个 SwiftUI hosting controller）。
+    //
+    // 壳的宿主（顶部条 + 底部条两个 SwiftUI hosting controller）。
     private let shellHosts = LyricsShellHosts()
     /// 壳要的播放状态投影（当前时间 / 总时长 / 是否在播放）。
     ///
@@ -140,10 +140,10 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         // 上下淡出带（含"壳下面那两块铺底"）。
         //
         // 有壳时不再是"一小条淡出"就完事：
-        //   · 上：从屏幕顶到**标题栏下沿**整块铺底色，只在最下面 `fadeBottomBand`
-        //     范围内做淡入 —— 这样淡入正好落在"歌手下方"，标题/歌手背后是干净的底色；
-        //   · 下：从**控件栏顶部**到底部整块铺底色，往上 `fadeBottomBand` 做淡出 ——
-        //     进度条/时间/三键背后同样是干净的底色。
+        // · 上：从屏幕顶到**标题栏下沿**整块铺底色，只在最下面 `fadeBottomBand`
+        // 范围内做淡入 —— 这样淡入正好落在"歌手下方"，标题/歌手背后是干净的底色；
+        // · 下：从**控件栏顶部**到底部整块铺底色，往上 `fadeBottomBand` 做淡出 ——
+        // 进度条/时间/三键背后同样是干净的底色。
         //
         // 真机截图实证（修之前）：只铺一条 40pt 的淡出带，壳本身没有背景，
         // 于是歌词直接从标题、进度条和三键底下穿过去 —— 三键压在一行歌词上。
@@ -170,7 +170,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         //
         // ⚠️ 这一行是排查"淡入/淡出位置不对"的**唯一**依据 ——
         // 把上下淡出带、壳的实际占位、窗口安全区一次打全：
-        //   `fade=` 那两段是**绝对 y**，直接和截图里"歌手下方 / 进度条上沿"对得上。
+        // `fade=` 那两段是**绝对 y**，直接和截图里"歌手下方 / 进度条上沿"对得上。
         let fadeSummary = "top[\(Int(topFadeView.frame.minY))..\(Int(topFadeView.frame.maxY))]"
             + " bottom[\(Int(bottomFadeView.frame.minY))..\(Int(bottomFadeView.frame.maxY))]"
         if fadeSummary != lastLoggedFadeSummary {
@@ -196,7 +196,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
 
     /// 安全区：**优先用窗口的**。
     ///
-    /// ⚠️ 真机实证（日志 8）：全屏页里我们挂在 `vc.view` 上，自己算出来的
+    /// ⚠️ 真机实证：全屏页里我们挂在 `vc.view` 上，自己算出来的
     /// `safeAreaInsets` 是 **0**（这一页的安全区由更上层处理），于是
     /// "上淡出带"从屏幕最顶端开始、"下淡出带"压到进度条上 ——
     /// 就是"淡入不在歌手下方、淡出不在进度条上方"。
@@ -244,20 +244,20 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     /// ⚠️⚠️ **这两行是"上下淡入淡出根本不出现"的唯一原因，别再删掉。**
     ///
     /// `CAGradientLayer` 是**手动** `addSublayer` 上去的，不参与 Auto Layout，
-    /// 新建时 `frame` 是 `.zero` —— 而下面 `updateFadeLayers()` 从头到尾只改
+    /// 新建时 `frame` 是 `.zero` —— 而下面 `updateFadeLayers` 从头到尾只改
     /// `topFadeView.frame` / `bottomFadeView.frame` 和渐变的 `colors`/`locations`，
     /// **从来没给过这两个图层尺寸**。一个 0x0 的渐变图层画不出任何像素，
     /// 于是那两条"铺底色 + 淡出"的带子等于不存在：
-    ///   · 全屏（有壳）：标题栏、进度条、时间、三键背后是干净的透明，
-    ///     歌词直接从它们**底下穿过去** —— 真机截图里"歌曲名压在第一行歌词上"、
-    ///     "三键压在一行歌词上"就是这个；
-    ///   · 预览（无壳）：卡片上下两端没有渐隐，进出视口的行是硬切。
+    /// · 全屏（有壳）：标题栏、进度条、时间、三键背后是干净的透明，
+    /// 歌词直接从它们**底下穿过去** —— 真机截图里"歌曲名压在第一行歌词上"、
+    /// "三键压在一行歌词上"就是这个；
+    /// · 预览（无壳）：卡片上下两端没有渐隐，进出视口的行是硬切。
     ///
-    /// 对照：`LyricsBackdropArtworkView` 那个同类渐变层是在 `layoutSubviews()`
+    /// 对照：`LyricsBackdropArtworkView` 那个同类渐变层是在 `layoutSubviews`
     /// 里 `gradientLayer.frame = bounds` 的，所以它的背景一直正常 ——
     /// 两处只有一处写了尺寸，这就是差别。
     ///
-    /// 放在 `updateFadeLayers()` 里（而不是 `layoutSubviews`）是因为两个视图的
+    /// 放在 `updateFadeLayers` 里（而不是 `layoutSubviews`）是因为两个视图的
     /// `frame` 就是在那里设的，尺寸与位置必须成对更新，否则会差一帧。
     private func syncFadeLayerFrames() {
         topFadeLayer.frame = topFadeView.bounds
@@ -269,7 +269,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     /// ⚠️ 颜色与 `locations` 必须**成对、在同一处**设置：`CAGradientLayer` 要求两者
     /// 数量一致，一处只设 colors、另一处只设 locations 会画出花屏甚至直接崩。
     /// 所以这里统一算，`configureBackdropIfNeeded` 只负责把底色算出来。
-    /// 尺寸交给上面的 `syncFadeLayerFrames()`（`frame` 变了它必须跟着变）。
+    /// 尺寸交给上面的 `syncFadeLayerFrames`（`frame` 变了它必须跟着变）。
     private func updateFadeLayers() {
         let base = resolvedBackgroundColor ?? .black
         let clear = base.withAlphaComponent(0)
@@ -303,14 +303,14 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         // 两条路的淡出手感才对得上。
         let band = LyricsShellLayout.fadeBottomBand
 
-        // ── 上：标题栏整块铺底色，在**紧贴第一行歌词**的上方 `band` 里做淡入 ──────
+        // ── 上：标题栏整块铺底色，在**紧贴第一行歌词**的上方 `band` 里做淡入
         //
-        // 用户要的是"淡入淡出放在歌手名字下面、播放条上面，像卡拉OK那样"。
+        // 要的是"淡入淡出放在歌手名字下面、播放条上面，像卡拉OK那样"。
         // 歌词让位的起点 = `安全区 + 标题栏高(62) + 内容呼吸(8)`，也就是第一行歌词的 y：
-        //   · 0 … (headerBottom − band)  完全不透明 → 状态栏、歌名、歌手背后是干净底色，
-        //     歌手名字**不会被渐变蹭到**（这一点很难返工，必须在第一次就做对）；
-        //   · (headerBottom − band) … headerBottom  逐渐变透明 → 歌词正好从"歌手下方"
-        //     开始淡入，而不是凭空出现。
+        // · 0 … (headerBottom − band) 完全不透明 → 状态栏、歌名、歌手背后是干净底色，
+        // 歌手名字**不会被渐变蹭到**（这一点很难返工，必须在第一次就做对）；
+        // · (headerBottom − band) … headerBottom 逐渐变透明 → 歌词正好从"歌手下方"
+        // 开始淡入，而不是凭空出现。
         //
         // ⚠️ `headerBottom` 不再夹一个 `min(..., 1)`：原来那写法在极短屏/异常状态下会让
         // `headerBottom < band`，`topStop` 被夹成 0，于是 locations 变成 [0,0,1]，
@@ -420,7 +420,6 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
 
         // 左右/宽度单独建，便于全屏时调整左边距。
         //
-        // ⚠️ 宽度锚到**自己**（不是 `scrollView.frameLayoutGuide`）：日志 8 实证，
         // 某些时序下那条链会解出一个比我们宽得多的值（overlay=342 而 stack=486），
         // 歌词于是被排成 486pt 宽、在卡片右缘裁掉 —— 就是"预览歌词向左偏移"。
         // 锚到自己就只有一个来源：我们的宽度。
@@ -440,14 +439,14 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     }
 
     // MARK: 全屏壳（与「更好的逐词歌词」共用同一份组件）
-
-    /// 把壳挂上（只挂一次；显隐与内容由 `applyControlsVisibility` /
-    /// `refreshShellMetadata` 管）。
-    ///
-    /// 壳的每个部件都来自 `LyricsShellViews.swift` —— 与新层是**同一份代码**。
-    /// （自己再手写一套 UIKit 壳的结果，真机对比处处对不上：标题偏高、三键太散、
-    /// 上下淡出难看；而且那个自绘收起键的标签正好是 "close"，
-    /// 被 `dismissFullscreen()` 当成原生控件点了回来 —— 无限递归直接爆栈崩掉。）
+    //
+    // 把壳挂上（只挂一次；显隐与内容由 `applyControlsVisibility` /
+    // `refreshShellMetadata` 管）。
+    //
+    // 壳的每个部件都来自 `LyricsShellViews.swift` —— 与新层是**同一份代码**。
+    // （自己再手写一套 UIKit 壳的结果，真机对比处处对不上：标题偏高、三键太散、
+    // 上下淡出难看；而且那个自绘收起键的标签正好是 "close"，
+    // 被 `dismissFullscreen` 当成原生控件点了回来 —— 无限递归直接爆栈崩掉。）
     private func setupPlaybackControls() {
         shellHosts.attach(
             to: self,
@@ -455,7 +454,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
             primaryColor: .white,
             onSeek: { time in
                 // 点行跳转**只有一份实现**（见 `AppleMusicLyricsOverlay.swift` 开头的
-                // `seekToTappedLyricLine`：`rounded()` + 5ms，缺一个就会"点这一行、跳到上一行"）。
+                // `seekToTappedLyricLine`：`rounded` + 5ms，缺一个就会"点这一行、跳到上一行"）。
                 seekToTappedLyricLine(time)
             },
             onClose: {
@@ -545,7 +544,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     /// 提成文件级之后，`WordByWordHost.attach` 被拒那条路也能打同一行，
     /// 而那正是"没挂上"时最需要的一行。
     ///
-    /// ⚠️ 2026-09-25 起没有逐词数据的歌**不会挂我们这层**，所以这条去重路径只在
+    /// ⚠️起没有逐词数据的歌**不会挂我们这层**，所以这条去重路径只在
     /// "挂了层"的歌上跑；"没挂"那边由 `attach` 的拒绝路径负责，两处口径一致。
     ///
     /// 每次换歌/换数据打一行（由 `setCurrentTime` 里版本变化处调用），
@@ -560,11 +559,11 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     }
 
     // MARK: 行模型归属
-
-    /// 当前**实时**播放的曲目 id。
-    ///
-    /// 与壳上的曲名同一个来源（`refreshShellMetadata` 也是从这里读的），
-    /// 所以"壳显示的歌"和"这个判据认为的歌"永远是同一首。
+    //
+    // 当前**实时**播放的曲目 id。
+    //
+    // 与壳上的曲名同一个来源（`refreshShellMetadata` 也是从这里读的），
+    // 所以"壳显示的歌"和"这个判据认为的歌"永远是同一首。
     private var liveTrackIdentifier: String {
         statefulPlayer?.currentTrack()?.trackIdentifier ?? ""
     }
@@ -618,14 +617,14 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         }
 
         // 背景（模糊封面 + 暗化）与文字色必须先于下面的 guard 配置好：
-        // 文字色取决于背景明暗，而 rebuild() 已经按旧色建过标签了。
+        // 文字色取决于背景明暗，而 rebuild 已经按旧色建过标签了。
         configureBackdropIfNeeded()
 
-        // ── 行模型是不是**这一首**的？（与 AM 层 `hasForeignLineModel` 同一判据）────
+        // ── 行模型是不是**这一首**的？（与 AM 层 `hasForeignLineModel` 同一判据）
         //
         // 切歌**不一定**伴随歌词请求：客户端命中自己的歌词存储 / 离线歌词时没有
-        // `color-lyrics` 请求，`resetWordByWordLyrics()` 就不会跑，`currentLyricsDto`
-        // 还是上一首的 —— 而壳上的曲名是每帧从播放器实时读的。真机现场（日志 28）：
+        // `color-lyrics` 请求，`resetWordByWordLyrics` 就不会跑，`currentLyricsDto`
+        // 还是上一首的 —— 而壳上的曲名是每帧从播放器实时读的。真机现场：
         // `[Shell] legacy metadata "Planetarium"` 配 `word-level judge: 31/33`（那是上
         // 一首 Rokudenashi 的 33 行模型，而 Planetarium 自己的 dto 只有 23 行、无逐词）。
         //
@@ -647,7 +646,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
 
         // 撤层的条件必须与 `attach` 的挂载判据**完全一致**：只有拿到逐词数据的歌才由我们渲染。
         //
-        // ⚠️ 这条 2026-09-25 从 `hasUsableLineLevelData` 收回到 `hasUsableWordLevelData`：
+        // ⚠️ 这条从 `hasUsableLineLevelData` 收回到 `hasUsableWordLevelData`：
         // "只有逐行"的歌现在整首交还 Spotify 原生那页/那张卡（产品规则写在 `attach`
         // 里那道 guard 的注释里）。这里如果还按行级放行，就会出现"attach 已经不挂了、
         // 但早先挂上去的旧层还在自己画"的不一致状态 —— 层不会自己消失。
@@ -747,7 +746,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         // 壳上的曲名 / 歌手 / 总时长也跟着换（换歌时唯一可靠的地方就是这里）。
         refreshShellMetadata()
         // 文字色不在这里定：setCurrentTime 紧接着就会调用
-        // configureBackdropIfNeeded()，由它按背景明暗统一决定并在需要时重涂。
+        // configureBackdropIfNeeded，由它按背景明暗统一决定并在需要时重涂。
         // 这里先回到改动前的默认值，保证纯色兜底时建出来的标签就是对的。
 
         guard let dto else { return }
@@ -759,7 +758,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
             label.numberOfLines = 0
             // `.natural`（**不是** `.left`）：按**内容**决定贴哪一边 ——
             // 阿拉伯语 / 希伯来语歌词因此靠右，中英文不受影响（`.natural` = `.left`）。
-            // 见 `String+ScriptDirection.swift` 顶部那段（用户 2026-10-02 报的"贴左不贴右"）。
+            // 见 `String+ScriptDirection.swift` 顶部那段（报的"贴左不贴右"）。
             label.textAlignment = .natural
             label.font = .systemFont(ofSize: lyricsFontSize, weight: .semibold)
             // 折行宽度**建的时候**就给死：别等下一轮布局（`layoutSubviews` 里那次）
@@ -920,11 +919,11 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     }
 
     // MARK: 背景：模糊封面
-
-    /// 是否使用「模糊封面 + 暗化渐变」背景。三条否决：
-    ///   - 用户在「定制」里选了静态色 → 静态色优先，不做封面背景；
-    ///   - 用户选了显示原生颜色 → 保持 Spotify 原始观感，不做封面背景；
-    ///   - 开关本身关掉 → 退回改动前的纯色底。
+    //
+    // 是否使用「模糊封面 + 暗化渐变」背景。三条否决：
+    // - 定制里选了静态色 → 静态色优先，不做封面背景；
+    // - 用户选了显示原生颜色 → 保持 Spotify 原始观感，不做封面背景；
+    // - 开关本身关掉 → 退回改动前的纯色底。
     private var backdropEnabled: Bool {
         guard NgzhwmSettingsViewModel.isLyricsBlurredBackdropEnabled else { return false }
         let settings = UserDefaults.lyricsColors
@@ -981,12 +980,12 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     ///
     /// 每帧调用，但只在「首次 / 换歌 / 改设置 / 底色来源变化」时真正干活。
     private func configureBackdropIfNeeded() {
-        // ── 非卡拉 OK 状态：**整块透明，把屏幕交还给 Spotify 原生界面** ──────────
+        // ── 非卡拉 OK 状态：**整块透明，把屏幕交还给 Spotify 原生界面**
         //
         // 什么时候走到这里：逐词歌词开关关掉、或这一首歌**没有可用的逐词数据**。
         // 此时这一层不该画任何东西 —— 连背景也不该画。
         // （判据是**逐词**：只有逐行的歌现在整首交还 Spotify 原生，
-        //  见 `attach` 里那道 guard 的产品规则注释。）
+        // 见 `attach` 里那道 guard 的产品规则注释。）
         //
         // ⚠️ 这里以前会铺一块**不透明的底色**（`backgroundColor = targetBackground`）。
         // 那一块把 Spotify 原生那一页整个盖住了：标题栏、进度条、播放键全部被压掉，
@@ -1006,7 +1005,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
             return
         }
 
-        // resolvedBackgroundColor 是缓存，用户改「定制」里的颜色时它不会变，
+        // resolvedBackgroundColor 是缓存，定制里的颜色时它不会变，
         // 所以不能沿用旧的 `backgroundColor != targetBackground` 判断，
         // 要把影响外观的几项一起编进 key。
         let key = backdropKey()
@@ -1023,7 +1022,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
             if changed {
                 backdropView.isHidden = true
                 backgroundColor = targetBackground
-                // 渐隐层的颜色/停靠点由 `updateFadeLayers()` 统一设置
+                // 渐隐层的颜色/停靠点由 `updateFadeLayers` 统一设置
                 // （颜色与 locations 必须成对，见那里）—— 这里只让它重算一次。
                 setNeedsLayout()
             }
@@ -1043,7 +1042,7 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
                 showsArtwork: true,
                 material: NgzhwmSettingsViewModel.isLyricsBackdropMaterialEnabled
             )
-            // 渐隐层同样交给 `updateFadeLayers()`（底色变了要重算一次）。
+            // 渐隐层同样交给 `updateFadeLayers`（底色变了要重算一次）。
             setNeedsLayout()
             // 自身保持透明，否则会把 backdropView 盖住。
             backgroundColor = .clear
@@ -1055,11 +1054,11 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
     }
 
     // MARK: 背景取色（跟随「定制」选项）
-
-    // 取色逻辑已抽成文件级 `wordByWordSolidBackgroundColor()`：
+    //
+    // 取色逻辑已抽成文件级 `wordByWordSolidBackgroundColor`：
     // 旧 UIKit 层（iOS 26 以下）与"只开逐词歌词"那条路的纯色背景共用同一份，
     // 两处各写一遍必然慢慢跑偏（这个文件里已经吃过好几次这种亏）。
-
+    //
     // MARK: 手动滚动打断自动跟随
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -1136,9 +1135,9 @@ final class LyricsWordByWordOverlayView: UIView, UIScrollViewDelegate {
         guard let label = recognizer.view as? LineLabel,
               let dto = dto, label.lineIndex >= 0, label.lineIndex < dto.lines.count,
               let offset = dto.lines[label.lineIndex].offsetMs else { return }
-        // ★ 2026-10-11：这一条（旧 UIKit overlay 的点行）以前是**直接 seek 到 offsetMs** ——
-        //   少了那 5ms，和"歌词进播放器"那一档犯的是同一个错（点这一行、跳到上一行）。
-        //   统一走 `seekToTappedLyricLine`（定义在 `AppleMusicLyricsOverlay.swift` 开头）。
+        // 这一条（旧 UIKit overlay 的点行）以前是**直接 seek 到 offsetMs** ——
+        // 少了那 5ms，和"歌词进播放器"那一档犯的是同一个错（点这一行、跳到上一行）。
+        // 统一走 `seekToTappedLyricLine`（定义在 `AppleMusicLyricsOverlay.swift` 开头）。
         seekToTappedLyricLine(TimeInterval(offset) / 1000)
     }
 }

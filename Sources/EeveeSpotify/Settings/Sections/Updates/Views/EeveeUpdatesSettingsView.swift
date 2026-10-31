@@ -7,7 +7,7 @@ import UIKit
 /// 根页只解 `tagName`，这里多解 `name` / `body` / `htmlUrl` / `publishedAt` / `prerelease`，
 /// 全部可选 —— 某个 release 少字段不影响这一页，也不影响版本检查。
 ///
-/// ⚠️ ★ 2026-10-11 更正：这里用的是**列表**接口 `/repos/<slug>/releases` ——
+/// ⚠️更正：这里用的是**列表**接口 `/repos/<slug>/releases` ——
 /// 仓库存在但**没有 release** 时它回的是 **200 + `[]`**，走下面的
 /// `.loaded(...) where isEmpty` ⇒ 显示 `updates_empty`，**不是 404**。
 /// 404 只在仓库**不存在 / 改名 / 转私有**时出现，那时显示 `updates_error_not_found`
@@ -42,7 +42,7 @@ struct EeveeUpdatesSettingsView: View {
                         .foregroundColor(.secondary)
 
                     // 限流（未登录 60 次/小时）是**会自己恢复**的失败，所以给一个重试入口 ——
-                    // 不然用户只能杀掉 App 再进。重试走的是同一条 `load()`（带 5 分钟缓存，
+                    // 不然用户只能杀掉 App 再进。重试走的是同一条 `load`（带 5 分钟缓存，
                     // 缓存还新鲜时根本不发请求）。
                     Button("updates_retry".localized) {
                         state = .loading
@@ -65,7 +65,7 @@ struct EeveeUpdatesSettingsView: View {
                 }
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         // ⚠️ 用 `onAppear` + `Task` 而不是 `.task {}`：后者要 iOS 15，
         // 本仓库的最低版本由 Theos 的 spm_config 给（历史上低到 iOS 14），别为这一页抬线。
@@ -143,9 +143,9 @@ struct EeveeUpdatesSettingsView: View {
 
     /// 失败原因 → 人话。
     ///
-    /// ⚠️ **别再直接把 `error.localizedDescription` 怼给用户**：2026-10-02 用户看到的是
+    /// ⚠️ **别再直接把 `error.localizedDescription` 怼给用户**：的是
     /// 「未能读取该数据，因为它的格式不正确」——那是 `DecodingError` 的文案，而真因在
-    /// HTTP 层（GitHub 未登录限流，日志 28 里那次请求只回了 280 字节的 403 响应体）。
+    /// HTTP 层。
     /// 见 `GitHubAPIError` 里那段说明。
     private func message(for error: Error) -> String {
         guard let apiError = error as? GitHubAPIError else {

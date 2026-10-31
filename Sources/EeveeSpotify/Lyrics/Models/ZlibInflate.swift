@@ -3,11 +3,11 @@ import Foundation
 
 /// zlib 流的解压 —— 酷狗 KRC 与 QQ 音乐 QRC 共用。
 ///
-/// ── 为什么不用 `zlib.h` ──────────────────────────────────────────────────────
+/// ── 为什么不用 `zlib.h`
 /// Theos 的 Swift 构建没有桥接头，`#import <zlib.h>` 用不了。`Compression` 是系统框架，
 /// `import Compression` 即可（本仓库已经在用 `CommonCrypto`，同样是系统框架）。
 ///
-/// ── 一个必须知道的坑 ────────────────────────────────────────────────────────
+/// ── 一个必须知道的坑
 /// Apple 的 `COMPRESSION_ZLIB` 吃的是**裸 DEFLATE**（RFC 1951），
 /// 而这两家给的都是**带 zlib 头尾的**流（RFC 1950：2 字节头 + DEFLATE + 4 字节 adler32）。
 /// 所以要先剥掉头尾，否则 `compression_decode_buffer` 永远返回 0。

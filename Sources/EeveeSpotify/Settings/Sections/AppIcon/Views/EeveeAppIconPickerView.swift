@@ -171,7 +171,7 @@ struct EeveeAppIconPickerView: View {
     /// - Inserts a space before `(` when not already preceded by a space.
     /// - Inserts spaces at camelCase/PascalCase word boundaries.
     /// - Inserts a space between a letter and a digit (and vice versa) when
-    ///   no space is already present — e.g. "EeveeV2" → "Eevee V2".
+    /// no space is already present — e.g. "EeveeV2" → "Eevee V2".
     /// - Collapses multiple spaces and trims.
     static func prettifyIconKey(_ key: String, prettify: Bool = true) -> String {
         guard prettify else { return key }

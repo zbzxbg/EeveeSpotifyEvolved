@@ -23,7 +23,7 @@ final class WordByWordPositionResolver {
     /// 逐策略探测：先试方法（responds 检查后 Dynamic.convert 调用），再试 ivar（class_getInstanceVariable 检查后读取）。
     /// 任一环节检查不通过就跳过，保证永不因猜错签名崩溃。
     func resolve() {
-        // 首选：statefulPlayer.position() —— 已由 runtime dump 确认（d16@0:8 = double 无参，秒）
+        // 首选：statefulPlayer.position —— 已由 runtime dump 确认（d16@0:8 = double 无参，秒）
         if let p = statefulPlayer as? NSObject, p.responds(to: Selector("position")) {
             let g = Dynamic.convert(p, to: WordByWordPlayerPositionGetter.self)
             getter = { g.position() }

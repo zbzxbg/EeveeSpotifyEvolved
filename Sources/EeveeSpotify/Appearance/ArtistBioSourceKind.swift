@@ -1,11 +1,8 @@
 import Foundation
 
-/// 「艺人介绍」从哪来（2026-10-18 第四轮，用户：「在设置页放个选项选择吧要不」）。
-///
 /// 四个选项对应 `ArtistBioSheet` 里那条取值链：
 ///
 /// | 选项 | 取值 | 代价 |
-/// |---|---|---|
 /// | `.automatic`（**默认**） | **Spotify 原生优先**（跟着 app 语言、不联网），读不到才退 Genius | 原生那份可能被截断（读的是界面上的文字） |
 /// | `.spotify` | 只用原生 | 读不到就只剩一句说明 + 维基百科链接 |
 /// | `.genius` | 只用 Genius | **英文**；卡片要署名「简介来自 Genius」 |
@@ -40,7 +37,7 @@ enum ArtistBioSourceKind: Int, CaseIterable, CustomStringConvertible {
     /// 这个选项要不要**读 Spotify 原生那一块**（`automatic` / `spotify` 要）。
     ///
     /// ⚠️ 这**不是**"要不要滚到「关于艺人」那一块"：那一块是懒加载的，只有用户自己滑到它才建得出来
-    /// （2026-10-18 晚起我们**不再**去扫列表/逼它出来），**与来源选择无关**。
+    /// **与来源选择无关**。
     var readsSpotifyNative: Bool { self == .automatic || self == .spotify }
 }
 

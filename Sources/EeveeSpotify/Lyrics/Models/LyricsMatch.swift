@@ -13,12 +13,12 @@ enum LyricsMatch {
     ///
     /// 为什么去标点：`Don't Stop Me Now` / `Dont Stop Me Now` / `Don’t Stop Me Now`
     /// （直引号 vs 弯引号）在中日韩与西文曲库里都是同一个名字，但字符串不相等。
-    /// CJK 的全角标点（`、` `！` `（）`）也在 `punctuationCharacters` 里，一并去掉。
+    /// CJK 的全角标点（`、` `！` ``）也在 `punctuationCharacters` 里，一并去掉。
     static func key(_ text: String?) -> String {
         guard let text, !text.isEmpty else { return "" }
         var dropped = CharacterSet.whitespacesAndNewlines
         dropped.formUnion(.punctuationCharacters)
-        // ⚠️ 是 `.symbols`，不是 `.symbolCharacters` —— 后者不存在（2026-10-31 编译现场）。
+        // ⚠️ 是 `.symbols`，不是 `.symbolCharacters` —— 后者不存在编译现场）。
         dropped.formUnion(.symbols)
         return text.lowercased()
             .components(separatedBy: dropped)

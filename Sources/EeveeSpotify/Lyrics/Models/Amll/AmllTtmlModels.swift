@@ -8,9 +8,9 @@ import Foundation
 // 响应统一包在 ApiResponse<T> 里：成功是 {"status":200,"data":T}，
 // 失败是 {"status":4xx/5xx,"error":"...","message":"..."}。
 // 这里不解成泛型，直接按字段可选解析，避免为一个接口引入泛型解码的复杂度。
-
-/// `/v1/lyrics/search` 与 `/v1/lyrics/get` 共用的歌曲条目。
-/// 搜索接口里 `lyrics` 固定为 null，只有 `get` 接口会带上完整 TTML。
+//
+// `/v1/lyrics/search` 与 `/v1/lyrics/get` 共用的歌曲条目。
+// 搜索接口里 `lyrics` 固定为 null，只有 `get` 接口会带上完整 TTML。
 struct AmllSongItem: Decodable {
     var id: Int64?
     var filename: String?

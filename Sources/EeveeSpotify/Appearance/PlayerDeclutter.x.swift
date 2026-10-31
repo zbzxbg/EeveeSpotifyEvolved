@@ -18,20 +18,20 @@ import ObjectiveC.runtime
 /// 一个 hook 挂在 `_TtC12Element_List18CollectionViewCell` 上；判定是"把这一格子树里
 /// 所有类名 + 无障碍 id 拼成一个字符串，看它包含哪个 marker"：
 ///
-///   · 先要求串里出现 `NowPlaying_ScrollAPI` —— 只认听歌页那个滚动列表，别处同款 cell 不碰；
-///   · 再按 `PlayerCard.markers` 逐条匹配，命中且**这张卡被关掉**才折；
-///   · 总开关（`hidePlayerCards`）只对"不属于 `NowPlaying_ModesImpl`"的格子生效 ——
-///     那三个 unit 是播放控件/信息区，不属于"卡片"。
+/// · 先要求串里出现 `NowPlaying_ScrollAPI` —— 只认听歌页那个滚动列表，别处同款 cell 不碰；
+/// · 再按 `PlayerCard.markers` 逐条匹配，命中且**这张卡被关掉**才折；
+/// · 总开关（`hidePlayerCards`）只对"不属于 `NowPlaying_ModesImpl`"的格子生效 ——
+/// 那三个 unit 是播放控件/信息区，不属于"卡片"。
 ///
-/// marker 全部在 `dump-9.1.88.txt` 里逐条查过（2026-10-13）。
+/// marker 全部在 里逐条查过。
 ///
 /// ⚠️ **故意不做按钮类**（shuffle / repeat / addTo / queue / share / connect / 歌词预览）：
-/// 藏掉按钮等于功能没了，而用户 2026-10-11 亲手点名在用其中几颗。这一批只折卡片。
+/// 藏掉按钮等于功能没了，而其中有几颗你还在用。这一批只折卡片。
 ///
 /// ## 开关是运行期读的
 ///
 /// `isHidden(_:)` 每次都读 UserDefaults ⇒ 开关一改，下一次 layout 就生效；
-/// `refresh()` 再补一次"当场生效"（作废缓存 + 让那个 collection view 重新问尺寸）。
+/// `refresh` 再补一次"当场生效"（作废缓存 + 让那个 collection view 重新问尺寸）。
 struct PlayerCardsDeclutterGroup: HookGroup {}
 
 enum PlayerCard: String, CaseIterable {
@@ -112,14 +112,14 @@ enum PlayerCardsDeclutter {
     }
 
     // MARK: - 判定缓存
-
-    /// 一次判定结果。
-    ///
-    /// 为什么要缓存：`preferredLayoutAttributesFittingAttributes(_:)` 在滚动时会被**每一格
-    /// 每一拍**问到，而判定要遍历整格子树（几十到几百个视图）。上游实测这层缓存是必需的。
-    ///
-    /// 为什么要 `generation`：开关一改，**旧判定立刻作废** —— 否则"刚被折过的格子"会一直
-    /// 复用 `collapse=true`，用户关掉开关卡片也不回来。`refresh()` 里自增。
+    //
+    // 一次判定结果。
+    //
+    // 为什么要缓存：`preferredLayoutAttributesFittingAttributes(_:)` 在滚动时会被**每一格
+    // 每一拍**问到，而判定要遍历整格子树（几十到几百个视图）。上游实测这层缓存是必需的。
+    //
+    // 为什么要 `generation`：开关一改，**旧判定立刻作废** —— 否则"刚被折过的格子"会一直
+    // 复用 `collapse=true`，用户关掉开关卡片也不回来。`refresh` 里自增。
     private final class Verdict {
         let generation: Int
         weak var content: UIView?
@@ -143,10 +143,9 @@ enum PlayerCardsDeclutter {
     private static var logged = Set<String>()
 
     /// 判定成本计量：`shouldCollapse` **每一格每一拍**都会被问（所以才要那层缓存），
-    /// 真实开销值得能从日志里看到 —— 每 50 / 200 / 800… 次报一行累计与均值。
     static let meter = PerfMeter("PlayerCards")
 
-    /// 最近一次判定过的格子 —— 只用来在 `refresh()` 里找到"那个" collection view。
+    /// 最近一次判定过的格子 —— 只用来在 `refresh` 里找到"那个" collection view。
     private static weak var lastCell: UICollectionViewCell?
 
     /// 这一格要不要折起来。（hook 每次布局都会问它。）
@@ -222,14 +221,14 @@ enum PlayerCardsDeclutter {
     }
 
     // MARK: - 当场生效
-
-    /// 开关被切换后调用：让已判定过的格子**重新问一次**尺寸。
-    ///
-    /// 两件事：① 作废全部缓存判定（见 `Verdict.generation`）；② 让最近见过的那个听歌页
-    /// collection view 失效布局 —— 它会重新逐格调用
-    /// `preferredLayoutAttributesFittingAttributes(_:)`，于是"打开就折、关掉就回来"。
-    ///
-    /// 找不到那个 collection view 时什么都不做：下一次 layout 本来也会重算。
+    //
+    // 开关被切换后调用：让已判定过的格子**重新问一次**尺寸。
+    //
+    // 两件事：① 作废全部缓存判定（见 `Verdict.generation`）；② 让最近见过的那个听歌页
+    // collection view 失效布局 —— 它会重新逐格调用
+    // `preferredLayoutAttributesFittingAttributes(_:)`，于是"打开就折、关掉就回来"。
+    //
+    // 找不到那个 collection view 时什么都不做：下一次 layout 本来也会重算。
     static func refresh() {
         generation += 1
         guard let cell = lastCell, let collection = enclosingCollectionView(of: cell) else { return }

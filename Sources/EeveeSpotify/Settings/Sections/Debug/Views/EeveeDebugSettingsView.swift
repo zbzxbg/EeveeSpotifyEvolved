@@ -3,12 +3,12 @@ import SwiftUI
 /// 「调试」页：排查/验证型开关 + 只读转储工具（见 `EeveeDebugSettingsViewModel` 的说明）。
 ///
 /// 现在的几行分三类：
-///   · **A/B 开关**（补充模块5 / 歌词入口开关）—— 会改行为、待定性，验完就写死 + 删 key + 删 l10n；
-///   · **只读转储**（更详细的日志记录 = 视图树 + customize 响应体；某个类的方法/ivar）—— 只往日志里写，不改任何行为；
-///   · **长期住户**：导出前脱敏（2026-10-17 从主设置页的「Debug」区搬来，默认开）。
+/// · **A/B 开关**（补充模块5 / 歌词入口开关）—— 会改行为、待定性，验完就写死 + 删 key + 删 l10n；
+/// · **只读转储**（更详细的日志记录 = 视图树 + customize 响应体；不改任何行为；
+/// · **长期住户**：导出前脱敏从主设置页的「Debug」区搬来，默认开）。
 ///
-/// ★★ 2026-10-30（用户）：「转储视图树，转储响应体两个融合，换成 更详细的日志记录」；
-///   并删掉了「替换寻找歌词时的占位符」那颗彩蛋（连同 UserDefaults 键与 l10n）。
+/// 「转储视图树，转储响应体两个融合，换成 更详细的日志记录」；
+/// 并删掉了「替换寻找歌词时的占位符」那颗彩蛋（连同 UserDefaults 键与 l10n）。
 ///
 /// 所有 UserDefaults 键**都沿用旧的**（`ngzhwm_inject_lyrics_card_element` /
 /// `redact_shared_log` / `dumpViewTree` / `dumpCustomizeBody` 等）⇒ 设备上已设的值原样保留；
@@ -33,14 +33,14 @@ struct EeveeDebugSettingsView: View {
             detailedLoggingSection()
 
             // 「转储某个类的方法/ivar」：与上面同一目的、答的是另一半问题
-            //   —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
+            // —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
             dumpClassSection()
 
-            // 「分享日志前脱敏」：**2026-10-17 用户要求从主设置页的「Debug」区搬进这里**。
-            //   转储是把东西写进日志，这一条是"把日志发出去之前先假名化" —— 同一条线的最后一环。
+            // 「分享日志前脱敏」：**Debug区搬进这里**。
+            // 转储是把东西写进日志，这一条是"把日志发出去之前先假名化" —— 同一条线的最后一环。
             redactSharedLogSection()
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
     }
@@ -67,10 +67,10 @@ struct EeveeDebugSettingsView: View {
 
     /// 「更详细的日志记录」：把**视图树**与**customize 响应体**两条转储合成一颗。
     ///
-    /// ★★ 2026-10-30（用户）：「转储视图树，转储响应体两个融合，换成 更详细的日志记录」。
-    ///   打开 ⇒ 同时写视图树（`ViewTreeDumper`，每 2s 一行）与 customize 响应体
-    ///   （`SpotifyResponsePatcher.dumpCustomizeBodyIfEnabled`，只在你需要换种子快照时用）。
-    ///   底下仍是原来的两个键，备份与已设值不受影响（见 `UserDefaults.detailedLogging`）。
+    /// 「转储视图树，转储响应体两个融合，换成 更详细的日志记录」。
+    /// 打开 ⇒ 同时写视图树（`ViewTreeDumper`，每 2s 一行）与 customize 响应体
+    /// （`SpotifyResponsePatcher.dumpCustomizeBodyIfEnabled`，只在你需要换种子快照时用）。
+    /// 底下仍是原来的两个键，备份与已设值不受影响（见 `UserDefaults.detailedLogging`）。
     @ViewBuilder private func detailedLoggingSection() -> some View {
         Section {
             Toggle(
@@ -101,7 +101,7 @@ struct EeveeDebugSettingsView: View {
         }
     }
 
-    /// 「分享日志前脱敏」——**2026-10-17 用户要求从主设置页的「Debug」区搬进「调试」页**。
+    /// 「分享日志前脱敏」——**Debug区搬进「调试」页**。
     ///
     /// 默认**开**（`UserDefaults.redactSharedLog` 的 getter：键不存在 ⇒ true）：
     /// 导出这个动作 99% 是为了把日志发给别人，而日志主体就是"你听了哪些歌"。
@@ -111,8 +111,8 @@ struct EeveeDebugSettingsView: View {
     /// 脱敏版生成失败时导出会**直接报错**，绝不回退明文（fail-closed）。
     ///
     /// ⚠️ 这一节与上面几节不同：不是"验证完就删"的临时件，而是**导出的隐私默认值**。
-    ///    它不在 `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，
-    ///    用 `Binding` 直接读写）—— 没有新状态要记，l10n 键与 UserDefaults 键都没变。
+    /// 它不在 `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，
+    /// 用 `Binding` 直接读写）—— 没有新状态要记，l10n 键与 UserDefaults 键都没变。
     @ViewBuilder private func redactSharedLogSection() -> some View {
         Section(footer: Text("redact_shared_log_description".localized)) {
             Toggle(

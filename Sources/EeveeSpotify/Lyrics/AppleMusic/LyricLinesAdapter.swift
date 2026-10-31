@@ -9,35 +9,35 @@
 import Foundation
 
 // MARK: - 逐语言罗马化开关（"歌词页面里的选择"）
-
-/// 三个逐语言罗马化开关的指纹。
-///
-/// **只此一份**：两处要用它 ——
-///   · `LyricsDto.romanizedContentsForDisplay()` 的缓存键；
-///   · `NowPlayingLyricsPlate` 判断"要不要把行模型重写一遍"（用户在设置里一改就该立刻生效）。
-///
-/// ⚠️ 2026-10-11 的教训就在隔壁（`seekToTappedLyricLine`）：**同一个判据抄两份 = 迟早只修一份**。
+//
+// 三个逐语言罗马化开关的指纹。
+//
+// **只此一份**：两处要用它 ——
+// · `LyricsDto.romanizedContentsForDisplay` 的缓存键；
+// · `NowPlayingLyricsPlate` 判断"要不要把行模型重写一遍"（用户在设置里一改就该立刻生效）。
+//
+// ⚠️的教训就在隔壁（`seekToTappedLyricLine`）：**同一个判据抄两份 = 迟早只修一份**。
 func romanizationSwitchesFingerprint() -> Int {
     var bits = 0
     if UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization") { bits |= 1 }
     if UserDefaults.standard.bool(forKey: "ngzhwm_chineseRomanization") { bits |= 2 }
     if UserDefaults.standard.bool(forKey: "ngzhwm_koreanRomanization") { bits |= 4 }
-    // ★ 2026-10-12（用户新加的"展示歌词翻译/罗马化歌词"两颗总开关）：
-    //   **译文那一档也进指纹** —— 理由与罗马字那三个完全一样：它只写 `UserDefaults`、
-    //   不会让 `currentLyricsVersion` 变，而播放器那一层的宿主是按这个指纹决定要不要重建的
-    //   （`NowPlayingLyricsHost.isCurrent`）⇒ 不进来的话，用户一拨开关要**等换歌**才看到效果
-    //   （那就是一颗"哑开关"，正是用户这次要解决的那种体验）。
+    // （用户新加的"展示歌词翻译/罗马化歌词"两颗总开关）：
+    // **译文那一档也进指纹** —— 理由与罗马字那三个完全一样：它只写 `UserDefaults`、
+    // 不会让 `currentLyricsVersion` 变，而播放器那一层的宿主是按这个指纹决定要不要重建的
+    // （`NowPlayingLyricsHost.isCurrent`）⇒ 不进来的话，用户一拨开关要**等换歌**才看到效果
+    // （那就是一颗"哑开关"，正是用户这次要解决的那种体验）。
     if !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled { bits |= 8 }
-    // ★ 2026-10-12（用户新加的「未播放歌词行模糊化」）：**同一类开关，同一个理由** ——
-    //   它也只写 `UserDefaults`、不让版本号变，不进来就得等换歌才生效（哑开关）。
-    // ★ 2026-10-30：二级菜单删除，这一档固定开启（bit 16 永远置位）。
+    // （未播放歌词行模糊化）：**同一类开关，同一个理由** ——
+    // 它也只写 `UserDefaults`、不让版本号变，不进来就得等换歌才生效（哑开关）。
+    // 二级菜单删除，这一档固定开启（bit 16 永远置位）。
     bits |= 16
     return bits
 }
 
 // MARK: - 罗马化结果的小缓存
-
-/// 缓存键：**歌词版本 + 三个开关**（换歌 / 改开关才会重算，见 `romanizedContentsForDisplay()`）。
+//
+// 缓存键：**歌词版本 + 三个开关**（换歌 / 改开关才会重算，见 `romanizedContentsForDisplay`）。
 private var romanizationCacheKey = ""
 private var romanizationCache: [String] = []
 
@@ -45,10 +45,10 @@ extension LyricsDto {
 
     /// 给**显示层**用的逐行罗马化文本（与 `lines` 同序、同长度）。
     ///
-    /// ⚠️ 这个函数每 0.3s 会被叫一次（`NowPlayingLyricsPlate.currentLines()` 那条复查节拍），
+    /// ⚠️ 这个函数每 0.3s 会被叫一次（`NowPlayingLyricsPlate.currentLines` 那条复查节拍），
     /// 而罗马化（日文还要走分词）不便宜 ⇒ **带缓存**：
-    ///   · 键 = `currentLyricsVersion` + `romanizationSwitchesFingerprint()`；
-    ///   · 命中还要 `count == lines.count`（防串行）。
+    /// · 键 = `currentLyricsVersion` + `romanizationSwitchesFingerprint`；
+    /// · 命中还要 `count == lines.count`（防串行）。
     func romanizedContentsForDisplay() -> [String] {
         // 键里除了版本与开关，还带上"行数 + 首行内容"：两个调用点（播放器那一层、全屏页）
         // 现在都用 `currentLyricsDto`，但**万一**将来有人拿一份别的 dto 进来，
@@ -60,32 +60,32 @@ extension LyricsDto {
             return romanizationCache
         }
 
-        // ★ 2026-10-12：**源给的官方罗马字优先**（网易 `romalrc`，见 `LyricsDto.officialRomanizedLines`）。
+        // **源给的官方罗马字优先**（网易 `romalrc`，见 `LyricsDto.officialRomanizedLines`）。
         //
         // 它以前是**替换正文**的（`NeteaseLyricsRepository` 直接改 `lines[i].content`）——
-        // 那正是用户报的「直接把原日文替换了」。现在它只当"原文上方那一行"：
+        // 那正是直接把原日文替换了。现在它只当"原文上方那一行"：
         // 正文永远是原文，这里返回的是罗马字那一层。
         //
         // ⚠️ 三个前提缺一不可：
-        //   · 对应的语言开关开着（官方罗马字是取词时按**那门语言**的开关存下来的，
-        //     用户后来把开关关掉时必须跟着不显示 —— 缓存键里已经含这三个开关）；
-        //   · 长度与 `lines` 一致（按下标配对，对不上就不用）；
-        //   · 官方有的那几行用官方，缺的那几行**退回本地转换**（官方罗马音常常不全，
-        //     旧的 `preferLocalRomaji` 兜底逻辑就是为这个存在的）。
+        // · 对应的语言开关开着（官方罗马字是取词时按**那门语言**的开关存下来的，
+        // 后来把开关关掉时必须跟着不显示 —— 缓存键里已经含这三个开关）；
+        // · 长度与 `lines` 一致（按下标配对，对不上就不用）；
+        // · 官方有的那几行用官方，缺的那几行**退回本地转换**（官方罗马音常常不全，
+        // 旧的 `preferLocalRomaji` 兜底逻辑就是为这个存在的）。
         //
-        // ★ 2026-10-12：这条判据以前**写死日语**（网易 `romalrc` 只有日语，当时够用）。
-        //   但"官方罗马字"现在不止网易一家：Musixmatch 那份是按**歌词语言**取的
-        //   （`MusixmatchLyricsRepository` 里对应 rc/rj/rk，2026-10-12 起也存进同一个字段）。
-        //   写死日语 ⇒ 中文/韩文歌曲的官方罗马字被**整份忽略**（只能退回本地转换，等于白存）。
-        //   现在改成"**这门语言的开关开着**，或日语开关开着" —— 后半句是网易那份的既有行为，
-        //   一个字都不动（那条路真机验证过，不许顺手改）。
+        // 这条判据以前**写死日语**（网易 `romalrc` 只有日语，当时够用）。
+        // 但"官方罗马字"现在不止网易一家：Musixmatch 那份是按**歌词语言**取的
+        // （`MusixmatchLyricsRepository` 里对应 rc/rj/rk，起也存进同一个字段）。
+        // 写死日语 ⇒ 中文/韩文歌曲的官方罗马字被**整份忽略**（只能退回本地转换，等于白存）。
+        // 现在改成"**这门语言的开关开着**，或日语开关开着" —— 后半句是网易那份的既有行为，
+        // 一个字都不动（那条路真机验证过，不许顺手改）。
         if isOfficialRomanizationEnabled(for: languageCode),
            !officialRomanizedLines.isEmpty,
            officialRomanizedLines.count == lines.count {
-            // ★ 2026-10-12（用户）：「如果日语罗马字用的是**网易云自己做的**，首字母不会被大写」。
+            // 「如果日语罗马字用的是**网易云自己做的**，首字母不会被大写」。
             //
-            // 官方 `romalrc` 全是小写，而本地那条管线（`romanizedForWordByWordIfEnabled()`）会做
-            // `capitalizingFirstLetterIfAlphabetic()`。两者显示的是**同一行**（原文上方那一行），
+            // 官方 `romalrc` 全是小写，而本地那条管线（`romanizedForWordByWordIfEnabled`）会做
+            // `capitalizingFirstLetterIfAlphabetic`。两者显示的是**同一行**（原文上方那一行），
             // 大小写必须一致 —— 否则"换了官方罗马字"看起来就像少做了一步。
             // 这里只动**显示的那份**，主歌词与词级对齐都不受影响。
             let official = officialRomanizedLines.map { line -> String in
@@ -113,12 +113,12 @@ extension LyricsDto {
 
     /// 官方罗马字要不要显示：**按这门语言的开关**。
     ///
-    /// 判据顺序与理由见 `romanizedContentsForDisplay()` 里那段（日语那条是网易路径的既有行为，
-    /// 必须保持；zh/ko 是 2026-10-12 给 Musixmatch 补的）。
+    /// 判据顺序与理由见 `romanizedContentsForDisplay` 里那段（日语那条是网易路径的既有行为，
+    /// 必须保持；zh/ko 是给 Musixmatch 补的）。
     ///
     /// ⚠️ 三个键的字面量在本仓库**还没收敛**（`NgzhwmSettingsViewModel` / 本文件 /
-    ///   `MusixmatchLyricsRepository` 各有一份 —— handoff §2.3b 记着这笔账）。
-    ///   这里用的是**同一批键名**；收敛是另一次改动，别混进来。
+    /// `MusixmatchLyricsRepository` 各有一份 —— handoff §2.3b 记着这笔账）。
+    /// 这里用的是**同一批键名**；收敛是另一次改动，别混进来。
     private func isOfficialRomanizationEnabled(for languageCode: String?) -> Bool {
         let defaults = UserDefaults.standard
         // 日语：网易 `romalrc` 那条路的既有判据，保持不动。
@@ -135,20 +135,20 @@ extension LyricsDto {
     /// 转成 Apple Music 风格渲染层使用的行模型。
     ///
     /// 时间语义：
-    ///   - 有词级时间轴的行 → `.precise`，并给出 `duration`
-    ///   - 只有行级时间的行 → `.lineSynchronized`，`duration` 取「下一行起始 − 本行起始」
-    ///     （末行用 `LyricVocalDurationEstimator` 估算），供渲染层按需拆「伪逐字」
+    /// - 有词级时间轴的行 → `.precise`，并给出 `duration`
+    /// - 只有行级时间的行 → `.lineSynchronized`，`duration` 取「下一行起始 − 本行起始」
+    /// （末行用 `LyricVocalDurationEstimator` 估算），供渲染层按需拆「伪逐字」
     func toAppleMusicLyricLines() -> [LyricLine] {
-        // ★ 2026-10-11：**罗马字**（用户要的"主歌词上方那一行"）。
+        // **罗马字**（用户要的"主歌词上方那一行"）。
         //
-        // 数据**不新造**：`romanizedForWordByWordIfEnabled()` 就是仓库里那条既有的罗马化管线 ——
+        // 数据**不新造**：`romanizedForWordByWordIfEnabled` 就是仓库里那条既有的罗马化管线 ——
         // 整首语言判定（`dominantCJKLanguageAbove`）+ 逐语言开关
         // （`ngzhwm_japaneseRomanization` / `_chineseRomanization` / `_koreanRomanization`，
         // 也就是"歌词页面里的选择"）+ 首字母大写。它返回的副本里 `content` 已是罗马化文本。
         //
         // ⚠️ 我们**只读它的 `content`**，主歌词仍用原文 ⇒ 两行都在（原文 + 上方罗马字）。
         // ⚠️ 索引要按**原数组**取：下面要按 offset 重排，用排序后的下标会串行。
-        // ⚠️ 走 `romanizedContentsForDisplay()`（带缓存）—— 这个函数每 0.3s 会被叫一次。
+        // ⚠️ 走 `romanizedContentsForDisplay`（带缓存）—— 这个函数每 0.3s 会被叫一次。
         let romanizedContents = romanizedContentsForDisplay()
 
         let indexed = lines.enumerated()
@@ -186,7 +186,7 @@ extension LyricsDto {
                 duration = LyricVocalDurationEstimator.estimatedDuration(for: line.content)
             }
 
-            // ★★ 2026-10-30（用户：「同时有好几行歌词同时播放」）：**时长不许越过下一行的起点**。
+            // （同时有好几行歌词同时播放）：**时长不许越过下一行的起点**。
             //
             // `LyricPlaybackTimeline` 对 `.precise` 行的判定是 `playbackTime < time + duration`，
             // 也就是说只要上一行的时长还盖着当前时间，它就会和下一行**同时**留在 active 集合里。
@@ -195,8 +195,8 @@ extension LyricsDto {
             // 行级同步那条本来就是 `nextStartTime - startTime`，等价。
             //
             // ⚠️ 只夹「小溢出」（≤ 1s）：Petit 里有**故意的重叠行**（副唱/语气词，
-            //    例如 yanaginagi「終わりの世界から」第 2 行「よ」压在第 1 行尾巴上）。
-            //    大溢出多半是这种分层人声，硬夹会把主行的高亮整段砍掉。
+            // 例如 yanaginagi「終わりの世界から」第 2 行「よ」压在第 1 行尾巴上）。
+            // 大溢出多半是这种分层人声，硬夹会把主行的高亮整段砍掉。
             let clampedDuration: TimeInterval?
             if let nextStartTime, let duration {
                 let available = max(nextStartTime - startTime, 0)
@@ -224,7 +224,7 @@ extension LyricsDto {
                 time: startTime,
                 duration: clampedDuration,
                 timingKind: isPrecise ? .precise : .lineSynchronized,
-                // ★ 必须用 `line.content`，**不要**把 words 拼回来当行文本。
+                // 必须用 `line.content`，**不要**把 words 拼回来当行文本。
                 //
                 // 原因：SpicyLyrics 的解析器会给词与词之间补前导空格
                 // （规则在 `SpicySyllableText`：`joined` 与 `words` 用**同一套**判据），
@@ -244,14 +244,14 @@ extension LyricsDto {
 
     /// 罗马字那一行：和原文**不一样**才算有。
     ///
-    /// 为什么要这条判据：`romanizedForWordByWordIfEnabled()` 会把整首歌都过一遍 ——
+    /// 为什么要这条判据：`romanizedForWordByWordIfEnabled` 会把整首歌都过一遍 ——
     /// 一首日文歌里的英文行（或本来就是拉丁字母的行）罗马化后就是它自己，
     /// 那种行再显示一遍罗马字纯属噪声、还白占一行高度。
     ///
-    /// ★ 2026-10-04：比较改成**忽略大小写**。
+    /// 比较改成**忽略大小写**。
     ///
-    /// 为什么：`romanizedForWordByWordIfEnabled()` 顺手会把行首字母大写
-    /// （`capitalizingFirstLetterIfAlphabetic()`，那是仓库的显示约定），而**原文**没有那一步。
+    /// 为什么：`romanizedForWordByWordIfEnabled` 顺手会把行首字母大写
+    /// （`capitalizingFirstLetterIfAlphabetic`，那是仓库的显示约定），而**原文**没有那一步。
     /// 于是 "i love you" 这种全小写的拉丁行会算成"罗马字与原文不同"⇒ 上面多出一行
     /// 只差一个字母大小写的"罗马字"（用户报的罗马化那一条修完之后才会露出来 ——
     /// 以前原文早就被整行替换成罗马字了，这一支根本走不到）。
@@ -298,9 +298,9 @@ extension LyricsDto {
             ),
             text: text,
             syllables: syllables,
-            // ★★ 2026-10-17（§A·24）：副唱**自己的**译文一路带上去 ——
-            //    渲染层（`SynchronizedLyricText.backgroundVocalRow`）会把它画成
-            //    副唱下面那一小行；以前这里硬编码 `nil`，那条链断在最后一步。
+            // 副唱**自己的**译文一路带上去 ——
+            // 渲染层（`SynchronizedLyricText.backgroundVocalRow`）会把它画成
+            // 副唱下面那一小行；以前这里硬编码 `nil`，那条链断在最后一步。
             translation: background.translation,
             position: background.isBeforePrimary
                 ? .beforePrimary
@@ -309,12 +309,12 @@ extension LyricsDto {
     }
 
     // MARK: - 私有
-
-    /// 词级时间轴 → 音节数组。
-    ///
-    /// 只用**首尾都拿得到**的词构建：`endMs` 缺失的词会借用「下一个词的 startMs」，
-    /// 借不到（末词）就用行时长兜底；两者都没有时返回空数组，
-    /// 让调用方退回 `.lineSynchronized`（宁可整行同步，也不要编造时间轴）。
+    //
+    // 词级时间轴 → 音节数组。
+    //
+    // 只用**首尾都拿得到**的词构建：`endMs` 缺失的词会借用「下一个词的 startMs」，
+    // 借不到（末词）就用行时长兜底；两者都没有时返回空数组，
+    // 让调用方退回 `.lineSynchronized`（宁可整行同步，也不要编造时间轴）。
     private static func syllables(
         for line: LyricsLineDto,
         startTime: TimeInterval,
@@ -329,7 +329,7 @@ extension LyricsDto {
             // ⚠️ 这里**不能**跳过纯空白 token。
             //
             // 音节列表会被渲染层拼回行文本（`TimedLyricTextBuilder` 用
-            // `syllables.map(\.text).joined()`），而 `line.content` 里那个空格是存在的。
+            // `syllables.map(\.text).joined`），而 `line.content` 里那个空格是存在的。
             // 一旦这里把空格丢掉，后续所有词的字符区间都会**前移一位**，
             // 填充前沿就会整体错位。空白本身在渲染时会被跳过（渲染器只处理
             // 非空白 run），所以留着它没有任何副作用。
@@ -346,7 +346,7 @@ extension LyricsDto {
                 wordEnd = nextStartTime
             }
 
-            // ★★ 2026-10-30：词的结束也不许越过下一行起点（同 `clampedDuration` 那条）。
+            // 词的结束也不许越过下一行起点（同 `clampedDuration` 那条）。
             // 否则最后一个词的高亮会在下一行已经开唱后还继续推进，看起来就是两行同时在唱。
             // ⚠️ 同样只夹小溢出（≤ 1s），大溢出按"故意的重叠行"处理。
             let resolvedEnd: TimeInterval?

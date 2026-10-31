@@ -5,7 +5,7 @@ import CommonCrypto
 //
 // 网易云音乐歌词源（直连 weapi）。
 //
-// ── 为什么直连可行 ──────────────────────────────────────────────────────────
+// ── 为什么直连可行
 // music.163.com 的 weapi 接口要求每个请求体携带 params / encSecKey 两个
 // 加密字段，但整套加密是「无状态」的：AES 密钥、IV 与 RSA 公钥都是全网
 // 写死的常量，不涉及任何用户身份，因此无需像 Musixmatch 那样要求用户
@@ -14,15 +14,15 @@ import CommonCrypto
 // register/anonimous 匿名注册接口已废弃（返回「参数错误」），不再调用。
 // 若响应下发会话 cookie 会自动持久化并随后续请求携带。
 //
-// ── weapi 加密流程（与 NeteaseCloudMusicApi/util/crypto.js 一致）───────
+// ── weapi 加密流程（与 NeteaseCloudMusicApi/util/crypto.js 一致）
 // 1. 随机 16 字符 secKey；
 // 2. params = AES-CBC(明文, key="0CoJUm6Qyw8W8jud", iv="0102030405060708")，
-//    再对结果用 key=secKey 加密一次，两次结果均做 base64；
+// 再对结果用 key=secKey 加密一次，两次结果均做 base64；
 // 3. encSecKey = hex( rawRSA( reverse(secKey), e=65537, 固定 1024 位模数 ) )，
-//    左补零到 256 个 hex 字符。这里的 RSA 是无填充的原始模幂（m^e mod n），
-//    与 JS 端 BigInt.powMod 等价。
+// 左补零到 256 个 hex 字符。这里的 RSA 是无填充的原始模幂（m^e mod n），
+// 与 JS 端 BigInt.powMod 等价。
 //
-// ── 失败兜底 ───────────────────────────────────────────────────────────────
+// ── 失败兜底
 // 本仓库的请求失败/查无此歌统一抛 LyricsError，由 CustomLyrics.x.swift 的
 // 既有回退逻辑（geniusFallback 等）接管；本文件不参与多级回退编排。
 
@@ -85,8 +85,8 @@ class NeteaseLyricsRepository: LyricsRepository {
     }
 
     // MARK: - weapi 加密
-
-    /// AES-128-CBC + PKCS7（密钥为 16 字节 UTF-8 字符串，IV 固定）。
+    //
+    // AES-128-CBC + PKCS7（密钥为 16 字节 UTF-8 字符串，IV 固定）。
     private func aesCbcEncrypt(_ data: Data, key: String) -> Data? {
         guard let keyData = key.data(using: .utf8),
               let ivData = Self.aesIv.data(using: .utf8) else {
@@ -200,9 +200,6 @@ class NeteaseLyricsRepository: LyricsRepository {
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         let secKey = String((0..<16).compactMap { _ in secKeyCharacters.randomElement() })
 
-        // 与官网前端 asrsea / darknessomi 版一致的双层 AES 链：
-        // 第二轮加密的输入必须是第一轮的 base64 文本（而非密文字节）。
-        // 若传密文字节，服务器解密流程对不上，返回 HTTP 200 + 空 body。
         guard let firstPass = aesCbcEncrypt(Data(text.utf8), key: Self.aesFirstKey) else {
             writeDebugLog("[NetEase] weapiEncrypt AES failure")
             throw LyricsError.decodingError
@@ -440,17 +437,17 @@ class NeteaseLyricsRepository: LyricsRepository {
     }
 
     // MARK: - 接口
-
-    /// 搜索走 **cloudsearch/pc**（2026-10-20 换）。
-    ///
-    /// 旧 `/weapi/search/get` 在「被标记的出口」（机房 IP、共享住宅 IP）会返回**诱饵结果**：
-    /// 歌名里带一个随机数字、和查询毫无关系（实测 `告白气球 周杰伦` → `48`、`Himitsu MIMI`
-    /// → `29`），而 cloudsearch 在同样的出口上给的是真结果。成熟项目也都走 cloudsearch：
-    /// Lyricify 用 `interface.music.163.com/eapi/cloudsearch/pc`（注释写明「可以在外网使用」），
-    /// 163MusicLyrics 用 `weapi/cloudsearch/get/web`，并在 `abroad: true` 时解码被加密的 result。
-    ///
-    /// 字段差异：cloudsearch 用 `ar`（歌手）、`dt`（毫秒时长）、`al`（专辑）、`alia`/`tns`
-    /// （别名/译名）；旧的 search/get 用 `artists`/`duration`/`album`。选歌那边两种都读。
+    //
+    // 搜索走 **cloudsearch/pc**换）。
+    //
+    // 旧 `/weapi/search/get` 在「被标记的出口」（机房 IP、共享住宅 IP）会返回**诱饵结果**：
+    // 歌名里带一个随机数字、和查询毫无关系（实测 `告白气球 周杰伦` → `48`、`Himitsu MIMI`
+    // → `29`），而 cloudsearch 在同样的出口上给的是真结果。成熟项目也都走 cloudsearch：
+    // Lyricify 用 `interface.music.163.com/eapi/cloudsearch/pc`（注释写明「可以在外网使用」），
+    // 163MusicLyrics 用 `weapi/cloudsearch/get/web`，并在 `abroad: true` 时解码被加密的 result。
+    //
+    // 字段差异：cloudsearch 用 `ar`（歌手）、`dt`（毫秒时长）、`al`（专辑）、`alia`/`tns`
+    // （别名/译名）；旧的 search/get 用 `artists`/`duration`/`album`。选歌那边两种都读。
     private func searchSongs(keyword: String) throws -> [[String: Any]] {
         let data = try performWeapi("/weapi/cloudsearch/pc", params: [
             "s": keyword,
@@ -489,7 +486,7 @@ class NeteaseLyricsRepository: LyricsRepository {
 
     /// 网易 `/weapi/song/lyric` 一次响应的四块文本 + 两条署名。
     ///
-    /// ★ 2026-10-24：`lyricUser` / `transUser` 是网易云回包自带的
+    /// `lyricUser` / `transUser` 是网易云回包自带的
     /// “贡献歌词的人 / 贡献翻译的人”（`nickname`）。以前只取 `lyric`，
     /// 于是页内歌词那块只能写 “NetEase”。现在把这两个名字交给
     /// `LyricsContributor`（`.uploader` / `.translator`）。
@@ -526,12 +523,12 @@ class NeteaseLyricsRepository: LyricsRepository {
             lrc: lrcBlock?["lyric"] as? String,
             tlyric: tlyricBlock?["lyric"] as? String,
             romalrc: (json["romalrc"] as? [String: Any])?["lyric"] as? String,
-            // ★★ 2026-10-24（用户：「网易云感觉不展示歌词提供者/翻译提供者」）：
-            //   真机回包（`/weapi/song/lyric`，id 3366973885）里 `lyricUser` / `transUser`
-            //   是 **lrc / tlyric 的同级字段**，不在块里面：
-            //     top keys = [sgc, sfy, qfy, transUser, lyricUser, lrc, klyric, tlyric, code]
-            //   上一版读的是 `lrc.lyricUser` / `tlyric.transUser` ⇒ 永远 nil（署名只剩
-            //   "NetEase"）。现在先读顶层，再退回块内（别的版本/代理可能嵌一层）。
+            // （网易云感觉不展示歌词提供者/翻译提供者）：
+            // 真机回包（`/weapi/song/lyric`，id 3366973885）里 `lyricUser` / `transUser`
+            // 是 **lrc / tlyric 的同级字段**，不在块里面：
+            // top keys = [sgc, sfy, qfy, transUser, lyricUser, lrc, klyric, tlyric, code]
+            // 上一版读的是 `lrc.lyricUser` / `tlyric.transUser` ⇒ 永远 nil（署名只剩
+            // "NetEase"）。现在先读顶层，再退回块内（别的版本/代理可能嵌一层）。
             lyricUser: Self.userNickname(json["lyricUser"])
                 ?? Self.userNickname(lrcBlock?["lyricUser"]),
             transUser: Self.userNickname(json["transUser"])
@@ -600,8 +597,8 @@ class NeteaseLyricsRepository: LyricsRepository {
     }
 
     // MARK: - LRC 解析
-
-    /// 过滤网易 LRC 里「作词 : XXX」这类歌曲制作信息行。
+    //
+    // 过滤网易 LRC 里「作词 : XXX」这类歌曲制作信息行。
     private static let creditLinePattern =
         "^\\s*(作词|作曲|编曲|制作人|制作助理|混音|混音师|母带|母带工程师|录音|录音师|" +
         "监制|和声|和音|吉他|贝斯|鼓|键盘|钢琴|小提琴|大提琴|弦乐|制作|出品|发行|" +
@@ -616,11 +613,11 @@ class NeteaseLyricsRepository: LyricsRepository {
     /// 是否为 ♪ 间奏行：空行，或整行只有 ♪ 符号（含多个 ♪ / 前后空白）。
     ///
     /// 两个用途：
-    ///   ① **丢弃**间奏行的判据 —— 用户拍板 A「把原本有的间奏全部删掉」，无条件生效
-    ///      （见下面两处 `.filter { !isInterludeRow(...) }`）；
-    ///   ② 翻译错位修复时「哪一行算间奏」的判定。
+    /// ① **丢弃**间奏行的判据 —— 把原本有的间奏全部删掉，无条件生效
+    /// （见下面两处 `.filter { !isInterludeRow(...) }`）；
+    /// ② 翻译错位修复时「哪一行算间奏」的判定。
     ///
-    /// ⚠️ 2026-10-18：它不再与任何开关有关。原先那对
+    /// ⚠️它不再与任何开关有关。原先那对
     /// `shouldRemoveInterludeSymbol`（读 `ngzhwm_removeMxmInterludeSymbol`）与
     /// `cleanedInterludeSymbol`（把含 ♪ 的行清成空白）**已随开关一起删除** ——
     /// 开关开着关着结果一样，留着就是编译错与"按了没反应"的空壳。
@@ -675,7 +672,7 @@ class NeteaseLyricsRepository: LyricsRepository {
                     continue
                 }
 
-                // Double + rounded()：Float32 会把 34.010 算成 34009.998 再截断为 34009，
+                // Double + rounded：Float32 会把 34.010 算成 34009.998 再截断为 34009，
                 // 与 yrc 行头的精确毫秒 34010 对不上，导致逐字翻译按 offset 对齐落空。
                 parsed.append((minute * 60 * 1000 + Int((seconds * 1000).rounded()), content))
             }
@@ -751,9 +748,9 @@ class NeteaseLyricsRepository: LyricsRepository {
     }
 
     // MARK: - 翻译对齐
-
-    /// tlyric 与原 lrc 按时间戳对齐；没有对应翻译的行填空串，
-    /// 保证翻译行数与主歌词行数一致（Spotify 按行展示翻译层）。
+    //
+    // tlyric 与原 lrc 按时间戳对齐；没有对应翻译的行填空串，
+    // 保证翻译行数与主歌词行数一致（Spotify 按行展示翻译层）。
     private func buildTranslation(
         _ tlyric: String,
         originalLines: [LyricsLineDto]
@@ -777,8 +774,8 @@ class NeteaseLyricsRepository: LyricsRepository {
                 continue
             }
             // 翻译里 ♪ 单独作为一行的，清成空白（保持行数对齐）——
-            // ★ 2026-10-18：原先由「删除间奏符号 ♪」开关控制，那颗开关已退役，
-            //   这里与主歌词同一条纪律：**无条件**处理。
+            // 原先由「删除间奏符号 ♪」开关控制，那颗开关已退役，
+            // 这里与主歌词同一条纪律：**无条件**处理。
             if translated.trimmingCharacters(in: .whitespaces) == "♪" {
                 translatedLines.append("")
             } else {
@@ -814,19 +811,19 @@ class NeteaseLyricsRepository: LyricsRepository {
     ///
     /// 两条路，按可信度排序：
     ///
-    ///   ① `buildTranslation` —— 按 **offset 对齐**（与行级 tlyric 完全同一条管线）。
-    ///      网易 ytlrc 的行头时间戳与 yrc 行头一一对应，`parseLrc` 侧也早已为这套对齐
-    ///      修过精度（见 `parseLrc` 里 "Float32 会把 34.010 算成 34009.998 … 与 yrc 行头的
-    ///      精确毫秒 34010 对不上" 那段），所以这是首选路径。
+    /// ① `buildTranslation` —— 按 **offset 对齐**（与行级 tlyric 完全同一条管线）。
+    /// 网易 ytlrc 的行头时间戳与 yrc 行头一一对应，`parseLrc` 侧也早已为这套对齐
+    /// 修过精度（见 `parseLrc` 里 "Float32 会把 34.010 算成 34009.998 … 与 yrc 行头的
+    /// 精确毫秒 34010 对不上" 那段），所以这是首选路径。
     ///
-    ///   ② 兜底：offset 一条都没命中时（`buildTranslation` 返回 nil —— 两份文本的时间戳
-    ///      不是同一套时就会这样），**按行序配对**：ytlrc 解析出来的第 i 行 → 主歌词第 i 行。
-    ///      理由：这两份文本本来就是同一条流水线按同一顺序产出的，**顺序可信、时间戳不一定**；
-    ///      宁可错位一格，也不要整首没有翻译（用户要的就是"逐词歌词也要有翻译"）。
-    ///      配对的基准是**最终要交出去的 `originalLines`**，而不是 `yrcParsed`：
-    ///      中间还隔着 `LyricsMarkerFilter` 的丢行与"删开头间奏空行"，只有对着最终数组
-    ///      才能保证 `translation.lines[i]` 与 `lines[i]` 同源同行
-    ///      （渲染层就是按行号取译文的，见 `LyricLinesAdapter` 的 `translationLines[index]`）。
+    /// ② 兜底：offset 一条都没命中时（`buildTranslation` 返回 nil —— 两份文本的时间戳
+    /// 不是同一套时就会这样），**按行序配对**：ytlrc 解析出来的第 i 行 → 主歌词第 i 行。
+    /// 理由：这两份文本本来就是同一条流水线按同一顺序产出的，**顺序可信、时间戳不一定**；
+    /// 宁可错位一格，也不要整首没有翻译（用户要的就是"逐词歌词也要有翻译"）。
+    /// 配对的基准是**最终要交出去的 `originalLines`**，而不是 `yrcParsed`：
+    /// 中间还隔着 `LyricsMarkerFilter` 的丢行与"删开头间奏空行"，只有对着最终数组
+    /// 才能保证 `translation.lines[i]` 与 `lines[i]` 同源同行
+    /// （渲染层就是按行号取译文的，见 `LyricLinesAdapter` 的 `translationLines[index]`）。
     ///
     /// 返回 nil = 这份 ytlrc 真的没有可用译文（解析不出行 / 配对后全空）。
     private func buildWordByWordTranslation(
@@ -853,7 +850,7 @@ class NeteaseLyricsRepository: LyricsRepository {
             let text = index < parsed.count ? parsed[index].content : ""
             // 与 buildTranslation 同一条 ♪ 规则：整行只有 ♪ 的译文清成空白
             // （保持行数与主歌词一致，不能把行挤掉）。
-            // ★ 2026-10-18：不再看「删除间奏符号 ♪」开关（已退役）—— 无条件处理。
+            // 不再看「删除间奏符号 ♪」开关（已退役）—— 无条件处理。
             if text.trimmingCharacters(in: .whitespaces) == "♪" {
                 lines.append("")
                 continue
@@ -874,9 +871,9 @@ class NeteaseLyricsRepository: LyricsRepository {
     }
 
     // MARK: - 官方罗马音
-
-    /// 用网易官方 romalrc（日语罗马音）按时间戳替换主歌词行。
-    /// 只有对应 offset 命中时才替换，未命中的行保留原文，返回实际替换的行数。
+    //
+    // 用网易官方 romalrc（日语罗马音）按时间戳替换主歌词行。
+    // 只有对应 offset 命中时才替换，未命中的行保留原文，返回实际替换的行数。
     private func applyRomanization(
         _ romalrc: String,
         originalLines: [LyricsLineDto]
@@ -911,18 +908,18 @@ class NeteaseLyricsRepository: LyricsRepository {
         let cacheKey = String(query.hashValue)
         if let cached = lyricsCache.object(forKey: cacheKey as NSString) {
             writeDebugLog("[NetEase] Cache hit")
-            // ★ 2026-10-24：时间轴偏移**不在这里加**了 —— 改成所有源共用的
+            // 时间轴偏移**不在这里加**了 —— 改成所有源共用的
             // `LyricsTimingOffset`，施加点统一在 `CustomLyrics.storeLyricsDto`。
             // 缓存里存的永远是**未偏移**的原始 dto，所以命中缓存也拿得到最新偏移。
             return cached.dto
         }
 
-        // ── 搜索（2026-10-20 重做）────────────────────────────────────────────
+        // ── 搜索重做）
         //
         // ① 查询串按「标题变体」逐个试：NetEase 的搜索对文字敏感，日文名能搜到，
-        //    罗马字名常常只搜到翻唱/同曲异名（实测 `Himitsu MIMI` 前 30 条里没有
-        //    MIMI 的《ヒミツ》，`MIMI ヒミツ` 第 2 条就是）。标题变体来自
-        //    `trackTitle()` + metadata 的本地化 `title`（见 `CustomLyrics`）。
+        // 罗马字名常常只搜到翻唱/同曲异名（实测 `Himitsu MIMI` 前 30 条里没有
+        // MIMI 的《ヒミツ》，`MIMI ヒミツ` 第 2 条就是）。标题变体来自
+        // `trackTitle` + metadata 的本地化 `title`（见 `CustomLyrics`）。
         // ② 候选收齐后按 标题/艺人/时长/专辑 打分，`alia`/`tns`（别名/译名）参与匹配。
         let durationToleranceMs = 5000
         let spotifyDurationMs = query.durationMs
@@ -988,10 +985,10 @@ class NeteaseLyricsRepository: LyricsRepository {
 
         // 从所有查询里收候选，按 NetEase song id 去重。
         //
-        // ★ 2026-10-22：记下"这条候选是从**标题 + 主艺人**那条查询里出来的吗"。
-        //   前 `artistQueryCount` 条查询是 `标题 + 主艺人`，后面才是只有标题
-        //   （见上面 `searchQueries` 的组装顺序）。后面选歌时会用这份归属，
-        //   因为只有标题那条查询会带进大量同名翻唱。
+        // 记下"这条候选是从**标题 + 主艺人**那条查询里出来的吗"。
+        // 前 `artistQueryCount` 条查询是 `标题 + 主艺人`，后面才是只有标题
+        // （见上面 `searchQueries` 的组装顺序）。后面选歌时会用这份归属，
+        // 因为只有标题那条查询会带进大量同名翻唱。
         let artistQueryCount = titleVariants.count
         var artistQuerySongIDs = Set<Int>()
         var candidates: [[String: Any]] = []
@@ -1021,9 +1018,9 @@ class NeteaseLyricsRepository: LyricsRepository {
             throw LyricsError.noSuchSong
         }
 
-        // ── 选歌：标题 / 艺人 / 时长 / 专辑 打分 ──────────────────────────────
+        // ── 选歌：标题 / 艺人 / 时长 / 专辑 打分
         //
-        // 历史：第一版只看第一位；第二版"时长对得上就取"（完全不看歌手），真机日志 45
+        // 历史：第一版只看第一位；第二版"时长对得上就取"（完全不看歌手），
         // 里的翻唱/伴奏全被选中；中间那版要求歌手 + 时长，但 artist 字段读错了（读 `ar`，
         // 旧 search/get 返回的是 `artists`）⇒ 闸门从未生效，只剩"第一个时长相符的"。
         //
@@ -1084,13 +1081,13 @@ class NeteaseLyricsRepository: LyricsRepository {
             return out
         }
 
-        // ── ★ 2026-10-22：给"同曲同歌手、但没有逐词"的候选找同名的有逐词兄弟 ──
+        // ──给"同曲同歌手、但没有逐词"的候选找同名的有逐词兄弟 ──
         //
-        // 用户规则：「A 和 B 的**艺人名字和歌曲名字必须完全一样**，专辑名字不要求一样」。
+        // A 和 B 的**艺人名字和歌曲名字必须完全一样**，专辑名字不要求一样。
         // 所以这里只比较**主标题**（`name`）与**全体艺人名**的归一化结果，不用
         // `alia`/`tns` 别名（那会退回"相似但不是同一条"的坑），也不看专辑。
-        // 归一化沿用上面 `normalized()`（去首尾空白、小写、全半角标点统一）——
-        // 「独白」和「自白」仍然不同，这正是 2026-10-18 那版被回退的原因。
+        // 归一化沿用上面 `normalized`（去首尾空白、小写、全半角标点统一）——
+        // 「独白」和「自白」仍然不同，这正是那版被回退的原因。
         func normalizedSongName(_ song: [String: Any]) -> String {
             (song["name"] as? String).map(normalized) ?? ""
         }
@@ -1165,14 +1162,14 @@ class NeteaseLyricsRepository: LyricsRepository {
             return abs(ms - spotify) <= durationToleranceMs
         }
 
-        // ── ★★ 2026-10-22（用户：「网易云会找错很多歌」）──────────────────────
+        // ──（网易云会找错很多歌）
         //
         // 四个现场（Spotify 侧是罗马字标题，网易侧是日文标题）：
-        //   Sakurasou / Natsunose → 桜葬；Moderate (feat. wanko) / MIMI → もでらーと；
-        //   Telepathy / esoragoto → テレパシー；Answer (feat. wanko) / MIMI → 解答。
+        // Sakurasou / Natsunose → 桜葬；Moderate (feat. wanko) / MIMI → もでらーと；
+        // Telepathy / esoragoto → テレパシー；Answer (feat. wanko) / MIMI → 解答。
         // 正确条目的标题在网易是日文，`titleMatchScore` 拿不到分；而"只有标题"那条
         // 搜索会带回一堆**同名英文翻唱**（Sakurasou / Moderate / Answer …）⇒ 标题 4 分
-        // 直接压过正确条目的"艺人 + 时长"。用户看到的就是"找错歌"。
+        // 直接压过正确条目的"艺人 + 时长"。的就是"找错歌"。
         //
         // 修法：**先按时长收窄**。Spotify 的 `trackDurationMilliseconds` 与网易同一条录音
         // 通常只差几百毫秒；如果某个候选的时长落在 ±2s 内，就只在**这些**候选里打分
@@ -1237,8 +1234,8 @@ class NeteaseLyricsRepository: LyricsRepository {
         }
 
         // ⚠️ 这个局部量**不能**叫 `songId`：它会遮蔽方法 `songId(from:)`，之后任何
-        //    `songId(from: …)` 都会被解析成这个 Int —— 2026-10-18 真机编译错误
-        //    `cannot call value of non-function type 'Int'` 就是这么来的。
+        // `songId(from: …)` 都会被解析成这个 Int ——真机编译错误
+        // `cannot call value of non-function type 'Int'` 就是这么来的。
         guard let chosenSongId = songId(from: chosen) else {
             writeDebugLog("[NetEase] Chosen result has no song id")
             throw LyricsError.noSuchSong
@@ -1273,8 +1270,8 @@ class NeteaseLyricsRepository: LyricsRepository {
         if let lrc = rawLyrics.lrc, lrc.contains("纯音乐") {
             writeDebugLog("[NetEase] Instrumental — returning empty lyrics")
             var dto = LyricsDto(lines: [], timeSynced: false, romanization: .original)
-            // ★ 2026-10-11：**把"源说过这是纯音乐"记在 dto 上** —— 听歌页那层据此写
-            //   「此歌曲为纯音乐。」而不是「未找到歌词」（两者数据都是空行，只有这个字段能区分）。
+            // **把"源说过这是纯音乐"记在 dto 上** —— 听歌页那层据此写
+            // 「此歌曲为纯音乐。」而不是「未找到歌词」（两者数据都是空行，只有这个字段能区分）。
             dto.isInstrumental = true
             lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey as NSString)
             return dto
@@ -1292,34 +1289,33 @@ class NeteaseLyricsRepository: LyricsRepository {
             // 逐字歌词：开关开启且网易下发 yrc 时，优先用词级（逐字）时间轴；
             // yrc 缺失/解析为空时回退到 lrc 行级时间轴（下面原逻辑不变）。
             let preferWordByWord = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
-            // ★ 2026-10-11：yrc 与 **ytlrc** 必须从同一次 eapi 响应里一起取出（元组解构）。
+            // yrc 与 **ytlrc** 必须从同一次 eapi 响应里一起取出（元组解构）。
             //
             // 以前这里写的是 `yrcText = try fetchYrcRaw(songId: songId).yrc` —— 取 `.yrc`
             // 这一个成员就等于把元组里的 `ytlrc` 当场丢掉。而 ytlrc 是逐字歌词配套的
             // 翻译（`fetchYrcRaw` 自己那行日志 `yrc … chars, ytlrc … chars` 就写着它一直在
             // 下发），丢了它，下面的逐字分支就永远没有译文可取 ——
-            // 用户 2026-10-11 的原话：「当返回逐词歌词的时候，不展示歌词翻译」。
-            // 真机日志里 `[NetEase] word-by-word — skipping translation layer` 与
+            // 当返回逐词歌词的时候，不展示歌词翻译。
             // `[NPVLyrics] expanded … translation 0/29` 成对出现，就是这条路径。
             // ⚠️ **不能**为了拿 ytlrc 再调一次 `fetchYrcRaw`：那是一次额外的网络请求。
             var yrcText: String? = nil
             var ytlrcText: String? = nil
             var yrcParsed: [(offsetMs: Int, content: String, words: [LyricsWordDto])] = []
 
-            // ★★ 2026-10-22（用户）：逐词开启时，yrc 有两种"不可用"要分开处理：
+            // 逐词开启时，yrc 有两种"不可用"要分开处理：
             //
-            //   ① **残 yrc**：选中的条目有 yrc，但正文缺字（现场「ただ声一つ —
-            //      Rokudenashi」：yrc 123 字 vs lrc 357 字；ytlrc 只有 55 字符 ⇒
-            //      "歌词缺少 + 翻译不见"）。判据：yrc 正文 < lrc 正文的 90%。
-            //      这种 yrc 一律丢掉，先保证正文与翻译正确（走 lrc + tlyric）。
-            //   ② **没有 yrc**：用户 2026-10-22 的规则 —— 找**同名同艺人**（专辑不比）
-            //      的兄弟条目用它的 yrc/ytlrc；时长夹 ±5s。
+            // ① **残 yrc**：选中的条目有 yrc，但正文缺字（现场「ただ声一つ —
+            // Rokudenashi」：yrc 123 字 vs lrc 357 字；ytlrc 只有 55 字符 ⇒
+            // "歌词缺少 + 翻译不见"）。判据：yrc 正文 < lrc 正文的 90%。
+            // 这种 yrc 一律丢掉，先保证正文与翻译正确（走 lrc + tlyric）。
+            // ② **没有 yrc**：的规则 —— 找**同名同艺人**（专辑不比）
+            // 的兄弟条目用它的 yrc/ytlrc；时长夹 ±5s。
             //
-            //   ⚠️ 残 yrc 还有一条**修复**路径（阶段 B）：同名 + 时长差 ≤2s，且兄弟的
-            //      yrc 正文同样覆盖 lrc ≥90% ⇒ 采用。这一档**不要求艺人名相同**：
-            //      正文覆盖已经证明是同一份词，而"Rokudenashi"与"ロクデナシ"本来就是
-            //      同一个艺人的罗马字/日文写法（用户 2026-10-18 报的现场）。
-            //      没有覆盖率这道门就不会用 —— 那正是 2026-10-18 那版被回退的原因。
+            // ⚠️ 残 yrc 还有一条**修复**路径（阶段 B）：同名 + 时长差 ≤2s，且兄弟的
+            // yrc 正文同样覆盖 lrc ≥90% ⇒ 采用。这一档**不要求艺人名相同**：
+            // 正文覆盖已经证明是同一份词，而"Rokudenashi"与"ロクデナシ"本来就是
+            // 同一个艺人的罗马字/日文写法（报的现场）。
+            // 没有覆盖率这道门就不会用 —— 那正是那版被回退的原因。
             if preferWordByWord {
                 var yrcRaw: (yrc: String?, ytlrc: String?)? = nil
                 do {
@@ -1375,8 +1371,7 @@ class NeteaseLyricsRepository: LyricsRepository {
                                 }
                                 probedStrict += 1
                                 guard let alt = try? fetchYrcRaw(songId: altId) else {
-                                    // ⚠️ 日志里的 id 用 `(id …)` 包起来：导出脱敏规则 4b
-                                    //    （`DebugLogSanitizer`）认这个形状，会换成 `<redacted>`。
+                                    // （`DebugLogSanitizer`）认这个形状，会换成 `<redacted>`。
                                     writeDebugLog("[NetEase] same-name sibling (id \(altId)) — yrc fetch failed")
                                     continue
                                 }
@@ -1439,18 +1434,17 @@ class NeteaseLyricsRepository: LyricsRepository {
             if !yrcParsed.isEmpty {
                 writeDebugLog("[NetEase] Word-by-word (yrc) lyrics — \(yrcParsed.count) line(s)")
                 // `LyricsMarkerFilter.isNonLyricLine` = 与其他源共用的"结构标注行"过滤器。
-                // 网易的 `<Music>` 间奏标记就靠它拦掉（2026-10-04 真机日志 45 的现场：
-                // 那行被当正文渲染，跟着歌词列一起滚）。判为标注行的**丢掉整行**，
+                // 网易的 `<Music>` 间奏标记就靠它拦掉。判为标注行的**丢掉整行**，
                 // 而不是留个空行 —— 空行在 AM 渲染层里会占一行高度，看着像"漏了一句"。
                 lines = yrcParsed
-                    // ★★ 2026-10-18（用户拍板：「把**原本有的间奏全部删掉**」）：♪ / `<Music>` 那类
-                    //    **整行丢掉**，而不是"清成空白、保留位置"。
-                    //    判据用现成的 `isInterludeRow`（空行、或整行只有 ♪，含多个 ♪ 与前后空白）。
+                    // （把**原本有的间奏全部删掉**）：♪ / `<Music>` 那类
+                    // **整行丢掉**，而不是"清成空白、保留位置"。
+                    // 判据用现成的 `isInterludeRow`（空行、或整行只有 ♪，含多个 ♪ 与前后空白）。
                     //
-                    //    为什么丢掉是对的：**间奏不该由一行文字表达** —— AM 那边是三个呼吸点，
-                    //    而"这一行到下一行之间有多久没词"这件事，`LyricInterludeTimeline` 是**按
-                    //    时间间隙**推出来的（Melox 的检测逻辑），不靠一个占位行 ✓。
-                    //    留空行反而有害：AM 渲染层里空行照样占一行高度，看着像漏了一句。
+                    // 为什么丢掉是对的：**间奏不该由一行文字表达** —— AM 那边是三个呼吸点，
+                    // 而"这一行到下一行之间有多久没词"这件事，`LyricInterludeTimeline` 是**按
+                    // 时间间隙**推出来的（Melox 的检测逻辑），不靠一个占位行 ✓。
+                    // 留空行反而有害：AM 渲染层里空行照样占一行高度，看着像漏了一句。
                     .filter { !isInterludeRow($0.content.lyricsNoteIfEmpty) }
                     .map {
                         LyricsLineDto(
@@ -1502,8 +1496,8 @@ class NeteaseLyricsRepository: LyricsRepository {
                     writeDebugLog("[NetEase] Unsynced lyrics fallback (\(lines.count) line(s))")
                 } else {
                     lines = parsed
-                        // ★★ 2026-10-18：与逐字那条路同一条纪律 —— 间奏行**整行丢掉**
-                        //    （见上面那段说明：间奏交给三个呼吸点与时间间隙，不交给一行文字）。
+                        // 与逐字那条路同一条纪律 —— 间奏行**整行丢掉**
+                        // （见上面那段说明：间奏交给三个呼吸点与时间间隙，不交给一行文字）。
                         .filter { !isInterludeRow($0.content.lyricsNoteIfEmpty) }
                         .map {
                             LyricsLineDto(
@@ -1515,10 +1509,10 @@ class NeteaseLyricsRepository: LyricsRepository {
                 }
             }
 
-        // ★★ 2026-10-18：**无条件**删掉开头的空行 —— 间奏行已经在上面被整行剔掉了，
-        //    这里兜的是"其他源形态留下的空头"（静态歌词路径会把空行原样收进来）。
-        //    旧版这颗由「删除间奏符号 ♪」开关控制；那颗开关现在无论开还是关都不该再影响结果
-        //    （用户拍板 A：间奏一律删掉），所以这一句不再看它。
+        // **无条件**删掉开头的空行 —— 间奏行已经在上面被整行剔掉了，
+        // 这里兜的是"其他源形态留下的空头"（静态歌词路径会把空行原样收进来）。
+        // 旧版这颗由「删除间奏符号 ♪」开关控制；那颗开关现在无论开还是关都不该再影响结果
+        // （A：间奏一律删掉），所以这一句不再看它。
         lines = Array(lines.drop(while: { $0.content.isEmpty }))
 
         // 网易云翻译只有简体中文。开启「不展示网易云歌词翻译」开关时，
@@ -1528,13 +1522,12 @@ class NeteaseLyricsRepository: LyricsRepository {
         if hideNetEaseTranslation {
             writeDebugLog("[NetEase] Hide translation enabled — skipping translation layer")
         } else if !yrcParsed.isEmpty {
-            // ★ 2026-10-11（用户）：「当返回逐词歌词的时候，不展示歌词翻译」。
+            // 「当返回逐词歌词的时候，不展示歌词翻译」。
             //
             // 逐字路径的译文来自 **ytlrc**（与 yrc 同一次 eapi 下发、行头一一对应），
             // 不是 `raw.tlyric` —— 后者与行级 lrc 同源，和 yrc 行头不是一套时间轴。
             // 这里以前只有一句 `[NetEase] word-by-word — skipping translation layer`
             // 就结束了：从不给 `translation` 赋值，于是逐字歌永远没有翻译层
-            // （真机日志 `[NPVLyrics] expanded … translation 0/29` 的那条路）。
             if let ytlrc = ytlrcText, !ytlrc.isEmpty {
                 translation = buildWordByWordTranslation(ytlrc, originalLines: lines)
             } else {
@@ -1574,9 +1567,9 @@ class NeteaseLyricsRepository: LyricsRepository {
             writeDebugLog("[NetEase] word-by-word path — skipping repo-side romaji (defer to display layer)")
         }
 
-        // ★★ 2026-10-12（用户拍板）：**官方罗马音也不再替换正文。**
+        // **官方罗马音也不再替换正文。**
         //
-        // 用户原话：「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，不是在原文的上面
+        // 「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，不是在原文的上面
         // 展示罗马字」，并选了"原生那页也回到日文原文，罗马字只由我们这层画"。
         //
         // 这一段以前是把 `lines[i].content` **换成**官方 `romalrc`（并顺带把残留日文的行
@@ -1584,11 +1577,11 @@ class NeteaseLyricsRepository: LyricsRepository {
         // 只是走的是另一条路（逐字 yrc 那条已经在 `storeLyricsDto` / `toSpotifyLyricsData` 改掉）。
         //
         // 现在：官方那份**留着**（它质量比本地转换好），但存进 `officialRomanizedLines`
-        // —— 显示层把它当"原文**上方**那一行"（`LyricLinesAdapter.romanizedContentsForDisplay()`
+        // —— 显示层把它当"原文**上方**那一行"（`LyricLinesAdapter.romanizedContentsForDisplay`
         // 首选它，缺的行再退回本地转换）。正文一个字都不动。
         //
         // ⚠️ 「修改 NetEase 日语罗马字展示方式」那个开关（`preferLocalRomaji`）**语义不变**：
-        //    它仍然是"宁可要本地那份、也不用官方那份"—— 打开时这里就不存官方罗马字。
+        // 它仍然是"宁可要本地那份、也不用官方那份"—— 打开时这里就不存官方罗马字。
         var officialRomanizedLines: [String] = []
         if let romalrc = rawLyrics.romalrc, !romalrc.isEmpty,
            languageCode == "ja",
@@ -1617,8 +1610,8 @@ class NeteaseLyricsRepository: LyricsRepository {
             languageCode: languageCode,
             officialRomanizedLines: officialRomanizedLines
         )
-        // ★ 2026-10-24：把网易云回包里的"贡献歌词 / 贡献翻译"带给显示层
-        //（页内歌词署名第二行、自绘歌词页页脚）。
+        // 把网易云回包里的"贡献歌词 / 贡献翻译"带给显示层
+        // （页内歌词署名第二行、自绘歌词页页脚）。
         dto.providerContributors = contributors(from: rawLyrics)
         writeDebugLog(
             "[NetEase] credits — lyricUser=\(rawLyrics.lyricUser ?? "nil"),"
@@ -1628,7 +1621,7 @@ class NeteaseLyricsRepository: LyricsRepository {
 
         writeDebugLog("[NetEase] Synced lyrics — \(lines.count) line(s)")
         // 缓存**原始** dto：时间轴偏移统一在 `CustomLyrics.storeLyricsDto` 加
-        //（见 `LyricsTimingOffset`），这里不再碰时间戳。
+        // （见 `LyricsTimingOffset`），这里不再碰时间戳。
         lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey as NSString)
         return dto
     }

@@ -9,16 +9,9 @@ import ObjectiveC.runtime
 
 @MainActor
 extension NowPlayingLyricsPlate {
-    // MARK: - 歌词键（2026-10-11 第二轮：搬进**控件条**）
-
-    /// 那枚键的落点。
-    ///
-    /// ★★ 2026-10-11 第二轮（照片 71）：**首选控件条**那一格（与绿色 ✓ / 分享键同一条线），
-    /// 也就是 `toggleCenterX` × `controlBandMidY`。用户圈的第 ② 处就是它。
-    /// 控件条**量不出来**（没有进度条锚点 / 页面太矮 / 该位置已经被导航条吃掉）时才退回
-    /// 下面那套老的三级判据 —— 宁可回到旧行为，也不要摆一个压在进度条或歌词上的键。
+    // 那枚键的落点。
     static func toggleFrame(in page: UIView) -> CGRect? {
-        // ★ 2026-10-11（照片 75）：和**下面那颗播放/暂停键同一条竖线**（量不到才用常量）。
+        // 和**下面那颗播放/暂停键同一条竖线**（量不到才用常量）。
         let centerX = transportColumnX(playButtonIdentifier, in: page) ?? toggleCenterX
         if let band = controlBandFrame(in: page, side: toggleSide, centerX: centerX) {
             return band
@@ -29,8 +22,8 @@ extension NowPlayingLyricsPlate {
     /// 控件条上的一格（给定中心 x，y 恒为 `controlBandMidY`）。
     ///
     /// 两条健全性检查（任一不过就返回 `nil`，交给 `fallbackToggleFrame`）：
-    ///   · 这一格必须在**导航条下沿之下**（否则会压在那三个导航控件上）；
-    ///   · 必须在**进度条顶边之上**（否则会压住进度条的拖动）。
+    /// · 这一格必须在**导航条下沿之下**（否则会压在那三个导航控件上）；
+    /// · 必须在**进度条顶边之上**（否则会压住进度条的拖动）。
     static func controlBandFrame(
         in page: UIView,
         side: CGFloat,
@@ -55,12 +48,12 @@ extension NowPlayingLyricsPlate {
     /// 老的三级判据。**只在控件条量不出来时兜底**。
     ///
     /// * **①**：`npv.bottomStackView` 的**最后一行**（footer）的 frame、水平居中。那一坨的子视图依次是
-    ///   「标题 / 进度 / 控件 / footer」，footer 恒为**最后一个**（那一行只有两侧原生控件，中间是空的）；
-    ///   pw 也是把歌词字形放 footer 那一排。⚠️ 我们只**借它的 frame**，键本身挂在 `page` 上（塞进
-    ///   Spotify 的 stack 会让它变成 `stack.subviews.last`，把"认 footer"这件事本身弄坏）
-    ///   ⇒ 代价：那一行自己重排时要等下一拍（≤0.3s）才跟上。
+    /// 「标题 / 进度 / 控件 / footer」，footer 恒为**最后一个**（那一行只有两侧原生控件，中间是空的）；
+    /// pw 也是把歌词字形放 footer 那一排。⚠️ 我们只**借它的 frame**，键本身挂在 `page` 上（塞进
+    /// Spotify 的 stack 会让它变成 `stack.subviews.last`，把"认 footer"这件事本身弄坏）
+    /// ⇒ 代价：那一行自己重排时要等下一拍（≤0.3s）才跟上。
     /// * **② footer 不能用**（版式变了 / 它被藏了）：贴那一坨**上面**；展开时**靠右**（歌词正文居中排，
-    ///   靠右能把"挡住歌词区、抢走点行跳转"的面积压到最小）。
+    /// 靠右能把"挡住歌词区、抢走点行跳转"的面积压到最小）。
     /// * **③ 那一坨都找不到**（进页面极早期）：由播放键反推同一条空带（`playToBandTop`）。
     ///
     /// ⚠️ **绝不放在"播放键正上方 44pt"**：那里是**标题行与进度条**，既压住 Spotify 的内容
@@ -103,12 +96,12 @@ extension NowPlayingLyricsPlate {
     /// ⚠️ **必须自己判 `#available(iOS 26.0, *)`**：这一整条链（渲染层 / `canShow` /
     /// `layoutAndMount`）都是 iOS 26 起的，而 `apply` 那条路**没有再包一层版本判断** ——
     /// 少这一道，iOS 14–25 上会摆出一枚**看得见但点了必然无效**的键
-    ///（`canShow` 直接 false，还会打出误导人的"这首歌没有可用的歌词"）。独立复核抓到的。
+    /// （`canShow` 直接 false，还会打出误导人的"这首歌没有可用的歌词"）。独立复核抓到的。
     static func ensureToggleZone(in page: UIView) {
         guard #available(iOS 26.0, *) else { return }
-        // ★ 2026-10-12：总开关关着就**一枚键都不许摆** —— 用户报的"歌词按钮点不动"
-        //   就是"键摆出来了、点下去 `canShow` 直接 false"造成的。调用点（`apply` / `reconcile`）
-        //   本来都判过了，这里再判一次是**兜底**：将来多一条调用路径，也不会再造出那枚死键。
+        // 总开关关着就**一枚键都不许摆** —— 用户报的"歌词按钮点不动"
+        // 就是"键摆出来了、点下去 `canShow` 直接 false"造成的。调用点（`apply` / `reconcile`）
+        // 本来都判过了，这里再判一次是**兜底**：将来多一条调用路径，也不会再造出那枚死键。
         guard isEnabled else {
             removeToggle()
             return
@@ -159,8 +152,8 @@ extension NowPlayingLyricsPlate {
 
     /// 那枚键长什么样：**永远是那个歌词图标**；这一首没词就变灰（**但仍然可点** —— 点了会说明原因）。
     ///
-    /// ★ 2026-10-11（用户提的）：展开时**不再**换成 `chevron.down`。
-    /// 用户原话：「现在点击歌词按钮之后会显示一个向下的箭头，能不能给这个箭头删了，
+    /// 展开时**不再**换成 `chevron.down`。
+    /// 「现在点击歌词按钮之后会显示一个向下的箭头，能不能给这个箭头删了，
     /// 然后就只有原本的歌词长相」+「**它原本就是歌词图标，就无论怎么点，它看起来都是那个歌词图标**」。
     /// （收起仍然靠点这一颗 —— 图标不变，位置也不变。）
     static func applyToggleAppearance(to zone: UIControl) {
@@ -186,8 +179,8 @@ extension NowPlayingLyricsPlate {
             }
         }
 
-        // ★ 2026-10-11：判据从 `hasLyricsAvailable()`（只认"有时间轴的词级/行级"）换成热路径版的
-        //   `hasAnythingToDrawFast()` —— 否则"没有时间轴但能静态列出全文"那一档会被错误地变灰。
+        // 判据从 `hasLyricsAvailable`（只认"有时间轴的词级/行级"）换成热路径版的
+        // `hasAnythingToDrawFast` —— 否则"没有时间轴但能静态列出全文"那一档会被错误地变灰。
         zone.alpha = hasAnythingToDrawFast() ? 1 : toggleDisabledAlpha
     }
 
@@ -198,9 +191,9 @@ extension NowPlayingLyricsPlate {
         lastToggleZone = nil
     }
 
-    // MARK: - ★ 2026-10-12：被我们移走的标题行**还能点**（点歌名 / 歌手跳专辑 / 歌手页）
-
-    /// 触摸替身（来龙去脉见 `NowPlayingTitleRelayView` 的说明）。
+    // MARK: -被我们移走的标题行**还能点**（点歌名 / 歌手跳专辑 / 歌手页）
+    //
+    // 触摸替身（来龙去脉见 `NowPlayingTitleRelayView` 的说明）。
     static weak var titleRelay: NowPlayingTitleRelayView?
     static var titleRelayForwards = 0
 
@@ -235,7 +228,6 @@ extension NowPlayingLyricsPlate {
 
     /// 真的转发了一次触摸 ⇒ 记一行（**有上限**：这是每点一次都会走的路，不许刷屏）。
     ///
-    /// 为什么要这行日志：用户 2026-10-12 报的"点歌名/歌手不能跳转"在**上一份日志里
     /// 一条痕迹都没有**（我们根本没参与那次触摸）。有了它，下一份日志能直接回答
     /// "替身接到触摸了吗、转进去了吗"。
     static func noteTitleRelayForward() {

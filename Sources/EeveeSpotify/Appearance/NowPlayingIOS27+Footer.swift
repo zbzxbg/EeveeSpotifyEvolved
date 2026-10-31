@@ -1,45 +1,18 @@
-// 「iOS 27 听歌页」的**底部工具行**（待办 T3 + T6）。
+// 「iOS 27 听歌页」的底部工具行：三颗字形按 AM 排开，触摸靠替身转发。
 //
-// ## 目标（`C:\dsh\am\1.jpg`）
+// AM 的底排是三颗、左右对称、等距：歌词气泡（左）/ 隔空播放（中）/ 队列（右），414×896 上是 x = 86 / 207 / 328，y = 底排中线（≈805）。Spotify 自己的布局是 Connect 在最左（≈38）、分享与队列挤在右边（≈329 / 376），中间一大片空 ⇒ 躲不开挪位置。
 //
-// AM 的底排是三颗、左右对称、**等距**：歌词气泡（左）/ 隔空播放（中）/ 队列（右），
-// 位置在 414×896 上是 **x = 86 / 207 / 328**，y = 底排中线（本机 ≈805）。
+// 做法 —— **不移动任何原生控件，只藏字形 + 自绘 + 替身**：
+// ① 三颗原生键（Connect / 分享 / 队列）只藏图标子树，按钮 `alpha` 保持 1；
+// ② 在页面上按 AM 的三个位置画三颗字形（26pt 方框、SF Symbol）；
+// ③ 三个位置各盖一块替身（`NowPlayingIOS27RemoteRelayView` 的 `zones`），命中后 `target.hitTest(中心)` ⇒ 原生键收到的是真触摸（手势、按压、它自己的动作全在）。
 //
-// 我们这排现在是 Spotify 自己的布局：**Connect 在最左（≈38），分享与队列挤在右边
-// （≈329 / 376）**，中间是一大片空 —— 所以"照 AM 排开"这件事躲不开**挪位置**。
+// 不用 `transform` 挪原生键：它们在 `UIStackView` 里，栈每次布局都会写 `frame`，给带 `transform` 的视图设 `frame` 会把位移吃掉。
 //
-// ## 做法：**不移动任何原生控件，只藏字形 + 自绘 + 替身**
+// 左边那颗 = 歌词入口：先找 `lyrics-card-view`，再找它内部类名带 `ShowLyricsButton` 的那颗键（`Lyrics_CardElementImpl.ShowLyricsButtonElementUI`），找到就用替身把触摸打给它 ⇒ 走 Spotify 自己的"打开全屏歌词"；找不到（歌词卡片关了、或还没建出来）就让那颗键变暗 —— **不做假入口**。iOS 26+ 上整条让位：改成打开我们自己的页内歌词（`NowPlayingIOS27.toggleLyricsMode`），不依赖 `ShowLyricsButton` 是否存在。
 //
-//   ① 三颗原生键（Connect / 分享 / 队列）**只藏图标子树**（按钮 `alpha` 保持 1）；
-//   ② 我们在页面上按 AM 的三个位置画三颗字形（26pt 方框、SF Symbol）；
-//   ③ 三个位置各盖一块替身（`NowPlayingIOS27RemoteRelayView` 的 `zones`），命中后
-//      `target.hitTest(中心)` ⇒ 原生键收到的是**真触摸**（手势/按压/它自己的动作全在）。
-//
-// 为什么不用 `transform` 把原生键挪过去：它们在 `UIStackView` 里，栈每次布局都会写
-// `frame`，而给带 `transform` 的视图设 `frame` 会把位移吃掉（本仓库"搬控件"那几轮的老坑）。
-//
-// ## 左边那颗 = 歌词入口（T6）
-//
-// 新版布局把「歌词卡片」挤到屏幕外了，用户点不到 Spotify 的全屏歌词 —— 这一轮补回来：
-//   · 先在页面里找 `lyrics-card-view`（真机日志 8 的 `CardView@0,0,374,320,id=lyrics-card-view`），
-//     再找它内部类名带 `ShowLyricsButton` 的那颗键（dump 里有
-//     `Lyrics_CardElementImpl.ShowLyricsButtonElementUI`）；
-//   · 找到就用替身把触摸打给它 ⇒ 走 Spotify 自己的"打开全屏歌词"；
-//   · 找不到（用户把「隐藏歌词卡片」关了、或卡片还没建出来）⇒ 左边那颗**变暗**
-//     （alpha 0.35）并在日志里写明原因，**不做假入口**（这一档按下去就是没反应，
-//     与本仓库"没词时歌词键变灰"的既有做法一致）。
-//
-// ★ 2026-10-24：iOS 26+ 上这一套**整条让位** —— 左边那颗不再转发给原生键，
-//   改成打开我们自己的页内歌词（`NowPlayingIOS27.toggleLyricsMode`），
-//   所以那颗键不依赖 `ShowLyricsButton` 存不存在，「找不到就变暗」那一档也不会出现。
-//   iOS 26 以下仍走上面那条原生转发。
-//
-// ⛔ 2026-10-30：「更炫酷的逐词歌词」（独立窗口 `LyricsStage`）已整体删除，
-//   这颗键现在只有「页内歌词」一种去向。
-//
-// ⚠️ 分享键的**图形**被藏了，但功能还在：Spotify 的 ⋯ 菜单里有分享
-// （`ShareButtonNowPlayingView` 只是快捷方式）。
-//
+// ⛔ 独立窗口的逐词歌词（`LyricsStage`）已整体删除，这颗键现在只有「页内歌词」一种去向。
+// ⚠️ 分享键的图形被藏了，功能还在：Spotify 的 ⋯ 菜单里有分享（`ShareButtonNowPlayingView` 只是快捷方式）。
 // 日志 tag：`[iOS27]`，一次性一行 `footer — …`。
 import Foundation
 import UIKit
@@ -48,7 +21,7 @@ import ObjectiveC.runtime
 /// 工具行字形整体下移多少（**nonisolated**：`NowPlayingPageOverlay` 不是 `@MainActor`，
 /// 读不了 `NowPlayingIOS27` 里的静态常量，所以真值放在这里）。
 ///
-/// 34 → **64**（2026-10-24，用户：「下面还空了很大一块（即呼吸感）」）：原生行中线 811，
+/// 34 → **64**下面还空了很大一块（即呼吸感））：原生行中线 811，
 /// 被底部那一坨一起上移 55 后是 756；+34 = 790，离屏幕底还有 ~90pt，而音量行在 730…758。
 /// +64 ⇒ 字形中线 820、框 807…833 —— 音量行与它之间约 26pt，底部只留安全区。
 let nowPlayingIOS27FooterRowYOffset: CGFloat = 64
@@ -57,18 +30,18 @@ let nowPlayingIOS27FooterRowYOffset: CGFloat = 64
 extension NowPlayingIOS27 {
 
     // MARK: - 常量
-
-    /// 工具行那三颗（真机树 8.4：`Components.ConnectButtonOutputSwitcher` / `ShareButtonNowPlayingView` /
-    /// `QueueButtonNowPlaying`）。
+    //
+    // 工具行那三颗（真机树 8.4：`Components.ConnectButtonOutputSwitcher` / `ShareButtonNowPlayingView` /
+    // `QueueButtonNowPlaying`）。
     static let connectButtonIdentifier = "Components.ConnectButtonOutputSwitcher"
-    /// Spotify 的歌词卡片（日志 8 的 `[Tree]`：`CardView@0,0,374,320,id=lyrics-card-view`）。
+    /// Spotify 的歌词卡片。
     static let lyricsCardIdentifier = "lyrics-card-view"
     /// 卡片里那颗"打开全屏歌词"的键（旧版本 dump：`Lyrics_CardElementImpl.ShowLyricsButtonElementUI`）。
     static let lyricsButtonClassFragment = "ShowLyricsButton"
-    /// ★ 2026-10-24（日志 13 的真机树）：9.1.88 上那颗键的**类名不含** `ShowLyricsButton`：
+    /// 9.1.88 上那颗键的**类名不含** `ShowLyricsButton`：
     ///
-    ///     [NPVTree] 5.CardView@0,0,374,0,id=lyrics-card-view
-    ///     [NPVTree] 11.EncoreButton@0,0,44,44,id=lyrics-expand-button
+    /// [NPVTree] 5.CardView@0,0,374,0,id=lyrics-card-view
+    /// [NPVTree] 11.EncoreButton@0,0,44,44,id=lyrics-expand-button
     ///
     /// 旧判据找不到它 ⇒ 底排左边那颗气泡一直“找不到入口”（`lyrics entry missing`）。
     /// 现在两种判据都认：类名片段（老版本）+ 无障碍 id（9.1.88）。
@@ -92,27 +65,27 @@ extension NowPlayingIOS27 {
     static let footerGlyphTint = UIColor(white: 1, alpha: 0.92)
     /// 没有歌词入口时左边那颗的暗度。
     ///
-    /// ★ 2026-10-24（用户：「不开实验性 fo 的情况下，这个歌词点不动」）：
-    ///   舞台关着时这颗键是**转发给 Spotify 的 `ShowLyricsButton`**，而 iOS 27 这一页
-    ///   根本没有那颗按钮（日志：`lyrics entry missing`）⇒ 按下去没反应。
-    ///   留着一颗死键只会让人以为坏了，所以改成 ⇒ **完全隐藏**（alpha 0）。
-    ///   打开舞台（这颗开关）它就回来。
+    /// （不开实验性 fo 的情况下，这个歌词点不动）：
+    /// 舞台关着时这颗键是**转发给 Spotify 的 `ShowLyricsButton`**，而 iOS 27 这一页
+    /// 根本没有那颗按钮（日志：`lyrics entry missing`）⇒ 按下去没反应。
+    /// 留着一颗死键只会让人以为坏了，所以改成 ⇒ **完全隐藏**（alpha 0）。
+    /// 打开舞台（这颗开关）它就回来。
     static let footerGlyphDisabledAlpha: CGFloat = 0
 
     /// 工具行字形整体下移多少。
     ///
-    /// ★ 2026-10-24（用户：「下面还空了很大一块（即呼吸感）」）：34 → **64**。
-    ///   原生那一行中线在 811，被底部那一坨一起上移 55 之后是 756；再 +34 = 790。
-    ///   790 到屏幕底（896）还剩 ~90pt 空档，而音量行就在 730…758 —— 上下都挤。
-    ///   现在 +64 ⇒ 字形中线 820、框 807…833：音量行与它之间约 26pt，底部只留安全区那一档。
-    ///   ⚠️ 只挪**我们自己画的**字形与替身（原生按钮全是 `sendActions` 转发，与位置无关）。
-    ///   ⚠️ 真实值在文件顶部那个 **nonisolated** 的全局常量里（`NowPlayingPageOverlay` 不是
-    ///   `@MainActor`，读不了本 enum 的静态属性）。
+    /// （下面还空了很大一块（即呼吸感））：34 → **64**。
+    /// 原生那一行中线在 811，被底部那一坨一起上移 55 之后是 756；再 +34 = 790。
+    /// 790 到屏幕底（896）还剩 ~90pt 空档，而音量行就在 730…758 —— 上下都挤。
+    /// 现在 +64 ⇒ 字形中线 820、框 807…833：音量行与它之间约 26pt，底部只留安全区那一档。
+    /// ⚠️ 只挪**我们自己画的**字形与替身（原生按钮全是 `sendActions` 转发，与位置无关）。
+    /// ⚠️ 真实值在文件顶部那个 **nonisolated** 的全局常量里（`NowPlayingPageOverlay` 不是
+    /// `@MainActor`，读不了本 enum 的静态属性）。
     static let footerRowYOffset: CGFloat = nowPlayingIOS27FooterRowYOffset
 
     // MARK: - 状态（T2/T3 共用"藏字形"的一套表）
-
-    /// 被我们藏掉的**原生字形子树**（按钮本身还活着，替身要能命中它们）。
+    //
+    // 被我们藏掉的**原生字形子树**（按钮本身还活着，替身要能命中它们）。
     static let hiddenGlyphs = NSHashTable<UIView>.weakObjects()
     static var glyphAlphas: [ObjectIdentifier: CGFloat] = [:]
 
@@ -128,19 +101,18 @@ extension NowPlayingIOS27 {
     static var footerLyricsAvailable = false
 
     // MARK: - 藏原生字形（T2 循环键也用这一套）
-
-    /// 把一颗原生键的**图标子树**按 `alpha = 0` 藏掉（按钮本身不动）。
-    ///
-    /// 为什么不是把按钮整体 `alpha = 0`：替身要靠 `hitTest` 进它，而 `alpha <= 0.01`
-    /// 的视图**参与不了命中测试**（UIKit 在 `hitTest` 第一句就返回 nil）。
-    ///
-    /// ★★ 2026-10-24（照片 1：听歌中突然**标题/进度/传输/收藏整块消失**，而底排三颗字形
-    ///   和音量还在）：这个函数原来会把**一整棵子树的所有层**都写成 `alpha = 0`。
-    ///   只要传给它的不是"那颗键"，而是一个**祖先容器**（`nearestControl` 会往上爬 6 跳），
-    ///   一次就能把 bottomStack 里所有兄弟控件一起藏掉。现在两条加固：
-    ///   ① 调用方只传**按钮自己**，不再传 `nearestControl(...)` 的祖先；
-    ///   ② 这里只藏**叶子视图**（真正的字形/文字），容器与别的 `UIControl` 只向下走、
-    ///      绝不整层按掉 —— 这样最坏也只是"图标没藏干净"，不会让一整块控件消失。
+    //
+    // 把一颗原生键的**图标子树**按 `alpha = 0` 藏掉（按钮本身不动）。
+    //
+    // 为什么不是把按钮整体 `alpha = 0`：替身要靠 `hitTest` 进它，而 `alpha <= 0.01`
+    // 的视图**参与不了命中测试**（UIKit 在 `hitTest` 第一句就返回 nil）。
+    //
+    // 这个函数原来会把**一整棵子树的所有层**都写成 `alpha = 0`。
+    // 只要传给它的不是"那颗键"，而是一个**祖先容器**（`nearestControl` 会往上爬 6 跳），
+    // 一次就能把 bottomStack 里所有兄弟控件一起藏掉。现在两条加固：
+    // ① 调用方只传**按钮自己**，不再传 `nearestControl(...)` 的祖先；
+    // ② 这里只藏**叶子视图**（真正的字形/文字），容器与别的 `UIControl` 只向下走、
+    // 绝不整层按掉 —— 这样最坏也只是"图标没藏干净"，不会让一整块控件消失。
     @discardableResult
     static func hideGlyphSubtree(_ view: UIView) -> Bool {
         var changed = false
@@ -151,7 +123,7 @@ extension NowPlayingIOS27 {
             let sub = queue.removeLast()
             visited += 1
             if !sub.subviews.isEmpty {
-                // 容器：只往下走，不按掉（按掉就是照片 1 那一整块控件消失）。
+                // 容器：只往下走，不按掉。
                 queue.append(contentsOf: sub.subviews)
                 continue
             }
@@ -188,17 +160,17 @@ extension NowPlayingIOS27 {
         }
     }
 
-    /// 清空那两张表（`clearState()` 里调用）。
+    /// 清空那两张表（`clearState` 里调用）。
     static func clearHiddenGlyphs() {
         hiddenGlyphs.removeAllObjects()
         glyphAlphas.removeAll()
     }
 
     // MARK: - 每拍入口
-
-    /// 把工具行排成 AM 的三颗。找不到工具行就返回 false。
-    ///
-    /// ⚠️ **先量到中线再藏**：量不到位置时若已经把原生字形藏掉，底排就空了。
+    //
+    // 把工具行排成 AM 的三颗。找不到工具行就返回 false。
+    //
+    // ⚠️ **先量到中线再藏**：量不到位置时若已经把原生字形藏掉，底排就空了。
     @discardableResult
     static func placeFooter(in page: UIView) -> Bool {
         let connect = footerControl(connectButtonIdentifier, in: page)
@@ -210,29 +182,28 @@ extension NowPlayingIOS27 {
         }
 
         var changed = false
-        // ★★ 2026-10-24（用户：「跨设备连接 这个按钮会抽搐」）：
-        //   上一版把原生 Connect 用 `transform` **搬**到中间（207）—— 它住在
-        //   `UIStackView` 里，栈每次布局写 `frame` 都会把 transform 的位移吃掉/叠加
-        //   （日志 19 里它的 frame 从 171,68 一路漂到 -55,-55 ⇒ 抽搐）。
-        //   现在**不搬**：原生键留在原地（x≈38），只把它的字形藏掉；中间那颗自绘
-        //   airplay 字形的可点区交给替身的 `zones`（真触摸转发到原生键中心）。
-        //   真按钮始终在 38，不需要跨半屏 hitTest。
+        // （跨设备连接 这个按钮会抽搐）：
+        // 上一版把原生 Connect 用 `transform` **搬**到中间（207）—— 它住在
+        // `UIStackView` 里，栈每次布局写 `frame` 都会把 transform 的位移吃掉/叠加
+        // 现在**不搬**：原生键留在原地（x≈38），只把它的字形藏掉；中间那颗自绘
+        // airplay 字形的可点区交给替身的 `zones`（真触摸转发到原生键中心）。
+        // 真按钮始终在 38，不需要跨半屏 hitTest。
         for button in [connect, share, queue].compactMap({ $0 }) {
-            // ★ 2026-10-24（照片 1）：这里**只传按钮自己**。以前传的是
-            //   `nearestControl(button)`（会向上爬 6 跳），一旦爬到 footer 以上的容器，
-            //   就会把 bottomStack 里标题/进度/传输/收藏的叶子一起按掉 ⇒ 整块控件消失。
+            // 这里**只传按钮自己**。以前传的是
+            // `nearestControl(button)`（会向上爬 6 跳），一旦爬到 footer 以上的容器，
+            // 就会把 bottomStack 里标题/进度/传输/收藏的叶子一起按掉 ⇒ 整块控件消失。
             if hideGlyphSubtree(button) { changed = true }
         }
-        // ★ 2026-10-24（用户拿 MeloX 的播放页做对照：「我感觉应该是放得下的吧」）：对，放得下 ——
-        //   只是**原生那一行太靠上**：日志里它的中线是 811，而音量行（28pt）落在 785…813、
-        //   传输行底 781 ⇒ 三件挤在 30pt 里，任何"循环徽标"都会压上去。
-        //   这一行（工具行字形 + 可点区）整体**下移 34pt ⇒ 845**：
-        //     · 音量行下沿 813 → 字形框顶 832，中间留 19pt；
-        //     · 框底 858 仍在安全区（862）以内；
-        //     · 循环徽标（24pt、中心 = 队列中心右上 13/−20 ⇒ 825）落在 813…837，
-        //       既不碰音量行（813 起）、也不碰队列的**字形墨迹**（836 起）——
-        //       就是 AM / MeloX 那种"小图标压在队列右上"的样子。
-        //   只挪**我们自己画的**三颗与替身，原生那三颗一个字都不动（它们本来就被藏了字形）。
+        // （我感觉应该是放得下的吧）：对，放得下 ——
+        // 而音量行（28pt）落在 785…813、
+        // 传输行底 781 ⇒ 三件挤在 30pt 里，任何"循环徽标"都会压上去。
+        // 这一行（工具行字形 + 可点区）整体**下移 34pt ⇒ 845**：
+        // · 音量行下沿 813 → 字形框顶 832，中间留 19pt；
+        // · 框底 858 仍在安全区（862）以内；
+        // · 循环徽标（24pt、中心 = 队列中心右上 13/−20 ⇒ 825）落在 813…837，
+        // 既不碰音量行（813 起）、也不碰队列的**字形墨迹**（836 起）——
+        // 就是 AM / MeloX 那种"小图标压在队列右上"的样子。
+        // 只挪**我们自己画的**三颗与替身，原生那三颗一个字都不动（它们本来就被藏了字形）。
         let glyphMidY = rowMidY + footerRowYOffset
         if mountFooterGlyphs(in: page, midY: glyphMidY, connect: connect, share: share, queue: queue) {
             changed = true
@@ -240,19 +211,18 @@ extension NowPlayingIOS27 {
         return changed
     }
 
-    /// 底排的一颗原生键 —— **只认当前可见页**（pager 里相邻页的副本会先被 BFS 撞上，
-    /// 日志 20 的 `bottom stack -413` 就是这么来的）。
+    /// 底排的一颗原生键 —— **只认当前可见页**。
     private static func footerControl(_ identifier: String, in page: UIView) -> UIView? {
         var queue: [UIView] = [page]
         var visited = 0
         while !queue.isEmpty, visited < 3000 {
             let view = queue.removeFirst()
             visited += 1
-            // ★ 2026-10-24（72ee701 的回归）：三颗原生键本来就贴着页面**左右边缘**
-            //   （Connect ≈38、分享 ≈329、队列 ≈376），用默认的 20%…80% 中线判据会把
-            //   它们全部筛掉 ⇒ `placeFooter` 直接 return false，底排三颗字形 + 替身
-            //   一起消失。这里只要"中线还在页面横向范围内"即可；离屏 pager 副本在
-            //   x≈-413 / +414 之外，照样会被挡掉。
+            // （72ee701 的回归）：三颗原生键本来就贴着页面**左右边缘**
+            // （Connect ≈38、分享 ≈329、队列 ≈376），用默认的 20%…80% 中线判据会把
+            // 它们全部筛掉 ⇒ `placeFooter` 直接 return false，底排三颗字形 + 替身
+            // 一起消失。这里只要"中线还在页面横向范围内"即可；离屏 pager 副本在
+            // x≈-413 / +414 之外，照样会被挡掉。
             if view.accessibilityIdentifier == identifier,
                NowPlayingIOS27.isControlOnPage(
                    view,
@@ -273,9 +243,9 @@ extension NowPlayingIOS27 {
     ) -> CGFloat? {
         var values: [CGFloat] = []
         for view in [share, queue, connect].compactMap({ $0 }) {
-            // ⚠️ 必须用 `convert`（**带 transform**）：2026-10-24 起 `npv.bottomStackView`
-            //   被整体上移 55pt（`placeBottomStack`），`untransformed` 会量到**上移之前**的位置，
-            //   于是我们画的字形/替身留在老地方、和原生键错开一整段（上一轮翻车就这原因）。
+            // ⚠️ 必须用 `convert`（**带 transform**）：起 `npv.bottomStackView`
+            // 被整体上移 55pt（`placeBottomStack`），`untransformed` 会量到**上移之前**的位置，
+            // 于是我们画的字形/替身留在老地方、和原生键错开一整段（上一轮翻车就这原因）。
             let rect = view.convert(view.bounds, to: page)
             guard rect.height > 1, rect.midY > 0, rect.midY < page.bounds.height else { continue }
             values.append(rect.midY)
@@ -295,10 +265,10 @@ extension NowPlayingIOS27 {
         share: UIView?,
         queue: UIView?
     ) -> Bool {
-        // ★★ 2026-10-24（用户：「歌词这部分，不能直接复用吗，iOS 27 这边只需要改动画就好了」）：
-        //   左边这颗气泡**永远**开我们自己的页内歌词（正文复用 `AppleMusicLyricsPage`）；
-        //   iOS 26+ **根本不转发** Spotify 那颗键，所以连找都不用找
-        //   —— 省掉每 ~3 秒一次的 2000 节点 BFS。只有 iOS 26 以下才需要它。
+        // （歌词这部分，不能直接复用吗，iOS 27 这边只需要改动画就好了）：
+        // 左边这颗气泡**永远**开我们自己的页内歌词（正文复用 `AppleMusicLyricsPage`）；
+        // iOS 26+ **根本不转发** Spotify 那颗键，所以连找都不用找
+        // —— 省掉每 ~3 秒一次的 2000 节点 BFS。只有 iOS 26 以下才需要它。
         // ⚠️ 要认**缓存**：`lyricsEntryTarget` 是节流的，被节流的那一拍返回 nil，
         // 但上一拍已经找到的那颗还在（`lyricsEntryView`）—— 否则那颗键会每 3 秒"失灵 9 拍"、
         // 左边那颗也会跟着一闪一闪。
@@ -306,7 +276,7 @@ extension NowPlayingIOS27 {
             ? nil
             : (lyricsEntryTarget(in: page) ?? lyricsEntryView)
         // 那颗键**永远可点**：
-        //   iOS 26+ ⇒ 我们自己的页内歌词；iOS 26 以下 ⇒ 退回 Spotify 那颗 `lyrics-expand-button`。
+        // iOS 26+ ⇒ 我们自己的页内歌词；iOS 26 以下 ⇒ 退回 Spotify 那颗 `lyrics-expand-button`。
         footerLyricsAvailable = canOpenOwnLyricsPage || lyricsTarget != nil
 
         // 页面换了（或上一份的宿主没了）⇒ 先把旧字形拆干净，别留在上一页上。
@@ -351,10 +321,10 @@ extension NowPlayingIOS27 {
                 glyph.frame = frame
                 changed = true
             }
-            // ★ 2026-10-24：舞台关着 + 找不到原生键 ⇒ **不画**（见 `footerGlyphDisabledAlpha`）。
-            //   这一档叫不上“变暗”了，就是真的没有歌词入口。
-            //   ★★ Connect 那颗现在**由我们画**（原生键留在 38、字形被藏）⇒ 这一颗
-            //   必须是 alpha 1，否则中间就空了（上一版是 0，因为原生字形被搬过来露着）。
+            // 舞台关着 + 找不到原生键 ⇒ **不画**（见 `footerGlyphDisabledAlpha`）。
+            // 这一档叫不上“变暗”了，就是真的没有歌词入口。
+            // Connect 那颗现在**由我们画**（原生键留在 38、字形被藏）⇒ 这一颗
+            // 必须是 alpha 1，否则中间就空了（上一版是 0，因为原生字形被搬过来露着）。
             let wantedAlpha: CGFloat
             if name == "lyrics" && !footerLyricsAvailable {
                 wantedAlpha = footerGlyphDisabledAlpha
@@ -367,13 +337,12 @@ extension NowPlayingIOS27 {
             }
         }
 
-        // ★★ 2026-10-24（日志 20：`connect: no action accepted the tap` ×6）：
-        //   `accessibilityActivate` / `sendActions` 对这颗 Encore 包装的 Connect 都不生效。
-        //   最终方案：把原生 Connect 从 `UIStackView` 里**结构性地**搬到中间字形的位置
-        //   （207），原槽位留一个等宽 placeholder；然后用替身的 `zones`（真触摸转发）
-        //   指向它 —— 目标真的在手指底下，`hitTest` 到的是按钮自己，不是 `.touchUpOutside`。
-        //   不再用 transform（栈会吃位移 = 抽搐），也不再走 actionZone。
-
+        // `accessibilityActivate` / `sendActions` 对这颗 Encore 包装的 Connect 都不生效。
+        // 最终方案：把原生 Connect 从 `UIStackView` 里**结构性地**搬到中间字形的位置
+        // （207），原槽位留一个等宽 placeholder；然后用替身的 `zones`（真触摸转发）
+        // 指向它 —— 目标真的在手指底下，`hitTest` 到的是按钮自己，不是 `.touchUpOutside`。
+        // 不再用 transform（栈会吃位移 = 抽搐），也不再走 actionZone。
+        //
         // 替身：三个互不相交的 zone，各指向一颗原生键。
         let relay: NowPlayingIOS27RemoteRelayView
         if let existing = footerRelay, existing.superview === page {
@@ -399,19 +368,19 @@ extension NowPlayingIOS27 {
                 height: tapSide
             )
         }
-        // ★★ 2026-10-24：**一律走 `sendActions`**（`tapAction`），不再把触摸 hitTest 到
-        //   原生键上 —— 那颗键不在手指底下，UIKit 算出来的点落在它 bounds 之外，
-        //   控件发的是 `.touchUpOutside`（用户报的"iOS 27 下歌词点不了"就是它）。
-        //   只有实在找不到 `UIControl` 时才退回 `zones`（至少不把触摸吞掉）。
+        // **一律走 `sendActions`**（`tapAction`），不再把触摸 hitTest 到
+        // 原生键上 —— 那颗键不在手指底下，UIKit 算出来的点落在它 bounds 之外，
+        // 控件发的是 `.touchUpOutside`（用户报的"iOS 27 下歌词点不了"就是它）。
+        // 只有实在找不到 `UIControl` 时才退回 `zones`（至少不把触摸吞掉）。
         func addZone(_ frame: CGRect, target: UIView?, label: String) {
             guard let target else { return }
             let action = tapAction(for: target, label: label)
-            // ★ 2026-10-24（用户：「下面那个雷达点不动」）：中间那颗是 Spotify 的
-            //   Connect / 输出切换（`ConnectButtonOutputSwitcher`）。它在 9.1.88 上是
-            //   Encore 包出来的，`sendActions` 到最内层 `UIControl` 有时什么都不做 ——
-            //   这里先试**无障碍激活**（`accessibilityActivate`），它走的是控件自己的
-            //   "我该干什么"那条路，对 SwiftUI/Encore 包装层比 target/action 稳。
-            //   失败了再退回 `sendActions`（其它两颗维持原路）。
+            // （下面那个雷达点不动）：中间那颗是 Spotify 的
+            // Connect / 输出切换（`ConnectButtonOutputSwitcher`）。它在 9.1.88 上是
+            // Encore 包出来的，`sendActions` 到最内层 `UIControl` 有时什么都不做 ——
+            // 这里先试**无障碍激活**（`accessibilityActivate`），它走的是控件自己的
+            // "我该干什么"那条路，对 SwiftUI/Encore 包装层比 target/action 稳。
+            // 失败了再退回 `sendActions`（其它两颗维持原路）。
             if label == "connect" {
                 // 目标可能是个 ViewHolder（`ConnectButtonOutputSwitcherViewHolder`），真正的
                 // `EncoreButton` 在它里面 —— `accessibilityActivate` 要打在**那颗**上。
@@ -444,11 +413,11 @@ extension NowPlayingIOS27 {
             }
         }
         if canOpenOwnLyricsPage {
-            // ★★ 2026-10-24（用户：「歌词这部分，不能直接复用吗，iOS 27 这边只需要改动画就好了」）：
-            //   **歌词键永远开我们自己的页** —— iOS 27 页内歌词（缩封面、移标题、铺
-            //   `AppleMusicLyricsPage`），进度/传输/音量/底排保持原样。
-            //   ⛔ 2026-10-30：原来这里还有「独立窗口 LyricsStage」那一档，已随
-            //   「更炫酷的逐词歌词」整体删除；现在只剩页内这一条。
+            // （歌词这部分，不能直接复用吗，iOS 27 这边只需要改动画就好了）：
+            // **歌词键永远开我们自己的页** —— iOS 27 页内歌词（缩封面、移标题、铺
+            // `AppleMusicLyricsPage`），进度/传输/音量/底排保持原样。
+            // ⛔原来这里还有「独立窗口 LyricsStage」那一档，已随
+            // 「更炫酷的逐词歌词」整体删除；现在只剩页内这一条。
             actionZones.append((tapRect(frames[0]), {
                 writeDebugLog("[\(logTag)] lyrics: toggling the iOS 27 in-page lyrics")
                 onMainThreadSync {
@@ -459,10 +428,9 @@ extension NowPlayingIOS27 {
             // iOS 26 以下没有我们自己的歌词页：退回 Spotify 那颗键。
             actionZones.append((tapRect(frames[0]), action))
         }
-        // ★★ 2026-10-24（日志 20：`connect: no action accepted the tap` ×6）：
-        //   Connect 这颗 `accessibilityActivate` / `sendActions` 都不认。把它从栈里
-        //   结构性搬到 207（原槽位 placeholder），目标就真的在手指底下；再用 `zones`
-        //   做真触摸转发。搬不动（不在 UIStackView 里）才退回动作级。
+        // Connect 这颗 `accessibilityActivate` / `sendActions` 都不认。把它从栈里
+        // 结构性搬到 207（原槽位 placeholder），目标就真的在手指底下；再用 `zones`
+        // 做真触摸转发。搬不动（不在 UIStackView 里）才退回动作级。
         if let connect, let target = NowPlayingIOS27.moveConnectHolder(
             connect, to: frames[1], in: page
         ) {
@@ -475,11 +443,11 @@ extension NowPlayingIOS27 {
         addZone(frames[2], target: queue, label: "queue")
         relay.zones = zones
         relay.actionZones = actionZones
-        // ★ 2026-10-24（用户：「点右下角那颗，还是 Spotify 原生弹窗」）：循环那颗是**另一块替身**，
-        //   它的框和这里的"队列"可点区（44pt，必须盖住藏在下面的原生分享键）必然重叠。
-        //   谁先收到触摸取决于 subviews 顺序（这一层每拍 bringToFront 一次）⇒ 同一处时而开队列、
-        //   时而循环。现在把循环那颗的框从**本层**命中范围里排除：那一小块会让给下面那块替身，
-        //   与顺序无关。（循环还没摆出来的那一两拍，`repeatPill` 为 nil，就不排除。）
+        // （点右下角那颗，还是 Spotify 原生弹窗）：循环那颗是**另一块替身**，
+        // 它的框和这里的"队列"可点区（44pt，必须盖住藏在下面的原生分享键）必然重叠。
+        // 谁先收到触摸取决于 subviews 顺序（这一层每拍 bringToFront 一次）⇒ 同一处时而开队列、
+        // 时而循环。现在把循环那颗的框从**本层**命中范围里排除：那一小块会让给下面那块替身，
+        // 与顺序无关。（循环还没摆出来的那一两拍，`repeatPill` 为 nil，就不排除。）
         if let pill = repeatPill, pill.superview === page {
             relay.excludedRects = [pill.frame]
         } else {
@@ -581,14 +549,13 @@ extension NowPlayingIOS27 {
     ///
     /// 为什么不是 `zones` / `sendActions`：见 `mountFooterGlyphs` 里那段 —— 替身的
     /// `zones` 把 `UITouch` 的真实坐标交给原生键，跨 170pt 必然 `.touchUpOutside`；
-    /// 而日志 18 里 `sendActions` 到 EncoreButton 连刷 8 秒也没打开面板。
     /// 这里把**动作级**的三条路都试一遍：
-    ///   ① `accessibilityActivate()`（由内到外）—— 不依赖位置，对 SwiftUI/Encore 包装层
-    ///      比 target/action 稳；
-    ///   ② `sendActions(for: .primaryActionTriggered)` / `.touchUpInside` —— 经典
-    ///      target/action 兜底；
-    ///   ③ 都没有接受时只打日志，**不假装成功**；下一招才是把原生键真的摆到 207
-    ///      （重排 stack / 加占位），那会动布局，先留到这一招被真机否掉之后。
+    /// ① `accessibilityActivate`（由内到外）—— 不依赖位置，对 SwiftUI/Encore 包装层
+    /// 比 target/action 稳；
+    /// ② `sendActions(for: .primaryActionTriggered)` / `.touchUpInside` —— 经典
+    /// target/action 兜底；
+    /// ③ 都没有接受时只打日志，**不假装成功**；下一招才是把原生键真的摆到 207
+    /// （重排 stack / 加占位），那会动布局，先留到这一招被真机否掉之后。
     static func activateConnect(_ holder: UIView) {
         var all: [UIView] = []
         var controls: [UIControl] = []
@@ -624,8 +591,7 @@ extension NowPlayingIOS27 {
     /// 把**原生 Connect 按钮**从栈里结构性搬到目标中心（`frames[1]` = 207）。
     ///
     /// 为什么不是 transform：它在 `UIStackView` 里，栈每次布局写 `frame` 会把 transform
-    /// 的位移吃掉/叠加（日志 19：171,68 → 206,103 → -55,-55 ⇒ 抽搐）。
-    /// 为什么不是 `sendActions` / `accessibilityActivate`：日志 18/20 都证明这颗
+    /// 的位移吃掉/叠加。
     /// Encore 包装的 Connect 不认这两种动作；只有**真触摸**能开面板。
     /// 现在把栈里的那一格换成等宽 placeholder，把按钮本体搬到页面上；替身的 `zones`
     /// 在 207 做真触摸转发时，目标真的就在手指底下 —— 不会再 `.touchUpOutside`。

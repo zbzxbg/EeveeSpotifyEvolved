@@ -1,39 +1,18 @@
 import Foundation
 
-// MARK: - AmllTtmlLyricsRepository
-//
 // AMLL 逐词歌词源（amll.dev）。
 //
-// ── 数据来源 ──────────────────────────────────────────────────────────────
-// 走 AMLL 官方 HTTP API：https://api.amll.dev/v1/lyrics/get?spotifyId=<trackID>
-// **精确匹配优先**：Spotify Track ID 就是唯一入口，拿不到就抛 .noSuchSong 交给既有的
-// geniusFallback 逻辑，猜错比没有更糟。
+// 数据来源：`https://api.amll.dev/v1/lyrics/get?spotifyId=<trackID>`，**精确匹配优先** —— Spotify Track ID 是唯一入口，拿不到就抛 `.noSuchSong` 交给既有的 `geniusFallback`，猜错比没有更糟。
 //
-// ★★ 2026-10-16「实验 → AMLL 模糊搜索」（默认**关**）：打开之后，精确那一步失败时**再按歌名搜一次**
-// （`GET /v1/lyrics/search?q=<歌名>` → 候选里挑一条 → `GET /v1/lyrics/get?id=<候选 id>`）。
-// 官方搜索是宽松的（`q=あのね` 会把"風色Letter"也返回），所以候选要**自己打分**才敢用：
-// 登记过本曲 spotifyId 最强；其次歌名归一化后完全一致；"部分重合 + 歌手也对得上"才过闸。
-// 只靠歌手对得上或只靠歌名部分重合**一律不要** —— 宁可没有词，也不能拿别的歌冒充。
-// 关掉时这一整条路不存在，行为与以前逐字一致。
+// 「实验 → AMLL 模糊搜索」（默认**关**）：打开后精确那步失败时**再按歌名搜一次**（`/v1/lyrics/search?q=<歌名>` → 候选里挑一条 → `/v1/lyrics/get?id=<候选 id>`）。官方搜索很宽松（`q=あのね` 会把"風色Letter"也返回），所以候选要**自己打分**：登记过本曲 spotifyId 最强；其次歌名归一化后完全一致；"部分重合 + 歌手也对得上"才过闸。只靠歌手对得上、或只靠歌名部分重合**一律不要** —— 宁可没有词，也不能拿别的歌冒充。关掉时这一整条路不存在。
 //
-// 为什么用官方 API 而不是社区镜像：AMLL 的全部镜像站（bikonoo / stevexmh / dimeta /
-// GDBA）都是按**网易云 / QQ 音乐 ID** 建索引的，本项目播放上下文里只有 Spotify Track ID，
-// 没有镜像可用的 URL 模板。官方 API 是唯一接受 spotifyId 的入口。
+// 为什么用官方 API 而不是社区镜像：AMLL 的镜像站（bikonoo / stevexmh / dimeta / GDBA）都按**网易云 / QQ 音乐 ID** 建索引，而本项目播放上下文里只有 Spotify Track ID，没有可用的 URL 模板。
 //
-// ── 为什么不做「时长闸门」──────────────────────────────────────────────────
-// TTML 里 <body dur> 与 /v1/lrclib/get 的 duration 字段都是「最后一个歌词时间戳」，
-// 不是音频时长（末句唱完到歌曲结束差几十秒属正常）。用它做等值比较是方法错误。
-// 身份判据只保留上游可声明的信号：文件内嵌的 spotifyId 命中本曲。
+// 不做「时长闸门」：TTML 的 `<body dur>` 与 lrclib 的 `duration` 都是「最后一个歌词时间戳」，不是音频时长（末句唱完到歌曲结束差几十秒属正常），拿它做等值比较是方法错误。身份判据只保留可声明的信号：文件内嵌的 spotifyId 命中本曲。
 //
-// ── 错误分类（关键）──────────────────────────────────────────────────────
-// 404 → 库里真没有 → .noSuchSong，静默降级，不弹窗。
-// 429（官方限流，单 IP 均值 50 req/s）与 502（OpenAPI 明示「数据源不稳定或索引更新失败」）
-//   → 是服务问题不是「没有歌词」，退避重试；连续失败抛错，日志明确区分。
-// 这两个状态码不能混进 noSuchSong，否则一次网络抖动就会被当成「这首歌没歌词」。
+// 错误分类：404 → 库里真没有 → `.noSuchSong`，静默降级不弹窗；429（官方限流，单 IP 均值 50 req/s）与 502（数据源不稳定或索引更新失败）是服务问题、不是「没有歌词」，退避重试、连续失败才抛错。这两个状态码不能混进 `.noSuchSong`，否则一次网络抖动就会被当成"这首歌没歌词"。
 //
-// ── 缓存 ──────────────────────────────────────────────────────────────────
-// 官方文档：通过 id / filename 取得的歌词内容永久固定不变，建议长期缓存。
-// 这里按 spotifyTrackId 缓存最终 DTO（含质检结论），命中即跳过网络与解析。
+// 缓存：官方文档说通过 id / filename 取得的内容永久固定不变，建议长期缓存。这里按 `spotifyTrackId` 缓存最终 DTO（含质检结论），命中即跳过网络与解析。
 
 class AmllTtmlLyricsRepository: LyricsRepository {
 
@@ -103,9 +82,9 @@ class AmllTtmlLyricsRepository: LyricsRepository {
         } catch let exactError {
             // ② **模糊**（「实验 → AMLL 模糊搜索」，默认关）：精确查不到时按歌名再搜一次。
             //
-            //    ⚠️ 判据放在**仓库层**而不是调用方：这个仓库只在两种情况被叫到 ——
-            //    「AMLL 优先」那一跳，或者用户把来源直接选成 AMLL ⇒ 设置页那句
-            //    "需要开启 AMLL 优先或歌词来源选择 AMLL"自动成立，不用再判一次。
+            // ⚠️ 判据放在**仓库层**而不是调用方：这个仓库只在两种情况被叫到 ——
+            // 「AMLL 优先」那一跳，或者用户把来源直接选成 AMLL ⇒ 设置页那句
+            // "需要开启 AMLL 优先或歌词来源选择 AMLL"自动成立，不用再判一次。
             guard UserDefaults.experimentsOptions.amllFuzzySearch else { throw exactError }
 
             writeDebugLog("[AMLL] exact lookup failed (\(exactError)) — fuzzy search is ON, searching by name")
@@ -117,7 +96,7 @@ class AmllTtmlLyricsRepository: LyricsRepository {
 
             let item = try fetchLyricsItem(id: hit.id)
             // ⚠️ 模糊命中是**按名字**认的 ⇒ 身份复核要关掉（那个文件当然不带本曲的 spotifyId）。
-            //    换来的是 `fuzzySearchItem` 的打分闸门：歌名对不上就根本不会被选中。
+            // 换来的是 `fuzzySearchItem` 的打分闸门：歌名对不上就根本不会被选中。
             let dto = try makeDto(item: item, trackId: trackId, enforceIdentity: false)
             lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey)
             return dto
@@ -127,7 +106,7 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     /// 一条拿到的条目 → DTO。三条"没有可用歌词"的判定集中在这里（精确 / 模糊共用）。
     ///
     /// - Parameter enforceIdentity: 精确那一跳传 true —— TTML 里若明确登记了 spotifyIds
-    ///   却不含本曲，说明后端匹配错了，宁可不要；模糊那一跳传 false（见调用点）。
+    /// 却不含本曲，说明后端匹配错了，宁可不要；模糊那一跳传 false（见调用点）。
     private func makeDto(item: AmllSongItem, trackId: String, enforceIdentity: Bool) throws -> LyricsDto {
         guard let ttml = item.lyrics, !ttml.isEmpty else {
             writeDebugLog("[AMLL] response carried no lyrics payload — noSuchSong")
@@ -146,8 +125,8 @@ class AmllTtmlLyricsRepository: LyricsRepository {
             throw LyricsError.noSuchSong
         }
 
-        // ★★ 2026-10-16（Q6 清点第 ① 条）：把**歌词作者**（AMLL 的 `authorUsernames.first`）交给
-        //    mapper 去写署名 —— 这一路以前只进日志，用户看到的署名永远是裸的源名。
+        // （Q6 清点第 ① 条）：把**歌词作者**（AMLL 的 `authorUsernames.first`）交给
+        // mapper 去写署名 —— 这一路以前只进日志，的署名永远是裸的源名。
         let dto = AmllLyricsMapper.makeDto(parsed, authorUsername: item.primaryAuthorUsername)
 
         guard !dto.lines.isEmpty else {
@@ -160,9 +139,9 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     }
 
     // MARK: - 网络
-
-    /// 一次请求的结果。重试判定必须和错误映射写在同一个地方 ——
-    /// 否则「哪些错误值得再试」会散落在两层之间，很容易把 502 当成「查无此歌」。
+    //
+    // 一次请求的结果。重试判定必须和错误映射写在同一个地方 ——
+    // 否则「哪些错误值得再试」会散落在两层之间，很容易把 502 当成「查无此歌」。
     private enum FetchOutcome {
         case success(AmllSongItem)
         /// 服务侧问题（网络 / 超时 / 429 / 5xx）：值得退避重试，最终失败也不代表「没有歌词」。
@@ -320,11 +299,11 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     }
 
     // MARK: - 模糊搜索（「实验 → AMLL 模糊搜索」）
-
-    /// `/v1/lyrics/search?q=<歌名>` 的一条候选。
-    ///
-    /// 官方搜索是**宽松**的（`q=あのね` 会连"風色Letter"一起返回）⇒ 候选必须自己打分挑
-    /// （见 `fuzzySearchItem`），不能拿了就用。
+    //
+    // `/v1/lyrics/search?q=<歌名>` 的一条候选。
+    //
+    // 官方搜索是**宽松**的（`q=あのね` 会连"風色Letter"一起返回）⇒ 候选必须自己打分挑
+    // （见 `fuzzySearchItem`），不能拿了就用。
     struct AmllSearchItem: Decodable {
         let id: Int
         let filename: String?
@@ -407,15 +386,15 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     /// 从搜索候选里挑一条**敢用**的。
     ///
     /// 打分（阈值 20）：
-    ///   · 登记过本曲 spotifyId ............ +100（最强，直接用）
-    ///   · 歌名归一化后**完全相同** ........ +20（单这一条就够）
-    ///   · 歌名只是**部分**重合 ............ +12
-    ///   · 任一歌手名对得上 ................. +10
+    /// · 登记过本曲 spotifyId ............ +100（最强，直接用）
+    /// · 歌名归一化后**完全相同** ........ +20（单这一条就够）
+    /// · 歌名只是**部分**重合 ............ +12
+    /// · 任一歌手名对得上 ................. +10
     ///
     /// ⇒ 只有"歌名完全对上"或"部分重合 **且** 歌手也对上"才过闸；光歌手对得上（10）
     /// 或光歌名部分重合（12）**不够** —— 模糊搜索可以找得宽，但不能拿别的歌冒充本曲。
     /// （`q` 那边不支持"歌名 + 歌手"一次给两样：实测 `q=あのね ナナツカゼ` 返回 0 条，
-    ///   所以只能取歌名、在本地按歌手打分。）
+    /// 所以只能取歌名、在本地按歌手打分。）
     private func fuzzySearchItem(for query: LyricsSearchQuery) throws -> AmllSearchItem? {
         let title = query.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {

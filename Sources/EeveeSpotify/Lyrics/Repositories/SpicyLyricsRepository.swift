@@ -5,25 +5,25 @@ import Foundation
 // 走 **SpicyLyrics 官方开发者 API**：`GET https://api.spicylyrics.org/v1/lyrics/<trackId>`
 // + `Authorization: Bearer <key>`（key 见 `SpicyLyricsKey+UserDefaults.swift`）。
 //
-// ── 为什么从 `/query` 搬过来（2026-10-13 实测）────────────────────────────────
+// ── 为什么从 `/query` 搬过来实测）
 // 旧路是**内部客户端 API** `POST /query`：body 里带 `queries[].variables.auth =
 // "SpicyLyrics-WebAuth"`，并且必须把从 Spotify 请求里抓到的 access token 塞进
 // `SpicyLyrics-WebAuth: Bearer <token>` 头，还要伪装一整套 Spicetify 的
 // Origin / UA / sec-ch-ua 头。实测结论：
-//   · body 形状不对 → HTTP 418「This is the internal client API… use the developer API」；
-//   · 形状对但不带 token → 200 外壳 + `result.data.error = "Missing authorization"`，
-//     且外壳带一条 `_notice`：**只授权官方客户端及其公开 fork 的个人使用，禁止第三方
-//     应用抓取/再分发**。
+// · body 形状不对 → HTTP 418「This is the internal client API… use the developer API」；
+// · 形状对但不带 token → 200 外壳 + `result.data.error = "Missing authorization"`，
+// 且外壳带一条 `_notice`：**只授权官方客户端及其公开 fork 的个人使用，禁止第三方
+// 应用抓取/再分发**。
 // ⇒ 技术上要抓 Spotify 凭据（脆弱）、条款上不被允许。官方 v1 只认我们自己的 key，
-//   不依赖任何 Spotify 凭据，并且是文档明确给出的接入方式。
+// 不依赖任何 Spotify 凭据，并且是文档明确给出的接入方式。
 //
-// ── 返回格式 ────────────────────────────────────────────────────────────────
+// ── 返回格式
 // v1 返回**普通 JSON**（`{"Body": {...}, "Status": 200, "Type": "object"}`），
 // 而旧 `/query` 的内层是 SLObjPack 打包格式。三条解析路径（Syllable / Line / Static）
 // 吃的都是 `SLObjPackValue`，所以在 `SLObjPackValue.fromJSON` 那一层做一次转换，
 // 不维护第二套解析器。`Body.Type` 决定精度：Syllable（逐词）/ Line（逐行）/ Static（无时间轴）。
 //
-// ── iOS 27 crash ─────────────────────────────────────────────────────────────
+// ── iOS 27 crash
 // The EXC_BREAKPOINT / _swift_task_checkIsolatedSwift crash is fixed in
 // DataLoaderServiceHooks.x.swift by dispatching orig.URLSession callbacks
 // onto the main queue. No changes needed here for that.
@@ -46,12 +46,12 @@ class SpicyLyricsRepository: LyricsRepository {
     private static let apiUrl = "https://api.spicylyrics.org/v1/lyrics/"
 
     // MARK: - Network
-
-    /// 一次 GET 的产物：响应体 + HTTP 状态码。
-    ///
-    /// ⚠️ 状态码**必须**跟数据一起带出来：v1 把失败原因放在状态码里
-    /// （401 = key 不存在/被吊销，403 = 带 Origin 头且不在白名单，404 = 没这首词的同步，
-    /// 503 = 还在生成）。旧 `/query` 那条路是 200 外壳 + 内层 `httpStatus`，两者不可混用。
+    //
+    // 一次 GET 的产物：响应体 + HTTP 状态码。
+    //
+    // ⚠️ 状态码**必须**跟数据一起带出来：v1 把失败原因放在状态码里
+    // （401 = key 不存在/被吊销，403 = 带 Origin 头且不在白名单，404 = 没这首词的同步，
+    // 503 = 还在生成）。旧 `/query` 那条路是 200 外壳 + 内层 `httpStatus`，两者不可混用。
     private struct QueryResult {
         let data: Data
         let httpStatus: Int
@@ -86,7 +86,7 @@ class SpicyLyricsRepository: LyricsRepository {
             throw LyricsError.decodingError
         }
 
-        // ⚠️ 没有密钥就**不要发请求**：本仓库不内置默认 key（用户拍板，理由见
+        // ⚠️ 没有密钥就**不要发请求**：本仓库不内置默认 key（理由见
         // `SpicyLyricsKey+UserDefaults.swift` 文件头）。正常流程下调用方（`CustomLyrics`）
         // 在"没 key"时已经改用 Musixmatch 了，走到这里说明是别处直接调进来 —— 给一句能读懂的原因。
         let apiKey = UserDefaults.effectiveSpicyLyricsApiKey
@@ -218,10 +218,10 @@ class SpicyLyricsRepository: LyricsRepository {
         // 署名挂在 dto 上往下走（`CustomLyrics.storeLyricsDto` 只在 dto 没带署名时兜底成源名）。
         //
         // ⚠️ 两个字段**分工不同**，别合并：
-        //   · `providerName`（短，如 `Spicy Lyrics`）会被贴到听歌页**歌手那一行**
-        //     （`NowPlayingLyricsPlate.providerSuffix()` 套一层全角括号）—— 长了会把歌手名挤掉；
-        //   · `providerCredit`（长，含"制作者 / 上传者"）进**注入 payload 的 `providedBy`**，
-        //     也就是 Spotify 原生歌词页/卡片底部那一行。
+        // · `providerName`（短，如 `Spicy Lyrics`）会被贴到听歌页**歌手那一行**
+        // （`NowPlayingLyricsPlate.providerSuffix` 套一层全角括号）—— 长了会把歌手名挤掉；
+        // · `providerCredit`（长，含"制作者 / 上传者"）进**注入 payload 的 `providedBy`**，
+        // 也就是 Spotify 原生歌词页/卡片底部那一行。
         var credited = dto
         credited.providerName = SpicyLyricsRepository.providerName
         credited.providerURL = SpicyLyricsRepository.providerURL
@@ -236,9 +236,9 @@ class SpicyLyricsRepository: LyricsRepository {
     }
 
     // MARK: - Attribution
-
-    /// 服务名 / 站点 / 贡献者解析都在 `SpicyLyricsAttribution` 里（Foundation-only，CI 直接测它）。
-    /// 这里只留"拼成一行纯文本"这件事 —— 它要用到 `.localized`，进不了 CI 的编译单元。
+    //
+    // 服务名 / 站点 / 贡献者解析都在 `SpicyLyricsAttribution` 里（Foundation-only，CI 直接测它）。
+    // 这里只留"拼成一行纯文本"这件事 —— 它要用到 `.localized`，进不了 CI 的编译单元。
     static var providerName: String { SpicyLyricsAttribution.providerName }
     static var providerURL: URL? { SpicyLyricsAttribution.providerURL }
 
@@ -246,9 +246,9 @@ class SpicyLyricsRepository: LyricsRepository {
     ///
     /// 这不是"客气一下"：SL 的服务条款把 `/docs/attribution` 定为**条款的一部分**（§6），
     /// 而 §5 明写"不许删除、模糊或改动署名"。三条硬要求：
-    ///   · 永远要写出**回答的 provider**；
-    ///   · `source == "spicy_lyrics"`（社区同步，词是人做的）时**还要**署名 uploader 与 maker；
-    ///   · 响应里没有 `source` 时要说**来源未知**，不许猜一个安上去。
+    /// · 永远要写出**回答的 provider**；
+    /// · `source == "spicy_lyrics"`（社区同步，词是人做的）时**还要**署名 uploader 与 maker；
+    /// · 响应里没有 `source` 时要说**来源未知**，不许猜一个安上去。
     /// 另外"歌词在屏幕上，署名就得在屏幕上（比如页面底部），不许只放进关于页或没人点的 tooltip"。
     ///
     /// 这一串进 `LyricsDto.providerCredit` → `toSpotifyLyricsData` 的 `providedBy`
@@ -308,9 +308,9 @@ class SpicyLyricsRepository: LyricsRepository {
                 continue
             }
 
-            // ★ 2026-10-25：间奏行**整行丢掉**，不再换成 `♪` 留在行里。
-            //   判据与理由见 `SpicyLineFilter`（用户：「呼吸灯的下一行有可能是 ♪，
-            //   而不是下一行歌词」）。
+            // 间奏行**整行丢掉**，不再换成 `♪` 留在行里。
+            // 判据与理由见 `SpicyLineFilter`（呼吸灯的下一行有可能是 ♪，
+            // 而不是下一行歌词）。
             if SpicyLineFilter.isInterludeRow(lineText) {
                 droppedInterludes += 1
                 continue
@@ -366,8 +366,8 @@ class SpicyLyricsRepository: LyricsRepository {
 
     private func parseStaticLyrics(_ root: SLObjPackValue) -> LyricsDto {
         // Static（无时间轴）的载荷有两种形状 —— 上游同款处理：
-        //   · `Lines: [{ Text }]`（旧 `/query` 时代我们只认这一种）；
-        //   · 或者跟 Syllable/Line 一样走 `Content: [{ Lead: { Text } }]`。
+        // · `Lines: [{ Text }]`（旧 `/query` 时代我们只认这一种）；
+        // · 或者跟 Syllable/Line 一样走 `Content: [{ Lead: { Text } }]`。
         // ⚠️ 只认第一种的话，v1 的 Static 曲目会拿到一份**空**歌词 —— 界面上就是"这首歌
         // 没有歌词"，比显示纯文本更糟。
         var texts = [String]()
@@ -412,7 +412,7 @@ class SpicyLyricsRepository: LyricsRepository {
         let result = try performQuery(trackId: trackId)
         var dto = try parseLyricsData(result, trackId: trackId)
 
-        // ★★ 2026-10-17（用户）：**实验开关「SpicyLyrics 交叉验证」，默认关**。
+        // **实验开关「SpicyLyrics 交叉验证」，默认关**。
         // 上游会把部分歌词和谐成星号（`my **** line`）。开关打开时，这里拿**同一首歌**
         // 在另一个源（AMLL / LRCLIB / PetitLyrics / Musixmatch / Genius，见
         // `LyricsUncensorFill`）里的文本找回同一句，只把星号那几段换掉 ——

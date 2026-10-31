@@ -9,9 +9,9 @@ import SwiftUI
 // 但让它在 `Text.Layout.Run` 上被读到，依赖 iOS 26 的
 // `attributedTextFormattingDefinition(_:)` 注册（见 `LyricAttributedText.swift`）。
 // 统一按 26 标注，避免"编译能过、运行时静默取不到值"这种最难查的状态。
-
-/// 挂在每个**字**上的时间轴信息。渲染器通过它取到这个字的起止时间、
-/// 所属音节/词的范围，从而算出填充前沿与长音强调。
+//
+// 挂在每个**字**上的时间轴信息。渲染器通过它取到这个字的起止时间、
+// 所属音节/词的范围，从而算出填充前沿与长音强调。
 @available(iOS 26.0, *)
 struct LyricTimingTextAttribute: TextAttribute, Hashable, Sendable {
     let startTime: TimeInterval

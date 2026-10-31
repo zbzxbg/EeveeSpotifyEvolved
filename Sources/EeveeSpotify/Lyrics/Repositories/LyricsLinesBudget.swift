@@ -3,7 +3,7 @@ import Foundation
 // MARK: - 「拿一批歌词行，但最多等 N 秒」
 //
 // 现在只有一处用它：「SpicyLyrics 交叉验证」—— 去问未打码的源要歌词，
-// 用来补回被和谐的词。（2026-10-18 之前「NetEase 交叉验证」也走这里，那个实验已整体撤掉。）
+// 用来补回被和谐的词。之前「NetEase 交叉验证」也走这里，那个实验已整体撤掉。）
 //
 // 为什么必须有墙钟预算：仓库里的取词都是**同步阻塞**的，而且
 // `SpicyLyricsRepository` 对 503（同步还在生成）是 `Thread.sleep` 退避重试
@@ -17,7 +17,7 @@ enum LyricsLinesBudget {
 
     /// 跑请求的**专用并发队列**。
     ///
-    /// ⚠️ 不用 `DispatchQueue.global()`：调用方（`CustomLyrics`）本身就在
+    /// ⚠️ 不用 `DispatchQueue.global`：调用方（`CustomLyrics`）本身就在
     /// `DispatchQueue.global(qos: .userInitiated).async` 里，而这里会在**外面**再等一个
     /// 信号量 —— 两层都占全局池的线程，多首并发时会互相挤。
     private static let queue = DispatchQueue(

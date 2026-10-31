@@ -12,15 +12,15 @@ import UIKit
 ///
 /// ⚠️ **这些是"抄来的手感"，不是"从我们真机量出来的"**：
 /// * 凡是**我们真机 dump 里有**的（封面 374×320、歌词卡 342×256、导航条 48/54…），
-///   一律以 `[Tree]` 为准，写在本文件的注释里；
+/// 一律以 `[Tree]` 为准，写在本文件的注释里；
 /// * 凡是**借来的比例/曲线**（下拉阈值、spring 参数、间距 13pt…），标注来源并允许被真机覆盖。
 ///
 /// 所以：**要改这里的数，先看真机日志或截图**，别凭感觉调。
 enum NowPlayingMetrics {
 
     // MARK: - 借自 kumone 的交互阈值（跨技术栈可搬：纯数字）
-
-    /// 顶部小横条（下拉关闭的那根）：宽 44 / 高 5 / 圆角胶囊。
+    //
+    // 顶部小横条（下拉关闭的那根）：宽 44 / 高 5 / 圆角胶囊。
     static let dragIndicatorWidth: CGFloat = 44
     static let dragIndicatorHeight: CGFloat = 5
     /// 横条到歌名之间留 13pt。
@@ -33,10 +33,10 @@ enum NowPlayingMetrics {
     static let miniPlayerExpandPrediction: CGFloat = 72
 
     // MARK: - 借自 kumone 的动画曲线（AM 那种"先快后缓"）
-
-    /// `timingCurve(0.16, 1, 0.3, 1)` —— 开头冲出去、结尾收得很轻。
-    /// 用法：`CABasicAnimation.timingFunction = NowPlayingMetrics.easeOutCurve`，
-    /// 时长单独取 `controlsLayoutDuration` 那一组。
+    //
+    // `timingCurve(0.16, 1, 0.3, 1)` —— 开头冲出去、结尾收得很轻。
+    // 用法：`CABasicAnimation.timingFunction = NowPlayingMetrics.easeOutCurve`，
+    // 时长单独取 `controlsLayoutDuration` 那一组。
     static let easeOutCurve = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
 
     /// 控制行显隐的时长（借：0.38 / 0.28 / 0.24 / 0.18）。
@@ -49,12 +49,12 @@ enum NowPlayingMetrics {
     static let backdropCrossfadeDuration: TimeInterval = 0.8
 
     // MARK: - 借自 kumone 的歌词列观感（下一轮用）
-
-    /// 歌词行距 26pt（我们的逐词层目前偏紧）。
+    //
+    // 歌词行距 26pt（我们的逐词层目前偏紧）。
     static let lyricLineSpacing: CGFloat = 26
     /// 歌词列上下渐隐的停点（0 / 0.12 / 0.85 / 1）。
     ///
-    /// ★ 2026-10-04：顶部那一档 **0.12 → 0.10**。用户要的是"往上淡出的部分再高点"，
+    /// 顶部那一档 **0.12 → 0.10**。用户要的是"往上淡出的部分再高点"，
     /// 而歌词块顶边同时上移了 ≈50pt（`NowPlayingLyricsPlate.lyricsTop` 66 → 24）——
     /// 块变高之后 0.12 会变成 ≈53pt，把"第一行"（块顶 + 48pt 内边距）卷进淡出带里；
     /// 0.10 让这条带子仍是 ≈44pt 并且**跟着块一起上移**（它本来就是块高的比例）。
@@ -65,8 +65,8 @@ enum NowPlayingMetrics {
     static let lyricScrollFollowDamping: CGFloat = 0.85
 
     // MARK: - 我们自己的真机数字（来自 `[Tree]`，不是借的）
-
-    /// 歌词卡：`CardView@0,0,374,320,id=lyrics-card-view`，内容区 `342×256`。
+    //
+    // 歌词卡：`CardView@0,0,374,320,id=lyrics-card-view`，内容区 `342×256`。
     static let lyricsCardSize = CGSize(width: 374, height: 320)
     static let lyricsCardContentSize = CGSize(width: 342, height: 256)
     /// 导航条：兼容设计下 48pt（`SPNavigationBar@0,48,414,44` 是旧版；新设计是 54pt）。

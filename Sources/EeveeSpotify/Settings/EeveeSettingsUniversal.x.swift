@@ -4,14 +4,14 @@ import UIKit
 
 // Universal settings integration.
 //
-// ⚠️ 2026-10-02：老的 `ProfileSettingsSection` / `SettingsViewController` /
+// ⚠️老的 `ProfileSettingsSection` / `SettingsViewController` /
 // `RootSettingsViewController` / "按标题猜设置"的兜底 hook **全部删除** ——
 // 它们的入口类只在 Spotify 9.1.0 上存在（扫过 9.1.0 / 9.1.74 / 9.1.76 / 9.1.86 四个包），
 // 在唯一的目标版本 9.1.86 上只会走到 `else` 分支打一行 `Skipped settings integration`。
 // 9.1.44+ 唯一那条路是下面这个。
 struct UniversalSettingsIntegrationListVCGroup: HookGroup { }
 
-// （`ProfileSettingsSection` 那条老入口已于 2026-10-02 删除：入口类只在 Spotify 9.1.0 上存在。）
+// （`ProfileSettingsSection` 那条老入口已于删除：入口类只在 Spotify 9.1.0 上存在。）
 
 
 // MARK: - Global Helper to avoid Orion Hooking Issues with setupEeveeButton
@@ -90,7 +90,7 @@ func injectEeveeButton(into target: UIViewController) {
     NSLog("[EeveeSpotify] Button injected. Items count: \(items.count)")
 }
 
-// （`SettingsViewController` / `RootSettingsViewController` 两条老入口已于 2026-10-02 删除。）
+// （`SettingsViewController` / `RootSettingsViewController` 两条老入口已于删除。）
 
 
 class SettingsListViewControllerHook: ClassHook<UIViewController> {
@@ -219,8 +219,8 @@ private func findFirstCollectionView(in view: UIView) -> UICollectionView? {
 }
 
 private func pushEeveeSettings(from vc: UIViewController) {
-    // ★ 2026-10-13：页面本体与那颗 GitHub 按钮现在只有**一份**（`EeveeSettingsLauncher.makePage`）——
-    //   长按标签栏主页那条路用的是同一个，两处因此不会漂。
+    // 页面本体与那颗 GitHub 按钮现在只有**一份**（`EeveeSettingsLauncher.makePage`）——
+    // 长按标签栏主页那条路用的是同一个，两处因此不会漂。
     guard let nav = vc.navigationController else { return }
     nav.pushViewController(EeveeSettingsLauncher.makePage(in: nav, size: vc.view.bounds), animated: true)
 }

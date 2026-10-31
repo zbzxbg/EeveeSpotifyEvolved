@@ -95,15 +95,15 @@ enum LyricsMarkerFilter {
     /// 无括号、整行只有符号的占位行：□ ? … — 等。
     /// 排除音乐符号（♪/♫/♬/♩/♭/♯）：那类行归**两个仓库各自的间奏判据**管
     /// （`NeteaseLyricsRepository.isInterludeRow` / `MusixmatchLyricsRepository.isMxmInterludeRow`，
-    /// 2026-10-18 起无条件整行丢弃），这里不再插一手 —— 两条规则同时删同一行只会让人看不懂是谁删的。
+    /// 起无条件整行丢弃），这里不再插一手 —— 两条规则同时删同一行只会让人看不懂是谁删的。
     private static let bareSymbolLinePattern =
         "^[^\\p{L}\\p{N}♪♫♬♩♭♯]+$"
 
     /// 尖括号占位行：**`<Music>`** / `<music>` / `<Instrumental>` 等。
     ///
-    /// 为什么单列一条（2026-10-04 真机日志 45）：网易云用 `<Music>` 当**间奏标记**，
+    /// 为什么单列一条：网易云用 `<Music>` 当**间奏标记**，
     /// 而它既不是 `[方括号]` 也不是 `♪`，前面八条规则全都盖不住 ⇒ 我们把它当正文渲染，
-    /// 用户看到的就是"歌词里混进一行 `<Music>`，跟着屏幕走"。
+    /// 的就是"歌词里混进一行 `<Music>`，跟着屏幕走"。
     /// 限长 24 个字符：真歌词里出现 `<...>` 包裹的长句子的可能性极低，而占位标记都很短。
     private static let angleBracketPlaceholderPattern =
         "^<\\s*[^<>]{1,24}\\s*>$"

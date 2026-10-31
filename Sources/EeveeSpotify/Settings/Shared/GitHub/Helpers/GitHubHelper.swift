@@ -2,28 +2,25 @@ import Foundation
 
 /// GitHub 接口的失败原因 —— **带着状态码**。
 ///
-/// ⚠️ 为什么单开这个类型（2026-10-02 用户报的「更新日志显示：未能读取该数据，
-/// 因为它的格式不正确」）：
-///   旧 `perform` **完全不看 HTTP 状态码**，把响应体直接丢给 `JSONDecoder`。
-///   真机日志 28 那次 `/releases/latest` 只回了 **280 字节**（GitHub 未登录限流的
-///   403 响应体；同一天同一台机器连续请求，出口 IP 是运营商 NAT、额度是很多人共用的），
-///   于是错误 JSON 被当成 release 解 → `DecodingError.keyNotFound("tagName")` →
-///   界面上就变成"格式不正确"这句**误导人**的话。
-///   现在：状态码先过闸，界面按**真实原因**说话（`EeveeUpdatesSettingsView`），
-///   日志里连状态码和响应体开头一起打出来 —— 下一份日志一眼就能定案。
+/// ⚠️ 为什么单开这个类型：
+/// 旧 `perform` **完全不看 HTTP 状态码**，把响应体直接丢给 `JSONDecoder`。
+/// 403 响应体；同一天同一台机器连续请求，出口 IP 是运营商 NAT、额度是很多人共用的），
+/// 于是错误 JSON 被当成 release 解 → `DecodingError.keyNotFound("tagName")` →
+/// 界面上就变成"格式不正确"这句**误导人**的话。
+/// 现在：状态码先过闸，界面按**真实原因**说话（`EeveeUpdatesSettingsView`），
 enum GitHubAPIError: Error {
     /// 限流。GitHub 未登录是 **60 次/小时，按出口 IP 算**。
     /// `reset` 是 `X-RateLimit-Reset` / `Retry-After` 给的恢复时刻（拿不到就是 nil）。
     case rateLimited(reset: Date?)
     /// 404：仓库或路径不存在。
     ///
-    /// ★ 2026-10-11 更正（查"这条文案还用得到吗"时发现的）：
-    ///   · `/releases/latest` 在"本仓库还没有 tag 化 release"时**确实**回 404 ——
-    ///     `getLatestRelease` 那条注释说的是对的，别改；
-    ///   · 但**列表**接口（`getReleases` → `/repos/<slug>/releases?per_page=30`）在同样情况下
-    ///     回的是 **200 + `[]`**，只有仓库**不存在 / 改名 / 转私有**时才 404。
+    /// 更正（查"这条文案还用得到吗"时发现的）：
+    /// · `/releases/latest` 在"本仓库还没有 tag 化 release"时**确实**回 404 ——
+    /// `getLatestRelease` 那条注释说的是对的，别改；
+    /// · 但**列表**接口（`getReleases` → `/repos/<slug>/releases?per_page=30`）在同样情况下
+    /// 回的是 **200 + `[]`**，只有仓库**不存在 / 改名 / 转私有**时才 404。
     /// ⇒ 这一支现在的含义就是"**仓库找不到了**"，界面文案（`updates_error_not_found`）
-    ///   已按这个真相改写（原来是"还没有 release，预期内无害"，对不上唯一能走到这里的场景）。
+    /// 已按这个真相改写（原来是"还没有 release，预期内无害"，对不上唯一能走到这里的场景）。
     case notFound
     /// 其它非 2xx（会把状态码原样带出来，方便日志与界面区分）。
     case httpStatus(Int)
@@ -35,14 +32,14 @@ enum GitHubAPIError: Error {
 
 /// GitHub 只读接口。
 ///
-/// ── 2026-10-02 两处修正（都与「更新日志」那次故障有关）────────────────────────
-///   ① **仓库 slug 不再写死**：用构建期生成的 `EeveeSpotify.repoSlug`
-///      （`Makefile` 从 `git remote get-url origin` 生成）。以前这里写死
-///      `zbzxbg/EeveeSpotify-ng-latest`，而那个名字已经改成 `zbzxbg/EeveeSpotifyEvolved`
-///      —— GitHub 对改名仓库会 302，于是"看起来还能用"，可一旦重定向没了（或换 owner）
-///      两个接口会一起静默失效；而且**改名后的名字才是用户看到的那个**。
-///   ② **条件请求 + 短缓存**：`ETag` / `If-None-Match`，GitHub 对 **304 不计算额度**
-///      （官方规则），再加上 5 分钟新鲜窗口 —— 反复进出「更新日志」不再白烧那 60 次。
+/// ──两处修正（都与「更新日志」那次故障有关）
+/// ① **仓库 slug 不再写死**：用构建期生成的 `EeveeSpotify.repoSlug`
+/// （`Makefile` 从 `git remote get-url origin` 生成）。以前这里写死
+/// `zbzxbg/EeveeSpotify-ng-latest`，而那个名字已经改成 `zbzxbg/EeveeSpotifyEvolved`
+/// —— GitHub 对改名仓库会 302，于是"看起来还能用"，可一旦重定向没了（或换 owner）
+/// 两个接口会一起静默失效；而且**改名后的名字才是的那个**。
+/// ② **条件请求 + 短缓存**：`ETag` / `If-None-Match`，GitHub 对 **304 不计算额度**
+/// （官方规则），再加上 5 分钟新鲜窗口 —— 反复进出「更新日志」不再白烧那 60 次。
 final class GitHubHelper {
     private let apiUrl = "https://api.github.com"
     private let decoder = JSONDecoder()
@@ -57,8 +54,8 @@ final class GitHubHelper {
     }
 
     // MARK: - 缓存 / 条件请求
-
-    /// 一次请求的结果。`etag` 用来发条件请求（304 不计额度）。
+    //
+    // 一次请求的结果。`etag` 用来发条件请求（304 不计额度）。
     private struct Entry {
         var data: Data
         var etag: String?
@@ -124,8 +121,8 @@ final class GitHubHelper {
         }
 
         guard (200...299).contains(status) else {
-            // ★ 这里以前**什么都不做**：错误体被当成正常数据往下走，于是限流 / 404
-            //   全都被 `JSONDecoder` 报成"格式不正确"。状态码 + 响应体开头都写进日志。
+            // 这里以前**什么都不做**：错误体被当成正常数据往下走，于是限流 / 404
+            // 全都被 `JSONDecoder` 报成"格式不正确"。状态码 + 响应体开头都写进日志。
             writeDebugLog(
                 "[GitHub] ⚠️ \(path) → HTTP \(status)（\(data.count) bytes）\(Self.excerpt(data))"
             )
@@ -140,8 +137,7 @@ final class GitHubHelper {
         return data
     }
 
-    /// 状态码 → 失败原因。403/429 一律按**限流**处理（对公开仓库的只读请求来说，
-    /// GitHub 的 403 实质就是限流；真出别的 403，日志里的响应体开头会说明）。
+    /// 状态码 → 失败原因。403/429 一律按**限流**处理。
     private static func error(status: Int, response: HTTPURLResponse?) -> GitHubAPIError {
         switch status {
         case 404:
@@ -184,13 +180,13 @@ final class GitHubHelper {
     }
 
     // MARK: - 接口
-
-    /// 版本检查的数据源。仓库 slug 来自构建期生成的 `EeveeSpotify.repoSlug`
-    /// （`Makefile`：`git remote get-url origin` → `GeneratedConfig.repoSlug`）。
-    ///
-    /// ⚠️ 本仓库若没有 tag 化的 release，这里会 404 —— 那是**预期内**的：
-    /// `EeveeSettingsVersionView.loadVersion()` 会把失败当成"没有新版本"，
-    /// 界面只是不提示更新，不会卡在转圈上（见那里的 15 秒超时与兜底）。
+    //
+    // 版本检查的数据源。仓库 slug 来自构建期生成的 `EeveeSpotify.repoSlug`
+    // （`Makefile`：`git remote get-url origin` → `GeneratedConfig.repoSlug`）。
+    //
+    // ⚠️ 本仓库若没有 tag 化的 release，这里会 404 —— 那是**预期内**的：
+    // `EeveeSettingsVersionView.loadVersion` 会把失败当成"没有新版本"，
+    // 界面只是不提示更新，不会卡在转圈上（见那里的 15 秒超时与兜底）。
     func getLatestRelease() async throws -> GitHubRelease {
         let path = "/repos/\(repoSlug)/releases/latest"
         return try decode(GitHubRelease.self, from: try await perform(path), path: path)

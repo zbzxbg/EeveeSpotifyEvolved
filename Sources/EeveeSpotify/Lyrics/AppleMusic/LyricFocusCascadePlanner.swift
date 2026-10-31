@@ -1,9 +1,9 @@
 import Foundation
 
 // 移植自 MeloX `MeloX/Core/Lyrics/LyricFocusCascadePlanner.swift`（GPL-3.0）。
-
-/// 焦点级联的纯时间规划器。合法计划保证：时间有限且非负、延迟单调不减、
-/// 时长单调不增、且在 `availableDuration` 内完成。
+//
+// 焦点级联的纯时间规划器。合法计划保证：时间有限且非负、延迟单调不减、
+// 时长单调不增、且在 `availableDuration` 内完成。
 enum LyricFocusCascadePlanner {
     private static let maximumMinimumCatchUpDuration: TimeInterval = 0.18
 

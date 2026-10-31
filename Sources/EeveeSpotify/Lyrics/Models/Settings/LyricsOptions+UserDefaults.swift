@@ -3,12 +3,12 @@ import Foundation
 extension UserDefaults {
     /// 歌词那一组选项。
     ///
-    /// ★ 2026-10-13（用户要求）：「Genius功能默认改成开启」⇒ `geniusFallback` 的默认值
+    /// 「Genius功能默认改成开启」⇒ `geniusFallback` 的默认值
     /// 由 `false` 改成 **`true`**。
     /// ⚠️ **光改这里不够**：这一份是**整块 JSON 落盘**的（见 `UserDefault` 属性包装器）——
-    /// 用户只要动过其中任何一项，盘上那份里 `geniusFallback` 就已经是一个具体值，
+    /// 只要动过其中任何一项，盘上那份里 `geniusFallback` 就已经是一个具体值，
     /// `defaultValue` 再也追不到它 ⇒ 配套的一次性迁移见文件末尾
-    /// `LyricsOptions.applyGeniusFallbackDefaultIfNeeded()`。
+    /// `LyricsOptions.applyGeniusFallbackDefaultIfNeeded`。
     @UserDefault(
         key: "lyricsOptions",
         defaultValue: LyricsOptions(
@@ -34,7 +34,7 @@ extension LyricsOptions {
     /// 改 `defaultValue` 对他**完全无效** —— 他会以为"你没改"。
     ///
     /// 只发生**一次**（标记键），并且照实打一行日志：
-    /// 这是"默认值变更"的补偿，不是每次启动都覆盖用户的选择。
+    /// 这是"默认值变更"的补偿，不是每次启动都覆盖。
     static func applyGeniusFallbackDefaultIfNeeded() {
         let container = UserDefaults.standard
         guard container.object(forKey: geniusDefaultMigratedKey) == nil else { return }

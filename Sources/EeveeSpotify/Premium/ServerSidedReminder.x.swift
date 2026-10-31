@@ -19,7 +19,6 @@ private func showPlaylistDownloadingPopUp(_ isPlaylist: Bool, onSecondaryClick: 
     )
 }
 
-//
 
 class ListRowInteractionListenerViewHook: ClassHook<UIView> {
     typealias Group = NonIOS14PremiumPatchingGroup
@@ -38,7 +37,6 @@ class ListRowInteractionListenerViewHook: ClassHook<UIView> {
     }
 }
 
-//
 
 class ContentOffliningUIHelperImplementationHook: ClassHook<NSObject> {
     typealias Group = IOS14And15PremiumPatchingGroup

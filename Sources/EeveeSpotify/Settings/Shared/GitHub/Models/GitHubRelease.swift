@@ -2,7 +2,7 @@
 ///
 /// ⚠️ 除 `tagName` 之外**全部可选**：版本检查（`GitHubHelper.getLatestRelease`）只认 `tagName`，
 /// 不能因为某个 release 少写了一个字段，就把"有没有新版"这件事弄坏。
-/// 下面这些是 2026-10-02 给「更新日志」页加的（那边会自己兜底空值）。
+/// 下面这些是给「更新日志」页加的（那边会自己兜底空值）。
 struct GitHubRelease: Decodable {
     var tagName: String
 

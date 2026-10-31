@@ -10,7 +10,7 @@ extension UserDefaults {
     private static let overwriteConfigurationKey = "overwriteConfiguration"
     private static let lyricsColorsKey = "lyricsColors"
     private static let lyricsOptionsKey = "lyricsOptions"
-    /// ★ 2026-10-31：歌词**系统翻译**（Apple `Translation` 框架，纯本地）。见 `LyricsAutoTranslation`。
+    /// 歌词系统翻译（Apple `Translation` 框架，纯本地），见 `LyricsAutoTranslation`。
     private static let lyricsAutoTranslateKey = "lyricsAutoTranslate"
     private static let hasShownCommonIssuesTipKey = "hasShownCommonIssuesTip"
     private static let hasPatchedBootstrapKey = "eeveeHasPatchedBootstrap"
@@ -27,7 +27,7 @@ extension UserDefaults {
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
     private static let hapticsLogControlsKey = "hapticsLogControls"
     private static let dumpViewTreeKey = "dumpViewTree"
-    /// ★ 2026-10-30：把「转储视图树」与「转储 customize 响应体」合成一颗「更详细的日志记录」。
+    /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
     private static let hideMiniPlayerBarKey = "hideMiniPlayerBar"
     private static let hideSingalongLineKey = "hideSingalongLine"
@@ -45,11 +45,11 @@ extension UserDefaults {
     private static let tabBarHideCreateKey = "tabBarHideCreate"
     private static let miniBarGlassKey = "miniBarGlass"
     private static let playlistSingleCoverKey = "playlistSingleCover"
-    /// ★ 2026-10-22：「修改Spotify听歌页布局」总开关（见 `nowPlayingLayout`）。
+    /// 「修改 Spotify 听歌页布局」总开关，见 `nowPlayingLayout`。
     private static let nowPlayingLayoutKey = "nowPlayingLayout"
-    /// ★ 2026-10-23：新的「iOS 27 听歌页」（满屏封面，`NowPlayingIOS27`）。
+    /// 「iOS 27 听歌页」：满屏封面那一版布局，见 `NowPlayingIOS27`。
     private static let nowPlayingIOS27Key = "nowPlayingIOS27"
-    /// ★ 2026-10-23：新的「iOS 27 听歌页」（满屏封面，`NowPlayingIOS27`）。
+    /// 「听歌页整页取色底」：把整页底色换成封面取色渐变，见 `nowPlayingBackdrop`。
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
     private static let nowPlayingLyricsInPlayerKey = "nowPlayingLyricsInPlayer"
@@ -59,7 +59,7 @@ extension UserDefaults {
     private static let amoledThemeKey = "amoledTheme"
     private static let accentColorRGBKey = "accentColorRGB"
     private static let entityPageAMHeaderKey = "entityPageAMHeader"
-    /// ★ 2026-10-18：艺人页那两格（见 `EntityPageHeaderManager.applyToArtistPage`）。
+    /// 艺人页那两格（听众数 / 标签栏）的开关，见 `EntityPageHeaderManager.applyToArtistPage`。
     private static let artistHideListenersKey = "artistHideListeners"
     private static let artistHideTabsKey = "artistHideTabs"
     private static let homeTileTintKey = "homeTileTint"
@@ -67,12 +67,12 @@ extension UserDefaults {
 
     /// **本仓库自己写进 `UserDefaults` 的全部键** —— 只给「备份与重置」用。
     ///
-    /// ⚠️ 为什么必须是白名单、而不是"遍历 `dictionaryRepresentation()` 全导/全删"：
-    /// 这个进程的 `.standard` **同时就是 Spotify 自己的偏好存储**（tweak 注进 Spotify.app）。
-    /// 全删会把 Spotify 的登录态周边、播放设置一起清掉 —— 那是 `FullResetHelper`（"重置
-    /// Spotify 状态"，另一个按钮）的语义，不是"重置本仓库的设置"。
+    /// 必须是白名单、不能遍历 `dictionaryRepresentation` 全导/全删：这个进程的
+    /// `.standard` 同时就是 Spotify 自己的偏好存储（tweak 注进 Spotify.app），全删会把
+    /// Spotify 的登录态周边与播放设置一起清掉 —— 那是 `FullResetHelper`（「重置 Spotify
+    /// 状态」，另一个按钮）的语义，不是「重置本仓库的设置」。
     ///
-    /// 加新键时**记得往这里也加一行**（否则它不会被导出/导入/重置）。
+    /// 加新键时记得往这里也加一行，否则它不会被导出/导入/重置。
     static let ownedKeys: [String] = [
         musixmatchTokenKey,
         darkPopUpsKey,
@@ -133,13 +133,13 @@ extension UserDefaults {
 
         // 不在上面那批常量里、但同样属于我们的：
         // · 「艺人介绍从哪来」—— 常量在 `Appearance/ArtistBioSourceKind.swift` 的扩展里
-        //   （与 `LyricsSource` 一样：**键由功能自己拥有**）；
+        // （与 `LyricsSource` 一样：**键由功能自己拥有**）；
         // · 「Flag 覆盖」表（`FlagOverrideStore` 用 `flagOverrides` 存 JSON Data）。
         "artistBioSource",
         "flagOverrides",
 
         // 歌词时间轴偏移（按「源 + 曲目」分开存，含旧网易云键）：键由功能自己拥有，
-        // 见 `Lyrics/LyricsTimingOffset.swift`。默认偏移 2026-10-23 已去掉。
+        // 见 `Lyrics/LyricsTimingOffset.swift`；默认偏移已取消，每个源/曲目各存各的。
         LyricsTimingOffset.offsetsKey,
         LyricsTimingOffset.titlesKey,
     ]
@@ -149,7 +149,7 @@ extension UserDefaults {
     // 老备份里还是 `ngzhwm_neteaseOffsetByTrack` / `...TrackTitles` 这两个旧键；
     // 不登记它们，「导入备份」会把那批网易云偏移静默丢掉（迁移只读已经落盘的旧键）。
     + LyricsTimingOffset.legacyOwnedKeys
-    // 「自动优选的来源顺序」（2026-10-31）。键由 `LyricsSourceOrder` 自己拥有 ——
+    // 「自动优选的来源顺序」。键由 `LyricsSourceOrder` 自己拥有 ——
     // 不登记的话，导入备份时用户排好的顺序会被静默丢掉（备份只碰白名单）。
     + [LyricsSourceOrder.userDefaultsKey]
 
@@ -243,12 +243,11 @@ extension UserDefaults {
 
     /// 「阻止评分提示」：拦住 App Store 的系统评分弹窗，**默认关**。
     ///
-    /// 拦的是 `SKStoreReviewController` 那两个类方法（系统弹窗，不是 Spotify 自己的
-    /// UI），所以与 `UpsellPopupBlocker` 那套弹窗 hook 互不相干 —— 详见
-    /// `RatingPromptBlock.x.swift` 顶部的说明。
+    /// 拦的是 `SKStoreReviewController` 的两个类方法（系统弹窗，不是 Spotify 自己的 UI），
+    /// 所以与 `UpsellPopupBlocker` 那套弹窗 hook 互不相干 —— 详见 `RatingPromptBlock.x.swift`。
     ///
-    /// ⚠️ **只在启动时读一次**（`RatingPromptBlock.launchEnabled`，hook 组装不装是启动
-    /// 时定的）⇒ 改完要重启，设置页那一行下面配了「立即重启」。
+    /// 只在启动时读一次（`RatingPromptBlock.launchEnabled`，hook 装不装是启动时定的）
+    /// ⇒ 改完要重启，设置页那一行下面配了「立即重启」。
     static var blockRatingPrompts: Bool {
         get {
             container.object(forKey: blockRatingPromptsKey) as? Bool ?? false
@@ -271,12 +270,12 @@ extension UserDefaults {
 
     /// 「分享日志前脱敏」——导出时是否把听歌记录假名化（**默认 true**）。
     ///
-    /// 默认 true 的理由：导出这个动作 99% 是为了把日志发给别人（issue / 群里），
-    /// 而日志主体就是"你听了哪些歌"。要自己留档的人可以关掉，关上之后导出的是
-    /// 原始文件（排查时需要真实曲目才好复现）。
+    /// 默认 true：导出这个动作几乎总是为了把日志发给别人（issue / 群里），而日志主体
+    /// 就是「你听了哪些歌」。要自己留档的可以关掉，关掉后导出的是原始文件（排查时需要
+    /// 真实曲目才好复现）。
     ///
-    /// ⚠️ 这条只影响**导出**。凭证/设备标识那一层是 `DebugLogSanitizer.sanitize`，
-    /// 在**写入口**就生效、没有开关 —— 那种东西不该有任何"忘了打开脱敏"的机会。
+    /// 只影响**导出**。凭证 / 设备标识那一层是 `DebugLogSanitizer.sanitize`，在**写入口**
+    /// 就生效、没有开关 —— 那种东西不该有「忘了打开脱敏」的机会。
     static var redactSharedLog: Bool {
         get {
             container.object(forKey: redactSharedLogKey) == nil
@@ -289,12 +288,11 @@ extension UserDefaults {
     }
 
     // MARK: - 上报拦截（Privacy）
-
-    /// 「拦截上报」总开关，**默认关**。
-    ///
-    /// 默认关的理由：它改的是网络行为，而"哪些端点算上报"没法离线证实（见
-    /// `TelemetryEndpointRules`）。先让用户自己开，并在设置页给一条
-    /// 「只观察不拦截」的路去确认真实端点。
+    //
+    // 「拦截上报」总开关，**默认关**。
+    //
+    // 默认关：它改的是网络行为，而「哪些端点算上报」没法离线证实（见 `TelemetryEndpointRules`）。
+    // 让只观察不拦截的路去确认真实端点。
     static var blockTelemetry: Bool {
         get {
             container.object(forKey: blockTelemetryKey) as? Bool ?? false
@@ -306,7 +304,7 @@ extension UserDefaults {
 
     /// 「只观察不拦截」：把请求的 host+path 打进日志，但一条都不拦。默认关。
     ///
-    /// 它是把"哪些是真的上报端点"从猜变成实测的唯一手段，本机没有真机流量可看。
+    /// 这是把「哪些是真的上报端点」从猜变成实测的唯一手段。
     static var telemetryObserveOnly: Bool {
         get {
             container.object(forKey: telemetryObserveOnlyKey) as? Bool ?? false
@@ -316,7 +314,7 @@ extension UserDefaults {
         }
     }
 
-    /// 用户自加的上报主机 / 路径关键词（逗号、分号或空白分隔），默认空。
+    /// 自加的上报主机 / 路径关键词（逗号、分号或空白分隔），默认空。
     static var telemetryExtraKeywords: String {
         get {
             container.string(forKey: telemetryExtraKeywordsKey) ?? ""
@@ -327,11 +325,11 @@ extension UserDefaults {
     }
 
     // MARK: - 播放器触感（Haptics）
-
-    /// 播放器控件触感，**默认关**。
-    ///
-    /// ⚠️ 这个开关在 `EeveeSpotify.init` 里被读一次（决定 hook 装不装），所以
-    /// **改动需要重启 Spotify** —— 和 `darkPopUps` 那些一样。强度不受此限制。
+    //
+    // 播放器控件触感，**默认关**。
+    //
+    // 这个开关在 `EeveeSpotify.init` 里被读一次（决定 hook 装不装），所以**改动需要重启
+    // Spotify**，和 `darkPopUps` 那些一样。强度不受此限制。
     static var hapticsEnabled: Bool {
         get {
             container.object(forKey: hapticsEnabledKey) as? Bool ?? false
@@ -351,11 +349,10 @@ extension UserDefaults {
         }
     }
 
-    /// 认为"属于播放器界面"的控件类名关键词，逗号分隔。
+    /// 认为「属于播放器界面」的控件类名关键词，逗号分隔。
     ///
-    /// 默认值覆盖 Spotify 命名里最常见的几种写法，但**不保证 9.1.86 上就对**：
-    /// 对不上时不会有任何副作用（不震而已），用设置页的「记录被点控件的类名」
-    /// 抓真名再加进来。
+    /// 默认值覆盖 Spotify 命名里最常见的几种写法，但不保证对所有版本都对：对不上时
+    /// 没有任何副作用（不震而已），用设置页的「记录被点控件的类名」抓真名再加进来。
     static var hapticsSurfaceKeywords: String {
         get {
             container.string(forKey: hapticsSurfaceKeywordsKey)
@@ -377,15 +374,14 @@ extension UserDefaults {
     }
 
     // MARK: - 视图树转储（Diagnostics）
-
-    /// 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志，默认关。
-    ///
-    /// ★★ 2026-10-30：设置页不再单独露这一颗 —— 它与 `dumpCustomizeBody` 合并成
-    /// 「更详细的日志记录」（`detailedLogging`）。这个键保留作**迁移与备份**用，
-    /// `detailedLogging` 的 setter 会把它一起写。
-    ///
-    /// 用途只有一个：给还没写的界面 hook（AMOLED / 隐藏区块 / 播放器手势）先拿到
-    /// 类名与层级。三条纪律见 `ViewTreeDumper` 的说明 —— 只读、有界、不做类枚举。
+    //
+    // 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志，默认关。
+    //
+    // 设置页不再单独露这一颗 —— 它与 `dumpCustomizeBody` 合并成「更详细的日志记录」
+    // （`detailedLogging`）。这个键保留作**迁移与备份**用，`detailedLogging` 的 setter 会一起写。
+    //
+    // 用途只有一个：给还没写的界面 hook（AMOLED / 隐藏区块 / 播放器手势）先拿到类名与层级。
+    // 三条纪律见 `ViewTreeDumper` 的说明 —— 只读、有界、不做类枚举。
     static var dumpViewTree: Bool {
         get {
             container.object(forKey: dumpViewTreeKey) as? Bool ?? false
@@ -396,20 +392,19 @@ extension UserDefaults {
     }
 
     // MARK: - 外观（Appearance）
-
-    // ⛔「深色栏底色」(amoledEnabled) 已于 2026-10-02 删除：
-    // 新设计语言下它每次布局都主动让位，是个纯空操作。
     //
-    // ★ 2026-10-13：**另一个** AMOLED 回来了（键名刻意不同，见下）——
-    // 它是全局换色而不是给某条栏涂底，机制在 `Sources/EeveeSpotifyC/ColorSwap.m`。
-
-    /// 「AMOLED 纯黑」：把 Spotify 的 #121212 底色换成纯黑（保留 alpha）。默认关。
-    ///
-    /// ⚠️ 与那个被删的 `amoledEnabled` **不是一回事**：那个只给旧设计语言的导航/标签栏涂底。
-    /// 键名换成新的，就是为了避免设备上存量的旧值把纯黑主题悄悄打开。
-    ///
-    /// ⚠️ **只在启动时读一次**（`Theme.launchAmoled`，C 侧还是 `dispatch_once`）⇒ 改完要重启，
-    /// 设置页那颗开关下面配了「立即重启」。
+    // 已删除的「深色栏底色」(amoledEnabled)：新设计语言下它每次布局都主动让位，是个纯空操作。
+    //
+    // 另一个 AMOLED 用下面那个键（键名刻意不同）—— 它是全局换色而不是给某条栏涂底，
+    // 机制在 `Sources/EeveeSpotifyC/ColorSwap.m`。
+    //
+    // 「AMOLED 纯黑」：把 Spotify 的 #121212 底色换成纯黑（保留 alpha）。默认关。
+    //
+    // 与已删除的 `amoledEnabled` 不是一回事：那个只给旧设计语言的导航 / 标签栏涂底。
+    // 键名换成新的，就是为了避免设备上存量的旧值把纯黑主题悄悄打开。
+    //
+    // 只在启动时读一次（`Theme.launchAmoled`，C 侧还是 `dispatch_once`）⇒ 改完要重启，
+    // 设置页那颗开关下面配了「立即重启」。
     static var amoledTheme: Bool {
         get {
             container.object(forKey: amoledThemeKey) as? Bool ?? false
@@ -435,15 +430,15 @@ extension UserDefaults {
         }
     }
 
-    /// 「Apple Music 式页头」（**歌单页**）：把 Spotify 的页头换成一版 AM 形态的 ——
-    /// 标题 / 创建者 / 长度**居中**，下面一行 shuffle + **白色 Play 胶囊** + 尾随按钮。
+    /// 「Apple Music 式页头」（**歌单页**）：标题 / 创建者 / 长度居中，下面一行
+    /// shuffle + **白色 Play 胶囊** + 尾随按钮。
     ///
-    /// **默认开**：用户 2026-10-13 的原话是「我就一个要求：看起来像 Apple Music」。
+    /// **默认开**（页面 AM 化是默认外观，不需要用户去发现）。
     ///
-    /// ⚠️ 认不出页头时这一颗**不会做任何事**（一个视图都不藏）⇒ 失败的表现是"没生效"，
-    /// 不是"页面坏了"。v1 **只作用于歌单页**（专辑页用的是同一个布局类，但头部结构不同）。
+    /// 认不出页头时这一颗不会做任何事（一个视图都不藏）⇒ 失败的表现是「没生效」，
+    /// 不是「页面坏了」。只作用于歌单页：专辑页用同一个布局类，但头部结构不同。
     ///
-    /// 出处与判断见 `Appearance/EntityPageHeader.swift` 文件头（借鉴 spoti.pw **v0.21.1**，
+    /// 出处与判断见 `Appearance/EntityPageHeader.swift` 文件头（借鉴 spoti.pw v0.21.1，
     /// GPL-3.0；v0.22.0 起那份已改为 PolyForm Strict，不可复制）。
     static var entityPageAMHeader: Bool {
         get {
@@ -456,10 +451,9 @@ extension UserDefaults {
         }
     }
 
-    /// ★ 2026-10-18（用户：「把那些分散的/未添加的艺人页的部分加上」）：
-    /// **艺人页的「每月有 x 名听众」那一行**要不要藏。默认**不藏**（保留信息）。
+    /// 艺人页的「每月有 x 名听众」那一行要不要藏。默认**不藏**（保留信息）。
     ///
-    /// 它只影响我们自绘的 AM 页头：原生那一行本来就被 `blankArtistChrome` 藏掉了，
+    /// 只影响我们自绘的 AM 页头：原生那一行本来就被 `blankArtistChrome` 藏掉了，
     /// 页头里显示的是我们从 `Components.Header.UI.Metadata` 读出来再画的一份。
     static var artistHideListeners: Bool {
         get {
@@ -470,11 +464,10 @@ extension UserDefaults {
         }
     }
 
-    /// ★ 2026-10-18：**艺人页的 Music / Video / Merch 标签栏**要不要藏（并让下面的列表上移）。
+    /// 艺人页的 Music / Video / Merch 标签栏要不要藏（并让下面的列表上移）。默认 **true**。
     ///
-    /// 默认 **true** —— 这是 2026-10-17 以来一直的行为（照 pw 的 `ArtistField.x` 做的），
-    /// 这颗开关只是把它**变成可选**，不改变默认观感。关掉时 `applyToArtistPage` 会把
-    /// 原 `alpha` / 点击 / 分页滚动位置逐个写回（见 `restoreArtistStrip`）。
+    /// 关掉时 `applyToArtistPage` 会把原 `alpha` / 点击 / 分页滚动位置逐个写回
+    /// （见 `restoreArtistStrip`）。
     static var artistHideTabs: Bool {
         get {
             container.object(forKey: artistHideTabsKey) == nil
@@ -487,9 +480,9 @@ extension UserDefaults {
     }
 
     /// Home 顶部那排**小卡片**的底色从各自的封面取色（出处见 `Appearance/HomeShortcutTiles.x.swift`，
-    /// 借鉴 spoti.pw **v0.21.1** 的 `HomeTiles.m`，GPL-3.0）。**默认开**。
+    /// 借鉴 spoti.pw v0.21.1 的 `HomeTiles.m`，GPL-3.0）。**默认开**。
     ///
-    /// ⚠️ 认不出卡片形状就什么都不做 ⇒ 失败的表现是"没生效"，不是"首页坏了"。
+    /// 认不出卡片形状就什么都不做 ⇒ 失败的表现是「没生效」，不是「首页坏了」。
     static var homeTileTint: Bool {
         get {
             container.object(forKey: homeTileTintKey) == nil
@@ -501,10 +494,10 @@ extension UserDefaults {
         }
     }
 
-    /// 迷你播放器左边那张封面做成**圆形**。**默认开**（用户点名要的；
-    /// 上游同款开关叫 `npb_round_artwork`，见 `Appearance/MiniBarArtwork.swift`）。
+    /// 迷你播放器左边那张封面做成**圆形**。**默认开**（上游同款开关叫 `npb_round_artwork`，
+    /// 见 `Appearance/MiniBarArtwork.swift`）。
     ///
-    /// 与 `miniBarGlass` **互不影响**：关掉玻璃，封面照样是圆的。
+    /// 与 `miniBarGlass` 互不影响：关掉玻璃，封面照样是圆的。
     static var miniBarRoundArtwork: Bool {
         get {
             container.object(forKey: miniBarRoundArtworkKey) == nil
@@ -517,8 +510,8 @@ extension UserDefaults {
     }
 
     // MARK: - 清爽（Declutter）
-
-    /// 隐藏标签栏上方的迷你播放条。默认关，实时读。
+    //
+    // 隐藏标签栏上方的迷你播放条。默认关，实时读。
     static var hideMiniPlayerBar: Bool {
         get {
             container.object(forKey: hideMiniPlayerBarKey) as? Bool ?? false
@@ -528,28 +521,17 @@ extension UserDefaults {
         }
     }
 
-    /// 隐藏封面与歌名之间那行跟唱单行歌词（`id=singalong-lyrics-view`）。
+    /// 隐藏封面与歌名之间那行跟唱单行歌词（`id=singalong-lyrics-view`）。默认**开**。
     ///
-    /// ★ **2026-10-08：默认值改回「开」，但机制换了**（用户拍板："我想要的高度效果是图片 59 的效果"）。
-    ///
-    /// **踩过的坑（两次判反）**：这个开关原来是"把那一行的视图 `hidden` 掉"，而用户给的现场是——
-    ///
-    /// > 图片 58 是胶囊显示「显示歌词」（**此时单行功能生效**）的时候截屏的
-    /// > （但是这个功能似乎是**只隐藏歌词内容，不隐藏功能，所以封面被抬上去了**）；
-    /// > 图片 59 是胶囊显示「隐藏歌词」的时候截屏的（**此时单行功能关闭，封面还是原来的正常的样子**）。
-    ///
-    /// ⇒ **藏视图只去得掉内容，Spotify 的"抬高封面"那个功能还在**。用户要的是 **59**
-    /// （= 功能真的关掉）。
-    ///
-    /// ★ 2026-10-10（照片 63 之后定案，现在是**两层 + 一颗开关**）：
-    ///   ① `DeclutterChrome.applySingalongLine` 当场把那一行的视图 `hidden`
-    ///      （屏幕上立刻没有那一行）；
-    ///   ② **`lyrics_under_cover_art_enabled=false`** 的远端配置替换
-    ///      （`DynamicPremium+ModifyingFunctions`）—— 连"封面被抬起来"的布局后果一起从根上关掉，
-    ///      **下次启动**生效。★ 日志 54 已证第二层真的生效：整份日志里 `LyricsContainerView` /
-    ///      `singalong-lyrics-view` **一个都没有**。
-    ///   ③ 那两颗胶囊（「切换至视频」/「显示歌词」）**不归这个开关**，归
-    ///      `hideNowPlayingPills`（见下）。
+    /// 只把那一行 `hidden` 掉不够：Spotify 的「抬高封面」是另一个功能，藏视图只去得掉内容、
+    /// 封面仍然被抬上去。要的是功能真的关掉，所以分两层：
+    /// ① `DeclutterChrome.applySingalongLine` 当场把那一行的视图 `hidden`
+    /// （屏幕上立刻没有那一行）；
+    /// ② 把远端配置 `lyrics_under_cover_art_enabled` 换成 `false`
+    /// （`DynamicPremium+ModifyingFunctions`）—— 连「封面被抬起来」的布局后果一起从根上
+    /// 关掉，**下次启动**生效。
+    /// ③ 那两颗胶囊（「切换至视频」/「显示歌词」）不归这个开关，归
+    /// `hideNowPlayingPills`（见下）。
     static var hideSingalongLine: Bool {
         get {
             container.object(forKey: hideSingalongLineKey) as? Bool ?? true
@@ -561,18 +543,15 @@ extension UserDefaults {
 
     /// 隐藏听歌页底部那排**胶囊**：「切换至视频」+「显示/隐藏歌词」。默认**开**。
     ///
-    /// ★ 2026-10-10（照片 63）：用户第二次报"这个隐藏歌词的胶囊还在"，并新发现旁边那颗
-    /// 「切换至视频」。日志 54 的 `[NPVTree]` 一次把两颗都点名了（**它们都有无障碍 id**，
-    /// 之前一直在按类名/标签猜，白绕了一圈）：
+    /// 两颗是同一排、同一类（`Encore.Button.Primary`），都有稳定的无障碍 id，一起给一个开关：
     ///
     /// ```
     /// 13.Primary@0,0,26,32,hidden,id=nowplaying-npv-musicvideos-switch    ← 「切换至视频」（无视频时 hidden）
     /// 13.Primary@0,0,104,32,id=lyrics-npv-switch-button                   ← 「显示/隐藏歌词」（104pt = 图标 + 文字）
     /// ```
     ///
-    /// 归属：两颗是**同一排**、同一类（`Encore.Button.Primary`），一起给一个开关最省事，
-    /// 也符合用户"这两个都不该出现"的说法。关掉开关 ⇒ 写回 `alpha`（**不用 `hidden`**：
-    /// pw 的文档明确写过 Encore/OverflowStack 那类栈里写 `hidden` 会崩）。
+    /// 关掉开关 ⇒ 写回 `alpha`（**不用 `hidden`**：Encore / OverflowStack 那类栈里写
+    /// `hidden` 会崩）。
     static var hideNowPlayingPills: Bool {
         get {
             container.object(forKey: hideNowPlayingPillsKey) as? Bool ?? true
@@ -584,7 +563,7 @@ extension UserDefaults {
 
     /// 隐藏首页顶部那条（问候语 + 筛选胶囊）。默认关，实时读。
     ///
-    /// 证据：真机树里只在**首页**出现（日志 7 的 #1–#7），`HomeHeaderView@0,0,414,50`。
+    /// 它只在首页出现，类名 `HomeHeaderView@0,0,414,50`。
     static var hideHomeHeader: Bool {
         get {
             container.object(forKey: hideHomeHeaderKey) as? Bool ?? false
@@ -594,10 +573,10 @@ extension UserDefaults {
         }
     }
 
-    /// 隐藏设备 / 输出切换按钮（"连接"）。默认关，实时读。
+    /// 隐藏设备 / 输出切换按钮（「连接」）。默认关，实时读。
     ///
-    /// ⚠️ 它在迷你播放条和播放器里**共用**（20/20 份转储都有），所以关掉是
-    /// "所有传输条上都不显示"，不是只在播放器页。
+    /// 它在迷你播放条和播放器里**共用**，所以关掉是「所有传输条上都不显示」，
+    /// 不是只在播放器页。
     static var hideConnectButton: Bool {
         get {
             container.object(forKey: hideConnectButtonKey) as? Bool ?? false
@@ -617,19 +596,18 @@ extension UserDefaults {
         }
     }
 
-    // MARK: - 播放器双击手势（Gestures）—— ⛔ 2026-10-04 整体删除
+    // MARK: - 播放器双击手势（Gestures）—— 已整体删除
     //
     // 删掉的是 `playerGestureNowPlaying` / `playerGestureFullscreenLyrics` /
     // `playerGestureBehavior` 三个键与它们的 getter（含 `ownedKeys` 里的三行）。
-    // 为什么删（都不是"坏了"）：① 手势挂在页面根视图上 ⇒ **在播放键上方双击也会跳歌**；
-    // ② 最该起作用的全屏歌词那一面默认关、从没验过；③ 最近 8 份日志里它一次都没被用过。
-    // 重做时的三条要求见 `Tools/eevee-hookfinder/SESSION_2026-10-03_NIGHT.md` §10。
-
+    // 原因：① 手势挂在页面根视图上 ⇒ **在播放键上方双击也会跳歌**；② 最该起作用的全屏
+    // 歌词那一面默认关、从没验过；
+    //
     // MARK: - 屏蔽的艺人（Blocked artists）
-
-    /// 「屏蔽的艺人」总开关。**默认开** —— 名单空着时什么都不做（`BlockedArtists.match`
-    /// 先判名单是否为空），所以开着没有副作用；而名单一旦有内容，用户显然就是要它生效。
-    /// 这个开关的用处是"临时全停"，不用去把名单清空。
+    //
+    // 「屏蔽的艺人」总开关。**默认开** —— 名单空着时什么都不做（`BlockedArtists.match`
+    // 先判名单是否为空），所以开着没有副作用；而名单一旦有内容，用户显然就是要它生效。
+    // 这个开关的用处是"临时全停"，不用去把名单清空。
     static var blockedArtistsEnabled: Bool {
         get {
             container.object(forKey: blockedArtistsEnabledKey) as? Bool ?? true
@@ -650,33 +628,32 @@ extension UserDefaults {
         }
     }
 
-    // ⛔ 听歌页那套外观开关（`musicStyleNowPlaying` / `nowPlayingShellEnabled` /
-    // `nowPlayingShellHeader` / `nowPlayingShellGlass` / `nowPlayingShellBackdrop`）
-    // 已于 2026-10-02 **全部删除**：那几版 bug 太多，先放一边，
-    // 等导航栏这条线收干净再重做（细节见 `Tools/eevee-hookfinder/SESSION_2026-10-02_SUMMARY.md`）。
-
+    // 已删除的听歌页外观开关（`musicStyleNowPlaying` / `nowPlayingShellEnabled` /
+    // `nowPlayingShellHeader` / `nowPlayingShellGlass` / `nowPlayingShellBackdrop`）：
+    // 那几版 bug 太多，等导航栏这条线收干净再重做。
+    //
     // MARK: - 标签栏玻璃
-
-    // ⛔「**标签用液态玻璃**」（`tabBarGlass`，我们自己画的那条胶囊）已于 2026-10-13
-    //   按用户要求**连同实现一起删除**（"这个功能可以删掉了"）。现在的标签栏玻璃只有一条路：
-    //   `tabBarSystemGlass`（下面那个）—— 叠一条系统 `UITabBar`，玻璃由 iOS 26 自己画
-    //   （折射 / 镜片 / 明暗自适应都是 UIKit 的）。旧键留在 `UserDefaults` 里无害，
-    //   只是不再被读；「重置本仓库设置」也不再管它（它已经不进 `ownedKeys`）。
-
-    /// 「**标签栏改用系统玻璃**」—— 用户 2026-10-12 提的（他看出 pw 那条栏"像果冻、还能滑"）。
-    ///
-    /// **默认开** —— 2026-10-13 用户要求："默认启用标签用液态玻璃"（此前默认关，理由只是"我没验过"）。
-    /// 做法是**照 pw 的做法**（`Redesigned/Navbar/TabBar.x`）把 Spotify 的栏内容藏掉、
-    /// 在上面叠一条**系统 `UITabBar`** ⇒ iOS 26 直接画成真·液态玻璃（选中气泡会滑、折射、明暗自适应）。
-    ///
-    /// ⚠️ 关掉 = **完全不动**（连一次布局都不碰）：藏起来的内容与让出去的高度都**精确写回**
-    /// （见 `TabBarSystemGlass.remove(reason:)`）。
-    /// ⚠️ 它现在是**唯一**一条标签栏玻璃的路（自绘那条已于 2026-10-13 按用户要求删除）。
-    /// 实现与四步做法写在 `Appearance/TabBarSystemGlass.x.swift` 的文件头。
-    ///
-    /// ⚠️ **光改默认值不够**：这个键只要被设置页写过一次，盘上就是一个具体的 `false`，
-    /// `?? true` 再也追不到它 ⇒ 配套的一次性迁移见下面
-    /// `applyTabBarSystemGlassDefaultIfNeeded()`（只做一次，之后尊重用户在设置里的开关）。
+    //
+    // 已删除的「**标签用液态玻璃**」（`tabBarGlass`，我们自己画的那条胶囊），连同实现一起删了。
+    // 现在的标签栏玻璃只有一条路：`tabBarSystemGlass`（下面那个）—— 叠一条系统 `UITabBar`，
+    // 玻璃由 iOS 26 自己画（折射 / 镜片 / 明暗自适应都是 UIKit 的）。
+    // 旧键留在 `UserDefaults` 里无害，只是不再被读；「重置本仓库设置」也不再管它
+    // （它已经不进 `ownedKeys`）。
+    //
+    // 「**标签栏改用系统玻璃**」。
+    //
+    // **默认开**。做法是照 pw（`Redesigned/Navbar/TabBar.x`）把 Spotify 的栏内容藏掉、
+    // 在上面叠一条**系统 `UITabBar`** ⇒ iOS 26 直接画成真·液态玻璃（选中气泡会滑、
+    // 折射、明暗自适应）。
+    //
+    // 关掉 = **完全不动**（连一次布局都不碰）：藏起来的内容与让出去的高度都**精确写回**
+    // （见 `TabBarSystemGlass.remove(reason:)`）。
+    // 它是**唯一**一条标签栏玻璃的路（自绘那条已删除）。
+    // 实现与四步做法写在 `Appearance/TabBarSystemGlass.x.swift` 的文件头。
+    //
+    // 光改默认值不够：这个键只要被设置页写过一次，盘上就是一个具体的 `false`，
+    // `?? true` 再也追不到它 ⇒ 配套的一次性迁移见下面
+    // `applyTabBarSystemGlassDefaultIfNeeded`（只做一次，之后尊重用户在设置里的开关）。
     static var tabBarSystemGlass: Bool {
         get {
             container.object(forKey: tabBarSystemGlassKey) as? Bool ?? true
@@ -689,15 +666,14 @@ extension UserDefaults {
     /// 迁移标记（只认它一次，之后永远尊重用户在设置里的选择）。
     private static let tabBarSystemGlassDefaultMigratedKey = "tabBarSystemGlassDefaultOn"
 
-    /// **一次性**把盘上的 `tabBarSystemGlass` 打开 —— 为"默认值从关改成开"补一刀。
+    /// **一次性**把盘上的 `tabBarSystemGlass` 打开 —— 为「默认值从关改成开」补一刀。
     ///
-    /// 为什么需要它（而不是只改默认值就行）：`UserDefaults.standard` 在这个进程里就是 Spotify 自己的
-    /// 偏好存储，而**设置页那颗开关只要被拨过一次**，盘上就已经有了一个具体的 `false`
-    /// （旧默认值写进去的），`?? true` 永远追不到它 —— 用户会觉得"你根本没改"。
+    /// 为什么不能只改默认值：`UserDefaults.standard` 在这个进程里就是 Spotify 自己的偏好
+    /// 存储，而设置页那颗开关只要被拨过一次，盘上就已经有一个具体的 `false`（旧默认值写
+    /// 进去的），`?? true` 永远追不到它 —— 你根本没改。
     ///
-    /// 只发生**一次**（标记键），并且照实打一行日志：
-    /// 这是"默认值变更"的补偿，不是每次启动都覆盖用户的选择。
-    /// 做法与理由与 `LyricsOptions.applyGeniusFallbackDefaultIfNeeded()` 完全一致。
+    /// 只发生**一次**（标记键），并且照实打一行日志：这是「默认值变更」的补偿，
+    /// 不是每次启动都覆盖。做法与 `LyricsOptions.applyGeniusFallbackDefaultIfNeeded` 一致。
     static func applyTabBarSystemGlassDefaultIfNeeded() {
         guard container.object(forKey: tabBarSystemGlassDefaultMigratedKey) == nil else { return }
         container.set(true, forKey: tabBarSystemGlassDefaultMigratedKey)
@@ -710,29 +686,27 @@ extension UserDefaults {
         )
     }
 
-    // MARK: - customize 快照的**落盘**兜底（2026-10-12，对齐上游）
-
-    /// customize 响应体的**落盘缓存**。
-    ///
-    /// ★★ 为什么加它（用户 2026-10-12 让"对比上游那几个仓库"）：
-    ///   `EeveeSpotifyReincarnated`（我们最近的同代 fork）里，`cachedCustomizeData` **每写一次就同步落盘**，
-    ///   而且**每处读取都 `?? UserDefaults.cachedCustomizeData`**：
-    ///
-    /// ```
-    /// SpotifyResponsePatcher.swift:26   UserDefaults.cachedCustomizeData = newValue
-    /// DataLoaderServiceHooks.x.swift:61 if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
-    /// DataLoaderServiceHooks.x.swift:62     ?? UserDefaults.cachedCustomizeData {
-    /// ```
-    ///
-    /// 我们这边**只有内存那一份**（+ 启动时用随包 `.bnk` 喂一份，见 `SpotifyResponsePatcher.seedCustomizeData`）。
-    /// 缺它的后果很具体，而且**正好落在用户报的"退出重进之后"**：
-    /// 新进程刚起、随包快照没拿到或名字变了、而服务器对 customize 回 **304**（很常见）
-    /// ⇒ `cachedCustomizeData == nil` ⇒ 我们**交不出 body** ⇒ App 拿到空配置
-    /// ⇒ **premium / 可播放性降级 ⇒ 歌单发灰、歌曲消失、放不动**（用户报的那三个症状）。
-    /// 上游靠落盘那一份就永远有 body 可交。
-    ///
-    /// ⚠️ 它**不进 `ownedKeys`**：这是**缓存**不是设置（不该进备份，也不该被"清空设置"连坐）；
-    ///    每次拿到 200 就会被覆盖，所以留着旧的也不会长期错。
+    // MARK: - customize 快照的**落盘**兜底（对齐上游）
+    //
+    // customize 响应体的**落盘缓存**。
+    //
+    // 上游（`EeveeSpotifyReincarnated`）里 `cachedCustomizeData` 每写一次就同步落盘，
+    // 而且每处读取都 `?? UserDefaults.cachedCustomizeData`：
+    //
+    // ```
+    // SpotifyResponsePatcher.swift:26   UserDefaults.cachedCustomizeData = newValue
+    // DataLoaderServiceHooks.x.swift:61 if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData
+    // DataLoaderServiceHooks.x.swift:62     ?? UserDefaults.cachedCustomizeData {
+    // ```
+    //
+    // 我们这边原来只有内存那一份（+ 启动时用随包 `.bnk` 喂一份，见
+    // `SpotifyResponsePatcher.seedCustomizeData`）。缺落盘那份的后果很具体：
+    // 新进程刚起、随包快照没拿到或名字变了、而服务器对 customize 回 **304**（很常见）
+    // ⇒ `cachedCustomizeData == nil` ⇒ 我们**交不出 body** ⇒ App 拿到空配置
+    // ⇒ **premium / 可播放性降级 ⇒ 歌单发灰、歌曲消失、放不动**。
+    //
+    // 它**不进 `ownedKeys`**：这是**缓存**不是设置（不该进备份，也不该被「清空设置」连坐）；
+    // 每次拿到 200 就会被覆盖，所以留着旧的也不会长期错。
     private static let cachedCustomizeDataKey = "eeveeCachedCustomizeData"
     private static let cachedCustomizeVersionKey = "eeveeCachedCustomizeVersion"
 
@@ -749,16 +723,15 @@ extension UserDefaults {
         }
     }
 
-    /// ★★ 2026-10-12 补：那份落盘 body 是**哪个 Spotify 版本**抓到的。
+    /// 那份落盘 body 是**哪个 Spotify 版本**抓到的。
     ///
-    /// 为什么必须有它（用户这一轮的三个症状）："退出重进 ⇒ 歌曲全黑 ⇒ 过一会部分能放"。
-    /// 新进程刚起、服务器对 customize 回 **304** 时，我们手上其实有两份 body：
-    ///   ① 内存里那份**随包种子**（旧版快照，刚才才修成 9.1.88）；
-    ///   ② 磁盘上那份**上一场真抓到的 body**（同一版本、而且已经过我们的改写）。
-    /// 以前**内存优先** ⇒ 回放的永远是旧快照，磁盘上更好的那一份**从来没被用过**
-    /// （真机日志 69：`customize 304 -> replaying the seed, 101415 bytes` —— 101415 正是种子的字节数）。
-    /// 现在反过来：**同版本的落盘 body 优先**，种子只在"磁盘上那份是别的版本"或"磁盘上没有"时兜底；
-    /// 而**种子本身不再落盘**（否则它会把真正的那份覆盖掉 —— 那就又回到"永远用旧快照"）。
+    /// 新进程刚起、服务器对 customize 回 **304** 时，手上其实有两份 body：
+    /// ① 内存里那份**随包种子**（旧版快照）；
+    /// ② 磁盘上那份**上一场真抓到的 body**（同一版本、而且已经过我们的改写）。
+    /// 以前**内存优先** ⇒ 回放的永远是旧快照，磁盘上更好的那一份**从来没被用过**。
+    /// 现在反过来：**同版本的落盘 body 优先**，种子只在「磁盘上那份是别的版本」或
+    /// 「磁盘上没有」时兜底；而**种子本身不再落盘**（否则它会把真正的那份覆盖掉 ——
+    /// 那就又回到「永远用旧快照」）。
     static var cachedCustomizeVersion: String? {
         get {
             container.string(forKey: cachedCustomizeVersionKey)
@@ -773,14 +746,14 @@ extension UserDefaults {
     }
 
     // MARK: - 标签文字（默认藏）
-
-    /// 隐藏四颗标签的**文字**（照片 21/23/25 里那条栏是没有文字的）。**默认开**。
-    ///
-    /// 这一条同时把"玻璃太扁"顺手解掉：内容带从"图标 + 文字 44pt"变成"只有图标 ~24pt"，
-    /// 胶囊自然收到 ~40pt（正好是照片里的比例），图标仍然居中。
-    ///
-    /// 来自 **spoti.pw** 的「Hide labels」（见它的 `docs/tweaks.md`）——
-    /// 来源、许可与改动见「开源许可」页。
+    //
+    // 隐藏四颗标签的**文字**。**默认开**。
+    //
+    // 这一条同时把「玻璃太扁」顺手解掉：内容带从「图标 + 文字 44pt」变成「只有图标 ~24pt」，
+    // 胶囊自然收到 ~40pt，图标仍然居中。
+    //
+    // 来自 **spoti.pw** 的「Hide labels」—— 来源、许可与改动
+    // 见「开源许可」页。
     static var tabBarHideLabels: Bool {
         get {
             container.object(forKey: tabBarHideLabelsKey) as? Bool ?? true
@@ -790,19 +763,18 @@ extension UserDefaults {
         }
     }
 
-    /// 「**隐藏「创建」标签**」—— 用户 2026-10-13 要的：
-    /// 「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。即液态玻璃只显示主页，搜索，音乐库三个按键」。
+    /// 「**隐藏「创建」标签**」。
     ///
-    /// **默认开**（就是他要的结果）。做法：**保住它在 `UIStackView` 里的槽位、只把内容藏起来**
+    /// **默认开**。做法：**保住它在 `UIStackView` 里的槽位、只把内容藏起来**
     /// （`alpha = 0` + 点不到；真机树里它是 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，
     /// id `TabBar.Item.创建`）——
-    /// ① 因为它**收不到点击**（UIKit 命中测试跳过 alpha < 0.01 的视图），"创建"这个入口真的没了；
+    /// ① 因为它**收不到点击**（UIKit 命中测试跳过 alpha < 0.01 的视图），「创建」这个入口真的没了；
     /// ② 而且**槽位还在** ⇒ 我们自己的几何与 UIKit 画的那块玻璃都照旧按四颗算，
-    ///    **宽度不随这颗开关变**（用户 2026-10-13 第二条要求："关掉创建之后玻璃宽度不变"；
-    ///    早先 `isHidden = true` 的写法会让另外三颗平分整条栏，玻璃从 360 缩到 274）。
+    /// **宽度不随这颗开关变**（早先用 `isHidden = true` 会让另外三颗平分整条栏，
+    /// 玻璃从 360 缩到 274）。
     ///
-    /// ⚠️ 判据是**类名**而不是文字：文字随语言变（`创建` / `Create`）。
-    /// ⚠️ 与 `tabBarHideLabels` 一样是**可撤销**的：关掉开关把它恢复成原来的 `alpha` 与交互开关
+    /// 判据是**类名**而不是文字：文字随语言变（`创建` / `Create`）。
+    /// 与 `tabBarHideLabels` 一样是**可撤销**的：关掉开关把它恢复成原来的 `alpha` 与交互开关
     /// （见 `TabBarGlassPlate.applyCreateTabVisibility`）。
     static var tabBarHideCreate: Bool {
         get {
@@ -813,19 +785,18 @@ extension UserDefaults {
         }
     }
 
-    // ⛔「**拖动胶囊切换标签**」（`tabBarDragCapsule`）已于 2026-10-13 **当天加、当天删**：
-    //   那个交互是**原生 iOS 26 标签栏自带的**（手指贴上玻璃就能横向滑，镜片立刻跟手、
-    //   松手选中手指下那一颗 —— 见 `TabBarSystemGlass.x.swift` 第五片的两处外部来源）。
-    //   我们自己装 pan 是**重复实现**，而且只会把触摸从系统手里抢走 ⇒ 一行都不该有。
-    //   要做的事只有一件：让玻璃接管触摸（`probeForwardRoute`）。
-
+    // 已删除的「**拖动胶囊切换标签**」（`tabBarDragCapsule`）：
+    // 那个交互是**原生 iOS 26 标签栏自带的**（手指贴上玻璃就能横向滑，镜片立刻跟手、
+    // 松手选中手指下那一颗 —— 见 `TabBarSystemGlass.x.swift` 第五片的两处外部来源）。
+    // 自己装 pan 是**重复实现**，而且只会把触摸从系统手里抢走 ⇒ 一行都不该有。
+    // 要做的事只有一件：让玻璃接管触摸（`probeForwardRoute`）。
+    //
     // MARK: - 迷你播放条玻璃（默认开）
-    /// 迷你播放条也铺一层**液态玻璃胶囊**：与标签栏那条**同高、同圆角、同材质**，
-    /// 宽度贴它自己的内容（真机 398pt，因为要装封面 + 歌名 + 按钮）。
-    /// **默认开** —— 用户 2026-10-02 直接点名要的（照片 33：那条实心红底太扎眼）。
-    ///
-    /// 关掉即完全还原：玻璃撤掉，被我们清空的封面色底与放开过的裁剪都还回去
-    /// （见 `MiniBarGlassPlate.removePlate`）。
+    // 迷你播放条也铺一层**液态玻璃胶囊**：与标签栏那条**同高、同圆角、同材质**，
+    // 宽度贴它自己的内容（真机 398pt，因为要装封面 + 歌名 + 按钮）。**默认开**。
+    //
+    // 关掉即完全还原：玻璃撤掉，被我们清空的封面色底与放开过的裁剪都还回去
+    // （见 `MiniBarGlassPlate.removePlate`）。
     static var miniBarGlass: Bool {
         get {
             container.object(forKey: miniBarGlassKey) as? Bool ?? true
@@ -836,16 +807,15 @@ extension UserDefaults {
     }
 
     // MARK: - 歌单封面：四宫格 → 单张（默认开）
-    /// 歌单封面默认是**服务端拼好的四宫格**：地址里就串着歌单前四首歌的专辑封面 id
-    /// （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`，每张 40 位十六进制）。
-    /// 把这个地址截到**第一个 id**，服务端回的是一张正常的单张封面（本机实测：
-    /// 640 与 300 的单 id 地址都是 200 + `image/jpeg`）⇒ 不用换 host、不用自己裁图。
-    ///
-    /// **默认开** —— 用户第 5 轮直接点名问的就是「能不能只显示一张」。
-    /// 机制、证据、以及"为什么不能写 `setURL:`"都在 `Appearance/PlaylistSingleCover.x.swift` 文件头。
-    ///
-    /// 关掉即完全还原：钩子只在开关开着时改写（关着一行都不改）；已经加载过的那几张
-    /// 会留在图片缓存里，重开一次歌单页就是原来的四宫格。
+    // 歌单封面默认是**服务端拼好的四宫格**：地址里串着歌单前四首歌的专辑封面 id
+    // （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`，每张 40 位十六进制）。
+    // 把这个地址截到**第一个 id**，服务端回的是一张正常的单张封面（640 与 300 的单 id
+    // 地址都是 200 + `image/jpeg`）⇒ 不用换 host、不用自己裁图。**默认开**。
+    //
+    // 机制、以及「为什么不能写 `setURL:`」都在 `Appearance/PlaylistSingleCover.x.swift` 文件头。
+    //
+    // 关掉即完全还原：钩子只在开关开着时改写（关着一行都不改）；已经加载过的那几张
+    // 会留在图片缓存里，重开一次歌单页就是原来的四宫格。
     static var playlistSingleCover: Bool {
         get {
             container.object(forKey: playlistSingleCoverKey) as? Bool ?? true
@@ -856,15 +826,15 @@ extension UserDefaults {
     }
 
     // MARK: - 歌词系统翻译（默认关）
-
-    /// 歌词**自动翻译**：源没给译文时，用 Apple 的 `Translation` 框架在手机上翻一遍，
-    /// 每行原文下面多一行译文（渲染层本来就有这条副行，见 `LyricLinesAdapter`）。
-    ///
-    /// **默认关** —— 它要用户自己在「设置 → App → 翻译 → 语言」里先下好两种语言，
-    /// 而且是个会改变歌词版面观感的功能，不该悄悄替所有人打开。
-    ///
-    /// 机制、对齐条件（只处理"每行都有时间轴且已按时间升序"的歌词）见
-    /// `Lyrics/LyricsAutoTranslation.swift` 与 `Lyrics/OnDeviceLyricsTranslation.swift`。
+    //
+    // 歌词**自动翻译**：源没给译文时，用 Apple 的 `Translation` 框架在手机上翻一遍，
+    // 每行原文下面多一行译文（渲染层本来就有这条副行，见 `LyricLinesAdapter`）。
+    //
+    // **默认关** —— 它要设置 → App → 翻译 → 语言里先下好两种语言，
+    // 而且是个会改变歌词版面观感的功能，不该悄悄替所有人打开。
+    //
+    // 机制、对齐条件（只处理"每行都有时间轴且已按时间升序"的歌词）见
+    // `Lyrics/LyricsAutoTranslation.swift` 与 `Lyrics/OnDeviceLyricsTranslation.swift`。
     static var lyricsAutoTranslate: Bool {
         get {
             container.object(forKey: lyricsAutoTranslateKey) as? Bool ?? false
@@ -875,17 +845,12 @@ extension UserDefaults {
     }
 
     // MARK: - 页面取色底（AM 化：专辑页 / 歌单页）
-
-    /// 「**Melox 风页面**」：模糊封面底 + 整页取色（原「封面下缘溶解」，
-    /// 名字是历史遗留，行为早已不止"下缘一条"）。
-    /// ★ 2026-10-14：「头部居中」那条**已删** —— 它只对艺人页跑，而名单里 4 个 id 全是
-    /// 专辑页的 ⇒ 从未命中过（详见 `Appearance/EntityPageAppearance.x.swift` 的 `tick()`）。
-    ///
-    /// **默认开** —— ★★ 2026-10-18 用户明确要求（「搞一下 替换Spotify的官方歌曲底色 默认开启」）。
-    ///
-    /// 历史：2026-10-13 曾经是「专辑/歌单页的**两个按钮默认关闭**」；2026-10-18 起**这一颗翻成默认开**
-    /// —— 页面 AM 化现在是**默认外观**，不再是需要用户去发现的开关。
-    /// 只改 fallback、**不动已存的值**：手动关过的设备保持关（与 AMLL 那条同一纪律）。
+    //
+    // 「**Melox 风页面**」：模糊封面底 + 整页取色（原「封面下缘溶解」，名字是历史遗留，
+    // 行为早已不止「下缘一条」）。
+    //
+    // **默认开** —— 页面 AM 化现在是**默认外观**，不再是需要用户去发现的开关。
+    // 只改 fallback、**不动已存的值**：手动关过的设备保持关（与 AMLL 那条同一纪律）。
     static var entityPageDissolve: Bool {
         get {
             container.object(forKey: entityPageDissolveKey) as? Bool ?? true
@@ -896,10 +861,10 @@ extension UserDefaults {
     }
 
     /// 「**藏掉 Spotify 自己的按键**」：每行的「+」「…」、头部的下载 / 加入 / 观看信息。
+    /// **默认关**。
     ///
-    /// **默认关** —— 2026-10-13 用户要求（同上：「两个按钮默认关闭」）。
-    /// ⛔ **右上那颗「…」永远不碰**：pw 的整套做法就骑在它上面（把 ⋯ 里没有的 Sort/Mix
-    /// 补进它的 sheet）⇒ 把它藏掉等于把要用的面板弄没了 ✗（见 `EntityPageAppearance` 里的名单）。
+    /// **右上那颗「…」永远不碰**：pw 的整套做法就骑在它上面（把 ⋯ 里没有的 Sort/Mix
+    /// 补进它的 sheet）⇒ 把它藏掉等于把要用的面板弄没了（见 `EntityPageAppearance` 里的名单）。
     /// **play / shuffle 也一律不碰**（那是真功能）。
     static var entityPageHideChrome: Bool {
         get {
@@ -911,27 +876,22 @@ extension UserDefaults {
     }
 
     // MARK: - 听歌页（NPV）：仿 AM 的取色渐变底
-
-    /// ★ 2026-10-22：「**修改Spotify听歌页布局**」总开关。**默认开**。
-    ///
-    /// 用户原话（2026-10-22）：
-    /// > 整合以下功能：整页取色底，隐藏Spotify歌曲播放页模块/隐藏Spotify官方单行歌词/
-    /// > 隐藏两个胶囊，歌词进播放器。上述功能整合，名字为：修改Spotify听歌页布局，
-    /// > 放在歌曲播放页的最上面（默认开启）。
-    ///
-    /// 它把这五件**结构改动**收进一颗开关（原来各占一行）：
-    ///   · `nowPlayingBackdrop`      —— 整页封面取色底；
-    ///   · `nowPlayingOneScreen`     —— 隐藏 Spotify 的播放页模块（卡片折叠 + 钉住列表）；
-    ///   · `hideSingalongLine`       —— 隐藏 Spotify 官方的单行歌词（含 `lyrics_under_cover_art_enabled` 那条 flag）；
-    ///   · `hideNowPlayingPills`     —— 隐藏「切换至视频 / 显示歌词」两颗胶囊；
-    ///   · `nowPlayingLyricsInPlayer`—— 把（我们自己的）歌词画进播放器中段。
-    ///
-    /// 语义：**总开关是这五件的唯一真相** —— 拨它时会把那五个键一起写成同一个值
-    /// （见 `NowPlayingSettingsView.applyLayoutChange`），落地代码仍然读各自的键，
-    /// 所以备份/导入看到的值与屏幕上的总开关永远一致。
-    ///
-    /// ⚠️ 那五颗键已经没有单独的 UI 了 ⇒ 每次启动（以及每次导入备份之后）都由
-    /// `normalizeNowPlayingLayoutKeys()` 按总开关归一一次。理由（旧备份会逐键写盘）写在那个方法上。
+    //
+    // 「**修改 Spotify 听歌页布局**」总开关。**默认开**。
+    //
+    // 它把这五件**结构改动**收进一颗开关（原来各占一行）：
+    // · `nowPlayingBackdrop` —— 整页封面取色底；
+    // · `nowPlayingOneScreen` —— 隐藏 Spotify 的播放页模块（卡片折叠 + 钉住列表）；
+    // · `hideSingalongLine` —— 隐藏 Spotify 官方的单行歌词（含 `lyrics_under_cover_art_enabled` 那条 flag）；
+    // · `hideNowPlayingPills` —— 隐藏「切换至视频 / 显示歌词」两颗胶囊；
+    // · `nowPlayingLyricsInPlayer`—— 把（我们自己的）歌词画进播放器中段。
+    //
+    // 语义：**总开关是这五件的唯一真相** —— 拨它时会把那五个键一起写成同一个值
+    // （见 `NowPlayingSettingsView.applyLayoutChange`），落地代码仍然读各自的键，
+    // 所以备份 / 导入看到的值与屏幕上的总开关永远一致。
+    //
+    // 那五颗键已经没有单独的 UI ⇒ 每次启动（以及每次导入备份之后）都由
+    // `normalizeNowPlayingLayoutKeys` 按总开关归一一次，理由写在该方法上。
     static var nowPlayingLayout: Bool {
         get {
             container.object(forKey: nowPlayingLayoutKey) as? Bool ?? true
@@ -941,15 +901,13 @@ extension UserDefaults {
         }
     }
 
-    /// ★ 2026-10-23（用户）：「iOS 27 听歌页」—— Apple Music（iOS 27）那一版的播放页（满屏封面）。
+    /// 「iOS 27 听歌页」—— Apple Music（iOS 27）那一版的播放页（满屏封面）。**默认开**。
     ///
-    /// ★★ 2026-10-30（用户：「听歌页样式那里，默认改成 Apple Music」）：**默认改为开**。
-    ///   三档 Picker 的优先级见 `NowPlayingStyle`：这一颗开着就是 `.appleMusic`，
-    ///   旧总开关的值被忽略（与 `NowPlayingLyricsPlate.isEnabled` 里 `!nowPlayingIOS27` 那道门一致）。
-    ///   已经手动选过别的档的用户不受影响 —— 他们盘上已有明确的 `false`。
+    /// 三档 Picker 的优先级见 `NowPlayingStyle`：这一颗开着就是 `.appleMusic`，
+    /// 旧总开关的值被忽略（与 `NowPlayingLyricsPlate.isEnabled` 里 `!nowPlayingIOS27` 那道门一致）。
+    /// 已经手动选过别的档的用户不受影响 —— 他们盘上已有明确的 `false`。
     ///
-    /// 两者是**互斥**的两版布局：这颗开着时，旧那套「歌词进播放器」自动让位
-    /// （`NowPlayingLyricsPlate.isEnabled` 里那道 `!nowPlayingIOS27` 的门）。
+    /// 两者是**互斥**的两版布局：这颗开着时，旧那套「歌词进播放器」自动让位。
     /// 结构类开关（取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊）两版**共用**，
     /// 统一看 `nowPlayingAnyLayout`。
     static var nowPlayingIOS27: Bool {
@@ -970,21 +928,21 @@ extension UserDefaults {
 
     /// 把五件结构改动的键统一成**总开关的值** —— 总开关是唯一真相。
     ///
-    /// 为什么需要"每次启动都做"，而不是只做一次迁移：
-    ///   · 这五颗键在设置页里已经没有单独的行了，它们唯一的合法来源就是总开关；
-    ///   · 但「备份与重置」的导入是**逐键写盘**的（五个键都在 `ownedKeys` 白名单里）——
-    ///     一份 2026-10-22 之前的备份带着 `hideSingalongLine=false` 导进来，就会变成
-    ///     "总开关显示开着、Spotify 官方单行歌词却还挂在那儿"，而页面上已经没有那颗开关可拨。
-    ///   ⇒ 启动时归一一次、导入备份之后再归一一次；挡不住"运行期间从外部写键"，
-    ///     但下一次启动/导入就会收正，不会静默地把界面和总开关拆成两套。
+    /// 为什么需要「每次启动都做」而不是只做一次迁移：
+    /// · 这五颗键在设置页里已经没有单独的行了，它们唯一的合法来源就是总开关；
+    /// · 但「备份与重置」的导入是**逐键写盘**的（五个键都在 `ownedKeys` 白名单里）——
+    /// 一份旧备份带着 `hideSingalongLine=false` 导进来，就会变成「总开关显示开着、
+    /// Spotify 官方单行歌词却还挂在那儿」，而页面上已经没有那颗开关可拨。
+    /// ⇒ 启动时归一一次、导入备份之后再归一一次；挡不住「运行期间从外部写键」，
+    /// 但下一次启动 / 导入就会收正，不会静默地把界面和总开关拆成两套。
     ///
-    /// 只写"值不对"的那几颗（正常情况下一个字节都不写），并打一行日志说明改了几颗。
+    /// 只写「值不对」的那几颗（正常情况下一个字节都不写），并打一行日志说明改了几颗。
     ///
     /// - Returns: 这次真的写了几颗键（0 = 本来就一致）。设置页拿它决定要不要**当场重放**一遍
-    ///   —— 备份导入把单键写歪之后，用户再回到这一页时界面和听歌页才会一起收正。
+    /// —— 备份导入把单键写歪之后，用户再回到这一页时界面和听歌页才会一起收正。
     @discardableResult
     static func normalizeNowPlayingLayoutKeys() -> Int {
-        // ★ 2026-10-23：两版布局共用这四颗结构键 ⇒ 归一到「任一布局开着」。
+        // 两版布局共用这四颗结构键 ⇒ 归一到「任一布局开着」。
         let enabled = nowPlayingAnyLayout
         let keys = [
             nowPlayingBackdropKey,
@@ -1022,23 +980,17 @@ extension UserDefaults {
     }
 
     /// 听歌页「**一屏**」：把播放器下面那些卡片全折起来 + 把列表钉在它的顶部
-    /// —— kumone / Music app 那种"一屏一首歌、滚不动"。**默认开**（2026-10-04 改的，见下）。
+    /// —— kumone / Music app 那种「一屏一首歌、滚不动」。**默认开**。
     ///
-    /// ⚠️ **默认值改过一次，两次都有理由**：
-    ///   · 原来**默认关**：折掉卡片会连**歌词卡**一起折掉，那会儿还没有替代的歌词入口；
-    ///   · 现在**默认开**：① 「歌词进播放器」（`NowPlayingLyricsPlate`）已经补上那个入口；
-    ///     ② 更要紧的是**照片 40/41（kumone）的对照** —— 它中间那块（185–644）**没有任何卡片**，
-    ///     卡片堆着就永远不像。而我们的 header 与底部已经和它逐条对上了 ⇒
-    ///     **卡片堆是"像不像"的唯一分水岭**，所以它必须是默认行为。
+    /// 默认开的两个前提：① 「歌词进播放器」（`NowPlayingLyricsPlate`）已经补上歌词入口，
+    /// 折掉卡片不会没歌词看；② kumone 的对照里中间那块**没有任何卡片**，卡片堆着就永远
+    /// 不像 ⇒ **卡片堆是「像不像」的唯一分水岭**，所以它必须是默认行为。
     ///
-    /// 仍然可以一键关掉（关掉即完全还原：`restore()` 把列表的 bottom inset 写回记下的原值）。
+    /// 仍然可以一键关掉（关掉即完全还原：`restore` 把列表的 bottom inset 写回记下的原值）。
     ///
     /// 思路与算法借自 spoti.pw v0.21.1（GPL-3.0）的 `Redesigned/Player/PlayerCards.x` +
-    /// `PlayerScroll.x`；为什么是"钉住"而不是"把滚动关掉"（关掉会让播放器划不掉）
+    /// `PlayerScroll.x`；为什么是「钉住」而不是「把滚动关掉」（关掉会让播放器划不掉）
     /// 写在 `NowPlayingOneScreen` 的文件头。
-    ///
-    /// 关掉即完全还原：`restore()` 把列表的 bottom inset 写回我们记下的原值，
-    /// 卡片折叠那一半读的就是这个开关（立刻生效，不必重启）。
     static var nowPlayingOneScreen: Bool {
         get {
             container.object(forKey: nowPlayingOneScreenKey) as? Bool ?? true
@@ -1053,12 +1005,9 @@ extension UserDefaults {
     /// 把**我们自己的**逐词歌词画进播放器中段（`npv.bottomStackView` 之上那块），
     /// 这样「一屏」把卡片全折掉之后，页面上仍然有歌词可看 —— 它是「一屏」能默认开的**前置**。
     ///
-    /// ★ 2026-10-11（用户）：从「默认关」改成「**默认开**」（「听歌页的那几个功能全部默认开启」）。
-    /// 当初默认关的两条理由现在的状态：
-    ///   1. "它压住的是 Spotify 自己的卡片区，得先让用户看一眼" —— 用户已经用过并拍板（照片 70/71/75）；
-    ///   2. "需要**逐词**数据，没有逐词的歌这一层会自己收起来" —— 仍然成立，而且现在
-    ///      **没有词就写一句说明 / 没有时间轴就静态列全文**（见 `NowPlayingLyricsPlate.noticeText()`），
-    ///      所以"收起来"不再是唯一结局。
+    /// 需要**逐词**数据；没有逐词时这一层会自己收起来，而且现在**没有词就写一句说明 /
+    /// 没有时间轴就静态列全文**（见 `NowPlayingLyricsPlate.noticeText`），
+    /// 所以「收起来」不再是唯一结局。
     ///
     /// 渲染复用 `AppleMusicLyricsOverlayView`（内嵌那一档，背景透明），宿主是
     /// `NowPlayingLyricsPlate` 自己的一份 —— 不去抢全屏页那个单例宿主。
@@ -1071,27 +1020,23 @@ extension UserDefaults {
         }
     }
 
-    /// ★ 2026-10-10（用户提的「**页面记忆**」）：听歌页上"歌词是展开着的那一屏"这个状态**记不记**。
+    /// 听歌页「**页面记忆**」：记不记「歌词是展开着的那一屏」这个状态。
     ///
-    /// ⚠️ **默认 `false` = "还没有偏好"**，不是"功能关着"：这个键**只由用户点那枚歌词键来写**
-    ///    （点开 ⇒ true，点收起 ⇒ false）。默认 false 的结果就是"用户没表过态时，行为与改动前
-    ///    完全一样（每次进播放器都是大封面）"；他**第一次点开**之后，记忆才开始生效。
-    ///    如果默认给 `true`，那"从没点开过"的用户一进播放器就会被自动展开 —— 那是错的。
+    /// **默认 `false` = 「还没有偏好」**，不是「功能关着」：这个键**只由用户点那枚歌词键来写**
+    /// （点开 ⇒ true，点收起 ⇒ false）。默认 false 的结果就是「用户没表过态时，行为与改动前
+    /// 完全一样（每次进播放器都是大封面）」；他**第一次点开**之后，记忆才开始生效。
+    /// 如果默认给 `true`，那「从没点开过」的用户一进播放器就会被自动展开 —— 那是错的。
     ///
-    /// 用户原话：
-    /// > 是不是没有那种页面记忆的功能。就是假如说我当时正在打开歌词的这个页面（照片 63），
-    /// > 退出之后再重进也还是在这个页面，不是那个大封面
-    ///
-    /// 现状（改动前的实证）：歌词展不展开只活在 `NowPlayingLyricsPlate.isOpen` 这个内存变量里，
+    /// 背景：歌词展不展开原来只活在 `NowPlayingLyricsPlate.isOpen` 这个内存变量里，
     /// 而 `remove(reason:)`（页面 `viewWillDisappear`）会走 `closeEverything` 把它清成 `false`
     /// ⇒ **没有记忆**，重进必然是大封面。
     ///
     /// 语义（写死在 `NowPlayingLyricsPlate` 里，不另设开关）：
-    ///   · **用户点开**歌词键 ⇒ 记 `true`；**用户点收起** ⇒ 记 `false`。只有这两种动作会改它；
-    ///   · **离开页面 / 切歌 / 收起动画 / 切开关**都不动它（那正是"记忆"的含义）；
-    ///   · 重进页面时若记的是 `true`、且「歌词进播放器」开着、且这一首**有能画的东西**
-    ///     ⇒ 自动铺回去；没词就只打一行日志、保持大封面（不空转）；
-    ///   · **落盘**（`UserDefaults`）⇒ 杀掉 App 重开也还记得。
+    /// · **用户点开**歌词键 ⇒ 记 `true`；**用户点收起** ⇒ 记 `false`。只有这两种动作会改它；
+    /// · **离开页面 / 切歌 / 收起动画 / 切开关**都不动它（那正是「记忆」的含义）；
+    /// · 重进页面时若记的是 `true`、且「歌词进播放器」开着、且这一首**有能画的东西**
+    /// ⇒ 自动铺回去；没词就只打一行日志、保持大封面（不空转）；
+    /// · **落盘**（`UserDefaults`）⇒ 杀掉 App 重开也还记得。
     static var nowPlayingLyricsExpanded: Bool {
         get {
             container.object(forKey: nowPlayingLyricsExpandedKey) as? Bool ?? false
@@ -1103,9 +1048,8 @@ extension UserDefaults {
 
     /// 调试页「**更详细的日志记录**」—— 把视图树与 customize 响应体两条转储合成一颗。**默认关**。
     ///
-    /// ★★ 2026-10-30（用户）：「转储视图树，转储响应体两个融合，换成 更详细的日志记录」。
-    ///   `ViewTreeDumper` / `SpotifyResponsePatcher` 仍读原来的两个键，这里只是把它们
-    ///   **同一拍写成同一个值**，并给设置页一颗单一开关。
+    /// `ViewTreeDumper` / `SpotifyResponsePatcher` 仍读原来的两个键，这里只是把它们
+    /// **同一拍写成同一个值**，并给设置页一颗单一开关。
     ///
     /// 迁移：新键还没写过时，取旧两键的**或** —— 之前只开了其中一个的用户不会因为合并而丢状态。
     static var detailedLogging: Bool {
@@ -1123,12 +1067,12 @@ extension UserDefaults {
     }
 
     // MARK: - 音乐库（改原生）
-
-    /// 音乐库大标题 + 收掉顶部滚边渐隐。**默认开**。
-    ///
-    /// 这是"改原生"路线的第一个开关（区别于听歌页那条"加壳"路线）：
-    /// 它改的是 Spotify 自己的标题对齐与那层 `LiquidGlass.GradientView` 灰纱，
-    /// 关掉即把原值写回。
+    //
+    // 音乐库大标题 + 收掉顶部滚边渐隐。**默认开**。
+    //
+    // 这是"改原生"路线的第一个开关（区别于听歌页那条"加壳"路线）：
+    // 它改的是 Spotify 自己的标题对齐与那层 `LiquidGlass.GradientView` 灰纱，
+    // 关掉即把原值写回。
     static var libraryLargeTitle: Bool {
         get {
             container.object(forKey: libraryLargeTitleKey) as? Bool ?? true
@@ -1138,14 +1082,14 @@ extension UserDefaults {
         }
     }
 
-    // MARK: - 主页（改原生，2026-10-12）
-
-    /// 主页头部按 **Apple Music 的 Listen Now** 改：大标题贴左（自己画、文字取标签栏那一颗 ⇒ 跟随语言）、
-    /// 头像靠右、收掉「全部/音乐/播客」那排 pills 与顶部灰纱。**默认开**（与音乐库那颗同一个观感档）。
-    ///
-    /// ⚠️ 它与音乐库那颗**刻意相反**的一点：音乐库的筛选 chips **保留**（排序要用，pw 删过又装回来），
-    /// 而主页那排 pills 是**内容筛选**、AM 没有 ⇒ 收掉。理由写在 `HomeHeaderAppearance` 文件头。
-    /// 关掉即还原（标题移除、RTL 翻回、pills 与灰纱的原 alpha 写回）。
+    // MARK: - 主页（改原生）
+    //
+    // 主页头部按 **Apple Music 的 Listen Now** 改：大标题贴左（自己画、文字取标签栏那一颗 ⇒ 跟随语言）、
+    // 头像靠右、收掉「全部/音乐/播客」那排 pills 与顶部灰纱。**默认开**（与音乐库那颗同一个观感档）。
+    //
+    // 它与音乐库那颗**刻意相反**的一点：音乐库的筛选 chips **保留**（排序要用），
+    // 而主页那排 pills 是**内容筛选**、AM 没有 ⇒ 收掉。理由写在 `HomeHeaderAppearance` 文件头。
+    // 关掉即还原（标题移除、RTL 翻回、pills 与灰纱的原 alpha 写回）。
     static var homeLargeTitle: Bool {
         get {
             container.object(forKey: homeLargeTitleKey) as? Bool ?? true
@@ -1156,20 +1100,20 @@ extension UserDefaults {
     }
 
     // MARK: - customize 响应体抓取（排障用）
-
-    /// 「转储 customize 响应体」。**默认关**，只为**替换种子快照**而存在。
-    ///
-    /// 背景：flag 改写依赖 `customize` 的响应体，而我们只能改写**拿得到的** body。
-    /// 现在用的是随包的 `.bnk`（9.1.76 时期转存）当种子，它够了、但不够**精确**——
-    /// 那份快照里没有 9.1.86 新下发的条目（新设计那批 flag 就在其中）。
-    ///
-    /// 所以：打开这个开关 + 打开「覆盖配置」清一次缓存（逼出 200）→ 下一次启动
-    /// 就能从调试日志里取到**你自己这版**的真 body（base64），把它转成新的
-    /// `.bnk` 换掉旧的即可（见 `SpotifyResponsePatcher.dumpCustomizeBodyIfEnabled`
-    /// 的说明，里面有解码命令）。
-    ///
-    /// ★★ 2026-10-30：设置页不再单独露这一颗 —— 它与 `dumpViewTree` 合并成
-    /// 「更详细的日志记录」（`detailedLogging`）。这个键保留作**迁移与备份**用。
+    //
+    // 「转储 customize 响应体」。**默认关**，只为**替换种子快照**而存在。
+    //
+    // 背景：flag 改写依赖 `customize` 的响应体，而我们只能改写**拿得到的** body。
+    // 现在用的是随包的 `.bnk` 当种子，它够了、但不够**精确** —— 那份快照里没有新版本
+    // 下发的条目（新设计那批 flag 就在其中）。
+    //
+    // 所以：打开这个开关 + 打开「覆盖配置」清一次缓存（逼出 200）→ 下一次启动
+    // 把它转成新的
+    // `.bnk` 换掉旧的即可（见 `SpotifyResponsePatcher.dumpCustomizeBodyIfEnabled`
+    // 的说明，里面有解码命令）。
+    //
+    // 设置页不再单独露这一颗 —— 它与 `dumpViewTree` 合并成「更详细的日志记录」
+    // （`detailedLogging`）。这个键保留作**迁移与备份**用。
     static var dumpCustomizeBody: Bool {
         get {
             container.object(forKey: dumpCustomizeBodyKey) as? Bool ?? false
@@ -1186,15 +1130,14 @@ extension UserDefaults {
 //
 // 移除原因：加入之后出现**稳定复现的启动崩溃**（EXC_BREAKPOINT/SIGTRAP，
 // `swift_unexpectedError`，崩在全局 userInitiated 队列上的一个 block 里，
-// 我们 dylib 有 4 帧未符号化；两份 .ips 的异常码同一地址 `0x19f2f6f54`）。
-// 它挡住了后续所有真机测试，所以先回退，事后再逐一排查。
+// 我们 dylib 有 4 帧未符号化）。它挡住了后续所有真机测试，所以先回退。
 //
-// ⚠️ 但它**已经产出了本轮最重要的结论**，回退不要把结论一起丢掉：
-//   · 卡片（与「关于艺人」并列那块）上显示的 provider 是 `EeveeForce…`
-//     —— 也就是我们自己写死的名字 ⇒ **卡片是被我们注入的 payload 驱动的**。
-//     Spotify 侧的"这首歌有没有词"（`has_lyrics` / 服务端判定 / 本地状态）
-//     **不是门控**。
-//   · `timeSynchronized = false` 的 payload → **建卡片**；
-//     `timeSynchronized = true` → Spotify 走"同步歌词"表现（单行）而**不建卡片**。
-//     两个面看起来是**互斥**的。
-//   · 推论：「合成行级时间轴」默认开启，正是把卡片挤掉的那个东西。
+// 回退不要把结论一起丢掉：
+// · 卡片（与「关于艺人」并列那块）上显示的 provider 是 `EeveeForce…`
+// —— 也就是我们自己写死的名字 ⇒ **卡片是被我们注入的 payload 驱动的**。
+// Spotify 侧的「这首歌有没有词」（`has_lyrics` / 服务端判定 / 本地状态）
+// **不是门控**。
+// · `timeSynchronized = false` 的 payload → **建卡片**；
+// `timeSynchronized = true` → Spotify 走「同步歌词」表现（单行）而**不建卡片**。
+// 两个面看起来是**互斥**的。
+// · 推论：「合成行级时间轴」默认开启，正是把卡片挤掉的那个东西。

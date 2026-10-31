@@ -6,19 +6,19 @@ import CoreImage
 // 「更好的逐词歌词」的背景：模糊版专辑封面 + 暗化渐变。
 //
 // 为什么不用 UIBlurEffect 去糊屏幕后面的东西、也不用 Metal shader：
-//   1. Spotify 自己那层歌词背景只暴露一个颜色（SPTNowPlayingBackgroundViewModel.color()），
-//      没有图也没有模糊视图，所以没有「现成的模糊封面」可以借；
-//   2. 实时 UIBlurEffect 会把盖在下面的原生歌词文字一起糊成灰影子，还得额外去隐藏原生视图；
-//   3. Apple Music 与 Spotify 的歌词背景本来都不是实时模糊，而是预渲染的封面模糊图 / 算出来的色，
-//      每首歌算一次就够，开销可以忽略。
+// 1. Spotify 自己那层歌词背景只暴露一个颜色（SPTNowPlayingBackgroundViewModel.color），
+// 没有图也没有模糊视图，所以没有「现成的模糊封面」可以借；
+// 2. 实时 UIBlurEffect 会把盖在下面的原生歌词文字一起糊成灰影子，还得额外去隐藏原生视图；
+// 3. Apple Music 与 Spotify 的歌词背景本来都不是实时模糊，而是预渲染的封面模糊图 / 算出来的色，
+// 每首歌算一次就够，开销可以忽略。
 //
 // 所以这里走「静态模糊封面」：拉原图 → 缩到小尺寸 → CIGaussianBlur → 存缓存 → 铺满 + 暗化。
-
-/// 从 SPTPlayerTrack 拿专辑封面。
-///
-/// `metadata()` 的键名在各 Spotify 版本/平台间不统一，所以按候选键逐个试，
-/// 并且把成功过的 URL 记下来 —— 只要这首歌曾经取到过，同一首歌的后续调用就有兜底，
-/// 不会因为某次 metadata 尚未就绪而闪回纯色背景。
+//
+// 从 SPTPlayerTrack 拿专辑封面。
+//
+// `metadata` 的键名在各 Spotify 版本/平台间不统一，所以按候选键逐个试，
+// 并且把成功过的 URL 记下来 —— 只要这首歌曾经取到过，同一首歌的后续调用就有兜底，
+// 不会因为某次 metadata 尚未就绪而闪回纯色背景。
 enum LyricsArtworkResolver {
     /// 候选顺序：越可能直接是 URL 的键越靠前。
     private static let urlKeys = [
@@ -51,7 +51,7 @@ enum LyricsArtworkResolver {
             // （覆写生效的话永远是 "true"），**不能**用来判断 Spotify 的原始判定。
             // 而且实测已经证明：**面 B 的门控根本不是这个键** —— 覆写每次都返回 true，
             // 面 B 依然只有 SECRET 出现。详见 `CustomLyrics+AllTracksLyrics.x.swift` 里
-            // `SPTPlayerTrackHook.metadata()` 上方的说明。
+            // `SPTPlayerTrackHook.metadata` 上方的说明。
             writeDebugLog("[Artwork] metadata keys: \(metadata.keys.sorted())")
         }
 
@@ -100,7 +100,7 @@ enum LyricsArtworkResolver {
 
     /// 把 Spotify 的 image 标识转成 CDN 地址。
     ///
-    /// 实测 `metadata()["image_url"]` 拿到的是 **`spotify:image:<hex>` URI**，不是 http(s) URL，
+    /// 实测 `metadata["image_url"]` 拿到的是 **`spotify:image:<hex>` URI**，不是 http(s) URL，
     /// 所以不能拿 `URL(string:)` 的 scheme 去判断（scheme 是 `spotify`，会被 http 校验拒掉）。
     /// 这里统一剥掉各种可能的前缀，只留 hex，再拼 `i.scdn.co`。
     private static func urlFromImageID(_ rawID: String) -> URL? {
@@ -131,13 +131,13 @@ enum LyricsArtworkResolver {
 }
 
 // MARK: - 背景视图
-
-/// 歌词页背景：模糊专辑封面 + 暗化渐变，外加一层材质（可选）压掉色带。
-///
-/// 层级（自下而上）：
-///   blurredImageView  —— 封面模糊图，aspectFill + 1.12 倍 overscan
-///   scrimView         —— UIBlurEffect(.systemUltraThinMaterialDark)，可选
-///   gradientLayer     —— 上/中/下三段暗化，中间最透（聚焦行所在区域）
+//
+// 歌词页背景：模糊专辑封面 + 暗化渐变，外加一层材质（可选）压掉色带。
+//
+// 层级（自下而上）：
+// blurredImageView —— 封面模糊图，aspectFill + 1.12 倍 overscan
+// scrimView —— UIBlurEffect(.systemUltraThinMaterialDark)，可选
+// gradientLayer —— 上/中/下三段暗化，中间最透（聚焦行所在区域）
 final class LyricsBackdropView: UIView {
 
     /// 背景的两种用法。
@@ -178,10 +178,10 @@ final class LyricsBackdropView: UIView {
     /// **那个理由是错的，而且它正好把封面涂死了**：
     ///
     /// 本视图的图层顺序是
-    ///   1. `backgroundColor`（不透明，图片路径下是 `.black`）
-    ///   2. `blurredImageView`（模糊封面）
-    ///   3. `scrimView`（可选系统材质）
-    ///   4. `gradientLayer` ← **盖在最上面**，用的就是这个 alpha
+    /// 1. `backgroundColor`（不透明，图片路径下是 `.black`）
+    /// 2. `blurredImageView`（模糊封面）
+    /// 3. `scrimView`（可选系统材质）
+    /// 4. `gradientLayer` ← **盖在最上面**，用的就是这个 alpha
     ///
     /// 也就是说"整块背景透不透"由**第 1 层**决定（那是 `isBackdropOpaque` 开关的事），
     /// 而这一层只是叠在封面**之上**的一层黑纱。alpha = 1.0 等于用一层纯黑把
@@ -286,12 +286,12 @@ final class LyricsBackdropView: UIView {
     }
 
     // MARK: 对外配置
-
-    /// 每次 rebuild（换歌 / 换数据）调用一次。
-    /// - Parameters:
-    ///   - baseColor: 兜底底色，来自 CustomLyrics 算好的原生歌词背景色。
-    ///   - showsArtwork: 是否使用模糊封面（用户选了静态色 / 原生色时为 false）。
-    ///   - material: 是否再叠一层系统材质压色带。
+    //
+    // 每次 rebuild（换歌 / 换数据）调用一次。
+    // - Parameters:
+    // - baseColor: 兜底底色，来自 CustomLyrics 算好的原生歌词背景色。
+    // - showsArtwork: 是否使用模糊封面（用户选了静态色 / 原生色时为 false）。
+    // - material: 是否再叠一层系统材质压色带。
     func configure(
         baseColor color: UIColor,
         showsArtwork: Bool,
@@ -323,8 +323,8 @@ final class LyricsBackdropView: UIView {
     }
 
     // MARK: 内部
-
-    /// 当前底色的感知亮度（0~1）。供文字层判断该用白字还是黑字。
+    //
+    // 当前底色的感知亮度（0~1）。供文字层判断该用白字还是黑字。
     var baseColorBrightness: CGFloat {
         var red: CGFloat = 0
         var green: CGFloat = 0
@@ -339,7 +339,7 @@ final class LyricsBackdropView: UIView {
     private var isLoading = false
 
     /// 系统材质层当前是否应该显示（由 `configure` 的 `showsArtwork && material` 决定）。
-    /// 记成状态是因为 `applyOpacity()` 也要用它 —— 材质层的显隐由两个条件共同决定。
+    /// 记成状态是因为 `applyOpacity` 也要用它 —— 材质层的显隐由两个条件共同决定。
     private var showsScrim = false
 
     /// 底色是否完全不透明。
@@ -443,8 +443,8 @@ final class LyricsBackdropView: UIView {
 }
 
 // MARK: - 模糊图缓存
-
-/// 每首歌只算一次模糊图，结果缓存在内存里（NSCache，系统可回收）。
+//
+// 每首歌只算一次模糊图，结果缓存在内存里（NSCache，系统可回收）。
 final class LyricsBackdropImageCache {
 
     static let shared = LyricsBackdropImageCache()

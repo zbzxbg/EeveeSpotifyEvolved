@@ -15,9 +15,9 @@ final class NowPlayingLyricsHost {
     var hostingController: UIHostingController<AppleMusicLyricsOverlayView>?
     var renderedVersion: Int = -1
     var renderedTrackId: String = ""
-    /// ★ 2026-10-11：这一份挂上去的是**静态档**（没有时间轴）吗 —— 换档要重挂。
+    /// 这一份挂上去的是**静态档**（没有时间轴）吗 —— 换档要重挂。
     var renderedStatic = false
-    /// ★ 2026-10-11：挂上去那一份的**罗马化开关指纹** —— 变了要就地重写行模型。
+    /// 挂上去那一份的**罗马化开关指纹** —— 变了要就地重写行模型。
     ///
     /// 为什么需要：罗马字是在 `LyricLinesAdapter` 里算进 `LyricLine` 的（按版本缓存），
     /// 而"日文/中文/韩文罗马化"三个开关只写 `UserDefaults`、**不会让版本号变**
@@ -33,8 +33,8 @@ final class NowPlayingLyricsHost {
 
     /// 罗马化那三个开关的**指纹**（逐语言，就是"歌词页面里的选择"）。
     ///
-    /// ⚠️ 实现**只有一份**：`romanizationSwitchesFingerprint()`（`LyricLinesAdapter.swift` 开头）——
-    /// 同一个判据抄两份，迟早只修一份（2026-10-11 那个 `seekToTappedLyricLine` 就是教训）。
+    /// ⚠️ 实现**只有一份**：`romanizationSwitchesFingerprint`（`LyricLinesAdapter.swift` 开头）——
+    /// 同一个判据抄两份，迟早只修一份那个 `seekToTappedLyricLine` 就是教训）。
     ///
     /// 它进 `isCurrent` ⇒ 用户一改开关，下一拍（≤0.3s）就会走 `updateLines` 把行模型重写一遍，
     /// 罗马字立刻出现/消失，不用等换歌。
@@ -72,17 +72,17 @@ final class NowPlayingLyricsHost {
             trackTitle: "",
             trackArtist: "",
             // ⚠️ **参数顺序必须与结构体里的属性声明顺序完全一致** —— SwiftUI 的逐成员初始化器
-            // 是位置敏感的（2026-10-05 CI 抓到：我把 `transparentBackdrop` 写在 `previewHeaderInset`
+            // 是位置敏感的CI 抓到：我把 `transparentBackdrop` 写在 `previewHeaderInset`
             // 后面，编译器报 "argument labels do not match"）。
             transparentBackdrop: true,
             clock: clock,
             projection: projection,
-            // ★ 2026-10-11：「没有时间轴」那一档 —— 见 `AppleMusicLyricsPage.isStatic`。
+            // 「没有时间轴」那一档 —— 见 `AppleMusicLyricsPage.isStatic`。
             isStatic: isStatic,
-            // ★★ 2026-10-17（用户：「**歌词进播放器**的时候也**没有额外的歌词结构**」）：
-            //   这一档 `showsProviderFooter` 必须是 `false`（不画署名页脚），而副唱以前被绑在它上面
-            //   ⇒ 用户看到的歌词永远没有"主词下方那一小行副唱"。这里显式打开：
-            //   署名是元信息、副唱是歌词内容，两件事分开。
+            // （**歌词进播放器**的时候也**没有额外的歌词结构**）：
+            // 这一档 `showsProviderFooter` 必须是 `false`（不画署名页脚），而副唱以前被绑在它上面
+            // ⇒ 的歌词永远没有"主词下方那一小行副唱"。这里显式打开：
+            // 署名是元信息、副唱是歌词内容，两件事分开。
             showsBackgroundVocals: true
         )
 
@@ -94,7 +94,7 @@ final class NowPlayingLyricsHost {
         hosting.view.accessibilityIdentifier = "eevee-npv-lyrics"
 
         container.addSubview(hosting.view)
-        // ★ 2026-10-24（照片 3：切歌词会闪一下黑底）：**加进容器之后再重申一次**。
+        // **加进容器之后再重申一次**。
         // 宿主视图在第一次布局前偶尔会把底色写成系统的不透明底（深色模式下就是一块黑），
         // 只设一次不够；`isOpaque = false` 一起写死，`alpha` 淡入才盖得住那一帧。
         hosting.view.backgroundColor = UIColor.clear
@@ -116,11 +116,10 @@ final class NowPlayingLyricsHost {
             hosting.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
-        // ★★ 2026-10-24（用户图片 4：歌词区是一块**比底子暗一档的矩形** + 上下"黑边"）：
-        //   SwiftUI 的 `HostingScrollView` 在 iOS 26 上带系统 `ScrollEdgeEffect`，
-        //   它会在滚动区上盖一层暗色/模糊；我们的宿主又是透明的 ⇒ 看起来就是一块
-        //   残留的卡片。这里把宿主的 scroll background 清掉、把上下 edge effect 藏掉
-        //   （只影响这一层，不碰 Spotify 自己的滚动视图）。
+        // SwiftUI 的 `HostingScrollView` 在 iOS 26 上带系统 `ScrollEdgeEffect`，
+        // 它会在滚动区上盖一层暗色/模糊；我们的宿主又是透明的 ⇒ 看起来就是一块
+        // 残留的卡片。这里把宿主的 scroll background 清掉、把上下 edge effect 藏掉
+        // （只影响这一层，不碰 Spotify 自己的滚动视图）。
         clearScrollChrome(in: hosting.view)
         DispatchQueue.main.async { [weak hosting] in
             guard let hosting else { return }
@@ -153,13 +152,13 @@ final class NowPlayingLyricsHost {
     }
 
     // MARK: - 宿主的滚动视图（iOS 26 的 ScrollEdgeEffect）
-
-    /// 把宿主里那个 SwiftUI `HostingScrollView` 的**底色**与**系统 scroll edge effect** 清掉。
-    ///
-    /// 为什么：这一层是"只有歌词"的透明层，宿主/容器都是 clear；但 iOS 26 的
-    /// `UIScrollView` 自带 `topEdgeEffect` / `bottomEdgeEffect`，会在滚动区上画一层
-    /// 暗色 + 模糊 ⇒ 屏幕上就是一块**比底子暗一档的矩形**（用户图片 4 的"残留"）
-    /// 和上下两条"黑边"（图片 3/4 的截图）。只碰这一棵子树，不 hook 全局 UIScrollView。
+    //
+    // 把宿主里那个 SwiftUI `HostingScrollView` 的**底色**与**系统 scroll edge effect** 清掉。
+    //
+    // 为什么：这一层是"只有歌词"的透明层，宿主/容器都是 clear；但 iOS 26 的
+    // `UIScrollView` 自带 `topEdgeEffect` / `bottomEdgeEffect`，会在滚动区上画一层
+    // 暗色 + 模糊 ⇒ 屏幕上就是一块**比底子暗一档的矩形**
+    // 和上下两条"黑边"。只碰这一棵子树，不 hook 全局 UIScrollView。
     private func clearScrollChrome(in root: UIView) {
         var queue: [UIView] = [root]
         var visited = 0
@@ -200,7 +199,7 @@ final class NowPlayingLyricsHost {
         projection.refresh()
     }
 
-    // MARK: - ★ 2026-10-08：逐词歌词改用**每帧时钟**
+    // MARK: -逐词歌词改用**每帧时钟**
 
     var usingPerFrameClock = false
 

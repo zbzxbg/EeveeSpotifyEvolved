@@ -3,18 +3,15 @@ import UIKit
 
 /// **只读探针**：专辑页 / 歌单页**头部封面到底是哪一个视图**。
 ///
-/// ── 为什么要它（2026-10-13 日志 77 实测）────────────────────────────────────
+/// ── 为什么要它
 ///
 /// 两个页面的头部是**两套东西**，不能照抄：
-///   · 歌单页：`Components.Header.UI.ArtworkImage`
-///     （日志 75 逐字：`23.ShadowContainer@76,62,262,262,id=Components.Header.UI.ArtworkImage`）；
-///   · 专辑页：`CreativeWorkPlatform` 那一族 —— 日志 77 逐字：
-///     `14.CreativeWorkTemplateView@0,0,414,896` /
-///     `15.HeaderNavigationBar@0,0,414,102` /
-///     `18.ElementView<Props, Any, Any>@0,0,414,477,id=CreativeWorkPlatform.Header` /
-///     `19.UIView@0,0,414,477,id=CreativeWorkPlatform.Components.UI.CreativeWorkHeader`。
-///     ⚠️ 而且**那个 Header 跟着滚动淡入淡出**（同一份日志里它依次是
-///     `alpha=-0.42 → 0.59 → -0.05`）⇒ 将来做 hero **不能跟它抢 alpha**，否则两边打架。
+/// · 歌单页：`Components.Header.UI.ArtworkImage`
+/// `14.CreativeWorkTemplateView@0,0,414,896` /
+/// `15.HeaderNavigationBar@0,0,414,102` /
+/// `18.ElementView<Props, Any, Any>@0,0,414,477,id=CreativeWorkPlatform.Header` /
+/// `19.UIView@0,0,414,477,id=CreativeWorkPlatform.Components.UI.CreativeWorkHeader`。
+/// ⚠️ 而且**那个 Header 跟着滚动淡入淡出**⇒ 将来做 hero **不能跟它抢 alpha**，否则两边打架。
 ///
 /// 卡点：**封面那一格没有 `accessibilityIdentifier`**，而 `ViewTreeDumper` 在**深度 24 截断**
 /// ⇒ 树里根本看不到它 ✗。所以补这一个探针：**只在那两个头部里往下走**（限深限数），
@@ -22,15 +19,9 @@ import UIKit
 ///
 /// ⚠️ **纯只读**：不 hook、不调用、不改任何东西。每 2s 看一眼；**每一页、每种头部最多报 2 次**，
 /// 看满 6 页（或行数用尽）就自己停，不留常驻节拍。
-///
-/// ★★ 2026-10-17：计数单位从「头部类型」改成「**页 + 头部**」。日志 104 实测：
-///    艺人页停留 6 秒就把 3 次配额全烧光（23:48:57 / 23:48:58 / 23:49:01 三次全在同一页），
-///    之后 23:49:17 进的那个**歌单页零命中** ⇒ §3 要等的「歌单页 page ids」永远等不到。
-///    现在每个**新页面**都会各拿到自己的配额，且 `page ids` 在候选封面**之前**打
-///    （撞上 `maxLines` 时不再被截掉那一段）。
 enum HeaderArtworkProbe {
 
-    /// 要找的头部容器（按 `accessibilityIdentifier` 认，日志 75 / 77 逐字核过）。
+    /// 要找的头部容器。
     private static let headerIdentifiers = [
         "CreativeWorkPlatform.Components.UI.CreativeWorkHeader",
         "Components.Header.UI.ArtworkImage",
@@ -47,7 +38,7 @@ enum HeaderArtworkProbe {
     private static let maxNodes = 120
 
     private static var timer: Timer?
-    /// key = "<页面 ObjectIdentifier>::<头部 identifier>"。
+    /// key = "<页面 ObjectIdentifier>：<头部 identifier>"。
     private static var reportsByTarget: [String: Int] = [:]
     private static var reportedPageIDs: Set<ObjectIdentifier> = []
     private static var lines = 0
@@ -77,7 +68,6 @@ enum HeaderArtworkProbe {
             guard let header = firstView(in: window, withIdentifier: identifier),
                   let page = pageAncestor(of: header, in: window) else { continue }
             // ⚠️ 计数键 =「页 + 头部」。按头部**类型**计数会让一个页把配额全烧掉
-            //    （日志 104：艺人页 3 次，歌单页 0 次，见文件头说明）。
             let key = "\(ObjectIdentifier(page))::\(identifier)"
             let reported = reportsByTarget[key] ?? 0
             guard reported < maxReportsPerTarget else { continue }
@@ -111,15 +101,15 @@ enum HeaderArtworkProbe {
                 + " id=\(identifier)"
         )
 
-        // ★★ 2026-10-17：**`page ids` 先打、候选封面后打**。
-        //   原来候选在前，一页的候选串能吃掉十几行 ⇒ 撞上 `maxLines` 时被截掉的正是
-        //   "整页 id" —— 而 §3（歌单页搜索条 / chips）要的就是那一段。
+        // **`page ids` 先打、候选封面后打**。
+        // 原来候选在前，一页的候选串能吃掉十几行 ⇒ 撞上 `maxLines` 时被截掉的正是
+        // "整页 id" —— 而 §3（歌单页搜索条 / chips）要的就是那一段。
         //
-        // 为什么整页 id 必须列（2026-10-13，日志 80 的教训）：歌单页的控制行
-        //   （分享 / ⋯ / 随机 / 播放）、curation pill 行（添加 / 编辑 / 排序 / 姓名和详情）
-        //   与"在此页面上查找"那个搜索框**都不在头部里** ⇒ 只摸头部的话，"藏掉 Spotify 那些按键"
-        //   在歌单页**一个都命中不了**（日志 80 里连一行 `hid … chrome` 都没有 ✗）。
-        //   这里只列 id + 尺寸 + 位置，限深限数。
+        // 为什么整页 id 必须列：歌单页的控制行
+        // （分享 / ⋯ / 随机 / 播放）、curation pill 行（添加 / 编辑 / 排序 / 姓名和详情）
+        // 与"在此页面上查找"那个搜索框**都不在头部里** ⇒ 只摸头部的话，"藏掉 Spotify 那些按键"
+        // 在歌单页**一个都命中不了**。
+        // 这里只列 id + 尺寸 + 位置，限深限数。
         var ids: [String] = []
         var seenIds = 0
         collectIdentifiers(in: page, of: window, depth: 0, seen: &seenIds, into: &ids)
@@ -175,8 +165,8 @@ enum HeaderArtworkProbe {
     }
 
     // MARK: - 小工具
-
-    /// 头部往上第一个"占满屏"的祖先 = 这一页（与 `EntityPageAppearance.pageRoot` 同一条几何）。
+    //
+    // 头部往上第一个"占满屏"的祖先 = 这一页（与 `EntityPageAppearance.pageRoot` 同一条几何）。
     private static func pageAncestor(of view: UIView, in window: UIView) -> UIView? {
         var node: UIView? = view
         while let current = node, current !== window {

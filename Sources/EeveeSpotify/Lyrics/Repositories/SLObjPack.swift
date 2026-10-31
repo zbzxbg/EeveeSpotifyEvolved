@@ -2,21 +2,21 @@ import Foundation
 
 // MARK: - SLObjPack decoder
 //
-// Swift port of the SLObjPack unpack() function from
+// Swift port of the SLObjPack unpack function from
 // spicetify-extension-main/src/utils/objpack.ts
 //
 // Wire format: the JSON-decoded value is a two-element array:
-//   [ valuesList: [primitive...], stream: [number...] ]
+// [ valuesList: [primitive...], stream: [number...] ]
 //
 // Opcodes in stream:
-//   n >= 0  → pointer into valuesList (returns a primitive)
-//   -1      → object:  next slot = key count N, then N key pointers, then N decoded values
-//   -2      → array:   next slot = item count N, then N decoded values
-//   -3      → schema array: next slot = item count N, next = key count K,
-//              then K key pointers, then N*K decoded values (batch of same-schema objects)
-//   -4      → empty array []
-//   -5      → single-element array: [ decode() ]
-//   -6      → empty object {}
+// n >= 0 → pointer into valuesList (returns a primitive)
+// -1 → object: next slot = key count N, then N key pointers, then N decoded values
+// -2 → array: next slot = item count N, then N decoded values
+// -3 → schema array: next slot = item count N, next = key count K,
+// then K key pointers, then N*K decoded values (batch of same-schema objects)
+// -4 → empty array []
+// -5 → single-element array: [ decode ]
+// -6 → empty object {}
 
 enum SLObjPackValue {
     case null

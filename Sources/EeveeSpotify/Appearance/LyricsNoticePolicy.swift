@@ -27,13 +27,13 @@ enum LyricsNoticePolicy {
     /// 判定这一拍要不要写说明、写哪一句。`nil` = **有歌词可画**，不写说明。
     ///
     /// - Parameters:
-    ///   - hasLines: 这一首**有行**（`currentLyricsDto?.lines.isEmpty == false`）。
-    ///   - hasDrawableLines: 行模型**画得出来**（`currentLines() != nil`）。
-    ///   - isInstrumental: 源**明确**说是纯音乐（不许拿"查无此歌"冒充它）。
-    ///   - hasAnyTimestamp: 行里**至少一行带时间**（只有 `hasLines` 为真时才有意义）。
-    ///   - hasUntimedText: 文本提得出来 ⇒ 可以画**静态歌词**（`currentUntimedLines() != nil`）。
-    ///   - isLookingUp: 数据还没到，而且**还在查**（`.idle` / `.loading`）；
-    ///     为假且没有行 ⇒ 查完了没有（`.failed` / `.found`）。
+    /// - hasLines: 这一首**有行**（`currentLyricsDto?.lines.isEmpty == false`）。
+    /// - hasDrawableLines: 行模型**画得出来**（`currentLines != nil`）。
+    /// - isInstrumental: 源**明确**说是纯音乐（不许拿"查无此歌"冒充它）。
+    /// - hasAnyTimestamp: 行里**至少一行带时间**（只有 `hasLines` 为真时才有意义）。
+    /// - hasUntimedText: 文本提得出来 ⇒ 可以画**静态歌词**（`currentUntimedLines != nil`）。
+    /// - isLookingUp: 数据还没到，而且**还在查**（`.idle` / `.loading`）；
+    /// 为假且没有行 ⇒ 查完了没有（`.failed` / `.found`）。
     static func notice(
         hasLines: Bool,
         hasDrawableLines: Bool,

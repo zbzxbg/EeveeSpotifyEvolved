@@ -48,7 +48,6 @@ class PetitLyricsRepository: LyricsRepository {
         return response
     }
     
-    //
     
     private func searchSong(_ title: String, artist: String) throws -> PetitSong {
         let response = try perform(
@@ -62,7 +61,6 @@ class PetitLyricsRepository: LyricsRepository {
         return song
     }
     
-    //
     
     private func getSong(_ lyricsId: Int, availableLyricsType: PetitLyricsType) throws -> PetitSong {
         var lyricsType: PetitLyricsType
@@ -85,7 +83,6 @@ class PetitLyricsRepository: LyricsRepository {
         return song
     }
     
-    //
     
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         writeDebugLog("[Petit] Fetching lyrics for \"\(query.title)\" - \(query.primaryArtist)")
@@ -117,11 +114,11 @@ class PetitLyricsRepository: LyricsRepository {
             // Petit 的 starttime/endtime 单位不稳定：行起始时间永远是毫秒（首词 starttime 即绝对 ms），
             // 但词时间在「厘秒格式」下是「相对行首的厘秒差」（存的整数值 = 行首 + 厘秒差，未 ×10）。
             //
-            // ★★ 2026-10-30（日志 999 / yanaginagi「終わりの世界から」）：**单位是逐行混用的**。
-            //   同一份 XML 里第 1 行每字 80（毫秒，80ms/字），第 2 行起每字 15 / 5（厘秒，
-            //   150ms / 50ms/字）。旧代码拿**整首**所有词间隔的中位数（5）判成"厘秒"，
-            //   于是第 1 行被 ×10 拉成 11.3 秒，压过第 2 行的 7.88 秒 ⇒ 两行同时亮、
-            //   逐词前沿也整体错位。单位必须**按行**判，行首始终按毫秒。
+            // **单位是逐行混用的**。
+            // 同一份 XML 里第 1 行每字 80（毫秒，80ms/字），第 2 行起每字 15 / 5（厘秒，
+            // 150ms / 50ms/字）。旧代码拿**整首**所有词间隔的中位数（5）判成"厘秒"，
+            // 于是第 1 行被 ×10 拉成 11.3 秒，压过第 2 行的 7.88 秒 ⇒ 两行同时亮、
+            // 逐词前沿也整体错位。单位必须**按行**判，行首始终按毫秒。
             let timedLines = lyrics.lines.filter { line in
                 if !line.linestring.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return true
@@ -131,7 +128,7 @@ class PetitLyricsRepository: LyricsRepository {
                     !(word.wordstring ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 }
             }
-            // ★★ 2026-10-30：把"压在前一行尾巴上的短句"并回前一行。
+            // 把"压在前一行尾巴上的短句"并回前一行。
             //
             // yanaginagi「終わりの世界から」里第 2 行「よ」被单独成行、起点写成 8120ms，
             // 而第 1 行按厘秒换算要到 10280ms 才唱完 ⇒ 两行同时亮。这种"≤3 字、≤2 词、
@@ -160,8 +157,8 @@ class PetitLyricsRepository: LyricsRepository {
             }
 
             let preserveWords = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
-            // ★ 2026-10-22（用户）：「Petit 会返回空白行歌词 ⇒ AM 呼吸灯过后（间奏）
-            //   是一行空白而不是下一行歌词」。
+            // 「Petit 会返回空白行歌词 ⇒ AM 呼吸灯过后（间奏）
+            // 是一行空白而不是下一行歌词」。
             //
             // Petit 的 wordsSynced 里，间奏/段落之间常夹着 `linestring` 为空（或纯空白）的
             // **行**；这些行通常还带一个 word 时间戳 ⇒ `LyricsLineDto.isBlankForDisplay`
@@ -189,8 +186,8 @@ class PetitLyricsRepository: LyricsRepository {
             
         case .plain:
             let stringLyrics = String(data: lyricsData, encoding: .utf8)!
-            // ★ 2026-10-22：同上 —— 纯文本也先丢掉空白行（原先靠 DTO 那层，但这里顺手
-            //   一起做，保证"空白行不进 payload"这条在源头就成立）。
+            // 同上 —— 纯文本也先丢掉空白行（原先靠 DTO 那层，但这里顺手
+            // 一起做，保证"空白行不进 payload"这条在源头就成立）。
             let lines = stringLyrics.components(separatedBy: .newlines)
                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             writeDebugLog("[Petit] Plain lyrics — \(lines.count) line(s)")
@@ -211,7 +208,7 @@ class PetitLyricsRepository: LyricsRepository {
 
     /// 检测**这一行**词级时间轴的单位：部分行是厘秒(1/100s)，部分行是毫秒。
     ///
-    /// ★★ 2026-10-30：原来按整首所有词的间隔中位数判，而 Petit 的上传数据**会在同一首里
+    /// 原来按整首所有词的间隔中位数判，而 Petit 的上传数据**会在同一首里
     /// 逐行混用单位**（yanaginagi「終わりの世界から」第 1 行 80ms/字，第 2 行起 15/5，
     /// 即 150ms / 50ms/字）。整首判成厘秒会把第 1 行拉长 10 倍、压到下一行上。
     ///
@@ -303,8 +300,8 @@ class PetitLyricsRepository: LyricsRepository {
 
     /// Petit 的 wordsSynced 词元素带 `wordstring`（词文本，含空格 token）+ starttime + endtime。
     ///
-    /// ★★ 2026-10-30（用户：「歌词某行缺字」）：渲染层的逐词文本是**用 syllables 拼出来的**
-    /// （`TimedLyricTextBuilder` 的 `characters.map(\.text).joined()`），不是用 `line.content`。
+    /// 渲染层的逐词文本是**用 syllables 拼出来的**
+    /// （`TimedLyricTextBuilder` 的 `characters.map(\.text).joined`），不是用 `line.content`。
     /// 所以只要词文本拼起来与 `linestring` 差一个字符，屏幕上就会**真的少一个字**
     /// （不是高亮没跟上）。这里立一条硬约束：拼出来的文本必须与 `linestring` 逐字相同；
     /// 不同就返回 nil，让这一行走行级同步、由 `content` 完整显示。

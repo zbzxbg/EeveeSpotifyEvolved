@@ -11,23 +11,23 @@ final class EntityPageHeaderButton: UIControl {
 
     /// 源控件取不到字形时的兜底（SF Symbol）。
     ///
-    /// ★ 2026-10-13（艺人页）：**换兜底字形要立刻生效** —— 艺人页那一颗是 Follow（文字按钮，
+    /// **换兜底字形要立刻生效** —— 艺人页那一颗是 Follow（文字按钮，
     /// `eeveeGlyph` 永远拿不到字形），"未关注 / 已关注"就是靠这里换一对 SF Symbol 表达的；
     /// 而 `feed(from:)` 在"源没变"时会早退，所以只能在这一侧的 didSet 里补。
     var fallbackGlyph: UIImage? {
         didSet {
-            // ★★ 2026-10-17（用户：「艺人页左边应该是一个 `i`…但现在是歌单的**随机播放**按钮」）：
-            //    **显式设的兜底字形必须立刻生效**。旧版这里是 `guard glyphView.image == nil` ——
-            //    而 `applyToArtistPage` 先 `updateRow`（那一刻 leading 还是 shuffle ⇒ `feed` 取到
-            //    shuffle 的字形），随后才 `setLeadingGlyph(info.circle)`，于是被这一句**挡掉**
-            //    ⇒ 那颗按钮永远是随机播放的样子（功能也没接对，见那边的说明）。
-            //    顺序上不会误伤：`updateRow` 里兜底是**先设、后 feed**，真字形仍然赢。
+            // （艺人页左边应该是一个 `i`…但现在是歌单的**随机播放**按钮）：
+            // **显式设的兜底字形必须立刻生效**。旧版这里是 `guard glyphView.image == nil` ——
+            // 而 `applyToArtistPage` 先 `updateRow`（那一刻 leading 还是 shuffle ⇒ `feed` 取到
+            // shuffle 的字形），随后才 `setLeadingGlyph(info.circle)`，于是被这一句**挡掉**
+            // ⇒ 那颗按钮永远是随机播放的样子（功能也没接对，见那边的说明）。
+            // 顺序上不会误伤：`updateRow` 里兜底是**先设、后 feed**，真字形仍然赢。
             guard let fallbackGlyph else { return }
             glyphView.image = fallbackGlyph.withRenderingMode(.alwaysTemplate)
         }
     }
-    /// ★★ 2026-10-16（用户：「播放按键右边的**添加艺人**显示有问题，改成中空的五角星（和 AM 一样）……
-    ///    点击之后（即收藏艺人之后）变成现在的绿色勾」）：
+    /// （播放按键右边的**添加艺人**显示有问题，改成中空的五角星（和 AM 一样）……
+    /// 点击之后（即收藏艺人之后）变成现在的绿色勾）：
     /// **强制用兜底字形**，不采用 Spotify 那颗按钮自己的图。只给艺人页的 Follow 用，
     /// 而且只在**未关注**那一档打开 —— 那颗在未关注时是"＋人"，用户要的是 AM 那种中空五角星；
     /// 已关注时保持原样（Spotify 自己的绿勾，取不到才用 `checkmark` 兜底）。
@@ -43,13 +43,12 @@ final class EntityPageHeaderButton: UIControl {
     var glyphColor: UIColor = .label
     var onGlyphColor: UIColor = .systemGreen
     /// 这颗按钮的**身份**（`shuffle` / `trailing`）—— 只进日志：用户报"右边那颗和别的按钮重合"时，
-    /// 日志里必须能分清他说的是哪一颗（见 `updateRow` 与 `tapped`）。
     var role = "side button"
 
-    /// ★★ 2026-10-18（用户：「如果未收藏艺人，点击收藏之后，按钮不会变绿，删除艺人之后，才会变绿」）：
+    /// （如果未收藏艺人，点击收藏之后，按钮不会变绿，删除艺人之后，才会变绿）：
     /// **点击之后**再去读一次源控件的状态。
     ///
-    /// 根因是时序：`tapped()` 第一句就 `refreshTint()`，而那一刻 Spotify **还没**把 Follow 的
+    /// 根因是时序：`tapped` 第一句就 `refreshTint`，而那一刻 Spotify **还没**把 Follow 的
     /// "已关注"写上去 —— 于是读到的是**点击前**的旧状态；之后如果页面没有新的布局回合，
     /// 这颗按钮就一直停在旧状态，直到下一次点击（于是"取消关注之后反而变绿"）。
     /// 这里在转发之后排几次复查，让状态跟上来（`refreshArtistFollow` 还会一起换字形）。
@@ -67,29 +66,22 @@ final class EntityPageHeaderButton: UIControl {
         refreshTint()
     }
 
-    /// ★★ 2026-10-16（用户：「歌单页右上角有一个**点不动的三点按键**」）：
+    /// （歌单页右上角有一个**点不动的三点按键**）：
     /// Spotify 那颗 `⋯` 是 `Encore.Button` 一族，菜单靠**它自己的交互**弹出来，不是 target/action ——
-    /// 日志 100 逐字：`fired: UIControl.touchUpInside`（转发"成功"了，界面一动不动）。
+    /// 界面一动不动）。
     /// ⇒ 这一颗**跳过第 ① 档**（送 target/action），直接走手势那一档（见 `eeveeFire` 的三档）。
     var skipsControlAction = false
 
-    /// ★★ 2026-10-17（用户：「点击后**跳转到关于艺人模块**」）：这一颗点下去要**先把源滚进视野**
+    /// （点击后**跳转到关于艺人模块**）：这一颗点下去要**先把源滚进视野**
     /// 再转发 —— 艺人页的"关于"（`SPTArtistAboutBiographyView`）在列表很下面，只转发不滚动的话
-    /// 用户什么都看不见。由调用方按需打开。
+    /// 什么都看不见。由调用方按需打开。
     var scrollsSourceIntoView = false
 
-    /// ★★ 2026-10-18 第二轮（用户：「点击 i 按键不会跳转到艺人介绍」）：**要不要用更宽一档的转发**
-    /// （`eeveeFireWide`：再往上 6 层找 tap + cell 的选中回调）。只有艺人页那颗 `i` 打开 ——
-    /// 别的按钮（play / shuffle / follow）本来就能用老三档走通，放宽只会多出误触的机会。
     var firesDeep = false
 
-    /// ★★ 2026-10-18 第三轮（用户：「要不点击 i 之后**不要 spotify 自己的了**，把原本的 spotify 的
-    /// 关于艺人 给去掉，**我们自己搞**」）：这一颗点下去**不转发给 Spotify**，改弹我们自己的
-    /// 「艺人介绍」（`ArtistBioSheet`）—— 正文从 Spotify 那一块里读走（`eeveeLongestText`），
-    /// 而列表里那一段已经被折成 0 高（`EntityPageSectionDrop.aboutArtistFragment`），页面上不留重复。
     var presentsOwnBio = false
 
-    /// ★★ 2026-10-17：**真正要转发的目标**（可以不是 `source`）。
+    /// **真正要转发的目标**（可以不是 `source`）。
     ///
     /// 艺人页左边那颗 `i` 就是这样：`source` 只负责"这颗按钮显示什么字形"（找不到"关于艺人"时
     /// 退回 shuffle 只是为了让按钮**有东西可显示**），而**动作**必须落在"关于艺人"上 ——
@@ -101,9 +93,9 @@ final class EntityPageHeaderButton: UIControl {
         super.init(frame: frame)
         glyphView.contentMode = .scaleAspectFit
         glyphView.isUserInteractionEnabled = false
-        // ★ 2026-10-13（用户：「旁边的按键小了点」）：两侧按钮嵌一圈玻璃圆（pw 的 `SGRGlassInside`
-        //   用的就是 `SGRGlassCircleSize = 44`）—— 字形 22pt 落在 44pt 玻璃圆里，分量才对得上
-        //   中间那颗胶囊。
+        // 两侧按钮嵌一圈玻璃圆（pw 的 `SGRGlassInside`
+        // 用的就是 `SGRGlassCircleSize = 44`）—— 字形 22pt 落在 44pt 玻璃圆里，分量才对得上
+        // 中间那颗胶囊。
         _ = eeveeInsertGlass(in: self, interactive: false)
         glass = subviews.first as? UIVisualEffectView
         addSubview(glyphView)
@@ -116,7 +108,7 @@ final class EntityPageHeaderButton: UIControl {
 
     /// 认一个 Spotify 的控件：记引用、取字形、取标签（顺带把无障碍名字带过来）。
     ///
-    /// ★ 2026-10-13（性能）：**同一个源控件只取一次字形** —— 这一拍在页头折叠的每一帧都会走到，
+    /// **同一个源控件只取一次字形** —— 这一拍在页头折叠的每一帧都会走到，
     /// 而"取字形"要遍历源控件的子树、还会 `withRenderingMode` 造一张新图。
     func feed(from control: UIView?) {
         let sameSource = (source as? NSObject) === (control as? NSObject)
@@ -132,9 +124,9 @@ final class EntityPageHeaderButton: UIControl {
     private func refreshTint() {
         let isOn = eeveeIsOn(source)
         glyphView.tintColor = isOn ? onGlyphColor : glyphColor
-        // ★★ 2026-10-17（用户：「如果艺人已经关注了，它应该是有**绿色描边**的，但现在没有」）：
-        //    Spotify 自己的"已关注"就是**绿字 + 绿描边**，AM 那颗收藏键也是描边态
-        //    ⇒ 把那圈玻璃的边描上（玻璃本身就是那颗 44pt 圆，圆角在 `layoutSubviews` 里跟着走）。
+        // （如果艺人已经关注了，它应该是有**绿色描边**的，但现在没有）：
+        // Spotify 自己的"已关注"就是**绿字 + 绿描边**，AM 那颗收藏键也是描边态
+        // ⇒ 把那圈玻璃的边描上（玻璃本身就是那颗 44pt 圆，圆角在 `layoutSubviews` 里跟着走）。
         if let glass {
             let width: CGFloat = isOn ? 1.5 : 0
             if glass.layer.borderWidth != width {
@@ -147,16 +139,14 @@ final class EntityPageHeaderButton: UIControl {
     @objc private func tapped() {
         refreshTint()
 
-        // ★★ 2026-10-18 第三轮（用户：「点击 i 之后不要 spotify 自己的了 … 我们自己搞」）：
-        //    艺人页这颗 `i` 现在**弹我们自己的"艺人介绍"**，不再往 Spotify 那一块转发。
         if presentsOwnBio {
             let name = EntityPageHeaderManager.currentArtistName
-            // 2026-10-18 晚（用户拍板）：**"不滚动就读简介"那一整套已删掉** —— 后台延后 1.5s 读 +
+            // 晚：**"不滚动就读简介"那一整套已删掉** —— 后台延后 1.5s 读 +
             // 每 1.5s 补读、点击时静默把列表翻一整趟 + 0.6s/1.6s 补扫，试过几轮都不成立
             // （那一段是懒加载的，不滚到就不建），而且每次都整页卡一下。
             // 现在只剩两件**零滚动**的事：
-            //   · 读缓存（用户滑到底之后被 `captureBioTextOnSight` 存下来的那份）；
-            //   · 认页面上**已经建出来**的那张卡（`eeveeArtistBioCard` 只做有界搜索）。
+            // · 读缓存（用户滑到底之后被 `captureBioTextOnSight` 存下来的那份）；
+            // · 认页面上**已经建出来**的那张卡（`eeveeArtistBioCard` 只做有界搜索）。
             // 都没有就照实弹占位符 —— 占位符里已经告诉用户"先滑到页面底部、再回来点"。
             var text = EntityPageHeaderManager.cachedBioText(for: name)
             if text == nil, let card = eeveeArtistBioCard(in: self) {
@@ -175,30 +165,26 @@ final class EntityPageHeaderButton: UIControl {
         // （否则目标缺失时就会去点那颗只负责显示字形的 shuffle —— 见 `fireTarget` 的说明）。
         var target = fireTarget ?? (scrollsSourceIntoView ? nil : source)
         if target == nil, scrollsSourceIntoView {
-            // ★★ 2026-10-18 第三轮（用户：「按下 i 之后还是没有跳转到 艺人介绍」）：
-            //    目标**还没建出来** ⇒ 先把列表扫一遍把它逼出来（见 `eeveeMaterialiseBio`），
-            //    不再只是"滚一屏"（那要用户连点好几次，而且滚过头就找不回来了）。
             target = eeveeMaterialiseBio(from: self)
         }
         var scrolled = false
-        // ★★ 2026-10-18：右上角那颗 `⋯` 连续两版都"转发成功、界面不动" ⇒ 第一次点击时把它的
-        //    target/action、手势、`UIMenu`、子控件各有哪些**逐项打进日志**（只打一次）。
+        // 右上角那颗 `⋯` 连续两版都"转发成功、界面不动" ⇒ 第一次点击时把它的
+        // target/action、手势、`UIMenu`、子控件各有哪些**逐项打进日志**（只打一次）。
         if role == "more", !Self.didLogMoreClickability {
             Self.didLogMoreClickability = true
             writeDebugLog(
                 "[EntityPageHeader] ⋯ clickability — \(eeveeDescribeClickability(target ?? source))"
             )
         }
-        // ★★ 2026-10-17（用户：「这三个点这部分能不能**直接抄 pw 的**」）：
-        //    `⋯` 现在**只走 pw 那条** —— `eeveeActivate` 是 `SGRActivate` / `SGRFire` 的逐行移植
-        //    （子树里第一颗 `UIControl` → `primaryActionTriggered` → `touchUpInside` → 无障碍）。
-        //    它只要发出过任何一个**控制事件**就算这一档用掉了：**不再叠**我们自己那串档位，
-        //    否则一次点击会变成两次；只有它连事件都没发（只拿到 `activate.accessibility(false)`）时，
-        //    才退回 `eeveeFire` / `eeveeFireWide` 那串兜底（手势 / 祖先 / cell 选中）。
+        // （这三个点这部分能不能**直接抄 pw 的**）：
+        // `⋯` 现在**只走 pw 那条** —— `eeveeActivate` 是 `SGRActivate` / `SGRFire` 的逐行移植
+        // （子树里第一颗 `UIControl` → `primaryActionTriggered` → `touchUpInside` → 无障碍）。
+        // 它只要发出过任何一个**控制事件**就算这一档用掉了：**不再叠**我们自己那串档位，
+        // 否则一次点击会变成两次；只有它连事件都没发（只拿到 `activate.accessibility(false)`）时，
+        // 才退回 `eeveeFire` / `eeveeFireWide` 那串兜底（手势 / 祖先 / cell 选中）。
         //
-        //    为什么不再用"跳过 target/action"那条（`skipsControlAction`）：日志 109 逐字
-        //    `targets=[touchUpInside=…]` 而 `fired: NOTHING` —— 是我们跳过了唯一有注册的那一档。
-        // ★ 2026-10-16：其余按钮仍走老三档（play / shuffle / follow 本来就通，不冒险改）。
+        // `targets=[touchUpInside=…]` 而 `fired: NOTHING` —— 是我们跳过了唯一有注册的那一档。
+        // 其余按钮仍走老三档（play / shuffle / follow 本来就通，不冒险改）。
         var path = target == nil
             ? "NOTHING (no target at all — this button has no source)"
             : "NOTHING (the target has no action and no tap recogniser)"
@@ -215,7 +201,7 @@ final class EntityPageHeaderButton: UIControl {
                         : eeveeFire(target, skippingControlAction: true)) ?? path
                 }
             } else {
-                // ★★ 2026-10-18：那颗 `i` 走"宽转发"（祖先链上的 tap + cell 的选中回调），见 `eeveeFireWide`。
+                // 那颗 `i` 走"宽转发"（祖先链上的 tap + cell 的选中回调），见 `eeveeFireWide`。
                 path = (firesDeep
                     ? eeveeFireWide(target, skippingControlAction: skipsControlAction)
                     : eeveeFire(target, skippingControlAction: skipsControlAction)) ?? path
@@ -228,16 +214,16 @@ final class EntityPageHeaderButton: UIControl {
                 : "NOTHING (the target is not built and the page has nothing to scroll)"
         }
 
-        // ★★ 2026-10-18：`⋯` 还有最后一档 —— **无障碍激活**。很多自绘控件（包括 Encore 的）
-        //    把"点一下"实现成 `accessibilityActivate()`（VoiceOver 用的就是这条），而 target/action
-        //    与手势都可能没有。只在前面几档全部落空时试，返回 true/false 都记进日志。
+        // `⋯` 还有最后一档 —— **无障碍激活**。很多自绘控件（包括 Encore 的）
+        // 把"点一下"实现成 `accessibilityActivate`（VoiceOver 用的就是这条），而 target/action
+        // 与手势都可能没有。只在前面几档全部落空时试，返回 true/false 都记进日志。
         if role == "more", path.hasPrefix("NOTHING"), let target {
             let activated = target.accessibilityActivate()
             path += activated ? " | accessibilityActivate=true" : " | accessibilityActivate=false"
         }
 
         // ⚠️ 不要在这些字符串**插值里写引号**：`swift_member_check.py` 的去字符串扫描器会提前
-        //    收尾、把剩下的英文当裸标识符误报（2026-10-17 踩过，见 `EntityPageStatusBar`）。先拼好。
+        // 收尾、把剩下的英文当裸标识符误报踩过，见 `EntityPageStatusBar`）。先拼好。
         let kind = (target ?? source).map { NSStringFromClass(type(of: $0)) } ?? "-"
         let isControl = (target ?? source) as? UIControl != nil
         let signals = eeveeOnSignals(source)
@@ -246,8 +232,8 @@ final class EntityPageHeaderButton: UIControl {
                 + " scrolledIntoView=\(scrolled), fired: \(path); \(signals)"
         )
 
-        // ★ 2026-10-17（第二版）：`⋯` 点完 0.9s 后再数一次"弹层迹象"。
-        //   前几版日志只能说明事件发出去了，说不出菜单弹没弹（见 `eeveePopupSnapshot`）。
+        // `⋯` 点完 0.9s 后再数一次"弹层迹象"。
+        // 前几版日志只能说明事件发出去了，说不出菜单弹没弹（见 `eeveePopupSnapshot`）。
         if role == "more" {
             let before = eeveePopupSnapshot()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
@@ -261,8 +247,8 @@ final class EntityPageHeaderButton: UIControl {
             }
         }
 
-        // ★★ 2026-10-18：点击之后源控件的状态才变（Follow 最明显，见 `afterFire`）。
-        //    别只靠"下一次布局回合"——艺人页关注之后不一定还会布局一次。
+        // 点击之后源控件的状态才变（Follow 最明显，见 `afterFire`）。
+        // 别只靠"下一次布局回合"——艺人页关注之后不一定还会布局一次。
         if let afterFire {
             for delay in Self.afterFireDelays {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
@@ -301,12 +287,12 @@ final class EntityPageHeaderButton: UIControl {
 
 /// 中间那颗播放键。**和左右两颗同一套**：透明玻璃圆 + 实心三角字形。
 ///
-/// ★★ 2026-10-18（用户：「回退点击播放按键的播放按钮变透明的设计（设计成和旁边那两个按键
-///    一样的透明背景，只有线条吧）」→ 随后「这个播放按钮的图标太丑了，换回之前那个图标」）：
-///    第一版把字形画成**中空描边三角**，用户看真机后觉得太丑 ⇒ **字形换回 SF Symbol
-///    `play.fill`（实心三角）**；背景仍保持用户点名要的"和两侧一样的透明玻璃圆"，
-///    不再恢复白色圆盘。
-///    ⚠️ 玻璃仍是 `eeveeMakeLightGlassView`（和两侧同一个函数），不是另写一套。
+/// （回退点击播放按键的播放按钮变透明的设计（设计成和旁边那两个按键
+/// 一样的透明背景，只有线条吧）→ 随后「这个播放按钮的图标太丑了，换回之前那个图标」）：
+/// 第一版把字形画成**中空描边三角**，用户看真机后觉得太丑 ⇒ **字形换回 SF Symbol
+/// `play.fill`（实心三角）**；背景仍保持用户点名要的"和两侧一样的透明玻璃圆"，
+/// 不再恢复白色圆盘。
+/// ⚠️ 玻璃仍是 `eeveeMakeLightGlassView`（和两侧同一个函数），不是另写一套。
 final class EntityPageHeaderPlay: UIControl {
 
     private let glyphView = UIImageView()
@@ -318,7 +304,7 @@ final class EntityPageHeaderPlay: UIControl {
     override init(frame: CGRect) {
         super.init(frame: frame)
         // 透明背景：底下的封面 / 取色底直接透出来，靠玻璃圆与白线字形保持可读性
-        //（两侧那两颗就是这么做的，见 `EntityPageHeaderButton.init`）。
+        // （两侧那两颗就是这么做的，见 `EntityPageHeaderButton.init`）。
         backgroundColor = .clear
         layer.masksToBounds = true
         _ = eeveeInsertGlass(in: self, interactive: true)
@@ -327,8 +313,8 @@ final class EntityPageHeaderPlay: UIControl {
         glyphView.contentMode = .scaleAspectFit
         // 两侧字形用的是 `.label`（深色界面上就是白）—— 中间这颗跟它们走，不再用黑色。
         glyphView.tintColor = .label
-        // ★★ 2026-10-18：字形回到**实心三角**（`play.fill`）。上一版的中空描边三角用户看真机后
-        //    说"太丑"，这里不再自己画图，直接用系统符号（加粗一档，放在 52pt 画布里分量够）。
+        // 字形回到**实心三角**（`play.fill`）。上一版的中空描边三角用户看真机后
+        // 说"太丑"，这里不再自己画图，直接用系统符号（加粗一档，放在 52pt 画布里分量够）。
         glyphView.image = Self.playGlyphImage()
         glyphView.isUserInteractionEnabled = false
         addSubview(glyphView)
@@ -362,11 +348,10 @@ final class EntityPageHeaderPlay: UIControl {
         }
     }
 
-    /// ★★ 2026-10-17：**长按 = 随机播放**。
+    /// **长按 = 随机播放**。
     ///
-    /// 左边那颗位置让给 AM 的 `i`（"关于艺人"）之后，随机播放就没地方点了 —— 用户早就问过
-    /// 「左边还是点不了的随机播放上哪点去」（见 `HANDOFF_2026-10-13_..._EntityPages-AM.md` §四.2），
-    /// 当时定下的方案就是这一条。长按识别成功会**取消**这次触摸 ⇒ `touchUpInside` 不会跟着发，
+    /// 左边那颗位置让给 AM 的 `i`（"关于艺人"）之后，随机播放就没地方点了 ——
+    /// 方案就是这一条：长按识别成功会**取消**这次触摸 ⇒ `touchUpInside` 不会跟着发，
     /// 所以"轻点 = 播放、长按 = 随机"不会互相打架。
     private weak var longPressSource: UIView?
     private var longPress: UILongPressGestureRecognizer?
@@ -401,22 +386,22 @@ final class EntityPageHeaderPlay: UIControl {
             glass.layer.cornerRadius = bounds.height / 2
         }
 
-        // ★ 2026-10-13（照 AM）：**形状决定形态**。正方形时是"大圆 ▶"，扁的时是"▶ 播放"胶囊。
+        // **形状决定形态**。正方形时是"大圆 ▶"，扁的时是"▶ 播放"胶囊。
         //
-        // ★★ 2026-10-19（用户：「**那个槽里面就不需要文字了**」）：胶囊现在**只画字形**，
-        //    文字永远隐藏 —— 所以那颗 `wordLabel` 只留作无障碍文案，不再参与排版。
-        //    形状仍然由布局决定（`EntityPageHeaderMetrics.playMinWidth` × `rowHeight`）。
+        // （**那个槽里面就不需要文字了**）：胶囊现在**只画字形**，
+        // 文字永远隐藏 —— 所以那颗 `wordLabel` 只留作无障碍文案，不再参与排版。
+        // 形状仍然由布局决定（`EntityPageHeaderMetrics.playMinWidth` × `rowHeight`）。
         let isCircle = abs(bounds.width - bounds.height) < 8
         if !wordLabel.isHidden { wordLabel.isHidden = true }
 
-        // ★★ 2026-10-18：**不再有白底**。两种形态都只留玻璃圆 + 线条字形，
-        //    与左右两颗完全同材质（见类型说明）——所以这里连"圆形纯白 / 胶囊白 90%"那条分支一起删了。
+        // **不再有白底**。两种形态都只留玻璃圆 + 线条字形，
+        // 与左右两颗完全同材质（见类型说明）——所以这里连"圆形纯白 / 胶囊白 90%"那条分支一起删了。
         if backgroundColor != .clear { backgroundColor = .clear }
         glass?.alpha = 1
 
         // 字形**居中**（槽里没有文字要避让）。
-        // ★★ 2026-10-06（用户：「播放按钮里面的按键**不够大**」）：圆形态 52；
-        //    胶囊形态从 24 抬到 **28** —— 槽变宽之后 24 显得偏小（2026-10-19）。
+        // （播放按钮里面的按键**不够大**）：圆形态 52；
+        // 胶囊形态从 24 抬到 **28** —— 槽变宽之后 24 显得偏小。
         let glyphSide: CGFloat = isCircle ? 52 : 28
         let glyphWidth = glyphView.image == nil ? 0 : glyphSide
         let startX = round((bounds.width - glyphWidth) / 2)
@@ -427,25 +412,25 @@ final class EntityPageHeaderPlay: UIControl {
 }
 
 // MARK: - 「最新发布」小卡片
-
-/// AM 艺人页三颗按钮下面那张卡片（用户 2026-10-17，图片 136）：
-///
-/// ```
-/// ┌────────────────────────────────────┐
-/// │ [封面]  2026年8月22日               │
-/// │         空耳 - Single               │
-/// │         2 首歌曲                     │
-/// └────────────────────────────────────┘
-/// ```
-///
-/// 数据在 `ArtistLatestReleaseSource`（iTunes 目录，**不需要令牌**，实测与图片 136 逐字一致）。
-/// 这一颗只负责画。
-///
-/// ★★ 2026-10-17（用户：「点击那个卡片应该是**跳转到对应的专辑**，而不是全部歌曲」）：
-/// 卡片**可点**，但**不接受"我们自己编一个目标"** —— 点下去由 `EntityPageHeaderManager`
-/// 把点击**转发给页面里那一格**（`eeveeSelectAncestorCell`，走 `collectionView(_:didSelectItemAt:)`，
-/// 就是真人点那张卡的那一条）。数据来自苹果目录那条兜底时没有 Spotify 目标 ⇒ 那时卡片不可点
-/// （`isTappable = false`，不留"看得见、点不动"的控件）。
+//
+// AM 艺人页三颗按钮下面那张卡片：
+//
+// ```
+// ┌────────────────────────────────────┐
+// │ [封面]  2026年8月22日               │
+// │         空耳 - Single               │
+// │         2 首歌曲                     │
+// └────────────────────────────────────┘
+// ```
+//
+// 数据在 `ArtistLatestReleaseSource`。
+// 这一颗只负责画。
+//
+// （点击那个卡片应该是**跳转到对应的专辑**，而不是全部歌曲）：
+// 卡片**可点**，但**不接受"我们自己编一个目标"** —— 点下去由 `EntityPageHeaderManager`
+// 把点击**转发给页面里那一格**（`eeveeSelectAncestorCell`，走 `collectionView(_:didSelectItemAt:)`，
+// 就是真人点那张卡的那一条）。数据来自苹果目录那条兜底时没有 Spotify 目标 ⇒ 那时卡片不可点
+// （`isTappable = false`，不留"看得见、点不动"的控件）。
 final class EntityPageHeaderReleaseCard: UIView {
 
     /// 高度与"卡片之间的间距"（`EntityPageHeaderView` 排版要用）。
@@ -540,8 +525,8 @@ final class EntityPageHeaderReleaseCard: UIView {
         artwork: UIImage?,
         artworkURL: URL?
     ) {
-        // ★ 2026-10-31：卡片挂到页头下面之后，这一条每一拍都会被调（`applyPick` 每拍都跑）——
-        //   不拦一下会每帧取消并重启一次封面下载。
+        // 卡片挂到页头下面之后，这一条每一拍都会被调（`applyPick` 每拍都跑）——
+        // 不拦一下会每帧取消并重启一次封面下载。
         let signature = [date ?? "", title, meta ?? "", artworkURL?.absoluteString ?? "-"]
             .joined(separator: "|")
         if artwork == nil, signature == lastContentSignature { return }
@@ -611,11 +596,11 @@ final class EntityPageHeaderReleaseCard: UIView {
 }
 
 // MARK: - 页头本体
-
-/// 那一块文字与按钮。输入永远是"文本 + Spotify 自己的控件"，自己不持有任何 Spotify 状态。
+//
+// 那一块文字与按钮。输入永远是"文本 + Spotify 自己的控件"，自己不持有任何 Spotify 状态。
 final class EntityPageHeaderView: UIView {
 
-    /// ★ 2026-10-13（AM 的标题**很大** —— photo_1 里 `Abel Tesfaye` 一个人占掉大半个屏宽）：
+    /// （AM 的标题**很大** —— photo_1 里 `Abel Tesfaye` 一个人占掉大半个屏宽）：
     /// 22 → **34**，缩放基准同时从 `.title2` 换成 `.largeTitle`（`makeLabel` 走 `UIFontMetrics`，
     /// 基准不换的话辅助功能字号下的比例会不对）。
     private let titleLabel = EntityPageHeaderView.makeLabel(
@@ -624,7 +609,7 @@ final class EntityPageHeaderView: UIView {
     private let creatorLabel = EntityPageHeaderView.makeLabel(
         style: .body, size: 17, weight: .regular, color: .secondaryLabel, lines: 1, alignment: .center
     )
-    /// ★★ 2026-10-16（用户：「现在的**每月有 x 名听众**可能看不清」）：原来这一行用的是
+    /// （现在的**每月有 x 名听众**可能看不清）：原来这一行用的是
     /// `.tertiaryLabel` —— 深色模式下就是 **白 30%**，压在我们那块灰底上几乎读不出来。
     /// 抬到 `.secondaryLabel`（白 60%）：AM 的 meta 行也是"比标题弱一档、但看得清"，
     /// 而 `.tertiaryLabel` 那一档是给**禁用态**用的。歌单/专辑页的"12 首歌曲 · 45 分钟"共用这颗。
@@ -681,8 +666,8 @@ final class EntityPageHeaderView: UIView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     // MARK: 输入
-
-    /// 文本变了才重排。返回是否变了（调用方用它决定要不要再走一遍）。
+    //
+    // 文本变了才重排。返回是否变了（调用方用它决定要不要再走一遍）。
     @discardableResult
     func update(title: String, creator: String, length: String, about: String) -> Bool {
         var changed = false
@@ -704,7 +689,7 @@ final class EntityPageHeaderView: UIView {
     /// 三颗按钮各认一个 Spotify 控件；`nil` = 那颗不显示。
     ///
     /// - Parameter trailingPrefersFallback: 右那颗**只用兜底字形**（见 `prefersFallbackGlyph`）——
-    ///   艺人页未关注时要用中空五角星，不能采用 Spotify 那颗自己的"＋人"图。
+    /// 艺人页未关注时要用中空五角星，不能采用 Spotify 那颗自己的"＋人"图。
     func updateRow(
         shuffle: UIView?,
         play: UIView?,
@@ -712,9 +697,8 @@ final class EntityPageHeaderView: UIView {
         trailingFallback: UIImage?,
         trailingPrefersFallback: Bool = false
     ) {
-        // ★ 2026-10-13：给两颗按钮**标身份** —— 日志 89 只有一行 `header button tapped (source found)`，
-        //   分不出用户点的是左边那颗还是右边那颗（他报告"右边那颗和原生按钮重合"时，
-        //   这一条恰恰是最该看清的）。下一份日志会写成 `tapped (role trailing, source …)`。
+        // 分不出用户点的是左边那颗还是右边那颗（他报告"右边那颗和原生按钮重合"时，
+        // 这一条恰恰是最该看清的）。下一份日志会写成 `tapped (role trailing, source …)`。
         shuffleButton.role = "shuffle"
         trailingButton.role = "trailing"
         trailingButton.fallbackGlyph = trailingFallback
@@ -734,7 +718,7 @@ final class EntityPageHeaderView: UIView {
         }
     }
 
-    /// ★★ 2026-10-18：右边那颗 Follow 点击之后要**重新读一次**状态并换字形/描边。
+    /// 右边那颗 Follow 点击之后要**重新读一次**状态并换字形/描边。
     /// 由 `EntityPageHeaderManager` 在艺人页上装；别的页面不装（`afterFire` 保持 nil）。
     var onTrailingTapped: (() -> Void)? {
         didSet { trailingButton.afterFire = onTrailingTapped }
@@ -743,9 +727,9 @@ final class EntityPageHeaderView: UIView {
     /// 把"关 / 开"两档的兜底字形与绿色描边一起刷新（艺人页 Follow）。
     ///
     /// - Parameters:
-    ///   - followed: 状态读出来是"已关注"吗（`eeveeIsOn`）。
-    ///   - glyph: 这一档该画的兜底字形（`star` / `checkmark`）。
-    ///   - source: 当前那颗 Follow 控件（可能和上一拍不是同一个实例）。
+    /// - followed: 状态读出来是"已关注"吗（`eeveeIsOn`）。
+    /// - glyph: 这一档该画的兜底字形（`star` / `checkmark`）。
+    /// - source: 当前那颗 Follow 控件（可能和上一拍不是同一个实例）。
     func updateFollow(followed: Bool, glyph: UIImage?, source: UIView?) {
         trailingButton.fallbackGlyph = glyph
         trailingButton.prefersFallbackGlyph = !followed
@@ -754,12 +738,12 @@ final class EntityPageHeaderView: UIView {
         trailingButton.refreshTintNow()
     }
 
-    /// ★★ 2026-10-17：**「最新发布」小卡片**（艺人页三颗按钮下面那张）。
+    /// **「最新发布」小卡片**（艺人页三颗按钮下面那张）。
     ///
     /// 数据由 `EntityPageHeaderManager` 给（首选**页面自己那一格** —— 见 `captureLatestRelease`；
     /// 苹果目录只在页面读不到时兜底）。这一侧只把数据转给 manager —— 卡片**不再画在本视图里**。
     ///
-    /// ★★ 2026-10-31（照片 168「自画卡片有入侵」）：卡片原来画在**页头内部**（贴底排的最后一项），
+    /// 卡片原来画在**页头内部**（贴底排的最后一项），
     /// 页头因此要长高 106pt；而 Spotify 的页头是 `UIStackView` 的一个 arranged subview，
     /// 我们改 `frame` 并不会让下面的列表跟着让位 ⇒ 卡片正好压在列表前两行上。
     /// 现在卡片挂到**页头下面的那一格**（见 `EntityPageHeaderManager.setReleaseCard`），
@@ -783,21 +767,21 @@ final class EntityPageHeaderView: UIView {
         )
     }
 
-    /// ★★ 2026-10-17：**长按播放键 = 随机播放**（见 `EntityPageHeaderPlay.feedLongPress` 的说明）。
+    /// **长按播放键 = 随机播放**（见 `EntityPageHeaderPlay.feedLongPress` 的说明）。
     /// 三个页面都接上：歌单/专辑页左边本来就是 shuffle，多一个入口无害；艺人页那颗位置让给 `i` 之后，
     /// 这里就是随机播放唯一的入口。
     func updatePlayLongPress(_ shuffle: UIView?) {
         playButton.feedLongPress(shuffle)
     }
 
-    /// ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：
+    /// （播放页左边的按钮不应该是那个 `i` 吗，还没改？）：
     /// 左边那颗（AM 的 **Info**）在 Spotify 侧对应的是**艺人简介卡**，那颗卡上没有图标可镜像
     /// ⇒ 由调用方**显式给一个**字形（`info.circle`）。中间与右边那两颗不经过这里。
     func setLeadingGlyph(_ glyph: UIImage?) {
         shuffleButton.fallbackGlyph = glyph
     }
 
-    /// ★★ 2026-10-17（用户：「点击（`i`）后**跳转到**关于艺人模块」）：左边那颗点下去要**先把源
+    /// （点击（`i`）后**跳转到**关于艺人模块）：左边那颗点下去要**先把源
     /// 滚进视野**再转发 —— 艺人页的"关于"（`SPTArtistAboutBiographyView`）在列表很下面。
     ///
     /// `target` 为 `nil`（那一块还没建出来）时**动作也不落在 `source` 上**（见 `fireTarget` 的说明）。
@@ -805,9 +789,8 @@ final class EntityPageHeaderView: UIView {
         shuffleButton.fireTarget = target
         shuffleButton.fallbackGlyph = glyph
         shuffleButton.scrollsSourceIntoView = true
-        // ★★ 2026-10-18：这一颗（艺人页的 `i`）要**宽转发** —— 见 `eeveeFireWide` 那段。
+        // 这一颗（艺人页的 `i`）要**宽转发** —— 见 `eeveeFireWide` 那段。
         shuffleButton.firesDeep = true
-        // ★★ 2026-10-18 第三轮：而且它**不转发**了 —— 弹我们自己的那张（见 `presentsOwnBio`）。
         shuffleButton.presentsOwnBio = true
     }
 
@@ -827,8 +810,8 @@ final class EntityPageHeaderView: UIView {
     }
 
     // MARK: 布局（贴底排）
-
-    /// 内容从标题顶到描述底的高度。`apply` 用它算"封面该伸到哪"。
+    //
+    // 内容从标题顶到描述底的高度。`apply` 用它算"封面该伸到哪"。
     func contentHeight(forWidth width: CGFloat) -> CGFloat {
         let text = max(0, width - 2 * EntityPageHeaderMetrics.side)
         var height: CGFloat = 0
@@ -840,9 +823,9 @@ final class EntityPageHeaderView: UIView {
             previous = label
         }
         if previous != nil { height += EntityPageHeaderMetrics.rowAbove }
-        // ★ 2026-10-13（照 AM）：按钮行的高度取三颗里**最高**的那颗。
-        // ★★ 2026-10-19：中间那颗改回**胶囊**（`playMinWidth` × `rowHeight`），不再比两侧高一档
-        //   ⇒ 整行高度就是两侧小圆的直径（见下面 `layoutSubviews` 里那段说明）。
+        // 按钮行的高度取三颗里**最高**的那颗。
+        // 中间那颗改回**胶囊**（`playMinWidth` × `rowHeight`），不再比两侧高一档
+        // ⇒ 整行高度就是两侧小圆的直径（见下面 `layoutSubviews` 里那段说明）。
         height += EntityPageHeaderMetrics.rowHeight
         if !aboutLabel.isHidden {
             height += EntityPageHeaderMetrics.aboutAbove
@@ -851,9 +834,9 @@ final class EntityPageHeaderView: UIView {
         return height
     }
 
-    /// ★ 2026-10-17：**只在会缩的页头上启用**上面那条渐隐。
+    /// **只在会缩的页头上启用**上面那条渐隐。
     ///
-    /// ⚠️ 照片 124 的教训：这条本来是给**艺人页**写的（那边 `HeaderContainer` 会从 520pt 缩到 100pt
+    /// ⚠️ 的教训：这条本来是给**艺人页**写的（那边 `HeaderContainer` 会从 520pt 缩到 100pt
     /// 的导航栏），但我无条件打开了 —— 而歌单页的 `PL.Header` **根本不会缩**，于是某一拍
     /// `bounds.height` 还没定下来时算出的 `fade = 0` 被留在那儿，**整块页头（标题 + 三颗按钮）
     /// 就此消失**，只剩 Spotify 自己的搜索框和 pill 行露在外面。
@@ -861,22 +844,17 @@ final class EntityPageHeaderView: UIView {
     var fadesWhenTight = false
 
     /// 贴底排时留多少（默认 `EntityPageHeaderMetrics.bottom` = 14）。
-    ///
-    /// ★★ 2026-10-18 第三轮（用户：「**那怎么解决艺人页的展示问题，spotify 的按键又靠上**」）：
-    /// **艺人页给 0** —— AM 的姓名与那三颗比我们低约 14pt（照片 118：名字 361–403、三颗 417–494；
-    /// 我们原来是 347–388 / 408–506），把整块往下挪 14pt 就对上了。专辑 / 歌单页维持 14
-    /// （那两页的版式用户没提意见）。
     var contentBottom: CGFloat = EntityPageHeaderMetrics.bottom
 
     /// **名字（标题）上沿**在本视图坐标里的 y；没有名字时是 −1。
     ///
-    /// ★★ 2026-10-18（用户：「AM 那三颗按键比 Spotify 靠下一点，所以它的渐变刚好不压到艺人名字；
-    ///    Spotify 的靠上就会被压住」）：`EntityPageAppearance.ensureSharpHero` 用它把**满幅照片的渐变
-    ///    收在名字上方**（`meltGap` / `meltSpanRatio`）—— AM 靠"把那一行做得更靠下"避开渐变，
-    ///    我们靠这一行避开：**页头多高、Spotify 自己把那一行摆在哪，都不影响收口落点**。
+    /// （AM 那三颗按键比 Spotify 靠下一点，所以它的渐变刚好不压到艺人名字；
+    /// Spotify 的靠上就会被压住）：`EntityPageAppearance.ensureSharpHero` 用它把**满幅照片的渐变
+    /// 收在名字上方**（`meltGap` / `meltSpanRatio`）—— AM 靠"把那一行做得更靠下"避开渐变，
+    /// 我们靠这一行避开：**页头多高、Spotify 自己把那一行摆在哪，都不影响收口落点**。
     ///
     /// ⚠️ 读的是 `titleLabel.frame`，也就是**上一次 `layoutSubviews` 的结果**（本文件就是排它的地方）
-    ///    ⇒ 首帧可能还是 0，那一拍 `ensureSharpHero` 会退回默认收口，下一拍就对上了（0.6s 的拍子）。
+    /// ⇒ 首帧可能还是 0，那一拍 `ensureSharpHero` 会退回默认收口，下一拍就对上了（0.6s 的拍子）。
     var textTop: CGFloat { titleLabel.isHidden ? -1 : titleLabel.frame.minY }
 
     /// 这一拍有没有标题 —— `textTop` 用 `-1` 表示"没有名字"，读它的地方要先问这一句，
@@ -886,16 +864,13 @@ final class EntityPageHeaderView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
 
-        // ★★ 2026-10-17（用户：「歌单页的图标似乎**没下沉**」；照片 121 是现场：那一行三颗按钮浮在
-        //    **收起来的导航栏**上、和 "AKIRVTXNSHI" 叠在一起）：
+        // 这一整块是**贴着页头底部**排的（`y = bounds.height - bottom - contentHeight`），而页头会随
+        // 滚动从 520pt 缩到 100pt 的导航栏 ⇒ 内容放不下时 `y` 变成负数，标题与按钮就**溢出到页头
+        // 上方**，正好压在 Spotify 自己的导航栏上 ✗。
         //
-        //    这一整块是**贴着页头底部**排的（`y = bounds.height - bottom - contentHeight`），而页头会随
-        //    滚动从 520pt 缩到 100pt 的导航栏 ⇒ 内容放不下时 `y` 变成负数，标题与按钮就**溢出到页头
-        //    上方**，正好压在 Spotify 自己的导航栏上 ✗。
-        //
-        //    ⇒ 页头矮到装不下这一块时，它整体**渐隐让位**（AM 里就是"跟着页头一起滚走"）：
-        //      `room ≥ 32pt` 全亮、`room ≤ 0` 全隐、中间线性。用 `alpha` 而不是 `isHidden`，
-        //      免得折叠过程中一闪一闪。
+        // ⇒ 页头矮到装不下这一块时，它整体**渐隐让位**（AM 里就是"跟着页头一起滚走"）：
+        // `room ≥ 32pt` 全亮、`room ≤ 0` 全隐、中间线性。用 `alpha` 而不是 `isHidden`，
+        // 免得折叠过程中一闪一闪。
         if fadesWhenTight {
             let needed = contentHeight(forWidth: bounds.width) + contentBottom
             let room = bounds.height - needed
@@ -921,14 +896,14 @@ final class EntityPageHeaderView: UIView {
 
         // Play 始终在页面正中，另两颗挂在它两侧 —— 少一颗也不动位置。
         //
-        // ★ 2026-10-13（照 AM）：中间那颗原来大一档（84 vs 两侧 56），三颗要**圆心同高**
-        //   ⇒ 中间那颗往上抬 `(big - side) / 2`。
+        // 中间那颗原来大一档（84 vs 两侧 56），三颗要**圆心同高**
+        // ⇒ 中间那颗往上抬 `(big - side) / 2`。
         //
-        // ★★ 2026-10-19（用户：「那个播放按键做成 **melox/am 一样的槽形状**吧」）：
-        //   中间那颗从「84pt 的大圆」改成 **148×56 的胶囊**（`playMinWidth` × `rowHeight`）——
-        //   与两侧小圆**一样高、同一行、同一圆心**，所以那条"往上抬半档"的偏移一并去掉。
-        //   胶囊里是 `[▶][6pt][播放]`，由 `EntityPageHeaderPlay.layoutSubviews` 里那条
-        //   "非正方形 ⇒ 显示文字"的分支负责（它本来就支持两种形态，不用再加开关）。
+        // （那个播放按键做成 **melox/am 一样的槽形状**吧）：
+        // 中间那颗从「84pt 的大圆」改成 **148×56 的胶囊**（`playMinWidth` × `rowHeight`）——
+        // 与两侧小圆**一样高、同一行、同一圆心**，所以那条"往上抬半档"的偏移一并去掉。
+        // 胶囊里是 `[▶][6pt][播放]`，由 `EntityPageHeaderPlay.layoutSubviews` 里那条
+        // "非正方形 ⇒ 显示文字"的分支负责（它本来就支持两种形态，不用再加开关）。
         let side = EntityPageHeaderMetrics.rowHeight
         let pill = EntityPageHeaderMetrics.playMinWidth
         let play = CGRect(
@@ -954,9 +929,9 @@ final class EntityPageHeaderView: UIView {
     }
 
     // MARK: 触摸
-
-    /// 只有按钮和**创建者那行文字**吃触摸；其余位置一律还给页面
-    /// （这一块和页面一样宽，全吃的话下拉就拉不动了）。
+    //
+    // 只有按钮和**创建者那行文字**吃触摸；其余位置一律还给页面
+    // （这一块和页面一样宽，全吃的话下拉就拉不动了）。
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
         if hit === self || hit === creatorLabel { return creatorHit(point) }

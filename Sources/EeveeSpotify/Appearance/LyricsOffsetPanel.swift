@@ -7,11 +7,11 @@ import SwiftUI
 /// 所以把它挪到播放器里、紧挨着 `⋯`。
 ///
 /// 三条约束（都是照仓库既有纪律来的）：
-///   · **改了立刻生效**：每次调整都写 `LyricsTimingOffset` 再调 `reapplyLyricsTimingOffset()`，
-///     不重新取词、不重建歌词页（那条函数只平移时间轴并自增版本号）；
-///   · **只动当前这一首**：键是「曲目 + 源」，与设置页那一套完全同一份数据，两边看到的是同一个值；
-///   · **Genius 不参与**：`LyricsTimingOffset.supportsOffset` 已经挡掉，这里只在入口处问一句，
-///     不支持就整行不出现（见 `LyricsOffsetMenuRow`）。
+/// · **改了立刻生效**：每次调整都写 `LyricsTimingOffset` 再调 `reapplyLyricsTimingOffset`，
+/// 不重新取词、不重建歌词页（那条函数只平移时间轴并自增版本号）；
+/// · **只动当前这一首**：键是「曲目 + 源」，与设置页那一套完全同一份数据，两边看到的是同一个值；
+/// · **Genius 不参与**：`LyricsTimingOffset.supportsOffset` 已经挡掉，这里只在入口处问一句，
+/// 不支持就整行不出现（见 `LyricsOffsetMenuRow`）。
 struct LyricsOffsetPanel: View {
 
     private let trackId: String

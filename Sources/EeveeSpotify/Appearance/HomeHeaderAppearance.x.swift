@@ -3,61 +3,27 @@ import Orion
 import UIKit
 import ObjectiveC.runtime
 
-/// 主页（Home / Listen Now）头部 —— 照 pw 的 `Redesigned/Home/HomeHeader.x`，
-/// 观感标准仍然是 **Apple Music 的 Listen Now**（用户 2026-10-12：「以网上的 AM 为准…还是要求优雅」）。
+/// 主页（Home / Listen Now）头部：大标题、右侧头像、收掉内容筛选 pills 与顶部灰纱。
 ///
-/// ── AM 的 Listen Now 长什么样（网上查的，不是记忆）──────────────────────────
-/// · **大标题 32pt/800、贴左沿**（AM 是 "Listen Now"；我们读**标签栏那一颗**的文字 ⇒「主页」，跟随语言）；
-/// · 标题行**右端一颗**（AM 是账户头像，我们这里就是打开侧边栏的头像）；
-/// · 顶部**没有那层压暗的灰纱**；
-/// · **没有 Spotify 那排「全部 / 音乐 / 播客」筛选 pills** —— AM 的 Listen Now 是
-///   "Stations for You 横排 → Recently Played 网格 → 推荐卡"，没有内容筛选胶囊。
-///   ⚠️ 所以这一页**与音乐库刻意相反**：音乐库的 chips **保留**（那是排序用的，pw 删过又装回来 —— issue #20），
-///   这里的 pills 是**内容筛选**、AM 没有 ⇒ **收掉**（要装回来只需把 `HomeHeaderMetrics.vanishPills` 改 false）。
+/// 观感以 Apple Music 的 Listen Now 为准：32pt/800 大标题贴左沿、右端一颗头像、顶部没有压暗的灰纱、没有「全部 / 音乐 / 播客」那排内容筛选 pills。
+/// ⚠️ 这一页与音乐库**刻意相反**：音乐库的 chips 是排序用的，保留；这里的 pills 是内容筛选，AM 没有 ⇒ 收掉（要装回来把 `HomeHeaderMetrics.vanishPills` 改 false）。
 ///
-/// ── 真机结构（日志 64 的 `[Tree] #1`，我们自己的机器，不是 pw 的树）──────────
+/// 真机结构：
 /// ```
-/// 16.GradientView@0,0,414,98,id=LiquidGlass.GradientView          ← 灰纱（收掉）
-/// 16.HomeHeaderView@0,0,414,50                                    ← 头部（hook 目标在页面 VC 上，见下）
-/// └ 17.UIStackView@0,8,414,34                                     ← 那一行
-///   ├ 18.AdaptiveFaceContainer@16,0,32,34
-///   │ └ 19.EncoreButton@0,0,32,34,id=Components.UI.SideDrawerButton    ← 头像
-///   └ 18.LeadingFadeMaskView@48,1,366,32
-///     └ 19.PillScrollView@0,0,366,32 → 22.PillView id=home-feed-{default,music,podcasts}-chip
+/// 16.GradientView@0,0,414,98,id=LiquidGlass.GradientView   ← 灰纱（收掉）
+/// 16.HomeHeaderView@0,0,414,50                            ← 头部
+/// └ 17.UIStackView@0,8,414,34
+///   ├ 18.AdaptiveFaceContainer@16,0,32,34                 ← 头像
+///   └ 18.LeadingFadeMaskView@48,1,366,32 → PillScrollView → PillView id=home-feed-*-chip
 /// ```
 ///
-/// ── 四条"照 pw"的实现纪律（每条都有理由，别再自己发明）──────────────────────
-///   1. **头像靠右用"把那一行翻成 RTL"**（`semanticContentAttribute = .forceRightToLeft`），
-///      不是自己算 transform：RTL 下 stack 会把**第一个 arranged subview 摆到右沿**，于是每拍自动对，
-///      而且"正在收听的朋友"临时插进来改变宽度时也不用管（pw 的原话就是这个）；
-///   2. **pills 是 arranged subview ⇒ 只能 `alpha = 0`，不能 `isHidden`、更不能摘掉**
-///      （摘掉会让那个 stack 卡在 `updateConstraints` —— pw 的 `SGRRestyle.h` 立的规矩，我们音乐库也吃过）；
-///   3. **标题自己画**（一个 `UILabel`，加在 header 上、不属于任何 stack）：文字从**标签栏那一颗**读
-///      （`TabBar.Item.Home` 里第一个 `UILabel`）⇒ 跟随 App 语言；**绝不去改 Spotify 自己那个 label** ——
-///      那一行会**随滚动往上滑并淡出**；
-///   4. **所有事情都做在页面的 `viewDidLayoutSubviews` 里**（pw 同款）：主页的头部**随滚动动**
-///      ⇒ 音乐库那套"头部静止 + 0.5s 复查"在这里**不成立**；页面的布局回合在滑动每一步都会来。
+/// 四条实现纪律：
+/// 1. 头像靠右靠**把那一行翻成 RTL**（`semanticContentAttribute = .forceRightToLeft`），不自己算 transform：RTL 下 stack 会把第一个 arranged subview 摆到右沿，宽度变化时也不用管；
+/// 2. pills 是 arranged subview ⇒ 只能 `alpha = 0`，不能 `isHidden`、更不能摘掉（摘掉会让那个 stack 卡在 `updateConstraints`）；
+/// 3. 标题自己画一个 `UILabel` 加在 header 上、不属于任何 stack，文字从标签栏那一颗读（`TabBar.Item.Home` 的第一个 `UILabel`）⇒ 跟随 App 语言；**绝不改 Spotify 自己那个 label**，那一行会随滚动上滑淡出；
+/// 4. 全部做在页面的 `viewDidLayoutSubviews` 里：主页头部随滚动动，音乐库那套「头部静止 + 0.5s 复查」在这里不成立。
 ///
-/// ⚠️ 与「隐藏主页头部」那颗开关（`DeclutterChrome.hideHomeHeader`）的关系 ——
-///    ★ 2026-10-14（用户批准"隐藏态不留灰纱"之后定的）：**「隐藏」是一个独立状态**，
-///    不再挂在 `homeLargeTitle` 后面；让位**只让"画"那一半，灰纱照收**。
-///    · **让位**：不建标题、不动那一行与 pills、不碰 RTL —— header 被 `DeclutterChrome` 设成
-///      `isHidden = true`（`DeclutterChrome.x.swift:382-388`，视图**还在树里**）⇒ 往一个看不见的
-///      容器上画标题没有意义，还会跟 Spotify 自己的隐藏逻辑打架；
-///    · **灰纱照收**（`clearScrim`）：灰纱与 header **同父、是兄弟**（上面的真机树 + `clearScrim`
-///      的注释），`DeclutterChrome` 藏的是 header **自己** ⇒ 谁都不会顺手带走灰纱。
-///      让位若排在 `clearScrim` **之前**，用户看到的就是"顶部条没了、灰纱还在"—— 那正是这次修的。
-///    · **可逆**：`clearScrim` 把原 alpha 记进 `vanishedViews`，切回「原样」时 `restore(in:)`
-///      会原样写回 ⇒ 灰纱不会被"粘死"。
-///    ⚠️ 为什么隐藏分支要排在 `isEnabled`（= `homeLargeTitle`）**之前**：设置页的三态是
-///      「原样 = 两颗都 false / AM 式 = `homeLargeTitle == true` / **隐藏 = `hideHomeHeader == true`，
-///      `homeLargeTitle` 的值被忽略**」（`Settings/Sections/Pages/Views/PagesAppearanceSettingsView.swift`
-///      文件头 + `HomeHeaderStyle`）。而那个选择器可以从「原样」（它会写 `homeLargeTitle = false`）
-///      **直接切到「隐藏」** ⇒ `false + true` 不是历史值、是今天就到的组合；
-///      隐藏行为若还看 `homeLargeTitle`，"顶部条没了、灰纱还在"就会在这个组合里复发。
-///    ⚠️ 隐藏态**不调 `restore(in:)`**：`restore` 会把灰纱 alpha 还回去（= 灰纱又出现，正好是
-///      要修的那一件）；标题/RTL/pills 那三件在 hidden 的 header 里反正看不见，留着还能让
-///      「隐藏 → AM 式」不用重建。切到「原样」时才走 `restore`（那条路一个字没动）。
+/// 与「隐藏主页头部」（`DeclutterChrome.hideHomeHeader`）的关系：隐藏是独立状态，不挂在 `homeLargeTitle` 后面 —— 设置页三态是「原样 / AM 式 / 隐藏」，且可以从「原样」直接切到「隐藏」（`homeLargeTitle = false` + `hideHomeHeader = true` 是今天就到的组合），所以隐藏分支必须排在 `isEnabled` 之前。隐藏态只让位"画"那一半，灰纱照收：灰纱与 header 同父、是兄弟，藏 header 不会带走灰纱。隐藏态不调 `restore(in:)`（那会把灰纱 alpha 还回去），切到「原样」时才走 `restore`。
 struct HomeHeaderAppearanceGroup: HookGroup {}
 
 enum HomeHeaderMetrics {
@@ -89,14 +55,14 @@ enum HomeHeaderAppearance {
     private static var tabName: String?
 
     // MARK: - 施加
-
-    /// 由页面 VC 的 `viewDidLayoutSubviews` 调用（**滑动每一步都会来**）。幂等。
+    //
+    // 由页面 VC 的 `viewDidLayoutSubviews` 调用（**滑动每一步都会来**）。幂等。
     @MainActor
     static func apply(to page: UIView) {
-        // ★ 2026-10-14：隐藏态**单独一条**、排在 `isEnabled` 前面（理由见文件头那段 ⚠️）：
-        //   「隐藏」= `hideHomeHeader == true`，`homeLargeTitle` 的值**被忽略**。
-        //   ⚠️ 这里读的是同一个键、而且是一个纯读（`UserDefaults+Extension.swift:532-539`）⇒
-        //   它为 false 时，下面每一步与改动前是**同一条语句、同一个顺序**（等价性逐条见交接报告）。
+        // 隐藏态**单独一条**、排在 `isEnabled` 前面（理由见文件头那段 ⚠️）：
+        // 「隐藏」= `hideHomeHeader == true`，`homeLargeTitle` 的值**被忽略**。
+        // ⚠️ 这里读的是同一个键、而且是一个纯读（`UserDefaults+Extension.swift:532-539`）⇒
+        // 它为 false 时，下面每一步与改动前是**同一条语句、同一个顺序**（等价性逐条见交接报告）。
         if UserDefaults.hideHomeHeader {
             standDown(in: page)
             return
@@ -121,9 +87,9 @@ enum HomeHeaderAppearance {
     /// （`clearScrim` 上面那段写了理由：扫整页会碰到别的页面的灰纱）。`DeclutterChrome` 是
     /// `view.isHidden = true`、视图**还在树里**（`DeclutterChrome.x.swift:382-388`）⇒ 照样找得到。
     /// ⚠️ 拿不到 header（页面还没建好）时什么都不做：那一拍的灰纱不收，下一个布局回合还会再来
-    ///    （页面的 `viewDidLayoutSubviews` + header 自己那一拍）—— 与改动前一致（改动前连找都不找）。
+    /// （页面的 `viewDidLayoutSubviews` + header 自己那一拍）—— 与改动前一致（改动前连找都不找）。
     /// ⚠️ 也**不**在这里删我们画过的标题 / 翻回 RTL：它们都在那个 hidden 的 header 里，看不见；
-    ///    留着反而让「隐藏 → AM 式」这一跳不用重建（切「原样」时由 `restore(in:)` 收尾）。
+    /// 留着反而让「隐藏 → AM 式」这一跳不用重建（切「原样」时由 `restore(in:)` 收尾）。
     @MainActor
     private static func standDown(in page: UIView) {
         if !didLogStandDown {
@@ -144,7 +110,7 @@ enum HomeHeaderAppearance {
         clearScrim(around: header)
 
         // ⚠️ 必须**强转成 `UIStackView`**：`findView` 的返回类型是 `UIView`，而 `arrangedSubviews`
-        //   只有 stack 才有（2026-10-12 编译错第 1 条就是漏了这个 `as?`）。
+        // 只有 stack 才有编译错第 1 条就是漏了这个 `as?`）。
         guard let stack = findView(in: header, where: { $0 is UIStackView }) as? UIStackView else { return }
 
         // ① 那一行翻成 RTL ⇒ 头像自动落到右沿（每拍都成立，宽度变了也不用管）。
@@ -180,7 +146,7 @@ enum HomeHeaderAppearance {
         let trailing = face.map { $0.convert($0.bounds, to: header).minX - HomeHeaderMetrics.gap }
             ?? (header.bounds.width - HomeHeaderMetrics.sideMargin)
 
-        // 垂直：**以头像那一颗为心**（用户 2026-10-12：「主页上的 主页两个字会偏上」）——
+        // 垂直：**以头像那一颗为心**（主页上的 主页两个字会偏上）——
         // 头像是他看得见的那一行，标题就该跟它一条中线；拿不到头像才退回那一行的中心。
         let rowMidY = face.map { $0.convert($0.bounds, to: header).midY }
             ?? stack.convert(stack.bounds, to: header).midY
@@ -194,8 +160,7 @@ enum HomeHeaderAppearance {
         if !title.frame.equalTo(frame) { title.frame = frame }
 
         // ⚠️ 这一行**不许嵌转义双引号**、也**不要** `header.window != nil` 这个条件：
-        //   上一版就是这么写的，结果整行没进日志（日志 65 里一条 `[Home] header …` 都没有，
-        //   而 `LeadingFadeMaskView … alpha=0.00` 证明代码其实跑了）⇒ 我们白猜了一轮。
+        // 上一版就是这么写的，结果整行没进日志⇒ 我们白猜了一轮。
         if !didLog, header.bounds.width > 1 {
             didLog = true
             writeDebugLog(
@@ -218,7 +183,7 @@ enum HomeHeaderAppearance {
         title.adjustsFontSizeToFitWidth = true
         title.minimumScaleFactor = 0.6
         // ⚠️ Swift 里是 **`isUserInteractionEnabled`**（`userInteractionEnabled` 是 ObjC 那个名字；
-        //   写成旧的会被编译器直接拦下 —— 2026-10-12 编译错第 2 条）。
+        // 写成旧的会被编译器直接拦下 ——编译错第 2 条）。
         title.isUserInteractionEnabled = false
         header.addSubview(title)
         objc_setAssociatedObject(header, &titleKey, title, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -326,12 +291,12 @@ enum HomeHeaderAppearance {
 }
 
 // MARK: - Hook
-
-/// 主页：`Home_FunkisPageImpl.FunkisViewController`（pw 挂的也是它）。
-///
-/// ⚠️ **为什么挂页面而不是挂 header**：首页滚动时 Spotify 会把那一行**往上滑并淡出**
-/// （pw 的注释 + 我们的真机树都证实）⇒ 只在 header 自己的布局回合里算，会在滑动过程中"卡住不动"。
-/// 页面的 `viewDidLayoutSubviews` 在**滑动每一步**都会来，天然就是"每拍重算"。
+//
+// 主页：`Home_FunkisPageImpl.FunkisViewController`（pw 挂的也是它）。
+//
+// ⚠️ **为什么挂页面而不是挂 header**：首页滚动时 Spotify 会把那一行**往上滑并淡出**
+// （pw 的注释 + 我们的真机树都证实）⇒ 只在 header 自己的布局回合里算，会在滑动过程中"卡住不动"。
+// 页面的 `viewDidLayoutSubviews` 在**滑动每一步**都会来，天然就是"每拍重算"。
 class HomeHeaderAppearanceHook: ClassHook<UIViewController> {
     typealias Group = HomeHeaderAppearanceGroup
     static let targetName = "Home_FunkisPageImpl.FunkisViewController"
@@ -339,8 +304,8 @@ class HomeHeaderAppearanceHook: ClassHook<UIViewController> {
     func viewDidLayoutSubviews() {
         orig.viewDidLayoutSubviews()
         // ⚠️ hook 方法体里**不许直接碰 @MainActor 的东西**（`viewIfLoaded` 就是）——
-        //   仓库成文规矩，见 `LyricsChromeVisibility.swift:3-17`。所以只把 VC 这个**引用**带进去，
-        //   `viewIfLoaded` 在 `onMainThreadSync` 的闭包里读（那个闭包本身就是 `@MainActor`）。
+        // 仓库成文规矩，见 `LyricsChromeVisibility.swift:3-17`。所以只把 VC 这个**引用**带进去，
+        // `viewIfLoaded` 在 `onMainThreadSync` 的闭包里读（那个闭包本身就是 `@MainActor`）。
         let controller = target
         onMainThreadSync {
             guard let view = controller.viewIfLoaded else { return }
@@ -349,14 +314,6 @@ class HomeHeaderAppearanceHook: ClassHook<UIViewController> {
     }
 }
 
-/// ★ 2026-10-12 补（用户第二轮反馈："主页那两个字**还是**偏上"）：
-/// **页面那一拍不够** —— 真机日志 67 里我们那一行是**对齐的**
-/// （`title frame 16,6,342,39` ⇒ 中心 25.5；`avatar 366,8,32,34` ⇒ 中心 25），
-/// 说明用户看到的错位发生在**某次只有那一行自己在动**的时候（滚动时 Spotify 会让这一行单独滑动/淡出，
-/// 那种回合**不一定**经过页面的 `viewDidLayoutSubviews`）。
-/// 这正是 pw 的教训，他的原话：**"那一行也要盯着，它自己的每一拍都把控件重新摆一遍"**
-/// （`LibraryHeader.x` 文件头最后一段）⇒ 所以这里**再挂一个头部自己的布局回合**，
-/// 两条路都算一次（幂等，重复算没有代价）。
 class HomeHeaderLayoutHook: ClassHook<UIView> {
     typealias Group = HomeHeaderAppearanceGroup
     // 与 `DeclutterChrome` 的「隐藏主页头部」同一个类名（那是另一颗开关，互不干扰）。

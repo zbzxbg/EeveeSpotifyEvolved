@@ -2,47 +2,28 @@ import Foundation
 
 /// 歌词时间轴偏移（**所有歌词源共用**，Genius 除外）。
 ///
-/// ## 为什么从"只有网易云"改成"所有源"
+/// 第一版只做网易云（理由是 UGC 时间轴参差），后来实测 Musixmatch / LRCLIB / Petit / AMLL / Spicy 也都有整首偏半秒的情况；只给网易云开口子，用户就得先判断"这次的词是哪个源给的、它能不能调"，这层认知负担不该由用户承担 ⇒ 改成全源生效。
 ///
-/// 2026-10-20 的第一版只做网易云（理由是 UGC 时间轴参差）。2026-10-24 用户改口：
-/// 「把歌词偏移这个东西做成对全部歌词源都生效」—— 实测 Musixmatch / LRCLIB / Petit /
-/// AMLL / Spicy 也都有整首偏半秒的情况，只给网易云开口子，用户就得先判断
-/// "这次的词是哪个源给的、它能不能调"，这层认知负担不该由用户承担。
-///
-/// ## 记录时**必须带上歌词源**
-///
-/// 同一首歌换一个源就是另一份时间轴 —— 网易云的词偏 0.3s、Musixmatch 的也许正好。
-/// 所以存储键是 **「源 + 曲目 id」** 而不是只按曲目：
+/// 记录时**必须带上歌词源**：同一首歌换一个源就是另一份时间轴（网易云的词偏 0.3s、Musixmatch 的也许正好），所以存储键是「源 + 曲目 id」而不是只按曲目：
 ///
 /// ```
 /// 生效偏移 = 该 (源, 曲目) 的覆盖 ?? 0
 /// ```
 ///
-/// 用户 2026-10-24：「记录的时候，要连带把歌词源记录」—— 设置页每一行也把源名画出来。
+/// 设置页每一行也要把源名画出来。
 ///
-/// ## Genius 不参与
+/// **Genius 不参与**：它的词只有行、没有可信时间轴（见 `LyricsDto.toSpotifyLyricsData` 里"不给无时间轴的源合成时间轴"那段），挪时间戳没有意义 ⇒ `offsetMs` 对 Genius 恒返回 0、`setOffset` 直接不写、设置页遇到 Genius 只显示一句说明，不给 ± 按钮。
 ///
-/// 用户 2026-10-24：「genius不用歌词偏移这个东西」。Genius 的词只有行、没有可信时间轴
-/// （见 `LyricsDto.toSpotifyLyricsData` 里"不给无时间轴的源合成时间轴"那段），
-/// 挪时间戳没有意义，所以：
-///   · `offsetMs` 对 Genius 恒返回 0；
-///   · `setOffset` 对 Genius 直接不写；
-///   · 设置页遇到 Genius 只显示一句说明，不给 ± 按钮。
-///
-/// ⚠️ 施加点在 `CustomLyrics.storeLyricsDto`（**唯一**入口）：dto 一落地就先按
-///    「这一首 + 这个源」平移，注入给 Spotify 的 payload 与两个自绘 overlay
-///    读到的都是同一份已经平移过的数据。
-///
-/// ⚠️ 用户可见的名称/说明由用户本人撰写；本枚举只负责存储与计算。
-///    键名与 `UserDefaults.ownedKeys` 的登记见本文件末尾。
+/// ⚠️ 施加点在 `CustomLyrics.storeLyricsDto`（**唯一**入口）：dto 一落地就先按「这一首 + 这个源」平移，注入给 Spotify 的 payload 与两个自绘 overlay 读到的都是同一份已经平移过的数据。
+/// 键名与 `UserDefaults.ownedKeys` 的登记见本文件末尾。
 enum LyricsTimingOffset {
 
     // MARK: - 键
-
-    /// `["<源>|<曲目 id>": 毫秒]` 的 JSON 文本。
-    ///
-    /// 用 String 而不是 Data，是为了让它能走设置备份的“普通 `key=value`”路径
-    /// （`SettingsBackup` 只对 `flagOverrides` 这一个 Data 键做特殊处理）。
+    //
+    // `["<源>|<曲目 id>": 毫秒]` 的 JSON 文本。
+    //
+    // 用 String 而不是 Data，是为了让它能走设置备份的“普通 `key=value`”路径
+    // （`SettingsBackup` 只对 `flagOverrides` 这一个 Data 键做特殊处理）。
     static let offsetsKey = "ngzhwm_lyricsOffsetBySourceAndTrack"
     /// `["<源>|<曲目 id>": "歌名 — 歌手"]` 的 JSON 文本。
     ///
@@ -51,10 +32,10 @@ enum LyricsTimingOffset {
     /// 老数据没有名字就显示「未知歌曲 + 短 id」，不猜。
     static let titlesKey = "ngzhwm_lyricsOffsetTrackTitles"
 
-    /// 2026-10-24 之前的旧键：只有网易云，键是**裸曲目 id**。只读一次做迁移。
+    /// 之前的旧键：只有网易云，键是**裸曲目 id**。只读一次做迁移。
     private static let legacyOffsetsKey = "ngzhwm_neteaseOffsetByTrack"
     private static let legacyTitlesKey = "ngzhwm_neteaseOffsetTrackTitles"
-    /// 2026-10-23 起就不再用（「默认偏移」），迁移时顺手删掉。
+    /// 起就不再用（「默认偏移」），迁移时顺手删掉。
     private static let legacyDefaultOffsetKey = "ngzhwm_neteaseOffsetMs"
 
     /// 偏移的上下限（±5s）与步进（50ms）。
@@ -63,8 +44,8 @@ enum LyricsTimingOffset {
     /// 最多保留多少条。超过就按 key 排序丢掉最早的几条 —— 没有时间戳可排序，
     /// 但至少行为是确定的，不会悄悄无限增长。
     ///
-    /// ★ 2026-10-23（用户：「如果歌曲多了起来」）：上限从 300 提到 1000。
-    /// ★ 2026-10-24：现在一条 = 一首歌的一个源，同样 1000 条上限（JSON 也就几十 KB）。
+    /// 上限从 300 提到 1000。
+    /// 现在一条 = 一首歌的一个源，同样 1000 条上限（JSON 也就几十 KB）。
     static let maxTrackOverrides = 1000
 
     /// 备份 / 全局重置 / 本页重置要认识的键（含旧键：重置时一起清掉）。
@@ -81,8 +62,8 @@ enum LyricsTimingOffset {
     ]
 
     // MARK: - 一条记录
-
-    /// 设置页那一列的一行：`(曲目, 源) → 毫秒`。
+    //
+    // 设置页那一列的一行：`(曲目, 源) → 毫秒`。
     struct Entry {
         let trackId: String
         let source: LyricsSource
@@ -92,15 +73,15 @@ enum LyricsTimingOffset {
     }
 
     // MARK: - 内存索引
-
-    /// 运行期索引：**只解一次 JSON，之后按 key 哈希查找**。
-    ///
-    /// 取词时每首歌要问 1~2 次；歌多了就是反复解析几十 KB。所以把解码结果缓存起来：
-    ///   · 首次读 → 解码一次；
-    ///   · 我们自己的写入 → 原地更新缓存；
-    ///   · 外部批量改键（备份导入 / 全局重置）→ 调 `invalidateCache()`。
-    ///
-    /// 锁是必须的：读发生在取词队列（后台），写发生在设置页（主线程）。
+    //
+    // 运行期索引：**只解一次 JSON，之后按 key 哈希查找**。
+    //
+    // 取词时每首歌要问 1~2 次；歌多了就是反复解析几十 KB。所以把解码结果缓存起来：
+    // · 首次读 → 解码一次；
+    // · 我们自己的写入 → 原地更新缓存；
+    // · 外部批量改键（备份导入 / 全局重置）→ 调 `invalidateCache`。
+    //
+    // 锁是必须的：读发生在取词队列（后台），写发生在设置页（主线程）。
     private static let cacheLock = NSLock()
     private static var cachedOffsets: [String: Int]?
     private static var cachedTitles: [String: String]?
@@ -152,7 +133,7 @@ enum LyricsTimingOffset {
     /// 读取；新键不存在而旧键在 ⇒ 就地把网易云那批迁移成新格式。
     ///
     /// ⚠️ 调用方**已经持有** `cacheLock`（所以这里只碰 `persist…Locked`，不再加锁，
-    ///    否则 `NSLock` 会自锁死）。
+    /// 否则 `NSLock` 会自锁死）。
     private static func loadOffsetsLocked() -> [String: Int] {
         let defaults = UserDefaults.standard
         if let text = defaults.string(forKey: offsetsKey),
@@ -208,8 +189,8 @@ enum LyricsTimingOffset {
     }
 
     // MARK: - 查询 / 写入
-
-    /// Genius 不参与歌词偏移（见文件头）。
+    //
+    // Genius 不参与歌词偏移（见文件头）。
     static func supportsOffset(source: LyricsSource) -> Bool {
         source != .genius
     }
@@ -252,7 +233,7 @@ enum LyricsTimingOffset {
     /// 想回到默认请用 `clearOverride`。
     ///
     /// - Parameter trackTitle: 这一条的显示名（`"歌名 — 歌手"`）。只在用户改当前播放这一首时传；
-    ///   设置页的"已保存列表"里改别的歌时传 `nil`，保持已存的名字（没有就是没有）。
+    /// 设置页的"已保存列表"里改别的歌时传 `nil`，保持已存的名字（没有就是没有）。
     static func setOffset(
         _ milliseconds: Int,
         forTrackId trackId: String,
@@ -313,8 +294,8 @@ enum LyricsTimingOffset {
     }
 
     // MARK: - 归一化
-
-    /// 夹到 ±5s，并吸附到 50ms 的整数倍（UI 的步进就是这个粒度）。
+    //
+    // 夹到 ±5s，并吸附到 50ms 的整数倍（UI 的步进就是这个粒度）。
     static func clamped(_ milliseconds: Int) -> Int {
         // 先夹范围再换算成步数：直接 `Double(milliseconds)` 在异常大的存储值上
         // 转回 Int 会溢出（本键可能被手改/导入过）。
@@ -324,8 +305,8 @@ enum LyricsTimingOffset {
     }
 
     // MARK: - 落盘
-
-    /// ⚠️ 下面两个 `persist…Locked` 都要求**调用方已持有 `cacheLock`**。
+    //
+    // ⚠️ 下面两个 `persist…Locked` 都要求**调用方已持有 `cacheLock`**。
 
     @discardableResult
     private static func save(_ offsets: [String: Int]) -> [String: Int] {

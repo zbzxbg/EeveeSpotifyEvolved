@@ -1,23 +1,23 @@
 // Sideload compat shim. LC-injected into main exec + every .appex by ipapatch.
 //
 // Five pieces:
-//   1. SecItem* rebind — apps hard-code their entitled keychain access group
-//      (e.g. `<TEAMID>.com.spotify.client.X`); resigning with another team
-//      makes that group invalid. Every keychain query is rewritten to use
-//      whatever access group our profile actually has.
-//   2. CKContainer / CKEntitlements neutered — resigned bundle has no iCloud
-//      ents; CloudKit lookups would assert. Return nil / strip the keys.
-//   3. containerURLForSecurityApplicationGroupIdentifier: never nil — without
-//      a real app-groups entitlement this returns nil and apps crash inside
-//      `hasPrefix:` of the result. Real URL when entitled, sandbox path otherwise.
-//   4. NSUserDefaults init redirect (appex-only) — appex reads `group.*`
-//      suites via a real URL inside our entitled app-group container instead
-//      of going through cfprefsd, so it sees what the main app wrote.
-//   5. Main-app fan-out — main writes to `group.*` via cfprefsd normally,
-//      and we mirror those writes to a parallel NSUserDefaults backed by the
-//      shared-container URL. Pieces 4 + 5 together bridge main → appex over
-//      group.* defaults. Without #5, group.* writes sit in per-process
-//      cfprefsd cache and the appex never sees them.
+// 1. SecItem* rebind — apps hard-code their entitled keychain access group
+// (e.g. `<TEAMID>.com.spotify.client.X`); resigning with another team
+// makes that group invalid. Every keychain query is rewritten to use
+// whatever access group our profile actually has.
+// 2. CKContainer / CKEntitlements neutered — resigned bundle has no iCloud
+// ents; CloudKit lookups would assert. Return nil / strip the keys.
+// 3. containerURLForSecurityApplicationGroupIdentifier: never nil — without
+// a real app-groups entitlement this returns nil and apps crash inside
+// `hasPrefix:` of the result. Real URL when entitled, sandbox path otherwise.
+// 4. NSUserDefaults init redirect (appex-only) — appex reads `group.*`
+// suites via a real URL inside our entitled app-group container instead
+// of going through cfprefsd, so it sees what the main app wrote.
+// 5. Main-app fan-out — main writes to `group.*` via cfprefsd normally,
+// and we mirror those writes to a parallel NSUserDefaults backed by the
+// shared-container URL. Pieces 4 + 5 together bridge main → appex over
+// group.* defaults. Without #5, group.* writes sit in per-process
+// cfprefsd cache and the appex never sees them.
 
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
@@ -39,9 +39,7 @@
 
 static NSString *accessGroupId;
 
-// =========================================================================
 // helpers
-// =========================================================================
 
 static BOOL createDirectoryIfNotExists(NSString *path) {
 	NSFileManager *fm = [NSFileManager defaultManager];
@@ -125,9 +123,7 @@ static BOOL sciShouldFanout(NSUserDefaults *defaults) {
 	return [suite hasPrefix:@"group"];
 }
 
-// =========================================================================
 // keychain access-group rebind (fishhook)
-// =========================================================================
 
 static OSStatus (*origSecItemAdd)(CFDictionaryRef, CFTypeRef *);
 static OSStatus (*origSecItemCopyMatching)(CFDictionaryRef, CFTypeRef *);
@@ -182,9 +178,7 @@ static void rebindSecFuncs(void) {
 	rebind_symbols(rebinds, 4);
 }
 
-// =========================================================================
 // CloudKit neutering
-// =========================================================================
 
 %hook CKContainer
 - (id)_setupWithContainerID:(id)a options:(id)b { return nil; }
@@ -200,9 +194,7 @@ static void rebindSecFuncs(void) {
 }
 %end
 
-// =========================================================================
 // NSFileManager group container URL
-// =========================================================================
 
 %hook NSFileManager
 - (NSURL *)containerURLForSecurityApplicationGroupIdentifier:(NSString *)groupIdentifier {
@@ -219,9 +211,7 @@ static void rebindSecFuncs(void) {
 }
 %end
 
-// =========================================================================
 // NSUserDefaults: appex redirect + main-app fan-out
-// =========================================================================
 
 %hook NSUserDefaults
 
@@ -253,9 +243,7 @@ static void rebindSecFuncs(void) {
 
 %end
 
-// =========================================================================
 // keychain access-group bootstrap
-// =========================================================================
 //
 // Probe a throwaway keychain entry so SecItemCopyMatching/SecItemAdd returns
 // the access group the OS actually granted us based on our profile. That's

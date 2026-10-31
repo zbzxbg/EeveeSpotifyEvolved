@@ -12,7 +12,7 @@ enum LyricsError: Error, CustomStringConvertible {
     ///
     /// ⚠️ 正常流程下这条**不该出现**：`CustomLyrics` 在取词入口就会把"没 key 的 SpicyLyrics"
     /// 换成 Musixmatch（见 `loadCustomLyricsForCurrentTrack` 里那一段）。留着它是防御性的 ——
-    /// 用户中途把 key 清空、或将来有人直接从仓库层调用时，必须得到一句能读懂的原因，
+    /// 中途把 key 清空、或将来有人直接从仓库层调用时，必须得到一句能读懂的原因，
     /// 而不是一个 401。
     case missingSpicyKey
     /// 「实验 → 启用Apple Music官方TTML歌词」开着，但**没填** Apple Music 的
@@ -46,7 +46,7 @@ enum LyricsError: Error, CustomStringConvertible {
             return "decoding_error".localized
         case .unknownError:
             return "unknown_error".localized
-        // 以前这三个 case 掉进 default 返回空串，日志里会打印成「failed: 」什么都看不到。
+        // 以前这三个 case 掉进 default 返回空串，
         case .noCurrentTrack:
             return "no_current_track"
         case .trackMismatch:

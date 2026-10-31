@@ -9,17 +9,17 @@ import UIKit
 // 那就别抄：两条渲染路径用**同一份代码**。
 //
 // 分工：
-//   · `LyricsShellChrome`   —— 三块**内容**（不含外边距），新层把它交给
-//     `AppleMusicLyricsPage` 排版，旧层用下面的 Host 视图按同样的边距排版；
-//   · `LyricsShellLayout`   —— 边距/高度这些**常数**的唯一来源，
-//     两条路径都必须读这里，改一处两边同时变；
-//   · `LyricsShellHeaderHost` / `LyricsShellFooterHost` —— 旧层用的宿主视图，
-//     复刻 `AppleMusicLyricsPage` 里那两段的排版（同样的 padding、同样的安全区用法）。
-
-/// 全屏壳的排版常数（唯一来源）。
-///
-/// 数值来自 `AppleMusicLyricsPage` 的实测：顶部标题两行 62、底部控件栏 116、
-/// 标题栏再往上抬 30、上下内容各留 8 / 46 的呼吸。
+// · `LyricsShellChrome` —— 三块**内容**（不含外边距），新层把它交给
+// `AppleMusicLyricsPage` 排版，旧层用下面的 Host 视图按同样的边距排版；
+// · `LyricsShellLayout` —— 边距/高度这些**常数**的唯一来源，
+// 两条路径都必须读这里，改一处两边同时变；
+// · `LyricsShellHeaderHost` / `LyricsShellFooterHost` —— 旧层用的宿主视图，
+// 复刻 `AppleMusicLyricsPage` 里那两段的排版（同样的 padding、同样的安全区用法）。
+//
+// 全屏壳的排版常数（唯一来源）。
+//
+// 数值来自 `AppleMusicLyricsPage` 的实测：顶部标题两行 62、底部控件栏 116、
+// 标题栏再往上抬 30、上下内容各留 8 / 46 的呼吸。
 enum LyricsShellLayout {
     static let headerHeight: CGFloat = 62
     static let footerHeight: CGFloat = 116
@@ -76,9 +76,8 @@ enum LyricsShellChrome {
     /// 右上角：关闭全屏。
     ///
     /// ⚠️ 必须是 SwiftUI 的 `Button`，**不能**做成 `UIControl`：
-    /// `WordByWordPlaybackControl.dismissFullscreen()` 是按无障碍标签在窗口里找
+    /// `WordByWordPlaybackControl.dismissFullscreen` 是按无障碍标签在窗口里找
     /// "原生收起键"的，自己如果也是一个 UIControl，就会点到**自己** → 无限递归
-    /// （真机崩过一次，日志里同一秒刷了几百行 `dismiss via native close button`）。
     static func close(primaryColor: Color, onClose: @escaping () -> Void) -> AnyView {
         AnyView(
             Button(action: onClose) {
@@ -94,16 +93,16 @@ enum LyricsShellChrome {
 }
 
 // MARK: - 旧层用的宿主视图（排版与新层逐一对应）
-
-/// 顶部条：标题栏 + 右上角关闭键。
-///
-/// 排版照抄 `AppleMusicLyricsPage` 里那段：
-///   · 标题栏 `headerContent.padding(.top, safeArea.top + headerTopInset)`
-///   · 关闭键 `.padding(.top, safeArea.top + 6).padding(.trailing, 12)`
-///
-/// ⚠️ `title` / `artist` 必须是 `var`：换歌时由 `LyricsShellHosts.update(title:artist:)`
-/// 直接改 `rootView` 上的这两个字段（改了就重绘），声明成 `let` 会在那一行报
-/// "不能对不可变属性赋值"。
+//
+// 顶部条：标题栏 + 右上角关闭键。
+//
+// 排版照抄 `AppleMusicLyricsPage` 里那段：
+// · 标题栏 `headerContent.padding(.top, safeArea.top + headerTopInset)`
+// · 关闭键 `.padding(.top, safeArea.top + 6).padding(.trailing, 12)`
+//
+// ⚠️ `title` / `artist` 必须是 `var`：换歌时由 `LyricsShellHosts.update(title:artist:)`
+// 直接改 `rootView` 上的这两个字段（改了就重绘），声明成 `let` 会在那一行报
+// "不能对不可变属性赋值"。
 struct LyricsShellHeaderHost: View {
     var title: String
     var artist: String
@@ -161,11 +160,11 @@ struct LyricsShellFooterHost: View {
 }
 
 // MARK: - 把 SwiftUI 壳挂到 UIKit 层上
-
-/// 把 `LyricsShellHeaderHost` / `LyricsShellFooterHost` 挂进旧渲染层的宿主。
-///
-/// 只占**上下两条**，中间那段留给歌词的滚动视图 —— 这样壳不会把歌词的触摸吃掉
-/// （整片覆盖的话，SwiftUI 宿主视图会挡住下面 UIScrollView 的手势）。
+//
+// 把 `LyricsShellHeaderHost` / `LyricsShellFooterHost` 挂进旧渲染层的宿主。
+//
+// 只占**上下两条**，中间那段留给歌词的滚动视图 —— 这样壳不会把歌词的触摸吃掉
+// （整片覆盖的话，SwiftUI 宿主视图会挡住下面 UIScrollView 的手势）。
 @MainActor
 final class LyricsShellHosts {
 

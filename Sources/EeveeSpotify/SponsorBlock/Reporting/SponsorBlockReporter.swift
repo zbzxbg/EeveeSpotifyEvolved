@@ -96,7 +96,7 @@ enum SponsorBlockReporter {
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         req.setValue("EeveeSpotify-SponsorBlock/1", forHTTPHeaderField: "X-CLIENT-NAME")
 
-        // ⚠️ 这一段 payload 里带着 `userID`（36 位持久标识，见 `makeUserID()`），
+        // ⚠️ 这一段 payload 里带着 `userID`（36 位持久标识，见 `makeUserID`），
         // 所以两条日志都必须过脱敏：`writeDebugLog` 在写入口打掉 `"userID":"…"`；
         // 而 `NSLog` 那条**不受「启用日志记录」开关控制**，走 `eeveeSanitizedNSLog`。
         // URL 也只留 path —— vote 那条的 query 里同样带着 userID。

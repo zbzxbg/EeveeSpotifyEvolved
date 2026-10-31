@@ -1,41 +1,16 @@
 import Foundation
 
-// MARK: - 「最新发布」卡片的数据
+// 「最新发布」卡片的数据。
 //
-// 用户 2026-10-17（图片 136）：AM 的艺人页在**三颗按钮下面**有一张"最新发布"小卡片：
+// AM 的艺人页在**三颗按钮下面**有一张"最新发布"小卡片（封面 / 日期 / 名称 / 曲数）。Spotify 的艺人页没有这一块 ⇒ 数据和卡片都得自己来。
 //
-//     ┌────────────────────────────────────────┐
-//     │ [封面]  2026年8月22日                   │
-//     │         空耳 - Single                   │
-//     │         2 首歌曲                         │
-//     └────────────────────────────────────────┘
-//
-// **Spotify 的艺人页没有这一块**（日志 109 的 `[ArtistPageProbe]` 逐行：只有 你已点赞 / 热门 /
-// 艺人之选 / 热门新歌，没有任何 release 元素）⇒ 数据和卡片都得我们自己来。
-//
-// ## 数据源：iTunes Search API（实测 2026-10-17）
-//
+// 数据源：iTunes Search API
 // `GET https://itunes.apple.com/search?term=<艺人>&entity=album&limit=50&country=jp`
-// 对图片 136 那位艺人（ナナツカゼ）返回的最新一条与 AM 卡片**逐字一致**：
+// 四个字段（日期 / 名称 / 曲数 / 封面）一次全给，而且不需要任何令牌 —— 不像官方 TTML 那条要 `media-user-token`。「最新发布」本来就是**苹果的目录**在 AM 里显示的东西，用苹果的目录最不容易对不上。封面把 `100x100bb` 换成 `600x600bb` 就是大图。
 //
-//     2026-08-22 | 空耳 - Single | ナナツカゼ | tracks=2 | artworkUrl100=…/100x100bb.jpg
+// ⚠️ 搜索是**按相关度**返回的、**不按日期** ⇒ 必须 `limit=50` 拉一批、自己按 `releaseDate` 取最新；并且要核对 `artistName` 与页面上那位艺人（同名不同人时不能直接采信）。
 //
-// 选择它的理由：
-//   · **不需要任何令牌**（Apple 的公开搜索接口），不像官方 TTML 那条要 `media-user-token`；
-//   · 四个字段（日期 / 名称 / 曲数 / 封面）一次全给；
-//   · 「最新发布」本来就是**苹果的目录**在 AM 里显示的东西 —— 用苹果的目录最不容易对不上。
-//   封面把 `100x100bb` 换成 `600x600bb` 就是大图。
-//
-// ⚠️ 搜索是**按相关度**返回的，**不按日期** ⇒ 必须 `limit=50` 拉一批、自己按 `releaseDate` 取最新；
-//    并且要核对 `artistName` 与页面上那位艺人（同名不同人时不能直接采信）。
-//
-// ## 优先级（用户 2026-10-17 追加）
-//
-// 「优先展示**艺人之选**，没有艺人之选再展示最新发布」。艺人之选是 **Spotify 自己的**板块
-// （日志 109：`[ArtistPageProbe] matches y=996 — … [艺人之选]`），不在苹果目录里 ⇒ 它只能从
-// 页面里读（见 `EntityPageHeaderManager.captureArtistPick`）。本文件只管"最新发布"这一档。
-
-/// 一张「最新发布」卡片要的全部东西。
+// 优先级：优先展示**艺人之选**，没有艺人之选再展示最新发布。艺人之选是 Spotify 自己的板块、不在苹果目录里，只能从页面里读（见 `EntityPageHeaderManager.captureArtistPick`）；本文件只管"最新发布"这一档。
 struct ArtistLatestRelease {
     let title: String
     let date: Date?
@@ -85,29 +60,28 @@ enum ArtistLatestReleaseSource {
     }
 
     // MARK: - 取数
-
-    /// 取这位艺人的最新一条发布；已经有缓存 / 已经有请求在飞时不重复发。
-    ///
-    /// ★★ 2026-10-17（第三版，日志 111 的现场）：**只查"设备地区"那一家店是不够的**。
-    ///
-    /// ```
-    /// [Release] iTunes search — "Nanatsukaze"
-    /// [Release] "Nanatsukaze" — no usable release in the iTunes response   ← 4 秒后
-    /// [Release] no release for "Nanatsukaze" — the card stays hidden
-    /// ```
-    ///
-    /// 本机实测（2026-10-17，`entity=album&limit=10`）：
-    ///
-    /// | country | resultCount | artistName |
-    /// |---|---|---|
-    /// | `cn`（这台设备的地区） | **0** | — |
-    /// | `jp` | 10 | `ナナツカゼ`（假名，与页面上的 `Nanatsukaze` 对不上） |
-    /// | `us` | 10 | **`Nanatsukaze`** ✓ |
-    ///
-    /// ⇒ 按 **设备地区 → `us` → `jp`** 依次试，第一个能给出"艺人名对得上"的结果就用它。
-    /// 中国大陆的 iTunes 目录**根本没有这位艺人的东西**，这条链是唯一能出卡车的路。
-    ///
-    /// - Note: 回调**一定**在主队列上。
+    //
+    // 取这位艺人的最新一条发布；已经有缓存 / 已经有请求在飞时不重复发。
+    //
+    // **只查"设备地区"那一家店是不够的**。
+    //
+    // ```
+    // [Release] iTunes search — "Nanatsukaze"
+    // [Release] "Nanatsukaze" — no usable release in the iTunes response   ← 4 秒后
+    // [Release] no release for "Nanatsukaze" — the card stays hidden
+    // ```
+    //
+    // 本机实测`entity=album&limit=10`）：
+    //
+    // | country | resultCount | artistName |
+    // | `cn`（这台设备的地区） | **0** | — |
+    // | `jp` | 10 | `ナナツカゼ`（假名，与页面上的 `Nanatsukaze` 对不上） |
+    // | `us` | 10 | **`Nanatsukaze`** ✓ |
+    //
+    // ⇒ 按 **设备地区 → `us` → `jp`** 依次试，第一个能给出"艺人名对得上"的结果就用它。
+    // 中国大陆的 iTunes 目录**根本没有这位艺人的东西**，这条链是唯一能出卡车的路。
+    //
+    // - Note: 回调**一定**在主队列上。
     static func fetch(artist: String, completion: @escaping (ArtistLatestRelease?) -> Void) {
         let key = normalized(artist)
         guard !key.isEmpty else {
@@ -183,8 +157,8 @@ enum ArtistLatestReleaseSource {
                 return
             }
 
-            // ★ 2026-10-17：**没对上的时候要把"对面写了什么"打出来** —— 上一轮的
-            //   `no usable release` 谁也答不了"是 0 条结果，还是艺人名对不上"。
+            // **没对上的时候要把"对面写了什么"打出来** —— 上一轮的
+            // `no usable release` 谁也答不了"是 0 条结果，还是艺人名对不上"。
             writeDebugLog(
                 "[Release] \"\(artist)\" @ \(country) — no usable release (\(parsed.results) result(s),"
                     + " artistName(s): \(parsed.artistNames))"
@@ -219,9 +193,9 @@ enum ArtistLatestReleaseSource {
     }
 
     // MARK: - 解析
-
-    /// 一次搜索的解析result：`release` 是要不要用，`results` / `artistNames` 只进日志
-    /// （"0 条结果"与"有结果但都对不上"是两件完全不同的事）。
+    //
+    // 一次搜索的解析result：`release` 是要不要用，`results` / `artistNames` 只进日志
+    // （"0 条结果"与"有结果但都对不上"是两件完全不同的事）。
     private static func parse(
         data: Data,
         artist: String
@@ -279,11 +253,11 @@ enum ArtistLatestReleaseSource {
             }
         }
 
-        // ★★ 2026-10-18：**一条日期都解析不出来就别猜**。
+        // **一条日期都解析不出来就别猜**。
         //
-        //   搜索是**按相关度**返回的，「最新发布」这个名字要求按日期挑 ⇒ 没有日期时
-        //   "第一名"根本不是"最新的一张"（`Connect the World` 就是这么被选上的）。
-        //   宁可这张卡先不出现（页面那一块读到之后会自己换上来），也不印一张错的专辑。
+        // 搜索是**按相关度**返回的，「最新发布」这个名字要求按日期挑 ⇒ 没有日期时
+        // "第一名"根本不是"最新的一张"（`Connect the World` 就是这么被选上的）。
+        // 宁可这张卡先不出现（页面那一块读到之后会自己换上来），也不印一张错的专辑。
         if matched > 0, dated == 0, let fallback = newest {
             writeDebugLog(
                 "[Release] \(matched) result(s) matched the artist but none carried a parseable"
@@ -295,10 +269,6 @@ enum ArtistLatestReleaseSource {
         return (newest, results.count, seenArtists.isEmpty ? "-" : seenArtists.joined(separator: " | "))
     }
 
-    /// `2026-08-22T07:00:00Z`（现代 iTunes Search）或 `06/20/2025 07:00:00`（老格式 / 部分端点）。
-    ///
-    /// ★★ 2026-10-18（日志 222 的现场：卡片显示成 `Connect the World - Single`）：
-    ///
     /// ```
     /// [Release] "Nanatsukaze" @ us → Connect the World - Single (1 track(s), date ?)
     /// ```

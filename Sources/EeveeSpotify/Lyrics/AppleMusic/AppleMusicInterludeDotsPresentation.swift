@@ -3,19 +3,19 @@ import Foundation
 
 // 移植自 MeloX `MeloX/Core/Lyrics/AppleMusicInterludeDotsPresentation.swift`（GPL-3.0）。
 //
-// 这里就是用户说的「三个呼吸点」的**全部动画数学**：给定播放时间，算出
-//   · 三个点各自的不透明度（`dotOpacities`）—— 依次点亮，前面点亮的点回落到
-//     `inactiveDotOpacity`；
-//   · 整排的缩放（`scale`）—— 平时按 `breathHalfCycleDuration` 一呼一吸，
-//     cue-out 时先冲一下峰值再塌缩；
-//   · 整排的不透明度（`opacity`）—— 退出阶段淡出。
+// 这里就是三个呼吸点的**全部动画数学**：给定播放时间，算出
+// · 三个点各自的不透明度（`dotOpacities`）—— 依次点亮，前面点亮的点回落到
+// `inactiveDotOpacity`；
+// · 整排的缩放（`scale`）—— 平时按 `breathHalfCycleDuration` 一呼一吸，
+// cue-out 时先冲一下峰值再塌缩；
+// · 整排的不透明度（`opacity`）—— 退出阶段淡出。
 //
 // 纯函数、无 UI 依赖：视图只负责把这三个数画出来（见 `AppleMusicInterludeRow`）。
 // 时钟由调用方给（本项目 = `AppleMusicLyricsPage` 宿主里那条 CADisplayLink）。
 //
 // ⚠️ 与 MeloX 的差别只有措辞级：注释改中文、`switch` 与 `guard` 的写法对齐本仓库的
-//    `AppleMusicInterludeMotionProfile`。曲线、事件顺序、阈值一律照抄 —— 这排点的观感
-//    就是靠这些数字还原 Apple Music 的，改一个数都要先在真机上看过。
+// `AppleMusicInterludeMotionProfile`。曲线、事件顺序、阈值一律照抄 —— 这排点的观感
+// 就是靠这些数字还原 Apple Music 的，改一个数都要先在真机上看过。
 
 struct AppleMusicInterludeDotsPresentation: Equatable, Sendable {
     let dotOpacities: [Double]

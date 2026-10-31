@@ -1,10 +1,10 @@
-// ★ 2026-10-13：从上游 EeveeSpotifyReincarnated 原样移植（`Sources/EeveeSpotifyC/ColorSwap.m`）。
+// 从上游 EeveeSpotifyReincarnated 原样移植（`Sources/EeveeSpotifyC/ColorSwap.m`）。
 //
 // 用途：「主题」换色 —— AMOLED 纯黑 + 用户强调色。它不改任何具体控件，而是在**颜色出生点**
 // 把 Spotify 自己那两种"设计 token"换掉：
-//   · 底色灰（#121212 那一档中性深灰，分量落在 0.01…0.10）→ **纯黑**（**保留 alpha**）；
-//   · 品牌绿（0x1ED760 / 0x1DB954，两个都认）→ 用户的强调色（按同比例缩放，
-//     所以深绿变体跟着变成"同一个强调色的深色版"，而不是被统一拍平）。
+// · 底色灰（#121212 那一档中性深灰，分量落在 0.01…0.10）→ **纯黑**（**保留 alpha**）；
+// · 品牌绿（0x1ED760 / 0x1DB954，两个都认）→ 用户的强调色（按同比例缩放，
+// 所以深绿变体跟着变成"同一个强调色的深色版"，而不是被统一拍平）。
 //
 // 为什么放在 C 层：这些颜色是在 **CALayer / CGFloat 那一层**出生的（大量来自后台线程），
 // 而且 `UIColor` 的构造器会被到处调用 —— 在 Swift 里没有一处能统管它们。所以这里只 swizzle
@@ -43,9 +43,9 @@ static BOOL swapGreen(CGFloat *r, CGFloat *g, CGFloat *b) {
         CGFloat gr = ((kGreens[i] >> 16) & 0xFF) / 255.0, gg = ((kGreens[i] >> 8) & 0xFF) / 255.0, gb = (kGreens[i] & 0xFF) / 255.0;
         if (fabs(*r - gr) > 0.01 || fabs(*g - gg) > 0.01 || fabs(*b - gb) > 0.01) continue;
         CGFloat factor = MAX(gr, MAX(gg, gb)) / (0xD7 / 255.0);
-        *r = MIN(1, sAccent[0] * factor);
-        *g = MIN(1, sAccent[1] * factor);
-        *b = MIN(1, sAccent[2] * factor);
+        * r = MIN(1, sAccent[0] * factor);
+        * g = MIN(1, sAccent[1] * factor);
+        * b = MIN(1, sAccent[2] * factor);
         return YES;
     }
     return NO;
@@ -167,7 +167,7 @@ int EeveeInstallColorSwaps(BOOL amoled, NSInteger accentRGB) {
 }
 
 void EeveeColorSwapStats(long *grey, long *green, long *uiColor) {
-    *grey = atomic_load_explicit(&sGreyHits, memory_order_relaxed);
-    *green = atomic_load_explicit(&sGreenHits, memory_order_relaxed);
-    *uiColor = atomic_load_explicit(&sInitHits, memory_order_relaxed);
+    * grey = atomic_load_explicit(&sGreyHits, memory_order_relaxed);
+    * green = atomic_load_explicit(&sGreenHits, memory_order_relaxed);
+    * uiColor = atomic_load_explicit(&sInitHits, memory_order_relaxed);
 }

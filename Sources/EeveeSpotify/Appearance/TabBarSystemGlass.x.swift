@@ -7,49 +7,28 @@ import ObjectiveC.runtime
 /// 标签栏：**把 Spotify 那条栏的内容藏起来，在它上面叠一条系统 `UITabBar`** ——
 /// iOS 26 会把它画成真·液态玻璃（选中气泡、折射、明暗自适应），一行玻璃 API 都不用我们写。
 ///
-/// ## 机制（四步）
-///   ① Spotify 的栏**留着**（frame / 交互 / inset 都不碰），但它的**内容不可见**；
-///   ② 叠一条**系统栏**，item 从 Spotify 那几颗同步（顺序、标题、图标都跟着开关走）；
-///   ③ **选中态**跟着"Spotify 把哪一颗标成选中"走（气泡因此会滑过去 / 形变）；
-///   ④ 系统栏比 Spotify 的栏高时，把差额写进 `TabBarImpl.additionalSafeAreaInsets.bottom`
-///      ⇒ Spotify 自己把栏 / 迷你播放器 / 页面一起让开。
+/// 机制四步：① Spotify 的栏**留着**（frame / 交互 / inset 都不碰），但内容不可见；
+/// ② 叠一条系统栏，item 从 Spotify 那几颗同步；③ 选中态跟着 Spotify 标成的那一颗走；
+/// ④ 系统栏比 Spotify 的栏高时，把差额写进 `TabBarImpl.additionalSafeAreaInsets.bottom`。
 ///
-/// ## 硬约束（错了当场就坏，别再试）
-///   · **只藏内容（图标 / 文字），绝不藏 item 视图本身**：UIKit 的命中测试跳过 `alpha < 0.01`
-///     的视图，藏了 item 就整条栏点不动；每个视图记**它自己的**原 alpha，不能统一写 1。
-///   · **图标先同步、后隐藏**：拿不到图标的那一颗，原图标就不藏（安全网，不留空行），
-///     每颗的 `icon=Y/N` 打进日志。
-///   · **宿主必须把底部安全区报成 0**：UIKit 的浮岛玻璃按所在视图的安全区量高度，否则会留
-///     34pt 给 Home Indicator，内容区只剩 26pt。
-///   · **几何只认 `TabBarGlassPlate.targetCapsuleRect`**；内边距量一次就冻结，而且只认栏自己那块
-///     `UITabBarPlatterView`（`_UITabBarItemPlatterView` 是选中气泡，尺寸随选中态变）。
-///   · **只放真正在用的那几颗 + `itemPositioning = .fill`**，沿宿主（按四格算出来的宽度）等分；
-///     藏「创建」时**保住槽位**，否则 UIKit 按三颗重画、玻璃变窄。按 `tag` 找格，不按下标。
-///   · **触摸**：只有 `probeForwardRoute` **读得出**一条能用的转发路时，系统栏才接管触摸
-///     （读 item 子树里那颗 `UITapGestureRecognizer` 的 `_targets`，目标要真的响应
-///     `TabBarItemElementUI.handleTap`）。可用路从公开到私有：`selectedIndex` → 识别器
-///     target/action → `-handleTap` → `accessibilityActivate()` → `UIControl.sendActions`；
-///     **全不通就 `handTouchesBack`**（栏与宿主一起关交互，交还过就不再收回），
-///     绝不留下"看得见、点不动"。转发完成后 0.25s 再 `reapply()`（Spotify 会晚一步重画标签色）。
-///   · **栏上不装任何手势**：iOS 26 的液态玻璃标签栏本来就"按住就能滑"；
-///     pan / 逐格切换那一套（"不跟手 / 胶囊回弹 / 替用户按按键"的根因）已删除。
-///   · 选中态判据：9.1.88 的 item **没有** `.selected` trait（`traits=0x0`）⇒ 看谁的文字是
-///     `#FFFFFF`（其余 `#B3B3B3`）。
-///
-/// ## 开关
-/// 设置 → 扩展功能 → 标签栏 →「**标签栏改用系统玻璃**」，**默认开**（老版本拨过的盘上值由
-/// `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()` 一次性迁移）。
-/// 关掉 = 系统栏与宿主移除 + 被藏的内容**各自恢复原 alpha** + `additionalSafeAreaInsets` 写回原值。
-/// 日志 tag：`[TabBarSystem]`。整个 enum 必须是 `@MainActor`（要调 `@MainActor` 的
-/// `TabBarGlassPlate.findTabsStack(in:)`，否则 Swift 6 并发检查直接判错）。
+/// 硬约束：只藏内容、绝不藏 item 视图（UIKit 的命中测试跳过 `alpha < 0.01` 的视图，藏了
+/// item 整条栏就点不动；每个视图要记**它自己的**原 alpha）；宿主必须把底部安全区报成 0
+/// （UIKit 按所在视图的安全区量玻璃高度，否则留 34pt 给 Home Indicator，内容区只剩 26pt）；
+/// 几何只认 `TabBarGlassPlate.targetCapsuleRect`；只放真正在用的那几颗、按 `tag` 找格；
+/// 触摸只在 `probeForwardRoute` 读得出转发路时才接管，全不通就 `handTouchesBack`；栏上不装
+/// 任何手势（iOS 26 的玻璃标签栏本来就"按住就能滑"）。选中态判据见 `syncSelection`。
+/// 开关：设置 → 扩展功能 → 标签栏 →「标签栏改用系统玻璃」，**默认开**（老版本拨过的盘上值由
+/// `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded` 一次性迁移）；关掉 = 系统栏与宿主
+/// 移除 + 内容各自恢复原 alpha + `additionalSafeAreaInsets` 写回。日志 tag `[TabBarSystem]`；
+/// enum 必须 `@MainActor`（要调 `@MainActor` 的 `TabBarGlassPlate.findTabsStack(in:)`）。
 @MainActor
 enum TabBarSystemGlass {
 
     static let logTag = "TabBarSystem"
 
-    /// Spotify 自己那一行的高度（真机树里 `UIStackView(0,0 414x49)`）。
+    /// Spotify 自己那一行的高度（视图树里是 `UIStackView(0,0 414x49)`）。
     private static let stockRowHeight: CGFloat = 49
-    /// `TabBarContainerImpl` 的类名（pw 也是按名字找它：它是 Spotify 那条栏的容器 VC）。
+    /// `TabBarContainerImpl` 的类名：它是 Spotify 那条栏的容器 VC，按类名找它。
     private static let containerClassName = "_TtC23NavigationUI_TabBarImpl19TabBarContainerImpl"
 
     static var isEnabled: Bool { UserDefaults.tabBarSystemGlass }
@@ -64,20 +43,19 @@ enum TabBarSystemGlass {
     /// 被我们按成透明的**内容**视图（图标 / 文字；**弱引用**）+ 各自的原 alpha。
     ///
     /// ⚠️ 两条纪律：
-    ///   · **只藏内容，不藏 item 视图本身** —— 藏了它，触摸就再也到不了 Spotify 那几颗
-    ///     （日志 63 的"整条栏点不动"就是这个）；
-    ///   · 每个视图记**它自己的**原 alpha，不能一律写 1（仓库在封面那条路上踩过"统一写回 = 永久错"）。
+    /// · **只藏内容，不藏 item 视图本身** —— 藏了它，触摸就再也到不了 Spotify 那几颗；
+    /// · 每个视图记**它自己的**原 alpha，不能一律写 1（统一写回 = 永久错）。
     private static let hiddenContent = NSHashTable<UIView>.weakObjects()
     private static var hiddenContentAlphas: [ObjectIdentifier: CGFloat] = [:]
 
-    /// 系统栏量出来的高度**只量一次**：让出高度之后 `sizeThatFits` 会要得更多（pw 的注释点了这件事）。
+    /// 系统栏量出来的高度**只量一次**：让出高度之后 `sizeThatFits` 会要得更多。
     private static var measuredGlassHeight: CGFloat = 0
 
     /// UIKit 自己留的那圈内边距（**玻璃 = 宿主 − 它**）：**量一次就冻结**，见 `place`。
     private static var glassInsets: UIEdgeInsets?
     private static weak var measuredInsetsBar: UIView?
     /// 上面那份内边距是**按几颗量**的 —— UIKit 的浮岛玻璃按**内容**定宽，三颗与四颗的常量不同
-    /// （真机日志 71：四颗 21/21、三颗 70/70）⇒ 颗数一变就重量一次。
+    /// （四颗 21/21、三颗 70/70）⇒ 颗数一变就重量一次。
     private static var glassInsetsCount = -1
     /// 我们是否已经把触摸交还给 Spotify（交还过就**不再收回**，避免"点一下空一下"）。
     private static var handedBackTouches = false
@@ -85,11 +63,9 @@ enum TabBarSystemGlass {
     private static var iconSnapshots: [ObjectIdentifier: UIImage] = [:]
     /// 我们装在 **Spotify 自己那条栏**上的那只"点一下"手势（**不抢触摸**，只让气泡立刻对过去）。
     ///
-    /// ⚠️ 2026-10-12 第四片：这里本来还有**第二只** `UIPanGestureRecognizer`（"按住划 = 滑过哪格切哪格"），
-    /// **已删除** —— 见文件头"第四片"：它 `cancelsTouchesInView = true`（吃掉系统玻璃要的那次触摸）、
-    /// 而且会**替用户换页**、切不动时还把气泡拨回原位。用户原话：
-    /// 「**不跟手**……**可能有胶囊回弹 / 替用户按按键**的情况」。pw 那条栏上**一只手势都没有**
-    /// （除了"长按主页进设置"），"跟手"是系统玻璃自己接住手指之后才有的东西。
+    /// ⚠️ 这里只能有这一只：pan（"按住划 = 滑过哪格切哪格"）`cancelsTouchesInView = true`，
+    /// 会吃掉系统玻璃要的那次触摸，还会**替用户换页**、切不动时把气泡拨回原位 ⇒ 已删除。
+    /// "跟手"是系统玻璃自己接住手指之后才有的东西，不是我们画出来的。
     private static var stockTapKey: UInt8 = 0
     private static var mirroredSelections = 0
     /// 上一次"探转发路"的时刻（`ProcessInfo.systemUptime`）—— 节流用，见 `probeForwardRouteThrottled`。
@@ -110,8 +86,8 @@ enum TabBarSystemGlass {
     private static var forwardedTaps = 0
 
     // MARK: - 对外入口
-
-    /// 幂等。由 `TabBarPlateHook.layoutSubviews`（栏自己每次布局）与复查节拍调用。
+    //
+    // 幂等。由 `TabBarPlateHook.layoutSubviews`（栏自己每次布局）与复查节拍调用。
     static func apply(to bar: UIView) {
         lastBar = bar
 
@@ -125,24 +101,24 @@ enum TabBarSystemGlass {
             return
         }
 
-        // ★ 复查节拍上再压一次（幂等）：Spotify 可能把「创建」显示回来。
-        //   主驱动是栏自己的布局回合（`TabBarPlateHook.layoutSubviews`），这里是保险。
-        //   ⚠️ **必须在下面取 `items` 之前** —— 顺序反了的话，第一拍会按四颗镜像一次。
+        // 复查节拍上再压一次（幂等）：Spotify 可能把「创建」显示回来。
+        // 主驱动是栏自己的布局回合（`TabBarPlateHook.layoutSubviews`），这里是保险。
+        // ⚠️ **必须在下面取 `items` 之前** —— 顺序反了的话，第一拍会按四颗镜像一次。
         TabBarGlassPlate.applyCreateTabVisibility(in: bar)
 
-        // ★ 2026-10-13：这里的**输入**是"占着槽位的那几颗"（`visibleItems` = **四格**）。
-        //   藏掉「创建」之后它**仍然占着第 4 格**（`applyCreateTabVisibility` 改成只把它按透明、
-        //   点不到，不再用 `isHidden`）—— 这是**几何**要的：宿主/玻璃的宽度按四格算，
-        //   才不随那颗开关变（日志 70/71 实测：四颗 360×60 → 三颗 274×60；而迷你条按
-        //   `capsuleWidthRatio` 等宽跟随 ⇒ 一起缩，用户报的就是这个）。
-        //   ⚠️ 但**系统栏只放真正在用的那几颗**（`syncItems` 跳过被藏的那一格）+
-        //   `itemPositioning = .fill` ⇒ 三颗把整块玻璃**三等分**（用户第二条要求的下半句）。
-        //   `item.tag` 是"占位列表"里的下标，转发与选中态都按它对齐（见 `item(at:on:)`）。
+        // 这里的**输入**是"占着槽位的那几颗"（`visibleItems` = **四格**）。
+        // 藏掉「创建」之后它**仍然占着第 4 格**（`applyCreateTabVisibility` 只把它按透明、
+        // 点不到，不用 `isHidden`）—— 这是**几何**要的：宿主/玻璃的宽度按四格算，
+        // 才不随那颗开关变（四颗 360×60 → 三颗 274×60；而迷你条按 `capsuleWidthRatio`
+        // 等宽跟随 ⇒ 一起缩）。
+        // ⚠️ 但**系统栏只放真正在用的那几颗**（`syncItems` 跳过被藏的那一格）+
+        // `itemPositioning = .centered` + `itemWidth` ⇒ 三颗把整块玻璃**三等分**。
+        // `item.tag` 是"占位列表"里的下标，转发与选中态都按它对齐（见 `item(at:on:)`）。
         let items = TabBarGlassPlate.visibleItems(in: stack)
         guard !items.isEmpty else { return }
 
         // ② 先同步系统栏 —— **顺序要紧**：下面"藏什么"取决于"镜像到了什么"
-        //   （拿不到图标的那一颗，原图标要留着当安全网）。
+        // （拿不到图标的那一颗，原图标要留着当安全网）。
         let systemBar = ensureBar(in: bar)
         let mirrored = syncItems(on: systemBar, from: items)
 
@@ -152,14 +128,13 @@ enum TabBarSystemGlass {
         // ③ 选中态：气泡跟着 Spotify 走。
         syncSelection(on: systemBar, items: items)
 
-        // ★ 第三片留下的那半：把"点一下"装到 **Spotify 自己那条栏**上（不抢它的触摸，只让气泡立刻对过去）。
-        //   ⚠️ 第四片删掉了它的兄弟（"按住划"）—— 见文件头。
+        // 把"点一下"装到 **Spotify 自己那条栏**上（不抢它的触摸，只让气泡立刻对过去）。
         installStockGestures(on: bar)
 
-        // ★★ 第四片：**系统栏该不该接管触摸**？—— 判据改成"能不能在**点之前**把转发路读出来"
-        //   （见 `probeForwardRoute`）。能读出来 ⇒ 玻璃才接得住手指（"跟手"与折射就是从这里来的）；
-        //   读不出来 ⇒ 照旧把触摸留给 Spotify 那条栏，并把那条链**逐环**写进日志。
-        //   ⚠️ **一旦交还过触摸就不再收回**（否则会"点一下空一下"地来回抖）。
+        // **系统栏该不该接管触摸**？—— 判据是"能不能在**点之前**把转发路读出来"
+        // （见 `probeForwardRoute`）。能读出来 ⇒ 玻璃才接得住手指（"跟手"与折射就是从这里来的）；
+        // 读不出来 ⇒ 照旧把触摸留给 Spotify 那条栏，并把那条链**逐环**写进日志。
+        // ⚠️ **一旦交还过触摸就不再收回**（否则会"点一下空一下"地来回抖）。
         if !handedBackTouches, !systemBar.isUserInteractionEnabled,
            let route = probeForwardRouteThrottled(in: bar) {
             systemBar.isUserInteractionEnabled = true
@@ -170,14 +145,14 @@ enum TabBarSystemGlass {
             )
         }
 
-        // ★ 摆位（第二片）：把宿主/系统栏摆成"自绘胶囊那一块"。
+        // 摆位：把宿主/系统栏摆成几何判据算出来的那一块（`TabBarGlassPlate.targetCapsuleRect`）。
         place(systemBar, in: bar)
 
         // ④ 让高度（放在最后：量高度要用**还没让过高度**的那次结果）。
         makeRoom(for: bar, systemBar: systemBar)
 
-        // ★ 把"我们给的框"与"UIKit 真画出来的玻璃"放进同一行（用户要求两条胶囊对齐，
-        //   而只有实测数字能收敛 —— 见文件头第二片 ①）。
+        // 把"我们给的框"与"UIKit 真画出来的玻璃"放进同一行 ——
+        // 只有实测数字能收敛（UIKit 按自己的内边距画，我们给的框 ≠ 玻璃框）。
         reportGlassGeometry(systemBar, in: bar)
 
         logLayoutOnce(bar: bar, items: items, systemBar: systemBar, mirrored: mirrored)
@@ -204,13 +179,11 @@ enum TabBarSystemGlass {
                 objc_setAssociatedObject(target, &hostKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
             objc_setAssociatedObject(target, &relayKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            // ★ 装在 Spotify 那条栏上的那只"点一下"手势也要摘掉 —— 不然关掉开关之后它还挂着。
+            // 装在 Spotify 那条栏上的那只"点一下"手势也要摘掉 —— 不然关掉开关之后它还挂着。
             if let tap = objc_getAssociatedObject(target, &stockTapKey) as? UIGestureRecognizer {
                 target.removeGestureRecognizer(tap)
                 objc_setAssociatedObject(target, &stockTapKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
-            // ⚠️ 2026-10-13：长按主页进设置那条**已回退**（用户：「这个功能先回退」），
-            //   所以这里不再有"故意不摘"的那一只；版面上只有这只"点一下"。
             restoreRoom(in: target)
         }
         restoreStockContent()
@@ -232,15 +205,13 @@ enum TabBarSystemGlass {
     }
 
     // MARK: - ① 藏 Spotify 自己的内容（**不藏 item 本身**）
-
-    /// 藏**图标与文字**：图标只藏"已经镜像到系统栏"的那些（安全网），文字一律藏
-    /// （文字要么由系统栏画标题，要么本来就该没有 —— 见 `tabBarHideLabels`）。
-    ///
-    /// ★★ 2026-10-12（真机日志 67 + 用户："**底部 spotify 自带的那一层按钮还在**"）：
-    /// 上一版这里只藏 `glyphViews`（= `UIImageView`），而**这一版的图标是 `SPTEncoreIconView`**
-    /// （日志 67：`icon taken from SPTEncoreIconView at 0,0,24,24`）⇒ 一颗都没藏住，
-    /// 我们镜像出来的图标和原图标**叠在一起**。
-    /// ⇒ **镜像到了什么就藏什么**：`findIconView`（我们取快照的那颗）与 `glyphViews` 一起藏。
+    //
+    // 藏**图标与文字**：图标只藏"已经镜像到系统栏"的那些（安全网），文字一律藏
+    // （文字要么由系统栏画标题，要么本来就该没有 —— 见 `tabBarHideLabels`）。
+    //
+    // ⚠️ 图标视图**不只是** `UIImageView`：这一版的图标是 `SPTEncoreIconView`，
+    // 只藏 `glyphViews` 会一颗都藏不住，镜像出来的图标和原图标**叠在一起**。
+    // ⇒ **镜像到了什么就藏什么**：`findIconView`（我们取快照的那颗）与 `glyphViews` 一起藏。
     private static func hideStockContent(items: [UIView], mirroredIcons: [Bool]) {
         for (index, item) in items.enumerated() {
             if index < mirroredIcons.count, mirroredIcons[index] {
@@ -285,22 +256,17 @@ enum TabBarSystemGlass {
             return existing
         }
 
-        // ★ 宿主：**只负责把底部安全区让掉**（见 `TabBarSystemGlassHost` 的说明）。
-        //   pw 也是这么做的（`SGRTabBarHost`）：UIKit 按"所在视图的安全区"量玻璃条的高度。
+        // 宿主：**只负责把底部安全区让掉**（见 `TabBarSystemGlassHost` 的说明）。
+        // UIKit 按"所在视图的安全区"量玻璃条的高度，宿主报 0 才不会多留 34pt。
         let host = TabBarSystemGlassHost()
         host.backgroundColor = .clear
         host.accessibilityIdentifier = "eevee-tabbar-system-glass-host"
 
-        // ★★ 2026-10-12 第四版：**"要不要接管触摸" = "能不能在点之前把转发路读出来"**
-        //    （见 `probeForwardRoute`）。用户第四轮原话：
-        //    「**标题栏液态玻璃不跟手**……**可能有胶囊回弹 / 替用户按按键**……**而且胶囊也没有反射**」。
-        //    日志 70 的第一行就是答案：`leaving the touches to Spotify's own bar (no forwarding route found…)`
-        //    ⇒ 前几版只认第 ① 条公开路（容器是 `UITabBarController`），而真机上容器**不是**
-        //    ⇒ 判定永远 false ⇒ **系统栏从来没接过一次触摸** ⇒ 玻璃只是一张画
-        //    （没有按下回弹、没有折射响应，也没有 UIKit 自己的跟手），而手指全落在 Spotify 那条栏上、
-        //    由第三片装的两只手势代劳 ⇒ 那三条症状一个不少。
-        //    pw 的做法正相反：**触摸全给系统栏**（`TabBar.x:360-364` 把 Spotify 那几个子视图
-        //    `alpha = 0` + `userInteractionEnabled = NO`），点击在 `didSelectItem` 里转发。
+        // **"要不要接管触摸" = "能不能在点之前把转发路读出来"**（见 `probeForwardRoute`）。
+        // 只认第 ① 条公开路（容器是 `UITabBarController`）是不行的：真机上容器**不是**
+        // ⇒ 判定永远 false ⇒ **系统栏从来没接过一次触摸** ⇒ 玻璃只是一张画
+        // （没有按下回弹、没有折射响应，也没有 UIKit 自己的跟手）。
+        // 反过来，一旦接管，转发就必须真的成立 —— 否则立刻变成"看得见、点不动"。
         let route = probeForwardRoute(in: bar)
         let takesTouches = route != nil
         host.isUserInteractionEnabled = takesTouches
@@ -316,20 +282,19 @@ enum TabBarSystemGlass {
         systemBar.backgroundImage = UIImage()
         systemBar.shadowImage = UIImage()
         systemBar.isTranslucent = true
-        // ★ 2026-10-13（用户第二条要求的下半句）：**剩下的三颗要三等分整块玻璃**。
-        //   ⚠️ **`.fill` 在 iOS 26 这条新玻璃上不生效**（真机日志 76 实测：三颗仍然每颗 94、
-        //   按内容居中、platter 274），而且 `.fill` 会把 `itemWidth` 一起吃掉
-        //   ⇒ 改用 **`.centered` + `itemWidth`**（每颗宽度 = 目标胶囊宽 / 颗数，见 `place`）：
-        //   三颗的方案就是"各占 1/3"，而且 platter 会跟着 item 宽度回到 360。
+        // 剩下的几颗要**等分整块玻璃**。
+        // ⚠️ **`.fill` 在 iOS 26 这条新玻璃上不生效**（三颗仍然每颗 94、按内容居中、
+        // platter 274），而且 `.fill` 会把 `itemWidth` 一起吃掉
+        // ⇒ 改用 **`.centered` + `itemWidth`**（每颗宽度 = 目标胶囊宽 / 颗数，见 `place`）：
+        // 三颗的方案就是"各占 1/3"，而且 platter 会跟着 item 宽度回到 360。
         systemBar.itemPositioning = .centered
 
         let relay = TabBarSystemGlassRelay()
         systemBar.delegate = relay
         objc_setAssociatedObject(bar, &relayKey, relay, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
-        // ★ 2026-10-13：**手指落在哪条栏上，哪条栏就得有手势** —— 这一档触摸全归系统玻璃
-        //   （日志 87：`the system bar takes the touches`），所以"点一下立刻对气泡"这只也得装在
-        //   这里：日志 87/88 里 `first tap seen` 一直没出现，就是它原来只挂在 Spotify 那条栏上。
+        // **手指落在哪条栏上，哪条栏就得有手势** —— 触摸归系统玻璃时，这条栏上一次触摸都
+        // 收不到，所以"点一下立刻对气泡"这只也得装在这里（两只各装一遍，`label` 区分日志）。
         installStockGestures(on: systemBar, label: "our system glass")
 
         host.addSubview(systemBar)
@@ -349,22 +314,22 @@ enum TabBarSystemGlass {
         return systemBar
     }
 
-    // MARK: - ★★ 第四片：转发路**读得出来**才接管触摸
-
-    /// "点了某颗之后谁来接"——**在建栏时就能读出来的那几条路**。
-    ///
-    /// 为什么必须"读得出来"才算数：系统栏一旦接管触摸，Spotify 那几颗就再也收不到点击
-    /// ⇒ 转发要是落空，标签栏立刻变成"看得见、点不动"（仓库红线）。所以判据从
-    /// "先接管、失败了再还回去"（会白丢第一下）改成"**先证明有人接**"。
+    // MARK: - 转发路**读得出来**才接管触摸
+    //
+    // "点了某颗之后谁来接"——**在建栏时就能读出来的那几条路**。
+    //
+    // 为什么必须"读得出来"才算数：系统栏一旦接管触摸，Spotify 那几颗就再也收不到点击
+    // ⇒ 转发要是落空，标签栏立刻变成"看得见、点不动"（仓库红线）。所以判据从
+    // "先接管、失败了再还回去"（会白丢第一下）改成"**先证明有人接**"。
     private enum ForwardRoute {
         /// ① 公开 API：容器是 `UITabBarController`，`selectedIndex` 就能换页。
         case container(controllers: Int)
-        /// ② pw 那条路：item 子树里那颗 tap 识别器的 `_targets` 里有一对**目标真的响应**的
-        ///    target/action（`TabBarItemElementUI` 的 `-handleTap` 就是它）。
+        /// ② item 子树里那颗 tap 识别器的 `_targets` 里有一对**目标真的响应**的 target/action
+        /// （`TabBarItemElementUI` 的 `-handleTap` 就是它）。
         case tapRecognizer(index: Int, target: String, action: String)
         /// ①′ 容器**自己带着的那几个 view controller**（这台机器上容器不是 `UITabBarController`，
-        ///    但日志 67 证明它答 `setSelectedViewController:`）⇒ 直接用它的 setter 换页 ——
-        ///    **完全不依赖 Element 的私有手势**，所以它是日志 72 之后最稳的一条路。
+        /// 但它答 `setSelectedViewController:`）⇒ 直接用它的 setter 换页 ——
+        /// **完全不依赖 Element 的私有手势**，所以这是最稳的一条路。
         case containerControllers(count: Int)
         /// ③ 子树里（响应链或 ivar 上）有对象响应 `-handleTap`。
         case handleTap(index: Int, holder: String)
@@ -372,7 +337,7 @@ enum TabBarSystemGlass {
         case control(index: Int, name: String)
     }
 
-    /// 一行说清"是**哪条**路、在哪一颗上"。日志里必须带这个，否则"接管了又点不动"没法复盘。
+    /// 一行说清"是**哪条**路、在哪一颗上"。否则"接管了又点不动"没法复盘。
     private static func describe(_ route: ForwardRoute?) -> String {
         guard let route = route else { return "none — no route can be read before a tap" }
         switch route {
@@ -391,7 +356,7 @@ enum TabBarSystemGlass {
     }
 
     /// 一条都读不出来时，把**那条链逐环**写出来（`_targets` 在不在 / 有几对 / 每对解出来什么）。
-    /// 这正是 pw 依赖的那一环，也是"为什么 pw 的写法在我们这版不通"的唯一判据。
+    /// 这是"为什么那套转发写法在这版不通"的唯一判据。
     private static func chainDescription(in bar: UIView) -> String {
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return "no tabs stack yet" }
         // ⚠️ 与转发用的是**同一份列表**（看得见的那几颗）—— 编号必须对得上。
@@ -409,8 +374,8 @@ enum TabBarSystemGlass {
 
     /// 探一次：**能读出来的**第一条路（顺序与 `forwardTap` 一致，从最公开到最私有）。
     ///
-    /// ⚠️ 只探"点得动"这件事；`accessibilityActivate()` 那条**探不出来**（要真调一次才知道），
-    ///    所以它只能留在 `forwardTap` 的兜底里，不能当接管触摸的判据。
+    /// ⚠️ 只探"点得动"这件事；`accessibilityActivate` 那条**探不出来**（要真调一次才知道），
+    /// 所以它只能留在 `forwardTap` 的兜底里，不能当接管触摸的判据。
     private static func probeForwardRoute(in bar: UIView) -> ForwardRoute? {
         let stack = TabBarGlassPlate.findTabsStack(in: bar)
         let itemCount = stack.map { TabBarGlassPlate.visibleItems(in: $0).count } ?? 0
@@ -418,16 +383,16 @@ enum TabBarSystemGlass {
            let controllers = tabs.viewControllers, controllers.count >= 2 {
             return .container(controllers: controllers.count)
         }
-        // ★★ 2026-10-13（**真机日志 72** 之后加的）：容器**自己带着**那几个 VC 那一条。
-        //   它比 route ② 更稳（不碰 Element 的私有手势），所以排在识别器前面。
-        //   ⚠️ 个数必须与"看得见的标签数"一致才敢按下标取（否则可能是别的 VC 数组）。
+        // 容器**自己带着**那几个 VC 那一条：它比 route ② 更稳（不碰 Element 的私有手势），
+        // 所以排在识别器前面。
+        // ⚠️ 个数必须与"看得见的标签数"一致才敢按下标取（否则可能是别的 VC 数组）。
         if let container = container(of: bar), let controllers = containerControllers(of: container),
            itemCount == 0 || controllers.count == itemCount {
             return .containerControllers(count: controllers.count)
         }
         guard let stack else { return nil }
         // ⚠️ 只探**转得出去的**那几颗：被我们藏掉的「创建」即使读得出转发路也不算数
-        //    （它在系统栏那边是 `isEnabled = false`，永远选不到 ⇒ 拿它当判据等于白丢一下）。
+        // （它在系统栏那边是 `isEnabled = false`，永远选不到 ⇒ 拿它当判据等于白丢一下）。
         let items = TabBarGlassPlate.visibleItems(in: stack)
         for (index, item) in items.enumerated() where !TabBarGlassPlate.isMutedTabItem(item) {
             if let recognizer = firstFireableTapRecognizer(in: item, index: index) { return recognizer }
@@ -446,24 +411,22 @@ enum TabBarSystemGlass {
     }
 
     /// 子树里第一颗"**真的点得动**"的 tap 识别器：`_targets` 里至少有一对 target/action 能解出来，
-    /// 且那个 target **响应**那个 action。读不出来就返回 nil（= 这条路不能算数）。
+    /// 且那个 target 能接住那个 action。读不出来就返回 nil（= 这条路不能算数）。
     ///
-    /// ★★ 2026-10-13（**真机日志 71** 纠正）：**target 是 `nil` 也算数** ——
-    /// 这台机器上第 4 颗（现在是第 3 颗）的 tap 识别器逐字是
-    /// `UITapGestureRecognizer[nil-target:handleTap]`：`_action` 读得出来、`_target` 是 `nil`
-    /// （Element 那边大概是"稍后再绑 target"或"走响应链"）。上一版因此判定"没有转发路"
-    /// ⇒ 玻璃从不接管触摸 ⇒ 按压/跟手/拖动全都没有（用户报的"没效果"就是这个）。
-    /// 现在：**只要 action 读得出来**就算有路；`nil` target 那一对在**点击那一刻**再读一次
-    /// （也许那时已经绑上了），仍然 `nil` 就走 `sendAction(to: nil)` 与响应链（见 `fire`）。
+    /// ⚠️ **target 是 `nil` 也算数**：这台机器上那颗识别器逐字是
+    /// `UITapGestureRecognizer[nil-target:handleTap]` —— `_action` 读得出来、`_target` 是 `nil`
+    /// （Element 那边大概是"稍后再绑 target"或"走响应链"）。所以判据是**只要 action 读得出来**
+    /// 就算有路；`nil` target 那一对在**点击那一刻**再读一次（也许那时已经绑上了），
+    /// 仍然 `nil` 就走 `sendAction(to: nil)` 与响应链（见 `fire`）。
     private static func firstFireableTapRecognizer(in item: UIView, index: Int) -> ForwardRoute? {
         for view in subtree(of: item, maxDepth: 6) {
             for recognizer in view.gestureRecognizers ?? [] {
                 guard recognizer is UITapGestureRecognizer, recognizer.isEnabled else { continue }
                 for pair in pairs(of: recognizer) {
                     guard let action = action(of: pair) else { continue }
-                    // target 是 `nil` **也算数**（日志 71 就是这一种）：见上面那段说明。
+                    // target 是 `nil` **也算数**：见上面那段说明。
                     // ⚠️ 门与 `fire` 保持一致：**runtime 里找得到那个方法**就算数，
-                    //   不再用 `responds(to:)`（日志 72：Element 的 Swift target 过不了那道门）。
+                    // 不用 `responds(to:)`（Element 的 Swift target 过不了那道门）。
                     let target = target(of: pair)
                     if let target,
                        class_getInstanceMethod(type(of: target), action) == nil,
@@ -495,33 +458,27 @@ enum TabBarSystemGlass {
         objc_getAssociatedObject(bar, &hostKey) as? TabBarSystemGlassHost
     }
 
-    /// ★ 第二片 ①：**把宿主摆成几何判据算出来的那一块**（`TabBarGlassPlate.targetCapsuleRect`）。
-    /// （2026-10-13 之前那句是"自绘胶囊那一块" —— 自绘那盘已删除，判据本身没变。）
+    /// **把宿主摆成几何判据算出来的那一块**（`TabBarGlassPlate.targetCapsuleRect`）。
     ///
-    /// ★★ 2026-10-12 第二版（**真机日志 64 纠正**）：**UIKit 画的玻璃比我们给的框小一圈** ——
-    /// 日志逐字：`host 27,-3,360,60` → 它画出来的 `_UITabBarItemPlatterView` 是 `48,-3,318,39`
-    /// ⇒ 它自己留了 **左右各 21、底 21**（顶 0）。所以：
-    ///   ① 我们给的框 ≠ 屏幕上的玻璃（用户原话："这做的也太矮了吧，**高度长度都不对**"）；
-    ///   ② 修法**不写死 21**，而是按**实测差**把宿主往外扩 —— 关系是"玻璃 = 宿主 − 常量"
-    ///      ⇒ 一次收敛、幂等；
-    ///   ③ 拿不到可信几何（首次布局 / 栏还没进窗口 / 玻璃还没排完）时退回"整条栏"，下一拍再对齐 ——
-    ///      绝不因为量不到就把玻璃藏起来（那是"看得见、点不动"那条红线的近亲）。
+    /// **UIKit 画的玻璃比我们给的框小一圈**：`host 27,-3,360,60` → 它画出来的
+    /// `_UITabBarItemPlatterView` 是 `48,-3,318,39` ⇒ 它自己留了 **左右各 21、底 21**（顶 0）。
+    /// 所以修法**不写死 21**，而是按**实测差**把宿主往外扩 —— 关系是"玻璃 = 宿主 − 常量"
+    /// ⇒ 一次收敛、幂等。拿不到可信几何（首次布局 / 栏还没进窗口 / 玻璃还没排完）时
+    /// 退回"整条栏"，下一拍再对齐 —— 绝不因为量不到就把玻璃藏起来。
     ///
-    /// ★★ 2026-10-12 第三版（用户报："**这个玻璃的大小会一直变**"）：内边距**量一次就冻结**
-    /// （`glassInsets`），而且只认**栏自己那块 platter**（见 `drawnGlassFrame`）。
-    /// 上一版每一拍都重量 ⇒ 量到的地方一变（选中动画期间那几块 platter 的尺寸会动）宿主就跟着变
-    /// ⇒ 玻璃肉眼可见地忽大忽小。冻结之后：**量一次 → 之后每拍只按它摆位**，稳。
+    /// 内边距**量一次就冻结**（`glassInsets`），而且只认**栏自己那块 platter**
+    /// （见 `drawnGlassFrame`）。每拍都重量的话，选中动画期间那几块 platter 的尺寸会动
+    /// ⇒ 宿主跟着变 ⇒ 玻璃肉眼可见地忽大忽小。冻结之后：量一次 → 之后每拍只按它摆位。
     private static func place(_ systemBar: UITabBar, in bar: UIView) {
         guard let host = hostView(for: bar) else { return }
         let target = TabBarGlassPlate.targetCapsuleRect(in: bar) ?? bar.bounds
 
-        // ★ 2026-10-13（用户："剩下三颗要**三等分**整块玻璃"）：UIKit 这块浮岛玻璃是
-        //   **按 item 宽度**撑出来的（真机日志 76：三颗 → platter 274；四颗 → 360），
-        //   而 `.fill` 在 iOS 26 这条新玻璃上不生效 ⇒ 只能**把每颗的宽度钉死**：
-        //     每颗宽 = 目标胶囊宽 / 颗数
-        //   ⇒ 三颗时正好把 360 三等分（item 中心 60 / 180 / 300），
-        //     而且 platter 的宽度回到 360（与"创建还在"时一致 —— 用户第一条要求）。
-        //   ⚠️ 幂等：只在真的变了才写（写 `itemWidth` 会触发一次布局 ⇒ 否则每拍互相打）。
+        // UIKit 这块浮岛玻璃是**按 item 宽度**撑出来的（三颗 → platter 274；四颗 → 360），
+        // 而 `.fill` 在 iOS 26 这条新玻璃上不生效 ⇒ 只能**把每颗的宽度钉死**：
+        // 每颗宽 = 目标胶囊宽 / 颗数
+        // ⇒ 三颗时正好把 360 三等分（item 中心 60 / 180 / 300），
+        // 而且 platter 的宽度回到 360（与"创建还在"时一致）。
+        // ⚠️ 幂等：只在真的变了才写（写 `itemWidth` 会触发一次布局 ⇒ 否则每拍互相打）。
         if let count = systemBar.items?.count, count > 1, target.width > 1 {
             let wanted = (target.width / CGFloat(count)).rounded()
             if abs(systemBar.itemWidth - wanted) > 0.5 {
@@ -535,13 +492,12 @@ enum TabBarSystemGlass {
             }
         }
 
-        // ★★ 2026-10-13（**真机日志 71** 纠正两处）：
-        //   ① 量内边距时**必须按"看得见的颗数"分家**：四颗那次量到 21/21，藏掉「创建」变三颗之后
-        //      再量是 **70/70** —— UIKit 的浮岛玻璃是**按内容**定宽的（三颗更窄），
-        //      所以"玻璃 = 宿主 − 常量"这个常量**随颗数变**。冻结本身没错（防漂），
-        //      错的是"换形状了还沿用旧常量" ⇒ 这里按颗数重量一次。
-        //   ② 宿主**不许越出栏**：日志 71 里 host 被撑成 `-29,-3,472,81`（栏只有 414），
-        //      越界那 29pt 两边没有任何用途，只会让命中区域跑到栏外。
+        // 量内边距时**必须按"看得见的颗数"分家**：
+        // ① 四颗量到 21/21，藏掉「创建」变三颗之后是 **70/70** —— UIKit 的浮岛玻璃是
+        // **按内容**定宽的（三颗更窄），所以"玻璃 = 宿主 − 常量"这个常量**随颗数变**。
+        // 冻结本身没错（防漂），错的是"换形状了还沿用旧常量" ⇒ 这里按颗数重量一次。
+        // ② 宿主**不许越出栏**：曾量到 `-29,-3,472,81`（栏只有 414），越界那 29pt 两边
+        // 没有任何用途，只会让命中区域跑到栏外。
         let visibleCount = TabBarGlassPlate.findTabsStack(in: bar)
             .map { TabBarGlassPlate.visibleItems(in: $0).count } ?? 0
         if measuredInsetsBar !== bar || glassInsetsCount != visibleCount {
@@ -578,47 +534,36 @@ enum TabBarSystemGlass {
         if !host.frame.equalTo(frame) { host.frame = frame }
         if !systemBar.frame.equalTo(host.bounds) { systemBar.frame = host.bounds }
 
-        // ⛔ 2026-10-13（用户）：「**迷你播放条原本是什么样就什么样，不和下面的一起动**
-        //    （就是原本 300 多的样子，标签栏就现在这个样子不变）」——
-        //    所以**这里不再按"UIKit 真画的那块"刷新** `capsuleWidth` / `capsuleWidthRatio`。
-        //    停掉之后那两个量保持**几何算出来的**那一份（`TabBarGlassPlate.capsuleRect` 里写的：
-        //    = "四格收紧后那条带 + 88"，真机上 360/414 ≈ 0.87）⇒ 迷你条回到原本 ~346pt，
-        //    而且**不再随标签栏玻璃的宽度变**（苹果给三颗的原生宽度是 274，那只是标签栏自己的事）。
-        //
-        //    历史：2026-10-13 第二片曾改成"跟真画的那块等宽"，理由是日志 71 里我们算 332 /
-        //    UIKit 画 274 对不上。现在用户明确要"两条解绑" ⇒ 撤回那一步。
+        // ⛔ **迷你播放条与标签栏玻璃解绑**：这里**不按"UIKit 真画的那块"刷新**
+        // `capsuleWidth` / `capsuleWidthRatio`。那两个量保持**几何算出来的**那一份
+        // （`TabBarGlassPlate.capsuleRect`：= "四格收紧后那条带 + 88"，360/414 ≈ 0.87）
+        // ⇒ 迷你条回到原本 ~346pt，而且**不再随标签栏玻璃的宽度变**
+        // （苹果给三颗的原生宽度是 274，那只是标签栏自己的事）。
     }
 
-    // MARK: - ★ 拖动胶囊：**系统自带，我们不碰**（2026-10-13 第三版认识）
-
-    // 用户原话：「**GitHub 或者苹果自己总有教里面这个胶囊怎么搞吧，哪来的独立开关**」——
-    // 对。查证（`Tools/eevee-hookfinder` 之外的外部来源，两处独立）：
+    // MARK: - 拖动胶囊：**系统自带，我们不碰**
     //
-    //   · **原生 iOS 26 的液态玻璃标签栏本来就能"按住就滑"**：手指一贴上那条栏就能横向滑，
-    //     选中镜片**立刻跟手**、松手选中手指下那一颗 —— 不用先长按。
-    //     原文（`liquid_glass_easy` #30，作者在 iOS 26 上逐条对比后写的）：
-    //     *"you can put your finger on the bar and slide right away, in one motion. The selection
-    //       lens follows the finger immediately, and releasing selects the tab under it."*
-    //   · 苹果的 WWDC25「Build a UIKit app with the new design」里，标签栏（`UITabBarController`）
-    //     整个是系统那一套（浮动玻璃 + 选中镜片 + minimize on scroll）——**没有"自己画胶囊"这条题**。
+    // **原生 iOS 26 的液态玻璃标签栏本来就能"按住就滑"**：手指一贴上那条栏就能横向滑，
+    // 选中镜片**立刻跟手**、松手选中手指下那一颗 —— 不用先长按。苹果 WWDC25
+    // 「Build a UIKit app with the new design」里，标签栏（`UITabBarController`）整个是
+    // 系统那一套（浮动玻璃 + 选中镜片 + minimize on scroll），**没有"自己画胶囊"这条题**。
     //
     // ⇒ 结论：**这一层一行代码都不该写**。我们唯一要做的是"别把触摸从系统栏手里拿走"
-    //   （见本文件第四片的 `probeForwardRoute`：玻璃接管触摸 ⇒ 苹果那套交互才有机会发生）。
+    // （见 `probeForwardRoute`：玻璃接管触摸 ⇒ 苹果那套交互才有机会发生）。
     //
-    // ⚠️ 曾经的两版都是错的，别再走回去：
-    //   ① 第一版（第三片）：在 **Spotify 那条栏**上装 pan"滑过哪格切哪格"，每次 `.changed` 都提交
-    //      ⇒ 用户报的"不跟手 / 胶囊回弹 / 替用户按按键"；
-    //   ② 第二版（第五片初稿）：照着 kumone 的 `GlassTabBar.swift` 在**我们宿主**上装 pan、
-    //      逐格切 + 独立开关 ⇒ **与系统自己那套重复**，而系统那套（连续跟手）比我们的更好。
-    //   kumone 之所以要自己写，是因为它是 **SwiftUI 自绘**的标签栏（iOS 16–25，没有原生玻璃）；
-    //   我们用的是**真系统栏**，所以这件事归 UIKit。
-
-    /// UIKit 自己画的那块玻璃 —— **只认 `UITabBarPlatterView` 那条线**（栏自己的 platter）。
-    ///
-    /// ⚠️ 不能按"面积最大"挑：同一族里还有 `_UITabBarItemPlatterView`（**选中那颗的气泡**，
-    /// 日志 64 的 `drawn` 列表里两者同名不同命）与 `_UILiquidLensView`（选中透镜）——
-    /// 它们的尺寸**随选中态变**，按面积挑会在点标签时挑到它们 ⇒ 宿主跟着变 ⇒ 玻璃忽大忽小。
-    /// 另外要求宽度至少是栏宽的四成（排到一半的 0×0 一律不要）。
+    // ⚠️ 两条走不通的路，别再走回去：
+    // ① 在 **Spotify 那条栏**上装 pan"滑过哪格切哪格"，每次 `.changed` 都提交
+    // ⇒ 不跟手 / 胶囊回弹 / 替用户按按键；
+    // ② 在**我们宿主**上装 pan、逐格切 + 独立开关 ⇒ **与系统自己那套重复**，
+    // 而系统那套（连续跟手）比我们写得好。SwiftUI 自绘的标签栏才需要自己实现这件事，
+    // 我们用的是**真系统栏**，所以归 UIKit。
+    //
+    // UIKit 自己画的那块玻璃 —— **只认 `UITabBarPlatterView` 那条线**（栏自己的 platter）。
+    //
+    // ⚠️ 不能按"面积最大"挑：同一族里还有 `_UITabBarItemPlatterView`（**选中那颗的气泡**）
+    // 与 `_UILiquidLensView`（选中透镜）—— 它们的尺寸**随选中态变**，按面积挑会在点标签时
+    // 挑到它们 ⇒ 宿主跟着变 ⇒ 玻璃忽大忽小。
+    // 另外要求宽度至少是栏宽的四成（排到一半的 0×0 一律不要）。
     private static func drawnGlassFrame(in systemBar: UITabBar, in bar: UIView) -> CGRect? {
         let widest = max(bar.bounds.width, 1)
         return platterViews(in: systemBar)
@@ -630,11 +575,10 @@ enum TabBarSystemGlass {
 
     /// 从 Spotify 那几颗同步 item（**顺序一致**，索引就是选中态与转发的对齐依据）。
     ///
-    /// ★ 两条来自日志 63 的实测：
-    ///   · 「隐藏标签栏文字」开着时**不给标题** —— 文字以前由我们自己那盘胶囊负责藏，
-    ///     这一条开着时那盘让位了 ⇒ 得由这里负责（用户报的"隐藏标签栏文字对它不生效"）；
-    ///   · 图标拿不到就**照实记 `false`**（`glyphImage` 没找到）—— 调用方据此**不藏**原来那颗图标。
-    ///   · `tag` = 索引：第二片的转发要用它（`didSelectItem` 只给 item，不给序号）。
+    /// 三条约束：
+    /// · 「隐藏标签栏文字」开着时**不给标题** —— 这一条得由这里负责，否则文字仍然留着；
+    /// · 图标拿不到就**照实记 `false`**（`glyphImage` 没找到）—— 调用方据此**不藏**原来那颗图标；
+    /// · `tag` = 索引：转发要用它（`didSelectItem` 只给 item，不给序号）。
     private static func syncItems(on systemBar: UITabBar, from items: [UIView]) -> Mirror {
         let hidesLabels = UserDefaults.tabBarHideLabels
 
@@ -644,10 +588,10 @@ enum TabBarSystemGlass {
         wanted.reserveCapacity(items.count)
 
         for (index, item) in items.enumerated() {
-            // ★ 被我们"保住槽位、只藏内容"的那一颗（「创建」）：**系统栏不给它 item**。
-            //   它的槽位留在 **Spotify 那条栏**里（撑住我们的几何 ⇒ 宿主/玻璃的宽度不变），
-            //   而系统栏只放**真正在用的那几颗** —— 配合 `itemPositioning = .fill`，
-            //   它们会把整块玻璃**三等分**（用户 2026-10-13 第二条要求）。
+            // 被我们"保住槽位、只藏内容"的那一颗（「创建」）：**系统栏不给它 item**。
+            // 它的槽位留在 **Spotify 那条栏**里（撑住我们的几何 ⇒ 宿主/玻璃的宽度不变），
+            // 而系统栏只放**真正在用的那几颗** —— 配合 `itemWidth` 的等分，
+            // 它们会把整块玻璃**三等分**。
             let muted = TabBarGlassPlate.isMutedTabItem(item)
             let title = (hidesLabels || muted) ? nil : labelText(of: item)
             let image = muted ? nil : glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
@@ -690,27 +634,27 @@ enum TabBarSystemGlass {
         return systemBar.items?.first { $0.tag == index }
     }
 
-    // MARK: - ★★ 第二片 ②：把系统栏上的选择**转发**成 Spotify 那一颗的点击
-
-    /// 系统栏选中了某一颗（`delegate` 中继叫到这里）。**只在主 actor 上跑**。
-    ///
-    /// 为什么必须转发：从第二片起系统栏**接管了触摸** ⇒ 手指再也落不到 Spotify 那几颗上。
-    /// 不转发就是仓库那条红线（"看得见、点不动"）。
+    // MARK: - 把系统栏上的选择**转发**成 Spotify 那一颗的点击
+    //
+    // 系统栏选中了某一颗（`delegate` 中继叫到这里）。**只在主 actor 上跑**。
+    //
+    // 为什么必须转发：系统栏**接管了触摸** ⇒ 手指再也落不到 Spotify 那几颗上。
+    // 不转发就是那条红线（"看得见、点不动"）。
     static func forwardSelection(from systemBar: UITabBar, item: UITabBarItem) {
         guard let bar = lastBar, let stack = TabBarGlassPlate.findTabsStack(in: bar) else {
             writeDebugLog("[\(logTag)] ⚠️ a tab was picked but the stock row is gone — nothing to forward to")
             return
         }
         // ⚠️ 与 `syncItems` 用的是**同一份列表**（`visibleItems`）：`item.tag` 就是它的下标。
-        //    藏掉「创建」之后这里是三颗 —— 拿 `stack.subviews` 会把第 3 颗转发到第 4 颗上。
+        // 藏掉「创建」之后这里是三颗 —— 拿 `stack.subviews` 会把第 3 颗转发到第 4 颗上。
         let items = TabBarGlassPlate.visibleItems(in: stack)
         let index = item.tag
         guard index >= 0, index < items.count else {
             writeDebugLog("[\(logTag)] ⚠️ picked item tag \(index) is out of range (\(items.count) item(s))")
             return
         }
-        // ★ 被我们藏掉的那一格（「创建」）**不该被转发**：它现在压根不在系统栏的 item 列表里
-        //   （`syncItems` 跳过它）⇒ 正常永远选不到；这里再兜一道，将来若把它加回来也不会误转发。
+        // 被我们藏掉的那一格（「创建」）**不该被转发**：它现在压根不在系统栏的 item 列表里
+        // （`syncItems` 跳过它）⇒ 正常永远选不到；这里再兜一道，将来若把它加回来也不会误转发。
         guard !TabBarGlassPlate.isMutedTabItem(items[index]) else {
             writeDebugLog("[\(logTag)] picked the muted tab #\(index) — nothing to forward to")
             return
@@ -718,36 +662,29 @@ enum TabBarSystemGlass {
         forwardTap(to: items[index], index: index, systemBar: systemBar)
 
         // Spotify 会在 ~0.25s 后重画标签颜色（那是我们唯一的选中态信号）⇒ 那一刻再对一次气泡。
-        // pw 也是这么收尾的（`didSelectItem` 里那个 dispatch_after）。
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { reapply() }
     }
 
-    /// 四条路依次试。**顺序是"从最公开到最私有"**，而且第 ① 条来自真机日志 64 的教训：
+    /// 五条路依次试，**顺序是"从最公开到最私有"**：
     ///
-    /// ★★ 2026-10-12（真机日志 64）：四颗全是
-    /// `⚠️ tap on #N found nothing to forward to … inside [UILongPressGestureRecognizer … |
-    /// UITapGestureRecognizer on TabBarItemElementView | …]` ⇒ **旧的三条路一条都没通**
-    /// （识别器**在**，但读它的 `_targets` 拿不到可触发的 target/action）⇒ 点标签栏完全没反应
-    /// （用户原话："**这些功能并没有实际效果**"）。所以第 ① 条换成**公开 API**：
-    ///
-    ///   ① **`UITabBarController.selectedIndex`** —— Spotify 那条栏的容器
-    ///      （`NavigationUI_TabBarImpl.TabBarContainerImpl`）**是 `UITabBarController` 的子类**
-    ///      （pw 在它身上 hook 的正是 `setSelectedViewController:`，那是 `UITabBarController` 的公开方法）
-    ///      ⇒ `selectedIndex` 就是"用户点了那一颗"的等价物，**一行签名都不用猜**。
-    ///   ② pw 那条路（读 tap 识别器的 target/action）—— 留着，它在 pw 的机器上是通的；
-    ///   ③ `-handleTap`（照 pw 注释里点名的 `TabBarItemElementUI`）：不猜签名、只找"响应它的对象"；
-    ///   ④ `accessibilityActivate()` → ⑤ `UIControl.sendActions`。
-    /// 五条全不通就**把触摸还给 Spotify 那条栏**（见 `handTouchesBack`）——
+    /// ① **`UITabBarController.selectedIndex`** —— Spotify 那条栏的容器
+    /// （`NavigationUI_TabBarImpl.TabBarContainerImpl`）**是 `UITabBarController` 的子类**
+    /// ⇒ `selectedIndex` 就是"用户点了那一颗"的等价物，**一行签名都不用猜**。
+    /// ①′ 容器的 `setSelectedViewController:`（容器不是 `UITabBarController` 时走这条，
+    /// 不碰 Element 的私有手势）。
+    /// ② 读 item 子树里 tap 识别器的 target/action 并触发它；
+    /// ③ `-handleTap`：不猜签名、只找"响应它的对象"；
+    /// ④ `accessibilityActivate` → ⑤ `UIControl.sendActions`。
+    /// 全不通就**把触摸还给 Spotify 那条栏**（见 `handTouchesBack`）——
     /// 宁可不要"按下回弹"，也绝不能留下"看得见、点不动"。
     private static func forwardTap(to item: UIView, index: Int, systemBar: UITabBar) {
         if selectThroughContainer(index: index) {
             reportForward(index: index, route: "UITabBarController.selectedIndex on Spotify's own container")
             return
         }
-        // ★★ 2026-10-13（**真机日志 72** 之后加的 ①′）：容器**自己带着**那几个 VC 时，
-        //    直接叫它的 `setSelectedViewController:` —— Spotify 内部就是这一步，
-        //    而且**不依赖 Element 的私有手势**（② 那条在这台机器上还得先解决 target 读法）。
-        //    排在 ② 前面是有意的：它能用就先用它。
+        // ①′：容器**自己带着**那几个 VC 时，直接叫它的 `setSelectedViewController:` ——
+        // Spotify 内部就是这一步，而且**不依赖 Element 的私有手势**。
+        // 排在 ② 前面是有意的：它能用就先用它。
         if selectThroughContainerControllers(index: index) {
             reportForward(index: index, route: "setSelectedViewController: on Spotify's own container")
             return
@@ -769,7 +706,7 @@ enum TabBarSystemGlass {
             return
         }
         reportForwardFailure(index: index, item: item)
-        // ★ 全失败时把"这颗识别器的 target 藏在哪"摊开一次 —— 见 `reportTapAnatomyOnce`。
+        // 全失败时把"这颗识别器的 target 藏在哪"摊开一次 —— 见 `reportTapAnatomyOnce`。
         reportTapAnatomyOnce(item)
         handTouchesBack(to: systemBar, reason: "every route failed on #\(index)")
     }
@@ -789,7 +726,7 @@ enum TabBarSystemGlass {
     }
 
     /// ①′ 容器**自己带着**的那几个 VC（`TabBarContainerImpl` 在这台机器上不是 `UITabBarController`，
-    /// 但日志 67 证明它答 `setSelectedViewController:`；数组顺序 = 标签顺序）。
+    /// 但它答 `setSelectedViewController:`；数组顺序 = 标签顺序）。
     ///
     /// 读法**有界且保守**：只看容器自己（含 3 层父类）的**对象型** ivar（编码 `@`），
     /// 取第一个"每个元素都是 `UIViewController`"的数组；对不上就返回 nil（绝不瞎猜下标）。
@@ -816,14 +753,14 @@ enum TabBarSystemGlass {
         return nil
     }
 
-    /// 把 `setSelectedViewController:` 直接叫在容器身上 —— 这就是 Spotify 点标签时内部走的那一步
-    /// （pw 在它身上 hook 的也正是这个方法）。**不碰 Element 的私有手势**，所以最稳。
+    /// 把 `setSelectedViewController:` 直接叫在容器身上 —— 这就是 Spotify 点标签时内部走的那一步。
+    /// **不碰 Element 的私有手势**，所以最稳。
     private static func selectThroughContainerControllers(index: Int) -> Bool {
         guard let bar = lastBar, let container = container(of: bar),
               let controllers = containerControllers(of: container),
               index >= 0, index < controllers.count else { return false }
         // ⚠️ 只有"VC 个数 == 看得见的标签数"才敢按 `index` 取 —— 否则这可能是别的 VC 数组
-        //    （导航栈之类），宁可返回 false 交给下一路，也绝不把页面切到不相干的 controller。
+        // （导航栈之类），宁可返回 false 交给下一路，也绝不把页面切到不相干的 controller。
         let itemCount = TabBarGlassPlate.findTabsStack(in: bar)
             .map { TabBarGlassPlate.visibleItems(in: $0).count } ?? 0
         guard itemCount == 0 || controllers.count == itemCount else { return false }
@@ -839,39 +776,21 @@ enum TabBarSystemGlass {
         return true
     }
 
-    // MARK: - ★ 第三片：点一下（装在 **Spotify 自己那条栏**上，不抢触摸）
-
-    /// 用户 2026-10-12（照片 86/87 + 日志 65）：「**液态玻璃不可以用手划动**，而且**反应时间有点慢**」。
-    ///
-    /// 日志 65 第一行就是答案：`… leaving the touches to Spotify's own bar (no forwarding route found …)`
-    /// ⇒ 那一版**根本没接管触摸**（那是对的：接管了又转发不出去 = 点不动），代价是两件事：
-    ///   · **慢**：气泡只能靠 0.5s 复查节拍追上去（日志里 `selection → #N` 都是半秒一跳）；
-    ///   · **划不动**：手势压根没到我们手里。
-    ///
-    /// 留下的这一只：`UITapGestureRecognizer`（**`cancelsTouchesInView = false`**）——
-    /// 点击照旧由 Spotify 完成（唯一被真机证明能换页的路），我们**同时**知道点了哪一颗
-    /// ⇒ **气泡立刻对过去**（不再等半秒）。
-    ///
-    /// ★★ 第四片（2026-10-12 深夜）：**它的兄弟 `UIPanGestureRecognizer` 已删除**。
-    /// 那只 pan 是"按住划 = 滑过哪格切哪格"，用户这一轮报的三件事全是它：
-    ///   · `cancelsTouchesInView = true` ⇒ **吃掉那次触摸**，系统玻璃永远接不到手指（"不跟手 / 没有反射"）；
-    ///   · 每次 `.changed` 都 `mirrorSelection` + `commitSelection` ⇒ **替用户换页**；
-    ///   · 提交不了时把气泡**拨回真实那一颗** ⇒ 看到的"胶囊回弹"。
-    /// pw 那条栏上**一只手势都没有**，所以这三个症状它一个都没有。
-    /// 这里只装**一只**手势：**点一下**（只把气泡对过去，不抢触摸）。
-    ///
-    /// ★ 2026-10-13（用户：「长按主页不会进入 eeveespotify 设置页」→ 随后「这个功能先回退」）：
-    /// 长按那只**已整体回退**（`holdHome` / `openSettingsFromHold` / `holdHomeUntil` 一并删掉）；
-    /// 落点 `EeveeSettingsLauncher` 留着 —— 设置列表里那一行还在用它，将来重做也直接复用。
-    /// 回退的原因：它在真机上始终没被触发，而每定位一次都要占掉一轮编译 + 一次真机日志。
-    ///
-    /// 那次排查留下一条**已经确定**的结论，将来重做时直接用：**两条栏各装一遍**。
-    /// 日志 87 逐字 `the system bar takes the touches (that is what makes the glass answer a finger)`
-    /// ⇒ 手指全落在**我们的系统玻璃**上，Spotify 那条栏上的识别器**一次都没收到**
-    /// （同一份日志里连 `first tap seen` 都没有 —— 那只"点一下"原来也一样从没生效过）。
-    /// pw 正是两边各装一只（`Native/Navbar/TabBarHooks.x` 装 Spotify 的栏、
-    /// `Redesigned/Navbar/TabBar.x` 装它自己的系统栏）—— `label` 参数为此保留：
-    /// 它让"这一只装在哪条栏上"在日志里一眼可辨。
+    // MARK: - 点一下（装在 **Spotify 自己那条栏**上，不抢触摸）
+    //
+    // 只装**一只**手势：`UITapGestureRecognizer`（**`cancelsTouchesInView = false`**）——
+    // 点击照旧由 Spotify 完成（唯一被证明能换页的路），我们**同时**知道点了哪一颗
+    // ⇒ **气泡立刻对过去**，不再等 0.5s 复查节拍（节拍那一路气泡是半秒一跳，观感就是"反应慢"）。
+    //
+    // ⚠️ **它的兄弟 `UIPanGestureRecognizer` 已删除**：那只 pan 做"按住划 = 滑过哪格切哪格"，
+    // · `cancelsTouchesInView = true` ⇒ **吃掉那次触摸**，系统玻璃永远接不到手指（不跟手 / 没有反射）；
+    // · 每次 `.changed` 都提交 ⇒ **替用户换页**；
+    // · 提交不了时把气泡**拨回真实那一颗** ⇒ 看到的"胶囊回弹"。
+    //
+    // ⚠️ **两条栏各装一遍**：触摸归系统玻璃时，手指全落在我们的系统栏上，Spotify 那条栏上的
+    // 识别器一次都收不到。
+    // 长按主页进设置那只手势已整体回退（`holdHome` / `openSettingsFromHold` / `holdHomeUntil`
+    // 一并删掉）；落点 `EeveeSettingsLauncher` 留着，设置列表里那一行还在用它。
     private static func installStockGestures(on stockBar: UIView, label: String = "Spotify's own bar") {
         if objc_getAssociatedObject(stockBar, &stockTapKey) == nil {
             let tap = UITapGestureRecognizer(
@@ -881,10 +800,8 @@ enum TabBarSystemGlass {
             tap.cancelsTouchesInView = false
             stockBar.addGestureRecognizer(tap)
             objc_setAssociatedObject(stockBar, &stockTapKey, tap, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            // ★ 这一行是"点一下到底有没有被我们看见"的**判据**：
-            //   日志 68 里用户点了标签，却只有 0.5s 节拍那几行 `selection → #N`（说明气泡是靠节拍追上的）
-            //   ⇒ 要么手势没装、要么装了没收到触摸、要么收到了但算不出第几颗。
-            //   有这一行 + `first tap seen` 一行，下一份日志就能把三者分开。
+            // 这一行是"点一下到底有没有被我们看见"的**判据**：有它而没有 `first tap seen`
+            // 就说明触摸没到我们手里（手势没装 / 装了没收到 / 收到了但算不出第几颗，三者靠日志分开）。
             writeDebugLog(
                 "[\(logTag)] tap recogniser installed on \(label) — it does not cancel touches,"
                     + " so Spotify still switches the page; we only mirror the bubble at once."
@@ -896,7 +813,7 @@ enum TabBarSystemGlass {
     /// 点击/划动时算"手指在哪一格"（按四颗的 frame 判；落缝里就按 x 等分兜底）。
     ///
     /// ⚠️ 走 `visibleItems`：藏掉「创建」之后这里只有三格，与系统栏那三颗**同序同数**
-    ///    （两处不一致的话，点第 3 颗会被算成第 4 颗）。
+    /// （两处不一致的话，点第 3 颗会被算成第 4 颗）。
     static func itemIndex(at point: CGPoint, in bar: UIView) -> Int? {
         guard let stack = TabBarGlassPlate.findTabsStack(in: bar) else { return nil }
         let items = TabBarGlassPlate.visibleItems(in: stack)
@@ -936,9 +853,9 @@ enum TabBarSystemGlass {
         writeDebugLog("[\(logTag)] first tap seen on Spotify's own bar — the bubble now moves at once")
     }
 
-    /// ★ 兜底：五条路全不通 ⇒ **把触摸还给 Spotify 自己那条栏**。    ///
-    /// 代价：**只有第一次点击失效**，之后每一次都落到 Spotify 那条栏上（= 第一片的行为：点得动、
-    /// 但没有"按下回弹"）。收益：绝不留下"看得见、点不动"。
+    /// 兜底：五条路全不通 ⇒ **把触摸还给 Spotify 自己那条栏**。
+    /// 代价：**只有第一次点击失效**，之后每一次都落到 Spotify 那条栏上（点得动，但没有"按下回弹"）。
+    /// 收益：绝不留下"看得见、点不动"。
     /// 之所以能做到"只失效一次"：系统栏一旦不吃触摸，我们的 `delegate` 就不会再被叫到，
     /// 而 `apply` 只在**建栏那一刻**设过 `isUserInteractionEnabled`（之后每拍都不碰它）。
     private static func handTouchesBack(to systemBar: UITabBar, reason: String) {
@@ -946,7 +863,7 @@ enum TabBarSystemGlass {
         handedBackTouches = true
         systemBar.isUserInteractionEnabled = false
         // ⚠️ **宿主必须一起关**：它开着交互、又盖在胶囊那一块上 ⇒ 只关栏的话触摸会被宿主吃掉，
-        //   页面既切不动、也没有回弹（用户 2026-10-12 报的"没有实际的按键效果"）。
+        // 页面既切不动、也没有回弹。
         systemBar.superview?.isUserInteractionEnabled = false
         writeDebugLog(
             "[\(logTag)] ⚠️ \(reason) — handing the touches back to Spotify's own bar so taps keep working from now on;"
@@ -954,11 +871,11 @@ enum TabBarSystemGlass {
         )
     }
 
-    /// 照 pw 的做法：**读那颗 item 子树里 tap 识别器自己的 target/action 并触发它**
+    /// **读那颗 item 子树里 tap 识别器自己的 target/action 并触发它**
     /// （`NavigationUI_TabBarImpl.TabBarItemElementUI` 就是用 `-handleTap` 答这个识别器的）。
     ///
-    /// ⚠️ `_targets` / `_target` / `_action` 都是私有 ivar —— 这正是 pw 的做法
-    /// （`TabBar.x:139-158`），它靠的就是"真机那一颗没有公开的点击入口"。
+    /// ⚠️ `_targets` / `_target` / `_action` 都是私有 ivar —— 这一颗 item 没有公开的点击入口，
+    /// 只能走这条路。
     private static func fireTapRecognizers(in item: UIView) -> Bool {
         for view in subtree(of: item, maxDepth: 6) {
             for recognizer in view.gestureRecognizers ?? [] {
@@ -974,11 +891,10 @@ enum TabBarSystemGlass {
         for pair in pairs(of: recognizer) {
             guard let action = action(of: pair) else { continue }
             if let target = target(of: pair) {
-                // ★★ 2026-10-13（**真机日志 72**）：这里**不能**再用 `responds(to:)` 当门 ——
-                //    这台机器上 target 是 Element 的 Swift 对象（`…19TabBarItemElementUI`），
-                //    `responds` 这一步会把它误判成"不会响应"，于是整条路被跳过（五条全败）。
-                //    改法：**直接用 runtime 找到方法、取 IMP 调** —— 与 UIKit 自己派发这条 action
-                //    是同一件事（选择器是 `handleTap`，无参 ⇒ 只要 self/_cmd 两个寄存器）。
+                // ⚠️ 这里**不能**用 `responds(to:)` 当门：target 是 Element 的 Swift 对象
+                // （`…19TabBarItemElementUI`），`responds` 会把它误判成"不会响应"，
+                // 于是整条路被跳过。改法：**直接用 runtime 找到方法、取 IMP 调** ——
+                // 与 UIKit 自己派发这条 action 是同一件事（`handleTap` 无参 ⇒ 只要 self/_cmd）。
                 if let method = class_getInstanceMethod(type(of: target), action) {
                     typealias ObjectiveCMessage = @convention(c) (AnyObject, Selector) -> Void
                     let send = unsafeBitCast(method_getImplementation(method), to: ObjectiveCMessage.self)
@@ -1001,9 +917,9 @@ enum TabBarSystemGlass {
                     continue
                 }
             }
-            // ★ 2026-10-13（**真机日志 71**）：`_target` 是 `nil` 的那一对 —— nil target 的动作
-            //   按 UIKit 的规矩送到**响应者链**上 ⇒ 用 `sendAction(to: nil)` 复现同一条路；
-            //   返回 `false` 说明没人接，交给下面的兜底（`handleTap` 响应链 / 无障碍 / `UIControl`）。
+            // `_target` 是 `nil` 的那一对 —— nil target 的动作按 UIKit 的规矩送到**响应者链**上
+            // ⇒ 用 `sendAction(to: nil)` 复现同一条路；返回 `false` 说明没人接，
+            // 交给下面的兜底（`handleTap` 响应链 / 无障碍 / `UIControl`）。
             if UIApplication.shared.sendAction(action, to: nil, from: recognizer, for: nil) {
                 writeDebugLog(
                     "[\(logTag)] tap → responder chain \(NSStringFromSelector(action)) (that pair's target is nil)"
@@ -1016,8 +932,8 @@ enum TabBarSystemGlass {
 
     /// 读一条手势的 `_targets`（**私有 ivar**）。读不出来就是空数组 = 这条路不能算数。
     ///
-    /// ★ 第四片把它抽出来给两处共用：`fire`（真的触发）与 `probeForwardRoute`
-    /// （**点之前**先读一遍，判断"点了有没有人接"）。
+    /// 两处共用：`fire`（真的触发）与 `probeForwardRoute`（**点之前**先读一遍，
+    /// 判断"点了有没有人接"）。
     private static func pairs(of recognizer: UIGestureRecognizer) -> [AnyObject] {
         guard let targetsIvar = class_getInstanceVariable(UIGestureRecognizer.self, "_targets"),
               let raw = object_getIvar(recognizer, targetsIvar) as? [AnyObject] else {
@@ -1028,13 +944,11 @@ enum TabBarSystemGlass {
 
     /// 读一对 `_targets` 里的 **target**。
     ///
-    /// ★★ 2026-10-13（**真机日志 72** 纠正）：**不能 `as? NSObject`**！
-    /// 这台机器上 Element 的 target 是 `…19TabBarItemElementUI`（解剖行逐字打出来的），
-    /// 原来那句 `object_getIvar(pair, ivar) as? NSObject` 把它**读成了 nil**
-    /// ⇒ route ② 永远被跳过、`sendAction(to: nil)` 又没人接（解剖行里响应者链一个 ★ 都没有）
-    /// ⇒ 五条全败 ⇒ 第一次松手就把触摸还了回去（= 用户报的"只能拖一次、之后没有拖动动画"）。
-    /// 现在：先按名字找，再**按 ivar 列表扫**（解剖行证明这条路在这台机器上读得出来），
-    /// 一律以 `AnyObject` 返回 —— 是不是 `NSObject` 由调用方按需再判（见 `fire`）。
+    /// ⚠️ **不能 `as? NSObject`**：Element 的 target 是 `…19TabBarItemElementUI`（Swift 对象），
+    /// `object_getIvar(pair, ivar) as? NSObject` 会把它**读成 nil** ⇒ route ② 永远被跳过、
+    /// `sendAction(to: nil)` 又没人接 ⇒ 五条全败 ⇒ 第一次松手就把触摸还了回去。
+    /// 所以：先按名字找，再**按 ivar 列表扫**，一律以 `AnyObject` 返回 ——
+    /// 是不是 `NSObject` 由调用方按需再判（见 `fire`）。
     private static func target(of pair: AnyObject) -> AnyObject? {
         if let ivar = class_getInstanceVariable(type(of: pair), "_target"),
            let value = object_getIvar(pair, ivar) {
@@ -1069,17 +983,14 @@ enum TabBarSystemGlass {
         return unsafeBitCast(raw, to: Selector.self)
     }
 
-    /// ③ 私有退路：`-handleTap`。
+    /// ③ 私有退路：`-handleTap`（`TabBarItemElementUI` 就是用这个方法答那颗 tap 识别器的）。
     ///
-    /// 名字来自 pw 的注释（`TabBar.x:137-138`："`NavigationUI_TabBarImpl`'s `TabBarItemElementUI`
-    /// answers a tap recognizer (`-handleTap`)"），但**这里不猜参数/返回值** ——
-    /// 只在"响应这个 selector 的对象"上调用它，找不到就返回 false：
-    ///   · 先看那颗 item 子树里每个视图的 **`next`（响应链）**；
-    ///   · 再**有界扫它们的 ivar**（Element 的 UI 对象一般挂在某个视图的 ivar 上，不在响应链里）。
+    /// **这里不猜参数/返回值** —— 只在"响应这个 selector 的对象"上调用它，找不到就返回 false：
+    /// · 先看那颗 item 子树里每个视图的 **`next`（响应链）**；
+    /// · 再**有界扫它们的 ivar**（Element 的 UI 对象一般挂在某个视图的 ivar 上，不在响应链里）。
     ///
-    /// ⚠️ **2026-10-12 复核 pw 源码之后的结论**：pw 自己**从来不是直接调 `handleTap`** 的 ——
-    /// 他走的是 `fireTapRecognizers`（即上面的 ②），只是那个识别器的 action 恰好叫 `-handleTap`。
-    /// 我这一条是"那一步读不出来时的补网"，**不是 pw 的做法**；命中与否都会打一行日志，别把它当成主路。
+    /// ⚠️ 真正的转发主路是 ② `fireTapRecognizers`，只是那个识别器的 action 恰好叫 `-handleTap`。
+    /// 这一条是"那一步读不出来时的补网"，不是主路。
     private static func callHandleTap(in item: UIView) -> Bool {
         guard let found = handleTapHolder(in: item) else { return false }
         _ = found.holder.perform(NSSelectorFromString("handleTap"))
@@ -1093,8 +1004,8 @@ enum TabBarSystemGlass {
     /// 所以 `probeForwardRoute` 与 `callHandleTap` 共用这一处。
     private static func handleTapHolder(in item: UIView) -> (holder: NSObject, via: String)? {
         let selector = NSSelectorFromString("handleTap")
-        // ① ★ 2026-10-13（日志 71）：**从"那颗 tap 识别器所在视图"沿响应者链往上找** ——
-        //    `nil`-target 的动作就是走这条链的，所以实现者最可能在这儿。
+        // ① **从"那颗 tap 识别器所在视图"沿响应者链往上找** ——
+        // `nil`-target 的动作就是走这条链的，所以实现者最可能在这儿。
         for view in subtree(of: item, maxDepth: 6) {
             for recognizer in view.gestureRecognizers ?? [] where recognizer is UITapGestureRecognizer {
                 var responder: UIResponder? = view
@@ -1144,16 +1055,16 @@ enum TabBarSystemGlass {
         return nil
     }
 
-    /// ★★ 2026-10-13（**真机日志 71** 的直接产物）：把"这颗 tap 识别器到底把 target 藏在哪"
-    /// **一次性摊开** —— 那台机器上它逐字是 `UITapGestureRecognizer[nil-target:handleTap]`。
+    /// 把"这颗 tap 识别器到底把 target 藏在哪"**一次性摊开** —— 那台机器上它逐字是
+    /// `UITapGestureRecognizer[nil-target:handleTap]`。
     ///
     /// 打三样（只打一次，就在"五条路全不通"那一刻）：
-    ///   ① 每对 `_targets` 的**类名**与它自己的**对象型 ivar 及取值类名**
-    ///      （`_target` / `_targetWeak` / `_targetRef` … 哪个有值，一眼看出来）；
-    ///   ② 从那颗识别器所在视图沿**响应者链**往上 12 跳的类名，**★ 标出谁响应 `handleTap`**；
-    ///   ③ 同一个视图上还有哪些识别器（顺带）。
+    /// ① 每对 `_targets` 的**类名**与它自己的**对象型 ivar 及取值类名**
+    /// （`_target` / `_targetWeak` / `_targetRef` … 哪个有值，一眼看出来）；
+    /// ② 从那颗识别器所在视图沿**响应者链**往上 12 跳的类名，标出谁响应 `handleTap`；
+    /// ③ 同一个视图上还有哪些识别器（顺带）。
     ///
-    /// ⚠️ 只在第一条"全失败"的点击时打一次；下一次它还是失败，这一行就是下一轮的**唯一**答案。
+    /// ⚠️ 只在第一条"全失败"的点击时打一次：下一次它还是失败，这一行就是唯一的答案。
     private static var didReportTapAnatomy = false
 
     private static func reportTapAnatomyOnce(_ item: UIView) {
@@ -1181,8 +1092,8 @@ enum TabBarSystemGlass {
                                 guard let encoding = ivar_getTypeEncoding(ivar), encoding.pointee == 0x40,
                                       let name = ivar_getName(ivar) else { continue }
                                 // ⚠️ `object_getIvar` 返回 `Any?`，**不能**直接 `type(of:)`（那是给类类型的
-                                //    重载，编译器会报 "expected to be instance of class or
-                                //    class-constrained type"）⇒ 先 `as AnyObject` 再取类名。
+                                // 重载，编译器会报 "expected to be instance of class or
+                                // class-constrained type"）⇒ 先 `as AnyObject` 再取类名。
                                 let field = String(cString: name)
                                 if let raw = object_getIvar(pair, ivar) {
                                     let object = raw as AnyObject
@@ -1195,9 +1106,9 @@ enum TabBarSystemGlass {
                         cls = class_getSuperclass(current)
                         hops += 1
                     }
-                    // ★ 除了 ivar，还把**两条判据**一起打出来（下一份日志就不用再猜了）：
-                    //   `imp` = `class_getInstanceMethod(target, action)` 找不找得到（新转发路就靠它）；
-                    //   `responds` = 老那条 `responds(to:)` 门（日志 72 证明它在这台机器上是 false）。
+                    // 除了 ivar，还把**两条判据**一起打出来：
+                    // `imp` = `class_getInstanceMethod(target, action)` 找不找得到（转发路就靠它）；
+                    // `responds` = 老那条 `responds(to:)` 门（在这台机器上是 false）。
                     let actionName = action(of: pair).map { NSStringFromSelector($0) } ?? "nil-action"
                     var verdict = "action=\(actionName)"
                     if let action = action(of: pair) {
@@ -1222,8 +1133,8 @@ enum TabBarSystemGlass {
                 pieces.append("chain from \(viewName): \(chain.joined(separator: " → "))")
             }
         }
-        // ★ 顺带把**容器**的对象型 ivar 也摊开：如果下一轮 ①′ 还是读不到 VC 数组，
-        //   这一节就是答案（那三个 VC 到底挂在哪儿）。
+        // 顺带把**容器**的对象型 ivar 也摊开：如果 ①′ 还是读不到 VC 数组，
+        // 这一节就是答案（那几个 VC 到底挂在哪儿）。
         if let bar = lastBar, let container = container(of: bar) {
             var fields: [String] = []
             var cls: AnyClass? = type(of: container)
@@ -1286,11 +1197,10 @@ enum TabBarSystemGlass {
         )
     }
 
-    /// 三条路全不通时的现场：**把子树里的识别器与 UIControl 全列出来**，下一份日志直接给答案。
+    /// 几条路全不通时的现场：**把子树里的识别器与 UIControl 全列出来**，下一份日志直接给答案。
     ///
-    /// ★ 2026-10-12 加细：**tap 识别器要把 pw 那条转发链逐环写清楚**
-    /// （`_targets` 在不在 → 有几对 → 每对的 `_target`/`_action` 解出来没有）。
-    /// 这是"为什么 pw 的写法在我们这版不通"的**唯一**判据 —— 上一版只报类名，等于什么都没说。
+    /// **tap 识别器要把转发链逐环写清楚**（`_targets` 在不在 → 有几对 →
+    /// 每对的 `_target`/`_action` 解出来没有）。只报类名等于什么都没说。
     private static func reportForwardFailure(index: Int, item: UIView) {
         var pieces: [String] = []
         for view in subtree(of: item, maxDepth: 6) {
@@ -1310,7 +1220,7 @@ enum TabBarSystemGlass {
         )
     }
 
-    /// 把一条 tap 识别器的**转发链**逐环写清楚（pw 的链：`_targets` → 每对 `_target`/`_action`）。
+    /// 把一条 tap 识别器的**转发链**逐环写清楚（`_targets` → 每对 `_target`/`_action`）。
     private static func describe(_ recognizer: UIGestureRecognizer) -> String {
         let name = shortName(NSStringFromClass(type(of: recognizer)))
         guard let ivar = class_getInstanceVariable(UIGestureRecognizer.self, "_targets") else {
@@ -1339,14 +1249,12 @@ enum TabBarSystemGlass {
     }
 
     // MARK: - ③ 选中态
-
-    /// 选中态：**先看文字亮度**（Spotify 选中那颗画白色、其余 `#B3B3B3`），
-    /// 再看 `accessibilityTraits.contains(.selected)`。
-    ///
-    /// ⚠️ 顺序**与第一版相反**，依据是日志 63：这台机器上四颗的 `traits` **全是 `0x0`**
-    /// （`[TabBarSel] item=TabBar.Item.主页 traits=0x0 … label text=#FFFFFF`，其余 `#B3B3B3`）
-    /// ⇒ 无障碍那条判据在 9.1.88 上**根本不成立**，只有亮度是真的。
-    /// 判据只有一处（这里），而且**用了哪条会打进日志**，下一份日志能核对。
+    //
+    // 选中态：**先看文字亮度**（Spotify 选中那颗画白色、其余 `#B3B3B3`），
+    // 再看 `accessibilityTraits.contains(.selected)`。
+    //
+    // ⚠️ 顺序不能反过来：9.1.88 上 item 的 `traits` **全是 `0x0`**（文字 `#FFFFFF` 是唯一信号）
+    // ⇒ 无障碍那条判据**根本不成立**。判据只有一处（这里），用了哪条会打进日志。
     private static func syncSelection(on systemBar: UITabBar, items: [UIView]) {
         // ⚠️ 按 `tag` 找（被藏掉的那一格不在系统栏的 item 列表里 —— 见 `item(at:on:)`）。
         guard let picked = selectedIndex(items: items),
@@ -1390,20 +1298,17 @@ enum TabBarSystemGlass {
         return nil
     }
 
-    /// 那一颗里所有的图标视图（**最深 6 层**：日志 63 证明原来只找 `UIImageView.image`、
-    /// 深度 ≤ 4 时是**找不到**的 —— 所以放宽，并且调用方会按"找没找到"决定藏不藏）。
     /// 一颗 item 的图标：**先找现成的 `UIImage`；拿不到就把那个"图标视图"整个渲染成一张图**。
     ///
-    /// ★★ 2026-10-12（真机日志 65：`items synced — … icons ["N", "N", "N", "N"]`，照片 86）：
-    /// 这一版的图标**不是** `UIImageView` —— 真机树里是
+    /// ⚠️ 这一版的图标**不是** `UIImageView` —— 视图树里是
     /// `16.OBJC_ONLY_IconView@40,5,24,24,id=Encore.IconView`（Encore 自己画的图标视图）
-    /// ⇒ 只找 `UIImageView.image` **永远拿不到**（前两版都栽在这），于是原图标留在玻璃底下：
+    /// ⇒ 只找 `UIImageView.image` **永远拿不到**，于是原图标留在玻璃底下：
     /// 又暗（隔着一层玻璃）又偏（位置由 Spotify 那条栏决定），而那几颗 item 只剩文字。
-    /// 照 pw 补一条（`TabBar.x:76-133` 的 `renderLayer`）：**把那个视图的 layer 渲染成 UIImage**，
-    /// 当模板图交给 UIKit（`.alwaysTemplate` 会自己上色）。
+    /// 所以补一条：**把那个视图的 layer 渲染成 UIImage**，当模板图交给 UIKit
+    /// （`.alwaysTemplate` 会自己上色）。
     ///
     /// ⚠️ 快照**必须在藏原图标之前**做（`apply` 里顺序是先 `syncItems` 再 `hideStockContent`）；
-    ///    而且要**按视图缓存**，否则每拍都会生成一张"新"图，`syncItems` 的"形状没变就不重建"永远不成立。
+    /// 而且要**按视图缓存**，否则每拍都会生成一张"新"图，`syncItems` 的"形状没变就不重建"永远不成立。
     private static func glyphImage(of node: UIView) -> UIImage? {
         if let ready = glyphViews(in: node).first?.image { return ready }
         guard let icon = findIconView(in: node), icon.bounds.width >= 8, icon.bounds.height >= 8 else { return nil }
@@ -1454,25 +1359,21 @@ enum TabBarSystemGlass {
     }
 
     /// 那一颗的文字。
-    ///
-    /// ⚠️ **不看 alpha**：那些文字是**我们自己**在上一拍藏掉的（`hideStockContent`），
-    /// 按 alpha 过滤的话第二轮就会读成 nil ⇒ 系统栏的标题会在第二拍凭空消失。
-    /// "要不要标题"只由「隐藏标签栏文字」那颗开关决定（`syncItems` 里）。
     private static func labelText(of node: UIView) -> String? {
         labelViews(in: node).first?.text
     }
 
     // MARK: - ④ 让高度
-
-    /// 把系统栏**比 Spotify 那条栏多出来的高度**写成容器的 `additionalSafeAreaInsets.bottom`。
-    ///
-    /// 为什么是这里（pw 的注释写得很清楚）：Spotify 那条栏的高度由"安全区往上 49pt"决定，
-    /// 迷你播放器站在同一条基准上，页面拿 49 + inset ⇒ **只要容器多让出多少，那一整套自己就跟着让**。
-    /// `additionalSafeAreaInsets` 是**我们写的**，关开关时能**精确写回**。
-    ///
-    /// ⚠️ 日志 63 里**没有** `made room` 那一行是**正确结果**：Face ID 机型 `83 - 49 - 34 = 0`。
-    /// ⚠️ 第二片之后宿主已经把底部安全区报成 0 ⇒ 这里量出来的高度只会更小（差额仍为 0），
-    ///    也就是说"让高度"这条在 Face ID 机型上依旧不生效 —— 与我们自绘胶囊那一版**完全一致**。
+    //
+    // 把系统栏**比 Spotify 那条栏多出来的高度**写成容器的 `additionalSafeAreaInsets.bottom`。
+    //
+    // 为什么是这里：Spotify 那条栏的高度由"安全区往上 49pt"决定，迷你播放器站在同一条基准上，
+    // 页面拿 49 + inset ⇒ **只要容器多让出多少，那一整套自己就跟着让**。
+    // `additionalSafeAreaInsets` 是**我们写的**，关开关时能**精确写回**。
+    //
+    // ⚠️ **没有** `made room` 那一行是**正确结果**：Face ID 机型 `83 - 49 - 34 = 0`。
+    // ⚠️ 宿主已经把底部安全区报成 0 ⇒ 这里量出来的高度只会更小（差额仍为 0），
+    // 也就是说"让高度"这条在 Face ID 机型上依旧不生效。
     private static func makeRoom(for bar: UIView, systemBar: UITabBar) {
         guard let container = container(of: bar), container.isViewLoaded,
               let view = container.view else {
@@ -1538,7 +1439,7 @@ enum TabBarSystemGlass {
         )
     }
 
-    /// 从栏往上找 `TabBarContainerImpl`（pw 也是这么找的：它是这条栏的容器 VC）。
+    /// 从栏往上找 `TabBarContainerImpl`（它是这条栏的容器 VC）。
     private static func container(of bar: UIView) -> UIViewController? {
         guard let containerClass = NSClassFromString(containerClassName) else { return nil }
         var responder: UIResponder? = bar.next
@@ -1561,12 +1462,11 @@ enum TabBarSystemGlass {
         writeDebugLog("[\(logTag)] standing by (\(reason))")
     }
 
-    /// ★ 第二片 ①：**把"我们给的框"和"UIKit 真画出来的玻璃"放进同一行**。
+    /// **把"我们给的框"和"UIKit 真画出来的玻璃"放进同一行**。
     ///
-    /// 用户要求"系统的液态玻璃与自绘的对齐"，而 UIKit 的浮岛玻璃**按自己的内边距画**
-    /// （我们给的宿主框 ≠ 玻璃框）⇒ 只有实测数字能收敛：这一行里
-    /// `host` 是我们摆的、`system bar` 是系统栏自己的、`drawn` 里那几块（platter /
-    /// liquid lens / selection）**才是屏幕上真正的那条胶囊**。下一份日志就能算出常量差。
+    /// UIKit 的浮岛玻璃**按自己的内边距画**（我们给的宿主框 ≠ 玻璃框）⇒ 只有实测数字能收敛：
+    /// 这一行里 `host` 是我们摆的、`system bar` 是系统栏自己的、`drawn` 里那几块（platter /
+    /// liquid lens / selection）**才是屏幕上真正的那条胶囊**。
     private static func reportGlassGeometry(_ systemBar: UITabBar, in bar: UIView) {
         let host = hostView(for: bar)
         let pieces = platterViews(in: systemBar).map { name, view in
@@ -1592,7 +1492,7 @@ enum TabBarSystemGlass {
         return found
     }
 
-    /// 类名去掉模块前缀（日志里短一点、读起来也稳）。
+    /// 类名去掉模块前缀。
     private static func shortName(_ name: String) -> String {
         name.split(separator: ".").last.map(String.init) ?? name
     }
@@ -1605,11 +1505,11 @@ enum TabBarSystemGlass {
     ) {
         guard !didLogLayout else { return }
         didLogLayout = true
-        // ⚠️ 日志 63 里我打的是 `stack.frame`，那时它是 `0,0,0,0`（还没排）⇒ 现在改打**每颗的 frame**。
+        // ⚠️ 打的是**每颗的 frame**，不是 `stack.frame`（后者在首拍还没排，是 `0,0,0,0`）。
         let frames = items.map { frameText($0.convert($0.bounds, to: bar)) }.joined(separator: " ")
-        // ⚠️ 这一行原来**写死**了 `taking touches, taps forwarded to Spotify's own items` ——
-        //   日志 70 里它和上面那行 `leaving the touches to Spotify's own bar` **自相矛盾**（第四片才发现）。
-        //   现在照实报：`isUserInteractionEnabled` 是什么就写什么。
+        // ⚠️ 触摸状态必须**照实报**：写死一句 "taking touches" 会和上面 `apply` 那行
+        // `leaving the touches to Spotify's own bar` 自相矛盾。`isUserInteractionEnabled`
+        // 是什么就写什么。
         let touchState = systemBar.isUserInteractionEnabled
             ? "; taking the touches, taps forwarded to Spotify's own items"
             : "; not taking the touches (nothing readable to forward a tap to), so Spotify's own bar still gets them"
@@ -1628,5 +1528,5 @@ enum TabBarSystemGlass {
 
 /// 系统栏本体。
 ///
-/// 第一片它只负责"长得对"；**第二片起它接管触摸**，选中的那一颗由 `TabBarSystemGlassRelay`
-/// 转发成对 Spotify 那一颗的点击（见文件头第二片 ②）。
+/// 它只管"长得对"；**接管触摸之后**，选中的那一颗由 `TabBarSystemGlassRelay`
+/// 转发成对 Spotify 那一颗的点击（见 `forwardSelection`）。

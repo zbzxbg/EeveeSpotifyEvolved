@@ -1,26 +1,26 @@
 import SwiftUI
 
 // 本项目新增（对齐 MeloX `AppleMusicLyricInterludeView` 的点阵部分，GPL-3.0）：
-// AM 歌词页里那条**间奏行** —— 用户说的「三个呼吸点」。
+// AM 歌词页里那条**间奏行** —— 三个呼吸点。
 //
 // 三层分工（谁都能单独换掉）：
-//   · `LyricInterludeTimeline`   —— 哪两句之间算间奏、这一拍该不该显示（纯逻辑）；
-//   · `AppleMusicInterludeDotsPresentation` —— 这一拍三个点各多亮、整排缩放/淡出（纯数学）；
-//   · 本文件                     —— 把那三个数画出来（几何来自 `AppleMusicInterludeMotionProfile`）。
+// · `LyricInterludeTimeline` —— 哪两句之间算间奏、这一拍该不该显示（纯逻辑）；
+// · `AppleMusicInterludeDotsPresentation` —— 这一拍三个点各多亮、整排缩放/淡出（纯数学）；
+// · 本文件 —— 把那三个数画出来（几何来自 `AppleMusicInterludeMotionProfile`）。
 //
 // ⚠️ **时钟不在这里**：这一页的宿主 `AppleMusicLyricsTickView` 已经用 CADisplayLink
-//    每帧把 `playbackTime` 送进来（见 `AppleMusicLyricsPage` 顶部"为什么不用
-//    `TimelineView`"那一段），所以这里只做"给定播放时间 → 画成什么样"的映射，
-//    不自己开计时器、也不做补间动画 —— 补间由 `presentation` 逐帧算出来，
-//    这样点阵与歌词走的是**同一条时钟**，不会互相错拍。
+// 每帧把 `playbackTime` 送进来（见 `AppleMusicLyricsPage` 顶部"为什么不用
+// `TimelineView`"那一段），所以这里只做"给定播放时间 → 画成什么样"的映射，
+// 不自己开计时器、也不做补间动画 —— 补间由 `presentation` 逐帧算出来，
+// 这样点阵与歌词走的是**同一条时钟**，不会互相错拍。
 //
 // 与 MeloX / Apple Music 真机行为的已知差别（都在这一层，改不改一眼能看见）：
-//   1. **不做"提升"**：点阵退出完到下一句真正开始之间（约 1.8s），高亮仍留在上一句
-//      —— 本项目的焦点由 `LyricPlaybackTimeline` 独家决定，不在这里抢。
-//      Apple Music 会把下一句提前变成焦点行；要接的话数据已经在了
-//      （`LyricInterludeTimeline.position(at:in:)` 的 `promotedLyricID`）。
-//   2. 间奏行**不参与**"点行跳转"：它没有可 seek 的歌词时间，点它不做任何事
-//      （MeloX 把它交给 `onInterfaceInteraction` 去收起界面，本项目没有那一层）。
+// 1. **不做"提升"**：点阵退出完到下一句真正开始之间（约 1.8s），高亮仍留在上一句
+// —— 本项目的焦点由 `LyricPlaybackTimeline` 独家决定，不在这里抢。
+// Apple Music 会把下一句提前变成焦点行；要接的话数据已经在了
+// （`LyricInterludeTimeline.position(at:in:)` 的 `promotedLyricID`）。
+// 2. 间奏行**不参与**"点行跳转"：它没有可 seek 的歌词时间，点它不做任何事
+// （MeloX 把它交给 `onInterfaceInteraction` 去收起界面，本项目没有那一层）。
 
 @available(iOS 26.0, *)
 struct AppleMusicInterludeRow: View {

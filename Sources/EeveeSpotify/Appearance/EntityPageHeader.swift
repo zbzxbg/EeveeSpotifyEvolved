@@ -1,17 +1,9 @@
 import Foundation
 import UIKit
 
-/// 「专辑 / 歌单页头」——把 Spotify 的页头换成 Apple Music 式的版本。
+/// 「专辑 / 歌单页头」—— 把 Spotify 的页头换成 Apple Music 式的版本。
 ///
-/// ## 出处
-///
-/// 借鉴 **spoti.pw v0.21.1** 的 `Redesigned/Kit/SGRHeaderInfo.{h,m}` 与
-/// `Redesigned/Playlist/PlaylistHeader.x`（该版本为 **GPL-3.0**；其 v0.22.0 起改为
-/// PolyForm Strict，**那里的代码不可复制**）。这里是**按它的判断重写的 Swift 实现**，
-/// 不是逐行翻译 —— 目标类与标识符全部用**我们自己真机日志** + `dump-9.1.88.txt` 重新核对。
-///
-/// ## 形态（Music app 的专辑 / 歌单页）
-///
+/// 形态（Music app 的专辑 / 歌单页），整块**贴底排**（内容底边距视图底 14pt）：
 /// ```
 ///              标  题          ← 居中、粗体、最多 2 行
 ///            创 建 者          ← 居中、次要色
@@ -21,21 +13,15 @@ import UIKit
 ///         ──────────────      ← 14pt
 ///           描 述             ← 自然对齐、最多 2 行
 /// ```
-/// 整块**贴底排**（内容底边距视图底 14pt）—— 这样标题与创建者正好压在封面的"溶解"边上，
-/// 而封面要伸到内容顶部往下 56pt（`titleRise`，给 hero 用）。
+/// 标题与创建者正好压在封面的"溶解"边上，封面要伸到内容顶部往下 56pt（`titleRise`，给 hero 用）。
 ///
-/// ## 三条关键取舍（都是 pw 的判断）
-///
-/// 1. **不摆 Spotify 的控件，整列藏掉自己画**：摆它的列就要回应它每一拍的 stack 重排与
-///    Auto Layout 写回，实测会被改回去。
-/// 2. **按钮"镜像 + 转发"**：字形取自被藏起来的 Spotify 控件（取不到用 SF Symbol 兜底），
-///    点击 `sendActions` 转发给那个控件 ⇒ 动作 / 状态 / 语言都留在 Spotify 那边。
+/// 三条关键取舍：
+/// 1. **不摆 Spotify 的控件，整列藏掉自己画**：摆它的列就要回应它每一拍的 stack 重排与 Auto Layout 写回，实测会被改回去；
+/// 2. **按钮"镜像 + 转发"**：字形取自被藏起来的 Spotify 控件（取不到用 SF Symbol 兜底），点击 `sendActions` 转发给那个控件 ⇒ 动作 / 状态 / 语言都留在 Spotify 那边；
 /// 3. **只有文字真正画到的地方吃触摸**：这块和页面一样宽，其余部分必须让下拉与点击穿过去。
 ///
-/// ## 安全阀
-///
-/// **认不出标题就整块不动**（`apply` 早退，一个视图都不藏）。所以任何一环失配的结果是
-/// "这个功能没生效"，而不是"歌单页坏了"。每一步都会在调试日志里留一行。
+/// 安全阀：**认不出标题就整块不动**（`apply` 早退，一个视图都不藏）。任何一环失配的结果是"这个功能没生效"，而不是"歌单页坏了"。
+/// 判据照 pw v0.21.1 `SGRHeaderInfo` / `PlaylistHeader.x` 重写，目标类与标识符用真机日志重新核对过。
 enum EntityPageHeaderMetrics {
     static let side: CGFloat = 20           // 文字左右内缩
     static let playMinWidth: CGFloat = 148  // Play 胶囊最小宽度（Music app 的）
@@ -44,20 +30,20 @@ enum EntityPageHeaderMetrics {
     static let aboutAbove: CGFloat = 14     // 按钮行与描述之间
     static let bottom: CGFloat = 14         // 内容底边距视图底
     static let titleRise: CGFloat = 56      // 封面要伸到内容顶部往下这么多（hero 用）
-    /// ★ 2026-10-13（用户给了 8 张 AM 艺人页，photo_1/3/5/7）：三颗的**尺寸关系**照 Apple Music 来
+    /// （用户给了 8 张 AM 艺人页，photo_1/3/5/7）：三颗的**尺寸关系**照 Apple Music 来
     /// —— 两侧是**小圆**（`ⓘ` 与 `☆`，≈56pt），中间是**大一档的圆**（纯白 `▶`，≈80pt）。
     /// 原来是 pw 的"两颗 44 圆 + 一颗 148×48 的白胶囊"；现在中间那颗**从胶囊变成圆**（去掉"播放"二字）。
     static let rowHeight: CGFloat = 56      // = 两侧小圆的直径
     static let playSide: CGFloat = 84       // = 中间那颗粒子的直径
-    /// ★ 2026-10-13（照 AM）：页头**右上角那颗 `⋯`** 的直径 —— AM 在同一位置放一颗"分享 + ⋯"的
+    /// 页头**右上角那颗 `⋯`** 的直径 —— AM 在同一位置放一颗"分享 + ⋯"的
     /// 玻璃胶囊，与左上角的返回键同高。
     static let pinnedMoreSide: CGFloat = 44
     /// 两侧按钮那圈**玻璃圆**的直径（= pw 的 `SGRGlassCircleSize`）。
     static let glassCircle: CGFloat = 44
-    /// 两侧按钮的字形边长。★ 2026-10-13（用户看真机：「旁边的按键小了点」）：
+    /// 两侧按钮的字形边长。（旁边的按键小了点）：
     /// 原来是"按 48pt 的 27% 内缩"≈26pt，看着比中间那颗胶囊轻 —— pw 是 44pt 玻璃圆里放字形，
     /// 所以这里改成**固定字形 + 44pt 玻璃圆**，与 Music app 的分量对齐。
-    /// ★ 同日再调（用户：「这播放旁边的播放图标太小了吧」）：22 → **24**。
+    /// 同日再调（这播放旁边的播放图标太小了吧）：22 → **24**。
     static let glyphSide: CGFloat = 24
 }
 
@@ -101,16 +87,16 @@ func eeveeInsertGlass(in host: UIView, interactive: Bool) -> UIVisualEffectView 
 }
 
 // MARK: - 藏 / 找 / 点
-
-/// 把 Spotify 的视图**藏死**。三个动作缺一不可：
-///
-///   · **改 `layer.isHidden`，不碰 `view.isHidden`** —— Spotify 自己会 `setHidden:NO` 把东西
-///     显示回来（改层挡得住），而且 Encore 的 stack 在 arranged view 被 `hidden` 时可能在
-///     `updateConstraints` 里 trap；
-///   · **空 mask** —— Spotify 不碰 mask，被空 mask 罩住的层什么都不画，这是第二道保险；
-///   · 关交互 + 关无障碍（藏掉的东西不该再能被点到或读屏读到）。
-///
-/// 幂等，每一拍调都行。
+//
+// 把 Spotify 的视图**藏死**。三个动作缺一不可：
+//
+// · **改 `layer.isHidden`，不碰 `view.isHidden`** —— Spotify 自己会 `setHidden:NO` 把东西
+// 显示回来（改层挡得住），而且 Encore 的 stack 在 arranged view 被 `hidden` 时可能在
+// `updateConstraints` 里 trap；
+// · **空 mask** —— Spotify 不碰 mask，被空 mask 罩住的层什么都不画，这是第二道保险；
+// · 关交互 + 关无障碍（藏掉的东西不该再能被点到或读屏读到）。
+//
+// 幂等，每一拍调都行。
 func eeveeConceal(_ view: UIView?) {
     guard let view else { return }
     if !view.layer.isHidden { view.layer.isHidden = true }
@@ -121,12 +107,12 @@ func eeveeConceal(_ view: UIView?) {
 
 /// **只加空 mask** 的藏法：视图什么都不画，但 `layer.isHidden` / `view.isHidden` 一个都不碰。
 ///
-/// ★ 2026-10-13（艺人页）：什么时候必须用它 —— 视图在 **`OverflowStackView`** 里的时候。
+/// 什么时候必须用它 —— 视图在 **`OverflowStackView`** 里的时候。
 /// pw 在艺人页踩过这个真机崩溃，注释逐字：
 ///
 /// > `ios-creator-impl.context_menu_in_navigation_bar_enabled_artist` moves more out of the header's
 /// > row, and with it gone Spotify's OverflowStackView force-unwraps the tallest view of a line that
-/// > has none and **traps as the page opens** (device crash 2026-09-18 19:09,
+/// > has none and **traps as the page opens** (device crash19:09,
 /// > **SIGTRAP in -[OverflowStackView updateConstraints]**).
 ///
 /// 空 mask 本身就让视图什么都不画，所以这里少一道 `hidden` 只是少一道保险，**不会漏**。
@@ -158,12 +144,6 @@ func eeveeFindView(_ root: UIView?, identifier: String, maxNodes: Int = 5000) ->
 }
 
 /// 按**类名片段**找第一个（含自身）视图。
-///
-/// ★★ 2026-10-17：为什么必须有它 —— 艺人页的"关于艺人"是 **`SPTArtistAboutBiographyView`**
-/// （真机树：`[Tree] #9 17.SPTArtistAboutBiographyView@16,82,382,1126`，与 `id=creator-page`
-/// **同一棵树**；382 = 414−32，就是列表行的内缩，日志里量到过 `382,70` 收起 / `382,1126` 展开
-/// 两种高度）。这种老 `SPT*` 视图**一个 accessibility id 都没有** ⇒ 按 id 永远找不到它
-/// （日志 94 的 `leading none` 就是这么来的）。
 func eeveeFindView(_ root: UIView?, classNameContains needle: String, maxNodes: Int = 5000) -> UIView? {
     guard let root else { return nil }
     var queue: [UIView] = [root]
@@ -179,7 +159,7 @@ func eeveeFindView(_ root: UIView?, classNameContains needle: String, maxNodes: 
 
 /// 把一个视图滚进它所在那个 `UIScrollView` 的视野。
 ///
-/// ★★ 2026-10-17（用户：「点击（`i`）后**跳转到关于艺人模块**」）：艺人页的"关于"在列表很下面
+/// （点击（`i`）后**跳转到关于艺人模块**）：艺人页的"关于"在列表很下面
 /// （真机树里那一块展开后 1126pt 高），只把点击转发过去、**不滚动**的话用户什么都看不见 ——
 /// 那个东西确实展开了，但不在屏幕上。
 @discardableResult
@@ -198,7 +178,7 @@ func eeveeScrollIntoView(_ view: UIView, topPadding: CGFloat = 24) -> Bool {
 
 /// 从 `view` 往上找**最外层** `UIScrollView`，往下滚一屏。
 ///
-/// ★★ 2026-10-17：给艺人页那颗 `i` 兜底 —— "关于艺人"（`SPTArtistAboutBiographyView`）是列表里
+/// 给艺人页那颗 `i` 兜底 —— "关于艺人"（`SPTArtistAboutBiographyView`）是列表里
 /// 懒加载的一段，页面刚打开时可能还没建出来。这时候点 `i`：**不许退回去做随机播放**，而是把页面
 /// 往下滚一屏，让那一段被建出来；下一拍 `fireTarget` 就有了，再点就是"滚过去 + 展开"。
 @discardableResult
@@ -219,21 +199,21 @@ func eeveeScrollPageDown(from view: UIView) -> Bool {
     return true
 }
 
-// MARK: - 「关于艺人」在这一版艺人页上的真实名字（真机日志 100 逐字）
-
-/// 卡片：id 前缀 `Components.UI.CreatorBiographyCard.*`、Swift 类名里含 `CreatorBiography`。
-/// 正文：`Components.UI.CreatorBiographyCard.BiographyLabel`（真机树里那一格就是它）。
-///
-/// ⚠️ 为什么不能只认 `SPTArtistAboutBiographyView`（日志 100 的现场）：
-///   · 那个类**在二进制里还在** ⇒ 启动那行 `about-artist hook on` 照样打得出来，
-///     但它在**这一版艺人页上从头到尾没出现过**：`applyToArtistPage` 那条 BFS 只试两拍、
-///     `eeveeMaterialiseBio` 滚到列表底也只报 `nothing built` —— 而**同一份日志**的
-///     `[HeaderProbe]` 明明列出了 `id=Components.UI.CreatorBiographyCard.HeaderLabel` /
-///     `.FreshFindsForwardBadge`：卡片在页面上，**只是不叫那个名字**。
-///   · 这件事本仓库自己早写下来了（`EntityPageRepaint` 的 `aboutArtistClassFragment`：
-///     「`aboutArtistFragment` 那条判据在这一版艺人页上永远不可能命中」）—— 那一轮只把
-///     **折叠**改对了，**读取侧没跟上** ⇒ 折叠照做（那一段被折成 0 高）、我们的卡片又读不到正文，
-///     于是用户**两边都看不到**（2026-10-11：「点击 i 之后，观感还是之前的那个」）。
+// MARK: - 「关于艺人」在这一版艺人页上的真实名字
+//
+// 卡片：id 前缀 `Components.UI.CreatorBiographyCard.*`、Swift 类名里含 `CreatorBiography`。
+// 正文：`Components.UI.CreatorBiographyCard.BiographyLabel`（真机树里那一格就是它）。
+//
+// ⚠️ 为什么不能只认 `SPTArtistAboutBiographyView`：
+// · 那个类**在二进制里还在** ⇒ 启动那行 `about-artist hook on` 照样打得出来，
+// 但它在**这一版艺人页上从头到尾没出现过**：`applyToArtistPage` 那条 BFS 只试两拍、
+// `eeveeMaterialiseBio` 滚到列表底也只报 `nothing built` —— 而**同一份日志**的
+// `[HeaderProbe]` 明明列出了 `id=Components.UI.CreatorBiographyCard.HeaderLabel` /
+// `.FreshFindsForwardBadge`：卡片在页面上，**只是不叫那个名字**。
+// · 这件事本仓库自己早写下来了（`EntityPageRepaint` 的 `aboutArtistClassFragment`：
+// 「`aboutArtistFragment` 那条判据在这一版艺人页上永远不可能命中」）—— 那一轮只把
+// **折叠**改对了，**读取侧没跟上** ⇒ 折叠照做（那一段被折成 0 高）、我们的卡片又读不到正文，
+// 于是点击 i 之后，观感还是之前的那个）。
 let eeveeArtistBioCardIdPrefix = "Components.UI.CreatorBiographyCard"
 let eeveeArtistBioTextId = "Components.UI.CreatorBiographyCard.BiographyLabel"
 let eeveeArtistBioClassFragment = "CreatorBiography"
@@ -264,7 +244,7 @@ func eeveeArtistBioSearchRoot(from view: UIView) -> UIView {
 ///
 /// 顺序：正文 label（id 精确）→ 它上面第一个 `CreatorBiography` 类祖先 → id 前缀 → 类名片段。
 /// ⚠️ 只认**落在 `creator-page` 里**的卡：听歌页那张"了解艺人"卡是同一族（`CreatorBiography`），
-///    不设这道闸就会在别的页面上乱认。
+/// 不设这道闸就会在别的页面上乱认。
 func eeveeArtistBioCard(in view: UIView) -> UIView? {
     let root = eeveeArtistBioSearchRoot(from: view)
     let nodeLimit = 20000
@@ -297,7 +277,7 @@ func eeveeArtistBioCard(in view: UIView) -> UIView? {
 /// 从那一块里读正文：**优先 id 精确的那颗 label**，读不到返回 nil（调用方再退"最长的一段"）。
 ///
 /// ⚠️ 读的是**界面上的文字**：Spotify 会把长简介截断（flag `is_async_biography_truncation_enabled`），
-///    要完整正文只能去 hook 数据层（`SPTArtistAboutDataLoader`，见 `ArtistBioSource` 的说明）。
+/// 要完整正文只能去 hook 数据层（`SPTArtistAboutDataLoader`，见 `ArtistBioSource` 的说明）。
 func eeveeArtistBioText(in card: UIView) -> String? {
     guard let label = eeveeFindView(card, identifier: eeveeArtistBioTextId)
         ?? eeveeFindView(card, identifier: eeveeArtistBioTextId + "*") else { return nil }
@@ -309,33 +289,19 @@ func eeveeArtistBioText(in card: UIView) -> String? {
 
 /// 把列表**扫一遍**，逼"关于艺人"那一段建出来，然后返回它。
 ///
-/// ★★ 2026-10-18 第三轮（用户：「**按下 i 之后还是没有跳转到 艺人介绍**」；日志 98 逐字
-///    `leading MISSING` + `fired: NOTHING yet (the target is not built) — scrolled the page a screen`）：
-///    那一块是**懒加载的 section**（真机树里在列表深度 20），页面刚打开时整棵树只有 979~1678 个节点
-///    ⇒ 它压根还没建出来。一次只滚一屏的兜底要用户连点好几次。
-///
 /// 做法：**在同一个主线程回合里**把最外层 scroll view 逐屏（`animated: false`）往下翻，
 /// collection view 会为每一屏建 cell；那一段建出来时 `SPTArtistAboutBiographyView` 的 `layoutSubviews`
 /// 就会响（`ArtistBiographyViewHook`），我们当场拿到它。全程不动画、最后**回到原位**，用户看不到跳动。
 ///
 /// ⚠️ 步数有上限（12 屏）；找不到就返回 nil，调用方照旧退回"滚一屏"那条老路。
 ///
-/// ★★ 2026-10-18 第五轮（**日志 99 的现场**）：`about-artist sweep — 1 step(s) over 1416pt,
-/// nothing built` —— 它**只看了列表最顶上那一屏**。原因在下面那个 `bottom`：
-/// 这是**自适应的懒加载列表**，没滚到的那部分还不存在 ⇒ 进来时算出来的
-/// `contentSize.height`（1416pt）比屏幕（896pt）只多 520pt，而 `step` 是 0.9 屏 = 806pt
-/// ⇒ 第一次循环就把 offset 推到 806 > 520，条件不成立、直接退出。
-/// 于是"滚一整趟把那一块逼出来"这句承诺从来没兑现过，`i` 那颗按键也就永远读不到正文
-/// （日志里紧接着的那行 `biography NOT READ (0 char)` 就是这么来的）。
-///
 /// 现在改成：**每一屏都重新读一次 `contentSize`**，翻到"当前这一趟的底"再继续 ——
 /// 列表边滚边长，所以"底"也必须边滚边问。
 @discardableResult
 func eeveeMaterialiseBio(from view: UIView) -> UIView? {
-    // ★★ 2026-10-11（日志 100）：**先零滚动找一遍**。卡片本来就在页面上（只是不叫
-    //    `SPTArtistAboutBiographyView`），cell 通常也已经建出来了 ⇒ 不用滚、也不受"折成 0 高"影响。
-    //    这一步把"扫列表"从**主路**降成**兜底** —— 以前它是主路，而它一次都没成功过
-    //    （日志 100：`2 step(s) down to 603pt of 1416pt, nothing built`）。
+    // **先零滚动找一遍**。卡片本来就在页面上（只是不叫
+    // `SPTArtistAboutBiographyView`），cell 通常也已经建出来了 ⇒ 不用滚、也不受"折成 0 高"影响。
+    // 这一步把"扫列表"从**主路**降成**兜底** —— 以前它是主路，而它一次都没成功过
     if let card = eeveeArtistBioCard(in: view) {
         EntityPageHeaderManager.artistBiographyAppeared(card)
         writeDebugLog(
@@ -360,7 +326,7 @@ func eeveeMaterialiseBio(from view: UIView) -> UIView? {
             found = bio
             break
         }
-        // ⚠️ 重新问一次"现在到底有多长"（见上面日志 99 那段说明）。
+        // ⚠️ 重新问一次"现在到底有多长"。
         let bottom = max(
             0,
             scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom
@@ -369,8 +335,8 @@ func eeveeMaterialiseBio(from view: UIView) -> UIView? {
         offset = min(offset + step, bottom)
     }
     if found == nil { found = EntityPageHeaderManager.artistBioTarget }
-    // ★★ 2026-10-11（日志 100）：滚完再按真机那三个名字找一次 —— 滚的过程把 cell 建出来了，
-    //    但钩子（`SPTArtistAboutBiographyView`）在这一版页面上永远不会响。
+    // 滚完再按真机那三个名字找一次 —— 滚的过程把 cell 建出来了，
+    // 但钩子（`SPTArtistAboutBiographyView`）在这一版页面上永远不会响。
     if found == nil, let card = eeveeArtistBioCard(in: view) {
         EntityPageHeaderManager.artistBiographyAppeared(card)
         found = card
@@ -395,11 +361,10 @@ let eeveeArtistBioUILabels: Set<String> = [
 
 /// 「关于艺人」卡里那些**不是简介**的整块 UI —— 按**类名 / 无障碍 id** 认（语言无关）。
 ///
-/// ★★ 2026-10-18：名字是从**解压后的 9.1.88 主二进制**（`C:\dsh\ipa\Payload\Spotify.app\Spotify`）
-/// 里挖出来的真名 —— `ArtistAbout_CommonUIKit` 那一族：
-///   · `SPTArtistAboutListenersView` + id `artist-about-listeners`（"每月有 x 名听众"那一行，
-///     文案 key `sArtistListenersSubtitleText`，见二进制 @179424128）；
-///   · `SPTArtistAboutRankView`      + id `artist-about-rank`（排行榜那一行，key `sArtistRankSubtitleText`）。
+/// 名字是从**解压后的 9.1.88 主二进制**里挖出来的 —— `ArtistAbout_CommonUIKit` 那一族：
+/// · `SPTArtistAboutListenersView` + id `artist-about-listeners`（"每月有 x 名听众"那一行，
+/// 文案 key `sArtistListenersSubtitleText`，见二进制 @179424128）；
+/// · `SPTArtistAboutRankView` + id `artist-about-rank`（排行榜那一行，key `sArtistRankSubtitleText`）。
 /// 这两块都是 Spotify 画在"关于艺人"里的**附加信息**，不是简介正文 ⇒ 拼正文时整块跳过。
 ///
 /// 为什么再按类名认一遍：下面 `eeveeSanitizedArtistBio` 那两条文字判据（带数字 + "听众/listener"）
@@ -442,7 +407,7 @@ func eeveeArtistBioLink(from view: UIView) -> (kind: String, title: String, url:
     let classHit = className.contains(eeveeArtistSocialLinkClassFragment)
 
     // ⚠️ 先做**便宜的早退**：这一支会被页面里每一拍每个节点调用（有界 800 节点 × 若干拍），
-    //    而下面的 `eeveeControlText` 自己最多走 200 个节点 —— 不加这一道就是 O(n²)。
+    // 而下面的 `eeveeControlText` 自己最多走 200 个节点 —— 不加这一道就是 O(n²)。
     let label = (view.accessibilityLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let isTappable = view is UIControl || !(view.gestureRecognizers ?? []).isEmpty
     guard classHit || isTappable || !label.isEmpty else { return nil }
@@ -515,12 +480,12 @@ func eeveeArtistBioLinkTitle(for kind: String) -> String {
 }
 
 // MARK: - Spotify 自己的「关于艺人」数据模型（`SPTArtistAbout`）
-
-/// 从 `SPTArtistAbout` 上读**姓名**。
-///
-/// ★★ 2026-10-18：下面这几个读法全部对着**二进制的类 → 方法表**写（`SPTArtistAbout` 的方法
-///    逐字：`artistName` / `biographyText` / `socialLinks` / `monthlyListenersCount` /
-///    `globalChartPosition` / `isRegistered` / `artistFactDictionaries`）。
+//
+// 从 `SPTArtistAbout` 上读**姓名**。
+//
+// 下面这几个读法全部对着**二进制的类 → 方法表**写（`SPTArtistAbout` 的方法
+// 逐字：`artistName` / `biographyText` / `socialLinks` / `monthlyListenersCount` /
+// `globalChartPosition` / `isRegistered` / `artistFactDictionaries`）。
 func eeveeArtistAboutName(from about: NSObject) -> String? {
     guard about.responds(to: NSSelectorFromString("artistName")),
           let name = about.value(forKey: "artistName") as? String else { return nil }
@@ -530,7 +495,7 @@ func eeveeArtistAboutName(from about: NSObject) -> String? {
 
 /// 从 `SPTArtistAbout` 上读**完整简介** —— 这是"关于艺人"的**权威正文**。
 ///
-/// 为什么这才是正解（用户：「解决方法总不能是正则式匹配字吧」）：界面那张卡里除了正文还画着
+/// 为什么这才是正解（解决方法总不能是正则式匹配字吧）：界面那张卡里除了正文还画着
 /// 艺人名与收听人数，**任何**从界面拼文字的方案都得靠"猜哪一行不是正文"；而这个字段就是
 /// 正文本身，一个字都不多。它同时不受界面那条
 /// `is_async_biography_truncation_enabled` 截断的影响。
@@ -543,10 +508,10 @@ func eeveeArtistAboutBiography(from about: NSObject) -> String? {
 
 /// `SPTArtistAbout.socialLinks` → 一串 `(kind, 真链接)`。
 ///
-/// ★★ `SPTArtistSocialLink` 的方法表（同一份 dump）：`twitter` / `facebook` / `instagram` /
-///    `wikipedia` / `whatsapp` / `tiktok`，属性类型全是 **`NSURL *`**，另有
-///    `urlForSocialLinkType:`。⇒ 用户要的"维基 / 推特链接"在这里是**现成的地址**，
-///    不用点、不用转发、也不用拼搜索页。
+/// `SPTArtistSocialLink` 的方法表（同一份 dump）：`twitter` / `facebook` / `instagram` /
+/// `wikipedia` / `whatsapp` / `tiktok`，属性类型全是 **`NSURL *`**，另有
+/// `urlForSocialLinkType:`。⇒ 用户要的"维基 / 推特链接"在这里是**现成的地址**，
+/// 不用点、不用转发、也不用拼搜索页。
 func eeveeArtistAboutLinks(from about: NSObject) -> [(kind: String, url: URL)] {
     guard about.responds(to: NSSelectorFromString("socialLinks")),
           let links = about.value(forKey: "socialLinks") as? NSObject else { return [] }
@@ -604,8 +569,8 @@ func eeveePlainArtistAboutText(_ raw: String) -> String {
 /// 在**活着的对象**里找那个"关于艺人"的模型（`SPTArtistAbout`）—— 不 hook、不联网，
 /// 只是问一句"你响应 `biographyText` 吗"。
 ///
-/// ★★ 2026-10-18：给数据线没接上时留一条**零风险**的备用路（比如那一页的 loader 没被创建）。
-///    有界（默认 600 个节点）；每一步都先 `responds(to:)`，不存在的方法名不会被问。
+/// 给数据线没接上时留一条**零风险**的备用路（比如那一页的 loader 没被创建）。
+/// 有界（默认 600 个节点）；每一步都先 `responds(to:)`，不存在的方法名不会被问。
 func eeveeArtistAboutModel(in root: UIView, limit: Int = 600) -> NSObject? {
     let selector = NSSelectorFromString("biographyText")
     var queue: [UIView] = [root]
@@ -621,14 +586,12 @@ func eeveeArtistAboutModel(in root: UIView, limit: Int = 600) -> NSObject? {
 
 /// 「关于艺人」那一块里那些**不是简介**的整行文字 —— 存正文之前按**整行**跳过。
 ///
-/// ★★ 2026-10-18（用户看照片 141：「点击 i 会**多出来**一些其他东西，比如艺人名字 /
-///    每月有 x 位听众」）：那张卡里除了正文，还画着**艺人名**与**收听人数**两行
-///    （收听那行有 id `artist-about-listeners`，日志 97 逐字），而
-///    `eeveeArtistBioBlockText` 是"把卡里所有文字按位置拼起来" ⇒ 这两行被当成正文收进了
-///    `bioTexts`。这里按行剔掉，**段与段之间的空行保留**。
+/// 那张卡里除了正文，还画着**艺人名**与**收听人数**两行；
+/// `eeveeArtistBioBlockText` 是"把卡里所有文字按位置拼起来" ⇒ 这两行被当成正文收进了
+/// `bioTexts`。这里按行剔掉，**段与段之间的空行保留**。
 ///
 /// ⚠️ 判据只在**已经认出来的那张卡片内部**用（`eeveeArtistBioBlockText` 的返回值），
-///    别拿去筛页面上别处的文字。
+/// 别拿去筛页面上别处的文字。
 let eeveeArtistBioChromeLines: Set<String> = [
     "关于", "关于艺人", "更多", "展开", "收起", "显示更多", "阅读更多", "查看全部",
     "播放", "关注", "已关注", "关注中", "分享",
@@ -709,8 +672,8 @@ func eeveeArtistBioBlockText(in card: UIView) -> String? {
         let view = queue.removeFirst()
         visited += 1
 
-        // ★★ 2026-10-18："每月有 x 名听众" / 排行榜那两块**整块**跳过（按类名 / id 认，
-        //    见 `eeveeIsArtistBioNonBodyChrome`）—— 它们不是简介，而且与语言无关。
+        // "每月有 x 名听众" / 排行榜那两块**整块**跳过（按类名 / id 认，
+        // 见 `eeveeIsArtistBioNonBodyChrome`）—— 它们不是简介，而且与语言无关。
         if eeveeIsArtistBioNonBodyChrome(view) { continue }
 
         var raw: String?
@@ -774,21 +737,20 @@ func eeveeOutermostScroll(from view: UIView) -> UIScrollView? {
 ///
 /// ## 为什么返回值是"路"而不是 Bool（这是被真机打回来的第二次）
 ///
-/// ★★★ 2026-10-06（日志 93：**几百行** `shuffle tapped — source found`，而随机播放毫无动静）：
 /// 旧版第一句是 `guard let control = control as? UIControl else { return false }` —— Spotify 的
 /// shuffle / play 是 `Encore.Button` 一族（点击挂在 `UITapGestureRecognizer` 上）⇒ 这一句把转发
 /// 整个吞掉；返回值又没人看 ⇒ **"日志说转发成功了、界面一动不动"**。
 ///
-/// ★★★ 2026-10-17（用户真机第二轮：「艺人页 / 歌单页的**点击播放**按键没反应」「艺人页左边那颗
+/// （艺人页 / 歌单页的**点击播放**按键没反应「艺人页左边那颗
 /// 应该是 `i`…但现在是歌单的**随机播放**按钮，并且点击没反应」）—— 同样的现场**又复现了**。
 /// 这一版把三件事一起做掉：
 ///
-///   ① **UIControl 也要先看有没有 target**：没有 target 的 `UIControl`（`Encore.Button` 正是
-///      如此）`sendActions` 是**空转**，而旧代码会因此 `return true`，把后面那条手势路一起挡掉。
-///   ② **包装层要往下钻**：按 id 找到的常常是 `ElementView<URL, Any, Any>` 那层包装
-///      （本文件 `firstControl` 的注释早就写了），真控件在它里面。调用方现在统一先 `findControl`
-///      钻一次，这里再补一道"子树里找手势"。
-///   ③ **tap recogniser 可能挂在子树里的某个视图上**，不在我们拿到的那一层。
+/// ① **UIControl 也要先看有没有 target**：没有 target 的 `UIControl`（`Encore.Button` 正是
+/// 如此）`sendActions` 是**空转**，而旧代码会因此 `return true`，把后面那条手势路一起挡掉。
+/// ② **包装层要往下钻**：按 id 找到的常常是 `ElementView<URL, Any, Any>` 那层包装
+/// （本文件 `firstControl` 的注释早就写了），真控件在它里面。调用方现在统一先 `findControl`
+/// 钻一次，这里再补一道"子树里找手势"。
+/// ③ **tap recogniser 可能挂在子树里的某个视图上**，不在我们拿到的那一层。
 ///
 /// ⚠️ **只走通一条就返回** —— 两条都发 = 一次点击触发两次（等于没点）。
 @discardableResult
@@ -796,9 +758,9 @@ func eeveeFire(_ control: UIView?, skippingControlAction: Bool = false) -> Strin
     guard let control else { return nil }
 
     // ① 真·UIControl **且确实注册了 target** ⇒ 发那一个事件（顺序按"最可能的"排）。
-    //    ★ 2026-10-16：`skippingControlAction` 给右上角那颗 `⋯` —— 它是 `Encore.Button`，
-    //    菜单不走 `sendActions`（日志 100：`fired: UIControl.touchUpInside` 而界面没动），
-    //    跳过这一档才有机会走到 ② 的手势那一条。
+    // `skippingControlAction` 给右上角那颗 `⋯` —— 它是 `Encore.Button`，
+    // 菜单不走 `sendActions`，
+    // 跳过这一档才有机会走到 ② 的手势那一条。
     if !skippingControlAction, let uiControl = control as? UIControl {
         for (event, label) in eeveeFireEvents where eeveeHasTargets(uiControl, event) {
             uiControl.sendActions(for: event)
@@ -809,24 +771,18 @@ func eeveeFire(_ control: UIView?, skippingControlAction: Bool = false) -> Strin
     // ② 手势：先自己，再（有界地）往下钻子树。
     if let fired = eeveeFireGesture(in: control) { return fired }
 
-    // ②½ ★★ 2026-10-18（用户：「右上角的三个点的按钮点击无反应」）：
-    //    **再往子树里找一颗真的有 target 的 `UIControl`**。按 id 找到的是外层
-    //    `EncoreButton`，真正把菜单弹出来的那颗 `CondensedButton` / 内部按钮可能在它里面；
-    //    旧版只往"手势"里钻，**子控件自己的 target/action 从来没试过**。
-    //    有界（深度 4 / 120 个节点）、只发第一颗有 target 的，不会把一次点击变成两次。
+    // ②½（右上角的三个点的按钮点击无反应）：
+    // **再往子树里找一颗真的有 target 的 `UIControl`**。按 id 找到的是外层
+    // `EncoreButton`，真正把菜单弹出来的那颗 `CondensedButton` / 内部按钮可能在它里面；
+    // 旧版只往"手势"里钻，**子控件自己的 target/action 从来没试过**。
+    // 有界（深度 4 / 120 个节点）、只发第一颗有 target 的，不会把一次点击变成两次。
     if let fired = eeveeFireSubControlAction(in: control) { return fired }
 
-    // ③ ★★ 2026-10-10（**日志 96 是判决**）：有界地再往上看两层。
+    // ③有界地再往上看两层。
     //
-    //    现场：用户**自己**点艺人页的"关于艺人"那一块，页面**真的跳走了**
-    //    （`12:39:04 [PageField] restored 2 background(s) (left the page)`，而且新页面不是我们
-    //    接管的三页 ⇒ 是独立的 `Creator_BiographyPageImpl.BiographyViewController`）。
-    //    而我们把点击转发给 `SPTArtistAboutBiographyView` 本身时什么都不发生 ⇒ **tap 挂在包着它
-    //    的那一层上**（ElementKit 的包装层），而那正是我先前**故意不找**的方向。
-    //
-    //    ⚠️ 两道闸门（只在"自己+子树都没有"时才走到这里，而且最多两层）：
-    //      · **不碰 `UIScrollView`** —— 那上面的 tap 是"点空白关页面"那一类；
-    //      · **不碰比目标宽太多的容器** —— 免得点到整页/整段那一级。
+    // ⚠️ 两道闸门（只在"自己+子树都没有"时才走到这里，而且最多两层）：
+    // · **不碰 `UIScrollView`** —— 那上面的 tap 是"点空白关页面"那一类；
+    // · **不碰比目标宽太多的容器** —— 免得点到整页/整段那一级。
     var ancestor = control.superview
     var levels = 0
     while let current = ancestor, levels < 2 {
@@ -843,18 +799,12 @@ func eeveeFire(_ control: UIView?, skippingControlAction: Bool = false) -> Strin
 
 /// **比 `eeveeFire` 更宽一档的转发** —— 只给艺人页那颗 `i`（"关于艺人"）用。
 ///
-/// ★★ 2026-10-18 第二轮（用户：「点击 i 按键不会跳转到艺人介绍」）：`SPTArtistAboutBiographyView`
-/// **自己对点击没反应** —— 日志 96 已经验过：用户**自己**点那一块能跳到 `BiographyViewController`，
-/// 我们把点击转发给这一块本身却什么都不发生 ⇒ 处理它的那一层在**祖先链**上；而且那一层很可能是
-/// **cell 的选中回调**（`UICollectionViewCell` 的点击不是 `UIGestureRecognizer`，`eeveeFire` 那三条路
-/// 一条都碰不到它）。
-///
 /// 三档，走通一档就返回：
-///   ① 先按 `eeveeFire` 的老三档（自己 → 子树 → 上两层）；
-///   ② **再往上走 6 层**找 tap（闸门照旧：不碰 `UIScrollView` / `UICollectionView` / `UITableView`，
-///      也不碰比目标宽太多的容器）；
-///   ③ 祖先链上有 `UICollectionViewCell` / `UITableViewCell` 就走**它的选中回调** ——
-///      这正是真人点一下走的那条路。
+/// ① 先按 `eeveeFire` 的老三档（自己 → 子树 → 上两层）；
+/// ② **再往上走 6 层**找 tap（闸门照旧：不碰 `UIScrollView` / `UICollectionView` / `UITableView`，
+/// 也不碰比目标宽太多的容器）；
+/// ③ 祖先链上有 `UICollectionViewCell` / `UITableViewCell` 就走**它的选中回调** ——
+/// 这正是真人点一下走的那条路。
 @discardableResult
 func eeveeFireWide(_ view: UIView?, skippingControlAction: Bool = false) -> String? {
     guard let view else { return nil }
@@ -988,7 +938,7 @@ func eeveeFireSubControlAction(in root: UIView) -> String? {
 
 /// **pw 的 `SGRActivate` / `SGRFire` 逐行移植**（`Redesigned/Kit/SGRRestyle.m`）。
 ///
-/// 用户 2026-10-17：「这三个点这部分能不能**直接抄 pw 的**」—— 能，而且本来就该抄：
+/// 这三个点这部分能不能**直接抄 pw 的**—— 能，而且本来就该抄：
 /// 他们已经把"点一颗 Spotify 自己的按钮"这件事收敛成了两条规则，我们这边却是一长串
 /// 自己发明的档位（手势 `_targets` 读不到、无障碍返回 false、子控件没 target…）。
 ///
@@ -996,10 +946,10 @@ func eeveeFireSubControlAction(in root: UIView) -> String? {
 /// > the first control under it, through the actions it registered, and through accessibility
 /// > for an Encore control that reads its touches from a gesture recognizer instead.
 ///
-///  ① 在子树里找**第一颗 `UIControl`**（含自身）；
-///  ② 看它注册了哪些事件：**`primaryActionTriggered` 优先，其次 `touchUpInside`**，
-///     两个都没有就**什么都不发**（`SGRFire` 返回 NO）；
-///  ③ ②没发出去 ⇒ `accessibilityActivate()`（Encore 那一族很多就把"点一下"实现成它）。
+/// ① 在子树里找**第一颗 `UIControl`**（含自身）；
+/// ② 看它注册了哪些事件：**`primaryActionTriggered` 优先，其次 `touchUpInside`**，
+/// 两个都没有就**什么都不发**（`SGRFire` 返回 NO）；
+/// ③ ②没发出去 ⇒ `accessibilityActivate`（Encore 那一族很多就把"点一下"实现成它）。
 ///
 /// 与 `eeveeFire` 的分工：`eeveeFire` 那串档位保留作**兜底**（手势 / 祖先 / cell 选中），
 /// 而**先**走这一个 —— 它才是 pw 在真机上验证过的那条。
@@ -1042,16 +992,16 @@ func eeveeActivate(_ source: UIView?) -> String? {
 }
 
 // MARK: - 弹层有没有出现（`⋯` 的点击结果）
-
-/// 屏幕上的"弹层迹象"：window 个数 + 类名带 Menu / Platter / Popover 的视图数。
+//
+// 屏幕上的"弹层迹象"：window 个数 + 类名带 Menu / Platter / Popover 的视图数。
 struct EeveePopupSnapshot: Equatable {
     let windows: Int
     let menuLike: Int
 }
 
-/// ★ 2026-10-17（第二版）：`⋯` 点完之后**界面上到底多出了什么**。
+/// `⋯` 点完之后**界面上到底多出了什么**。
 ///
-/// 前几版日志只能证明"事件发出去了"（日志 100 / 109 / 110 全是 `fired: …`，界面一动不动），
+/// 前几版日志只能证明"事件发出去了"，
 /// 证明不了"菜单弹没弹"。这里数两样东西：**window 个数**（`UIMenu` / platter 常常自建一层
 /// window）与**类名带 Menu / Platter / Popover 的视图数**。点之前数一次，0.9s 后再数一次：
 /// 两次一样 ⇒ 这一档转发确实什么都没换来（下一步就该换"我们自己建菜单"那条路）。
@@ -1080,12 +1030,12 @@ func eeveePopupSnapshot() -> EeveePopupSnapshot {
 
 /// 只进日志：一颗控件到底"为什么点不动"——target/action、手势、`UIMenu`、子控件各有哪些。
 ///
-/// ★★ 2026-10-18（用户：「右上角的三个点的按钮点击无反应」）：上一版已经跳过 `sendActions`
+/// （右上角的三个点的按钮点击无反应）：上一版已经跳过 `sendActions`
 /// 直接走手势，仍然没反应 ⇒ 不再猜。下一次点击 `⋯` 时把这一行打出来，就能分清：
-///   ① 它其实有 target/action（只是事件类型不对）；
-///   ② 它是一个 `UIButton.menu`（靠 UIKit 自己的触摸弹出，`sendActions` 天生无效）；
-///   ③ 动作挂在子树里某颗子控件上（见 `eeveeFireSubControlAction`）；
-///   ④ 只有手势，而手势的 target 在更上面一层。
+/// ① 它其实有 target/action（只是事件类型不对）；
+/// ② 它是一个 `UIButton.menu`（靠 UIKit 自己的触摸弹出，`sendActions` 天生无效）；
+/// ③ 动作挂在子树里某颗子控件上（见 `eeveeFireSubControlAction`）；
+/// ④ 只有手势，而手势的 target 在更上面一层。
 func eeveeDescribeClickability(_ root: UIView?) -> String {
     guard let root else { return "nil" }
 
@@ -1101,7 +1051,7 @@ func eeveeDescribeClickability(_ root: UIView?) -> String {
                 let actions = control.actions(forTarget: target, forControlEvent: event) ?? []
                 guard !actions.isEmpty else { return nil }
                 // `allTargets` 是 `Set<AnyHashable>` ⇒ 先当 `AnyObject` 再取动态类名
-                //（直接 `type(of: target)` 会得到 `AnyHashable.Type`，不是 `AnyClass`）。
+                // （直接 `type(of: target)` 会得到 `AnyHashable.Type`，不是 `AnyClass`）。
                 let object = target as AnyObject
                 return "\(NSStringFromClass(type(of: object))).\(actions.joined(separator: "+"))"
             }
@@ -1149,10 +1099,10 @@ func eeveeFireRecognizers(of view: UIView) -> String? {
     let targetKey = NSSelectorFromString("target")
     let actionKey = NSSelectorFromString("action")
     for recognizer in view.gestureRecognizers ?? [] where recognizer is UITapGestureRecognizer {
-        // ★★ 2026-10-18（崩溃 `Spotify-2026-10-17-150419.ips`）：
-        //    `value(forKey: "_targets")` 在**没有这个键**的 `UITapGestureRecognizer`（子类 / 系统
-        //    自绘手势）上会抛 `valueForUndefinedKey:` —— 那是 ObjC 异常，Swift 接不住，直接 abort。
-        //    先 `responds(to:)` 再读；没有就跳过这一颗，绝不拿 KVC 去赌。
+        // （崩溃 `Spotify--150419.ips`）：
+        // `value(forKey: "_targets")` 在**没有这个键**的 `UITapGestureRecognizer`（子类 / 系统
+        // 自绘手势）上会抛 `valueForUndefinedKey:` —— 那是 ObjC 异常，Swift 接不住，直接 abort。
+        // 先 `responds(to:)` 再读；没有就跳过这一颗，绝不拿 KVC 去赌。
         guard recognizer.responds(to: NSSelectorFromString("_targets")),
               let pairs = recognizer.value(forKey: "_targets") as? [AnyObject] else { continue }
         for pair in pairs {
@@ -1171,14 +1121,14 @@ func eeveeFireRecognizers(of view: UIView) -> String? {
 
 /// 这颗源控件**现在是不是"开"态**（随机播放已开 / 已关注）。
 ///
-/// ★★ 2026-10-17（用户：「（关注）功能正常。但是如果艺人已经关注了，它应该是有**绿色描边**的，
-/// 但现在没有」）：旧版只有 `(source as? UIControl)?.isSelected` 一条判据 —— 而按 id 找到的
+/// （（关注）功能正常。但是如果艺人已经关注了，它应该是有**绿色描边**的，
+/// 但现在没有）：旧版只有 `(source as? UIControl)?.isSelected` 一条判据 —— 而按 id 找到的
 /// 常常是 `ElementView<…>` **包装层**（`isSelected` 恒假），于是**永远不变绿**。
 /// `firstControl` 的注释里逐字写着这件事，但 Follow 那颗当时没走它。
 ///
 /// 这里把三条能拿到的信号都试一遍，从最标准到最兜底：
-///   ① `UIControl.isSelected`；② `accessibilityTraits` 里的 `.selected`（App 暴露开关态的标准做法）；
-///   ③ **文字里的"已关注"标记**（`Follow` 是文字按钮：关注 ↔ 已关注 / Follow ↔ Following）。
+/// ① `UIControl.isSelected`；② `accessibilityTraits` 里的 `.selected`（App 暴露开关态的标准做法）；
+/// ③ **文字里的"已关注"标记**（`Follow` 是文字按钮：关注 ↔ 已关注 / Follow ↔ Following）。
 ///
 /// ⚠️ 第 ③ 条是按本仓库已有的两套语言写的（与 `am_header_play` 那类一样直接落在代码里）。
 /// 真实文本会由 `eeveeOnSignals` 打进日志 —— 下一份日志能直接告诉我们哪一条信号真的会变，
@@ -1240,5 +1190,5 @@ func eeveeGlyph(of control: UIView?) -> UIImage? {
 }
 
 // MARK: - 页头里那三颗控件
-
-/// 「镜像按钮」：字形取自被藏起来的 Spotify 控件，点击转发给它。
+//
+// 「镜像按钮」：字形取自被藏起来的 Spotify 控件，点击转发给它。

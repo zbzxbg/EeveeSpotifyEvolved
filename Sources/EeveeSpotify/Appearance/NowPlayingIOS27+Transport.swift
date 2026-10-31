@@ -1,46 +1,20 @@
-// 「iOS 27 听歌页」的**传输行**（待办 T2，用户 2026-10-23 拍板 **A**）。
+// 「iOS 27 听歌页」的传输行：藏掉随机与循环，循环挪到工具行。
 //
-// ## 用户的原话与选项
+// AM 的形状：传输行只有三颗（上一首 / 播放 / 下一首，白字形，没有随机、没有循环）；循环在底部工具行，一颗小圆玻璃钮贴在"队列"那颗的右上方（≈ +8pt / −20pt）；随机在 AM 里没有常驻入口（属于播放列表语境）—— 这里同理，Spotify 自己的 ⋯ 菜单本来就带重复/随机动作（`_TtC19NowPlaying_ViewImpl23ContextMenuRepeatAction`），藏掉按钮不等于功能消失。
 //
-//   A 藏起来（像 AM；循环挪到工具行，随机进 ⋯）；
-//   B 留着不动；C 藏起来 + 长按播放键 = 随机。
-//   ⇒ 用户回了 **a**。
+// 真机结构（414×896）：
+// ```
+// 传输行 UIStackView@12,16,382,64
+//   Shuffle 48×48 / Previous 56×56 / Play 64×64 / Next 56×56 / Repeat 48×48
+// 工具行 UIStackView@12,0,386,44  →  Connect / Share / Queue
+// ```
 //
-// ## AM 的目标形状（`C:\dsh\am\1.jpg`）
+// 做法 —— **不移动任何原生控件**：
+// · 随机：`hideChrome` ⇒ `alpha = 0`（记原值，`restore` 统一写回）。它那颗 slot 还在，所以上一首/下一首不会因为"少了两颗"重新排版，位置不变；
+// · 循环：**只藏它的图标子树**，按钮本身 `alpha` 保持 1 —— 触摸要靠替身转给它（`alpha = 0` 的视图参与不了命中测试）；
+// · 我们画的圆钮（30pt 圆 + `repeat` 字形）挂在 `page` 上，位置按队列那颗算；上面盖一层 `NowPlayingIOS27RemoteRelayView`，命中时把触摸打到原生循环键的中心，由它自己 `hitTest` 出真正接这一下的视图 ⇒ 原生按钮收到的是真的触摸（手势、按压、它自己的动作全都在）。
 //
-//   · 传输行只有**三颗**：上一首 / 播放 / 下一首（白字形，没有随机、没有循环）；
-//   · 循环在**底部工具行**：一颗小圆玻璃钮，位置在"队列"那颗的**右上方**（≈ +8pt / −20pt）；
-//   · 随机在 AM 里根本没有常驻入口（它属于播放列表语境）—— 这里同理：Spotify 自己的 ⋯
-//     （`Context menu`）菜单里本来就带重复/随机相关的动作（dump 里有
-//     `_TtC19NowPlaying_ViewImpl23ContextMenuRepeatAction`），藏掉按钮不等于功能消失。
-//
-// ## 真机结构（交接文档第八节 8.4，414×896）
-//
-//   传输行：`UIStackView@12,16,382,64`
-//     随机      ElementView 48×48（`Components.UI.ShuffleButton`）
-//     SPTNowPlayingPreviousTrackButton 56×56
-//     SPTNowPlayingPlayButton          64×64
-//     SPTNowPlayingNextTrackButton     56×56
-//     Nowplaying-RepeatButton          48×48
-//   工具行：`UIStackView@12,0,386,44`（Connect / Share / Queue）
-//
-// ## 做法（**不移动任何原生控件**）
-//
-//   · 随机：`hideChrome` ⇒ `alpha = 0`（记原值，`restore()` 统一写回）；它那颗 slot 还在，
-//     所以上一首/下一首**不会**因为"少了两颗"而重新排 —— 位置与截图一致，不做二次排版；
-//   · 循环：**只藏它的图标子树**（按钮本身 `alpha` 保持 1）—— 因为触摸要靠"替身"转给它
-//     （`alpha = 0` 的视图参与不了命中测试，这条在"搬控件"那几轮踩过）；
-//   · 我们画的那颗圆钮（30pt 圆 + `repeat` 字形）挂在 `page` 上，位置按**队列那颗**算；
-//     它上面盖一层 `NowPlayingIOS27RemoteRelayView`：命中时把触摸**打到原生循环键的中心**，
-//     由它自己 `hitTest` 出真正接这一下的视图 ⇒ 原生按钮收到的是**真的触摸**（手势、按压、
-//     它自己的动作全都在）。
-//
-// ## 为什么替身是新类，不直接复用 `NowPlayingTitleRelayView`
-//
-// 那个类只处理"**行还在原地、只是被 transform 挪走**"：它用
-// `row.convert(row.bounds, to: self).contains(point)`，要求替身与目标**同坐标**（它自己是整页视图）。
-// 我们这颗是**跨位置**映射（我们的圆钮 ↔ 传输行里的循环键），所以自己写一个只认
-// `sourceRect` 的替身，命中后一律打到目标**中心**（本来就是一颗"点一下"的键）。
+// 为什么替身是新类：`NowPlayingTitleRelayView` 只处理"行还在原地、只是被 transform 挪走"，用 `row.convert(row.bounds, to: self).contains(point)` 要求替身与目标同坐标；这里是跨位置映射（我们的圆钮 ↔ 传输行里的循环键），所以另写一个只认 `sourceRect`、命中后一律打到目标中心的替身。
 //
 // 日志 tag：`[iOS27]`，一次性两行：`transport — …` 与 `repeat state — …`。
 import Foundation
@@ -50,15 +24,15 @@ import ObjectiveC.runtime
 /// 跨位置替身：把"我们画的那颗"的触摸交给**另一处**的原生控件。
 ///
 /// · `zones` 是若干**本层坐标**里的可点区域，每块各指向一颗原生视图；
-/// · ★★ **2026-10-24 修正（这条很重要，别再往回改）**：`zones` 那条"把触摸 hitTest 到原生控件"
-///   的路**只在小位移时有效**。UIKit 交付给被命中视图的 `UITouch` 里存的仍然是**真实的窗口坐标**，
-///   控件换算到自己坐标系后落在 bounds **之外** ⇒ `UIControl` 发的是 `.touchUpOutside`，动作**不触发**。
-///   我们的字形和它对应的原生键差得越远越必然失败（歌词气泡离 `lyrics-expand-button` 有大半屏，
-///   用户 2026-10-24 报的"iOS 27 下歌词点不了"就是这条）。
-///   ⇒ 现在**一律走 `actionZones` + `sendActions(for: .touchUpInside)`**：与位置无关。
-///   `zones` 只剩"目标真的就在手指底下"那种情况可用。
+/// ·**修正（这条很重要，别再往回改）**：`zones` 那条"把触摸 hitTest 到原生控件"
+/// 的路**只在小位移时有效**。UIKit 交付给被命中视图的 `UITouch` 里存的仍然是**真实的窗口坐标**，
+/// 控件换算到自己坐标系后落在 bounds **之外** ⇒ `UIControl` 发的是 `.touchUpOutside`，动作**不触发**。
+/// 我们的字形和它对应的原生键差得越远越必然失败（歌词气泡离 `lyrics-expand-button` 有大半屏，
+/// 报的"iOS 27 下歌词点不了"就是这条）。
+/// ⇒ 现在**一律走 `actionZones` + `sendActions(for: .touchUpInside)`**：与位置无关。
+/// `zones` 只剩"目标真的就在手指底下"那种情况可用。
 /// · `actionZones` 命中时 `hitTest` 返回**本视图**，由自带的 `UITapGestureRecognizer` 在抬手时执行闭包
-///   （「歌词舞台」那颗气泡也用它：舞台是独立窗口，没有原生控件可打）。
+/// （「歌词舞台」那颗气泡也用它：舞台是独立窗口，没有原生控件可打）。
 final class NowPlayingIOS27RemoteRelayView: UIView {
 
     var zones: [(rect: CGRect, target: UIView)] = []
@@ -66,12 +40,12 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
 
     /// **不接**的区域：让给叠在同一页上的**另一块替身**。
     ///
-    /// ★ 2026-10-24（用户：「点右下角那颗，还是 Spotify 原生弹窗」）：工具行的"队列"可点区
-    ///   是 44pt（必须盖住藏在下面的原生分享键），而"循环"那颗是**另一块替身**、框只有 26pt
-    ///   ⇒ 两者必然重叠。谁先收到触摸取决于 `page.subviews` 的顺序（footer 每拍都
-    ///   `bringSubviewToFront` 一次），于是同一处时而开队列、时而循环。
-    ///   现在 footer 这块替身把"循环那颗的框"从自己的命中范围里**排除**，触摸会自然落到
-    ///   下面那块替身上 —— 与顺序无关。
+    /// （点右下角那颗，还是 Spotify 原生弹窗）：工具行的"队列"可点区
+    /// 是 44pt（必须盖住藏在下面的原生分享键），而"循环"那颗是**另一块替身**、框只有 26pt
+    /// ⇒ 两者必然重叠。谁先收到触摸取决于 `page.subviews` 的顺序（footer 每拍都
+    /// `bringSubviewToFront` 一次），于是同一处时而开队列、时而循环。
+    /// 现在 footer 这块替身把"循环那颗的框"从自己的命中范围里**排除**，触摸会自然落到
+    /// 下面那块替身上 —— 与顺序无关。
     var excludedRects: [CGRect] = []
 
     private func accepts(_ point: CGPoint) -> Bool {
@@ -122,8 +96,8 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
             guard target.window != nil, target.alpha > 0.01, !target.isHidden else { return nil }
             let centre = CGPoint(x: target.bounds.midX, y: target.bounds.midY)
             // ⚠️ `hitTest` 可能返回 nil（目标把整棵子树按 alpha 藏了的时候）——
-            //   那时**退回目标本身**：触摸仍然落在原生控件上（就是我们要的转发），
-            //   而不是"掉到下面那块替身上、开了别的面板"（2026-10-24 的现场）。
+            // 那时**退回目标本身**：触摸仍然落在原生控件上（就是我们要的转发），
+            // 而不是"掉到下面那块替身上、开了别的面板"的现场）。
             return target.hitTest(centre, with: event) ?? target
         }
         // 自己执行动作的那一块：返回自己，手势识别器接住这一下。
@@ -139,8 +113,8 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
 extension NowPlayingIOS27 {
 
     // MARK: - 常量
-
-    /// 随机那颗（真机树 `EncoreButton…id=Components.UI.ShuffleButton`）。
+    //
+    // 随机那颗（真机树 `EncoreButton…id=Components.UI.ShuffleButton`）。
     static let shuffleButtonIdentifier = "Components.UI.ShuffleButton"
     /// 循环那颗（交接文档 8.4：`Nowplaying-RepeatButton 48×48`）。
     static let repeatButtonIdentifier = "Nowplaying-RepeatButton"
@@ -152,9 +126,9 @@ extension NowPlayingIOS27 {
     static let repeatRelayIdentifier = "eevee-ios27-repeat-relay"
     /// 循环徽标：面积（只为触摸）。
     ///
-    /// ★ 2026-10-24（用户拿 MeloX 播放页对照：「我感觉应该是放得下的吧」）：放得下 —— 关键是
-    ///   工具行三颗已经整体下移到 845（`NowPlayingIOS27.footerRowYOffset`），音量行下沿是 813，
-    ///   队列字形墨迹从 836 起 ⇒ 813…836 这 23pt 正好放一颗 24pt 的徽标（中心 825）。
+    /// （我感觉应该是放得下的吧）：放得下 —— 关键是
+    /// 工具行三颗已经整体下移到 845（`NowPlayingIOS27.footerRowYOffset`），音量行下沿是 813，
+    /// 队列字形墨迹从 836 起 ⇒ 813…836 这 23pt 正好放一颗 24pt 的徽标（中心 825）。
     static let repeatPillSide: CGFloat = 24
     /// 徽标中心相对**队列字形中心**的偏移（AM 参考图：右 ≈13、上 ≈20）。
     static let repeatPillOffsetX: CGFloat = 13
@@ -170,8 +144,8 @@ extension NowPlayingIOS27 {
     static let repeatIdleTint = UIColor(white: 1, alpha: 0.92)
 
     // MARK: - 状态
-
-    /// 我们画的圆钮 + 它上面的替身。
+    //
+    // 我们画的圆钮 + 它上面的替身。
     static weak var repeatPill: UIView?
     static weak var repeatGlyph: UIImageView?
     static weak var repeatRelay: NowPlayingIOS27RemoteRelayView?
@@ -179,8 +153,8 @@ extension NowPlayingIOS27 {
     static var didLogRepeatState = false
 
     // MARK: - 每拍入口
-
-    /// 藏随机与循环、把循环摆到工具行。找不到传输行就返回 false（不假装成功）。
+    //
+    // 藏随机与循环、把循环摆到工具行。找不到传输行就返回 false（不假装成功）。
     @discardableResult
     static func placeTransport(in page: UIView) -> Bool {
         guard let row = transportRow(in: page) else { return false }
@@ -202,8 +176,7 @@ extension NowPlayingIOS27 {
                 guard let view else { return "missing" }
                 return "hidden (\(NSStringFromClass(type(of: view))))"
             }
-            // 把"谁压着谁"需要的三个框一次打全（2026-10-24：上一份日志里没有这三行，
-            // 只能靠照片猜重叠；下一次直接看数）。
+            // 把"谁压着谁"需要的三个框一次打全。
             func rect(_ view: UIView?) -> String {
                 guard let view else { return "missing" }
                 let r = view.convert(view.bounds, to: page)
@@ -229,15 +202,15 @@ extension NowPlayingIOS27 {
     }
 
     // MARK: - 找传输行那两颗
-
-    /// 返回传输行最外那两颗：**随机**（最左）与**循环**（最右）。
-    ///
-    /// 先按 id 找；**缺哪一颗就补哪一颗**（真机 8.4 的树里随机那颗常常没有 id）——
-    /// 补法是**结构**：从播放键往上爬到"装得下上一首、播放、下一首的那一层"，
-    /// 再把这一层里不在那三颗之列、看得见且够宽的最左/最右子视图当随机/循环。
+    //
+    // 返回传输行最外那两颗：**随机**（最左）与**循环**（最右）。
+    //
+    // 先按 id 找；**缺哪一颗就补哪一颗**（真机 8.4 的树里随机那颗常常没有 id）——
+    // 补法是**结构**：从播放键往上爬到"装得下上一首、播放、下一首的那一层"，
+    // 再把这一层里不在那三颗之列、看得见且够宽的最左/最右子视图当随机/循环。
     private static func transportRow(in page: UIView) -> (shuffle: UIView?, repeat: UIView?)? {
-        // ★ 2026-10-24：这两颗贴着页面左右边缘（中线≈40 / 374），默认 20% 闸门会把它们
-        //   全筛掉；而且 pager 里相邻页还有一份 ⇒ 用 margin 0 的 visibleView。
+        // 这两颗贴着页面左右边缘（中线≈40 / 374），默认 20% 闸门会把它们
+        // 全筛掉；而且 pager 里相邻页还有一份 ⇒ 用 margin 0 的 visibleView。
         var shuffle = visibleView(identifier: shuffleButtonIdentifier, in: page, horizontalMargin: 0)
         var repeatKey = visibleView(identifier: repeatButtonIdentifier, in: page, horizontalMargin: 0)
         if shuffle != nil, repeatKey != nil { return (shuffle, repeatKey) }
@@ -288,13 +261,13 @@ extension NowPlayingIOS27 {
     private static func mountRepeatPill(in page: UIView, forwardingTo repeatKey: UIView) -> Bool {
         // 落点：**队列字形的右上角**（AM 参考图 / MeloX 都是这个关系：小徽标压在队列右肩）。
         //
-        // ⚠️ 2026-10-24 的两轮反复，结论记在这里：
-        //   · 第一版按 AM 量了 +13/−18，但当时工具行还停在**原生中线 811**，而它上面挤着
-        //     传输行底 781 + 音量行 785…813 ⇒ 徽标必然压到滑杆和队列字形（用户：「互相遮挡」）；
-        //   · 于是先退到"传输行右端"（能点、不挤，但不是 AM 的样子）；
-        //   · 用户拿 MeloX 的播放页对照后确认**放得下** ⇒ 正解是把**我们画的**工具行整体
-        //     下移 34pt（`NowPlayingIOS27.footerRowYOffset`，原生行不动），腾出 813…836 这一段。
-        //   现在徽标 24pt、中心 = 队列中心 +（13, −20）⇒ 813…837：上不碰音量行、下不碰字形墨迹。
+        // ⚠️的两轮反复，结论记在这里：
+        // · 第一版按 AM 量了 +13/−18，但当时工具行还停在**原生中线 811**，而它上面挤着
+        // 传输行底 781 + 音量行 785…813 ⇒ 徽标必然压到滑杆和队列字形（互相遮挡）；
+        // · 于是先退到"传输行右端"（能点、不挤，但不是 AM 的样子）；
+        // · 用户拿 MeloX 的播放页对照后确认**放得下** ⇒ 正解是把**我们画的**工具行整体
+        // 下移 34pt（`NowPlayingIOS27.footerRowYOffset`，原生行不动），腾出 813…836 这一段。
+        // 现在徽标 24pt、中心 = 队列中心 +（13, −20）⇒ 813…837：上不碰音量行、下不碰字形墨迹。
         guard let anchor = queueAnchorRect(in: page) else { return false }
         let side = repeatPillSide
         let centre = CGPoint(
@@ -331,12 +304,12 @@ extension NowPlayingIOS27 {
             page.addSubview(fresh)
             repeatPill = fresh
             repeatGlyph = glyph
-            // ⚠️ 2026-10-24：这一句**必须有**。
+            // ⚠️这一句**必须有**。
             //
             // `pill` 是"先声明、后赋值"的常量，上面那个分支赋了（`existing`），这里
             // 原来只写了 `repeatPill = fresh`（那是**另一张表**里的弱引用），于是
             // 下面 `pill.frame` 那几行报 4 条
-            //   constant 'pill' used before being initialized
+            // constant 'pill' used before being initialized
             // 同一个函数里那两颗 `relay` 是两条分支各赋一次、所以没事 —— 别照那颗的写法漏这一行。
             pill = fresh
             changed = true
@@ -362,9 +335,9 @@ extension NowPlayingIOS27 {
             repeatRelay = fresh
             changed = true
         }
-        // ★★ 2026-10-24：改成 `sendActions` 转发（`zones` 那条 hitTest 路对"不在手指底下"
-        //    的控件无效 —— 详见 `NowPlayingIOS27RemoteRelayView` 的头注）；
-        //    实在找不到 `UIControl` 才退回 hitTest（至少不会把触摸吞掉）。
+        // 改成 `sendActions` 转发（`zones` 那条 hitTest 路对"不在手指底下"
+        // 的控件无效 —— 详见 `NowPlayingIOS27RemoteRelayView` 的头注）；
+        // 实在找不到 `UIControl` 才退回 hitTest（至少不会把触摸吞掉）。
         if let action = tapAction(for: repeatKey, label: "repeat") {
             relay.actionZones = [(frame, action)]
             relay.zones = []
@@ -447,15 +420,15 @@ extension NowPlayingIOS27 {
     }
 
     // MARK: - 转发（T2/T3 共用）
-
-    /// 把"点一下这颗原生视图"变成**与位置无关**的动作。
-    ///
-    /// 为什么需要它：替身把触摸 `hitTest` 到一颗**不在手指底下**的视图时，UIKit 交付的
-    /// `UITouch` 仍是真实窗口坐标 ⇒ 控件算出来的点在自己 bounds 之外 ⇒ 它发
-    /// `.touchUpOutside`（动作不触发）。`sendActions(for: .touchUpInside)` 不经过命中测试，
-    /// 走控件自己的 target/action / `UIAction` ⇒ 跨半屏也没问题。
-    ///
-    /// 返回 nil = 这颗视图附近**找不到 `UIControl`**（那时调用方就别放这块可点区，别造死键）。
+    //
+    // 把"点一下这颗原生视图"变成**与位置无关**的动作。
+    //
+    // 为什么需要它：替身把触摸 `hitTest` 到一颗**不在手指底下**的视图时，UIKit 交付的
+    // `UITouch` 仍是真实窗口坐标 ⇒ 控件算出来的点在自己 bounds 之外 ⇒ 它发
+    // `.touchUpOutside`（动作不触发）。`sendActions(for: .touchUpInside)` 不经过命中测试，
+    // 走控件自己的 target/action / `UIAction` ⇒ 跨半屏也没问题。
+    //
+    // 返回 nil = 这颗视图附近**找不到 `UIControl`**（那时调用方就别放这块可点区，别造死键）。
     @MainActor
     static func tapAction(for target: UIView?, label: String) -> (() -> Void)? {
         guard let target else { return nil }
@@ -469,9 +442,9 @@ extension NowPlayingIOS27 {
         let controlClass = NSStringFromClass(type(of: control))
         return {
             writeDebugLog("[\(logTag)] \(label): sendActions → \(controlClass)")
-            // ⚠️ 这个闭包存进的是**非隔离**的 `() -> Void`（替身的 `actionZones`）——
-            //    这里用 `onMainThreadSync` 把 `@MainActor` 的操作显式包住，不靠
-            //    "闭包继承外围隔离"那条推断（上一轮就是这类推断让包白跑）。
+            // ⚠️ 这个闭包存进的是**非隔离**的 ` -> Void`（替身的 `actionZones`）——
+            // 这里用 `onMainThreadSync` 把 `@MainActor` 的操作显式包住，不靠
+            // "闭包继承外围隔离"那条推断（上一轮就是这类推断让包白跑）。
             onMainThreadSync {
                 // 先 `.touchDown` 再 `.touchUpInside`：有些控件只在"按下过"之后才认抬手
                 // （`UIControl.sendActions` 只是逐个事件派发 target/action，发两个是安全的）。
@@ -506,11 +479,11 @@ extension NowPlayingIOS27 {
     }
 
     // MARK: - 收尾
-
-    /// 拆掉我们的圆钮与替身。
-    ///
-    /// 藏掉的图标（随机走 `hideChrome`、循环走 `hideGlyphSubtree`）由 `restore()` 里的
-    /// `revealChrome()` / `revealHiddenGlyphs()` 统一写回 —— T2 与 T3 共用那两套表，只写一次。
+    //
+    // 拆掉我们的圆钮与替身。
+    //
+    // 藏掉的图标（随机走 `hideChrome`、循环走 `hideGlyphSubtree`）由 `restore` 里的
+    // `revealChrome` / `revealHiddenGlyphs` 统一写回 —— T2 与 T3 共用那两套表，只写一次。
     static func teardownTransport() {
         repeatPill?.removeFromSuperview()
         repeatPill = nil

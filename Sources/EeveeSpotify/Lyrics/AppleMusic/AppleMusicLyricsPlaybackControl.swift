@@ -4,27 +4,27 @@ import UIKit
 
 // 自绘"壳"的**动作层**：播放 / 暂停 / 上下曲。
 //
-// ── 为什么是"探测"而不是"直接调" ──────────────────────────────────────────
+// ── 为什么是"探测"而不是"直接调"
 // 本模块所有 hook 都靠 runtime 探测（`responds(to:)` + `Dynamic.convert`），
 // 因为 Spotify 的私有类名与协议不对外承诺。自己出壳之后我们需要三个原生没有的
 // 动作：toggle 播放/暂停、下一曲、上一曲。做法与 `WordByWordSeeker` 完全一致：
-//   1. 先看 `statefulPlayer` 自己有没有这个方法；
-//   2. 再在**界面层级里**找那个按钮（Spotify 的播放键是 UIControl，且在无障碍
-//      树里有稳定的标签："Pause"/"暂停"、"Next"/"下一首"…）；
-//   3. 都没有就什么都不做（按钮仍然可点，只是没反应，不崩、不错乱）。
+// 1. 先看 `statefulPlayer` 自己有没有这个方法；
+// 2. 再在**界面层级里**找那个按钮（Spotify 的播放键是 UIControl，且在无障碍
+// 树里有稳定的标签："Pause"/"暂停"、"Next"/"下一首"…）；
+// 3. 都没有就什么都不做（按钮仍然可点，只是没反应，不崩、不错乱）。
 //
-// ── 为什么"找按钮"这条并不脏 ──────────────────────────────────────────────
+// ── 为什么"找按钮"这条并不脏
 // 自己出壳是**视觉上**接管：原生那一页仍然完整存在（我们只是把它盖住），
 // 它的播放键依旧连着真实的播放管线。所以"找到那个按钮并发一个 touchUpInside"
-// 比自己去拼 `play()`/`pause()` 这种未公开签名**更可靠** —— 不依赖任何私有方法名，
+// 比自己去拼 `play`/`pause` 这种未公开签名**更可靠** —— 不依赖任何私有方法名，
 // 只依赖一个无障碍标签，而那个标签是 Spotify 为 VoiceOver 维护的、不会乱改。
 
 enum WordByWordPlaybackControl {
 
     // MARK: 播放 / 暂停
-
-    /// 切换播放 / 暂停。
-    /// 先试 `statefulPlayer` 上的方法，再退回"点原生播放键"。
+    //
+    // 切换播放 / 暂停。
+    // 先试 `statefulPlayer` 上的方法，再退回"点原生播放键"。
     @discardableResult
     static func togglePlayPause() -> Bool {
         if let player = statefulPlayer as? NSObject {
@@ -110,12 +110,12 @@ enum WordByWordPlaybackControl {
     }
 
     // MARK: 预览卡片：展开 / 分享
-
-    /// 展开到全屏歌词页。
-    ///
-    /// 「自己出壳」之后卡片上那个小箭头被我们盖住了，但**功能还在** ——
-    /// 优先按无障碍 id 找（`lyrics-expand-button`，真机 dump 确认存在），
-    /// 找不到才退回按标签猜。
+    //
+    // 展开到全屏歌词页。
+    //
+    // 「自己出壳」之后卡片上那个小箭头被我们盖住了，但**功能还在** ——
+    // 优先按无障碍 id 找（`lyrics-expand-button`，真机 dump 确认存在），
+    // 找不到才退回按标签猜。
     @discardableResult
     static func expandToFullscreenLyrics() -> Bool {
         if tapControl(withIdentifier: "lyrics-expand-button", action: "expand lyrics") {
@@ -177,19 +177,19 @@ enum WordByWordPlaybackControl {
     }
 
     // MARK: 通用：点一个原生控件
-
-    /// 按**无障碍 id** 点一个原生控件。
-    ///
-    /// 比按标签找可靠得多 —— 标签是给 VoiceOver 看的、会随语言/文案变，
-    /// 而 id 是开发定义的稳定标识。真机 dump 已确认这几颗都有 id：
-    ///   · `lyrics-expand-button`  「将歌词界面扩展至全屏」
-    ///   · `lyrics-share-button`   「分享歌词」
-    ///   · `SPTNowPlayingNextTrackButton` / `SPTNowPlayingPreviousTrackButton`
-    ///
-    /// ⚠️ 为什么必须优先用 id：按标签全局找、取"面积最大"的做法**选错过**——
-    /// 卡片上的"展开"和 Now Playing 页那颗同名按钮同时在窗口里，
-    /// 结果选中了页面别处那颗（真机 dump：frame=(-36,692)；卡片那颗在 (334,360)），
-    /// 于是"点我们画的方框没反应"。
+    //
+    // 按**无障碍 id** 点一个原生控件。
+    //
+    // 比按标签找可靠得多 —— 标签是给 VoiceOver 看的、会随语言/文案变，
+    // 而 id 是开发定义的稳定标识。真机 dump 已确认这几颗都有 id：
+    // · `lyrics-expand-button` 「将歌词界面扩展至全屏」
+    // · `lyrics-share-button` 「分享歌词」
+    // · `SPTNowPlayingNextTrackButton` / `SPTNowPlayingPreviousTrackButton`
+    //
+    // ⚠️ 为什么必须优先用 id：按标签全局找、取"面积最大"的做法**选错过**——
+    // 卡片上的"展开"和 Now Playing 页那颗同名按钮同时在窗口里，
+    // 结果选中了页面别处那颗（真机 dump：frame=(-36,692)；卡片那颗在 (334,360)），
+    // 于是"点我们画的方框没反应"。
     @discardableResult
     static func tapControl(withIdentifier identifier: String, action: String) -> Bool {
         guard let window = keyWindow else { return false }
@@ -213,10 +213,9 @@ enum WordByWordPlaybackControl {
     /// 在真机上**选错过对象**（见那个方法的注释）。这个方法保留给"没有 id"的场景。
     ///
     /// - Parameters:
-    ///   - labels: 标签候选（小写、`contains` 匹配）。
-    ///   - excluding: 需要排除的词（例如找"播放"时要排掉"播放专辑"）。
-    ///   - exact: true 时要求整体相等，用于 "close" 这类容易误伤的短词。
-    ///   - action: 日志里显示的动作名。
+    /// - labels: 标签候选（小写、`contains` 匹配）。
+    /// - excluding: 需要排除的词（例如找"播放"时要排掉"播放专辑"）。
+    /// - exact: true 时要求整体相等，用于 "close" 这类容易误伤的短词。
     @discardableResult
     static func tapNativeControl(
         labels: [String],
@@ -260,13 +259,12 @@ enum WordByWordPlaybackControl {
     ///
     /// ⚠️ 必须排除，否则会出现"自己点自己"的无限递归：
     /// 旧渲染层早期那版收起键是个 `UIControl`、标签正好是 "close"，
-    /// 于是 `dismissFullscreen()` 按标签找到它 → `sendActions` → 又调
-    /// `dismissFullscreen()` → …… 真机直接爆栈崩溃
-    /// （日志里同一秒刷了几百行 `dismiss via native close button`）。
+    /// 于是 `dismissFullscreen` 按标签找到它 → `sendActions` → 又调
+    /// `dismissFullscreen` → …… 真机直接爆栈崩溃
     ///
     /// 判据两条，够用且不看版本：
-    ///   · 祖先里有我们自己的 overlay 视图类；
-    ///   · 或者自己/祖先挂着 `eevee` 前缀的无障碍 id（SwiftUI 宿主视图我们会打上）。
+    /// · 祖先里有我们自己的 overlay 视图类；
+    /// · 或者自己/祖先挂着 `eevee` 前缀的无障碍 id（SwiftUI 宿主视图我们会打上）。
     private static func isOwnControl(_ view: UIView) -> Bool {
         var node: UIView? = view
         var depth = 0
@@ -283,13 +281,13 @@ enum WordByWordPlaybackControl {
     }
 
     // MARK: 关闭全屏
-
-    /// "正在关全屏"的过程级闸门（见 `dismissFullscreen` 的说明）。
-    ///
-    /// 与 `sendTap` 里的 `isForwardingTap` 是**互补**的两道：那道挡住
-    /// "任意转发动作的重入"，这道专门挡住"关全屏"这一条 —— 因为它是唯一
-    /// 一个**由我们自己触发、又会把整个全屏页拆掉**的动作，一旦成环，
-    /// 连转场动画都会参与进来，比其它几颗按钮危险得多。
+    //
+    // "正在关全屏"的过程级闸门（见 `dismissFullscreen` 的说明）。
+    //
+    // 与 `sendTap` 里的 `isForwardingTap` 是**互补**的两道：那道挡住
+    // "任意转发动作的重入"，这道专门挡住"关全屏"这一条 —— 因为它是唯一
+    // 一个**由我们自己触发、又会把整个全屏页拆掉**的动作，一旦成环，
+    // 连转场动画都会参与进来，比其它几颗按钮危险得多。
     private static var isDismissing = false
 
     /// 关闭全屏歌词页。
@@ -298,11 +296,11 @@ enum WordByWordPlaybackControl {
     /// 负责，比我们 `dismiss` 稳），找不到才退回 `dismiss(animated:)`。
     ///
     /// ⚠️ 这里有**两道**防自反馈的闸，缺一不可：
-    ///   1. `findTransportButton` 里的 `isOwnControl`：按具体控件排除我们自己的壳；
-    ///   2. 下面这个 `isDismissing`：按**调用过程**排除重入。
+    /// 1. `findTransportButton` 里的 `isOwnControl`：按具体控件排除我们自己的壳；
+    /// 2. 下面这个 `isDismissing`：按**调用过程**排除重入。
     ///
     /// 第 1 道是"别选中自己"，但它依赖"我们的控件能被认出来"——
-    /// 而真机崩溃报告（`Spotify-2026-09-19-100944.ips`）显示，一次
+    /// 而真机崩溃报告（`Spotify--100944.ips`）显示，一次
     /// `-[UIApplication sendAction:to:from:forEvent:]` 触发的主线程递归
     /// 一路把栈打穿（命中 `Stack Guard`）。那说明**光靠控件识别是不够的**：
     /// 只要"转发出去的动作最终又回到关全屏"，就会无限递归。
@@ -346,16 +344,16 @@ enum WordByWordPlaybackControl {
     }
 
     // MARK: 诊断
-
-    /// 把窗口里所有"可点的控件"连同它们的标签、位置打出来，并说明每个动作
-    /// **会**选中哪一个。
-    ///
-    /// 用途：现在自绘壳的三键是靠"标签 + 面积最大"选目标的，真机上出现了
-    /// "暂停键切去专辑""上一首没反应"这类现象 —— 那说明选错了控件。
-    /// 光靠猜类名/标签改不动，必须看清那一刻窗口里到底有哪些控件、各自在哪。
-    ///
-    /// 只在「开启日志记录」打开时输出（`writeDebugLog` 自己受开关控制）。
-    /// 在全屏壳挂载时调用一次。
+    //
+    // 把窗口里所有"可点的控件"连同它们的标签、位置打出来，并说明每个动作
+    // **会**选中哪一个。
+    //
+    // 用途：现在自绘壳的三键是靠"标签 + 面积最大"选目标的，真机上出现了
+    // "暂停键切去专辑""上一首没反应"这类现象 —— 那说明选错了控件。
+    // 光靠猜类名/标签改不动，必须看清那一刻窗口里到底有哪些控件、各自在哪。
+    //
+    // 只在「开启日志记录」打开时输出（`writeDebugLog` 自己受开关控制）。
+    // 在全屏壳挂载时调用一次。
     static func dumpControlCandidates() {
         guard let window = keyWindow else {
             writeDebugLog("[ShellDump] no key window")
@@ -436,19 +434,19 @@ enum WordByWordPlaybackControl {
     }
 
     // MARK: 内部
-
-    /// 播放键的标签：**当前状态是"播放中"时它叫 Pause**，所以两组都要匹配。
-    ///
-    /// 这里用 `exactMatch: true`（配合下面的排除词），原因是真机实测：
-    /// 模糊匹配下"暂停键"会切到**专辑页** —— 那是命中了标签里带 "play/播放" 的
-    /// 别的控件（例如"播放专辑"）。精确相等 + 排除词两道闸门能挡住它。
+    //
+    // 播放键的标签：**当前状态是"播放中"时它叫 Pause**，所以两组都要匹配。
+    //
+    // 这里用 `exactMatch: true`（配合下面的排除词），原因是真机实测：
+    // 模糊匹配下"暂停键"会切到**专辑页** —— 那是命中了标签里带 "play/播放" 的
+    // 别的控件（例如"播放专辑"）。精确相等 + 排除词两道闸门能挡住它。
     private static let playPauseLabels = ["pause", "play", "暂停", "播放", "继续"]
     /// 播放键要排掉的词。
     ///
     /// - 内容是"播放某个东西"的入口（专辑/歌单/电台 …），不是传输控件；
     /// - **进度条也算**：真机 dump 抓到 `playPause -> ...ProgressBar6Slider
-    ///   label="曲目位置"` —— 它的标签里带"曲"、被模糊匹配命中过，
-    ///   结果"暂停键"去点了进度条（表现就是按下没反应或乱跳）。
+    /// label="曲目位置"` —— 它的标签里带"曲"、被模糊匹配命中过，
+    /// 结果"暂停键"去点了进度条（表现就是按下没反应或乱跳）。
     private static let playPauseExclusions = [
         "album", "playlist", "radio", "artist", "song radio", "mix",
         "专辑", "歌单", "歌手", "电台", "播放列表",
@@ -467,10 +465,10 @@ enum WordByWordPlaybackControl {
     /// 避免命中离屏的备份视图或无障碍占位元素。
     ///
     /// - Parameters:
-    ///   - exactMatch: true 时要求标签**整体相等**（忽略大小写与空白），
-    ///     用于 "close" 这种容易误伤的短词。
-    ///   - excluding: 命中这些词的控件直接跳过。用于"找播放键但排掉播放专辑/
-    ///     播放列表"这类场景 —— 这正是真机上"暂停键切去专辑"的成因。
+    /// - exactMatch: true 时要求标签**整体相等**（忽略大小写与空白），
+    /// 用于 "close" 这种容易误伤的短词。
+    /// - excluding: 命中这些词的控件直接跳过。用于"找播放键但排掉播放专辑/
+    /// 播放列表"这类场景 —— 这正是真机上"暂停键切去专辑"的成因。
     private static func findTransportButton(
         labels: [String],
         excluding: [String] = [],
@@ -560,17 +558,17 @@ enum WordByWordPlaybackControl {
     /// "点自己 → 又点自己 → …"，主线程栈一路耗尽，最后不是普通闪退，
     /// 而是**卡死**（栈保护页触发 SIGSEGV，真机表现就是"歌还在放、界面全死"）。
     ///
-    /// 真机崩溃报告实证（`Spotify-2026-09-19-100944.ips`）：
-    ///   `-[UIApplication sendAction:to:from:forEvent:]` → `-[UIControl sendAction:to:forEvent:]`
-    ///   → EeveeSpotify.dylib 的动作实现 → 同一函数连刷 8 帧 → 递归到
-    ///   `StringProtocol.replacingOccurrences` 深处 → 命中 `Stack Guard` 区。
+    /// 真机崩溃报告实证（`Spotify--100944.ips`）：
+    /// `-[UIApplication sendAction:to:from:forEvent:]` → `-[UIControl sendAction:to:forEvent:]`
+    /// → EeveeSpotify.dylib 的动作实现 → 同一函数连刷 8 帧 → 递归到
+    /// `StringProtocol.replacingOccurrences` 深处 → 命中 `Stack Guard` 区。
     /// 这个项目里为同一类问题已经栽过两次（`dismissFullscreen` 找到自己画的
     /// "close" 按钮、`LyricsShellChrome.close` 用 `UIControl`），
     /// 但那两次都是**按具体控件**打补丁；这里补的是**结构性**的一道闸：
     /// 一次转发没走完，绝不允许再发起第二次转发。
     ///
     /// 为什么不会误伤正常操作：SwiftUI/UIKit 的按钮回调都是同步跑完就返回的，
-    /// 用户不可能在这一次派发还没返回时再点第二下。真正会被挡住的只有
+    /// 不可能在这一次派发还没返回时再点第二下。真正会被挡住的只有
     /// "转发 → 动作 → 又转发"这种自反馈环，那正是要挡的。
     private static func sendTap(to control: UIControl) {
         guard !isForwardingTap else {
@@ -594,17 +592,17 @@ enum WordByWordPlaybackControl {
 }
 
 // MARK: - 播放状态投影
-
-/// 把每帧的播放位置投影成"壳"需要的三个量：当前时间、总时长、是否在播放。
-///
-/// - 总时长：取 `SPTPlayerTrack.trackDurationMilliseconds`（已有字段），失败则用
-///   歌词最后一行的时间兜底（AMLL 的 TTML 自带 `dur`，日志里可见）。
-/// - 是否在播放：**靠位置是否在变来推断**。不去猜 `isPlaying` 这种未公开属性 ——
-///   位置连续两帧变化即"播放中"，长时间不动即"暂停"。这个方法在暂停、切歌、
-///   seek 之后都能自洽，且不依赖任何私有签名。
-///
-/// ⚠️ 刻意**不带** `@available(iOS 26.0, *)`：它只是 Combine + Foundation，
-/// 旧渲染层（不开「更好的逐词歌词」时走的那条）也要用同一个壳，所以两条路径共用。
+//
+// 把每帧的播放位置投影成"壳"需要的三个量：当前时间、总时长、是否在播放。
+//
+// - 总时长：取 `SPTPlayerTrack.trackDurationMilliseconds`（已有字段），失败则用
+// 歌词最后一行的时间兜底。
+// - 是否在播放：**靠位置是否在变来推断**。不去猜 `isPlaying` 这种未公开属性 ——
+// 位置连续两帧变化即"播放中"，长时间不动即"暂停"。这个方法在暂停、切歌、
+// seek 之后都能自洽，且不依赖任何私有签名。
+//
+// ⚠️ 刻意**不带** `@available(iOS 26.0, *)`：它只是 Combine + Foundation，
+// 旧渲染层（不开「更好的逐词歌词」时走的那条）也要用同一个壳，所以两条路径共用。
 @MainActor
 final class AppleMusicLyricsPlaybackProjection: ObservableObject {
 
@@ -636,8 +634,8 @@ final class AppleMusicLyricsPlaybackProjection: ObservableObject {
     /// 播放位置每帧都带一点抖动（采样误差、播放器内部量化），
     /// 一帧 ±1ms 就会让图标在两颗之间来回抽 —— 真机上就是"暂停键抽搐"。
     /// 现在：
-    ///   · 相对锚点累计前进 ≥ `advanceThreshold` → 判定为播放中，并把锚点前移；
-    ///   · 连续 `pauseThreshold` 没有累计前进 → 判定为暂停。
+    /// · 相对锚点累计前进 ≥ `advanceThreshold` → 判定为播放中，并把锚点前移；
+    /// · 连续 `pauseThreshold` 没有累计前进 → 判定为暂停。
     func refresh() {
         let newTime = positionProvider() ?? time
         time = newTime
@@ -674,13 +672,13 @@ final class AppleMusicLyricsPlaybackProjection: ObservableObject {
 }
 
 // MARK: - 自绘壳
-
-/// 全屏歌词页的"壳"**底部**：进度条 + 时间 + 播放控制。
-///
-/// 标题栏在 `LyricsShellChrome.header`（它不需要播放状态，所以留在那边，
-/// 这里只管底部这块）。
-///
-/// ⚠️ 同样**不带** `@available(iOS 26.0, *)`：旧渲染层共用这套壳。
+//
+// 全屏歌词页的"壳"**底部**：进度条 + 时间 + 播放控制。
+//
+// 标题栏在 `LyricsShellChrome.header`（它不需要播放状态，所以留在那边，
+// 这里只管底部这块）。
+//
+// ⚠️ 同样**不带** `@available(iOS 26.0, *)`：旧渲染层共用这套壳。
 struct AppleMusicLyricsControls: View {
 
     @ObservedObject var projection: AppleMusicLyricsPlaybackProjection
@@ -803,7 +801,7 @@ private struct AppleMusicLyricsProgressBar: View {
             // ⚠️ 触摸区必须比"看得见的那条线"大得多。
             //
             // 轨道只有 4pt、圆点 11pt，手指按不准就表现为"这条进度条拖不动"。
-            // 真机反馈（2026-09-25）：**AM 全屏**那条拖不动，而**普通逐词**那条能拖 ——
+            // 真机反馈：**AM 全屏**那条拖不动，而**普通逐词**那条能拖 ——
             // 两份其实是同一段代码，差别只可能来自"手指有没有正好落在带上"。
             // 用负 inset 把命中区域上下各撑 8pt（≈27pt 高）：**不影响布局与外观**。
             .contentShape(Rectangle().inset(by: -8))
@@ -836,7 +834,6 @@ private struct AppleMusicLyricsProgressBar: View {
                         } else {
                             // 拖过、但一次 seek 都没发生：`duration == 0` 时旧代码会
                             // **静默跳过** `onSeek`，表现就是"划了没反应"。
-                            // 这条日志专治它 —— 下次日志里只看这一行就能定性。
                             writeDebugLog(
                                 "[AppleMusicLyrics] seek bar drag ended but duration=0"
                                     + " — no seek issued"

@@ -3,38 +3,20 @@ import UIKit
 
 /// 「实验 → 显示 Instagram 分享位」。
 ///
-/// ## 上游是怎么写的（`EeveeSpotifyReincarnated/Sources/EeveeSpotify/Experiments/Instagram/`）
+/// 上游挂 `SPTSharingSDK.canHandleShareDestination(_:)` 与两个 `SPTShare_FoundationImplProperties.isInstagram*SharingEnabled` getter —— 但那三个名字在 9.1.88 上**一个都不存在**（全文搜 0 命中），而上游 README 写的目标版本也是 9.1.88 ⇒ 上游那份在这版上是死代码，照抄只会得到一个"开了没反应"的开关。
 ///
-/// 它挂两个类、三个方法：
-///   · `SPTSharingSDK.canHandleShareDestination(_:)` —— 目标 id 含 `instagram` 就返回 true；
-///   · `SPTShare_FoundationImplProperties.isInstagramStoriesCanvasSharingEnabled()` 与
-///     `…InstagramDirectMessageSharingEnabled()` —— 直接返回 true。
+/// 9.1.88 的等价物：那一族换成了 `Share_SharingSDKSwift.*ShareHandler`（Notes / Stories / 私信三个 handler），开关变成了构造 `Share_FoundationSwiftImpl.SPTShare_FoundationSwiftImplProperties` 时传进去的 6 个 BOOL：
 ///
-/// ⚠️ **那三个名字在 9.1.88 上一个都不存在**：`dump-9.1.88.txt` 全文搜
-/// `SPTSharingSDK` / `SPTShare_FoundationImplProperties` / `SPTSharingSDKDestination`
-/// ⇒ **0 命中**。而上游 README 写的目标版本**也是 9.1.88**
-/// （`Experiments/Instagram/ShowInstagramDestination.x.swift` 自 initial commit 起没改过）
-/// ⇒ 上游那份在这版 Spotify 上**是死代码**，照抄只会得到一个"开了没反应"的开关。
+/// initWithIsInstagramDirectMessageSharingEnabled:
+/// isInstagramStoriesCanvasSharingEnabled:
+/// isFacebookCanvasSharingEnabled:
+/// isFacebookMessengerSharingEnabled:
+/// isSnapchatCanvasSharingEnabled:
+/// isUseractivitySharingEnabled:
 ///
-/// ## 9.1.88 上的等价物（这一份实现的）
-///
-/// 那一族换成了 `Share_SharingSDKSwift.*ShareHandler`（dump 3220/3226/3228：Instagram 的
-/// Notes / Stories / 私信三个 handler），而开关变成了**构造
-/// `Share_FoundationSwiftImpl.SPTShare_FoundationSwiftImplProperties` 时传进去的 6 个 BOOL**
-/// （dump:6190 是这个类的重整名 `_TtC25Share_FoundationSwiftImpl38…`，dump:26180 是它的 init 选择器）：
-///
-///     initWithIsInstagramDirectMessageSharingEnabled:
-///     isInstagramStoriesCanvasSharingEnabled:
-///     isFacebookCanvasSharingEnabled:
-///     isFacebookMessengerSharingEnabled:
-///     isSnapchatCanvasSharingEnabled:
-///     isUseractivitySharingEnabled:
-///
-/// ⇒ 这里 hook 那个 init，把**两个 Instagram 参数改写成 true**、其余原样传下去 ——
-///   与上游"把那两个 getter 强写成 true"是同一件事，只是换成了这一版的形态。
+/// ⇒ 这里 hook 那个 init，把**两个 Instagram 参数改写成 true**、其余原样传下去 —— 与上游"把那两个 getter 强写成 true"是同一件事，只是换成了这一版的形态。
 ///
 /// ⚠️ 第二条路（更保守、不碰任何类）：`ExperimentFlagReplacements` 里强制那三条服务端 flag。
-///    两条一起上，谁生效都算数；类名/方法名对不上时这里只打一行日志、**不装**（见下面）。
 struct InstagramDestinationGroup: HookGroup { }
 
 class SPTShareFoundationSwiftImplPropertiesHook: ClassHook<NSObject> {

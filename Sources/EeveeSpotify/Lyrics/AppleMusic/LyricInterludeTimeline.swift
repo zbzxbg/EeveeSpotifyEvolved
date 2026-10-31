@@ -5,23 +5,23 @@ import Foundation
 // 模型部分（`LyricInterlude` / `LyricInterludePlaybackPosition` / 两个枚举）先落在
 // `LyricInterlude.swift` 里；这个文件补的是当时那行 TODO 点名的三件：
 //
-//   ① **间隙阈值** —— `minimumAnimatedGapDuration` = 填充前导 1s + 退出 1.8s。
-//      比这更短的间隙连"点亮 → 退出"两个阶段都放不下，硬放只会看到点闪一下；
-//      `normalizedInferredThreshold` 再把外部给的阈值夹到这条下界之上。
-//   ② **`contentEndTime` 估算** ——「这一句唱到什么时候」：
-//      作者标注的 `duration` 与最后一个音节的结束时间取**大者**；
-//      只有行级时间的来源（`.lineSynchronized`）退回 `LyricVocalDurationEstimator`，
-//      而且**不得超过**该行的显示时长 —— 下一行的起点就是人声尾部的上限，
-//      否则估出来的尾巴会把整段间隙吃掉，间奏就永远判不出来。
-//   ③ **policy 过滤** —— `.preciseTiming` 只认作者时间轴；`.automatic(threshold)`
-//      把推断出来的 LRC 间隙也算进来（阈值先过一遍 `normalizedInferredThreshold`）。
+// ① **间隙阈值** —— `minimumAnimatedGapDuration` = 填充前导 1s + 退出 1.8s。
+// 比这更短的间隙连"点亮 → 退出"两个阶段都放不下，硬放只会看到点闪一下；
+// `normalizedInferredThreshold` 再把外部给的阈值夹到这条下界之上。
+// ② **`contentEndTime` 估算** ——「这一句唱到什么时候」：
+// 作者标注的 `duration` 与最后一个音节的结束时间取**大者**；
+// 只有行级时间的来源（`.lineSynchronized`）退回 `LyricVocalDurationEstimator`，
+// 而且**不得超过**该行的显示时长 —— 下一行的起点就是人声尾部的上限，
+// 否则估出来的尾巴会把整段间隙吃掉，间奏就永远判不出来。
+// ③ **policy 过滤** —— `.preciseTiming` 只认作者时间轴；`.automatic(threshold)`
+// 把推断出来的 LRC 间隙也算进来（阈值先过一遍 `normalizedInferredThreshold`）。
 //
 // 附带 `position(at:in:)`：给定播放时间，回答「现在该显示哪个间奏、焦点归谁」。
 // 它是纯函数，**不含时钟** —— 时钟由调用方给（本项目 = `AppleMusicLyricsPage` 宿主里
 // 那条已经过真机验证的 CADisplayLink，见那个文件顶部"为什么不用 TimelineView"）。
 //
 // ⚠️ 与 MeloX 的差别只有措辞级：去掉 `nonisolated`（本仓库其余移植件也没用）、
-//    注释改中文、`switch` 统一写成显式 `return`。阈值、判据、顺序一律照抄。
+// 注释改中文、`switch` 统一写成显式 `return`。阈值、判据、顺序一律照抄。
 
 enum LyricInterludeTimeline {
 
@@ -40,8 +40,8 @@ enum LyricInterludeTimeline {
     /// 候选是"时间几何"的事实，policy 是"要不要显示"的口味，两者分开才缓存得住。
     ///
     /// 两头都照顾到：
-    ///   · **前奏** —— 从 0 到第一句真正有内容时间的歌词之间也算一段间奏（`precedingLyricID == nil`）；
-    ///   · 每两句之间 —— 上一句的人声尾部到下一句的起点。
+    /// · **前奏** —— 从 0 到第一句真正有内容时间的歌词之间也算一段间奏（`precedingLyricID == nil`）；
+    /// · 每两句之间 —— 上一句的人声尾部到下一句的起点。
     static func candidates(in lyrics: [LyricLine]) -> [LyricInterlude] {
         guard let firstLyric = lyrics.first else { return [] }
 
@@ -109,19 +109,18 @@ enum LyricInterludeTimeline {
                 return interlude.gapDuration >= minimumAnimatedGapDuration
             case (.preciseTiming, .lineSynchronized):
                 // 作者时间轴那一档**故意不认**推断出来的 LRC 间隙：
-                //   那里"人声尾部"是我们自己估的，把估计值当事实去显示倒计时会误报。
+                // 那里"人声尾部"是我们自己估的，把估计值当事实去显示倒计时会误报。
                 return false
             case let (.automatic(minimumInferredGapDuration), .precise):
-                // ★★ 2026-10-18（日志 104 的现场）：**逐字来源也吃同一个阈值**。
+                // **逐字来源也吃同一个阈值**。
                 //
-                //    原来这一档只看 `minimumAnimatedGapDuration`（1s 前导 + 1.8s 退出 = 2.8s），
-                //    于是"2.8s 的呼吸"也算一段间奏 —— 日志 104 里 Starboy 判出
-                //    `17 interlude(s) in 65 line(s)`：每 40pt 一条驻留行（见
-                //    `AppleMusicInterludeRow`，"不亮的时候也占着 40pt"）⇒ 整整 680pt 的
-                //    **空白行**，用户看到的就是「歌词有额外换行」。
+                // 原来这一档只看 `minimumAnimatedGapDuration`（1s 前导 + 1.8s 退出 = 2.8s），
+                // `17 interlude(s) in 65 line(s)`：每 40pt 一条驻留行（见
+                // `AppleMusicInterludeRow`，"不亮的时候也占着 40pt"）⇒ 整整 680pt 的
+                // **空白行**，歌词有额外换行。
                 //
-                //    现在与行级那条**共用 `.automatic` 给的阈值**（下界仍是 2.8s）：
-                //    Apple Music 也只给"真的没人唱"的那几段画呼吸点，不是每一次换气。
+                // 现在与行级那条**共用 `.automatic` 给的阈值**（下界仍是 2.8s）：
+                // Apple Music 也只给"真的没人唱"的那几段画呼吸点，不是每一次换气。
                 return interlude.gapDuration
                     >= normalizedInferredThreshold(minimumInferredGapDuration)
             case let (.automatic(minimumInferredGapDuration), .lineSynchronized):
@@ -134,15 +133,15 @@ enum LyricInterludeTimeline {
     /// 给定播放时间 → 这一拍该显示什么。
     ///
     /// 三个阶段（顺序不能换）：
-    ///   1. 还没到 → 什么都不显示，但把 `nextTransitionTime` 报出去（调用方据此定时）；
-    ///   2. `visualEndTime` 之前 → 点阵可见、**并且占着焦点**；
-    ///   3. `countdownEndTime`（= 下一句的起点）之前 → 点阵已经视觉清空，但这一行
-    ///      仍然"是它"（`visibleInterludeID` 不变，让视图认得出这是一次间奏交接），
-    ///      同时把下一句提升为焦点行（`promotedLyricID`）。
+    /// 1. 还没到 → 什么都不显示，但把 `nextTransitionTime` 报出去（调用方据此定时）；
+    /// 2. `visualEndTime` 之前 → 点阵可见、**并且占着焦点**；
+    /// 3. `countdownEndTime`（= 下一句的起点）之前 → 点阵已经视觉清空，但这一行
+    /// 仍然"是它"（`visibleInterludeID` 不变，让视图认得出这是一次间奏交接），
+    /// 同时把下一句提升为焦点行（`promotedLyricID`）。
     ///
-    /// ⚠️ 第 3 阶段是 MeloX 的"提升"语义。**2026-10-17 起渲染层真的消费它了**：
-    ///    `AppleMusicLyricsPage` 用 `focusedLyricID(highlighted:interludePosition:)` 把焦点
-    ///    交给下一句（在那之前只给间奏行用，于是这 1.8s 里高亮还留在上一句 —— §A·7）。
+    /// ⚠️ 第 3 阶段是 MeloX 的"提升"语义。**起渲染层真的消费它了**：
+    /// `AppleMusicLyricsPage` 用 `focusedLyricID(highlighted:interludePosition:)` 把焦点
+    /// 交给下一句（在那之前只给间奏行用，于是这 1.8s 里高亮还留在上一句 —— §A·7）。
     static func position(
         at playbackTime: TimeInterval,
         in interludes: [LyricInterlude]
@@ -200,13 +199,13 @@ enum LyricInterludeTimeline {
     /// 这一拍**焦点该落在哪一句** —— `promotedLyricID` 与 `highlightedLyricID` 是
     /// **二选一**，不是并列。
     ///
-    /// ★★ 2026-10-17（`MEMORY_2026-10-17_Remaining-Work.md` §A·7「间奏点阵消失后到下一句
-    ///    开始那 1.8s，高亮仍留在上一句」）：`position(at:in:)` 的第 3 阶段本来就报了
-    ///    `promotedLyricID`（MeloX 的"提升"语义），但渲染层以前**只消费前两个字段** ⇒
-    ///    那 1.8s 里焦点还是"最后一句已开始"的**上一句**。
+    /// 症状：间奏点阵消失后到下一句开始那 1.8s，高亮仍留在上一句。
+    /// `position(at:in:)` 的第 3 阶段本来就报了
+    /// `promotedLyricID`（MeloX 的"提升"语义），但渲染层以前**只消费前两个字段** ⇒
+    /// 那 1.8s 里焦点还是"最后一句已开始"的**上一句**。
     ///
     /// ⚠️ 两者**不能 OR**：`highlightedLyricID` 在这 1.8s 里仍然指向上一句，OR 起来就是
-    ///    前后两句**同时**亮 —— 比改之前更糟。所以有提升行时由它**独占**焦点。
+    /// 前后两句**同时**亮 —— 比改之前更糟。所以有提升行时由它**独占**焦点。
     static func focusedLyricID(
         highlighted: LyricLine.ID?,
         interludePosition: LyricInterludePlaybackPosition

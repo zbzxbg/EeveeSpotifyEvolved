@@ -11,26 +11,26 @@ import UIKit
 /// 属于本仓库更稳的那一路（不隐藏视图、不碰布局、可撤销）。
 ///
 /// 原料**不是**这一页带来的：`KnownFlagCatalog` 的 `flag_group_interventions` 那两组
-/// 早在 2026-10-02 就收录并**逐条在 `.spotify-ipa/flag-table.txt` 里核对过**
-/// （见 `SPOTIFY_GAP.md` §5.2 的 25 条 `Hide …` 清单）。这一页只做一件事：
+/// 早在 `KnownFlagCatalog` 里就收录了，并逐条在 IPA 的 flag 表里核对过
+/// （25 条 `Hide …` 清单）。这一页只做一件事：
 /// **把"要读 flag 名 + 选 on/off + 再点一次取消"三步，变成一个人话开关**。
 ///
 /// ## 三条实现纪律
 ///
 /// 1. **不另开改配置的路径**：开关写的仍是 `FlagOverrideStore`（`scope` 一定带上 ——
-///    `.forceBool` 只有在给了 scope 时才**追加**服务端没下发过的条目，见
-///    `DynamicModifyingFunctions.modifyAssignedValues` 那段"没有就追加"）。
+/// `.forceBool` 只有在给了 scope 时才**追加**服务端没下发过的条目，见
+/// `DynamicModifyingFunctions.modifyAssignedValues` 那段"没有就追加"）。
 /// 2. **`UserDefaults` 不参与语义**：点过就写覆盖、取消就删覆盖；页面重进时用
-///    `existingOverride(for:)` 反查真实状态 —— 所以在「Flag 覆盖」页手写/手删过的条目
-///    这一页也显示得对（开关的唯一含义就是"**有没有一条把它关掉的覆盖**"）。
+/// `existingOverride(for:)` 反查真实状态 —— 所以在「Flag 覆盖」页手写/手删过的条目
+/// 这一页也显示得对（开关的唯一含义就是"**有没有一条把它关掉的覆盖**"）。
 /// 3. **只认 `.off` 那一种覆盖**：`on` / `set` / `number` 在这条路径上是空操作，
-///    所以要按"有没有**关掉**"来显示，而不是"有没有覆盖"。
+/// 所以要按"有没有**关掉**"来显示，而不是"有没有覆盖"。
 ///
 /// ## 依赖与代价（照实写）
 ///
 /// * flag 覆盖要**重启 Spotify** 才生效（远端配置按会话下发一次），页头写明。
 /// * 少数 flag（`observedValue` 为空 = 只在 IPA 字面量表里见过）是否被服务端采纳，
-///   只能从下一份日志的 `[Flags] replacement … N match(es)` 判断，**这一页不许诺 100% 生效**。
+/// 只能从下一份日志的 `[Flags] replacement … N match(es)` 判断，**这一页不许诺 100% 生效**。
 struct EeveeReduceInterventionsView: View {
 
     /// 当前**已生效**的覆盖表（页面重进时用它反查，而不是自己记状态）。
@@ -38,7 +38,7 @@ struct EeveeReduceInterventionsView: View {
 
     var body: some View {
         List {
-            // ── 总闸：`ios-messaging-reduceinterventions-impl.enabled` ────────────────
+            // ── 总闸：`ios-messaging-reduceinterventions-impl.enabled`
             if let master = Self.masterFlag {
                 Section(
                     header: Text("reduce_interventions_master".localized),
@@ -52,14 +52,14 @@ struct EeveeReduceInterventionsView: View {
                 }
             }
 
-            // ── 逐条提示。驱动源就是目录，不另维护一份名单 ────────────────────────────
+            // ── 逐条提示。驱动源就是目录，不另维护一份名单
             Section(header: Text("reduce_interventions_tips_section".localized)) {
                 ForEach(Self.interventionRows, id: \.key) { row in
                     toggle(row)
                 }
             }
 
-            // ── 第二批：别的 scope 里的同类提示（每个 scope 一节，副标题写清是哪条）──────
+            // ── 第二批：别的 scope 里的同类提示（每个 scope 一节，副标题写清是哪条）
             ForEach(Self.hintSections, id: \.scope) { section in
                 Section(header: Text(Self.hintSectionTitleKey(for: section.scope).localized)) {
                     ForEach(section.rows, id: \.key) { row in
@@ -68,15 +68,15 @@ struct EeveeReduceInterventionsView: View {
                 }
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear { overrides = FlagOverrideStore.all }
     }
 
     // MARK: - 行模型
-
-    /// 一行开关。把一个 `KnownFlag` 需要的东西**预先算好**，行视图里就只做渲染 ——
-    /// 这样 `body` 里的表达式都很小，不会喂给类型检查器一个长链（见 `existingOverride` 的注释）。
+    //
+    // 一行开关。把一个 `KnownFlag` 需要的东西**预先算好**，行视图里就只做渲染 ——
+    // 这样 `body` 里的表达式都很小，不会喂给类型检查器一个长链（见 `existingOverride` 的注释）。
     private struct Row: Hashable {
         let flag: KnownFlag
         let labelKey: String
@@ -144,7 +144,7 @@ struct EeveeReduceInterventionsView: View {
     }
 
     /// 已有的、且**确实把这条关掉**的覆盖。`on` / `set` / `number` 不算 —— 那样会让
-    /// 用户在「Flag 覆盖」页写的其它模式被这一页误读成"已关闭"。
+    /// Flag 覆盖页写的其它模式被这一页误读成"已关闭"。
     ///
     /// ⚠️ 写法刻意为"**逐句、显式类型**"，不要合并回一个长表达式：
     /// 第一版写的是 `overrides.first { $0.id == flag.id && $0.mode == .off }`，CI 直接报
@@ -214,7 +214,7 @@ struct EeveeReduceInterventionsView: View {
     /// ⚠️ 为什么不直接渲染整组：那个组里还躺着 3 条我**没写文案**的 flag
     /// （`ios-feature-nowplayingbar.data_saver_tooltip` / `ios-feature-search.concerts_enabled` /
     /// `ios-reinventfree-contextualupsellpremiumpromo-impl.is_promo_cta_enabled`）。
-    /// 直接渲染整组的话，它们会**自动上屏并且显示裸键名** —— 2026-10-03 就是靠
+    /// 直接渲染整组的话，它们会**自动上屏并且显示裸键名** ——就是靠
     /// `check_reduce_interventions_l10n.py` 才发现的（它会列出"这一页会拼出来的每个键"）。
     /// 所以规则定死：**想让它上屏，先在这里加一行、再补两个 l10n 键**。
     private static let curatedHints: Set<String> = [
@@ -309,7 +309,7 @@ struct EeveeReduceInterventionsView: View {
     ///
     /// ⚠️ 键名与 `KnownFlagCatalog` 里那条 flag **一一对应**，且**按 scope 决定形状**：
     /// * scope 就是「减少打扰」那个模块（`ios-messaging-reduceinterventions-impl`）→
-    ///   `reduce_interventions_flag_<去掉 enable_message_ 前缀的名字>`（历史键名，别改）；
+    /// `reduce_interventions_flag_<去掉 enable_message_ 前缀的名字>`（历史键名，别改）；
     /// * 别的 scope → `reduce_interventions_flag_<scope 末段>_<flag 名>`。
     ///
     /// 为什么要分段：第二批里 `is_enabled` / `nudges` 这种名字在多个 scope 里都会出现，

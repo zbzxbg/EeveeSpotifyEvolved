@@ -12,23 +12,23 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     /// 自动优选：不是单一来源，而是按地区与时间轴质量排好序的一条链路。
     /// 作为来源选择器里的一项，与具体来源互斥。
     ///
-    /// ★ 2026-10-31：取代原来的「多级回退」（`.multiLevel`）。
-    ///   **rawValue 保持 7 不变** —— 用户盘上存的就是这个整数，改名会把他们
-    ///   已选的「多级回退」重置成默认来源。行为差异见 `LyricsAutoSelect` 文件头。
+    /// 取代原来的「多级回退」（`.multiLevel`）。
+    /// **rawValue 保持 7 不变** —— 用户盘上存的就是这个整数，改名会把他们
+    /// 已选的「多级回退」重置成默认来源。行为差异见 `LyricsAutoSelect` 文件头。
     case autoSelect
     /// AMLL：提供高质量逐词歌词与丰富的歌词结构（amll.dev）。
     /// 追加在末尾，避免改变既有 rawValue。
     case amllTtml
     /// Apple Music **官方** TTML（实验）。追加在末尾，避免改变既有 rawValue。
     ///
-    /// ★ 2026-10-17：**刻意不出现在 `allCases` 里** —— 它不是用户在来源选择器里挑的一项，
-    ///   而是由「设置 → 实验 → 启用Apple Music官方TTML歌词」这个总开关**强制**启用的
-    ///   （那个开关的语义就是"忽略当前所有有关于歌词的设置"）。
-    ///   所以它只会在 `CustomLyrics.loadCustomLyricsForCurrentTrack` 的覆盖分支里出现，
-    ///   rawValue 也永远不会被写进 `lyricsSource` 这个 UserDefault。
+    /// **刻意不出现在 `allCases` 里** —— 它不是用户在来源选择器里挑的一项，
+    /// 而是由「设置 → 实验 → 启用Apple Music官方TTML歌词」这个总开关**强制**启用的
+    /// （那个开关的语义就是"忽略当前所有有关于歌词的设置"）。
+    /// 所以它只会在 `CustomLyrics.loadCustomLyricsForCurrentTrack` 的覆盖分支里出现，
+    /// rawValue 也永远不会被写进 `lyricsSource` 这个 UserDefault。
     case appleMusicOfficialTtml
-    // ★ 2026-10-31：补上 Taurus 有、我们缺的四个源。同样**追加在末尾**，不改既有 rawValue。
-    /// BiniLyrics：社区收的 Apple Music 逐字 TTML，按名字搜。
+    // 补上 Taurus 有、我们缺的四个源。同样**追加在末尾**，不改既有 rawValue。
+    // BiniLyrics：社区收的 Apple Music 逐字 TTML，按名字搜。
     case bini
     /// Unison：人工打轴的 TTML，曲库小、质量高。
     case unison
@@ -59,10 +59,10 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     case .notReplaced:
         return "Spotify"
     case .spicy:
-        // ★ 2026-10-13（用户）：连写的那版 `SpicyLyrics` 全部改成官方写法 `Spicy Lyrics`。
-        //   这一串有三个去处：来源选择器的标签、署名兜底（`toSpotifyLyricsData` 的
-        //   `providedBy`）、以及日志。SL 的站点 / 条款 / attribution 文档一律写两词；
-        //   API 里的 `spicy_lyrics` 是**字段值**（标识符），不是展示名。
+        // 连写的那版 `SpicyLyrics` 全部改成官方写法 `Spicy Lyrics`。
+        // 这一串有三个去处：来源选择器的标签、署名兜底（`toSpotifyLyricsData` 的
+        // `providedBy`）、以及日志。SL 的站点 / 条款 / attribution 文档一律写两词；
+        // API 里的 `spicy_lyrics` 是**字段值**（标识符），不是展示名。
         return "Spicy Lyrics"
     case .netease:
         return "NetEase"
@@ -81,14 +81,14 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     case .appleMusicOfficialTtml:
         // 这是**提供者署名**（注入 payload 的 `providedBy` / 页脚那一行），不是源选择器的标签。
         //
-        // ★ 2026-10-17（用户）：「如果歌词来源是苹果官方，显示为 Apple Inc.」——
-        //   刻意**不写** "Apple Music"：署名行要的是版权方（Apple Inc.），
-        //   与服务/产品名（Apple Music）区分开。实验开关那一行的文案不受影响。
+        // 「如果歌词来源是苹果官方，显示为 Apple Inc.」——
+        // 刻意**不写** "Apple Music"：署名行要的是版权方（Apple Inc.），
+        // 与服务/产品名（Apple Music）区分开。实验开关那一行的文案不受影响。
         return "Apple Inc."
     }
     }
 
-    /// 歌词偏移的**存储键**（`LyricsTimingOffset` 用，2026-10-24 起）。
+    /// 歌词偏移的**存储键**（`LyricsTimingOffset` 用，起）。
     ///
     /// 为什么不直接用 `description`：那一串是**展示名**，`autoSelect` 那一项还是
     /// 本地化串（`lyrics_source_auto.localized`）—— 用户换一次语言，
@@ -102,9 +102,9 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
         case .notReplaced: return "spotify"
         case .spicy: return "spicy"
         case .netease: return "netease"
-        // ⚠️ 这个字符串**不许跟着枚举一起改名**：它是 2026-10-24 起写进
-        //   `ngzhwm_lyricsOffsetBySourceAndTrack` 的键，改了等于把用户已存的偏移全丢掉。
-        //   "multiLevel" 是旧名字，保留它就是保留那些数据。
+        // ⚠️ 这个字符串**不许跟着枚举一起改名**：它是起写进
+        // `ngzhwm_lyricsOffsetBySourceAndTrack` 的键，改了等于把用户已存的偏移全丢掉。
+        // "multiLevel" 是旧名字，保留它就是保留那些数据。
         case .autoSelect: return "multiLevel"
         case .amllTtml: return "amll"
         case .appleMusicOfficialTtml: return "appleMusic"

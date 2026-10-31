@@ -3,48 +3,21 @@ import UIKit
 
 /// 从**任意视图**打开 EeveeSpotify 设置页。
 ///
-/// ⚠️ 2026-10-13：**它现在的调用方只有设置列表里那一行**（`pushEeveeSettings`）。原来还有一个
-/// "长按标签栏第一颗（主页）"的入口，**那个功能已按用户要求整体回退** ——
-/// 见 `TabBarSystemGlass.installStockGestures` 里留下的那条结论（重做时**两条栏各装一遍**）。
-/// 这个落点本身与手势无关，留着：将来重做时直接接上就行。
+/// ⚠️ 现在的调用方只有设置列表里那一行（`pushEeveeSettings`）。原来还有一个"长按标签栏第一颗（主页）"的入口，那个功能已按整体回退（结论留在 `TabBarSystemGlass.installStockGestures`：重做时**两条栏各装一遍**）。这个落点本身与手势无关，留着将来直接接上。
 ///
-/// ## 出处：pw 的 `SGOpenModSettings`
+/// 两步走（照 pw 的 `SGOpenModSettings`）：**沿 responder 链找控制器**，再**沿 `parentViewController` 找一个导航栈**。注意不是只看 `viewController.navigationController` —— 标签栏那个控制器本身不在栈里，栈在它的子 VC 里，所以要递归找子 VC 里的 `UINavigationController`。
 ///
-/// 借鉴 **spoti.pw v0.21.1**（**GPL-3.0**；v0.22.0 起改为 PolyForm Strict，那里的代码不可复制）。
-/// 长按那两只手势在 `Native/Navbar/TabBarHooks.x`（`SGHomeHold`）与
-/// `Redesigned/Navbar/TabBar.x:228-239`（`SGRSystemTabBar` 的 `held:`），
-/// 两边最后都落到 `App/ModSettings.x` 的这一个函数上：
+/// 多一条兜底：实在没有栈就 present 一层自己的栈。长按主页那条路上我们不一定找得到栈，而"按了没反应"是不能接受的。这条兜底只在标签栏那种"控制器不在栈里"的场合才会走到。
 ///
-/// ```objc
-/// void SGOpenModSettings(UIView *source) {
-///     UIViewController *owner = nil;
-///     for (UIResponder *r = source; r && !owner; r = r.nextResponder) {
-///         if ([r isKindOfClass:UIViewController.class]) owner = (UIViewController *)r;
-///     }
-///     UINavigationController *nav = nil;
-///     for (UIViewController *page = owner; page && !nav; page = page.parentViewController) nav = navigationIn(page);
-///     SGShowPage(nav.topViewController ?: SGTopController(), modSettingsPage());
-/// }
-/// ```
-///
-/// 也就是两步：**沿 responder 链找控制器**，再**沿 `parentViewController` 找一个导航栈**
-/// （它的 `navigationIn` 是"递归找子 VC 里的 `UINavigationController`"，不是只看
-/// `viewController.navigationController` —— 标签栏那个控制器本身不在栈里，栈在它的子 VC 里）。
-///
-/// 我们多一条兜底：**实在没有栈就 present 一层自己的栈**。理由：长按主页这条路上我们不一定
-/// 找得到栈，而"按了没反应"是不能接受的（那正是用户抱怨过的那类问题）。
-/// 这条兜底只在标签栏那种"控制器不在栈里"的场合才会走到。
-///
-/// ⚠️ 与 `EeveeSettingsUniversal.x.swift` 里设置列表那一行**共用同一份页面**
-/// （`makePage`）—— 两处各写一份迟早会漂（那颗 GitHub 按钮、标题、尺寸都会）。
+/// ⚠️ 与 `EeveeSettingsUniversal.x.swift` 里设置列表那一行**共用同一份页面**（`makePage`）—— 两处各写一份迟早会漂（那颗 GitHub 按钮、标题、尺寸都会）。
 enum EeveeSettingsLauncher {
 
     /// 打开设置页。返回是否成功（**认不出就什么都不做** —— 不猜、不崩，与本仓库同一条纪律）。
     @discardableResult
     static func open(from view: UIView, reason: String) -> Bool {
-        // ★ 2026-10-18：`⋯` 现在挂在 window 上（见 `EntityPageHeaderManager.pinMoreButton`）——
-        //    设置页是 push/present 上来的，那颗 window 级按钮会浮在设置页上面。打开设置前先收走；
-        //    退回实体页时，那一页的布局拍会重新把它挂回去。
+        // `⋯` 现在挂在 window 上（见 `EntityPageHeaderManager.pinMoreButton`）——
+        // 设置页是 push/present 上来的，那颗 window 级按钮会浮在设置页上面。打开设置前先收走；
+        // 退回实体页时，那一页的布局拍会重新把它挂回去。
         EntityPageHeaderManager.removePinnedMore(reason: "settings opened")
         guard let owner = viewController(of: view) else {
             writeDebugLog("[Settings] \(reason): no view controller above that view — nothing was opened")
@@ -101,8 +74,8 @@ enum EeveeSettingsLauncher {
     }
 
     // MARK: - 找那两样（pw 的 `SGOpenModSettings` 逐字）
-
-    /// 沿 responder 链找第一个控制器。
+    //
+    // 沿 responder 链找第一个控制器。
     private static func viewController(of view: UIView) -> UIViewController? {
         var responder: UIResponder? = view
         var level = 0

@@ -11,30 +11,30 @@ import ObjectiveC.runtime
 /// ③ `LinearGradient(clear → black 0.35, .top → .bottom)`
 /// 交叉淡入时长 = `NowPlayingMetrics.backdropCrossfadeDuration`（kumone 的 0.8s）。
 ///
-/// ⚠️ 关键区别：这是**取色渐变**，不是模糊封面。2026-10-02 那次"自绘壳"把整页糊掉，
-///    根因是**加了一层模糊盖在内容上**；渐变铺在底层，机理相反，所以不会糊内容。
+/// ⚠️ 关键区别：这是**取色渐变**，不是模糊封面。那次"自绘壳"把整页糊掉，
+/// 根因是**加了一层模糊盖在内容上**；渐变铺在底层，机理相反，所以不会糊内容。
 ///
 /// ## 做法（零破坏性写入）
 /// 自己一块**整页 `UIView`**（三层 `CAGradientLayer` 作它的子层），`insertSubview(at: 0)` 插进
 /// 那层的**子视图**栈：不碰人家的 `backgroundColor`，也不跟人家的 layer 栈抢位置。
-///   · 那层自己的底色在我们下面（我们铺的是不透明底 ⇒ 观感上就是"换掉了底色"）；
-///   · 那层自己的子视图（真有内容的话）仍在上面 ⇒ **最坏只是"没效果"，不会是"盖掉内容"**；
-///   · 全程只加自己的视图 ⇒ 关开关 `remove()` 就是完全还原。
+/// · 那层自己的底色在我们下面（我们铺的是不透明底 ⇒ 观感上就是"换掉了底色"）；
+/// · 那层自己的子视图（真有内容的话）仍在上面 ⇒ **最坏只是"没效果"，不会是"盖掉内容"**；
+/// · 全程只加自己的视图 ⇒ 关开关 `remove` 就是完全还原。
 ///
-///   · **可见性闸门**：`isHidden` / 祖先链 `alpha` / `window != nil` 三关都过才算候选；
-///     被闸门挡掉的计数上报（否则"没垫上"和"垫错层"在日志里长得一样）；
-///   · **自愈**：`reconcile()` 蹭 `DeclutterChrome` 既有的复查节拍（**不新开定时器**），先读那一层
-///     自己的 `backgroundColor`（Spotify 每首歌写一次，一次属性读），变了才去问
-///     `metadata()["extracted_color"]` 要权威值；尺寸每拍同步；
-///   · **纪律**：幂等、走查有 `maxNodes` 上限、重找 1s 节流、
-///     垫了谁 / 被谁挡掉 / 换了色各打一行 `[NPVStyle]`。
+/// · **可见性闸门**：`isHidden` / 祖先链 `alpha` / `window != nil` 三关都过才算候选；
+/// 被闸门挡掉的计数上报；
+/// · **自愈**：`reconcile` 蹭 `DeclutterChrome` 既有的复查节拍（**不新开定时器**），先读那一层
+/// 自己的 `backgroundColor`（Spotify 每首歌写一次，一次属性读），变了才去问
+/// `metadata["extracted_color"]` 要权威值；尺寸每拍同步；
+/// · **纪律**：幂等、走查有 `maxNodes` 上限、重找 1s 节流、
+/// 垫了谁 / 被谁挡掉 / 换了色各打一行 `[NPVStyle]`。
 enum NowPlayingBackdrop {
 
     static let logTag = "NPVStyle"
 
     // MARK: - 常量
-
-    /// 走查上限（本仓库纪律：2000 节点，见 `EeveeSettingsViewController` 那处）。
+    //
+    // 走查上限（本仓库纪律：2000 节点，见 `EeveeSettingsViewController` 那处）。
     private static let maxNodes = 2000
     /// "满页"的下限：真机里那层是**满宽**的，但未必满高（`7.UIView@0,0,414,896` 满高，
     /// 滚动后同一层会变成 `414x1682`）。只卡"满宽 + 足够高"。
@@ -48,8 +48,8 @@ enum NowPlayingBackdrop {
     private static let backdropIdentifier = "eevee-npv-backdrop"
 
     // MARK: - 状态
-
-    /// 强引用挂在**被垫的那一层**上：那层随页面一起销毁，我们跟着走，不留悬挂引用。
+    //
+    // 强引用挂在**被垫的那一层**上：那层随页面一起销毁，我们跟着走，不留悬挂引用。
     private static var backdropKey: UInt8 = 0
     /// 三个渐变子层挂在**我们自己的视图**上。
     private static var layersKey: UInt8 = 0
@@ -80,17 +80,17 @@ enum NowPlayingBackdrop {
     }
 
     // MARK: - 对外入口
-
-    /// 每次进入 / 切开关时调一次。`hex` 为 `nil` 表示"还没拿到封面色"。
-    ///
-    /// - Parameter hex: 封面取色，形如 `FFE84838`（8 位 ARGB）或 `E84838`（6 位 RGB）。
-    ///   来源与歌词配色同一个：`track.metadata()["extracted_color"]`。
+    //
+    // 每次进入 / 切开关时调一次。`hex` 为 `nil` 表示"还没拿到封面色"。
+    //
+    // - Parameter hex: 封面取色，形如 `FFE84838`（8 位 ARGB）或 `E84838`（6 位 RGB）。
+    // 来源与歌词配色同一个：`track.metadata["extracted_color"]`。
     static func apply(hex: String?, in pageView: UIView) {
         lastPage = pageView
 
-        // ★ 2026-10-22：「修改Spotify听歌页布局」总开关关掉时，取色底也不参与
-        //   （总开关拨动时会把 `nowPlayingBackdrop` 一起写成 false，这道 `&&` 是
-        //   给"外部写回 / 导入备份"兜底的 —— 总开关的语义是"这一套一起上/一起撤"）。
+        // 「修改Spotify听歌页布局」总开关关掉时，取色底也不参与
+        // （总开关拨动时会把 `nowPlayingBackdrop` 一起写成 false，这道 `&&` 是
+        // 给"外部写回 / 导入备份"兜底的 —— 总开关的语义是"这一套一起上/一起撤"）。
         guard UserDefaults.nowPlayingAnyLayout, UserDefaults.nowPlayingBackdrop else {
             remove(reason: "switch off")
             return
@@ -143,7 +143,7 @@ enum NowPlayingBackdrop {
 
     /// 关掉开关时把一切拿走。
     ///
-    /// ★ 新做法**只加了自己的一个子视图**、没改 Spotify 任何属性 ⇒ 这里就是"拿掉它"，
+    /// 新做法**只加了自己的一个子视图**、没改 Spotify 任何属性 ⇒ 这里就是"拿掉它"，
     /// 不需要还原任何东西（旧版要写回 `backgroundColor`，那是个会漏的账）。
     static func remove(reason: String) {
         var backdrop: UIView? = lastBackdrop
@@ -165,19 +165,19 @@ enum NowPlayingBackdrop {
     }
 
     // MARK: - 自愈（蹭既有节拍，不新开定时器）
-
-    /// 由 `DeclutterChrome` 既有的复查节拍调用（0.3s、非前台不跑、`MainWindow` 布局才跑）。
-    ///
-    /// **为什么必须有它**（日志 38 的 #7→#9）：
-    /// 用户**一直待在听歌页**时，Spotify 那层封面底色自己从 `bg=#E84838` 变成 `bg=#584860`、
-    /// 高度从 896 变成 1682 —— 而这段时间里**没有第三次 `[NPVStyle]`**
-    /// （`apply` 只在 `viewWillAppear` / `viewDidAppear` 跑）。
-    /// 也就是说：换歌、滚动之后我们的层必然失配。这一支把那个窗口压到 ≤0.3s。
-    ///
-    /// 成本：没在听歌页时 = 两次 weak 读 + 一次 `window` 读；
-    /// 在听歌页时 = 再加**一次 `backgroundColor` 读**（换色那一刻才问 metadata）。
-    ///
-    /// - Returns: 这一拍**真的动了**吗（给排查用）。
+    //
+    // 由 `DeclutterChrome` 既有的复查节拍调用（0.3s、非前台不跑、`MainWindow` 布局才跑）。
+    //
+    // **为什么必须有它**：
+    // **一直待在听歌页**时，Spotify 那层封面底色自己从 `bg=#E84838` 变成 `bg=#584860`、
+    // 高度从 896 变成 1682 —— 而这段时间里**没有第三次 `[NPVStyle]`**
+    // （`apply` 只在 `viewWillAppear` / `viewDidAppear` 跑）。
+    // 也就是说：换歌、滚动之后我们的层必然失配。这一支把那个窗口压到 ≤0.3s。
+    //
+    // 成本：没在听歌页时 = 两次 weak 读 + 一次 `window` 读；
+    // 在听歌页时 = 再加**一次 `backgroundColor` 读**（换色那一刻才问 metadata）。
+    //
+    // - Returns: 这一拍**真的动了**吗（给排查用）。
     @discardableResult
     static func reconcile() -> Bool {
         guard UserDefaults.nowPlayingAnyLayout, UserDefaults.nowPlayingBackdrop else { return false }
@@ -202,9 +202,8 @@ enum NowPlayingBackdrop {
         var didSomething = false
 
         // ① 换歌：先读**那一层自己的底色**（Spotify 每首歌写一次，一次属性读）。
-        //    真机依据：日志 38 里 `bg=#E84838` 与该曲 `extracted_color=e84838` **逐字相同**，
-        //    而且 #9 那次它自己变成了 `#584860` —— 它就是我们的"换歌信号"，不用轮询接口。
-        //    变了才去问 metadata 要权威值（那一句会走 Spotify 的接口，能省则省）。
+        // 而且 #9 那次它自己变成了 `#584860` —— 它就是我们的"换歌信号"，不用轮询接口。
+        // 变了才去问 metadata 要权威值（那一句会走 Spotify 的接口，能省则省）。
         if let spotifyHex = victimHex(victim), spotifyHex != lastHex {
             let authoritative = currentHex() ?? spotifyHex
             if let color = UIColor(hexString: authoritative) {
@@ -225,13 +224,13 @@ enum NowPlayingBackdrop {
     }
 
     // MARK: - 垫上 / 刷新
-
-    /// 把我们的整页底挂到 `victim` 的**子视图**栈最下面（幂等：已经有了就复用）。
-    ///
-    /// ⚠️ 为什么是 `insertSubview(at: 0)` 而不是 `insertSublayer`：
-    /// 子视图只在**它自己的子视图**之下（而它自己的底色又在所有子视图之下）⇒
-    /// 我们替掉的是"那一层的底色"，它自己的内容仍然压在我们上面。
-    /// 旧版往人家的 **layer 栈**里插，那个位置既可能被它自己的子层压住，又不是视图层级的对手。
+    //
+    // 把我们的整页底挂到 `victim` 的**子视图**栈最下面（幂等：已经有了就复用）。
+    //
+    // ⚠️ 为什么是 `insertSubview(at: 0)` 而不是 `insertSublayer`：
+    // 子视图只在**它自己的子视图**之下（而它自己的底色又在所有子视图之下）⇒
+    // 我们替掉的是"那一层的底色"，它自己的内容仍然压在我们上面。
+    // 旧版往人家的 **layer 栈**里插，那个位置既可能被它自己的子层压住，又不是视图层级的对手。
     private static func attach(to victim: UIView) -> UIView {
         if let existing = objc_getAssociatedObject(victim, &backdropKey) as? UIView {
             if existing.superview !== victim {
@@ -326,8 +325,8 @@ enum NowPlayingBackdrop {
     }
 
     // MARK: - 三层（与 kumone 的 ZStack 一一对应）
-
-    /// ① 取色对角渐变（**不透明** —— 它才是"把底色换掉"的那一层）。
+    //
+    // ① 取色对角渐变（**不透明** —— 它才是"把底色换掉"的那一层）。
     private static func makeBase(in bounds: CGRect) -> CAGradientLayer {
         let layer = CAGradientLayer()
         layer.startPoint = CGPoint(x: 0, y: 0)      // topLeading
@@ -393,15 +392,15 @@ enum NowPlayingBackdrop {
     }
 
     // MARK: - 找"那一层"
-
-    /// 在 `root` 的子树里找"**看得见的**、满页、有自己底色"的视图，按面积从大到小。
-    ///
-    /// 判据（比旧版多一道可见性闸门，其余刻意保守）：
-    ///   · 尺寸：满宽（容差 1pt）+ 高度 ≥ `minHeight`；
-    ///   · `backgroundColor` 非空且非透明（纯色才值得垫；渐变/图案色读不出分量）；
-    ///   · ★ 可见：自己与**祖先链**都不 `hidden` / `alpha > 0.01`，且在窗口里。
-    ///     —— 旧版没有这一关，而 9.1.88 的听歌页里就躺着
-    ///     `15.UIView@0,0,414,896,hidden,alpha=0.00` 这种满页不可见视图（日志 38 的 #7）。
+    //
+    // 在 `root` 的子树里找"**看得见的**、满页、有自己底色"的视图，按面积从大到小。
+    //
+    // 判据（比旧版多一道可见性闸门，其余刻意保守）：
+    // · 尺寸：满宽（容差 1pt）+ 高度 ≥ `minHeight`；
+    // · `backgroundColor` 非空且非透明（纯色才值得垫；渐变/图案色读不出分量）；
+    // ·可见：自己与**祖先链**都不 `hidden` / `alpha > 0.01`，且在窗口里。
+    // —— 旧版没有这一关，而 9.1.88 的听歌页里就躺着
+    // `15.UIView@0,0,414,896,hidden,alpha=0.00` 这种满页不可见视图。
     private static func candidates(in root: UIView) -> [UIView] {
         var accepted: [UIView] = []
         var invisible = 0
@@ -421,7 +420,7 @@ enum NowPlayingBackdrop {
 
             // 纯色才垫：动态色 / 图案色读不出分量，硬写会变成一块黑。
             // ⚠️ 条件拆开写 —— 合成一个长表达式会喂给类型检查器一个难题
-            // （2026-10-03 已经在 `EeveeReduceInterventionsView` 上栽过一次
+            // 已经在 `EeveeReduceInterventionsView` 上栽过一次
             // `unable to type-check this expression in reasonable time`）。
             let isPlainColour: Bool = color.cgColor.numberOfComponents >= 3
             var white: CGFloat = 0
@@ -478,7 +477,7 @@ enum NowPlayingBackdrop {
         )
     }
 
-    /// 与 `refreshNowPlayingBackdrop` 同一处口径（`track.metadata()["extracted_color"]`）。
+    /// 与 `refreshNowPlayingBackdrop` 同一处口径（`track.metadata["extracted_color"]`）。
     /// **只在换色那一刻调一次** —— 0.3s 的节拍上不碰它。
     private static func currentHex() -> String? {
         let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
@@ -486,12 +485,11 @@ enum NowPlayingBackdrop {
     }
 
     // MARK: - 日志
-
-    /// 第一次垫上时上报**我们垫在谁身上**。
-    ///
-    /// 旧版那句"接管 1 层"只报了个数量 —— 日志 38 之后为了搞清"到底垫了哪一层"，
-    /// 只能回头去翻 `[Tree]` 的 BFS 层级反推。这一版把身份、尺寸、那层自己的
-    /// 底色/子视图/子层数全部记上，**下一次日志自己就能结案**。
+    //
+    // 第一次垫上时上报**我们垫在谁身上**。
+    //
+    // 只能回头去翻 `[Tree]` 的 BFS 层级反推。这一版把身份、尺寸、那层自己的
+    // 底色/子视图/子层数全部记上，**下一次日志自己就能结案**。
     private static func reportAttachIfNeeded(victim: UIView, backdrop: UIView, hex: String) {
         guard !didLogAttach else { return }
         didLogAttach = true

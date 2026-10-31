@@ -18,11 +18,11 @@ import ObjectiveC.runtime
 /// ## 三条纪律（与 `EeveeProbes` 那种"什么都打"的探针**不一样**）
 ///
 /// 1. **只读**：只用 runtime 的反射 API **枚举**，**绝不调用**找到的 selector。
-///    猜 `value(forKey:)` 的键、键不存在时会抛**不可捕获**的 NSException ⇒ 直接把 Spotify
-///    搞崩（本仓库吃过这个亏，见 `EeveeProbes` 那段注释）。
+/// 猜 `value(forKey:)` 的键、键不存在时会抛**不可捕获**的 NSException ⇒ 直接把 Spotify
+/// 搞崩（本仓库吃过这个亏，见 `EeveeProbes` 那段注释）。
 /// 2. **有界**：只处理这一次调用传进来的那个对象 / 类，**不做全类枚举**。
 /// 3. 走 `writeDebugLog`：自带脱敏，且只在「启用日志记录」打开时才写；不进系统控制台
-///    （`NSLog` 的东西进不了我们导出的那个日志文件）。
+/// （`NSLog` 的东西进不了我们导出的那个日志文件）。
 enum ClassDumper {
 
     /// 转储一个**活对象**的类。
@@ -79,7 +79,7 @@ enum ClassDumper {
     ///
     /// 为什么不能只认运行期名：Swift 类的运行期名是 **mangled** 的
     /// （`_TtC35CreativeWorkCommons_CoverArtTiltKit16CoverArtTiltView`），而
-    /// `ViewTreeDumper` 打出来的是**短名**（`CoverArtTiltView`），日志里转手时常见的又是
+    /// `ViewTreeDumper` 打出来的是**短名**（`CoverArtTiltView`），
     /// `Module.Class` 记法 —— 让人去手拼 mangled 名是不现实的。
     ///
     /// 所以解析顺序是：**精确名** → 短名后缀 → `Module.Class`（模块段出现、类名段结尾）。

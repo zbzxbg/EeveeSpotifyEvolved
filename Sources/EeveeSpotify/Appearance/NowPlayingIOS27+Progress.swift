@@ -1,43 +1,17 @@
-// 「iOS 27 听歌页」的**进度条**（待办 T1：细轨 + 两端时间）。
+// 「iOS 27 听歌页」的进度条：4pt 细轨、去掉圆钮、两端时间换等宽数字。
 //
-// ## 目标（`C:\dsh\am\1.jpg`，AM 的播放页）
+// AM 的播放页：轨道约 4pt、没有白色圆钮；已播部分接近纯白、未播是半透明白；时间在轨道下面两端（左 `1:21`、右 `−2:06`），数字等宽 —— 否则每秒走字时宽度会跳，整行跟着一抖。
 //
-//   · 轨道约 4pt，**没有那颗白色圆钮**；
-//   · 已播部分接近纯白、未播部分是半透明白（深色背景上就是一条浅灰）；
-//   · 时间在轨道**下面**两端（左 `1:21`、右 `−2:06`），数字**等宽** ——
-//     否则每秒走字时宽度会跳，整行跟着一抖（pw `PlayerControls.x` 就是为这个才换的字体）。
+// 真机结构：`AutoLayoutStackView@28,660 358×41,id=Components.UI.ProgressBarUnitNowPlaying` → `Slider@-2,0,362,17,id=SPTNowPlayingSliderV2`（`_TtCO17NowPlaying_ECMKit11ProgressBar6Slider`）→ `_UISlideriOSVisualElement 362×17`（轨道画在它里面）→ `SliderBufferingAnimationView y=7 h=4` ⇒ 轨道中线在 y≈7…11。两颗时间标签是原生的，所以**不画自己的时间**，只把字体换成等宽；只有"一颗都没找到"的版本才退到自绘。
 //
-// ## 真机现状（照片 163，9.1.88）
+// 这一轮只做三件事，**不动任何几何、不动触摸**：
+// ① 轨道换 4pt：`setMinimumTrackImage` / `setMaximumTrackImage` 给一张 1×N 纯色图，UISlider 横向拉伸它、高度保持 N —— 比盖一条自己的轨道安全得多（拖动手势在 UISlider 自己身上，盖上去的层要么吃触摸、要么得靠替身转发）；
+// ② 圆钮换 4×4 全透明图 ⇒ 看不见，但点击跳播 / 拖动 / 无障碍全部还是原生行为；
+// ③ 两颗时间标签换 `monospacedDigitSystemFont`（宽度恒定 ⇒ 不抖）。
 //
-//   单元：`AutoLayoutStackView@28,660 358×41,id=Components.UI.ProgressBarUnitNowPlaying`
-//     → `Slider@-2,0,362,17,id=SPTNowPlayingSliderV2`
-//        （运行时类 `_TtCO17NowPlaying_ECMKit11ProgressBar6Slider`，UISlider 子类）
-//        → `_UISlideriOSVisualElement 362×17`（轨道画在它里面）
-//        → `SliderBufferingAnimationView y=7 h=4`（⇒ 轨道中线就在 y≈7…11 那一条）
-//     → **两颗时间标签**（原生就有：`0:42` / `-3:13`，见照片 163 轨道下面那一行）
+// 端头为什么是方的：胶囊要靠 `resizableImage(withCapInsets:)` 的端帽，而 `UIImageView` 渲染时未必认端帽 —— 认了是胶囊，不认就被横向拉成一只长椭圆（比方头难看得多）。先出零风险的方头 4pt，端帽等真机确认后再定。
 //
-//   ⇒ 所以这一轮**不画自己的时间**，只把原生的那两颗换成等宽数字；
-//     只有"一颗都没找到"的版本才退到自绘（见 `progressTimeLabels` 的注释）。
-//
-// ## 这一轮只做三件事，**不动任何几何、不动触摸**
-//
-//   ① 轨道换成 4pt：`setMinimumTrackImage` / `setMaximumTrackImage` 给一张 1×N 纯色图，
-//      UISlider 横向拉伸它、高度保持 N（这样比"盖一条自己的轨道"安全得多 —— 拖动手势
-//      在 UISlider 自己身上，盖上去的层要么吃触摸、要么得靠替身转发）；
-//   ② 圆钮换成 4×4 全透明图 ⇒ 看不见，但点击跳播 / 拖动 / 无障碍全部还是 Spotify 原生行为；
-//   ③ 两颗时间标签的字体换成 `monospacedDigitSystemFont`（宽度恒定 ⇒ 不抖）。
-//
-// ## 为什么端头是**方的**（AM 是胶囊）
-//
-// 胶囊要靠 `resizableImage(withCapInsets:)` 的端帽，而 `UIImageView` 渲染时**未必**认端帽：
-// 认了是胶囊，不认就被横向拉成一只长椭圆（比方头难看得多）。本机没有 Swift 编译器，
-// 一次 CI 很贵 ⇒ 先出"方头 4pt"这条零风险的；端帽等下一张截图再定要不要赌。
-//
-// ## 收尾
-//
-// 三张原图 + 每个标签的原字体都在第一次改之前记下来了（`progressOriginal*`），
-// `teardownProgress()` 按原值写回；开关关掉 / 离开播放页都会走到它。
-//
+// 收尾：三张原图与每个标签的原字体都在第一次改之前记下来了（`progressOriginal*`），`teardownProgress` 按原值写回；开关关掉 / 离开播放页都会走到它。
 // 日志 tag：`[iOS27]`，一次性一行 `progress styled — …`。
 import Foundation
 import UIKit
@@ -47,8 +21,8 @@ import ObjectiveC.runtime
 extension NowPlayingIOS27 {
 
     // MARK: - 常量
-
-    /// 进度条那颗 `UISlider` 的 id（真机树：`Slider@-2,0,362,17,id=SPTNowPlayingSliderV2`）。
+    //
+    // 进度条那颗 `UISlider` 的 id（真机树：`Slider@-2,0,362,17,id=SPTNowPlayingSliderV2`）。
     static let progressSliderIdentifier = "SPTNowPlayingSliderV2"
     /// 轨道厚度（AM 那条按 414pt 宽量 ≈ 4pt；原生是 2–3pt）。
     static let progressTrackHeight: CGFloat = 4
@@ -68,8 +42,8 @@ extension NowPlayingIOS27 {
     static let progressThumbImage: UIImage? = progressTransparentImage(side: progressThumbSide)
 
     // MARK: - 状态
-
-    /// 进度条单元（`Components.UI.ProgressBarUnitNowPlaying`）。
+    //
+    // 进度条单元（`Components.UI.ProgressBarUnitNowPlaying`）。
     static weak var progressUnitView: UIView?
     /// 我们改过的那一颗（记原图就记在它身上）。
     static weak var progressStyledSlider: UISlider?
@@ -88,8 +62,8 @@ extension NowPlayingIOS27 {
     static var didLogProgress = false
 
     // MARK: - 每拍入口
-
-    /// 把轨道换成 4pt、圆钮藏掉、时间改等宽。页面里没有进度条就返回 false。
+    //
+    // 把轨道换成 4pt、圆钮藏掉、时间改等宽。页面里没有进度条就返回 false。
     @discardableResult
     static func placeProgress(in page: UIView) -> Bool {
         guard let unit = progressUnit(in: page), let track = trackSlider(in: unit) else {
@@ -115,14 +89,14 @@ extension NowPlayingIOS27 {
     }
 
     // MARK: - 找单元 / 找滑块
-
-    /// 进度条单元：**只认当前可见页**那一个。
-    ///
-    /// ★ 2026-10-24（日志 20 的同类现场）：听歌页的 pager 里同时留着相邻页的 cell，
-    ///   旧写法先问 `SPTNowPlayingView` 再整页 BFS ⇒ 经常先撞上**离屏**那一份。
-    ///   后果不只是进度条样式没上：`lyricsStageFrame` 用它的 y 算歌词区高度，离屏
-    ///   那一份在 y≈-413 ⇒ 高度算成负数 ⇒ 歌词容器永远不铺（点了没反应）。
-    ///   这里和底排/标题一样，只接 `isControlOnPage` 的那一份。
+    //
+    // 进度条单元：**只认当前可见页**那一个。
+    //
+    // 听歌页的 pager 里同时留着相邻页的 cell，
+    // 旧写法先问 `SPTNowPlayingView` 再整页 BFS ⇒ 经常先撞上**离屏**那一份。
+    // 后果不只是进度条样式没上：`lyricsStageFrame` 用它的 y 算歌词区高度，离屏
+    // 那一份在 y≈-413 ⇒ 高度算成负数 ⇒ 歌词容器永远不铺（点了没反应）。
+    // 这里和底排/标题一样，只接 `isControlOnPage` 的那一份。
     static func progressUnit(in page: UIView) -> UIView? {
         if let unit = progressUnitView, unit.window != nil,
            isControlOnPage(unit, in: page, requireAlpha: false) {
@@ -159,8 +133,8 @@ extension NowPlayingIOS27 {
     }
 
     // MARK: - 轨道 / 圆钮
-
-    /// 换轨道图 + 藏圆钮。**原值只在第一次（或换了新滑块）时记**。
+    //
+    // 换轨道图 + 藏圆钮。**原值只在第一次（或换了新滑块）时记**。
     private static func styleProgressTrack(_ slider: UISlider) -> Bool {
         if progressStyledSlider !== slider {
             progressStyledSlider = slider
@@ -208,12 +182,12 @@ extension NowPlayingIOS27 {
     }
 
     // MARK: - 时间标签
-
-    /// 进度条单元里的时间标签（原生那两颗），换成**等宽数字**字体。
-    ///
-    /// 只认"看得见"的（`isHidden` / `alpha` 都排除），并且**跳过我们自己画的**
-    /// （id 前缀 `eevee-ios27-`）—— 老版本没有原生标签时，这条会返回 0，
-    /// `placeProgress` 的日志会如实写 `0 time label(s)`，不会假装成功。
+    //
+    // 进度条单元里的时间标签（原生那两颗），换成**等宽数字**字体。
+    //
+    // 只认"看得见"的（`isHidden` / `alpha` 都排除），并且**跳过我们自己画的**
+    // （id 前缀 `eevee-ios27-`）—— 老版本没有原生标签时，这条会返回 0，
+    // `placeProgress` 的日志会如实写 `0 time label(s)`，不会假装成功。
     private static func styleProgressTimeLabels(in unit: UIView) -> (changed: Bool, count: Int) {
         var changed = false
         var count = 0
@@ -257,8 +231,8 @@ extension NowPlayingIOS27 {
     }
 
     // MARK: - 收尾
-
-    /// 把轨道那三张图与时间标签的原字体写回去（开关关掉 / 离开播放页）。
+    //
+    // 把轨道那三张图与时间标签的原字体写回去（开关关掉 / 离开播放页）。
     static func teardownProgress() {
         if let slider = progressStyledSlider {
             if slider.minimumTrackImage(for: .normal) !== progressOriginalMinImage {
@@ -277,7 +251,7 @@ extension NowPlayingIOS27 {
         }
     }
 
-    /// 状态清空（`clearState()` 里调用）。
+    /// 状态清空（`clearState` 里调用）。
     static func clearProgressState() {
         progressUnitView = nil
         progressStyledSlider = nil

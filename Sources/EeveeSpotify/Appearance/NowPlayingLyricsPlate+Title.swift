@@ -65,7 +65,7 @@ extension NowPlayingLyricsPlate {
             options: [.allowUserInteraction, .beginFromCurrentState],
             animations: change,
             // ⚠️ `completion` 显式写 `nil`：UIKit 那个 Swift 签名虽然给了默认值，
-            //    但这个仓库的编译器版本只保证"最多一个警告"，不冒这个险（同 `applyCoverState`）。
+            // 但这个仓库的编译器版本只保证"最多一个警告"，不冒这个险（同 `applyCoverState`）。
             completion: nil
         )
     }
@@ -79,12 +79,12 @@ extension NowPlayingLyricsPlate {
         // **元素自己的坐标**；元素自己已经右移了 `shift`（≈74pt）⇒ 直接拿页面坐标当宽度用会差整整一个
         // `shift`（"右边没有别的控件"那条兜底尤其糟：`room = bounds.width` ⇒ 上面那条 guard 把 mask
         // 清掉 ⇒ **一行 mask 都不贴**）。所以两条路都换算到元素自己的坐标，再兜"页面右沿 − 8"。
-        // ⚠️ 这里**不能用 `untransformed`**（它减掉元素自己的 `tx`，是给 `measure()` 算"位移前起点"用的）：
+        // ⚠️ 这里**不能用 `untransformed`**（它减掉元素自己的 `tx`，是给 `measure` 算"位移前起点"用的）：
         // mask 挂在这个元素的 layer 上 ⇒ x=0 对的是元素**当前（位移后）**的左边，用它算会多出一个 `shift`
         // ⇒ `width == bounds.width` ⇒ mask 被删掉。要用 `convert`（**含 transform**）。
         let titleLeft = title.convert(title.bounds, to: page).minX
-        // ★ 2026-10-22：右沿的余量也用 `titleGap`（原来是写死的 8pt）；与"离控件"那条
-        //   同一个数 ⇒ 用户报的"滚动的右边界太靠右"只需调 `titleGap` 一处。
+        // 右沿的余量也用 `titleGap`（原来是写死的 8pt）；与"离控件"那条
+        // 同一个数 ⇒ 用户报的"滚动的右边界太靠右"只需调 `titleGap` 一处。
         let pageLimit = (page.bounds.maxX - titleGap) - titleLeft
         let limitRoom = trailingControlX(in: title, page: page)
             .map { $0 - titleLeft - titleGap }
@@ -131,20 +131,18 @@ extension NowPlayingLyricsPlate {
         return limit
     }
 
-    // MARK: - 控件条：分享键搬进来 / 关歌词时标题行去左上角（2026-10-11 第二轮）
-
-    /// 把 Spotify 自己的**分享键**搬进"控件条"（进度条上方那一条空带 —— 绿色 ✓ 本来就在那儿）：
-    /// **[分享 58] [我们的歌词键 215] [绿色 ✓ 371（不动）]** —— 底部那两排一颗都不用改，
-    /// **收藏键不搬**（绿色 ✓ 留在原处）。
-    ///
-    /// ⚠️ 这是**视觉**搬运：搬过去之后**点不到**（已知并刻意选这一档）—— UIKit 的 hit-test 在祖先那一层
-    /// 就问 `point(inside:)`，而分享键被抬到 626pt 之后已经在它**父视图**（footer 那一行）的边界之外
-    /// ⇒ 触摸到不了它；要分享得走右上角 `⋯` 菜单里的 Share（`bandNote` 会把"被谁挡住"写进日志）。
-    ///
-    /// ⚠️ 两个状态都摆，和 `isOpen` 无关：这一条在**开着**和**关着**歌词时都是空的（关着时标题/歌手已被
-    /// `applyClosedTitleTransform` 挪去左上角）⇒ 每拍都摆。
-    /// ⚠️ 位移只写 `transform`：位置由父视图的 Auto Layout 决定，改 `frame` 会被下一拍写回（本仓库老教训）；
-    /// 只写平移分量，`a,b,c,d` 原样保留，每拍用 `untransformed` 重算，父视图重排也能跟上。
+    // 把 Spotify 自己的**分享键**搬进"控件条"（进度条上方那一条空带 —— 绿色 ✓ 本来就在那儿）：
+    // **[分享 58] [我们的歌词键 215] [绿色 ✓ 371（不动）]** —— 底部那两排一颗都不用改，
+    // **收藏键不搬**（绿色 ✓ 留在原处）。
+    //
+    // ⚠️ 这是**视觉**搬运：搬过去之后**点不到**（已知并刻意选这一档）—— UIKit 的 hit-test 在祖先那一层
+    // 就问 `point(inside:)`，而分享键被抬到 626pt 之后已经在它**父视图**（footer 那一行）的边界之外
+    // ⇒ 触摸到不了它；要分享得走右上角 `⋯` 菜单里的 Share（`bandNote` 会把"被谁挡住"写进日志）。
+    //
+    // ⚠️ 两个状态都摆，和 `isOpen` 无关：这一条在**开着**和**关着**歌词时都是空的（关着时标题/歌手已被
+    // `applyClosedTitleTransform` 挪去左上角）⇒ 每拍都摆。
+    // ⚠️ 位移只写 `transform`：位置由父视图的 Auto Layout 决定，改 `frame` 会被下一拍写回（本仓库老教训）；
+    // 只写平移分量，`a,b,c,d` 原样保留，每拍用 `untransformed` 重算，父视图重排也能跟上。
     @discardableResult
     static func applyControlBand(in page: UIView) -> Bool {
         guard let button = visibleShareButton(in: page) else {
@@ -166,7 +164,7 @@ extension NowPlayingLyricsPlate {
         }
 
         let current = untransformed(button, in: page)
-        // ★ 2026-10-11（照片 75）：和**下面那颗 shuffle 同一条竖线**（量不到才用常量）。
+        // 和**下面那颗 shuffle 同一条竖线**（量不到才用常量）。
         let columnX = transportColumnX(shuffleButtonIdentifier, in: page) ?? shareButtonCenterX
         let target = CGPoint(x: columnX, y: controlBandMidY)
         let dx = (target.x - current.midX).rounded()
@@ -185,7 +183,7 @@ extension NowPlayingLyricsPlate {
         )
         if button.transform != moved { button.transform = moved }
 
-        // ★ 2026-10-11（用户报的「分享按键…用不了」）：它自己点不到 ⇒ **替它收点击**。
+        // 它自己点不到 ⇒ **替它收点击**。
         ensureShareRelay(in: page, frame: landed)
 
         if !didLogBandShare {
@@ -229,7 +227,7 @@ extension NowPlayingLyricsPlate {
         }
         if relay.frame != frame { relay.frame = frame }
         // ⚠️ 必须压在**歌词容器之上**（容器铺满歌词区，只在控件条那一条放行；就算放行了，
-        //    也还是这颗热区先收到触摸 —— 它是页面最前面的一个子视图）。
+        // 也还是这颗热区先收到触摸 —— 它是页面最前面的一个子视图）。
         page.bringSubviewToFront(relay)
     }
 
@@ -262,11 +260,11 @@ extension NowPlayingLyricsPlate {
         let current = untransformed(row, in: page)
         guard current.height > 1 else { return false }
 
-        // ★ 2026-10-04（用户：「大封面有时候会把歌手的名字的下半部分挡住」）：
-        //   原来这里**只看导航条**，从不问"封面顶边在哪"。真机日志 57 逐字：
-        //   行 `28,98,308,51`（下沿 **149**）vs 封面 `24,146,366,366`（顶边 **146**）
-        //   ⇒ **压 3pt**，而 51pt 高的行里第二行就是歌手 ⇒ 用户看到的正是"歌手名字的下半截"。
-        //   现在：量得到封面就夹一道"行底 ≤ 封面顶 − 6"；量不到就照旧（宁可保持原样，别瞎移）。
+        // （大封面有时候会把歌手的名字的下半部分挡住）：
+        // 原来这里**只看导航条**，从不问"封面顶边在哪"。
+        // 行 `28,98,308,51`（下沿 **149**）vs 封面 `24,146,366,366`（顶边 **146**）
+        // ⇒ **压 3pt**，而 51pt 高的行里第二行就是歌手 ⇒ 的正是"歌手名字的下半截"。
+        // 现在：量得到封面就夹一道"行底 ≤ 封面顶 − 6"；量不到就照旧（宁可保持原样，别瞎移）。
         var top = navBottom + closedTitleTopInset
         if let list = findByIdentifier(listIdentifier, in: page),
            let cover = visibleCover(in: list, page: page) {
@@ -322,7 +320,7 @@ extension NowPlayingLyricsPlate {
     ///
     /// ⚠️ `bandShareButton` 的声明类型是 `UIView?`（我们只当它是"页里那个视图"），
     /// 而 `sendActions(for:)` 是 **`UIControl`** 的方法 ⇒ 这里必须 `as? UIControl`。
-    /// 这一条 2026-10-11 让 CI 红过一次（`value of type 'UIView' has no member 'sendActions'`
+    /// 这一条让 CI 红过一次（`value of type 'UIView' has no member 'sendActions'`
     /// + `cannot infer contextual base in reference to member 'touchUpInside'`，
     /// 后一条是前一条的连锁）—— 自检 `swift_member_check.py` 的规则 ④ 就是为它加的。
     static func relayShareTap() {
@@ -358,8 +356,8 @@ extension NowPlayingLyricsPlate {
         let current = effectiveLabelText(label)
         guard !current.isEmpty else { return }
 
-        // ★ 2026-10-22（用户：图片里 `（NetEase）` 被截断）：现在显示的可能**是我们裁过的**
-        //   `歌手…（提供商）` —— 真名在 `lastArtistFullBase`，不能从显示文本反推（会把省略号当名字）。
+        // （用户：图片里 `（NetEase）` 被截断）：现在显示的可能**是我们裁过的**
+        // `歌手…（提供商）` —— 真名在 `lastArtistFullBase`，不能从显示文本反推（会把省略号当名字）。
         var base = current
         if let previous = lastArtistSuffix, current.hasSuffix(previous), !lastArtistFullBase.isEmpty {
             base = lastArtistFullBase
@@ -367,22 +365,22 @@ extension NowPlayingLyricsPlate {
             base = String(current.dropLast(previous.count))
         }
         // ⚠️ 这里**不许**再 `guard !base.hasSuffix(suffix)`：宽度一变（展开 ↔ 收起、旋转）时，
-        //    已经写着后缀的那一行要**重新按新宽度裁一次**，否则用户会在窄版式里继续看到截断。
+        // 已经写着后缀的那一行要**重新按新宽度裁一次**，否则用户会在窄版式里继续看到截断。
         guard !base.isEmpty else { return }
 
-        // ★★ 2026-10-23（用户：「不能靠滚动来全展示么」）：歌手那一行**本来就是 MarqueeLabel**
-        //    （`now-playing-subtitle-label`）。所以这里**不裁**：写完整的 `歌手（提供商）`，
-        //    让它自己的 marquee 把后半段（提供商）滚出来 —— 裁掉才是"永远看不到"。
-        //    普通 `UILabel` 没有滚动能力，仍然按可见宽度裁（见 `fittedArtistLine`）。
+        // （不能靠滚动来全展示么）：歌手那一行**本来就是 MarqueeLabel**
+        // （`now-playing-subtitle-label`）。所以这里**不裁**：写完整的 `歌手（提供商）`，
+        // 让它自己的 marquee 把后半段（提供商）滚出来 —— 裁掉才是"永远看不到"。
+        // 普通 `UILabel` 没有滚动能力，仍然按可见宽度裁（见 `fittedArtistLine`）。
         let isMarqueeLabel = NSStringFromClass(type(of: label)).contains("Marquee")
         let trackId = currentTrackId() ?? ""
         let wanted: String
         if isMarqueeLabel {
             wanted = base + suffix
         } else {
-            // ★★ 2026-10-23：宽度**缓存**（见 `artistFitWidth` 的说明）—— 每拍重算会被我们自己
-            //    写短的文本反馈回来，越算越小。只有换曲 / 换展开状态 / 换标签 / 文本被 binder
-            //    写回原样时才重算一次；重算时标签上写的是 Spotify 给的**原歌手名**（没有被我们裁过）。
+            // 宽度**缓存**（见 `artistFitWidth` 的说明）—— 每拍重算会被我们自己
+            // 写短的文本反馈回来，越算越小。只有换曲 / 换展开状态 / 换标签 / 文本被 binder
+            // 写回原样时才重算一次；重算时标签上写的是 Spotify 给的**原歌手名**（没有被我们裁过）。
             let stateKey = door.isOpen ? "open" : "closed"
             let labelKey = "\(trackId)|\(stateKey)|\(String(describing: ObjectIdentifier(label)))"
             let alreadyHasOurs = lastArtistSuffix.map { current.hasSuffix($0) } ?? false
@@ -415,9 +413,9 @@ extension NowPlayingLyricsPlate {
         lastArtistSuffix = suffix
         lastArtistFullBase = base
 
-        // ★ 2026-10-04：这条日志原来**一个进程只打一次**，于是"换歌之后有没有重新贴上"
-        //   在日志里完全看不出来（用户这次报的就是"没有展示"，而我们手里没有一行能判它的证据）。
-        //   改成"每换一首歌允许再报一次"。
+        // 这条日志原来**一个进程只打一次**，于是"换歌之后有没有重新贴上"
+        // 而我们手里没有一行能判它的证据）。
+        // 改成"每换一首歌允许再报一次"。
         if !didLogArtistProvider || loggedArtistProviderTrack != trackId {
             didLogArtistProvider = true
             loggedArtistProviderTrack = trackId

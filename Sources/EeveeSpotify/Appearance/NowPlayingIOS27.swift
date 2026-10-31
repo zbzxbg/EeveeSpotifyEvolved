@@ -1,56 +1,18 @@
 // 「iOS 27 听歌页」—— 把听歌页做成 Apple Music（iOS 27）那一版的样子。
 //
-// 2026-10-23（用户）：`C:\dsh\am\1.jpg` 是 iOS 27 在 Apple Music 上的表现，问"我们可以做吗"，
-// 随后拍板："和现在的『修改Spotify听歌页布局』这个按钮，直接做新的就好了。"
-// ⇒ 这是一颗**独立的新开关**（`UserDefaults.nowPlayingIOS27`），默认关；
-//    和旧那套（`NowPlayingLyricsPlate` 的"歌词进播放器"）**互斥**：新的开着时旧的自动让位
-//    （`NowPlayingLyricsPlate.isEnabled` 的 `!nowPlayingIOS27` 那道门）。
+// 独立开关 `UserDefaults.nowPlayingIOS27`，默认关；与旧那套（`NowPlayingLyricsPlate` 的
+// "歌词进播放器"）**互斥** —— 新的开着时旧的自动让位（`NowPlayingLyricsPlate.isEnabled`
+// 里的 `!nowPlayingIOS27` 那道门）。
 //
-// ## 第四轮（用户："太丑了、bug 很多"之后的**方向修正**）
+// 背景用 pw 的 field：字段色底（整图平均色，过饱和后压到两条上限）+ 封面的模糊延续
+// （整张缩到 48pt 再模糊）+ 窗口 64% 起渐到 42% 黑的纱。封面是 `(0, 0, W, 0.58H)` 的
+// 竖长裁切、从屏幕最顶上画起，下沿再用 mask 淡进模糊里 ⇒ 没有接缝。
 //
-// 前三轮我一直在**搬 Spotify 的原生控件**：放大封面、挪标题、把底部那一坨整抬 130pt、
-// 工具行单独挪回去、再用替身转发点击…… 每一次都要"每拍补写 + 记原值 + 撤干净"，
-// 而 Spotify 会回收 cell、重写 transform、写回 alpha ⇒ 修一个冒一个（照片 160/162），
-// 自制的那条"模糊带"在浅色封面上糊成一块灰（照片 163）。
-//
-// 用户提示 pw v0.21.1 / 专辑歌单艺人页早就把"取色 + 模糊底"做过了。查证：
-//   · `spotipw-v0.21.1/tweak/Sources/Redesigned/Player/PlayerField.x`：
-//     播放页背景 = `SGRArtworkField`，**封面的模糊图 + 深色底 + 从窗口 55% 压到纯黑**
-//     （`SGRField.m` 的 `kBlackFrom = 0.55` / `kBlackTo = 1`）；
-//   · 我们仓库 `EntityPageAppearance` 已经移植了它的 `_solid + _black` 两半，
-//     文件头逐字写着"`_backdrop` 那一层只有播放器用" ⇒ 缺的就是这一块。
-// ⇒ 这一轮：**背景换成这套 field**，并且**不再搬底部那一坨**（上抬 / 工具行替身全部撤掉）。
-//
-// ## 这一版做什么
-//
-//   ① **封面满血**：`(0, 0, W, 0.58H)` 的竖长裁切（`scaleAspectFill`、无圆角），从屏幕最顶上开始画；
-//      ⚠️ 2026-10-24 之前这里写的是 `W×W` 方图 —— 照片 2 显示那会在封面与标题之间留 186pt 的黑。
-//   ①′ **底部那一坨整体上移 55pt**（`npv.bottomStackView`，曲名/进度/时间/传输行/工具行都在里面）
-//      ⇒ 曲名落到 545、只比封面下沿（520）低 25pt。目标就是 `C:\dsh\am\1.jpg` 那个关系
-//      （曲名压在封面下沿、进度紧接其下）。量位置的地方全部改用 `convert`（带 transform）。
-//   ② **背景 = pw 的 field**：字段色（封面下沿的平均色，压到 pw 的两条上限）→
-//      窗口 55% 起渐到纯黑 → 封面下沿那一条**模糊拷贝**（同一条边界的裁切，1:1 接得上）；
-//   ③ 封面自己下沿再用一条 mask 淡进那条模糊里 ⇒ 没有接缝；
-//   ④ **标题行只收左边距**（16pt），**纵向留在 Spotify 原生位置** —— 不抬它就不会和进度条
-//      之间空出一大块（照片 161 的老问题）；
-//   ⑤ 顶部 chrome：藏歌单名与向下箭头、画 AM 那根小横条（⋯ 留在右上角原生位置）；
-//   ⑥ 底部按 AM 重排（2026-10-23 深夜，T1~T4/T6）：
-//      · **进度条** 4pt 细轨 + 无圆钮 + 等宽时间 → `NowPlayingIOS27+Progress.swift`；
-//      · **传输行** 只留上一首/播放/下一首，循环挪到工具行右上方 → `NowPlayingIOS27+Transport.swift`；
-//      · **工具行** 三颗按 AM 摆在 86/207/328（歌词 / 隔空播放 / 队列）→ `NowPlayingIOS27+Footer.swift`；
-//      · **音量条** 夹在传输行与工具行之间 → `NowPlayingPageOverlay.ios27VolumeY`。
-//
-// ## 纪律（前几轮踩出来的）
-//
-//   · **不移动**任何会被 Spotify 重排的行（stack / 工具行）——移出去就点不到；
-//     要换位置的控件统一用"**藏字形 + 自绘 + 替身**"（`NowPlayingIOS27RemoteRelayView`）；
-//   · 只对**封面壳**写 `alpha`（记原值、每拍补、收尾写回），其余原生属性一律不碰；
-//   · 自己的视图全部挂在**封面所在的那个整页 cell** 里（contentlayer 在 UI 栈下面），
-//     z-order 天然正确；
-//   · 每 0.3s 蹭 `DeclutterChrome` 的既有节拍（不新开定时器）。
-//
-// 日志 tag：`[iOS27]`。排查先看：`artwork up` / `field mounted` / `frames`（各行的真实坐标）/
-// `progress styled` / `transport` / `repeat state` / `footer` / `restored`。
+// 纪律：**不移动**任何会被 Spotify 重排的行（移出去就点不到），要换位置用"藏字形 + 自绘 +
+// 替身"（`NowPlayingIOS27RemoteRelayView`）；只对封面壳写 `alpha`（记原值、每拍补、收尾写回）；
+// 自己的视图挂在封面所在的整页 cell 里（contentlayer 在 UI 栈下面），z-order 天然正确；
+// 量位置一律用 `convert`（带 transform）；每 0.3s 蹭 `DeclutterChrome` 的节拍，不新开定时器。
+// 日志 tag：`[iOS27]`。
 import Foundation
 import UIKit
 import CoreImage
@@ -62,78 +24,63 @@ enum NowPlayingIOS27 {
     static let logTag = "iOS27"
 
     // MARK: - 几何 / 配色
-
-    /// 标题行左边距。**只改横向**。
-    ///
-    /// ★ 2026-10-24（用户拿 `C:\dsh\am\1.jpg` 对比：「歌曲名字/艺人名字往右移，对比挺明显」）：
-    ///   16 → **28**。28 就是**进度条自己的左边距**（日志 `ProgressBarUnitNowPlaying=28,660`）——
-    ///   AM 那张图里曲名与进度条是同一条左边线，我们原来是 16 vs 28，一眼就能看出没对齐。
-    ///   再往右就得连进度条一起挪（那是原生控件），单独算一笔。
+    //
+    // 标题行左边距。**只改横向**。
+    //
+    // 取 28 是为了和进度条的左边距（`ProgressBarUnitNowPlaying` 的 x=28）对齐 ——
+    // AM 里曲名与进度条共用同一条左边线。再往右就得连进度条一起挪，那是原生控件。
     static let titleLeadInset: CGFloat = 28
     /// 封面自己下沿从哪一档开始淡出（占封面高度）。
     ///
-    /// ★ 2026-10-23 第六轮（用户：「AM 的渐变做的长度挺长的」）：0.78 → **0.45**。
-    /// 也就是说封面从 45% 高度就开始往下淡，到底边完全化成底色 ——
-    /// 过渡带占整张封面的一半（约 230pt），才是 AM 那种“没有明确边界”的感觉。
+    /// 0.45 ⇒ 过渡带占整张封面的一半（约 230pt），到底边完全化成底色，
+    /// 才有 AM 那种"没有明确边界"的感觉。
     static let artworkFadeStart: CGFloat = 0.45
     /// 取"字段色"时裁封面下沿多少（占封面边长）。
     static let stripFraction: CGFloat = 0.30
     /// 封面**高度**占页高的比例。
     ///
-    /// ★ 2026-10-24（照片 2 的"上下两大块空"）：AM 参考图里封面是**竖长**裁切，
-    ///   一直铺到屏幕约 57% 高、标题压在它下沿；我们原来是 414×414 的方图，
-    ///   于是封面下方到标题之间空出 186pt。取 0.58（896 × 0.58 ≈ 520）对上参考图。
+    /// AM 的封面是竖长裁切、铺到屏幕约 57% 高、标题压在它下沿。0.58 在 896 高的屏上
+    /// 得到 ≈520pt；用方图会让封面与标题之间空出 186pt。
     static let artworkHeightRatio: CGFloat = 0.58
     /// 封面高宽比上限：方图裁成竖图最多裁到 1.30；再大会把封面两边裁掉太多。
     static let artworkMaxAspect: CGFloat = 1.30
     /// 顶部压暗带：**封面仍然满血到顶**，只在状态栏/灵动岛那一带再压一层黑。
     ///
-    /// ★ 2026-10-24（用户：「封面直接顶到头，但刘海屏会挡住，保持现状？下移一点再做渐变？」）：
-    ///   照 AM（`C:\dsh\am\1.jpg`）**不下移** —— 那张图封面也是顶到屏幕最上沿的，
-    ///   在灵动岛下面继续铺。移下来反而会在最上面留一条黑边、破坏沉浸感。
-    ///   要解决的是"亮度"：浅色封面（照片 2 那张黄字红底）会让状态栏时间和下拉把手糊掉，
-    ///   所以在最上层再叠一层"上重下无"的黑色渐变，只压这一带、不碰封面构图。
-    ///   高度 = 安全区顶 + 64（刘海/灵动岛 + 把手 + 状态栏文字），下限 96。
+    /// 封面不下移（AM 也是顶到最上沿），要解决的是亮度：浅色封面会让状态栏时间和
+    /// 下拉把手糊掉。所以在最上层叠一层上重下无的黑色渐变，只压这一带、不碰封面构图。
+    /// 高度 = 安全区顶 + 64（刘海/灵动岛 + 把手 + 状态栏文字），下限 96。
     static let topScrimExtraHeight: CGFloat = 64
     static let topScrimMinHeight: CGFloat = 96
     /// 底部那一坨（`npv.bottomStackView`：曲名 / 进度 / 时间 / 传输行 / 工具行）整体上移多少。
     ///
-    /// ★ 2026-10-24（用户：「`C:\dsh\am` 里不是有图片 1 么，这个先做得像吧起码」）：
-    ///   图片 1 里曲名**压在封面下沿**、进度紧接其下；我们原来是"方图 + 曲名留在原生 600"
-    ///   ⇒ 封面（0…520）到曲名之间一整块黑。上移 55 ⇒ 曲名 600→**545**，只比封面下沿低 25pt，
-    ///   就是图片 1 那个关系（再往上就压到封面上了，那是另一笔账：得先确认封面层在曲名下面）。
+    /// 上移 55 后曲名从 600 落到 545，只比封面下沿（520）低 25pt，与 AM 一致；
+    /// 再往上会压到封面上。
     /// ⚠️ 只有**这一层** transform；量位置的地方必须用 `convert`（带 transform），不能用
-    ///   `untransformed`，否则字形/音量行会留在原位（上一轮"抬 130pt"翻车就是这个）。
+    /// `untransformed`，否则字形/音量行会留在原位。
     static let bottomStackYOffset: CGFloat = -55
-    /// 压黑渐变：从页面 60% 起渐到纯黑（pw 的 `kBlackFrom` 是 0.55；这里推后一点，
+    /// 压黑渐变：从页面 64% 起渐到纯黑（pw 的 `kBlackFrom` 是 0.55；这里推后一点，
     /// 让封面淡出来的那块颜色多留一会儿，过渡更长）。
     static let blackFromRatio: CGFloat = 0.64
     /// 压黑渐变终点的**不透明度**。
     ///
-    /// ★ 2026-10-24（用户选 A）：终点原来是 1.0（纯黑）⇒ 下半屏死黑。现在背景里铺了
-    /// "封面的模糊延续"，这条纱只负责压暗（0.62），颜色的层次能透出来。
-    ///
-    /// ★★ 2026-10-24（用户：「现在这个渐变感觉是灰色的，有些歌不太好看」）：
-    ///   0.62 → **0.42**。AM 那块是"暗下去"，不是"灰掉" —— 它把封面**过饱和**之后
-    ///   再压暗（Apple Music 的渐变本身就是把专辑图多层扭曲 + 高斯模糊，颜色被刻意拉高
-    ///   饱和度）；我们是一条模糊底 + 一条纱，所以纱要更淡、颜色才透得出来。
+    /// 取 0.42 而不是纯黑：背景里铺了封面的模糊延续，这条纱只负责压暗。AM 那块是
+    /// "暗下去"不是"灰掉"——它先把封面过饱和再压暗，所以我们这条纱要更淡，颜色才透得出来。
     static let blackScrimAlpha: CGFloat = 0.42
-    /// 字段颜色的两条上限（原 pw：饱和度 0.55、线性亮度 0.07 ⇒ sRGB ≈ 0.29）。
+    /// 字段颜色的两条上限（pw 原值：饱和度 0.55、线性亮度 0.07 ⇒ sRGB ≈ 0.29）。
     ///
-    /// ★★ 2026-10-24：pw 这两条是为"整块纯色底"定的；现在底下铺的是封面模糊图，
-    ///   颜色不需要压到那么死。把饱和度上限放到 0.90、亮度 0.38，并给平均色一个
-    ///   `fieldSaturationBoost`（见 `fieldColour`）—— 对应 AM 的"过饱和封面"。
+    /// pw 这两条是为整块纯色底定的；我们底下还铺了封面模糊图，颜色不需要压那么死，
+    /// 放宽到 0.90 / 0.38，再叠一个 `fieldSaturationBoost`（见 `fieldColour`）。
     static let maxFieldSaturation: CGFloat = 0.90
     static let maxFieldBrightness: CGFloat = 0.38
     /// 平均色 → 字段色时的饱和度倍率（AM 的渐变会刻意过饱和专辑图）。
     static let fieldSaturationBoost: CGFloat = 1.45
-    /// 顶部导航那三件的 id（真机树：`108.log:1735-1736`）。
+    /// 顶部导航那三件的 id。
     ///
-    ///   · `now-playing-minimize-button` —— 左上那颗向下箭头（48×48，`Tertiary`）；
-    ///   · `now-playing-navigation-unit-title-label` —— 中间那个歌单名（30×48 的 stack）；
-    ///   · `Context menu` —— 右上那个 ⋯（48×48，`Tertiary`）。
+    /// · `now-playing-minimize-button` —— 左上那颗向下箭头（48×48，`Tertiary`）；
+    /// · `now-playing-navigation-unit-title-label` —— 中间那个歌单名（30×48 的 stack）；
+    /// · `Context menu` —— 右上那个 ⋯（48×48，`Tertiary`）。
     ///
-    /// AM 的播放页顶部**只有一根小横条**（下拉把手）⇒ 前两件藏起来；⋯ 搬到工具行正中间。
+    /// AM 的播放页顶部**只有一根小横条**（下拉把手）⇒ 前两件藏起来。
     static let navTitleIdentifier = "now-playing-navigation-unit-title-label"
     static let contextMenuIdentifier = "Context menu"
     /// 我们自己画的那根小横条。
@@ -154,18 +101,16 @@ enum NowPlayingIOS27 {
     static weak var artworkMask: CAGradientLayer?
     /// 上一次画上去的封面图（**跨换歌 / 跨 cell 复用都留着**）。
     ///
-    /// 2026-10-24（用户：切歌会闪过原生大封面）：旧布局 `NowPlayingLyricsPlate+Cover`
-    /// 就是用"自己缓存上一次那张图、新图没到先顶着"解决的。这里同名同法；
-    /// 只有 `restore` / `clearState` 会清掉它（不能放进 `teardownArtwork` —— 那个是换 cell 时调的）。
+    /// 换歌时新图还没到，用它顶着，避免露出原生封面（与 `NowPlayingLyricsPlate+Cover` 同法）。
+    /// 只有 `restore` / `clearState` 会清掉它 —— 不能放进 `teardownArtwork`，那是换 cell 时调的。
     static var lastArtworkImage: UIImage?
 
     /// 曲目元数据里的**专辑封面**（`image_url` → `i.scdn.co` 那张），按曲目 id 认。
     ///
-    /// ★★ 2026-10-24（用户：「出现艺人头像这个东西不一定是之前进过艺人页/专辑页才有的」）：
-    /// 播放页 contentlayer 里有时候摆的不是专辑封面（Canvas 帧 / 艺人图），而
-    /// `firstImage(in: shell)` 只认"壳里第一张够大的图" ⇒ 会把它当成封面、连 field 一起用。
-    /// 元数据的 `image_url` 永远是**这首的专辑封面** ⇒ 异步取它，**优先于壳里的图**；
-    /// 壳只负责"元数据图还没到的那一两拍"和加载失败时兜底。
+    /// 播放页 contentlayer 里摆的不一定是专辑封面（Canvas 帧 / 艺人图），而
+    /// `firstImage(in: shell)` 只认壳里第一张够大的图 ⇒ 会连 field 一起用错。
+    /// 元数据的 `image_url` 永远是这首的专辑封面 ⇒ 异步取它、**优先于壳里的图**；
+    /// 壳只负责元数据图还没到的那一两拍和加载失败时兜底。
     static var metadataArtworkTrackId = ""
     static var metadataArtworkImage: UIImage?
     static var metadataArtworkLoading = false
@@ -204,15 +149,13 @@ enum NowPlayingIOS27 {
 
     /// 页内歌词模式下，盖在**原生歌名/艺人**上的透明点击区。
     ///
-    /// ★★ 2026-10-30（用户：「专辑封面旁边的艺人名字/歌曲名字无法点击」）：
-    ///   Spotify 原生那两行只是 `UILabel`，不是按钮；我们把标题行搬到缩略图旁边之后，
-    ///   它们依旧不吃触摸。这里各盖一颗透明 `UIButton`：点歌名开专辑、点艺人开艺人页，
-    ///   URI 取自当前曲目的 `album_uri` / `artist_uri`（日志 999 的 metadata 键表里有）。
+    /// Spotify 原生那两行只是 `UILabel`，不吃触摸。这里各盖一颗透明 `UIButton`：
+    /// 点歌名开专辑、点艺人开艺人页，URI 取自当前曲目的 `album_uri` / `artist_uri`。
     static weak var titleTapButton: UIButton?
     static weak var artistTapButton: UIButton?
-    /// 只报一次"点击区挂上了"（照片 169 之后：下一次日志能直接确认它在不在）。
+    /// 只报一次"点击区挂上了"。
     static var didLogTitleTapTargets = false
-    /// 只报一次"找不到那两行"（同一份日志里能直接分清是"没挂上"还是"点了没反应"）。
+    /// 只报一次"找不到那两行"—— 与上一条一起区分"没挂上"和"点了没反应"。
     static var didLogMissingTapLabels = false
 
     /// 被我们**整体上移**的"底部那一坨"，以及它原来的 `transform`（收尾要写回）。
@@ -235,72 +178,57 @@ enum NowPlayingIOS27 {
     static var didLogFrames = false
     static var didLogMissingCover = false
     static var didLogRestore = false
-    /// ★ 2026-10-24（照片 2：歌词收起后专辑图不展示）：换歌 / 收歌词那一两拍里
-    /// 封面壳与宿主会对不上。这时**不能把我们上一拍已经画上去的那张图藏掉** ——
-    /// 藏了就是一个洞（原生壳也被我们按着）。只报一次，下一次日志能看到走了这条路。
+    /// 换歌 / 收歌词那一两拍里封面壳与宿主会对不上。这时**不能把上一拍已经画上去的
+    /// 那张图藏掉** —— 藏了就是一个洞（原生壳也被我们按着）。只报一次。
     static var didLogArtworkHold = false
     /// 宿主选错（某一层整页祖先里含 `npv.bottomStackView`）只报一次。
     ///
-    /// ★ 2026-10-24（照片 1：听歌中突然标题/进度/传输/收藏全没了，而底排字形还在）：
-    /// `field` 是整页大的，它一旦被插到**控件上面那一层**，就会把整块 bottomStack 盖住。
+    /// `field` 是整页大的，一旦插到**控件上面那一层**，就会把整块 bottomStack 盖住。
     static var didLogCoverHostSkip = false
-    /// ★ 2026-10-25（用户：「点击歌词展示之后，封面又回溶底了」）：
     /// 封面壳认不出来、靠"记下来的宿主"按模式摆好时只报一次 —— 它同时是
     /// `resolvedShell` 那几拍空转的证据（见 `syncArtworkFrameWithoutShell`）。
     static var didLogWithoutShell = false
-    /// "一次藏了很多叶子"只报一次（照片 1 的排查线）。
+    /// "一次藏了很多叶子"只报一次。
     static var didLogWideGlyphHide = false
-    /// ★ 2026-10-24（用户：「点击 雷达 按钮没反应」）：
-    /// 不再用 `sendActions` 转发 Connect —— 那颗 `EncoreButton` 收到 sendActions 也什么都不做
-    ///（日志 18：连按 8 秒，全是 `connect: sendActions → EncoreButton`、面板没出来）。
-    /// 改成**把原生 Connect 按钮搬到中间那颗字形的位置**，让真触摸落在它身上。
+    /// Connect（雷达）不能用 `sendActions` 转发 —— 那颗 `EncoreButton` 收到 sendActions
+    /// 什么都不做。改成**把原生 Connect 按钮搬到中间那颗字形的位置**，让真触摸落在它身上。
     static weak var movedConnectHolder: UIView?
     static var movedConnectBase: (ObjectIdentifier, CGAffineTransform)?
     /// 原生 Connect 搬走后，在原 `UIStackView` 槽位留下的等宽占位（保证分享/队列不挪位）。
     static weak var connectPlaceholder: UIView?
     static var didLogConnectMoved = false
     /// 连续多少拍"记下的那一页不在窗口里"（见 `reconcile` 里那段：换歌转场会短暂摘掉旧页，
-    /// 立刻收尾就等于把原生封面放回来 = 用户看到的那一闪）。
+    /// 立刻收尾就等于把原生封面放回来 = 屏幕上就是那一闪）。
     static var pageMissingTicks = 0
 
-    /// ★ 2026-10-24（用户：「只想要封面/歌名/艺人像之前那样动，展示歌词；为什么连按钮也改了」）：
     /// iOS 27 自己的**页内歌词模式** —— 只缩封面、移标题、在中间铺歌词，
     /// **进度条 / 传输行 / 音量 / 底排三颗一颗都不动**（不借用旧布局的
     /// `NowPlayingLyricsPlate` 整套版式）。
     static var lyricsModeActive = false
-    /// 开合歌词时那一层「整幅封面慢慢化开」的过渡视图（就是用户要的
-    /// 「让封面溶进我们自己的底子」；只活 0.36s）。
+    /// 开合歌词时那一层「整幅封面慢慢化开」的过渡视图（让封面溶进我们自己的底子；只活 0.36s）。
     static weak var lyricsDissolveView: UIImageView?
     /// 开合动画令牌：连点两次时后一次作废前一次的回调。
     static var lyricsModeGeneration = 0
 
-    /// ★ 2026-10-24（用户：「歌曲名字的位置放歌词来源是谁，艺人名字放歌词提供者/
-    /// 翻译提供者。而这个展示只在歌词展示的时候出现」）：
     /// 页内歌词模式下、**歌词区左下角**那块两行署名（第一行来源、第二行提供者/翻译者）。
     static weak var lyricsCreditView: NowPlayingIOS27LyricsCreditView?
 
     /// 歌词阶段是否已经"该露面了"。
     ///
-    /// ★ 2026-10-24（用户：「图片 1 是进入展示歌词页出现的动画（会有黑底，并且观感不佳）」）：
-    /// 开歌词时先让封面缩成缩略图（0.30s），**过 ~0.2s 再挂歌词/署名**。
-    /// 之前两者同一帧出现：歌词和"NetEase"直接压在还是一大张的封面上，而且宿主视图的
-    /// 第一帧底色（深色）会跟着淡入被看见。延迟之后歌词只在缩略图旁边出现，黑底那一帧
-    /// 在容器还透明的时候就已经画完了。
+    /// 开歌词时先让封面缩成缩略图，**过一段再挂歌词/署名**：两者同一帧出现的话，
+    /// 歌词会压在还是一大张的封面上，宿主视图第一帧的深色底也会跟着淡入被看见。
+    /// 延迟之后歌词只在缩略图旁边出现，黑底那一帧在容器还透明时就画完了。
     static var lyricsModeRevealed = false
     /// 开歌词时"封面先动、歌词后到"的延迟。
     ///
-    /// ★★ 2026-10-24（用户图片 3/4：歌词出现的动画里有"残留"和黑边）：
-    ///   0.20 → **0.36** —— 原来歌词在封面还没缩完（0.36s）时就淡进来，
-    ///   于是那半秒里是"一张大封面 + 一块歌词卡片"叠着（截图里的残留就是它）。
-    ///   等封面落到 64pt 缩略图之后再挂歌词/署名。
+    /// 必须 ≥ 封面缩小的 0.36s 动画，否则那半秒里是"一张大封面 + 一块歌词卡片"叠着。
     static let lyricsRevealDelay: TimeInterval = 0.36
     /// 打开时"该露面"被推迟了，等 `layout` 量到标题已经在缩略图旁边再亮（见 `setLyricsMode`）。
     static var lyricsRevealPending = false
     /// 歌词容器底部为那两行「来源 / 提供者」让出的高度。
     ///
-    /// ★★ 2026-10-24（用户图片 1：`NetEase` 和译文叠在一起）：署名原来被摆在
-    ///   容器**里面**的下沿（`stage.maxY − 42`），而当前行一旦滚到底、译文就会
-    ///   落到同一块。现在容器缩短这么多，署名落在容器**下面**、进度条上面。
+    /// 署名原来摆在容器**里面**的下沿，歌词滚到底时译文会落到同一块。容器缩短这么多
+    /// 之后，署名落在容器**下面**、进度条上面。
     static let lyricsCreditReserve: CGFloat = 50
 
     /// 缩略图边长 / 圆角 / 左边距 / 离安全区顶的距离。
@@ -314,15 +242,13 @@ enum NowPlayingIOS27 {
     static let lyricsStageBottomGap: CGFloat = 18
 
     // MARK: - 对外入口
-
-    /// 进听歌页时叫一次（蹭既有的两个 appear 点）。
+    //
+    // 进听歌页时叫一次（蹭既有的两个 appear 点）。
     static func apply(in page: UIView) {
         // ⚠️ 别用一个**已经离开窗口**的页面覆盖记下来的好页面。
         //
-        // 2026-10-24（用户：「切歌还是会闪一下原生大封面」）：日志 3 里
-        // `restored (page disappeared)` 一分钟出现 6 次，而 `[PLAYER] track changed` 只有 4 次 ——
-        // 也就是说 `reconcile` 反复把状态收掉、下一次 `apply` 又重装，那一两拍原生封面就露着。
-        // 换歌转场里旧页会被摘下来，这时若还用它覆盖 `lastPage` 就白白多一轮收尾/重建。
+        // 换歌转场里旧页会被摘下来，这时若还用它覆盖 `lastPage`，`reconcile` 会把状态收掉、
+        // 下一次 `apply` 又重装，那一两拍原生封面就露着。
         if page.window == nil, let live = lastPage, live.window != nil {
             return
         }
@@ -341,7 +267,7 @@ enum NowPlayingIOS27 {
     /// 设置页切开关时叫一次：还挂着就当场落地，否则等下次进听歌页。
     ///
     /// ⚠️ **关掉时不管页面在不在都要收尾**：壳与 cell 会被复用，留着 `alpha = 0` 的壳
-    /// 就是下一次在别处显形的空封面。`restore()` 不依赖页面对象。
+    /// 就是下一次在别处显形的空封面。`restore` 不依赖页面对象。
     static func reapply() {
         guard isEnabled else {
             restore(reason: "switch off")
@@ -355,14 +281,12 @@ enum NowPlayingIOS27 {
     @discardableResult
     static func reconcile() -> Bool {
         // 页面真的不在窗口里了 ⇒ 把写过的每一处还回去（cell 会被复用）。
-        // ⚠️ 这一步**不能**放在 `isEnabled` 后面：用户可能"先离开播放器、再在设置里关掉"。
+        // ⚠️ 这一步**不能**放在 `isEnabled` 后面：可能"先离开播放器、再在设置里关掉"。
         if let page = lastPage, page.window == nil {
-            // ★ 2026-10-24（用户：「切歌还是会闪一下原生大封面」）：**别立刻收尾**。
-            //
-            // 换歌 / 转场里旧的那一页会被短暂摘出窗口；`restore()` 会把原生封面、原生行、
-            // 我们的字形统统放回去 —— 下一拍 `apply` 又重装，那一两拍就是用户看到的那一闪。
-            // 这里先数拍：连续 3 拍（≈0.9s，`DeclutterChrome` 是 0.3s 一拍）都还是"页面不在"，
-            // 才认为真的离开了播放器，那时再收尾（回收的 cell 不能留着 alpha = 0）。
+            // **别立刻收尾**：换歌 / 转场里旧页会被短暂摘出窗口，`restore` 会把原生封面、
+            // 原生行、我们的字形统统放回去，下一拍 `apply` 又重装 —— 那一两拍就是那一闪。
+            // 先数拍：连续 3 拍（≈0.9s，`DeclutterChrome` 是 0.3s 一拍）都还是"页面不在"，
+            // 才认为真的离开了播放器（回收的 cell 不能留着 alpha = 0）。
             pageMissingTicks += 1
             if pageMissingTicks >= 3 {
                 restore(reason: "page disappeared")
@@ -371,16 +295,15 @@ enum NowPlayingIOS27 {
             pageMissingTicks = 0
         }
 
-        // ★ 2026-10-24：页内歌词模式**不接管整页** —— 这一层照常每拍重铺，
-        //   只是 `updateArtwork` / `placeTitleRow` / `updateLyricsStage` 按模式换几何。
-        //   所以这里没有"让位/恢复"的分支。
+        // 页内歌词模式**不接管整页** —— 这一层照常每拍重铺，只是 `updateArtwork` /
+        // `placeTitleRow` / `updateLyricsStage` 按模式换几何，所以没有"让位/恢复"的分支。
 
         guard isEnabled else { return false }
         guard let page = lastPage, page.window != nil else { return false }
         return layout(in: page)
     }
 
-    /// ★ 2026-10-24：点底排那颗歌词气泡 = **开/关页内歌词**。
+    /// 点底排那颗歌词气泡 = **开/关页内歌词**。
     ///
     /// 只做三件事：封面缩成 64pt 缩略图、标题行挪到缩略图右边、歌词铺在中间；
     /// 底部按钮（进度/传输/音量/三颗字形）全部保持 iOS 27 的样子。
@@ -390,8 +313,7 @@ enum NowPlayingIOS27 {
 
     static func setLyricsMode(_ on: Bool, in page: UIView) {
         guard on != lyricsModeActive else { return }
-        // ★ 2026-10-24：转场里页面会被短暂摘出窗口。以前这里静默 return ——
-        //   用户点了一下、什么都没发生，日志里也看不到。现在至少留一行。
+        // 转场里页面会被短暂摘出窗口。这里静默 return 的话，
         guard page.window != nil else {
             writeDebugLog(
                 "[\(logTag)] lyrics mode \(on ? "on" : "off") ignored —"
@@ -410,16 +332,14 @@ enum NowPlayingIOS27 {
             lyricsRevealPending = false
             // 歌名/艺人的透明点击区也一起收（它们只在歌词模式里存在）。
             removeTitleTapTargets()
-            // ★ 2026-10-24（用户：「从歌词页面到全溶封面的过渡不是很好」）：
-            //   **不要在第一帧就把歌词抽走** —— 它和封面长回去同一段 0.30s 淡出，
-            //   淡完再拆容器。快速重开时 `generation` 对不上，这次拆作废（歌词接着淡入）。
+            // **不要在第一帧就把歌词抽走** —— 它和封面长回去同一段 0.30s 淡出，
+            // 淡完再拆容器。快速重开时 `generation` 对不上，这次拆作废（歌词接着淡入）。
             NowPlayingLyricsPlate.fadeOutLyricsOnly(duration: 0.30) {
                 guard generation == lyricsModeGeneration, !lyricsModeActive else { return }
                 NowPlayingLyricsPlate.unmountLyricsOnly()
             }
         } else {
-            // ★ 2026-10-24（照片 3）：每次打开都让歌词容器从透明淡进来 —— 宿主视图
-            // 第一帧的底色（深色）就不会被看成"闪一下黑底"。
+            // 每次打开都让歌词容器从透明淡进来 —— 宿主视图第一帧的深色底就不会被看成"闪一下黑底"。
             NowPlayingLyricsPlate.lyricsOnlyNeedsFadeIn = true
             // 宿主视图从挂上到真正画完内容还有一两帧；这段时间容器保持透明（见
             // `NowPlayingLyricsPlate.lyricsOnlyFadeInDelay`），别让那一帧深色跟着淡入。
@@ -429,11 +349,10 @@ enum NowPlayingIOS27 {
             lyricsRevealPending = false
             DispatchQueue.main.asyncAfter(deadline: .now() + lyricsRevealDelay) {
                 guard generation == lyricsModeGeneration, lyricsModeActive else { return }
-                // ★ 先跑一拍 `layout`：它负责把封面缩完、把标题挪到缩略图旁边。
+                // 先跑一拍 `layout`：它负责把封面缩完、把标题挪到缩略图旁边。
                 _ = layout(in: page)
-                // ★★ 2026-10-24（用户图片 1：「歌曲名字/艺人名字不会动」）：
-                //   标题还没量到 / 还留在原生 y（换歌转场、页还没建完）时**先不亮歌词**，
-                //   否则容器会把原位标题盖住，看起来就是"名字不会动"。下一拍再试。
+                // 标题还没量到 / 还留在原生 y（换歌转场、页还没建完）时**先不亮歌词**，
+                // 否则容器会把原位标题盖住。下一拍再试。
                 guard lyricsSceneReady(in: page) else {
                     lyricsRevealPending = true
                     writeDebugLog(
@@ -455,11 +374,10 @@ enum NowPlayingIOS27 {
             "[\(logTag)] lyrics mode \(on ? "on" : "off") — "
                 + "cover/title move, the bottom controls stay as they are"
         )
-        // ★ 2026-10-24（用户：「原本的修改听歌页就有自己做底子，让封面溶进底子做过渡」）：
-        //   开歌词时先铺一层**整幅封面**（同一张图），让它在这一段动画里慢慢化开
-        //   → 下面露出来的就是我们自己的 field（封面色 + 模糊封面 + 暗纱）。
-        //   ⚠️ **只在"开"这一向做**：关的那一向封面本来就会从 64pt 长回满屏，
-        //   再叠一张整幅封面淡入就成了两层同图叠加（用户说的"过渡不好"的一部分）。
+        // 开歌词时先铺一层**整幅封面**（同一张图），让它在这一段动画里慢慢化开
+        // → 下面露出来的就是我们自己的 field（封面色 + 模糊封面 + 暗纱）。
+        // ⚠️ **只在"开"这一向做**：关的那一向封面本来就会从 64pt 长回满屏，
+        // 再叠一张整幅封面淡入就成了两层同图叠加。
         if on {
             beginLyricsDissolve(entering: true, in: page)
         }
@@ -472,10 +390,9 @@ enum NowPlayingIOS27 {
             options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]
         ) {
             _ = layout(in: page)
-            // ★★ 2026-10-25：`layout` 里封面几何排在最后、而且要先认出封面壳；这一拍
-            //   壳没认出来（日志 21 的 `no on-screen artwork yet`）封面就不会缩 ——
-            //   但歌词照样会在 0.36s 后挂上来，于是"封面又回溶底"。这里用记下来的宿主
-            //   把模式几何**同一段动画**里落地，与壳无关（幂等，成功时只是一次比较）。
+            // `layout` 里封面几何排在最后、而且要先认出封面壳；这一拍壳没认出来封面就不会缩，
+            // 但歌词照样会在 0.36s 后挂上来，于是"封面又回溶底"。这里用记下来的宿主
+            // 把模式几何**同一段动画**里落地，与壳无关（幂等，成功时只是一次比较）。
             _ = syncArtworkFrameWithoutShell(in: page)
         }
     }
@@ -523,41 +440,36 @@ enum NowPlayingIOS27 {
     static func coverDidLayOut(from tilt: UIView) {
         guard isEnabled,
               let page = lastPage, page.window != nil, tilt.window != nil else { return }
-        // ★ 2026-10-24（用户：「切歌还是会有 Spotify 原生大封面闪过」）：
-        //   旧布局（`NowPlayingLyricsPlate.coverDidLayOut`）早就解决了同一件事，这里照它的做法：
-        //   · **不要求** `tilt` 已经在这棵 `page` 底下 —— 换歌/翻页转场里新封面先挂在**新的**
-        //     contentlayer cell 上，等 `lastPage` 更新过来时它已经露了一两帧；
-        //   · **不要求** `alpha > 0.01` —— 新封面对象常常先以 `alpha = 0` 出现，等 Spotify
-        //     把它淡入时不再有新的布局回调；
-        //   · 连 `tilt` 自己一起按下去（不只是它里面那张同尺寸的图），Spotify 之后在同一份
-        //     tilt 里换图 / 加层都不会再露出来。
-        //   门禁改成"真的是听歌页封面 cell 里的 tilt"（`isInsideCoverCell`），不会误伤列表封面。
+        // 照 `NowPlayingLyricsPlate.coverDidLayOut` 的做法，避免切歌时闪出原生大封面：
+        // · **不要求** `tilt` 已经在这棵 `page` 底下 —— 换歌/翻页转场里新封面先挂在**新的**
+        // contentlayer cell 上，等 `lastPage` 更新过来时它已经露了一两帧；
+        // · **不要求** `alpha > 0.01` —— 新封面对象常常先以 `alpha = 0` 出现，等 Spotify
+        // 把它淡入时不再有新的布局回调；
+        // · 连 `tilt` 自己一起按下去（不只是它里面那张同尺寸的图），Spotify 之后在同一份
+        // tilt 里换图 / 加层都不会再露出来。
+        // 门禁改成"真的是听歌页封面 cell 里的 tilt"（`isInsideCoverCell`），不会误伤列表封面。
         guard tilt.bounds.width >= 200 else { return }
         guard NowPlayingLyricsPlate.isInsideCoverCell(tilt) else { return }
-        // ★ 2026-10-24（用户：「切歌会闪过 Spotify 原生大封面 的问题又回来了」）：
-        //   **先按下去，再判页面归属**。72ee701 把 `isControlOnPage` 提到了隐藏之前，
-        //   而换歌那一拍新封面 cell 还在转场里（中线可能不在 20%…80% / 还没进 `lastPage`
-        //   子树）⇒ 这一拍直接 return、原生封面整张露出来，下一拍才按掉 = 用户看到的那一闪。
-        //   隐藏本身对离屏 cell 无害（它进页面时我们照样画自己的图）；
-        //   只有"记壳 + 画图"才需要页面归属。
+        // **先按下去，再判页面归属**。换歌那一拍新封面 cell 还在转场里（中线可能不在
+        // 20%…80% / 还没进 `lastPage` 子树）⇒ 若先判归属就会直接 return、原生封面整张露出来，
+        // 下一拍才按掉 = 那一闪。隐藏本身对离屏 cell 无害（它进页面时我们照样画自己的图）；
+        // 只有"记壳 + 画图"才需要页面归属。
         guard isNowPlayingCoverCell(tilt) else { return }
         if let cover = NowPlayingLyricsPlate.sameSizeChild(of: tilt) {
             hideShell(cover)
         }
         hideShell(tilt)
         // 壳**这一拍就记下来**（哪怕新 cell 还在转场里、还没进 lastPage 子树）——
-        // 下一拍 `resolvedShell` 会用它继续画；`updateArtwork` 自己有可见页闸门，
-        // 所以不会重演日志 20 的 `artwork frame -372`。
+        // 下一拍 `resolvedShell` 会用它继续画；`updateArtwork` 自己有可见页闸门。
         let shell = shell(in: tilt) ?? tilt
         artworkShell = shell
         guard isControlOnPage(tilt, in: page, requireAlpha: false) else { return }
 
-        // ★ 2026-10-24（用户：切歌后**不展示自画封面**）：换歌时新 cell 还没挂到 `lastPage`
-        //   底下，原来那道 `tilt.isDescendant(of: page)` 会让这一拍直接返回 —— 而我们刚把
-        //   原生 tilt 按成 alpha 0，`resolvedShell` 的 `visibleCover` 又因 alpha 0 认不出它
-        //   ⇒ 接下来十几秒都"no on-screen artwork"（真机日志 16：02:53:52 → 02:54:08）。
-        //   现在把壳**记下来**（`artworkShell`）并立即尝试画；`updateArtwork` 拿不到宿主也
-        //   没关系，下一拍 `resolvedShell` 会直接用这个记录继续试。
+        // 换歌时新 cell 还没挂到 `lastPage` 底下。若用 `tilt.isDescendant(of: page)` 判，
+        // 这一拍会直接返回 —— 而原生 tilt 刚被按成 alpha 0，`resolvedShell` 的 `visibleCover`
+        // 又因 alpha 0 认不出它 ⇒ 接下来十几秒都"no on-screen artwork"。
+        // 所以把壳**记下来**（`artworkShell`）并立即尝试画；`updateArtwork` 拿不到宿主也没关系，
+        // 下一拍 `resolvedShell` 会直接用这个记录继续试。
         _ = updateArtwork(shell, in: page)
         _ = updateField(in: page)
     }
@@ -599,50 +511,46 @@ enum NowPlayingIOS27 {
         if let trackId = NowPlayingLyricsPlate.currentTrackId() {
             refreshMetadataArtwork(trackId: trackId)
         }
-        // ★★ 2026-10-24（照片 1 / 照片 2）：**先摆不依赖封面壳的那几行**。
-        //
-        // 旧顺序是"先 resolve 封面，拿不到就 return"——而换歌 / 关歌词的头一两拍，
-        // 新的封面 cell 还没挂到页面上（`resolvedShell` 返回 nil）⇒ 标题行根本不回来、
-        // 底排也不重排（照片 2 的"歌手/艺人名字不回来"）。这几样只认控件自己的 id，
-        // 与封面无关，必须先做、而且**不管封面在不在都要做**。
+        // **先摆不依赖封面壳的那几行**：换歌 / 关歌词的头一两拍，新的封面 cell 还没挂到
+        // 页面上（`resolvedShell` 返回 nil），若"先 resolve 封面、拿不到就 return"，
+        // 标题行根本不回来、底排也不重排。这几样只认控件自己的 id，与封面无关。
         //
         // ⚠️ 顺序不能动：`placeBottomStack` 的 -55pt 是 `placeTitleRow` 量自然位置的
-        //    前提（标题行就长在这个 stack 里）。
+        // 前提（标题行就长在这个 stack 里）。
         if placeBottomStack(in: page) { changed = true }
         if placeTitleRow(in: page) { changed = true }
-        // ★★ 2026-10-24（图片 1）：`setLyricsMode` 那一拍标题还没量到（换歌转场/页面重建）
-        //   ⇒ 它把"亮歌词"挂起；这里每一拍重试，标题真到缩略图旁边了才铺歌词。
+        // `setLyricsMode` 那一拍标题可能还没量到（换歌转场/页面重建）⇒ 它把"亮歌词"挂起；
+        // 这里每一拍重试，标题真到缩略图旁边了才铺歌词。
         if lyricsModeActive, !lyricsModeRevealed, lyricsRevealPending,
            lyricsSceneReady(in: page) {
             lyricsRevealPending = false
             lyricsModeRevealed = true
             changed = true
         }
-        // ★ 2026-10-30：页内歌词时，歌名/艺人那两行只是原生 label，不吃触摸 ——
-        //   在它们上面各盖一颗透明按钮（点歌名开专辑、点艺人开艺人页）。
+        // 页内歌词时，歌名/艺人那两行只是原生 label，不吃触摸 ——
+        // 在它们上面各盖一颗透明按钮（点歌名开专辑、点艺人开艺人页）。
         if placeTitleTapTargets(in: page) { changed = true }
         if placeNavChrome(in: page) { changed = true }
-        // 待办 T1：进度条（4pt 轨 + 藏圆钮 + 等宽时间），见 `NowPlayingIOS27+Progress.swift`。
+        // 进度条（4pt 轨 + 藏圆钮 + 等宽时间），见 `NowPlayingIOS27+Progress.swift`。
         // 它只换 UISlider 的三张图与两颗标签的字体，不碰几何、不碰手势。
         if placeProgress(in: page) { changed = true }
-        // 待办 T3 + T6：工具行排成 AM 的三颗（歌词 / 隔空播放 / 队列），见 `NowPlayingIOS27+Footer.swift`。
-        // ⚠️ 必须排在 T2 前面：循环那颗圆钮是**按我们画的那颗队列字形**定位的。
+        // 工具行排成 AM 的三颗（歌词 / 隔空播放 / 队列），见 `NowPlayingIOS27+Footer.swift`。
+        // ⚠️ 必须排在传输行前面：循环那颗圆钮是**按我们画的那颗队列字形**定位的。
         if placeFooter(in: page) { changed = true }
-        // 页内歌词容器：缩略图下沿 + 16 → 进度条上沿 − 18。它也不依赖封面壳
-        //（b6b4eb2 起就是这条），封面晚到也要能看词。
-        // ★ 2026-10-24：开歌词时**等封面缩完再挂**（`lyricsModeRevealed`），否则歌词和
-        //   宿主第一帧的深色底会压在那张还没缩小的封面上（照片 1）。
+        // 页内歌词容器：缩略图下沿 + 16 → 进度条上沿 − 18。它也不依赖封面壳，
+        // 封面晚到也要能看词。
+        // 开歌词时**等封面缩完再挂**（`lyricsModeRevealed`），否则歌词和宿主第一帧的
+        // 深色底会压在那张还没缩小的封面上。
         if lyricsModeActive, lyricsModeRevealed, updateLyricsStage(in: page) { changed = true }
-        // ★ 2026-10-24：歌词区左下角那块「歌词来源 / 提供者/翻译者」。
-        //   收起时保留视图、alpha 归 0（和歌词一起淡出），下一次打开直接淡入。
+        // 歌词区左下角那块「歌词来源 / 提供者/翻译者」。
+        // 收起时保留视图、alpha 归 0（和歌词一起淡出），下一次打开直接淡入。
         if placeLyricsCredit(in: page) { changed = true }
 
         guard let shell = resolvedShell(in: page) else {
-            // ★ 2026-10-24（照片 2）：**别在没图的时候硬留一个洞**。
-            // 兜底找一次原生封面：
-            //   · 我们自己已经有东西可画 ⇒ 把兜底那张按下去（避免两张同屏）；
-            //   · 我们自己什么都没画出来 ⇒ **让原生封面先露着**（宁可这一拍是原生封面，
-            //     也不要一片空）。以前这里无条件 hideShell，于是原生和我们的都被藏掉。
+            // **别在没图的时候硬留一个洞**。兜底找一次原生封面：
+            // · 我们自己已经有东西可画 ⇒ 把兜底那张按下去（避免两张同屏）；
+            // · 我们自己什么都没画出来 ⇒ **让原生封面先露着**（宁可这一拍是原生封面，
+            // 也不要一片空）。无条件 hideShell 会让原生和我们的都被藏掉。
             if let fallback = fallbackCoverShell(in: page) {
                 if artworkView != nil || lastArtworkImage != nil {
                     hideShell(fallback)
@@ -650,11 +558,9 @@ enum NowPlayingIOS27 {
                     revealShell(fallback)
                 }
             }
-            // ★★ 2026-10-25（用户：「点击歌词展示之后，封面又回溶底了」）：
-            //   这一拍没有壳 ⇒ `updateArtwork` 整条不跑。以前只在这里"把缩略图长回满屏"，
-            //   收歌词那一向才有人管；**开**歌词那一向（缩成 64pt）就永远没人做 ⇒
-            //   歌词、标题、署名都出来了，封面还停在整幅帧（就是"又回溶底"）。
-            //   现在两向都走同一条：按当前模式摆好。
+            // 这一拍没有壳 ⇒ `updateArtwork` 整条不跑。只处理"缩略图长回满屏"那一向的话，
+            // **开**歌词那一向（缩成 64pt）就永远没人做 ⇒ 歌词、标题、署名都出来了，
+            // 封面还停在整幅帧（"又回溶底"）。两向都走同一条：按当前模式摆好。
             if syncArtworkFrameWithoutShell(in: page) { changed = true }
             if !didLogMissingCover {
                 didLogMissingCover = true
@@ -664,17 +570,16 @@ enum NowPlayingIOS27 {
         }
         didLogMissingCover = false
         // 认出来了就先按下去（不等 `updateArtwork` 的图）—— 首次进页面时图往往比壳晚一拍，
-        // 这一拍不按，用户看到的就是"Spotify 原生大封面闪一下"。
+        // 这一拍不按，屏幕上就是"Spotify 原生大封面闪一下"。
         hideShell(shell)
         artworkShell = shell
 
         if updateArtwork(shell, in: page) { changed = true }
-        // ★★ 2026-10-25：壳认出来了，`updateArtwork` 仍可能因为量不到整页宿主 / 还没图
-        //   而提前返回（它那几条 guard）。模式几何再兜一次 —— 幂等：已经是对的就只做一次比较。
-        //   ⚠️ 代价是"壳正常"那条路每拍多跑两次 `convert` + 一次 scrim 比较
-        //   （只读复核 2026-10-25 的 NIT-2）。故意换这个便宜：`updateArtwork` 的返回值
-        //   语义是 "changed"，稳态下本来就是 false，用它当"几何有没有走到"的判据会反过来
-        //   每拍都去兜底。宁可多两次换算，也不要为省它们再引一条会写错的账。
+        // 壳认出来了，`updateArtwork` 仍可能因为量不到整页宿主 / 还没图而提前返回。
+        // 模式几何再兜一次 —— 幂等：已经是对的就只做一次比较。
+        // ⚠️ 代价是"壳正常"那条路每拍多跑两次 `convert` + 一次 scrim 比较。故意的：
+        // `updateArtwork` 的返回值语义是 "changed"，稳态下本来就是 false，拿它当
+        // "几何有没有走到"的判据会反过来每拍都去兜底。宁可多两次换算。
         if syncArtworkFrameWithoutShell(in: page) { changed = true }
         if mountField(in: page) { changed = true }
         if !didLogFrames {
@@ -689,9 +594,9 @@ enum NowPlayingIOS27 {
     /// 抽出来是因为「歌词区左下角那行来源」也要贴同一个底边（`placeLyricsCredit`），
     /// 两处各算一份的话改一个数就会错位。
     private static func lyricsStageFrame(in page: UIView) -> CGRect? {
-        // ★ 2026-10-24：进度条也必须找**当前可见页**那一份 —— pager 里相邻页的副本
-        //   在 y≈-413，用它算出来的高度是负数 ⇒ `guard bottom - top > 80` 永远不过，
-        //   歌词容器就永远不铺（点了没反应）。见 `progressUnit(in:)`。
+        // 进度条也必须找**当前可见页**那一份 —— pager 里相邻页的副本在 y≈-413，
+        // 用它算出来的高度是负数 ⇒ `guard bottom - top > 80` 永远不过，歌词容器就永远不铺。
+        // 见 `progressUnit(in:)`。
         guard let progress = progressUnit(in: page) else { return nil }
         let progressRect = progress.convert(progress.bounds, to: page)
         let thumb = lyricsThumbFrame(in: page)
@@ -708,9 +613,9 @@ enum NowPlayingIOS27 {
 
     /// 页内歌词**内容容器**的框：完整 stage 再扣掉底部署名的 50pt。
     ///
-    /// ★★ 2026-10-24（用户图片 1：`NetEase` 与译文叠在一起）：署名在 stage 的下沿，
-    ///   而歌词滚到底时最后一行/译文也会落到那里。容器缩短后，署名落在容器**下面**、
-    ///   进度条上面，两者不再共用一块区域（`placeLyricsCredit` 仍按完整 stage 定位）。
+    /// 署名在 stage 的下沿，而歌词滚到底时最后一行/译文也会落到那里。容器缩短后，
+    /// 署名落在容器**下面**、进度条上面，两者不再共用一块区域
+    /// （`placeLyricsCredit` 仍按完整 stage 定位）。
     private static func lyricsContainerFrame(in page: UIView) -> CGRect? {
         guard var frame = lyricsStageFrame(in: page) else { return nil }
         guard frame.height - Self.lyricsCreditReserve > 120 else { return frame }
@@ -721,9 +626,8 @@ enum NowPlayingIOS27 {
     /// 页内歌词的容器。只铺歌词（`mountLyricsOnly`），不碰控件条 / 底部按钮。
     @discardableResult
     private static func updateLyricsStage(in page: UIView) -> Bool {
-        // ★★ 2026-10-24（图片 1）：标题还没挪到缩略图旁边时**不要铺** —— 容器会盖住
-        //   还留在原生 y=550 的歌名/艺人。把"已露面"退回去、下一拍标题到位后重新淡入；
-        //   署名也跟着 alpha 0，不会单独飘着。
+        // 标题还没挪到缩略图旁边时**不要铺** —— 容器会盖住还留在原生 y=550 的歌名/艺人。
+        // 把"已露面"退回去、下一拍标题到位后重新淡入；署名也跟着 alpha 0，不会单独飘着。
         guard titleRowPlaced(in: page) else {
             if lyricsModeRevealed {
                 lyricsModeRevealed = false
@@ -739,14 +643,13 @@ enum NowPlayingIOS27 {
             return false
         }
         let mounted = NowPlayingLyricsPlate.mountLyricsOnly(in: page, frame: frame)
-        // ★ 2026-10-24（用户：「点击 收藏 按钮没反应」）：
-        //   歌词容器一直伸到进度条上沿（587），而收藏键（AddToButton）在 348,549,48×48
-        //   —— 它的上半截落在容器里，`NowPlayingLyricsContainerView` 又只在底部那一条放行
-        //   触摸 ⇒ 点 ✓ 被容器吃掉。这里把收藏键的框登记成"放行区"，触摸直接落到原生键上。
+        // 歌词容器一直伸到进度条上沿（587），而收藏键（AddToButton）在 348,549,48×48
+        // —— 它的上半截落在容器里，`NowPlayingLyricsContainerView` 又只在底部那一条放行
+        // 触摸 ⇒ 点 ✓ 被容器吃掉。这里把收藏键的框登记成"放行区"。
         if mounted,
            let container = NowPlayingLyricsPlate.lastContainer as? NowPlayingLyricsContainerView {
-            // ★ 2026-10-24：收藏键贴着右边缘（348…396），默认 20% 闸门会把它筛掉；
-            //   pager 里还有相邻页的副本 ⇒ 用 visibleView（margin 0）只认当前页那一颗。
+            // 收藏键贴着右边缘（348…396），默认 20% 闸门会把它筛掉；
+            // pager 里还有相邻页的副本 ⇒ 用 visibleView（margin 0）只认当前页那一颗。
             let like = visibleView(identifier: "Components.UI.AddToButton", in: page)
             if let like {
                 let rect = like.convert(like.bounds, to: page).insetBy(dx: -6, dy: -6)
@@ -789,9 +692,9 @@ enum NowPlayingIOS27 {
     /// 这一拍该用哪张封面。
     ///
     /// 1. **先认自己画过的那张**：我们把原生壳 `alpha = 0` 之后，`visibleCover` 的判据
-    ///    （`alpha > 0.01 || isHiddenByUs`）不再认它 —— 只靠它每拍都会早退。
-    /// 2. **挡住"挑到离屏那张"**：日志 888 里出现过 `at 399,161` 和 `at -138252,161`
-    ///    （横向翻页转场中途），画进那种格子 = 屏幕上什么都没有（照片 162）。
+    /// （`alpha > 0.01 || isHiddenByUs`）不再认它 —— 只靠它每拍都会早退。
+    /// 2. **挡住"挑到离屏那张"**：横向翻页转场中途会出现 `at 399,161` / `at -138252,161`
+    /// 这种格子，画进去等于屏幕上什么都没有。
     private static func resolvedShell(in page: UIView) -> UIView? {
         if let shell = artworkShell, shell.window != nil,
            isControlOnPage(shell, in: page, requireAlpha: false),
@@ -822,9 +725,8 @@ enum NowPlayingIOS27 {
 
     /// 这个控件是不是**当前可见的那一页**上的。
     ///
-    /// ★★ 2026-10-24（日志 20）：听歌页的 pager 里会同时留着相邻页的 cell，
-    /// `findByIdentifier` 的 BFS 经常先撞上**离屏**那一页的 `npv.bottomStackView`
-    /// （日志：`bottom stack lifted -55pt — -413…-413`，而屏幕上那一份在 4,543）。
+    /// 听歌页的 pager 里会同时留着相邻页的 cell，`findByIdentifier` 的 BFS 经常先撞上
+    /// **离屏**那一页的 `npv.bottomStackView`（`-413…-413`，而屏幕上那一份在 4,543）。
     /// 结果是我们搬了离屏的标题/底排，屏幕上的歌名/封面不动；`lyricsSceneReady`
     /// 又永远等不到，歌词一直 `deferred`。所有"按 id 找控件"的地方都必须过这一道。
     static func isControlOnPage(
@@ -878,8 +780,8 @@ enum NowPlayingIOS27 {
     /// 把这一首**元数据里的专辑封面**取回来（异步、按曲目 id 缓存）。
     ///
     /// 为什么不能只信播放页 contentlayer 里的那张图：那里有时候是 Canvas / 艺人图，
-    /// 不是专辑封面（用户 2026-10-24：「出现艺人头像……不一定是之前进过艺人页/专辑页才有的」）。
-    /// `SPTPlayerTrack.metadata()["image_url"]` 是这首曲目的专辑封面，
+    /// 不是专辑封面。
+    /// `SPTPlayerTrack.metadata["image_url"]` 是这首曲目的专辑封面，
     /// `LyricsArtworkResolver` 已经把它翻译成 `i.scdn.co` 地址（歌词背景在用同一条链）。
     private static func refreshMetadataArtwork(trackId: String) {
         if trackId != metadataArtworkTrackId {
@@ -931,14 +833,13 @@ enum NowPlayingIOS27 {
         artworkShell = shell
         let trackId = NowPlayingLyricsPlate.currentTrackId() ?? ""
         let trackChanged = trackId != lastTrackId
-        // ★★ 2026-10-24：先确保这一首的**元数据封面**在取（或已取到）。
+        // 先确保这一首的**元数据封面**在取（或已取到）。
         refreshMetadataArtwork(trackId: trackId)
 
-        // ★★ 2026-10-24（用户：「出现艺人头像……不一定是之前进过艺人页/专辑页才有的」）：
-        //   **优先用元数据里的专辑封面**。播放页 contentlayer 里有时候摆的是 Canvas 帧 /
-        //   艺人图（`firstImage(in: shell)` 会把它当成封面，field 也跟着错），而
-        //   `SPTPlayerTrack.metadata()["image_url"]` 才是这首的专辑封面。
-        //   壳里的图只负责"元数据图还没到的那一两拍"兜底。
+        // **优先用元数据里的专辑封面**。播放页 contentlayer 里有时候摆的是 Canvas 帧 /
+        // 艺人图（`firstImage(in: shell)` 会把它当成封面，field 也跟着错），而
+        // `SPTPlayerTrack.metadata["image_url"]` 才是这首的专辑封面。
+        // 壳里的图只负责"元数据图还没到的那一两拍"兜底。
         var image: UIImage? = metadataArtworkImage
         if image == nil {
             image = NowPlayingLyricsPlate.firstImage(in: shell)
@@ -948,10 +849,9 @@ enum NowPlayingIOS27 {
         }
         if image == nil {
             if trackChanged {
-                // ★ 2026-10-24（用户：「进入听歌页可能会展示一小会 Spotify 原生大封面」）：
-                //   这里原来 `revealShells()` 把原生封面放出来等图 —— 但"等图"的那一两拍
-                //   正是用户看到的那张原生大封面。现在**保持按下去**，露我们自己的背景 field；
-                //   图一到 `updateArtwork` 的下一拍就画上来。
+                // 不能 `revealShells` 把原生封面放出来等图 —— "等图"的那一两拍正是
+                // 露出来的那张原生大封面。**保持按下去**，露我们自己的背景 field；
+                // 图一到下一拍就画上来。
                 return false
             }
             // 刚进页面的头几拍：允许缓存兜底（那时还没有"上一首"的问题）。
@@ -960,12 +860,11 @@ enum NowPlayingIOS27 {
 
         guard let image, let host = fullPageAncestor(of: shell, in: page),
               isControlOnPage(host, in: page) else {
-            // ★ 2026-10-24（照片 2）：**不要把上一拍画上去的那张藏起来**。
+            // **不要把上一拍画上去的那张藏起来**。
             //
-            // 旧代码这里有一句 `artworkView?.isHidden = true`：换歌时新的 cell 还没
-            // 量到宿主，这一拍把我们的封面藏掉、原生壳又早被 `coverDidLayOut` 按成 0
-            // ⇒ 用户看到的就是"专辑图片不展示"。现在保留我们那张（旧图也是同一张专辑
-            // 的图），只把原生壳按下去；等宿主出现再换新图。
+            // 这里若 `artworkView?.isHidden = true`，换歌时新的 cell 还没量到宿主，
+            // 我们的封面被藏掉、原生壳又早被 `coverDidLayOut` 按成 0 ⇒ 屏幕上没有专辑图。
+            // 保留我们那张（旧图也是同一张专辑的图），只把原生壳按下去；等宿主出现再换新图。
             if artworkView == nil {
                 // 我们自己**一张都没有**：让原生封面先露着，别留洞。
                 revealShell(shell)
@@ -1021,15 +920,14 @@ enum NowPlayingIOS27 {
 
         // 封面画多大、什么形状：几何见 `artworkFrame(in:host:)`，形状见 `applyArtworkMode(to:)`。
         // ⚠️ 先改 frame 再换形状：下沿那条淡出 mask 的 frame 是照 `bounds` 算的，
-        //   反过来会让 mask 慢一拍（收起/展开的那一段看得见）。
+        // 反过来会让 mask 慢一拍（收起/展开的那一段看得见）。
         let wanted = artworkFrame(in: page, host: host)
         if imageView.frame != wanted {
             imageView.frame = wanted
             changed = true
         }
         if applyArtworkMode(to: imageView) { changed = true }
-        // 一次性诊断：封面到底被放在哪、宿主多大。
-        // （用户报“有的歌铺开程度不对”时，看这一行就知道是宿主坐标还是帧子算错了。）
+        // 一次性诊断：封面到底被放在哪、宿主多大 —— 用来区分是宿主坐标还是帧子算错。
         if !didLogArtworkFrame {
             didLogArtworkFrame = true
             writeDebugLog(
@@ -1061,9 +959,8 @@ enum NowPlayingIOS27 {
 
     /// 封面在**当前模式**下的 frame（宿主坐标）。
     ///
-    ///   · 普通：`fullBleedArtworkFrame`（**宽 = 页宽，高 = 页高的 58%**）；
-    ///   · 页内歌词模式：左上角 **64pt 缩略图**（用户 2026-10-24：只动封面/标题，
-    ///     底部按钮保持 iOS 27 的样子）。
+    /// · 普通：`fullBleedArtworkFrame`（**宽 = 页宽，高 = 页高的 58%**）；
+    /// · 页内歌词模式：左上角 **64pt 缩略图**（只动封面/标题，底部按钮保持 iOS 27 的样子）。
     ///
     /// 抽出来的理由：`updateArtwork`（有壳）和 `syncArtworkFrameWithoutShell`（没壳）
     /// 必须**用同一份几何**，否则"有壳时缩、没壳时停在上一帧"这种半成品又会回来。
@@ -1091,10 +988,9 @@ enum NowPlayingIOS27 {
             }
             if imageView.layer.mask != nil {
                 imageView.layer.mask = nil
-                // ★★ 2026-10-24（用户图片 2：收起歌词后封面下沿是**硬切**、没有淡进底子）：
-                //   这里只摘了 `layer.mask`，`artworkMask` 还指着那块 gradient ⇒
-                //   收起时 `applyArtworkFadeMask` 以为"已经有 mask"，只改 frame、**不重新挂**，
-                //   于是封面下沿永远硬切。现在把账一起清掉。
+                // 只摘 `layer.mask` 的话，`artworkMask` 还指着那块 gradient ⇒
+                // 收起时 `applyArtworkFadeMask` 以为"已经有 mask"，只改 frame、**不重新挂**，
+                // 封面下沿就永远硬切。把账一起清掉。
                 artworkMask = nil
                 changed = true
             }
@@ -1115,20 +1011,14 @@ enum NowPlayingIOS27 {
 
     /// 把自己画的那张封面按**当前模式**摆好 —— 不依赖封面壳。
     ///
-    /// 原来的 `restoreArtworkWithoutShell` 只写了"收起歌词时长回满屏"那一向；反过来
-    /// （打开时缩成 64pt）只有 `updateArtwork` 会做，而它必须先认出封面壳
-    /// （`resolvedShell`）再量到整页宿主。
-    ///
-    /// ★★ 2026-10-25（用户：「点击歌词展示之后，封面又回溶底了」，日志 21 里那一串
-    ///   `no on-screen artwork yet` 就是它）：开歌词那一拍这两道里只要有一道没过，
-    ///   封面就**停在上一次的整幅帧**上 —— 歌词、缩进过的标题、署名全出来了，封面却还是
-    ///   那张"溶进底子"的大图（缩略图位置空着）。收起时同一条路也可能把缩略图留在原地。
-    ///   现在两向合一：只要封面还挂在一个活着的宿主里，就按模式摆好；不碰任何原生视图。
+    /// 只处理"收起歌词时长回满屏"那一向的话，（打开时缩成 64pt）只有 `updateArtwork` 会做，
+    /// 而它必须先认出封面壳（`resolvedShell`）再量到整页宿主 —— 那两道里只要有一道没过，
+    /// 封面就**停在上一次的整幅帧**上：歌词、缩进过的标题、署名全出来了，缩略图位置空着。
+    /// 两向合一：只要封面还挂在一个活着的宿主里，就按模式摆好；不碰任何原生视图。
     @discardableResult
     private static func syncArtworkFrameWithoutShell(in page: UIView) -> Bool {
-        // 宿主就认**封面真正挂在的那一层**（`superview`）。原稿还写了一个
-        // `?? artworkHost` 的兜底，但下一行要 `view.superview === host` —— 兜底永远过不去，
-        // 是死代码（只读复核 2026-10-25 指出）。封面本来也只会被挂进 `host`，
+        // 宿主就认**封面真正挂在的那一层**（`superview`）。不要写 `?? artworkHost` 兜底：
+        // 下一行要 `view.superview === host`，兜底永远过不去。封面本来也只会被挂进 `host`，
         // 宿主没挂上时这一拍本来就无从摆位置。
         guard let view = artworkView,
               let host = view.superview,
@@ -1145,7 +1035,6 @@ enum NowPlayingIOS27 {
         if view.frame != wanted {
             view.frame = wanted
             changed = true
-            // 一次性诊断：下一份日志里出现这一行 = "几何是靠记下来的宿主摆正的"，
             // 说明 `updateArtwork` 那一拍没有走到几何（壳认不出来 / 宿主量不到）。
             if !didLogWithoutShell {
                 didLogWithoutShell = true
@@ -1168,10 +1057,10 @@ enum NowPlayingIOS27 {
     /// 曲名在 545、离这一带很远，所以不会把标题压暗。
     @discardableResult
     private static func updateTopScrim(in host: UIView, page: UIView) -> Bool {
-        // ★ 2026-10-25：页内歌词模式下封面缩略图就长在状态栏下面
-        //   （`lyricsThumbTopInset` = 46），这条压暗带有 96…112pt 高、还插在封面**上面**，
-        //   会横过缩略图上沿 ⇒ 缩略图顶部像是被压黑了一条。那一档只保留状态栏那一段
-        //   （顶层安全区量到 0 时也就 1pt：宁可没有这条压暗，也不让它压到缩略图）。
+        // 页内歌词模式下封面缩略图就长在状态栏下面（`lyricsThumbTopInset` = 46），
+        // 这条压暗带有 96…112pt 高、还插在封面**上面**，会横过缩略图上沿。
+        // 那一档只保留状态栏那一段（顶层安全区量到 0 时也就 1pt：宁可没有这条压暗，
+        // 也不让它压到缩略图）。
         let height = lyricsModeActive
             ? max(page.safeAreaInsets.top, 1)
             : max(page.safeAreaInsets.top + topScrimExtraHeight, topScrimMinHeight)
@@ -1250,9 +1139,9 @@ enum NowPlayingIOS27 {
             mask = fresh
         }
         var changed = false
-        // ★★ 2026-10-24（用户图片 2）：mask 可能**已经被摘掉**（歌词模式的缩略图那一向
-        //   `imageView.layer.mask = nil`），而 `artworkMask` 还是旧的。以前这里只在
-        //   "新建"那一支挂 mask ⇒ 收起歌词后永远不重新挂、封面下沿硬切。每次都比一下身份。
+        // mask 可能**已经被摘掉**（歌词模式的缩略图那一向 `imageView.layer.mask = nil`），
+        // 而 `artworkMask` 还是旧的。只在"新建"那一支挂 mask 的话，收起歌词后永远不重新挂、
+        // 封面下沿硬切。每次都比一下身份。
         if imageView.layer.mask !== mask {
             imageView.layer.mask = mask
             changed = true
@@ -1265,24 +1154,22 @@ enum NowPlayingIOS27 {
     }
 
     // MARK: - 背景 field（pw 的配方）
-
-    /// 字段色底 + 封面的模糊延续 + 压暗纱。
-    ///
-    /// 层次（从下往上）：
-    ///   `solid`（字段色，取封面下沿均值）→ `backdrop`（整张封面缩到 48pt 再模糊，aspectFill）
-    ///   → `black`（60% 起渐到 62% 黑）→ 我们那张锐利封面（`updateArtwork` 加的，下沿自己淡出）。
-    ///
-    /// ⚠️ 历史：2026-10-23 第五轮删过一次模糊层（那版是"封面下沿裁一条 + 固定 28pt 半径"，
-    ///   在缩略图上半径过大、糊成一块灰，用户说"和 AM 不搭"）。2026-10-24 用户选了 A 方案后
-    ///   按新做法回来：**整张**封面缩到 48pt 再模糊（没有可辨认细节，只有颜色）。
+    //
+    // 字段色底 + 封面的模糊延续 + 压暗纱。
+    //
+    // 层次（从下往上）：
+    // `solid`（字段色，整图均值）→ `backdrop`（整张封面缩到 48pt 再模糊，aspectFill）
+    // → `black`（64% 起渐到 42% 黑）→ 我们那张锐利封面（`updateArtwork` 加的，下沿自己淡出）。
+    //
+    // ⚠️ 模糊层必须是**整张**封面缩到 48pt 再模糊。按"封面下沿裁一条 + 固定 28pt 半径"
+    // 做的话半径相对小图过大，会糊成一块灰。
     @discardableResult
     private static func mountField(in page: UIView) -> Bool {
         guard let shell = artworkShell,
               let host = fullPageAncestor(of: shell, in: page) else { return false }
-        // ★ 2026-10-24（照片 1）：**最后一道闸** —— 只要宿主在绘制顺序上位于
-        //   `npv.bottomStackView` 之上（或者把它包在里面），这块整页大的 field 就一定会
-        //   盖住标题/进度/传输/收藏。宁可这一拍不铺底，也不能让控件消失；
-        //   下一拍 Spotify 把层级调回来（或换歌重建完成）就会自动铺上。
+        // **最后一道闸** —— 只要宿主在绘制顺序上位于 `npv.bottomStackView` 之上
+        // （或者把它包在里面），这块整页大的 field 就一定会盖住标题/进度/传输/收藏。
+        // 宁可这一拍不铺底，也不能让控件消失；下一拍 Spotify 把层级调回来就会自动铺上。
         guard !hostWouldCoverControls(host), !hostIsAboveControls(host) else {
             if !didLogCoverHostSkip {
                 didLogCoverHostSkip = true
@@ -1291,16 +1178,13 @@ enum NowPlayingIOS27 {
                         + " — the field would cover the title/progress/transport"
                 )
             }
-            // 如果之前已经铺上去了（层级是后来才翻上去的），必须撤掉 —— 留着就是照片 1。
             if fieldHost != nil { teardownField() }
             return false
         }
 
-        // ★ 2026-10-24（用户：「有的歌封面好像超出边界、有的像被往下拉了」）：
-        //   wrapper 之前用的是 `page.bounds`——那是**页面坐标**，而它被加到 `host`（cell）里；
-        //   host 的原点不一定在页面原点（换歌转场 / 非页面高的 cell 时会偏）
-        //   ⇒ 带着彩色底与渐变线一起错位，看起来就是“封面被往下拉”。现在一律换成
-        //   `host.convert(page.bounds, from: page)`（封面本来就是这么算的，只有底层漏了）。
+        // wrapper 的框必须用 `host.convert(page.bounds, from: page)`：`page.bounds` 是
+        // **页面坐标**，而 wrapper 被加到 `host`（cell）里，host 的原点不一定在页面原点
+        // （换歌转场 / 非页面高的 cell 时会偏）⇒ 彩色底与渐变线会跟着错位。
         let fieldFrame = host.convert(page.bounds, from: page)
         if let existing = fieldHost, existing.superview === host {
             var changed = false
@@ -1328,13 +1212,10 @@ enum NowPlayingIOS27 {
         solid.backgroundColor = .black
         wrapper.addSubview(solid)
 
-        // ★ 2026-10-24（用户选 A：「背景改成封面模糊延续」）：封面下方那块不再是纯黑。
-        //
-        //   之前 2026-10-23 撤回的那一版是"封面下沿的模糊条"（固定 28pt 半径 ⇒ 糊成一块灰）。
-        //   这一版换成**整页一张缩到 48pt 再模糊的封面**（`backdrop(from:)`），
-        //   它只是"颜色的延续"，没有可辨认的细节，所以不会糊成脏块。
-        //   层级：solid（字段色，兜底）→ backdrop（模糊封面，aspectFill）→ black（渐变纱）
-        //   → 我们那张锐利封面（在 wrapper 之上）。
+        // 封面下方那块不是纯黑，是**整页一张缩到 48pt 再模糊的封面**（`backdrop(from:)`）：
+        // 它只是"颜色的延续"，没有可辨认的细节，所以不会糊成脏块。
+        // 层级：solid（字段色，兜底）→ backdrop（模糊封面，aspectFill）→ black（渐变纱）
+        // → 我们那张锐利封面（在 wrapper 之上）。
         let backdrop = UIImageView(frame: wrapper.bounds)
         backdrop.isUserInteractionEnabled = false
         backdrop.contentMode = .scaleAspectFill
@@ -1415,16 +1296,14 @@ enum NowPlayingIOS27 {
 
     /// 字段色：**按图的身份**重算（同一张图只算一次）；换歌交叉淡入。
     ///
-    /// ★ 2026-10-24（用户：「为什么会有渐变色是黑色的情况」）：
-    ///   原来这里按**曲目 id** 提前返回。换歌第一拍 `firstImage(shell)` 里还是**上一首**那张图，
-    ///   我们拿它算了色、又记下**新**的 `trackId` ⇒ 之后每一拍都在第一行提前返回
-    ///   ⇒ 这一整首都顶着上一首的底色；上一首算出来偏黑（或取色失败得到 `.black`）时，
-    ///   屏幕上就是"明明换了歌、渐变还是黑的"。现在按 `image !== lastFieldImage` 判：
-    ///   图换了才重算，所以新封面一到，底色跟着换。
+    /// 不能按**曲目 id** 提前返回：换歌第一拍 `firstImage(shell)` 里还是**上一首**那张图，
+    /// 拿它算了色、又记下**新**的 `trackId` ⇒ 之后每拍都在第一行提前返回，这一整首都顶着
+    /// 上一首的底色（上一首偏黑或取色失败时就是"换了歌、渐变还是黑的"）。
+    /// 判据用 `image !== lastFieldImage`：图换了才重算。
     @discardableResult
     private static func updateField(in page: UIView) -> Bool {
         // 图也可能是我们缓存的那张（换歌那一两拍壳里还没图）—— 用**屏幕上那张**算色，
-        // 封面和底色才是同一首。★ 元数据里的专辑封面优先（见 `refreshMetadataArtwork`）。
+        // 封面和底色才是同一首。元数据里的专辑封面优先（见 `refreshMetadataArtwork`）。
         guard let shell = artworkShell,
               let image = metadataArtworkImage
                 ?? NowPlayingLyricsPlate.firstImage(in: shell)
@@ -1441,17 +1320,13 @@ enum NowPlayingIOS27 {
             lastBackdropSource = image
             lastBackdropImage = backdrop(from: image)
         }
-        // ⚠️ 必须**显式**标成 `() -> Void`。
+        // ⚠️ 必须**显式**标成 ` -> Void`。
         //
-        // `fieldSolid?.backgroundColor = colour` 是**可选链赋值**，它的值类型是 `Void?`
-        // ⇒ 一个**只有这一句**的闭包会被推断成 `() -> ()?`，而
-        // `UIView.transition(animations:)` 要 `() -> Void`，于是报：
-        //   cannot convert value of type '() -> ()?' to expected argument type '() -> Void'
-        //
-        // 来由（别被 blame 带偏）：这个闭包原来是**两句**（第二句是
-        // `if let strip { fieldBlur?.image = strip }`，那一句是 Void），所以推断一直是
-        // `() -> Void`；`1ac5568`（2026-10-23 深夜，删掉那条模糊拷贝）之后它变成一句，
-        // 类型推断跟着变 —— 而 blame 只会说这三行来自 `328c202`。修法就是把类型写死。
+        // `fieldSolid?.backgroundColor = colour` 是**可选链赋值**，值类型是 `Void?`
+        // ⇒ 只有这一句的闭包会被推断成 ` -> ?`，而 `UIView.transition(animations:)`
+        // 要 ` -> Void`，于是报：
+        // cannot convert value of type ' -> ?' to expected argument type ' -> Void'
+        // 闭包里加第二句 Void 语句也能躲过，但那样一改就复发 —— 把类型写死。
         let apply: () -> Void = {
             fieldSolid?.backgroundColor = colour
             fieldBackdrop?.image = lastBackdropImage
@@ -1479,7 +1354,7 @@ enum NowPlayingIOS27 {
     /// 把封面做成"颜色的延续"：缩到 48pt 宽 → 高斯模糊 → 返回那张小图（屏幕上 `aspectFill` 铺满）。
     ///
     /// 为什么这么小：这块只负责"下半屏整片是同一种颜色"，任何可辨认的细节都会被读成"糊了"。
-    /// 2026-10-23 撤回的那一版是"封面下沿裁一条 + 固定 28pt 半径" ⇒ 在缩略图上半径过大、糊成灰块。
+    /// 按"封面下沿裁一条 + 固定 28pt 半径"做的话，半径相对小图过大，会糊成灰块。
     private static func backdrop(from image: UIImage) -> UIImage? {
         guard let cgImage = image.cgImage else { return nil }
         let input = CIImage(cgImage: cgImage)
@@ -1493,11 +1368,10 @@ enum NowPlayingIOS27 {
         filter.setValue(9, forKey: kCIInputRadiusKey)
         guard let blurred = filter.outputImage?.cropped(to: small.extent) else { return nil }
 
-        // ★ 2026-10-24（用户：「渐变感觉是灰色的」/「AM 是怎么做的」）：
-        //   Apple Music 的渐变不是"平均色 + 黑纱"，而是把**专辑图本身**多层扭曲 + 模糊，
-        //   并**刻意过饱和**（社区逆向：Mac/网页版会把封面 oversaturate 再叠 4 份）。
-        //   我们没有 Metal shader，近似做法是：模糊之后再过一遍 `CIColorControls`
-        //   （饱和度 ×1.45 / 对比 ×1.05）⇒ 同一张模糊底，颜色明显更透、不再灰。
+        // Apple Music 的渐变不是"平均色 + 黑纱"，而是把**专辑图本身**多层扭曲 + 模糊，
+        // 并**刻意过饱和**（社区逆向：Mac/网页版会把封面 oversaturate 再叠 4 份）。
+        // 我们没有 Metal shader，近似做法是：模糊之后再过一遍 `CIColorControls`
+        // （饱和度 ×1.45 / 对比 ×1.05）⇒ 同一张模糊底，颜色更透、不再灰。
         let graded: CIImage
         if let controls = CIFilter(name: "CIColorControls") {
             controls.setValue(blurred, forKey: kCIInputImageKey)
@@ -1516,10 +1390,9 @@ enum NowPlayingIOS27 {
 
     /// 从封面取"字段色"：**整张图的平均色**，再拉高饱和度、压到白字读得清的亮度。
     ///
-    /// ★ 2026-10-24（用户：「现在这个渐变感觉是灰色的」）：
-    ///   以前取的是**封面下沿 30%** 的平均色 —— 而很多封面下沿是白色/灰色（人物脚下、
-    ///   唱片行、留白），算出来就是一块灰底，和上半张彩色的封面完全不搭。
-    ///   AM 的底色来自**整张图**的平均/主色并刻意过饱和 ⇒ 这里改成整图平均 + ×1.45。
+    /// 取**整张图**的平均色而不是封面下沿 30%：很多封面下沿是白色/灰色（人物脚下、
+    /// 唱片行、留白），算出来就是一块灰底，和上半张彩色的封面完全不搭。
+    /// AM 的底色也来自整张图的平均/主色并刻意过饱和 ⇒ 整图平均 + ×1.45。
     private static func fieldColour(from image: UIImage) -> UIColor {
         guard let average = averageColour(of: image) else { return .black }
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0
@@ -1564,20 +1437,20 @@ enum NowPlayingIOS27 {
     }
 
     // MARK: - 标题行
-
-    /// 把 `npv.bottomStackView` 整体上移 `bottomStackYOffset`（逐拍幂等，只写一层 transform）。
-    ///
-    /// 为什么选它：曲名 / 进度 / 时间 / 传输行 / 工具行**都在这一个 stack 里**（日志：
-    /// `npv.bottomStackView=4,592 406×241`），所以一次 transform 就能把"整块底部"提到
-    /// 图片 1 的位置；逐个行去搬要写五份、还要各自记账，出错面大得多。
-    ///
-    /// ⚠️ 必须排在各"量位置"的函数之前（`placeTitleRow` / `placeFooter` / `placeTransport` /
-    ///   音量行），并且那些地方必须用 **`convert`**（带 transform）而不是 `untransformed`。
+    //
+    // 把 `npv.bottomStackView` 整体上移 `bottomStackYOffset`（逐拍幂等，只写一层 transform）。
+    //
+    // 为什么选它：曲名 / 进度 / 时间 / 传输行 / 工具行**都在这一个 stack 里**
+    // （`npv.bottomStackView` ≈ 406×241），一次 transform 就能把"整块底部"提上去；
+    // 逐个行去搬要写五份、还要各自记账，出错面大得多。
+    //
+    // ⚠️ 必须排在各"量位置"的函数之前（`placeTitleRow` / `placeFooter` / `placeTransport` /
+    // 音量行），并且那些地方必须用 **`convert`**（带 transform）而不是 `untransformed`。
     @discardableResult
     private static func placeBottomStack(in page: UIView) -> Bool {
         guard let stack = bottomStackView(in: page) else { return false }
-        // ★ 2026-10-24（日志 20）：换页/换歌时底排会换对象。旧对象的 transform 必须
-        //   先还回去，否则它下次被复用时 base 会记成"已经抬过 55pt"的错值。
+        // 换页/换歌时底排会换对象。旧对象的 transform 必须先还回去，
+        // 否则它下次被复用时 base 会记成"已经抬过 55pt"的错值。
         if let previous = bottomStack, previous !== stack,
            let recorded = bottomStackBase, recorded.0 == ObjectIdentifier(previous) {
             previous.transform = recorded.1
@@ -1599,10 +1472,10 @@ enum NowPlayingIOS27 {
         )
         guard stack.transform != wanted else { return false }
         stack.transform = wanted
-        // ★ 2026-10-24（真机照片 1：底部挤在一起）：音量行是按
-        //   「传输行下沿 + 工具行上沿」中点算的（`NowPlayingPageOverlay.ios27VolumeY`）。
-        //   这一坨上移 55pt 之后它必须跟着重算，否则会停在**上移前**的
-        //   785…813 —— 正压在工具行字形（790）上。只在 transform 变化那一拍调一次。
+        // 音量行是按「传输行下沿 + 工具行上沿」中点算的
+        // （`NowPlayingPageOverlay.ios27VolumeY`）。这一坨上移 55pt 之后它必须跟着重算，
+        // 否则会停在**上移前**的 785…813 —— 正压在工具行字形（790）上。
+        // 只在 transform 变化那一拍调一次。
         NowPlayingPageOverlay.reapply()
 
         if !didLogBottomStack {
@@ -1636,12 +1509,11 @@ enum NowPlayingIOS27 {
 
     /// 只把标题行的**左边距**收到 28pt（纵向留在原生位置）。
     ///
-    /// 为什么不抬上去：前三轮把它抬到 `W+56`，而进度条在原生那一档 —— 中间就空出一大块
-    /// （照片 161）。不搬底部的前提下，唯一自洽的做法是"纵向不动"。
+    /// 为什么不抬上去：抬到 `W+56` 会和进度条之间空出一大块。不搬底部的前提下，
+    /// 唯一自洽的做法是"纵向不动"。
     ///
-    /// ★ 2026-10-24（用户照片 2）：页内歌词模式下仍把**歌名/艺人挪到缩略图旁边**
-    ///   —— 那一块保留正常信息；「歌词来源/提供者」另放歌词区左下角（`placeLyricsCredit`），
-    ///   不再占用标题行。
+    /// 页内歌词模式下仍把**歌名/艺人挪到缩略图旁边** —— 那一块保留正常信息；
+    /// 「歌词来源/提供者」另放歌词区左下角（`placeLyricsCredit`），不再占用标题行。
     @discardableResult
     private static func placeTitleRow(in page: UIView) -> Bool {
         guard let row = titleRowView(in: page) else { return false }
@@ -1672,10 +1544,9 @@ enum NowPlayingIOS27 {
         let dx: CGFloat
         let dy: CGFloat
         if lyricsModeActive {
-            // 页内歌词：标题/艺人贴到缩略图右边、与缩略图**竖直居中**（图 2 的关系）。
-            // ★★ 2026-10-24（用户：「封面右边的歌手名字/歌曲名字不太对称」）：
-            //   原来按**顶边**对齐（`thumb.minY`）—— 缩略图 64pt、标题行 46pt，
-            //   文字块会偏上，右边留白比下边多。改成按中线对齐。
+            // 页内歌词：标题/艺人贴到缩略图右边、与缩略图**竖直居中**。
+            // 不能按**顶边**对齐（`thumb.minY`）：缩略图 64pt、标题行 46pt，
+            // 文字块会偏上，右边留白比下边多。按中线对齐。
             let thumb = lyricsThumbFrame(in: page)
             dx = (thumb.maxX + 12 - natural.minX).rounded()
             dy = (thumb.midY - natural.midY).rounded()
@@ -1697,11 +1568,11 @@ enum NowPlayingIOS27 {
     }
 
     // MARK: - 歌名 / 艺人点击（页内歌词）
-
-    /// 在原生歌名 / 艺人两行上各盖一颗透明按钮。
-    ///
-    /// 只在**页内歌词已经亮出来**时挂：普通听歌页的标题行离封面很近，
-    /// 原生自己有一套长按/拖拽手势，没必要去抢。
+    //
+    // 在原生歌名 / 艺人两行上各盖一颗透明按钮。
+    //
+    // 只在**页内歌词已经亮出来**时挂：普通听歌页的标题行离封面很近，
+    // 原生自己有一套长按/拖拽手势，没必要去抢。
     @discardableResult
     private static func placeTitleTapTargets(in page: UIView) -> Bool {
         guard lyricsModeActive, lyricsModeRevealed else {
@@ -1748,7 +1619,7 @@ enum NowPlayingIOS27 {
         }
 
         // 「挂上了」这条日志放在**这一层**：两个尺寸（`titleFrame` / `artistFrame`）是这里的局部量，
-        // `makeTapTarget` 里根本看不到它们（2026-10-31 编译现场：`cannot find 'titleFrame' in scope`）。
+        // `makeTapTarget` 里看不到它们（否则报 `cannot find 'titleFrame' in scope`）。
         if !didLogTitleTapTargets, titleTapButton != nil || artistTapButton != nil {
             didLogTitleTapTargets = true
             writeDebugLog(
@@ -1822,13 +1693,11 @@ enum NowPlayingIOS27 {
 
     /// 点歌名：打开**当前曲目的专辑**。
     ///
-    /// ★★ 2026-10-31（照片 169：「选择 Apple Music 式时 Starboy 和艺人名字点不动」）：
-    ///   上一版只用 `album_uri` + `SpotifyURIOpener`，两条都可能空转 ——
-    ///   ① 取不到 metadata（`statefulPlayer` / `loadedTrack` 都拿不到）⇒ 直接 return；
-    ///   ② 链接分发器没抓到 ⇒ `open` 退回 `UIApplication.open(spotify:…)`，对 App 自己
-    ///      就是空操作。两种都表现为"点上去什么都不发生"，而沉浸式那边是**原生**在响应。
-    ///   ⇒ 拿不到 URI / 分发器没就绪时，把这一下**转发给原生标题行**（`eeveeFire`）：
-    ///      沉浸式里它本来就能点，所以这条兜底一定有效。
+    /// 只用 `album_uri` + `SpotifyURIOpener` 的话两条都可能空转 ——
+    /// ① 取不到 metadata（`statefulPlayer` / `loadedTrack` 都拿不到）⇒ 直接 return；
+    /// ② 链接分发器没抓到 ⇒ `open` 退回 `UIApplication.open(spotify:…)`，对 App 自己
+    /// 就是空操作。两种都表现为"点上去什么都不发生"。
+    /// ⇒ 拿不到 URI / 分发器没就绪时，把这一下**转发给原生标题行**（`eeveeFire`）。
     private static func openCurrentAlbum() {
         let uri = currentTrackMetadata()["album_uri"]
         if SpotifyURIOpener.isReady, let uri, !uri.isEmpty {
@@ -1865,7 +1734,7 @@ enum NowPlayingIOS27 {
             return
         }
         // `eeveeFireWide`：先发控件/手势，再往上两层找"tap 挂在包装层上"的那种
-        //（艺人页那颗 `i` 就是这么找到的，见 `eeveeFireWide` 的说明）。
+        // （艺人页那颗 `i` 就是这么找到的，见 `eeveeFireWide` 的说明）。
         if let fired = eeveeFireWide(row) {
             writeDebugLog("[\(logTag)] title tap — \(reason), forwarded to the native row (\(fired))")
         } else {
@@ -1880,10 +1749,9 @@ enum NowPlayingIOS27 {
 
     /// 歌词区**左下角**那块「歌词来源 / 上传者·制作者·翻译者」。
     ///
-    /// ★ 2026-10-24（用户照片 3 的黑圈）：放在歌词块底沿、进度条上沿之上 ——
-    ///   不占标题行（那是照片 2 的黑圈，保持正常的歌名/艺人）。
-    ///   只在歌词模式且已经"该露面"（`lyricsModeRevealed`）时可见；
-    ///   收起时保留视图、alpha 归 0（下一次打开直接淡入，不用重建）。
+    /// 放在歌词块底沿、进度条上沿之上 —— 不占标题行（那里保持正常的歌名/艺人）。
+    /// 只在歌词模式且已经"该露面"（`lyricsModeRevealed`）时可见；
+    /// 收起时保留视图、alpha 归 0（下一次打开直接淡入，不用重建）。
     @discardableResult
     private static func placeLyricsCredit(in page: UIView) -> Bool {
         let view: NowPlayingIOS27LyricsCreditView
@@ -1940,26 +1808,24 @@ enum NowPlayingIOS27 {
     }
 
     // MARK: - 顶部 chrome
-
-    /// 顶部：藏掉 Spotify 的歌单名与向下箭头，画一根 AM 那种小横条，⋯ 搬到工具行正中。
-    ///
-    /// 为什么不画一个"假关闭键"：AM 那根横条**本来就不是按钮**，是下拉把手的视觉提示；
-    /// 这一页的下拉关闭挂在列表自己的 pan recogniser 上，藏了箭头照样能划掉。
+    //
+    // 顶部：藏掉 Spotify 的歌单名与向下箭头，画一根 AM 那种小横条，⋯ 搬到工具行正中。
+    //
+    // 为什么不画一个"假关闭键"：AM 那根横条**本来就不是按钮**，是下拉把手的视觉提示；
+    // 这一页的下拉关闭挂在列表自己的 pan recogniser 上，藏了箭头照样能划掉。
     @discardableResult
     private static func placeNavChrome(in page: UIView) -> Bool {
         var changed = false
         for identifier in [NowPlayingLyricsPlate.minimizeButtonIdentifier, navTitleIdentifier] {
-            // ★ 2026-10-24：左上那颗更小（x≈28…76，中线 52），必须 margin 0；
-            //   pager 里相邻页也有一份，按 id 直接 BFS 会藏错对象。
+            // 左上那颗更小（x≈28…76，中线 52），必须 margin 0；
+            // pager 里相邻页也有一份，按 id 直接 BFS 会藏错对象。
             guard let view = visibleView(identifier: identifier, in: page) else {
                 continue
             }
             if hideChrome(view) { changed = true }
         }
-        // ★ 2026-10-23 第五轮：⋯ **不搬了**。
-        //   它住在导航条里（SwiftUI 托管的那一层），**每一帧都会重置 transform** ——
-        //   我们 0.3s 一拍地搬回去就是"一直在闪"（用户报的现象）。要搬得换一种做法
-        //   （自绘一颗 + 自己拉菜单），不在这一轮。
+        // ⋯ **不搬**。它住在导航条里（SwiftUI 托管的那一层），**每一帧都会重置 transform** ——
+        // 我们 0.3s 一拍地搬回去就是"一直在闪"。要搬得换一种做法（自绘一颗 + 自己拉菜单）。
         if placeGrabber(in: page) { changed = true }
         return changed
     }
@@ -1990,10 +1856,10 @@ enum NowPlayingIOS27 {
         return true
     }
 
-    /// 把一颗原生视图按 `alpha = 0` 藏掉（记原值；`revealChrome()` 统一写回）。
+    /// 把一颗原生视图按 `alpha = 0` 藏掉（记原值；`revealChrome` 统一写回）。
     ///
-    /// ⚠️ 从 `private` 提到 internal（2026-10-23，T2）：传输行那两颗也走这一条，
-    /// 于是"记原值 / 收尾写回"只有一套实现，`hiddenChrome` / `chromeAlphas` 也只有一份。
+    /// ⚠️ 它是 internal 而不是 private：传输行那两颗也走这一条，于是"记原值 / 收尾写回"
+    /// 只有一套实现，`hiddenChrome` / `chromeAlphas` 也只有一份。
     static func hideChrome(_ view: UIView) -> Bool {
         let key = ObjectIdentifier(view)
         if chromeAlphas[key] == nil {
@@ -2031,15 +1897,15 @@ enum NowPlayingIOS27 {
     }
 
     // MARK: - 收尾
-
-    /// 关开关 / 离开页面：把写过的每一处写回去，拆掉我们自己的视图。
+    //
+    // 关开关 / 离开页面：把写过的每一处写回去，拆掉我们自己的视图。
     static func restore(reason: String) {
         // 页内歌词先收（它不参与 `hadState` 的账，但必须先拆掉容器与化开层）。
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil
-        // ★ 2026-10-30：歌名/艺人的透明点击区也要一起收，别留在回收的 cell 上。
+        // 歌名/艺人的透明点击区也要一起收，别留在回收的 cell 上。
         removeTitleTapTargets()
-        // ★ 2026-10-24：歌词署名视图也要一起收，别留在回收的 cell 上。
+        // 歌词署名视图也要一起收，别留在回收的 cell 上。
         lyricsCreditView?.removeFromSuperview()
         lyricsCreditView = nil
         lyricsModeRevealed = false
@@ -2061,9 +1927,9 @@ enum NowPlayingIOS27 {
 
         revealShells()
         revealChrome()
-        // T2/T3 藏掉的原生字形（循环 / 工具行三颗）—— 与 `revealChrome()` 同一套写法，只是目标另一组。
+        // 藏掉的原生字形（循环 / 工具行三颗）—— 与 `revealChrome` 同一套写法，只是目标另一组。
         revealHiddenGlyphs()
-        // ★ 2026-10-24：底部那一坨的上移也要写回（否则离开页面后下一位用户看到的是被抬高的行）。
+        // 底部那一坨的上移也要写回（否则离开页面后下次进页面看到的是被抬高的行）。
         if let stack = bottomStack, let recorded = bottomStackBase,
            recorded.0 == ObjectIdentifier(stack), stack.transform != recorded.1 {
             stack.transform = recorded.1
@@ -2173,8 +2039,8 @@ enum NowPlayingIOS27 {
     }
 
     // MARK: - 小工具
-
-    /// 封面壳（tilt 里那张 `Encore.ImageView`）。
+    //
+    // 封面壳（tilt 里那张 `Encore.ImageView`）。
     private static func shell(in tilt: UIView) -> UIView? {
         var visited = 0
         var queue: [UIView] = [tilt]
@@ -2191,9 +2057,8 @@ enum NowPlayingIOS27 {
 
     /// 标题行：`now-playing-title-label` 的祖父（与 `NowPlayingLyricsPlate.measure` 同一口径）。
     ///
-    /// ★ 2026-10-24（日志 20）：原来先找 `listIdentifier` 的第一份 list，再在它里面找
-    ///   label —— pager 里相邻页的 list 会先被撞上（标题 y = -443）。现在直接全页 BFS
-    ///   所有 label，挑**祖父在当前页可见范围**的那一个。
+    /// 不能先找 `listIdentifier` 的第一份 list 再在它里面找 label —— pager 里相邻页的 list
+    /// 会先被撞上（标题 y = -443）。直接全页 BFS 所有 label，挑**祖父在当前页可见范围**的那一个。
     private static func titleRowView(in page: UIView) -> UIView? {
         var queue: [UIView] = [page]
         var visited = 0
@@ -2212,10 +2077,9 @@ enum NowPlayingIOS27 {
 
     /// 标题行是不是**已经**被我们挪到缩略图旁边（而且还在窗口里）。
     ///
-    /// ★★ 2026-10-24（用户图片 1：「按下歌词后歌曲名字/艺人名字不会动」）：
-    ///   换歌 / 页面重建的头一两拍 `titleRowView` 可能还找不到；标题留在原生 y=550，
-    ///   而歌词容器正好盖住 174…569 ⇒ 名字被整块吃掉。用它当"能不能亮歌词"的闸门：
-    ///   标题真到了缩略图中线附近再挂容器，下一拍再试。
+    /// 换歌 / 页面重建的头一两拍 `titleRowView` 可能还找不到；标题留在原生 y=550，
+    /// 而歌词容器正好盖住 174…569 ⇒ 名字被整块吃掉。用它当"能不能亮歌词"的闸门：
+    /// 标题真到了缩略图中线附近再挂容器，下一拍再试。
     private static func titleRowPlaced(in page: UIView) -> Bool {
         guard let row = titleRow, row.window != nil else { return false }
         let rect = row.convert(row.bounds, to: page)
@@ -2227,10 +2091,9 @@ enum NowPlayingIOS27 {
 
     /// 我们那张封面是不是**真的落在当前页面上**。
     ///
-    /// ★★ 2026-10-24（用户图片 1：按下歌词后"溶底封面不会动"）：换歌时封面可能还挂在
-    ///   上一格 cell 上（日志 19：`eevee-ios27-artwork@-386,94`，宿主偏了一整页），
-    ///   屏幕上只剩模糊底。这时开歌词只会得到"一块歌词卡片 + 没有封面"的半成品。
-    ///   等封面回到页面上再亮歌词（下一拍重试）。
+    /// 换歌时封面可能还挂在上一格 cell 上（`eevee-ios27-artwork@-386,94`，宿主偏了一整页），
+    /// 屏幕上只剩模糊底。这时开歌词只会得到"一块歌词卡片 + 没有封面"的半成品。
+    /// 等封面回到页面上再亮歌词（下一拍重试）。
     private static func artworkOnPage(in page: UIView) -> Bool {
         guard let view = artworkView, view.window != nil, view.superview != nil else { return false }
         let rect = view.convert(view.bounds, to: page)
@@ -2263,12 +2126,11 @@ enum NowPlayingIOS27 {
 
     /// 封面所在的**整页**祖先（contentlayer 的 cell，414×896）。
     ///
-    /// ★ 2026-10-24（照片 1：听歌中突然标题/进度/传输/收藏全没了，而底排字形还在）：
-    ///   整页大的祖先**不止一个** —— 换歌 / cell 复用时，第一张 414×896 的祖先有可能
-    ///   是**控件上面那一层**。我们的 field 是整页大的，插进那一层就会把
-    ///   `npv.bottomStackView` 整块盖住（缩略图还在，因为它在 field 上面）。
-    ///   所以：整页祖先里**跳过任何包含 bottomStack 的**，只认封面自己那一格；
-    ///   全都不合适时才退回老行为（至少封面还在）。
+    /// 整页大的祖先**不止一个** —— 换歌 / cell 复用时，第一张 414×896 的祖先有可能
+    /// 是**控件上面那一层**。我们的 field 是整页大的，插进那一层就会把
+    /// `npv.bottomStackView` 整块盖住（缩略图还在，因为它在 field 上面）。
+    /// 所以：整页祖先里**跳过任何包含 bottomStack 的**，只认封面自己那一格；
+    /// 全都不合适时才退回老行为（至少封面还在）。
     private static func fullPageAncestor(of view: UIView, in page: UIView) -> UIView? {
         var current = view.superview
         var fallback: UIView?
@@ -2307,11 +2169,10 @@ enum NowPlayingIOS27 {
 
     /// 宿主的**绘制顺序**是不是在 `npv.bottomStackView` 之上。
     ///
-    /// ★ 2026-10-24（照片 1）：`hostWouldCoverControls` 只查"宿主是不是把控件包在里面"；
-    ///   还有一种更隐蔽的情况 —— 宿主与控件是**兄弟层级**，而宿主那一支被 Spotify
-    ///   提到了前面（换歌 / 打开歌词时重建 contentlayer 就会这样）。那时
-    ///   `stack.isDescendant(of: host)` 是假，但整页大的 field 照样盖住控件。
-    ///   这里按"从根到该视图的 subview 下标"比较两边的绘制顺序。
+    /// `hostWouldCoverControls` 只查"宿主是不是把控件包在里面"；还有一种更隐蔽的情况 ——
+    /// 宿主与控件是**兄弟层级**，而宿主那一支被 Spotify 提到了前面（换歌 / 打开歌词时
+    /// 重建 contentlayer 就会这样）。那时 `stack.isDescendant(of: host)` 是假，
+    /// 但整页大的 field 照样盖住控件。这里按"从根到该视图的 subview 下标"比较绘制顺序。
     private static func hostIsAboveControls(_ host: UIView) -> Bool {
         guard let stack = controlsStackForComparison(), let window = stack.window,
               host.window === window else { return false }
@@ -2348,14 +2209,14 @@ enum NowPlayingIOS27 {
         return bottomStackView(in: page)
     }
 
-    /// 一次性把各行的真实坐标打出来（排查 / 下一轮排版靠它）。
+    /// 一次性把各行的真实坐标打出来（排查排版问题靠它）。
     private static func logFrames(in page: UIView) {
         func text(_ identifier: String) -> String {
             guard let view = NowPlayingLyricsPlate.findByIdentifier(identifier, in: page) else {
                 return "\(identifier)=missing"
             }
             // ⚠️ 用 `convert`（带 transform）：底部那一坨被整体上移 55pt，
-            //    `untransformed` 打出来的是**上移之前**的坐标，排查时会误判成"没生效"。
+            // `untransformed` 打出来的是**上移之前**的坐标，排查时会误判成"没生效"。
             let rect = view.convert(view.bounds, to: page)
             return "\(identifier)=\(Int(rect.minX)),\(Int(rect.minY))"
                 + " \(Int(rect.width))×\(Int(rect.height))"

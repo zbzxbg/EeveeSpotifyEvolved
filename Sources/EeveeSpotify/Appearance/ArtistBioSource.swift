@@ -1,9 +1,6 @@
 import Foundation
 import UIKit
 
-/// 「艺人介绍」的**兜底来源**（2026-10-18 第四轮，用户：「或者 关于艺人 的来源你有什么好方法么，
-/// 维基百科？spotify 原生？」）。
-///
 /// ## 为什么是 Genius
 ///
 /// 本仓库**已经有** Genius 这条线（`Lyrics/Repositories/GeniusLyricsRepository.swift`：`api.genius.com`，
@@ -11,15 +8,15 @@ import UIKit
 /// 不新增 key、不新增账号、用户不用配置任何东西 ✓。
 ///
 /// 它补的是 Spotify 那边**读不到**的情况（正文为空 / 被截断 / 那一块没建出来）：
-///   · `GET /search?q=<艺人名>` —— 取 `type == artist` 且**名字对得上**的那个命中；没有就退到歌命中的主艺人；
-///   · `GET /artists/<id>` —— `response.artist.description.plain` 就是简介。
+/// · `GET /search?q=<艺人名>` —— 取 `type == artist` 且**名字对得上**的那个命中；没有就退到歌命中的主艺人；
+/// · `GET /artists/<id>` —— `response.artist.description.plain` 就是简介。
 ///
 /// ⚠️ 两点如实说：
-///   ① Genius 的艺人简介**基本是英文**（Spotify 那边是跟着 app 语言的）⇒ **只在 Spotify 读不到时才用**
-///      （见 `ArtistBioSheet.present`），而且要**署名**（`artist_bio_from_genius` 那一行）。
-///   ② 维基百科**不做正文**：CC BY-SA 要署名 + 许可链接，而且你听的那批日系独立艺人命中率很低
-///      ⇒ 只做成一个**链接**（`ArtistBioSheet` 底部那颗 Wikipedia 按钮）。
-///      Spotify 自己的 About 页也是这么干的：`SPTArtistAbout:sArtistWikipediaButtonTitle`（dump:21079）。
+/// ① Genius 的艺人简介**基本是英文**（Spotify 那边是跟着 app 语言的）⇒ **只在 Spotify 读不到时才用**
+/// （见 `ArtistBioSheet.present`），而且要**署名**（`artist_bio_from_genius` 那一行）。
+/// ② 维基百科**不做正文**：CC BY-SA 要署名 + 许可链接，而且你听的那批日系独立艺人命中率很低
+/// ⇒ 只做成一个**链接**（`ArtistBioSheet` 底部那颗 Wikipedia 按钮）。
+/// Spotify 自己的 About 页也是这么干的：`SPTArtistAbout:sArtistWikipediaButtonTitle`（dump:21079）。
 enum ArtistBioSource {
 
     private static let session: URLSession = {
@@ -46,8 +43,7 @@ enum ArtistBioSource {
 
     /// 用哪个语言的维基（按 app 语言挑 zh / ja / en，其余落 en）→ **完整的主机名**。
     ///
-    /// ⚠️⚠️ 2026-10-11（日志 101 + 图片 132：用户问"`https://zh/wiki/Special:Search?search=…`
-    /// 这玩意是正常的维基百科搜索链接么"）：**不是，它是坏的**。
+    /// ⚠️⚠️**不是，它是坏的**。
     /// 这里原来只返回**语言码**（`"zh"`），而三处 URL 都是 `https://\(host)/…` 拼出来的
     /// ⇒ 拼成 `https://zh/wiki/Special:Search` —— 主机名只有一个 `zh`，DNS 都解析不了。
     /// 也就是说：那颗「在维基百科中打开」**从来没打开过**，`.wikipedia` 那一档也**从来没取到过词**
@@ -91,8 +87,6 @@ enum ArtistBioSource {
                   let encoded = title.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
                   let summary = URL(string: "https://\(wikipediaHost())/api/rest_v1/page/summary/\(encoded)")
             else {
-                // ★★ 2026-10-11：**为什么不给正文**必须留在日志里 —— 以前"搜不到条目"与
-                //    "请求压根没成功"在日志里长得一模一样（都是一句 HTTP 0 或者干脆没有）。
                 writeDebugLog(
                     "[ArtistBio] wikipedia search → no article for this artist"
                         + " (\(hits?.count ?? 0) hit(s) in the response)"
@@ -168,11 +162,11 @@ enum ArtistBioSource {
 
     /// **找 `fetchArtistAboutForArtist:withCompletion:` 的宿主类**（一次性诊断，只为下一轮铺路）。
     ///
-    /// 为什么要它：`dump-9.1.88.txt` 是**按字母排的选择器表**（`:24502` 那一行只有选择器名），
+    /// 为什么要它： 是**按字母排的选择器表**（`:24502` 那一行只有选择器名），
     /// **没有"选择器 → 类"的映射** ✗ ⇒ 猜不出来。而运行时有 `objc_getClassList`：扫一遍、只读、
     /// 找到就打一行日志 ✓（零副作用）。
     ///
-    /// 下一份日志里出现类名之后，就能 hook 它 —— 把**完整正文**收下来（而不是像现在这样读收起态那个
+    /// 就能 hook 它 —— 把**完整正文**收下来（而不是像现在这样读收起态那个
     /// 大概被截断过的 label；`biographyText:withStyle:`（`dump:22624`）说明"收起/展开"是**样式**，
     /// 而 flag 里那条 `is_async_biography_truncation_enabled` 也说明截断是真实存在的）。
     static func reportArtistAboutFetcher() {
@@ -206,11 +200,11 @@ enum ArtistBioSource {
     /// （实测一次白跑：25 条 `get` 报错，连别的文件的都一起翻出来）。
     /// - Parameter tag: 这一跳**是谁**（`genius search` / `genius artist 123` / `wikipedia search` …）。
     ///
-    ///   ★★ 2026-10-11（真机日志 100）：这一行以前把前缀**写死成 "genius"**，于是维基百科那条失败
-    ///   打出来是 `[ArtistBio] genius /w/api.php → HTTP 0` —— **指错了来源**（`/w/api.php` 是 MediaWiki）；
-    ///   而且只在 `status != 200` 时才打、还把 URLSession 的 `error` **丢掉**（`{ data, response, _ in`）
-    ///   ⇒ `HTTP 0`（一个响应都没拿到）到底是 DNS、超时还是 TLS 失败，日志里一个字都没有。
-    ///   现在：**每一次都打**（200 也打，带字节数），失败时带上 `error.localizedDescription`。
+    /// 这一行以前把前缀**写死成 "genius"**，于是维基百科那条失败
+    /// 打出来是 `[ArtistBio] genius /w/api.php → HTTP 0` —— **指错了来源**（`/w/api.php` 是 MediaWiki）；
+    /// 而且只在 `status != 200` 时才打、还把 URLSession 的 `error` **丢掉**（`{ data, response, _ in`）
+    /// ⇒ `HTTP 0`（一个响应都没拿到）到底是 DNS、超时还是 TLS 失败，
+    /// 现在：**每一次都打**（200 也打，带字节数），失败时带上 `error.localizedDescription`。
     private static func fetchJSON(
         _ url: URL,
         using client: URLSession = session,

@@ -1,29 +1,29 @@
 import Foundation
 
 // 移植自 MeloX（GPL-3.0）：
-//   MeloX/Core/Lyrics/AppleMusicLyricsTypographyProfile.swift
-//   MeloX/Core/Lyrics/AppleMusicLyricsSupplementalTextProfile.swift
+// MeloX/Core/Lyrics/AppleMusicLyricsTypographyProfile.swift
+// MeloX/Core/Lyrics/AppleMusicLyricsSupplementalTextProfile.swift
 // 另加本项目自己的分档（见下）。
 //
 // ⚠️ 关键改动的理由（重要，别改回去）：
 // MeloX 的 36pt / 段间距 39 / 行距 25 是为**整屏深色画布**调出来的 ——
 // 一屏只显示约 5 行、且整页都是歌词。本项目有两个比它小得多的容器
 // （全屏歌词页约 700pt 高、内嵌预览约 200pt 高），照搬 36pt 的结果是：
-//   · 英文长句被拆成 3 行，"字太大了"
-//   · 预览卡片里 3 行字就占满整个卡片
+// · 英文长句被拆成 3 行，"字太大了"
+// · 预览卡片里 3 行字就占满整个卡片
 // 所以这里以**本项目原有 overlay 的排版**（22pt 主 / 16pt 译文 / 行距 18）
 // 作为基准档，Apple Music 的 36pt 那一档只在将来做"整屏独立页"时才可能用到。
-
+//
 // MARK: - 主歌词字号的「仿 Apple Music 原值」（保留备查）
-
-/// Apple Music 主歌词的字号。
-///
-/// MeloX 说明：Music 26.6 的 UIKit 规格里存的是 48pt 源字号，但它的文本容器几何
-/// 与「直接给 `SynchronizedLyricText` 设 48pt」并不等价，实际渲染基线更接近
-/// `.largeTitle`，所以取 36pt。
-///
-/// **本项目当前不使用这个值**（见文件头说明），保留它是为了注明出处、
-/// 以及将来真要做"整屏接管"的全屏页时可以直接取用。
+//
+// Apple Music 主歌词的字号。
+//
+// MeloX 说明：Music 26.6 的 UIKit 规格里存的是 48pt 源字号，但它的文本容器几何
+// 与「直接给 `SynchronizedLyricText` 设 48pt」并不等价，实际渲染基线更接近
+// `.largeTitle`，所以取 36pt。
+//
+// **本项目当前不使用这个值**（见文件头说明），保留它是为了注明出处、
+// 以及将来真要做"整屏接管"的全屏页时可以直接取用。
 struct AppleMusicLyricsTypographyProfile: Equatable, Sendable {
     let primaryFontSize: Double
 
@@ -33,8 +33,8 @@ struct AppleMusicLyricsTypographyProfile: Equatable, Sendable {
 }
 
 // MARK: - 译文 / 音译排版
-
-/// Apple Music 音译层与译文层的排版常量（iOS 26.6 实现，非公开 API）。
+//
+// Apple Music 音译层与译文层的排版常量（iOS 26.6 实现，非公开 API）。
 struct AppleMusicLyricsSupplementalTextProfile: Equatable, Sendable {
     let transliterationSpacing: Double
     let transliterationMinimumWordSpacing: Double
@@ -52,14 +52,14 @@ struct AppleMusicLyricsSupplementalTextProfile: Equatable, Sendable {
 }
 
 // MARK: - 本项目实际使用的分档
-
-/// 按容器尺度分档的歌词排版。
-///
-/// 「仿 Apple Music」的部分是**运动**（填充前沿、长音强调、焦点弹簧、级联），
-/// 排版则跟随本项目原有 overlay 的比例，这样它嵌在 Spotify 页面里不违和。
-///
-/// 注意这里是 `struct` 而不是 `enum`：它带存储属性、用成员逐一初始化器构造，
-/// 写成 `enum` 会同时报"存储属性不允许"和"没有 Self(...) 初始化器"两个错。
+//
+// 按容器尺度分档的歌词排版。
+//
+// 「仿 Apple Music」的部分是**运动**（填充前沿、长音强调、焦点弹簧、级联），
+// 排版则跟随本项目原有 overlay 的比例，这样它嵌在 Spotify 页面里不违和。
+//
+// 注意这里是 `struct` 而不是 `enum`：它带存储属性、用成员逐一初始化器构造，
+// 写成 `enum` 会同时报"存储属性不允许"和"没有 Self(...) 初始化器"两个错。
 struct LyricsTypographyScale {
 
     /// 主歌词字号
@@ -68,9 +68,9 @@ struct LyricsTypographyScale {
     let supplementalFontSize: CGFloat
     /// 视觉行之间的间距
     let lineSpacing: CGFloat
-    /// ★ 2026-10-12：**同一行歌词折行之后，两行之间**的间距。
+    /// **同一行歌词折行之后，两行之间**的间距。
     ///
-    /// 用户原话：「有个感觉就是现在主语言换行的中间空隙有点大了」——
+    /// 有个感觉就是现在主语言换行的中间空隙有点大了——
     /// 原因很直接：`SynchronizedLyricText` 里那句 `.lineSpacing(typography.lineSpacing)` 用的是
     /// **块间距**（`.player` 档 26pt），而 26 是"上一句到下一句"的距离（kumone 的
     /// `LazyVStack(spacing: 26)`）。一行**自己折成两行**时也吃这个值 ⇒ 折行看起来像"空了一整句"。
@@ -85,8 +85,8 @@ struct LyricsTypographyScale {
     ///
     /// ⚠️ 字号是**被容器宽度约束的**，不能凭观感调大。
     /// 实测（`[LyricWrap] text=` 字段，26pt / 366pt 容器）：
-    ///   "I'm tryna put you in the worst mood ah"  → 479.4pt
-    ///   "Twenty racks a table cut from ebony"     → 455.6pt
+    /// "I'm tryna put you in the worst mood ah" → 479.4pt
+    /// "Twenty racks a table cut from ebony" → 455.6pt
     /// 也就是 **26pt 下每字符约 12.6pt**，38 字符的行要 479pt —— 远超 366pt 容器，
     /// 于是**几乎每一行都必然折成两行**，且第一行剩不下多少空间。
     /// 这不是折行算法的问题，是字号超出容器容量。
@@ -102,21 +102,20 @@ struct LyricsTypographyScale {
         supplementalSpacing: 4
     )
 
-    /// ★ 2026-10-11（照片 67 我们 / 照片 68 kumone）：**「歌词进播放器」那一层自己的档**。
+    /// **「歌词进播放器」那一层自己的档**。
     ///
     /// 为什么不能沿用上面两档：这一层既不是"200pt 高的小卡片"（`.preview`），
-    /// 也不是"整屏接管"（`.fullscreen`）——它是**中段一整块（日志 55：`20,261,374,323`，
-    /// 约 370×320pt）**。用 `.preview` 的结果就是照片 67 那个"挤"：块间距只有 10pt，
-    /// 一屏能塞 7–8 行，看上去像一份文档；而 kumone（照片 68）**一屏只有 4 块**，
+    /// 也不是"整屏接管"（`.fullscreen`）——它是**中段一整块**。用 `.preview` 的结果就是那个"挤"：块间距只有 10pt，
+    /// 一屏能塞 7–8 行，看上去像一份文档；而 kumone**一屏只有 4 块**，
     /// 中间留着大片呼吸。
     ///
-    /// 数字是**从照片 68 量出来的**（591px 宽 ÷ 1.428 ≈ 414pt）：
-    ///   · 主歌词一行 "I like to feel like I am" ≈ 273pt / 25 字符 ⇒ **≈22pt**；
-    ///   · 同一行折行后的行距 ≈ 40px ⇒ **≈28pt**；
-    ///   · 译文（中文 17 字 ≈ 291pt）⇒ **≈17pt**；
-    ///   · 块与块之间（`LazyVStack(spacing: 26)`，kumone 源码；
-    ///     我们这边早就抄进了 `NowPlayingMetrics.lyricLineSpacing = 26`，一直没消费）
-    ///     ⇒ **26pt**。
+    /// 数字是**从量出来的**（591px 宽 ÷ 1.428 ≈ 414pt）：
+    /// · 主歌词一行 "I like to feel like I am" ≈ 273pt / 25 字符 ⇒ **≈22pt**；
+    /// · 同一行折行后的行距 ≈ 40px ⇒ **≈28pt**；
+    /// · 译文（中文 17 字 ≈ 291pt）⇒ **≈17pt**；
+    /// · 块与块之间（`LazyVStack(spacing: 26)`，kumone 源码；
+    /// 我们这边早就抄进了 `NowPlayingMetrics.lyricLineSpacing = 26`，一直没消费）
+    /// ⇒ **26pt**。
     ///
     /// ⚠️ 26 与 6 这两个数是**手感**（可调）；22 / 17 与 `.fullscreen` 同源，
     /// 但**容器更宽更矮**，所以行距按 kumone 走、不按比例缩。
@@ -124,7 +123,7 @@ struct LyricsTypographyScale {
         primaryFontSize: 22,
         supplementalFontSize: 17,
         lineSpacing: 26,
-        // ★ 2026-10-12：折行用紧行距（≈0.27×字号）。26 只留给"块与块"（见 `wrappedLineSpacing`）。
+        // 折行用紧行距（≈0.27×字号）。26 只留给"块与块"（见 `wrappedLineSpacing`）。
         wrappedLineSpacing: 6,
         supplementalSpacing: 6
     )

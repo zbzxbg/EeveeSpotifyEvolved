@@ -5,40 +5,14 @@ import QuartzCore
 
 /// 「Spotify 一旦往我们清过的地方重画底色，就把这次写入丢掉」。
 ///
-/// ## 出处
+/// 为什么必须有它：清底色原来只有每 0.6s 走一遍页面，而且只清 `depth ≤ 7`、只清等于 `#121212` 的那些 —— 列表在深度 15+，滚动时才创建的行更是每一行都要重画一次 ⇒ 页头区（我们的模糊底）与列表区（Spotify 的底色）之间出现一条硬边。这里不轮询，而是**劫住 `CALayer.setBackgroundColor:`**：谁想画底色就在那一刻被拦下，事件驱动，只在真有写入时走一次。
 ///
-/// 借鉴 **spoti.pw v0.21.1** 的 `Redesigned/Kit/SGRRepaint.x`（那一版是 **GPL-3.0**；
-/// v0.22.0 起该仓库改为 PolyForm Strict，**那里的代码不可复制**）。它的原文：
+/// 三道闸门（缺一不可）：
+/// ① 当前确实在一个我们接管的页面里（`EntityPageRepaint.root` 非空）—— 不在就一个字都不动；
+/// ② `layer.delegate` 必须真是 `UIView`，而且 `view.layer === layer`（子层不算）；
+/// ③ 颜色必须是底面色（近黑灰），而且那个视图在这个页面的子树里。
 ///
-/// > Keeps the areas the redesign stripped transparent when Spotify repaints them.
-///
-/// ```objc
-/// %hook CALayer
-/// - (void)setBackgroundColor:(CGColorRef)color {
-///     if (color && (…sgr_playlistRoot || sgr_albumRoot || …)) {
-///         UIView *view = (UIView *)self.delegate;
-///         if ([view isKindOfClass:UIView.class] && view.layer == self && !SGKeepsColor(view)) {
-///             … else if (SGIsBaseSurface(color) && SGIsInside(view, …)) { color = NULL; }
-///         }
-///     }
-///     %orig(color);
-/// }
-/// ```
-///
-/// ## 为什么必须有它（用户照片 103 那条"割裂感很强的线"）
-///
-/// 我们清底色原来只有**每 0.6s 走一遍页面**、而且只清 `depth ≤ 7`、只清等于 `#121212` 的那些 ——
-/// 列表在深度 15+，**滚动时才创建的行**更是每一行都要重画一次 ⇒ 于是"页头区（我们的模糊底）"与
-/// "列表区（Spotify 的底色）"之间出现一条硬边。
-///
-/// pw 不轮询，而是**劫住 `CALayer.setBackgroundColor:`**：谁想画底色就在那一刻被拦下 ⇒ 又准又省
-/// （事件驱动，只在真有写入时走一次）。
-///
-/// ## 三道闸门（缺一不可，pw 逐字）
-///
-///   ① **当前确实在一个我们接管的页面里**（`EntityPageRepaint.root` 非空）——不在就一个字都不动；
-///   ② `layer.delegate` 必须真是 `UIView`、而且 `view.layer === layer`（子层不算，pw 的 `view.layer == self`）；
-///   ③ 颜色必须是**底面色**（近黑灰，pw 的 `SGIsBaseSurface`），而且那个视图在这个页面的子树里。
+/// 判据照 pw v0.21.1 `SGRRepaint.x` 重写。
 enum EntityPageRepaint {
 
     /// 我们接管的页面根。由 `EntityPageAppearance` 在每一拍里设（weak，页面走了自动失效）。
@@ -53,7 +27,6 @@ enum EntityPageRepaint {
 
     /// 与 `EntityPageAppearance` 清底色同一个判据：近黑、近灰、不透明。
     ///
-    /// ★★ 2026-10-06（照片 111/113：照片区是浅的、**下面"你已点赞"与"热门"整片还是黑的**）：
     /// 阈值 `0.12` 只够 `#121212`（列表底，0.071）；Spotify 的**卡片**是"抬起一层"的 `#282828`
     /// （**0.157**）—— 这一档原来被放过去了。而**列表与 cell 的底是它们在自己的布局回合画的**，
     /// 页面上那趟每 0.6s 的扫描（`depth ≤ 7`）够不到 ⇒ 真正拦得住它们的**只有这一道全局钩子**，
@@ -89,9 +62,6 @@ class EntityPageRepaintLayerHook: ClassHook<CALayer> {
 /// 列表是**在自己的布局回合**把底色画上去的（pw 的 `PlaylistField.x` 原话：*"The list paints itself the
 /// base surface from its own pass rather than through a layer that the repaint hook would hear about,
 /// so it is cleared where it is laid out."*）—— 所以在它那一拍再清一次。
-///
-/// 类名来自我们自己的符号表与真机树（`dump-9.1.88.txt:12060`、
-/// `[Tree] … FTPTouchCancellingCollectionView@0,0,414,896,id=SPTFreeTierPlaylistTableView`）。
 class PlaylistListBackgroundHook: ClassHook<UIScrollView> {
     typealias Group = EntityPageRepaintGroup
     static let targetName = "_TtC35ListUXPlatform_FreeTierPlaylistImpl32FTPTouchCancellingCollectionView"
@@ -109,7 +79,6 @@ class PlaylistListBackgroundHook: ClassHook<UIScrollView> {
 
 /// 清一棵子树里"画了底面色"的那些层（**递归、有界**）。
 ///
-/// ★ 2026-10-13（照片 108：专辑页往下滚，上半部分带色、`你可能还会喜欢` 以下整片黑）：
 /// 只清"列表自己 + 它的直接子视图"不够 —— 那些 section 的底画在更深的层里，而 `CALayer` 那道闸门
 /// 又听不到它们（它们同样是**在自己的布局回合**画的）。所以这里往下走到 `depth` 层。
 ///
@@ -119,10 +88,9 @@ func eeveeClearBaseSurface(_ view: UIView, depth: Int = 0) {
     if let colour = view.backgroundColor, EntityPageRepaint.isBaseSurface(colour.cgColor) {
         view.backgroundColor = .clear
     }
-    // ★★ 2026-10-06（日志 92 逐字：`cleared 0 base-surface background(s)` —— 页面上一个底都没清到，
-    //    而屏幕上明明是"你已点赞 / 显示更多"那一片黑）：**直接画在 layer 上的底色也要清**。
-    //    我们的 `CALayer` 钩子只在"**写入的那一刻**"拦得住；页面是在我们接管**之前**就建好的、
-    //    那些 layer 早就画上了，钩子一概听不到。所以这里两种都要看。
+    // 而屏幕上明明是"你已点赞 / 显示更多"那一片黑）：**直接画在 layer 上的底色也要清**。
+    // 我们的 `CALayer` 钩子只在"**写入的那一刻**"拦得住；页面是在我们接管**之前**就建好的、
+    // 那些 layer 早就画上了，钩子一概听不到。所以这里两种都要看。
     if let layerColour = view.layer.backgroundColor, EntityPageRepaint.isBaseSurface(layerColour) {
         view.layer.backgroundColor = nil
     }
@@ -130,8 +98,8 @@ func eeveeClearBaseSurface(_ view: UIView, depth: Int = 0) {
     for sub in view.subviews { eeveeClearBaseSurface(sub, depth: depth + 1) }
 }
 
-/// ★ 2026-10-13（照片 105：专辑页往下滚是**一片黑**）：**专辑页的列表和歌单页那个类不是一个**
-/// （日志 87：`[Tree] … CreativeWorkTemplateListView@0,0,414,896`）。pw 的 `AlbumField.x` 为它单开一个：
+/// **专辑页的列表和歌单页那个类不是一个**
+/// pw 的 `AlbumField.x` 为它单开一个：
 ///
 /// > The list paints itself the base surface from its own pass rather than through a layer that the
 /// > repaint hook would hear about, so it is cleared where it is laid out. Its collection view is a
@@ -166,69 +134,48 @@ class AlbumCellBackgroundHook: ClassHook<UIView> {
     func layoutSubviews() {
         orig.layoutSubviews()
         guard let root = EntityPageRepaint.root, target.isDescendant(of: root) else { return }
-        // ★★ 2026-10-18 第五轮：顺手记一笔"这个类的实例在这一页是活的"（每页一次，见 `noteCellSeen`）。
-        //    它与折行那一趟的 `cell #` 诊断合起来才能分清"类没被用"与"方法没被叫"。
         EntityPageSectionDrop.noteCellSeen(target)
         eeveeClearBaseSurface(target)
     }
 }
 
-/// ★★ 2026-10-18 第三轮（用户：「**艺人页的 你已点赞** 和 **歌单页的那几个按键** 可以全部去掉」）：
-/// **把那一整格折成 0 高**（不是藏内容 —— 藏了会留一块空白）。
-///
 /// 手法照本仓库已经验证过的那条（`PlayerCardCellHook`，`PlayerDeclutter.x.swift:253`）与 pw 的
 /// `ArtistSections.x`：cell 在 `preferredLayoutAttributesFittingAttributes(_:)` 里被问"你要多高"时
 /// 回答 **0** ✓。两个目标各认各的：
 ///
-///   · **歌单页那排 pill**（添加 / 编辑 / 排序 / 姓名和详情）= 真机树里
-///     `ElementContentView<String, CurationActionsToolbarElement>` 里那个
-///     `id=PlaylistCuration.Row.CurationActionsToolbar` 的 414×52 视图
-///     （日志 7/8/12/17/47/52… 里到处都有）。pw 把同一个字符串写成常量
-///     `SGRPlaylistCurationIdentifier`（`PlaylistMenu.x:35`）—— 连它也是这么摘的 ✓。
-///   · **艺人页的「你已点赞」那一排** —— 它**没有 accessibility id**（翻遍我们的树都没有），
-///     但它是 `Creator_LikedSongsElementKit` 那一族（`dump-9.1.88.txt:7762-7764`：
-///     `LikedSongsElementProvider` / `CollectionObserver` / `ConnectivityObserver`；Swift 泛型实参
-///     会出现在 `NSStringFromClass` 里，真机树就是 `ElementContentView<String, …Element>` 这种写法）
-///     ⇒ 按**类名**认，而且**只在页面根就是 `creator-page` 时**折 —— 「喜欢的歌曲」那一页不动 ✓。
+/// · **歌单页那排 pill**（添加 / 编辑 / 排序 / 姓名和详情）= 真机树里
+/// `ElementContentView<String, CurationActionsToolbarElement>` 里那个
+/// `id=PlaylistCuration.Row.CurationActionsToolbar` 的 414×52 视图
+/// pw 把同一个字符串写成常量
+/// `SGRPlaylistCurationIdentifier`（`PlaylistMenu.x:35`）—— 连它也是这么摘的 ✓。
+/// · **艺人页的「你已点赞」那一排** —— 它**没有 accessibility id**（翻遍我们的树都没有），
+/// 但它是 `Creator_LikedSongsElementKit` 那一族
+/// ⇒ 按**类名**认，而且**只在页面根就是 `creator-page` 时**折 —— 「喜欢的歌曲」那一页不动 ✓。
 enum EntityPageSectionDrop {
 
     static let curationIdentifier = "PlaylistCuration.Row.CurationActionsToolbar"
-    /// ★★ 2026-10-16（用户：「歌单页那一行**添加 / 编辑 / 排序 / 姓名和详情 / 表情符号**没隐藏」）：
+    /// （歌单页那一行**添加 / 编辑 / 排序 / 姓名和详情 / 表情符号**没隐藏）：
     /// **整行那条 id 不是唯一的判据**。同一行里的按钮挂的是**另一个 id**
-    /// （`PlaylistCuration.AddButton`，真机日志里 72 次；行 id 107 次），而 `containsMarker` 是
+    /// 而 `containsMarker` 是
     /// **子串命中** —— 判据换成**模块前缀 `PlaylistCuration`** 就同时罩住两者，
     /// 也顺带罩住 Spotify 将来在同一模块下新加的按钮。
     ///
     /// ⚠️ 前缀这么短、这么专有，不会误伤别的行（`PlaylistCuration.*` 全是这一排工具栏的东西）。
     static let curationFragment = "PlaylistCuration"
     static let likedSongsFragment = "LikedSongs"
-    /// ★★ 2026-10-18 第五轮（日志 99 的 `[HeaderProbe] page ids:` 逐字，出现两次）：
-    /// **「你已点赞」那一排是有 accessibility id 的** —— `Components.UI.LikedSongs.Row`（挂在
-    /// 一个 `ListRow` 上，frame 0,496,414,64）。上一轮那句"翻遍我们的树都没有"是**错的**，
-    /// 于是判据只剩"类名里含 LikedSongs"，而真机树里那一行的类名是 `ListRow`（**不含**这个词）
-    /// ⇒ 永远认不出来。id 这条现在放**第一顺位**；类名那条留着当兜底（有的版本会给它套一个
-    /// 带 `LikedSongs` 的泛型包装类，见下面 `likedSongsFragment` 的说明）。
     static let likedSongsIdentifier = "Components.UI.LikedSongs.Row"
-    /// ★★ 2026-10-18 第五轮：**艺人页「关于艺人」那一格带的 id**。
-    ///
     /// 出处是 pw 的 `Redesigned/Artist/ArtistSections.x:7-9`（GPL 的 v0.21.1，本仓库内那份）逐字：
     /// > every kind of content carries an identifier of its own, in any language:
     /// > `Components.UI.RetrievalRowElementUI` (tracks), `PinnedItemUI` (the pick), `HomeCard`
     /// > (a carousel), `UpcomingReleaseRow`, **`CreatorBiographyCard` (About)**, …
     ///
-    /// ⚠️ 2026-10-17 我们查过一次 `CreatorBiographyCard`，结论是"那是听歌页的'了解艺人'卡"——
+    /// ⚠️我们查过一次 `CreatorBiographyCard`，结论是"那是听歌页的'了解艺人'卡"——
     /// 那次查的是**听歌页那棵树**。两页共用同一族 id 并不矛盾（`SPTArtistAboutBiographyView`
     /// 就是这一族的实现），所以两页都认：这条判据外面还有 `creator-page` 那道闸门，
     /// 听歌页上的同名卡不会被它碰到 ✓。
     static let aboutArtistIdentifierFragment = "CreatorBiographyCard"
-    /// ★★ 2026-10-18 第三轮：艺人页的「关于艺人」那一块 —— 正文被
-    /// `ArtistBioSheet` 读走之后，列表里这一段就折掉（用户：「把原本的 spotify 的
-    /// 关于艺人 给去掉，我们自己搞」）。
-    ///
-    /// ⚠️ 这个类**没有 accessibility id**（2026-10-18 的树），所以只能按类名认；
-    /// 上面那条 id 判据是第五轮加的**第二顺位**。
     static let aboutArtistFragment = "SPTArtistAboutBiographyView"
-    /// ★★ 2026-10-18 第六轮：**类名那一段**（Swift mangled 名里真正稳定的模块名）。
+    /// **类名那一段**（Swift mangled 名里真正稳定的模块名）。
     ///
     /// 与 `PlayerDeclutter.PlayerCard.markers` 的 `.aboutArtist: ["CreatorBiography"]`
     /// **一字不差** —— 那一套在听歌页是实测可用的（上游 `PlayerDeclutter.x.swift:30` 同样这么写），
@@ -250,12 +197,12 @@ enum EntityPageSectionDrop {
     /// 艺人页那两族的**统一判据**：子树里任意**类名**或任意 **accessibility id**
     /// 含其中之一 ⇒ 折。
     ///
-    /// ★★ 2026-10-18 第六轮：判据统一成"子串"。这套写法本仓库已经有**两处实测可用**：
-    ///   · `PlayerDeclutter.PlayerCard.markers`（听歌页卡片，含 `.aboutArtist → "CreatorBiography"`）；
-    ///   · 上游 `PlaylistHides.isPills`（id 子串）。
+    /// 判据统一成"子串"。这套写法本仓库已经有**两处实测可用**：
+    /// · `PlayerDeclutter.PlayerCard.markers`（听歌页卡片，含 `.aboutArtist → "CreatorBiography"`）；
+    /// · 上游 `PlaylistHides.isPills`（id 子串）。
     /// 而之前漏掉的两个模块，各自的真实名字都只有这种写法认得出来：
-    ///   · 「你已点赞」→ id `Components.UI.LikedSongs.Row`（日志 99 逐字），类名却是 `ListRow`；
-    ///   · 「关于艺人」→ 类名 `CreatorBiographyCardLayout`，见上面那条。
+    /// · 「你已点赞」→ id `Components.UI.LikedSongs.Row`，类名却是 `ListRow`；
+    /// · 「关于艺人」→ 类名 `CreatorBiographyCardLayout`，见上面那条。
     /// 「你已点赞」那一族 —— 折它**不需要**先读到任何东西。
     static let likedSongsMarkers = [
         likedSongsFragment,
@@ -293,8 +240,6 @@ enum EntityPageSectionDrop {
     static func shouldCollapse(_ cell: UIView, at path: IndexPath?, height: CGFloat) -> Bool {
         guard let root = EntityPageRepaint.root, cell.isDescendant(of: root) else { return false }
 
-        // ★★ 2026-10-18 第五轮：**换页清账**。`kinds` / `dropped` 一直按 IndexPath 记，
-        //    上一页的 `1-7` 与这一页的 `1-7` 是两回事 ⇒ 不清就会"折错标题格"。
         if tablePage !== root {
             tablePage = root
             kinds.removeAll()
@@ -302,16 +247,12 @@ enum EntityPageSectionDrop {
             didReport = false
         }
 
-        // ★★ 2026-10-18 第五轮：艺人页上把"被问到高度的 cell"打一次（见 `reportArtistCellsOnce`）。
-        //    ⚠️ 必须放在下面那些 `guard`/提前返回之前 —— 它的全部意义就是回答
-        //    "到底有没有被叫到"。
-        //
-        // ★★ 2026-10-16（用户报的"歌单页那排 pill / 喜欢的歌曲那排 chips 没隐藏"）：
-        //    **这份 dump 原来只在 `creator-page` 上跑** ⇒ 歌单页上我们**从来没有**那份
-        //    `cell #… ids=[…]` 清单，也就无法判断那排 pill 到底在不在某个 cell 里
-        //    （决定"折成 0 高"还是"只能藏、留 52pt 空档"）。这里放宽成
-        //    **creator-page 或带 `PL.Header` 的歌单页**；`reportArtistCellsOnce` 自己按页记账，
-        //    仍然每页只报一次。
+        // （用户报的"歌单页那排 pill / 喜欢的歌曲那排 chips 没隐藏"）：
+        // **这份 dump 原来只在 `creator-page` 上跑** ⇒ 歌单页上我们**从来没有**那份
+        // `cell #… ids=[…]` 清单，也就无法判断那排 pill 到底在不在某个 cell 里
+        // （决定"折成 0 高"还是"只能藏、留 52pt 空档"）。这里放宽成
+        // **creator-page 或带 `PL.Header` 的歌单页**；`reportArtistCellsOnce` 自己按页记账，
+        // 仍然每页只报一次。
         if root.accessibilityIdentifier == "creator-page"
             || eeveeAncestor(withIdentifier: "PL.Header", of: cell) != nil {
             reportArtistCellsOnce(cell, at: path, height: height)
@@ -325,16 +266,16 @@ enum EntityPageSectionDrop {
             return true
         }
 
-        // ★★ 2026-10-16：判据从"整行那条 id"放宽到**模块前缀**（见 `curationFragment`）——
-        //    同行里的按钮是 `PlaylistCuration.AddButton`，只认整行 id 时一行都命不中。
+        // 判据从"整行那条 id"放宽到**模块前缀**（见 `curationFragment`）——
+        // 同行里的按钮是 `PlaylistCuration.AddButton`，只认整行 id 时一行都命不中。
         var drop = containsMarker(cell, curationFragment)
         if !drop, root.accessibilityIdentifier == "creator-page" {
             drop = likedSongsMarkers.contains { containsMarker(cell, $0) }
-            // ★★ 2026-10-11（日志 100）：「关于艺人」**先读到正文再折**。
-            //    折叠这一侧按 `CreatorBiography` 认（认得对），而**读取**那一侧以前按
-            //    `SPTArtistAboutBiographyView` 认 —— 那个类在这一版艺人页上没出现过 ⇒
-            //    那一格被折成 0 高、我们的卡片又读不到文字 = 用户**两边都看不到**（本轮报告的现场）。
-            //    现在读不到就**不折**：宁可留着 Spotify 那一段，也不要都不显示。
+            // 「关于艺人」**先读到正文再折**。
+            // 折叠这一侧按 `CreatorBiography` 认（认得对），而**读取**那一侧以前按
+            // `SPTArtistAboutBiographyView` 认 —— 那个类在这一版艺人页上没出现过 ⇒
+            // 那一格被折成 0 高、我们的卡片又读不到文字 = 用户**两边都看不到**（本轮报告的现场）。
+            // 现在读不到就**不折**：宁可留着 Spotify 那一段，也不要都不显示。
             if !drop, aboutArtistMarkers.contains(where: { containsMarker(cell, $0) }) {
                 drop = EntityPageHeaderManager.hasCapturedBio
             }
@@ -409,10 +350,8 @@ enum EntityPageSectionDrop {
         return false
     }
 
-    /// ★★ 2026-10-18 第五轮：**「你已点赞」那一行到底装在哪个 cell 类里**（每页一次，不依赖钩子）。
-    ///
     /// 为什么另开一条诊断：`reportArtistCellsOnce` 走的是 **cell 钩子** —— 万一我们挂的那个类
-    /// 在艺人页压根没被用，它就**一行都不会响**，日志里只剩"什么都没有"，还是分不清
+    /// 在艺人页压根没被用，它就**一行都不会响**，还是分不清
     /// "类没被用"与"方法没被叫"。这条从**页面那一趟**按 id 直接找到那一行、沿祖先链走到最近的
     /// `UICollectionViewCell` 并报出它的类名 ⇒ 下一次要挂钩子就有确切的名字了。
     ///
@@ -478,10 +417,10 @@ enum EntityPageSectionDrop {
     /// 有界地往下找"**类名或 id 里含**这个片段"的视图 —— 折行判据的唯一入口。
     ///
     /// 为什么是"含"而不是"等于"：
-    ///   · 有的 id 尾上带一串哈希（真机树里 `Components.UI.ContextMenuButton-0D5pkUE6Uv8PXqonJZr2Fv`），
-    ///     写死全名会在版本之间悄悄失配；
-    ///   · 类名是 Swift mangled 名，**只有模块名那一段稳定**
-    ///     （`_TtC22Lyrics_CardElementImpl19LyricsCardElementUI` 这类）。
+    /// · 有的 id 尾上带一串哈希（真机树里 `Components.UI.ContextMenuButton-0D5pkUE6Uv8PXqonJZr2Fv`），
+    /// 写死全名会在版本之间悄悄失配；
+    /// · 类名是 Swift mangled 名，**只有模块名那一段稳定**
+    /// （`_TtC22Lyrics_CardElementImpl19LyricsCardElementUI` 这类）。
     ///
     /// 这套写法与 `PlayerDeclutter.PlayerCard.markers` / 上游 `PlaylistHides.isPills` 一致
     /// —— 那两处都是实测可用的。
@@ -514,21 +453,18 @@ enum EntityPageSectionDrop {
         return found
     }
 
-    // MARK: - 诊断（日志 99 之后加的那两条）
-
-    /// ★★ 2026-10-18 第五轮：**把艺人页上"被问到高度"的 cell 打进日志**（每页最多 14 行）。
-    ///
-    /// ## 为什么必须有它
-    ///
-    /// 日志 99 里 `[PageRepaint] dropping a section` **一行都没有** —— 而"该折的没折成"
-    /// 有两种**完全不同**的原因，要改的地方也完全不同：
-    ///
-    ///   ① **钩子压根没被叫**：这一页的 cell 不是自适应高度的
-    ///      （`preferredLayoutAttributesFittingAttributes` 那一趟不走）⇒ 得换挂点；
-    ///   ② 钩子叫了，但**判据没认出来**（真机的类名 / id 与我们猜的不一样）⇒ 改判据。
-    ///
-    /// 这一行把"这一页到底有哪些 cell、各自什么类、带什么 id"钉进日志 ⇒ 下一份日志直接分岔。
-    /// 有界：**每页最多 14 行**、只在 `creator-page` 上打、只在还没出结果时打。
+    // MARK: - 诊断
+    //
+    // ## 为什么必须有它
+    //
+    // 有两种**完全不同**的原因，要改的地方也完全不同：
+    //
+    // ① **钩子压根没被叫**：这一页的 cell 不是自适应高度的
+    // （`preferredLayoutAttributesFittingAttributes` 那一趟不走）⇒ 得换挂点；
+    // ② 钩子叫了，但**判据没认出来**（真机的类名 / id 与我们猜的不一样）⇒ 改判据。
+    //
+    // 这一行把"这一页到底有哪些 cell、各自什么类、带什么 id"钉进日志 ⇒ 下一份日志直接分岔。
+    // 有界：**每页最多 14 行**、只在 `creator-page` 上打、只在还没出结果时打。
     private static var cellDumpPage: UIView?
     private static var cellDumpCount = 0
     private static var didDumpCells = false
@@ -563,8 +499,6 @@ enum EntityPageSectionDrop {
         }
     }
 
-    /// ★★ 2026-10-18 第五轮：**我们挂的那个 cell 类在这一页有没有活实例**。
-    ///
     /// 与 `reportArtistCellsOnce` 分两头钉：这条来自 `layoutSubviews`（**只要这个类的实例存在
     /// 就一定会响**），那条来自 `preferredLayoutAttributesFittingAttributes`（**只有自适应高度
     /// 那一趟才响**）。两条一对比就能分清 §"① 类没被用" 与 §"② 方法没被叫"。
@@ -657,7 +591,6 @@ func activateEntityPageRepaint() {
         PlaylistListBackgroundHook.targetName,
         AlbumListBackgroundHook.targetName,
         AlbumCellBackgroundHook.targetName,
-        // ★★ 2026-10-18 第三轮：「你已点赞」/ 歌单 pill 那两格折成 0 高（见 `EntityPageSectionDrop`）。
         ElementListSectionDropHook.targetName,
         PlaylistSectionDropHook.targetName,
     ]

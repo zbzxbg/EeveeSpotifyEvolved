@@ -4,7 +4,7 @@ import Foundation
 // to the app tmp dir and logs the first 256 bytes as hex. Flip `enabled` to
 // inspect new ad surfaces, then flip back before shipping.
 //
-// ⚠️ 2026-09-30：`enabled = false` 是默认值，**别在发布构建里打开**。打开时它会把
+// ⚠️`enabled = false` 是默认值，**别在发布构建里打开**。打开时它会把
 // 整份响应体（首页 feed 之类，含用户内容）原样写到 tmp —— 那些 `.bin` 文件**不经过**
 // `DebugLogSanitizer`，脱敏只覆盖日志行。日志行本身走 `eeveeSanitizedNSLog`，
 // 所以至少路径与 URL 是安全的。

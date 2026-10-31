@@ -5,13 +5,13 @@ import Orion
 public var spotifyAccessToken: String?
 
 // ng（Reborn-ng）歌词仓库（SpicyLyrics 等）通过下面这两个访问器读写 token。
-// ★ 2026-10-13：**SpicyLyrics 已经不再消费它了** —— 那个源搬到了官方 v1 API，
-//   只认自己的 `sl_pk_` key（见 `SpicyLyricsRepository` 文件头），那条路本来就要抓
-//   Spotify 凭据，属于旧 `/query` 时代的产物。
-//   ⇒ 现在这里**没有歌词侧消费者**（`spotifyAccessTokenSnapshot()` 零调用点）。
-//   捕获本身先留着：`spotifyAccessToken` 是 public 既有读取点，而且同处的日志
-//   （token 形状 / 轮换序号，见 `SpotifyTokenOrdinal`）是排查登录态时唯一能看的信号。
-//   ⚠️ 别把"改歌词源"和这里联系起来 —— 两者已经无关。
+// **SpicyLyrics 已经不再消费它了** —— 那个源搬到了官方 v1 API，
+// 只认自己的 `sl_pk_` key（见 `SpicyLyricsRepository` 文件头），那条路本来就要抓
+// Spotify 凭据，属于旧 `/query` 时代的产物。
+// ⇒ 现在这里**没有歌词侧消费者**（`spotifyAccessTokenSnapshot` 零调用点）。
+// 捕获本身先留着：`spotifyAccessToken` 是 public 既有读取点，而且同处的日志
+// （token 形状 / 轮换序号，见 `SpotifyTokenOrdinal`）是排查登录态时唯一能看的信号。
+// ⚠️ 别把"改歌词源"和这里联系起来 —— 两者已经无关。
 // URLSession 回调与歌词仓库跑在不同队列上，直接读写无保护的全局 String 有数据竞争，
 // 这里用锁串行化；`spotifyAccessToken` 变量本身保留，兼容既有读取点。
 private let spotifyAccessTokenLock = NSLock()
@@ -47,7 +47,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             let token = String(auth.dropFirst(7))
             setSpotifyAccessToken(token)
             // 只记**形状**与来源，绝不记 token 本身。见 `HttpClientURLSessionHooks` 同处的说明：
-            // 2026-09-30 起 `prefix=前6字符` 换成轮换序号，URL 只留 scheme+host+path。
+            // 起 `prefix=前6字符` 换成轮换序号，URL 只留 scheme+host+path。
             let dotCount = token.filter { $0 == "." }.count
             let shape = "len=\(token.count) dots=\(dotCount) \(SpotifyTokenOrdinal.label(for: token))"
             writeDebugLog("[TokenCapture] \(shape) from \(DebugLogSanitizer.logSafeURL(task.currentRequest?.url))")
@@ -82,8 +82,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         guard let buffer = URLSessionHelper.shared.obtainData(for: task) else {
             // Customize 304 fallback — wg-spclient returned 304, no buffer
             // to patch, but we have a cached body from a prior 200.
-            // ⚠️ 2026-10-12：改走 `customizeReplay` —— **同版本的落盘真 body 优先，种子兜底**
-            //   （以前内存里的种子永远优先 ⇒ 磁盘上那份更好的 body 一次都没用上，日志 69 的现象）。
+            // ⚠️改走 `customizeReplay` —— **同版本的落盘真 body 优先，种子兜底**
             if url.isCustomize, let cached = SpotifyResponsePatcher.customizeReplay?.data {
                 orig.URLSession(session, dataTask: task, didReceiveData: cached)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
@@ -129,22 +128,21 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     return
                 }
 
-                // ── 分档预算 + 结果备忘（v4.11）─────────────────────────────────────
+                // ── 分档预算 + 结果备忘（v4.11）
                 //
-                // 真机四档实测（2026-10-02 日志 34，同一首"全网没词"的歌，Spotify 9.1.88）：
-                //   不回退 ≤1s → 卡片在；＋Genius 回退 4s → 开始丢；＋AMLL 优先 6s → 更差；
-                //   多级回退（4 源串行）13s → 最差。
+                // 真机四档实测：
+                // 不回退 ≤1s → 卡片在；＋Genius 回退 4s → 开始丢；＋AMLL 优先 6s → 更差；
+                // 多级回退（4 源串行）13s → 最差。
                 // ⇒ NPV 的模块列表是"组件加载完之后"才建的（`…WithDidLoadComponents…`），
-                //   响应晚于约 1~4s 就赶不上这一轮；"退出重进就好"= 让列表重建一次。
+                // 响应晚于约 1~4s 就赶不上这一轮；"退出重进就好"= 让列表重建一次。
                 //
                 // 对策（完整理由写在 `LyricsResponseCache` 的注释里）：
-                //   · 刚产出过且曲目/设置都没变 → 直接交（0 等待）；
-                //   · 这首歌的**第一次**请求 → 只等 1.5s，先交占位把卡片建出来；
-                //   · **后续**请求（Spotify 交完占位后会立刻再来一次 —— 日志 34 里 4/4）
-                //     → 用长预算，把真词带上去。
-                // ⚠️ 2026-10-02（v4.11.1）：改用 `budgetPlan` —— 与 `HttpClientURLSessionHooks`
-                // **共用同一个 `LyricsResponseCache` 实例与同一套计数**（原先两边各算各的，
-                // 而真机日志 28→35 里只有 `[HCUS]` 一条路在跑，这套调度等于没生效）。
+                // · 刚产出过且曲目/设置都没变 → 直接交（0 等待）；
+                // · 这首歌的**第一次**请求 → 只等 1.5s，先交占位把卡片建出来；
+                // · **后续**请求
+                // → 用长预算，把真词带上去。
+                // ⚠️（v4.11.1）：改用 `budgetPlan` —— 与 `HttpClientURLSessionHooks`
+                // **共用同一个 `LyricsResponseCache` 实例与同一套计数**。
                 let cache = LyricsResponseCache.shared
                 let cacheSignature = LyricsResponseCache.currentSignature
                 let requestPlan = cache.budgetPlan(forPath: url.path, signature: cacheSignature)
@@ -213,7 +211,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
-            // patch() returned nil but didReceiveData already suppressed the original —
+            // patch returned nil but didReceiveData already suppressed the original —
             // replay the buffer or the consumer hangs (casita/browsita with no ad sections).
             orig.URLSession(session, dataTask: task, didReceiveData: buffer)
             orig.URLSession(session, task: task, didCompleteWithError: nil)

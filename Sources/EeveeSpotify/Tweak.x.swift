@@ -18,8 +18,8 @@ private let eeveeLogger = Logger(
 /// 而歌词响应是**并发**处理的（同一首歌的两个 color-lyrics 响应各跑在一个后台队列上，
 /// 见 `HttpClientURLSessionHooks`）。两个线程同时 seek 到同一个末尾再各自写 → 有一行被覆盖。
 ///
-/// 真机证据（2026-09-27 日志 16，`Corner Store`）：第一次响应的
-/// `synthetic line timing applied` **整行消失**，而它的孪生响应（1 秒后）和其余每一首都在，
+/// 现象：第一次响应的 `synthetic line timing applied` **整行消失**，
+/// 而它的孪生响应（1 秒后）和其余每一首都在，
 /// 且上下文行完整 —— 就是这种丢行。丢行会让"某行不在 = 代码没跑"这类推断直接失效。
 ///
 /// 用 `sync` 而不是 `async`：崩溃取证时最后几行必须已经落盘（异步会把它们留在队列里）。
@@ -46,11 +46,11 @@ private func appendLogFile(_ message: String) {
     }
 }
 
-/// ⚠️ 2026-09-30：这里**必须**过 `DebugLogSanitizer.sanitize`。
+/// ⚠️这里**必须**过 `DebugLogSanitizer.sanitize`。
 ///
 /// 理由：这一行同时写文件**和** `os_log(privacy: .public)`，而系统统一日志是清不掉的
 /// （设置里的「清除调试日志」只清 App 容器里那份）。只在导出时脱敏的话，
-/// 系统日志里那份仍然是明文 —— 所以脱敏放在写入口，而不是导出按钮里。
+/// 而不是导出按钮里。
 func writeDebugLog(_ message: String) {
     guard UserDefaults.enableLogRecording else { return }
 
@@ -72,7 +72,7 @@ func writeErrorLog(_ message: String) {
 ///
 /// 为什么单独给一个函数：这批调用点**不受**「启用日志记录」开关控制（NSLog 直接进
 /// 系统统一日志），也**不进**导出文件。既然开关管不到它们，脱敏就更不能漏 ——
-/// 否则用户在设置里关掉日志记录、把文件删干净，系统日志里那份明文照样在。
+/// 否则用户在设置里关掉日志记录、把文件删干净，
 func eeveeSanitizedNSLog(_ message: String) {
     NSLog("%@", DebugLogSanitizer.sanitize(message))
 }
@@ -268,25 +268,24 @@ func eeveeEnvFlag(_ name: String) -> Bool {
     return s == "1" || s == "true" || s == "yes" || s == "y"
 }
 
-// ── 这里曾经有一个"运行时类名探针"（`logPlayerTrackCandidates`）───────────────
+// ── 这里曾经有一个"运行时类名探针"（`logPlayerTrackCandidates`）
 //
-// 它的目的：离线找出 9.1.x 上到底是哪个类提供 `metadata()`（`has_lyrics` 就在那个
+// 它的目的：离线找出 9.1.x 上到底是哪个类提供 `metadata`（`has_lyrics` 就在那个
 // 字典里），好把 `SPTPlayerTrackHook.targetName` 改成真名。
 //
 // **已经删掉了**，原因是它连续两次造成启动崩溃，而且一次都没能给出可用结果：
-//   · 第一次：挂在「启用日志记录」下面 → 开日志 + 杀后台 + 重开 = 启动后约 291ms
-//     崩（EXC_BREAKPOINT/SIGTRAP，栈在 `_CF_forwarding_prep_0` → `swift_getObjectType`，
-//     寄存器 `__NSGenericDeallocHandler` = 给已释放对象发消息）；
-//   · 第二次：改成独立开关 + 启动后 3 秒 + 只扫白名单前缀，仍然崩（同一崩溃地址
-//     0x19dbe54b4、同一份指令流），而且**崩溃时日志文件里什么都没有** ——
-//     说明崩在写日志之前，或者日志所在的 tmp 目录随重装被清掉了。
+// · 第一次：挂在「启用日志记录」下面 → 开日志 + 杀后台 + 重开 = 启动后约 291ms
+// 崩（EXC_BREAKPOINT/SIGTRAP，栈在 `_CF_forwarding_prep_0` → `swift_getObjectType`，
+// 寄存器 `__NSGenericDeallocHandler` = 给已释放对象发消息）；
+// · 第二次：改成独立开关 + 启动后 3 秒 + 只扫白名单前缀，仍然崩（同一崩溃地址
+// 0x19dbe54b4、同一份指令流），而且**崩溃时日志文件里什么都没有** ——
+// 说明崩在写日志之前，或者日志所在的 tmp 目录随重装被清掉了。
 // 结论：在这台设备上"运行时诊断"这条路不可观测也不可控，不值得再试第三次。
 //
 // 真正需要"哪个类持有 has_lyrics"这个答案时，走离线路线：
-//   Tools/eevee-hookfinder/extract_player_track_class.py
+// Tools/eevee-hookfinder/extract_player_track_class.py
 // 它直接读解密 IPA 的 `__objc_classname` / `__objc_methname`，不碰运行时，
-// 已经据此确认 9.1.86 里 `SPTPlayerTrack` 是存在的（当初 dump-unknown.txt
-// 只抓 `_TtC` 开头的 Swift 名，才误判成"不存在"）。
+// 已经据此确认 9.1.86 里 `SPTPlayerTrack` 是存在的。
 
 struct EeveeSpotify: Tweak {
     static let version = "2.0.0-beta"
@@ -317,7 +316,7 @@ struct EeveeSpotify: Tweak {
     // fails to activate - a missing target class, a renamed/removed selector, a method-add
     // conflict, etc. Critically, this can happen for hooks in `DefaultGroup`
     // (e.g. UIOpenURLContextHook, UIApplicationLiveContainerSharingHook), which Orion
-    // activates automatically during its init sequence, BEFORE `EeveeSpotify.init()` runs -
+    // activates automatically during its init sequence, BEFORE `EeveeSpotify.init` runs -
     // so none of the NSClassFromString/selector guards below can protect against it.
     //
     // Since this codebase already treats individual hook groups as independently optional
@@ -353,17 +352,17 @@ struct EeveeSpotify: Tweak {
 
         activateEeveeCrossfadeForce()
 
-        // customize 种子（2026-10-01）：必须在任何网络改写之前跑。
+        // customize 种子：必须在任何网络改写之前跑。
         //
         // 冷启动第一个 customize 常是 304、没有 body，那条路径下
-        // `cachedCustomizeData` 会永远填不满（唯一写入点在 `patch()` 里，而它只有拿到
-        // body 才会被调用）→ `modifyRemoteConfiguration()` 一次都不跑 → `[Flags]` 全灭、
+        // `cachedCustomizeData` 会永远填不满（唯一写入点在 `patch` 里，而它只有拿到
+        // body 才会被调用）→ `modifyRemoteConfiguration` 一次都不跑 → `[Flags]` 全灭、
         // flag 替换（含「Flag 覆盖」）静默失效。这里用随包的 `.bnk` 先喂一份，
         // 304 兜底就有东西可回放；真 body 一到即被替换。详见
         // `SpotifyResponsePatcher.seedCustomizeDataIfNeeded`。
         SpotifyResponsePatcher.seedCustomizeDataIfNeeded()
 
-        // ★ 2026-10-17：远端配置（flag）的**读时拦截**（移植自上游 `RemoteFlags`）。
+        // 远端配置（flag）的**读时拦截**（移植自上游 `RemoteFlags`）。
         //
         // 与上面那条是两条**互补**的路： customize 改写管"服务端下发的那张表"，
         // 这一条钩的是 `RemoteConfigurationSDK` 的取值入口（bool/int/enum），
@@ -371,7 +370,7 @@ struct EeveeSpotify: Tweak {
         // 两条路读的是同一张表（`FlagOverrideStore`），值不会打架。
         //
         // ⚠️ 它同时是**采集器**：升级 Spotify 后第一次启动会装上这组 hook、把每条读到的
-        //   flag 记下来（20 秒后写 `flags.json`），设置页那个浏览器页列的就是这张表。
+        // flag 记下来（20 秒后写 `flags.json`），设置页那个浏览器页列的就是这张表。
         activateRemoteFlags()
 
         // 播放器控件触感：开关关着时连 hook 都不装（见 PlayerHaptics.x.swift），
@@ -387,26 +386,25 @@ struct EeveeSpotify: Tweak {
         // 所以设置页那颗开关下面配了「立即重启」。
         activateRatingPromptBlock()
 
-        // ★ 2026-10-13：主题换色（AMOLED 纯黑 + 强调色）—— 在**颜色出生点**装 swizzle
-        //   （`Sources/EeveeSpotifyC/ColorSwap.m`，C 侧 `dispatch_once`）。
-        //   ⚠️ 必须**早装**：它管的是"之后创建的颜色"，晚装就会有一批界面用旧色画完。
-        //   与上面两条一样是"启动时按开关决定装不装" ⇒ 改完要重启。
+        // 主题换色（AMOLED 纯黑 + 强调色）—— 在**颜色出生点**装 swizzle
+        // （`Sources/EeveeSpotifyC/ColorSwap.m`，C 侧 `dispatch_once`）。
+        // ⚠️ 必须**早装**：它管的是"之后创建的颜色"，晚装就会有一批界面用旧色画完。
+        // 与上面两条一样是"启动时按开关决定装不装" ⇒ 改完要重启。
         activateTheme()
 
-        // ⛔ AMOLED（深色栏底色）已于 2026-10-02 删除。
+        // ⛔ AMOLED（深色栏底色）已于删除。
         // 理由：新设计语言下它每次布局都主动让位（`if NewDesignLanguage.isActive { 记一行; return }`），
         // 是个纯空操作 + 21KB 死代码；只有兼容模式的构建（`liquid_glass=false`）里才活，
         // 而本仓库只服务新设计基线。它原来承担的那个"运行期观察新设计"的兜底信号
         // 已搬到 `NewDesignYield.observeNewDesignMarkersIfNeeded`。
-
+        //
         // 新设计语言下让我们自己给旧设计打的补丁让位（目前是标签栏那层渐隐遮罩）。
         activateNewDesignYield()
 
         // ⛔ 听歌页那套外观代码（自绘壳 / 玻璃顶栏 / 吸顶头让位 / 顶部大标题 / 满屏取色背景）
-        // 已于 2026-10-02 **整块删除** —— bug 太多（照片 19/20 的糊底、两颗 ⌄、顶栏与吸顶头
-        // 互相打架……），先放一边，等导航栏这条线收干净再重做。
+        // 已于**整块删除** —— bug 太多，先放一边，等导航栏这条线收干净再重做。
         // 删掉的是整个文件 `Appearance/NowPlayingShell.x.swift`（含 `StickyHeaderYieldHook`）。
-
+        //
         // 底部标签栏（主页/搜索/音乐库/创建）的真液态玻璃。
         // 真类名从解密 IPA 核出：`NavigationUI_TabBarImpl.TabBarItemElementView`
         // 与 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`。
@@ -421,109 +419,105 @@ struct EeveeSpotify: Tweak {
         // 与听歌页那条"加壳"路线不同 —— 它改的是 Spotify 自己的视图，关掉即还原。
         activateLibraryAppearance()
 
-        // ★ 2026-10-12：主页头部 —— 与音乐库同一套"AM 化"（大标题贴左 + 头像靠右 + 收 pills/灰纱），
-        //   但**挂点不同**：主页的头随滚动动，所以挂在页面的 `viewDidLayoutSubviews` 上（见那个文件头）。
+        // 主页头部 —— 与音乐库同一套"AM 化"（大标题贴左 + 头像靠右 + 收 pills/灰纱），
+        // 但**挂点不同**：主页的头随滚动动，所以挂在页面的 `viewDidLayoutSubviews` 上（见那个文件头）。
         activateHomeHeaderAppearance()
 
         // 清爽开关（迷你播放条 / 标签栏渐隐 / free-tier 提示条）。同上：总是装、实时读。
         activateDeclutterChrome()
 
-        // ★ 2026-10-13：听歌页**卡片类**清爽（歌词卡 / 了解艺人 / 相关视频 / SongDNA /
-        //   现场演出 / 观看流 / 发行倒计时 / 制作名单 / 周边 / 推荐内容，外加一颗总开关）。
-        //   与上面那条不同：这些是滚动列表的 cell，"藏"要拦布局去**折成 0 高**，
-        //   所以单独一条 hook（`Appearance/PlayerDeclutter.x.swift`）。
-        //   按钮类（shuffle/repeat/addTo/queue/share/connect）**故意不做** —— 藏了功能就没了。
+        // 听歌页**卡片类**清爽（歌词卡 / 了解艺人 / 相关视频 / SongDNA /
+        // 现场演出 / 观看流 / 发行倒计时 / 制作名单 / 周边 / 推荐内容，外加一颗总开关）。
+        // 与上面那条不同：这些是滚动列表的 cell，"藏"要拦布局去**折成 0 高**，
+        // 所以单独一条 hook（`Appearance/PlayerDeclutter.x.swift`）。
+        // 按钮类（shuffle/repeat/addTo/queue/share/connect）**故意不做** —— 藏了功能就没了。
         activatePlayerCardsDeclutter()
 
         // 播放器控制键的字形替换（藏原生图标 + 叠自己的字形，原生按钮留着）。
         // 做法照 spoti.pw v0.21.1 的 `PlayerControls.x`（GPL-3.0），见 `NowPlayingControlsPlate` 文件头。
         activateNowPlayingControls()
 
-        // ★ 2026-10-09：换歌那一瞬间的"大封面闪一下"（照片 61）—— **事件驱动**地按住封面。
-        //   那条每 0.3s 的复查节拍永远追不上"新封面刚建好"的那一帧（见 `CoverFlashGuard.x.swift`）。
+        // 换歌那一瞬间的"大封面闪一下"—— **事件驱动**地按住封面。
+        // 那条每 0.3s 的复查节拍永远追不上"新封面刚建好"的那一帧（见 `CoverFlashGuard.x.swift`）。
         activateCoverFlashGuard()
 
-        // ★ 2026-10-23：队列卡片（Spotify 自己的「队列」弹窗）的**只读**探针 ——
-        //   把它的 view 登记给 `ViewTreeDumper`，于是「转储视图树」打开时、弹开队列卡片
-        //   就会在日志里出现一份 `[NPVTree]` 的队列页树（下一步改「随机/循环/自动播放/定时器」
-        //   那一排要靠它）。只登记指针，不改任何视图。
+        // 队列卡片（Spotify 自己的「队列」弹窗）的**只读**探针 ——
+        // 把它的 view 登记给 `ViewTreeDumper`，于是「转储视图树」打开时、弹开队列卡片
+        // 那一排要靠它）。只登记指针，不改任何视图。
         activateQueueSheetProbe()
 
-        // ★★ 2026-10-22（日志 5）：艺人页「最新发布」卡片的数据改由 Spotify 自己的 Web API 提供时，
-        //   卡片手里只有一个 `spotify:album:…`（页面里"那一格"还是懒加载骨架，没法转发点击）——
-        //   打开它只能走 App **自己的**链接分发器。这条 hook 只把那个单例记成弱引用，
-        //   真正的门禁在卡片那一侧（见 `SpotifyURIOpener.x.swift`）。目标类缺失只记一行日志。
+        // 艺人页「最新发布」卡片的数据改由 Spotify 自己的 Web API 提供时，
+        // 卡片手里只有一个 `spotify:album:…`（页面里"那一格"还是懒加载骨架，没法转发点击）——
+        // 打开它只能走 App **自己的**链接分发器。这条 hook 只把那个单例记成弱引用，
+        // 真正的门禁在卡片那一侧（见 `SpotifyURIOpener.x.swift`）。目标类缺失只记一行日志。
         activateSpotifyURIOpener()
 
-        // ★ 2026-10-13（用户：「我们的观感不好，我想让这些页面看起来像 Apple Music」）：
-        //   歌单页**页头**换成 AM 形态（标题/创建者/长度居中 + shuffle + 白色 Play 胶囊）。
-        //   借鉴 spoti.pw **v0.21.1**（GPL-3.0）的 `SGRHeaderInfo` 与 `PlaylistHeader.x`，
-        //   实现是本仓库自己的 Swift；目标类与 id 全部用我们自己的真机日志 + dump-9.1.88 核对过。
-        //   v1 **只作用于歌单页**，认不出页头就什么都不做（见 `EntityPageHeader.x.swift`）。
+        // （我们的观感不好，我想让这些页面看起来像 Apple Music）：
+        // 歌单页**页头**换成 AM 形态（标题/创建者/长度居中 + shuffle + 白色 Play 胶囊）。
+        // 借鉴 spoti.pw **v0.21.1**（GPL-3.0）的 `SGRHeaderInfo` 与 `PlaylistHeader.x`，
+        // 实现是本仓库自己的 Swift；目标类与 id 全部用我们自己的真机日志 + dump-9.1.88 核对过。
+        // v1 **只作用于歌单页**，认不出页头就什么都不做（见 `EntityPageHeader.x.swift`）。
         activateEntityPageHeader()
 
-        // ★★ 2026-10-31（`Spotify-2026-10-31-094701.ips`）：艺人简介卡里点「翻译」会把 App 打崩 ——
-        //   那张卡直接挂在 window 上、没有 VC 祖先，系统的 `-[UITextInputController _translate:]`
-        //   找不到 VC 就 NSAssert。这条只拦"没有 VC 祖先"的文本框（见 `EntityPageHeaderHooks.x.swift`）。
+        // （`Spotify--094701.ips`）：艺人简介卡里点「翻译」会把 App 打崩 ——
+        // 那张卡直接挂在 window 上、没有 VC 祖先，系统的 `-[UITextInputController _translate:]`
+        // 找不到 VC 就 NSAssert。这条只拦"没有 VC 祖先"的文本框（见 `EntityPageHeaderHooks.x.swift`）。
         activateArtistBioTranslateGuard()
 
-        // ★★ 2026-10-31（用户：「歌词偏移放到听歌页，右上角那个按钮」）：
-        //   播放页 `⋯` 弹出的是一张 sheet（`ContextMenu_InternalImpl.ContextMenuViewController`）——
-        //   在它的**表尾**挂一行「歌词偏移」，点开一张 ±25ms 的紧凑面板。
-        //   不接管重画整张菜单（那是 taurus 的做法，871 行，换一版就整块失效）；
-        //   认不出「这是播放器的菜单」就什么都不做，只留一行日志。
+        // （歌词偏移放到听歌页，右上角那个按钮）：
+        // 播放页 `⋯` 弹出的是一张 sheet（`ContextMenu_InternalImpl.ContextMenuViewController`）——
+        // 在它的**表尾**挂一行「歌词偏移」，点开一张 ±25ms 的紧凑面板。
+        // 不接管重画整张菜单（那是 taurus 的做法，871 行，换一版就整块失效）；
+        // 认不出「这是播放器的菜单」就什么都不做，只留一行日志。
         activatePlayerMenuOffsetRow()
 
-        // ★ 2026-10-13（用户看 pw 的截图）：「Home 那几个小方框的底色会跟着封面的样子跑」——
-        //   借鉴 spoti.pw **v0.21.1** 的 `Redesigned/Home/HomeTiles.m`（GPL-3.0），实现见
-        //   `Appearance/HomeShortcutTiles.x.swift`。认不出卡片就什么都不做，
-        //   第一次命中会把卡片结构打进 `[HomeTiles]` 日志（转储器到不了那一层）。
+        // （Home 那几个小方框的底色会跟着封面的样子跑——
+        // 借鉴 spoti.pw **v0.21.1** 的 `Redesigned/Home/HomeTiles.m`（GPL-3.0），实现见
+        // `Appearance/HomeShortcutTiles.x.swift`。认不出卡片就什么都不做，
+        // 第一次命中会把卡片结构打进 `[HomeTiles]` 日志（转储器到不了那一层）。
         activateHomeShortcutTiles()
 
-        // ★ 2026-10-13（用户照片 103：「上面能看到一点点全糊封面，但是有条线，割裂感很强」）：
-        //   页头区（我们的模糊底）与列表区（Spotify 自己画的底色）之间那条硬边 —— 照 pw 的
-        //   `Kit/SGRRepaint.x`（GPL-3.0）劫住 `CALayer.setBackgroundColor:`，
-        //   在我们接管的页面里把底面色**丢掉**。事件驱动，比"每 0.6s 走一遍页面"又准又省
-        //   （见 `Appearance/EntityPageRepaint.x.swift` 文件头）。
+        // （上面能看到一点点全糊封面，但是有条线，割裂感很强）：
+        // 页头区（我们的模糊底）与列表区（Spotify 自己画的底色）之间那条硬边 —— 照 pw 的
+        // `Kit/SGRRepaint.x`（GPL-3.0）劫住 `CALayer.setBackgroundColor:`，
+        // 在我们接管的页面里把底面色**丢掉**。事件驱动，比"每 0.6s 走一遍页面"又准又省
+        // （见 `Appearance/EntityPageRepaint.x.swift` 文件头）。
         activateEntityPageRepaint()
 
-        // ★ 2026-10-17（用户给了两张 AM 艺人页截图 118/119：「am 是这么处理的：用渐变来处理，而往下滚
-        //   就一直保持渐变之后的颜色…而且渐变之后的颜色会根据艺人变化」）：
-        //   日志证明"渐变 / 往下滚保持 / 随艺人变"这三条我们**早就有**（`[PageField] field colour is
-        //   now #F2F7FB … bottom #A1A5A8` 就是 Nanatsukaze 那页的淡灰底）。真正缺的是 **AM 解决
-        //   "照片铺到顶"的办法：翻状态栏**（118 黑字 / 119 白字）—— 我们原来一处都没碰过它
-        //   ⇒ 亮封面上白字直接消失（照片 115）。挂点与实测依据见
-        //   `Appearance/EntityPageStatusBar.x.swift` 文件头（Info.plist 没有关掉 VC 控制、
-        //   二进制里 `statusBarStyle` 0 命中）。
+        // 日志证明"渐变 / 往下滚保持 / 随艺人变"这三条我们**早就有**（`[PageField] field colour is
+        // now #F2F7FB … bottom #A1A5A8` 就是 Nanatsukaze 那页的淡灰底）。真正缺的是 **AM 解决
+        // "照片铺到顶"的办法：翻状态栏**（118 黑字 / 119 白字）—— 我们原来一处都没碰过它
+        // ⇒ 亮封面上白字直接消失。挂点与实测依据见
+        // `Appearance/EntityPageStatusBar.x.swift` 文件头（Info.plist 没有关掉 VC 控制、
+        // 二进制里 `statusBarStyle` 0 命中）。
         activateEntityPageStatusBar()
 
-        // ★ 2026-10-13（用户第 5 轮问的）：「歌单封面是歌单里前四首歌的专辑封面拼成的一张，
-        //   有没有办法让它变成一张？」—— 能，而且不用动视图层：
-        //   那个四宫格**不是视图拼的**，地址里就串着四张图的 id
-        //   （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`，IPA 的 `__cstring` 里逐字有
-        //   模板串 `https://mosaic.scdn.co/%lu/%@`）；把路径截到**第一个 40 位 id**，
-        //   服务端回的是一张正常的单张封面（本机实测 640/300 都是 200 + image/jpeg）。
-        //   钩子挂在 `SPTMosaicImageLoaderRequest` 拆路径之前（`load` / `loadMosaic` / `URL`），
-        //   而**不是**去藏/替换视图 —— 视图那边拿到的本来就是一张成品图。
-        //   证据、为什么不能写 `setURL:`、以及关掉开关的效果都在
-        //   `Appearance/PlaylistSingleCover.x.swift` 文件头。**默认开**（就是他要的结果）。
+        // （歌单封面是歌单里前四首歌的专辑封面拼成的一张，
+        // 有没有办法让它变成一张？—— 能，而且不用动视图层：
+        // 那个四宫格**不是视图拼的**，地址里就串着四张图的 id
+        // （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`，IPA 的 `__cstring` 里逐字有
+        // 模板串 `https://mosaic.scdn.co/%lu/%@`）；把路径截到**第一个 40 位 id**，
+        // 服务端回的是一张正常的单张封面（本机实测 640/300 都是 200 + image/jpeg）。
+        // 钩子挂在 `SPTMosaicImageLoaderRequest` 拆路径之前（`load` / `loadMosaic` / `URL`），
+        // 而**不是**去藏/替换视图 —— 视图那边拿到的本来就是一张成品图。
+        // 证据、为什么不能写 `setURL:`、以及关掉开关的效果都在
+        // `Appearance/PlaylistSingleCover.x.swift` 文件头。**默认开**（就是他要的结果）。
         activatePlaylistSingleCover()
 
-        // ⛔「播放器双击手势」已于 2026-10-04 删除（用户拍板：先删掉，之后再搞）。
-        //   原因（都在日志里）：① 手势挂在**页面根视图**上 ⇒ 在播放键上方双击也会跳歌
-        //   （`[Gestures] diag … singleTapsAbove=2`，日志 39/40/41）；② 它最该起作用的那一面
-        //   （全屏歌词）默认关，30 份日志里一次都没验过；③ 最近 8 份日志里它**一次都没被用过**。
-        //   原来的实现、设置行、UserDefaults 键与 7 条文案**全部删除**，不留"按了会误伤"的入口。
-        //   要重做时的三条要求写在 `NowPlayingBackdrop` 同级的文档里 —— 见
-        //   `Tools/eevee-hookfinder/SESSION_2026-10-03_NIGHT.md` §10（含修法：控件上不认 + 单击让位）。
-
+        // ⛔「播放器双击手势」已于删除（先删掉，之后再搞）。
+        // 原因：① 手势挂在**页面根视图**上 ⇒ 在播放键上方双击也会跳歌
+        // ② 它最该起作用的那一面
+        // （全屏歌词）默认关，
+        // 原来的实现、设置行、UserDefaults 键与 7 条文案**全部删除**，不留"按了会误伤"的入口。
+        // 要重做时的三条要求：控件上不认 + 单击让位 + 另选挂点（见 `NowPlayingBackdrop` 同级说明）。
+        //
         // 调试用视图树转储：默认关，开关在「调试」页且打开即生效（那边会直接调
-        // `applyEnabledState()`）；这里只是让重启后能自动续上。
+        // `applyEnabledState`）；这里只是让重启后能自动续上。
         ViewTreeDumper.applyEnabledState()
 
-        // ★ 2026-10-03 夜：一次性「**探针包**」（`ProbePack`）—— 把"只有装一次机才知道"的
-        //   只读事实一次问完（pw v0.21.1 那些目标类在 9.1.88 上还在不在…）。
-        //   **只读、只打日志**，查完整块删。它走 `writeDebugLog` ⇒「启用日志记录」关着时零动作。
+        // 夜：一次性「**探针包**」（`ProbePack`）—— 把"只有装一次机才知道"的
+        // 只读事实一次问完（pw v0.21.1 那些目标类在 9.1.88 上还在不在…）。
+        // **只读、只打日志**，查完整块删。它走 `writeDebugLog` ⇒「启用日志记录」关着时零动作。
         ProbePack.runOnce()
 
         // 屏蔽艺人：1 秒一次的只读轮询，发现换歌就判一次（名单空着时它什么都不做）。
@@ -540,11 +534,11 @@ struct EeveeSpotify: Tweak {
         // Spotify 9.1.x. Each target is runtime-gated for minor-version safety.
         activateUpsellServiceBlocker()
 
-        // ★ 2026-10-13：CMP（ClientMessagingPlatform）营销面的**呈现侧**兜底 ——
-        //   全屏「welcome back / 2 个月 Premium」接管、「Final call」首页横幅。
-        //   请求侧已经在 `URL+Extension.isPendragonFetchMessageList` 拦了，但**已落盘**的
-        //   消息还会弹 ⇒ 这一层管它们。7 个目标类已用 dump-9.1.88 逐条核对过，
-        //   每个都带"类/方法存在性"检查，缺了只记日志、不影响其余 hook。
+        // CMP（ClientMessagingPlatform）营销面的**呈现侧**兜底 ——
+        // 全屏「welcome back / 2 个月 Premium」接管、「Final call」首页横幅。
+        // 请求侧已经在 `URL+Extension.isPendragonFetchMessageList` 拦了，但**已落盘**的
+        // 消息还会弹 ⇒ 这一层管它们。7 个目标类已用 dump-9.1.88 逐条核对过，
+        // 每个都带"类/方法存在性"检查，缺了只记日志、不影响其余 hook。
         activateClientMessagingPlatformBlocker()
 
         // Block upsell components injected into Hub/home JSON (e.g. upgrade banners).
@@ -553,8 +547,8 @@ struct EeveeSpotify: Tweak {
             NSLog("[EeveeSpotify] AdBlockerGroup activated")
         }
 
-        // activateEeveeFlexGesture()
-
+        // activateEeveeFlexGesture
+        //
         // Clean Share Links: swizzle the concrete class of UIPasteboard.general in
         // addition to the ClassHook<UIPasteboard> hooks — the general pasteboard is a
         // private subclass whose overridden setters would otherwise bypass base-class
@@ -577,26 +571,26 @@ struct EeveeSpotify: Tweak {
         let deviceModel = UIDevice.current.model
 
         writeDebugLog("=== EeveeSpotify \(EeveeSpotify.version) starting ===")
-        // ★ 2026-10-13：**默认值变更的补偿**（用户要求"Genius 功能默认改成开启"）。
-        //   `lyricsOptions` 是**整块 JSON** 落盘的 ⇒ 只改 `defaultValue` 追不到已经写过的那份，
-        //   所以这里一次性把盘上那份也打开（只做一次，之后尊重用户在设置里的开关）。
+        // **默认值变更的补偿**（"Genius 功能默认改成开启"）。
+        // `lyricsOptions` 是**整块 JSON** 落盘的 ⇒ 只改 `defaultValue` 追不到已经写过的那份，
+        // 所以这里一次性把盘上那份也打开（只做一次，之后尊重用户在设置里的开关）。
         LyricsOptions.applyGeniusFallbackDefaultIfNeeded()
-        // ★ 2026-10-13（用户要求"**默认启用标签用液态玻璃**"）：同上，把
-        //   `tabBarSystemGlass` 的默认值由关改成**开**；这个键只要被设置页拨过一次，
-        //   盘上就是一个具体的 `false` ⇒ 也要补一刀（只做一次，之后尊重用户在设置里的开关）。
-        //   ⚠️ 关掉它仍然是"完全不动"（内容与高度精确写回），见
-        //   `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()` 的注释。
+        // （"**默认启用标签用液态玻璃**"）：同上，把
+        // `tabBarSystemGlass` 的默认值由关改成**开**；这个键只要被设置页拨过一次，
+        // 盘上就是一个具体的 `false` ⇒ 也要补一刀（只做一次，之后尊重用户在设置里的开关）。
+        // ⚠️ 关掉它仍然是"完全不动"（内容与高度精确写回），见
+        // `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded` 的注释。
         UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()
-        // ★ 2026-10-22（用户：「整合以下功能…名字为：修改Spotify听歌页布局…默认开启」）：
-        //   把听歌页那五件结构改动（取色底 / 隐藏播放页模块 / 隐藏官方单行歌词 /
-        //   隐藏两颗胶囊 / 歌词进播放器）收进一颗总开关。每次启动都把盘上那五颗键
-        //   **按总开关归一**一次 —— 旧版本被单独关过的那几项、以及导入旧备份带进来的
-        //   单键值，都会在这一次收正；之后总开关就是唯一真相（详见该方法的注释）。
+        // （整合以下功能…名字为：修改Spotify听歌页布局…默认开启）：
+        // 把听歌页那五件结构改动（取色底 / 隐藏播放页模块 / 隐藏官方单行歌词 /
+        // 隐藏两颗胶囊 / 歌词进播放器）收进一颗总开关。每次启动都把盘上那五颗键
+        // **按总开关归一**一次 —— 旧版本被单独关过的那几项、以及导入旧备份带进来的
+        // 单键值，都会在这一次收正；之后总开关就是唯一真相（详见该方法的注释）。
         UserDefaults.normalizeNowPlayingLayoutKeys()
-        // ★ 2026-10-13（用户要求：「**展示罗马化翻译 / 歌词翻译默认开启**」）：把
-        //   「三颗逐语言罗马化开关 = 开」+「不隐藏译文」一次性写进键里 —— **只对没写过的键**，
-        //   已经手动选过的设备保持他自己的选择（与上面那条、以及 Genius 回退那条同一条纪律）。
-        //   ⚠️ 必须写键、不能只改 getter：那三颗键在别处是按**字面量**读的（见该方法上的注释）。
+        // （**展示罗马化翻译 / 歌词翻译默认开启**）：把
+        // 「三颗逐语言罗马化开关 = 开」+「不隐藏译文」一次性写进键里 —— **只对没写过的键**，
+        // 已经手动选过的设备保持他自己的选择（与上面那条、以及 Genius 回退那条同一条纪律）。
+        // ⚠️ 必须写键、不能只改 getter：那三颗键在别处是按**字面量**读的（见该方法上的注释）。
         NgzhwmSettingsViewModel.applyRomanizationAndTranslationDefaultsIfNeeded()
         // 这一行是"那一轮跑的是哪一档"的标记：玻璃没出现时，先看它是 ON 还是 OFF。
         writeDebugLog("[INIT] tab bar glass: \(UserDefaults.tabBarSystemGlass ? "ON" : "OFF")")
@@ -607,24 +601,23 @@ struct EeveeSpotify: Tweak {
         writeDebugLog("[INIT] Lyrics source: \(UserDefaults.lyricsSource)")
         // 一个真开关（补卡片元素）+ 一个写死启用的修复（隐藏官方歌词）
         // + 禁用歌词功能 + Genius 回退开关，一次打出来：
-        //   · 补卡片元素 —— 2026-09-26 起是读 UserDefaults 的真开关（默认 ON），
-        //     这里记的是**实际生效值**；
-        //   · 隐藏官方歌词 —— 2026-09-25 起写死在 `NgzhwmSettingsViewModel` 里；
-        //   · 禁用歌词功能 —— 仍然是用户开关，值是它自己。
+        // · 补卡片元素 ——起是读 UserDefaults 的真开关（默认 ON），
+        // 这里记的是**实际生效值**；
+        // · 隐藏官方歌词 ——起写死在 `NgzhwmSettingsViewModel` 里；
+        // · 禁用歌词功能 —— 仍然是用户开关，值是它自己。
         //
-        // ⚠️ 2026-09-27：`synthetic line timing` 一栏已删 —— 「补全歌词时间轴」那个开关
+        // ⚠️`synthetic line timing` 一栏已删 —— 「补全歌词时间轴」那个开关
         // 连同它给真实歌词源合成时间轴的代码一起删了（只剩占位文案写死补，见
         // `makeUnavailableLyrics`）。所以这一栏不再有"两档"，A/B 分组看的是别的字段。
         //
         // 这行同时是排障时的"这一轮跑的是哪一档"标记（A/B 就靠它分组）。
         //
-        // ⚠️ 「补卡片元素」必须打出来：排查"预热卡时有时无"时，日志里其余线索全是
+        // ⚠️ 「补卡片元素」必须打出来：排查"预热卡时有时无"时，
         // 间接的（没注入 ≠ 开关关着 —— 也可能是服务端本来就带那个元素，或客户端走了
         // 缓存、我们连响应都没看到）。没有这一行，状态只能靠猜。
         //
         // ⚠️ 「Genius 回退」同样必须打出来 —— 它是**跨场次在变**的那个状态：
-        // 2026-09-26 日志 4（10:47）开着，日志 5–14（12:15–23:35，含日志 11）整批关着，
-        // 次日日志 15（09:51）又开着。日志 11 里 170 次请求、124 次网易云失败，一次
+        // 一次
         // Genius 回退都没有 —— 当时只能靠"有没有 `falling back to Genius` 这一行"反推，
         // 没法区分"开关关着"和"回退跑了但 0 命中"。补上这一行之后每份日志自证状态。
         //
@@ -642,35 +635,35 @@ struct EeveeSpotify: Tweak {
                 + "\(UserDefaults.lyricsOptions.geniusFallback ? "ON" : "OFF")"
                 + " | AMLL preferred: "
                 + "\(NgzhwmSettingsViewModel.isAmllPreferred ? "ON" : "OFF")"
-                // ★ 2026-10-17：实验开关的状态必须自证 —— 它会**整体覆盖**上面这些设置
-                //   （连"来源"都不看），所以读日志时第一眼就要知道它开没开。
+                // 实验开关的状态必须自证 —— 它会**整体覆盖**上面这些设置
+                // （连"来源"都不看），所以读日志时第一眼就要知道它开没开。
                 + " | Apple Music official TTML: "
                 + "\(UserDefaults.experimentsOptions.appleMusicOfficialTtml ? "ON" : "OFF")"
         )
         writeDebugLog("[INIT] tweakInitTime: \(tweakInitTime)")
 
-        // ★ 2026-10-13：**只读**探针 —— 封面图到底由哪个类/哪个选择器加载。
-        //   用户问"歌单封面能不能只显示第一首的专辑封面"，而 `dump-9.1.88.txt` 的
-        //   `[selectors]` 桶只给选择器名、不给所属类 ⇒ 只能上设备问一次（不 hook、不调用）。
+        // **只读**探针 —— 封面图到底由哪个类/哪个选择器加载。
+        // 问"歌单封面能不能只显示第一首的专辑封面"，而 的
+        // `[selectors]` 桶只给选择器名、不给所属类 ⇒ 只能上设备问一次（不 hook、不调用）。
         ImagePipelineProbe.probeOnce()
 
-        // ★ 2026-10-13 夜：**只读**探针 —— 专辑页 / 歌单页**头部封面到底是哪一个视图**。
-        //   日志 77 把两页的骨架摸清了（专辑页是 `CreativeWorkPlatform` 那一族，且它的 Header
-        //   **跟着滚动淡入淡出**；歌单页是 `Components.Header.UI.ArtworkImage`），
-        //   但**封面那一格没有 id、`ViewTreeDumper` 又在深度 24 截断** ⇒ 树里看不到它。
-        //   这个探针只在两个头部里往下走走、把"像封面的"打出来（不 hook、不改任何东西，
-        //   **每页每种头部最多 2 次、最多 6 页**就自己停；2026-10-17 起按**页**计数，见那个文件）。
+        // 夜：**只读**探针 —— 专辑页 / 歌单页**头部封面到底是哪一个视图**。
+        // 且它的 Header
+        // **跟着滚动淡入淡出**；歌单页是 `Components.Header.UI.ArtworkImage`），
+        // 但**封面那一格没有 id、`ViewTreeDumper` 又在深度 24 截断** ⇒ 树里看不到它。
+        // 这个探针只在两个头部里往下走走、把"像封面的"打出来（不 hook、不改任何东西，
+        // **每页每种头部最多 2 次、最多 6 页**就自己停；起按**页**计数，见那个文件）。
         HeaderArtworkProbe.start()
 
-        // ★ 2026-10-13（用户：「我就一个要求：看起来像 Apple Music」）：
-        //   专辑页 / 歌单页的 **AM 化** —— ① 取色底（最底层渐变）② 封面下缘溶解。
-        //   做法照 pw 的 `AlbumField`：铺在页面最底层，而且**必须先清掉 list / 每个 cell 画的
-        //   `#121212` 底色**（不清就完全看不见那层 —— 那条坑的近亲是"整页变黑"）。
-        //   ★ 2026-10-14 更正（原文写"两颗开关各自独立、**默认都开**"，两处都与代码不符）：
-        //     · 用户侧**只有一颗**（`entityPageDissolve`）—— "封面取色底"那条路径已并进它，
-        //       且 `EntityPageAppearance.x.swift:317` 读的也是同一个键（老键 `entityPageField` 已删）；
-        //     · `entityPageDissolve` 默认是 **false**（`UserDefaults+Extension.swift` 里的 `?? false`）。
-        //   机制与证据见 `Appearance/EntityPageAppearance.x.swift` 文件头。日志 tag：`[PageField]`。
+        // （我就一个要求：看起来像 Apple Music）：
+        // 专辑页 / 歌单页的 **AM 化** —— ① 取色底（最底层渐变）② 封面下缘溶解。
+        // 做法照 pw 的 `AlbumField`：铺在页面最底层，而且**必须先清掉 list / 每个 cell 画的
+        // `#121212` 底色**（不清就完全看不见那层 —— 那条坑的近亲是"整页变黑"）。
+        // 更正（原文写"两颗开关各自独立、**默认都开**"，两处都与代码不符）：
+        // · 用户侧**只有一颗**（`entityPageDissolve`）—— "封面取色底"那条路径已并进它，
+        // 且 `EntityPageAppearance.x.swift:317` 读的也是同一个键（老键 `entityPageField` 已删）；
+        // · `entityPageDissolve` 默认是 **false**（`UserDefaults+Extension.swift` 里的 `?? false`）。
+        // 机制与证据见 `Appearance/EntityPageAppearance.x.swift` 文件头。日志 tag：`[PageField]`。
         EntityPageAppearance.start()
 
         // 隐私 / 触感 / Flag 覆盖都是"默认关、用户自己开"的，所以启动时把**实际生效值**
@@ -686,26 +679,24 @@ struct EeveeSpotify: Tweak {
                 + " | flag overrides=\(FlagOverrideStore.count)"
         )
 
-        // ★ 2026-10-02：把「覆盖配置」（补丁页那个开关）的状态也打出来。
+        // 把「覆盖配置」（补丁页那个开关）的状态也打出来。
         //
         // 排查"整库变黑 / 听不了歌"时，**H2（我们的 premium 伪装漏了一次）与
-        // H1/H3（服务端按会话地区 / 账号风控）的区分全看它开没开**（见
-        // `SESSION_2026-10-02_APPEARANCE.md` §12.2–12.3）：
-        //   · 开着还是黑 → 大概率不是产品状态那一层（H1/H3）；
-        //   · 关着 → 先怀疑 H2，把开关打开再试。
-        // 日志 30 里一个字都没有，于是"开了覆盖配置也没用"这句话没法验证。
+        // H1/H3（服务端按会话地区 / 账号风控）的区分全看它开没开**：
+        // · 开着还是黑 → 大概率不是产品状态那一层（H1/H3）；
+        // · 关着 → 先怀疑 H2，把开关打开再试。
+        // 于是"开了覆盖配置也没用"这句话没法验证。
         writeDebugLog(
             "[INIT] patching: overwriteConfig="
                 + "\(UserDefaults.overwriteConfiguration ? "ON" : "OFF")"
                 + " (ON = the bundled Premium config snapshot fully replaces the one the server sends)"
         )
 
-        // ★ 2026-10-12：**「不启用 Premium 补丁」那一档以前一行都没有** —— 于是用户那轮
-        // A/B（"和不启用 Premium 补丁有关"）在日志里**无法复核**：翻遍 30 多份日志也查不到
+        // **「不启用 Premium 补丁」那一档以前一行都没有** —— 于是用户那轮
         // 症状出现时 patchType 在哪一档。判读：
-        //   · `requests` = 我们在改写账号态与 flag（**用户是免费号，这一档才是"能放"的那一档**）；
-        //   · `disabled` = 服务端说什么就是什么 ⇒ 免费号在这一档**本来就该灰、该放不动**；
-        //   · `notSet`   = 还没定过档（首次启动、或"清空设置"之后）。
+        // · `requests` = 我们在改写账号态与 flag（**用户是免费号，这一档才是"能放"的那一档**）；
+        // · `disabled` = 服务端说什么就是什么 ⇒ 免费号在这一档**本来就该灰、该放不动**；
+        // · `notSet` = 还没定过档（首次启动、或"清空设置"之后）。
         // `hasPatchedBootstrap` = 这次启动 bootstrap 那条路有没有真的改写成功。
         writeDebugLog(
             "[INIT] patching: patchType=\(UserDefaults.patchType)"
@@ -717,9 +708,9 @@ struct EeveeSpotify: Tweak {
         // CarPlay crash fix (Issue #16) — safe-gated
         activateCarPlayCrashFix()
 
-        // （已移除：Reincarnated 自带的开屏捐赠彩蛋 Donation.activate()
-        //   —— "Hysan's Elsa Recovery Fund"，第 5/10 次启动弹 toast）
-
+        // （已移除：Reincarnated 自带的开屏捐赠彩蛋 Donation.activate
+        // —— "Hysan's Elsa Recovery Fund"，第 5/10 次启动弹 toast）
+        //
         // Verify critical hook targets exist
         let hookTargets: [(String, String)] = [
             ("SPTAuthSessionImplementation", "SPTAuthSession"),
@@ -743,7 +734,7 @@ struct EeveeSpotify: Tweak {
         }
 
         // `SPTPlayerTrackHook`（见 `CustomLyrics+AllTracksLyrics.x.swift`）在 9.1.x 上挂的是
-        // `SPTPlayerTrack`，并在它的 `metadata()` 里写 `has_lyrics = "true"`。
+        // `SPTPlayerTrack`，并在它的 `metadata` 里写 `has_lyrics = "true"`。
         //
         // 这条覆写若没绑上，客户端就只能听 Spotify 服务端的判定 —— 结果是"Spotify 没词的歌"
         // 连**面 B**（与「关于艺人」并列的「歌词」预览卡片）都不建，而**面 A**（封面与歌名
@@ -779,10 +770,10 @@ struct EeveeSpotify: Tweak {
                 activateV91ServerSidedReminderIfAvailable()
             }
 
-            // ★ 2026-10-17：「实验 → 启用Apple Music官方TTML歌词」也是一个**替换歌词**的源。
-            //   它必须在这里就成立，否则用户在来源里选着「禁用歌词替换」（`.notReplaced`）
-            //   时，整个歌词模块根本不会激活 ⇒ 实验打开也什么都不发生。
-            //   覆盖点见 `CustomLyrics.loadCustomLyricsForCurrentTrack` 顶部那一段。
+            // 「实验 → 启用Apple Music官方TTML歌词」也是一个**替换歌词**的源。
+            // 它必须在这里就成立，否则禁用歌词替换（`.notReplaced`）
+            // 时，整个歌词模块根本不会激活 ⇒ 实验打开也什么都不发生。
+            // 覆盖点见 `CustomLyrics.loadCustomLyricsForCurrentTrack` 顶部那一段。
             let lyricsEnabled = UserDefaults.lyricsSource.isReplacingLyrics
                 || UserDefaults.experimentsOptions.appleMusicOfficialTtml
 
@@ -816,11 +807,11 @@ struct EeveeSpotify: Tweak {
             }
 
             // Settings 入口：9.1.44+ 唯一那条路（见下面）。
-            // ⚠️ 2026-10-02：原来这里还有一段"老设置页"（`ProfileSettingsSection` +
+            // ⚠️原来这里还有一段"老设置页"（`ProfileSettingsSection` +
             // `SettingsViewController` + `RootSettingsViewController` + 按标题猜设置的兜底）
             // —— 入口类只在 Spotify 9.1.0 上存在（扫过 9.1.0/9.1.74/9.1.76/9.1.86 四个包），
             // 在本仓库唯一的目标版本 9.1.86 上永远走 `else` 打一行 Skipped。**已按死代码删除。**
-
+            //
             // 9.1.44 path — ProfileSettingsSection gone, new SettingsListViewController owns Settings root.
             if NSClassFromString("_TtC21Settings_PlatformImpl26SettingsListViewController") != nil {
                 UniversalSettingsIntegrationListVCGroup().activate()
@@ -836,20 +827,20 @@ struct EeveeSpotify: Tweak {
             // ② 这里按 9.1.88 的真实形态 hook 那个 init（类/方法对不上就只打一行日志）。
             InstagramShareDestination.activateIfNeeded()
 
-            // ⚠️⚠️ 这个 `return` 把 `init()` 切成了两段 —— 它后面那句 "For other versions"
-            //   底下整段在 **9.1.x（本仓唯一的目标版本）上永远不会执行**。
-            //   已经栽过两次：2026-10-30 的 karaoke / SponsorBlock / 调试探针，以及
-            //   2026-10-30 的 beta 提示（`BetaVersionNotice` 写在函数最末尾 ⇒ 一次都没弹过，
-            //   2026-10-31 已删）。
-            //   ⇒ **凡是"所有版本都要跑"的东西，加在 return 之前（这里），不要只加在函数末尾。**
+            // ⚠️⚠️ 这个 `return` 把 `init` 切成了两段 —— 它后面那句 "For other versions"
+            // 底下整段在 **9.1.x（本仓唯一的目标版本）上永远不会执行**。
+            // 已经栽过两次：的 karaoke / SponsorBlock / 调试探针，以及
+            // 的 beta 提示（`BetaVersionNotice` 写在函数最末尾 ⇒ 一次都没弹过，
+            // 已删）。
+            // ⇒ **凡是"所有版本都要跑"的东西，加在 return 之前（这里），不要只加在函数末尾。**
             return
         }
 
         // For other versions, activate all features normally
-        // ⚠️ 2026-10-02 删掉的 Instagram 分享位实验挂的是 `SPTSharingSDK` /
-        //    `SPTShare_FoundationImplProperties` —— **只在 Spotify 9.1.0 上存在**。
-        //    2026-10-16 按 9.1.88 的形态重做（`Share_FoundationSwiftImpl…Properties` 的 init），
-        //    见 `Experiments/Instagram/ShowInstagramDestination.x.swift`。
+        // ⚠️删掉的 Instagram 分享位实验挂的是 `SPTSharingSDK` /
+        // `SPTShare_FoundationImplProperties` —— **只在 Spotify 9.1.0 上存在**。
+        // 按 9.1.88 的形态重做（`Share_FoundationSwiftImpl…Properties` 的 init），
+        // 见 `Experiments/Instagram/ShowInstagramDestination.x.swift`。
         InstagramShareDestination.activateIfNeeded()
         
         if UserDefaults.darkPopUps {
@@ -860,7 +851,7 @@ struct EeveeSpotify: Tweak {
             activatePremiumPatchingGroup()
         }
         
-        // ★ 2026-10-17：同上 —— 那个实验在"来源 = 禁用歌词替换"时也要让模块活着。
+        // 同上 —— 那个实验在"来源 = 禁用歌词替换"时也要让模块活着。
         if UserDefaults.lyricsSource.isReplacingLyrics
             || UserDefaults.experimentsOptions.appleMusicOfficialTtml {
             BaseLyricsGroup().activate()
@@ -875,7 +866,7 @@ struct EeveeSpotify: Tweak {
         
         // Settings 入口：只留 9.1.44+ 那条（`SettingsListViewController`）。
         // 老的 ProfileSettingsSection / SettingsViewController / RootSettingsViewController /
-        // "按标题猜设置"的那条兜底 hook 已于 2026-10-02 删除（只服务 9.1.86 之前的版本）。
+        // "按标题猜设置"的那条兜底 hook 已于删除（只服务 9.1.86 之前的版本）。
         if NSClassFromString("_TtC21Settings_PlatformImpl26SettingsListViewController") != nil {
             UniversalSettingsIntegrationListVCGroup().activate()
         }

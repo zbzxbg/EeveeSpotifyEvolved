@@ -1,18 +1,18 @@
 import Foundation
 import SwiftUI
 
-/// 「歌词偏移」独立页（2026-10-23 从歌词设置页里拆出来；2026-10-24 从"只做网易云"改成所有源）。
+/// 「歌词偏移」独立页从歌词设置页里拆出来；从"只做网易云"改成所有源）。
 ///
-/// 为什么单独一页（用户原话）：「设置页里面放个可点击进去的页面吧，和那些功能一样」——
+/// 为什么单独一页（设置页里面放个可点击进去的页面吧，和那些功能一样——
 /// 这个功能会随听歌不断长出新的条目，内嵌在歌词页里越拖越长；拆成子页之后
 /// 入口和「歌词 / 听歌页 / 补丁」那些在同一组，页内只留这一件事。
 ///
-/// ★ 2026-10-24（用户）：「把歌词偏移这个东西做成对全部歌词源都生效，但记录的时候，
-///   要连带把歌词源记录，genius不用歌词偏移这个东西」。于是：
-///   · 每一条记录都是「源 + 曲目」，行里把源名画出来（同一首歌换源就是另一条）；
-///   · Genius 进来时只显示一句说明，不给 ± 按钮（它没有可信时间轴，挪了没意义）。
+/// 「把歌词偏移这个东西做成对全部歌词源都生效，但记录的时候，
+/// 要连带把歌词源记录，genius不用歌词偏移这个东西」。于是：
+/// · 每一条记录都是「源 + 曲目」，行里把源名画出来（同一首歌换源就是另一条）；
+/// · Genius 进来时只显示一句说明，不给 ± 按钮（它没有可信时间轴，挪了没意义）。
 ///
-/// 只有**单条偏移**（2026-10-23 去掉「默认偏移」）：默认值是"所有歌词一起挪"，
+/// 只有**单条偏移**去掉「默认偏移」）：默认值是"所有歌词一起挪"，
 /// 实际没什么用，还会让"这首歌到底存了多少"更难看清。
 struct EeveeLyricsOffsetSettingsView: View {
 
@@ -51,7 +51,7 @@ struct EeveeLyricsOffsetSettingsView: View {
             savedEntriesSection()
             NonIPadSpacerView()
         }
-        // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 与其它自定义页保持一致。
+        // inset-grouped（胶囊卡片）—— 与其它自定义页保持一致。
         .listStyle(InsetGroupedListStyle())
         .onAppear { refreshCurrentSongOffset() }
     }
@@ -135,8 +135,8 @@ struct EeveeLyricsOffsetSettingsView: View {
     }
 
     // MARK: - 已保存
-
-    /// 搜索过滤后的那一列。空搜索词 = 全部。
+    //
+    // 搜索过滤后的那一列。空搜索词 = 全部。
     private var visibleSavedEntries: [SavedEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return savedEntries }
@@ -179,9 +179,9 @@ struct EeveeLyricsOffsetSettingsView: View {
         }
 
         // ⚠️ 这里必须用 `Section(header:footer:content:)`（header/footer 是 **View**、content 是
-        //    尾随闭包）—— `Section(header: X) { … } footer: { … }` 这种写法在本仓库的
-        //    SwiftUI 版本里没有对应重载，会被解析成 `init(header:footer:content:)` 而编译失败
-        //    （2026-10-23 实测：「incorrect argument label … have 'header:_:footer:'」）。
+        // 尾随闭包）—— `Section(header: X) { … } footer: { … }` 这种写法在本仓库的
+        // SwiftUI 版本里没有对应重载，会被解析成 `init(header:footer:content:)` 而编译失败
+        // 实测：「incorrect argument label … have 'header:_:footer:'」）。
         Section(
             header: Text("lyrics_offset_saved".localized),
             footer: Text("lyrics_offset_saved_count".localizeWithFormat(savedEntries.count))
@@ -261,8 +261,8 @@ struct EeveeLyricsOffsetSettingsView: View {
 
     /// 「当前歌曲」那一行：取**当前这份歌词**的曲目 id 与源。
     ///
-    /// ★ 2026-10-24：以前只在"当前歌词来自网易云"时才取得到 track id；现在任何源都取，
-    ///   Genius 也取（但要靠 `currentSongSupportsOffset` 把 ± 按钮挡住）。
+    /// 以前只在"当前歌词来自网易云"时才取得到 track id；现在任何源都取，
+    /// Genius 也取（但要靠 `currentSongSupportsOffset` 把 ± 按钮挡住）。
     private func refreshCurrentSongOffset() {
         let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
         currentSongTitle = track?.string(ifResponding: "trackTitle") ?? ""

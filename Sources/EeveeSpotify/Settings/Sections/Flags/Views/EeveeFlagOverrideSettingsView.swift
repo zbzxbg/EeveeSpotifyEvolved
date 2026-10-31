@@ -5,14 +5,14 @@ import UIKit
 ///
 /// 它不改网络，也不自己造一条修改配置的路径：写进 `FlagOverrideStore`，由
 /// `modifyAssignedValues` 追加在内置替换**之后**应用（见 `FlagOverride+Replacement.swift`），
-/// 所以用户的选择能压过仓库自己的默认值。
-/// ★ 2026-10-17 起还多了一条**读时拦截**同类覆盖（`RemoteFlags` 钩
+/// 所以能压过仓库自己的默认值。
+/// 起还多了一条**读时拦截**同类覆盖（`RemoteFlags` 钩
 /// `RemoteConfigurationSDK` 的取值入口，见 `Flags/RemoteFlags.swift`）—— 两条路读同一张表。
 ///
 /// ⚠️ 这一页**只负责"编辑"**：已知 flag 的目录搬到了独立的「已知 flag」页（带过滤框）——
-/// 两件事挤在一页就是上一版"表格墙"的由来（用户反馈页面臃肿）。
+/// 两件事挤在一页就是上一版"表格墙"的由来（页面臃肿）。
 ///
-/// ★★ 2026-10-17（用户：「关于 flag 这部分…用上游的」）：**根页那一行现在打开的是
+/// （关于 flag 这部分…用上游的）：**根页那一行现在打开的是
 /// 「远端开关」浏览器页**（`EeveeFlagBrowserView`，自动扫出来的完整清单）——
 /// 这一页降级成它里面那一行「手动写入」，用在"浏览器还没扫到 / 要写一条服务端从没
 /// 下发过的 flag"的场合。存储与生效路径一个字没变，所以两页永远一致。
@@ -42,7 +42,7 @@ struct EeveeFlagOverrideSettingsView: View {
                 }
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear {
             overrides = FlagOverrideStore.all

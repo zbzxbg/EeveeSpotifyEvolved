@@ -21,7 +21,7 @@ extension NowPlayingLyricsPlate {
         var titleElement: UIView?
     }
 
-    /// `measure()` 的两种结局（见 `layoutAndMount` 里那段说明）。
+    /// `measure` 的两种结局（见 `layoutAndMount` 里那段说明）。
     enum MeasureOutcome {
         case ok(Geometry)
         case failed(String)
@@ -58,17 +58,16 @@ extension NowPlayingLyricsPlate {
         // 缩略图：贴"封面区"左上 —— 我们用封面自己的左上 + `thumbTop`（pw 用 `SGRPlayerArtworkAreaIn`，
         // 我们量不到那个 band，就用封面的顶；差别只是几 pt，且换歌会重算）。
         // ⚠️ **`leading` 必须夹住**：`titleElement` 可能是个 marquee（`transform.tx` 是**模型值**、
-        //    `UIView.animate` 会立刻写上去）或者右对齐的行 ⇒ 量出来的 `minX` 可能是负的、或每拍都在跳。
-        //    它直接喂给 `thumbTransform`，后果有两条：① 缩略图飞到画面外；② `applyCoverState` 的收敛
-        //    判据是**精确比较**，每拍一个新 `target` 就会每 0.5s 重启一次 0.45s 的动画（封面永不停）。
+        // `UIView.animate` 会立刻写上去）或者右对齐的行 ⇒ 量出来的 `minX` 可能是负的、或每拍都在跳。
+        // 它直接喂给 `thumbTransform`，后果有两条：① 缩略图飞到画面外；② `applyCoverState` 的收敛
+        // 判据是**精确比较**，每拍一个新 `target` 就会每 0.5s 重启一次 0.45s 的动画（封面永不停）。
         let rawLeading = titleElement.map { untransformed($0, in: page).minX } ?? (cover.minX + 20)
         let leading = min(
             max(rawLeading, page.bounds.minX + stageSideInset),
             page.bounds.maxX - thumbSide - stageSideInset
         )
-        // ★ 2026-10-11（照片 67 → 68）：缩略图**不再跟着原生封面**，改成**贴导航条下沿**。
+        // 缩略图**不再跟着原生封面**，改成**贴导航条下沿**。
         //
-        // 原来 `thumb.y = cover.minY + 8`：日志 55 的 `cover.minY = 161` ⇒ 169，
         // 也就是把 96（导航条下沿）到 161 那 **65pt 白扔**；而 kumone 的 header 是贴着自己那根
         // 横条下面的（67–133）。我们上面有 Spotify 的 96pt 导航条躲不开 ⇒ 目标 = 96 + 8 = 104
         // （能达到的最近位置）。导航条用 **id** 量（`now-playing-minimize-button`），
@@ -86,19 +85,19 @@ extension NowPlayingLyricsPlate {
         let rowFrame = titleRow.map { untransformed($0, in: page) }
         let top = rowFrame.map { thumb.midY - $0.height / 2 } ?? (thumb.maxY + 12)
         let lift = top - (rowFrame?.minY ?? top)
-        // ★ 2026-10-04（用户：「当歌曲名字过长时…右侧的晃动区超过屏幕的右侧了」）：
-        //   右移给缩略图让位的量**不许把那一行的右边缘推出屏幕**。
-        //   算术（真机：页面 414pt、那一行 308pt、原来 72+16）：28+72+16+308 = **424 > 414**
-        //   ⇒ 长标题的 marquee 有 10pt 在屏幕右边之外（这就是用户报的那一条）。
-        //   常量已经收到 64+12（= 412，正好进得去），这里再夹一道**上限**兜别的机型/更宽的行：
-        //   右边缘最多到页面右沿 − 4pt —— 宁可挤掉几 pt 的 gap，也不许晃动区出屏。
+        // （当歌曲名字过长时…右侧的晃动区超过屏幕的右侧了）：
+        // 右移给缩略图让位的量**不许把那一行的右边缘推出屏幕**。
+        // 算术（真机：页面 414pt、那一行 308pt、原来 72+16）：28+72+16+308 = **424 > 414**
+        // ⇒ 长标题的 marquee 有 10pt 在屏幕右边之外（这就是用户报的那一条）。
+        // 常量已经收到 64+12（= 412，正好进得去），这里再夹一道**上限**兜别的机型/更宽的行：
+        // 右边缘最多到页面右沿 − 4pt —— 宁可挤掉几 pt 的 gap，也不许晃动区出屏。
         let wantedShift = thumbSide + thumbGap
         let shiftLimit = (page.bounds.maxX - 4) - (rowFrame?.maxX ?? page.bounds.maxX)
         let shift = rowFrame == nil ? 0 : max(0, min(wantedShift, shiftLimit))
 
         // 歌词区：缩略图/标题之下 → **进度条之上**。
         //
-        // ★ 2026-10-11：原来锚在 `npv.bottomStackView` 的**顶边**（≈593）⇒ 歌词 261–584，
+        // 原来锚在 `npv.bottomStackView` 的**顶边**（≈593）⇒ 歌词 261–584，
         // 而进度条在 ≈680 ⇒ 中段白空 80–100pt；kumone 是"歌词一直排到进度条上方 19pt"
         // （623 / 642）。改成锚**进度条单元**的顶边（id），量不到才退回旧锚点。
         let stageBottom: CGFloat
@@ -125,7 +124,7 @@ extension NowPlayingLyricsPlate {
         guard stage.height > livingHeight / 2 else {
             return .failed("the lyrics area would be too short (\(Int(stage.height))pt)")
         }
-        // ⚠️ ★ `lift` **只有量到标题行时**才配当判据：量不到时上面那句
+        // ⚠️`lift` **只有量到标题行时**才配当判据：量不到时上面那句
         // `let lift = top - (rowFrame?.minY ?? top)` 恒等于 **0** —— 一个 nil 合并表达式会悄悄变成
         // 一条"永远失败"的判据。量不到标题行 = 这一页没有要上移的东西 ⇒ **照常展开**，只是不做位移。
         //
@@ -148,9 +147,9 @@ extension NowPlayingLyricsPlate {
     }
 
     /// 列表里那个"看得见的封面"。**三趟**，一趟比一趟宽：
-    ///   · **第一趟（最硬）**：必须**在 `SPTNowPlayingView` 里面**，且祖先里没有被折成 0 的；
-    ///   · **第二趟**：只要"祖先里没有被折成 0 的"；
-    ///   · **第三趟**：旧判据（**宁可回到老行为，也不要一张都挑不出来**）。
+    /// · **第一趟（最硬）**：必须**在 `SPTNowPlayingView` 里面**，且祖先里没有被折成 0 的；
+    /// · **第二趟**：只要"祖先里没有被折成 0 的"；
+    /// · **第三趟**：旧判据（**宁可回到老行为，也不要一张都挑不出来**）。
     ///
     /// `id=SPTNowPlayingView` 是**结构性身份**，不是几何猜的：真机 `[NPVTree]` 里播放器的每一件
     /// 都在它里面（底部那一坨 / 进度条 / 三颗按钮 / 标题行），而**卡片自己的封面**与它**平级**、
@@ -175,9 +174,9 @@ extension NowPlayingLyricsPlate {
     /// 一趟有界 BFS。`skippingCollapsedAncestors = true` 时跳过"祖先里被折成 0 的"那些；
     /// `inside` 非空时只认它的后代。
     ///
-    /// ★ **优先挑"真的落在页面范围内"的那一张**：页面里会同时存在两个同尺寸的 `Encore.ImageView`，
+    /// **优先挑"真的落在页面范围内"的那一张**：页面里会同时存在两个同尺寸的 `Encore.ImageView`，
     /// 另一个可能 `window != nil`（老判据认它）却**整张在屏幕外** —— 把 `alpha = 0` 写在它身上屏幕
-    /// 上那张一点没变，而 `measure()` 还会拿它的 frame 当地理。
+    /// 上那张一点没变，而 `measure` 还会拿它的 frame 当地理。
     /// ⚠️ 只用来**挑**，不做硬门禁：只剩离屏那一张 ⇒ 照旧用它（转场中途真封面也可能暂时在页面外）。
     static func firstVisibleCover(
         in list: UIView,
@@ -228,8 +227,8 @@ extension NowPlayingLyricsPlate {
     /// 这个视图**在祖先里有没有被"折没"**：任一祖先 `hidden`，或者 `bounds` 退化到 0。
     ///
     /// ⚠️ **不看 `alpha`**：`hideSpotifyCover` 会把**已经被我们藏起来的那张**写成 `alpha = 0`，
-    ///    而下一拍 `measure()` 还得能再认出它来（隐藏名册在 `hiddenCovers` 里）。
-    ///    这里只判"几何上被折没了"，那是「一屏」留下的唯一痕迹。
+    /// 而下一拍 `measure` 还得能再认出它来（隐藏名册在 `hiddenCovers` 里）。
+    /// 这里只判"几何上被折没了"，那是「一屏」留下的唯一痕迹。
     ///
     /// 走查有界（32 跳，本仓库纪律），到 `root` 为止。
     static func hasCollapsedAncestor(_ view: UIView, root: UIView) -> Bool {
@@ -247,7 +246,7 @@ extension NowPlayingLyricsPlate {
         return false
     }
 
-    /// ★ **被我们自己藏起来的那张也算合格** —— 这是上面那条判据能活过第二拍的**前置条件**。
+    /// **被我们自己藏起来的那张也算合格** —— 这是上面那条判据能活过第二拍的**前置条件**。
     ///
     /// `ensureCover` 在展开的那一刻就把 Spotify 那张主封面的 `alpha` 写成 0
     /// （`hideSpotifyCover`，同图所以看不出"换"），而 **`layoutAndMount` 每一拍都要重跑**
@@ -255,17 +254,17 @@ extension NowPlayingLyricsPlate {
     /// 严格那一趟一张都挑不到 → 退回旧判据 → 又去挑那张**卡的**封面 → `lift` 又变正数
     /// ⇒ **展开撑不过半秒**。（独立只读复核点出来的，本轮修法的前置条件。）
     static func isHiddenByUs(_ view: UIView) -> Bool {
-        // ★ 2026-10-12：问**静态名册**（`hiddenCovers`），不再问页面 ——
-        //   `lastPage` 是 weak，页面一没这里就会答"不是我们藏的"，于是展开撑不过半秒；
-        //   名册本身也不该依赖"哪一页"（见名册那段的两条理由）。
+        // 问**静态名册**（`hiddenCovers`），不再问页面 ——
+        // `lastPage` 是 weak，页面一没这里就会答"不是我们藏的"，于是展开撑不过半秒；
+        // 名册本身也不该依赖"哪一页"（见名册那段的两条理由）。
         hiddenCovers.contains(view)
     }
 
     /// 挑中的封面**换了就报一行**（上限 `chosenCoverLogLimit` 行）。
     ///
     /// 为什么不是"整个会话只报一次"：`visibleCover` 有两个调用时机 ——
-    /// 页面开着时 `rememberArtworkIfNeeded` 顺手认一次、点的那一刻 `measure()` 再量一次。
-    /// **这两次挑中的可能不是同一个**，而"挑错了"正是日志 50/51 的病根 ⇒
+    /// 页面开着时 `rememberArtworkIfNeeded` 顺手认一次、点的那一刻 `measure` 再量一次。
+    /// **这两次挑中的可能不是同一个**，
     /// 必须看得见"换了"。有限次，不会刷屏。
     static weak var lastLoggedCover: UIView?
     static var chosenCoverLogs = 0
@@ -277,7 +276,7 @@ extension NowPlayingLyricsPlate {
         guard chosenCoverLogs < chosenCoverLogLimit else { return }
         chosenCoverLogs += 1
         // ⚠️ 不要写 `rect.map(frameText)`：那是把一个 `@MainActor` 静态方法当函数值传，
-        //    本仓库的编译器版本只保证"最多一个警告"，没必要冒这个险（独立复核指出）。
+        // 本仓库的编译器版本只保证"最多一个警告"，没必要冒这个险（独立复核指出）。
         let where_: String
         if let page = lastPage {
             where_ = frameText(view.convert(view.bounds, to: page))
@@ -294,7 +293,7 @@ extension NowPlayingLyricsPlate {
 
     /// 底部那一坨的顶边（页面坐标系）。
     ///
-    /// ★ **先认"从 `page` 直接量"**（`convert` 出来就是页面坐标，最准），找不到才退回老那套
+    /// **先认"从 `page` 直接量"**（`convert` 出来就是页面坐标，最准），找不到才退回老那套
     /// "列表 + `layer.position`"的算法。
     ///
     /// ⚠️ 这不是"修 bug"，是**加固**：问题只在**找不到时的退路** —— `page.bounds.height - 240`
@@ -317,13 +316,13 @@ extension NowPlayingLyricsPlate {
         return frame.offsetBy(dx: -t.tx, dy: -t.ty)
     }
 
-    // MARK: - 两个新锚点（2026-10-11：照片 67 → 68 的几何对齐）
-
-    /// 导航条的下沿（pt，页面坐标系）。
-    ///
-    /// 判据是 **id**：`now-playing-minimize-button`（真机每一份 `[NPVTree]` 里都有
-    /// `Tertiary@0,0,48,48,id=now-playing-minimize-button`）——
-    /// 不按类名（`Tertiary` 全页好几颗）、不按几何猜。
+    // MARK: - 两个新锚点
+    //
+    // 导航条的下沿（pt，页面坐标系）。
+    //
+    // 判据是 **id**：`now-playing-minimize-button`（真机每一份 `[NPVTree]` 里都有
+    // `Tertiary@0,0,48,48,id=now-playing-minimize-button`）——
+    // 不按类名（`Tertiary` 全页好几颗）、不按几何猜。
     static func navBarBottom(in page: UIView) -> CGFloat? {
         guard let button = findByIdentifier(minimizeButtonIdentifier, in: page) else { return nil }
         let frame = untransformed(button, in: page)
@@ -348,26 +347,26 @@ extension NowPlayingLyricsPlate {
     }
 
     // MARK: - 封面与标题
-
-    /// 我们自己那份封面：**建/复用容器 + 里面的 imageView**，并**把 Spotify 那条藏起来**。
-    ///
-    /// ★ 动画的关键（照 pw `PlayerLyrics.x` 的 `place()` / `thumbTransform()`，GPL-3.0）：容器永远
-    /// 按"**Spotify 画封面的大小与位置**"布局，位移只写在 `transform` 上（*bounds + center, not a frame*）。
-    ///
-    /// ⚠️ **不能动画 `frame`**：`layoutAndMount` **每 0.3s 重跑一次**要重写封面布局，画在 `frame` 上
-    /// 会被那一拍**打断/拽回**；改 `bounds`/`center` **完全不打扰动画**（本仓库纪律：`frame` 在 transform
-    /// 非恒等时不可信）。阴影同理挂在**容器**上（跟着 transform 走、不用每帧重画）⇒ 容器**不裁剪**，
-    /// 裁剪与圆角放在里面那层 imageView 上。
-    // MARK: - 收起态的大封面尺寸（用户 2026-10-04：「把现在的大封面做小，不需要那么大」）
-
-    /// 收起态那张大封面的目标宽度（pt）：Spotify 给的是 **366pt**，这里收到 **242pt**（kumone 的量）。
-    ///
-    /// 为什么只动 `transform`：收起态那张是 **Spotify 自己的**（我们那份只在展开时存在）⇒ 尺寸只能
-    /// 这么收 —— 仓库规矩：改别人的视图**只做 transform / 透明度**，动完要能**完全还原**
-    /// （原值记在 `scaledCoverBase`，离开页面 / 关开关时写回）。
-    ///
-    /// 附带：`measure()` 用 `convert`（**含 transform**）⇒ `geometry.cover` 自动变成 242pt，缩略图的
-    /// 缩放比与动画起点跟着对；封面顶边落到 ≈208pt ⇒ 收起态标题行离它 59pt，不再压住歌手名字。
-    /// ⚠️ **展开 / 收起两个状态都要摆**：换歌会换一个新的封面对象。
+    //
+    // 我们自己那份封面：**建/复用容器 + 里面的 imageView**，并**把 Spotify 那条藏起来**。
+    //
+    // 动画的关键（照 pw `PlayerLyrics.x` 的 `place` / `thumbTransform`，GPL-3.0）：容器永远
+    // 按"**Spotify 画封面的大小与位置**"布局，位移只写在 `transform` 上（*bounds + center, not a frame*）。
+    //
+    // ⚠️ **不能动画 `frame`**：`layoutAndMount` **每 0.3s 重跑一次**要重写封面布局，画在 `frame` 上
+    // 会被那一拍**打断/拽回**；改 `bounds`/`center` **完全不打扰动画**（本仓库纪律：`frame` 在 transform
+    // 非恒等时不可信）。阴影同理挂在**容器**上（跟着 transform 走、不用每帧重画）⇒ 容器**不裁剪**，
+    // 裁剪与圆角放在里面那层 imageView 上。
+    // MARK: - 收起态的大封面尺寸（把现在的大封面做小，不需要那么大）
+    //
+    // 收起态那张大封面的目标宽度（pt）：Spotify 给的是 **366pt**，这里收到 **242pt**（kumone 的量）。
+    //
+    // 为什么只动 `transform`：收起态那张是 **Spotify 自己的**（我们那份只在展开时存在）⇒ 尺寸只能
+    // 这么收 —— 仓库规矩：改别人的视图**只做 transform / 透明度**，动完要能**完全还原**
+    // （原值记在 `scaledCoverBase`，离开页面 / 关开关时写回）。
+    //
+    // 附带：`measure` 用 `convert`（**含 transform**）⇒ `geometry.cover` 自动变成 242pt，缩略图的
+    // 缩放比与动画起点跟着对；封面顶边落到 ≈208pt ⇒ 收起态标题行离它 59pt，不再压住歌手名字。
+    // ⚠️ **展开 / 收起两个状态都要摆**：换歌会换一个新的封面对象。
     static let restingCoverSide: CGFloat = 242
 }

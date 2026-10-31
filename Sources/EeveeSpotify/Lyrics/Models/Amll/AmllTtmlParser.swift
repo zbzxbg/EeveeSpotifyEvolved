@@ -4,22 +4,22 @@ import Foundation
 //
 // 把 TTML 正文解析成与项目既有模型对齐的中间结构（LyricsDto / LyricsLineDto / LyricsWordDto）。
 //
-// ── 转换规则 ──────────────────────────────────────────────────────────────
-// <p begin/end itunes:key>          → LyricsLineDto（offsetMs = p.begin，行级时间以此为准）
-// <p> 内有序的计时 <span>           → LyricsWordDto（startMs/endMs）
-// <p> 内 span 之间的空白文本节点    → 并入前一个词的 text（承载英文词间空格）
-// <p> 内其它文本                    → 同样作为一个词（无时间）
-// ttm:role="x-translation"          → 抽走，成为 LyricsTranslationDto.lines[行索引]
-// ttm:role="x-roman"                → 抽走，成为行级官方罗马音
-// ttm:role="x-bg"                   → 抽走，合并到行尾（本文件的 v1 策略，见下）
+// ── 转换规则
+// <p begin/end itunes:key> → LyricsLineDto（offsetMs = p.begin，行级时间以此为准）
+// <p> 内有序的计时 <span> → LyricsWordDto（startMs/endMs）
+// <p> 内 span 之间的空白文本节点 → 并入前一个词的 text（承载英文词间空格）
+// <p> 内其它文本 → 同样作为一个词（无时间）
+// ttm:role="x-translation" → 抽走，成为 LyricsTranslationDto.lines[行索引]
+// ttm:role="x-roman" → 抽走，成为行级官方罗马音
+// ttm:role="x-bg" → 抽走，合并到行尾（本文件的 v1 策略，见下）
 // iTunesMetadata 的 <text for="L1"> → 侧挂翻译/音译，按 itunes:key 关联
-// body dur / 末行 end               → 交给 repository 做身份复核
+// body dur / 末行 end → 交给 repository 做身份复核
 //
-// ── x-bg（背景人声）的处理 ────────────────────────────────────────────────
+// ── x-bg（背景人声）的处理
 // 背景人声在 TTML 里是嵌在同一个 <p> 内的独立计时子树，和主词时间重叠（对唱/和声）。
 // 本项目的渲染层是「单列单行」模型（Spotify 原生歌词表格 + LyricsWordByWord overlay），
 // 表达不了行内子行，因此 v1 采用**合并到行尾**：
-//     content = "主词文本 (背景人声文本)"
+// content = "主词文本 (背景人声文本)"
 // 背景词作为词条追加在末尾，时间保持原值。这样内容不丢、content == words 拼接 的不变量成立、
 // 高亮不错位；代价是背景人声从「同时」退化为「顺序」点亮。
 // 同一 <p> 里的 x-translation 只取 <p> 直接子级的那个（背景人声内部的翻译优先级更低）。
@@ -106,13 +106,13 @@ enum AmllTtmlParser {
         var parsed: [AmllTtmlLine] = []
         var skippedTrackParagraphs = 0
         for node in paragraphNodes {
-            // ★★ 2026-10-16（Q6 清点第 ③ 条）：**整轨的译文/罗马音不能当主歌词**。
+            // （Q6 清点第 ③ 条）：**整轨的译文/罗马音不能当主歌词**。
             //
-            //    TTML 允许把译文放在**另一个 `<div>`** 里，那时每一个 `<p>` 自己就带
-            //    `ttm:role="x-translation"` / `"x-roman"`；而这里原本把文档里**所有** `<p>`
-            //    摊平、按时间排序后当主歌词 ⇒ 那种文档会被**重复一遍**（原文轨 + 译文轨交替出现）。
-            //    译文/罗马音的收集本来就走 `parseLine` 里的 role 扫描与 `<iTunesMetadata>` 旁挂，
-            //    不依赖这一条 —— 所以这里跳过它们不会丢译文。
+            // TTML 允许把译文放在**另一个 `<div>`** 里，那时每一个 `<p>` 自己就带
+            // `ttm:role="x-translation"` / `"x-roman"`；而这里原本把文档里**所有** `<p>`
+            // 摊平、按时间排序后当主歌词 ⇒ 那种文档会被**重复一遍**（原文轨 + 译文轨交替出现）。
+            // 译文/罗马音的收集本来就走 `parseLine` 里的 role 扫描与 `<iTunesMetadata>` 旁挂，
+            // 不依赖这一条 —— 所以这里跳过它们不会丢译文。
             if node.hasRole("x-translation") || node.hasRole("x-roman") {
                 skippedTrackParagraphs += 1
                 continue
@@ -196,13 +196,13 @@ enum AmllTtmlParser {
     /// 解析 <iTunesMetadata> 下的侧挂翻译/音译：`<text for="L1">…</text>`。
     /// 同一 key 可能有多语言，全部收下，取值时按语言优先级挑。
     ///
-    /// ★ 2026-10-17（Apple Music 官方 TTML 那条线）：苹果的写法有**两种**——
-    ///   ① `<translation xml:lang="zh-Hans"><text for="L1">你好</text></translation>`
-    ///      （AMLL 与大多数文件用的是这种，`for` 在 `<text>` 上）；
-    ///   ② `<translation xml:lang="zh-Hans" for="L1">你好</translation>`
-    ///      （`for` 在**容器自己**身上，没有 `<text>` 子节点）。
-    ///   以前只认 ① ⇒ ② 那种文件里译文整首丢失（"官方 TTML 有译文却看不到"）。
-    ///   现在：一个容器里**没收到任何 `<text for>`** 时，才退回读容器自己的 `for` + 正文。
+    /// （Apple Music 官方 TTML 那条线）：苹果的写法有**两种**——
+    /// ① `<translation xml:lang="zh-Hans"><text for="L1">你好</text></translation>`
+    /// （AMLL 与大多数文件用的是这种，`for` 在 `<text>` 上）；
+    /// ② `<translation xml:lang="zh-Hans" for="L1">你好</translation>`
+    /// （`for` 在**容器自己**身上，没有 `<text>` 子节点）。
+    /// 以前只认 ① ⇒ ② 那种文件里译文整首丢失（"官方 TTML 有译文却看不到"）。
+    /// 现在：一个容器里**没收到任何 `<text for>`** 时，才退回读容器自己的 `for` + 正文。
     private static func parseSidecar(
         named containerName: String,
         in root: AmllTtmlNode
@@ -252,17 +252,17 @@ enum AmllTtmlParser {
 
         // 行级时间：`<p begin>` 优先；缺失时退回**第一个计时 span** 的 begin。
         //
-        // ★ 2026-10-17（Apple Music 官方 TTML 那条线）：Apple 的 `syllable-lyrics` 里
-        //   `<p>` **有时不带 begin/end**，时间只挂在 span 上（`dropcreations/Manzana...`
-        //   的转换器就是被迫从首个/末个 span 反推行时间的）。以前的硬判据是
-        //   `guard let startMs = parseTimeMs(node.attribute("begin"))` ⇒ 那种文件会被
-        //   **整首丢光**（"没有 <p> 能解析" → noSuchSong），表现为"实验打开了却永远没词"。
+        // （Apple Music 官方 TTML 那条线）：Apple 的 `syllable-lyrics` 里
+        // `<p>` **有时不带 begin/end**，时间只挂在 span 上（`dropcreations/Manzana...`
+        // 的转换器就是被迫从首个/末个 span 反推行时间的）。以前的硬判据是
+        // `guard let startMs = parseTimeMs(node.attribute("begin"))` ⇒ 那种文件会被
+        // **整首丢光**（"没有 <p> 能解析" → noSuchSong），表现为"实验打开了却永远没词"。
         let startMs = paragraphBegin ?? syllables.first?.startMs
         guard let startMs else { return nil }
 
         // ⚠️ `end` 的回退**只在 `<p>` 完全没有行级时间时**才做：带 `<p begin>` 的文件
-        //   （AMLL 与绝大多数老文件）行为保持**逐字不变** —— 它们本来就没有 end 的那些行
-        //   仍然没有 end，不会因为这次改动突然多出一个"行尾"。
+        // （AMLL 与绝大多数老文件）行为保持**逐字不变** —— 它们本来就没有 end 的那些行
+        // 仍然没有 end，不会因为这次改动突然多出一个"行尾"。
         let endMs = paragraphEnd
             ?? (paragraphBegin == nil ? syllables.last?.endMs : nil)
 
@@ -321,9 +321,9 @@ enum AmllTtmlParser {
         for index in contents.indices {
             guard case .child(let span) = contents[index], span.localName == "span" else { continue }
 
-            // ★★ 2026-10-17：**ruby 注音容器**（`tts:ruby="container"`）单独处理 ——
-            //    它的正文（base）与注音都不带 begin/end，时间只挂在 `tts:ruby="text"` 上。
-            //    见 `rubySyllable(in:)` 与 `AmllTtmlNode.rubyAnnotationStyles`。
+            // **ruby 注音容器**（`tts:ruby="container"`）单独处理 ——
+            // 它的正文（base）与注音都不带 begin/end，时间只挂在 `tts:ruby="text"` 上。
+            // 见 `rubySyllable(in:)` 与 `AmllTtmlNode.rubyAnnotationStyles`。
             if span.rubyStyle == "container" {
                 guard var syllable = rubySyllable(in: span) else { continue }
                 syllable.text += trailingSeparator(after: index, in: contents)
@@ -376,10 +376,10 @@ enum AmllTtmlParser {
     /// </span>
     /// ```
     /// ⚠️ 不特判的话：容器自己没有 begin/end ⇒ 整段被跳过（**正文丢了**），而有时间戳的
-    ///    `tts:ruby="text"` 注音又不在 `<p>` 的直接子级里、不会被当词条 —— 但 `plainText`
-    ///    会把注音一起拼进来 ⇒ 用户看到的是「所しょ詮せん」这种正文混读音。
+    /// `tts:ruby="text"` 注音又不在 `<p>` 的直接子级里、不会被当词条 —— 但 `plainText`
+    /// 会把注音一起拼进来 ⇒ 所しょ詮せん这种正文混读音。
     private static func rubySyllable(in container: AmllTtmlNode) -> AmllTtmlSyllable? {
-        // `text()` 已经跳过 `textContainer` / `text` ⇒ 这里拿到的就是 base 的正文。
+        // `text` 已经跳过 `textContainer` / `text` ⇒ 这里拿到的就是 base 的正文。
         let text = container.text().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
 
@@ -486,13 +486,13 @@ enum AmllTtmlParser {
     }
 
     // MARK: - 时间解析
-
-    /// 解析 TTML 时间值，返回毫秒。支持：
-    ///   `12.3s` / `500ms`  —— 带单位
-    ///   `1:02.189`         —— MM:SS.fff
-    ///   `1:02:03.456`      —— HH:MM:SS.fff
-    ///   `12.345`           —— 裸秒数
-    /// 统一走 Double 再 rounded()，避免 Float 精度把 34.010 算成 34009。
+    //
+    // 解析 TTML 时间值，返回毫秒。支持：
+    // `12.3s` / `500ms` —— 带单位
+    // `1:02.189` —— MM:SS.fff
+    // `1:02:03.456` —— HH:MM:SS.fff
+    // `12.345` —— 裸秒数
+    // 统一走 Double 再 rounded，避免 Float 精度把 34.010 算成 34009。
     static func parseTimeMs(_ raw: String?) -> Int? {
         guard let raw else { return nil }
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)

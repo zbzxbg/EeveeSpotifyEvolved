@@ -14,9 +14,9 @@ import ObjectiveC.runtime
 ///
 /// 做法（照 pw `PlayerLyrics.x` 的 `hitTest:`）：在**自己**这一层重写 `hitTest:`，把点**换算**进那一行，
 /// 问它要一个命中视图并返回 ——
-///   · 本层铺满页面，但 `point(inside:)` 只认**那一行当前的视觉 frame**；
-///   · `hitTest` 里先问那一行；命中就把那个视图返回 ⇒ 触摸照常走到 Spotify 的控件（它的祖先手势 /
-///     选中机制也都还能收到这次触摸）。
+/// · 本层铺满页面，但 `point(inside:)` 只认**那一行当前的视觉 frame**；
+/// · `hitTest` 里先问那一行；命中就把那个视图返回 ⇒ 触摸照常走到 Spotify 的控件（它的祖先手势 /
+/// 选中机制也都还能收到这次触摸）。
 /// 范围之外一律返回 nil，触摸穿透给下面原有的视图。
 final class NowPlayingTitleRelayView: UIView {
 
@@ -57,7 +57,7 @@ final class NowPlayingLyricsContainerView: UIView {
     var passThroughBottom: CGFloat = 0
     /// 额外放行的矩形（**容器坐标**）。
     ///
-    /// ★ 2026-10-24（用户：「点击 收藏 按钮没反应」）：歌词容器伸到进度条上沿（587），
+    /// （点击 收藏 按钮没反应）：歌词容器伸到进度条上沿（587），
     /// 而收藏键在 549…597 —— 上半截被容器吃了。由调用方把收藏键的框换算到这里。
     var passThroughRects: [CGRect] = []
 

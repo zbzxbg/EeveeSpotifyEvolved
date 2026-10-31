@@ -14,9 +14,9 @@ extension NowPlayingLyricsPlate {
 
     /// 把歌手那一行还原成纯歌手名（**离开页面 / 关开关** —— 不再跟着"收起歌词"走）。
     ///
-    /// ★ 2026-10-22（用户：图片里 `（NetEase）` 被截断）：现在贴上去的可能是**裁过的**
-    ///   `歌手…（提供商）`，所以还原不能只摘括号（那样会把截断后的省略号留在 Spotify 的标签上）。
-    ///   贴的时候把**完整歌手名**记在 `lastArtistFullBase`，这里优先用它写回。
+    /// （用户：图片里 `（NetEase）` 被截断）：现在贴上去的可能是**裁过的**
+    /// `歌手…（提供商）`，所以还原不能只摘括号（那样会把截断后的省略号留在 Spotify 的标签上）。
+    /// 贴的时候把**完整歌手名**记在 `lastArtistFullBase`，这里优先用它写回。
     static func restoreArtistLine(in page: UIView) {
         guard let suffix = lastArtistSuffix, let label = artistLabel(in: page) else { return }
         let current = effectiveLabelText(label)
@@ -37,11 +37,11 @@ extension NowPlayingLyricsPlate {
 
     /// 歌手那一行到底是哪一个 `UILabel`。判据**从硬到软**三条：
     ///
-    ///   ① **id**：`now-playing-subtitle-label`（Spotify 不是每份树都给它这个 id，不能只靠它）；
-    ///   ② **按文本认** —— 页面里那个写着**当前歌手名**的标签（歌手名从曲目元数据取）。**确定性**判据；
-    ///   ③ 位置兜底：标题那一行里、标题**正下方**、且与标题左边缘对齐的标签。
+    /// ① **id**：`now-playing-subtitle-label`（Spotify 不是每份树都给它这个 id，不能只靠它）；
+    /// ② **按文本认** —— 页面里那个写着**当前歌手名**的标签（歌手名从曲目元数据取）。**确定性**判据；
+    /// ③ 位置兜底：标题那一行里、标题**正下方**、且与标题左边缘对齐的标签。
     ///
-    /// ⚠️ **位置兜底会误中**一个 `text = "直播"` 的徽章 —— 提供商被贴到 LIVE 徽章上，用户看到的仍然是
+    /// ⚠️ **位置兜底会误中**一个 `text = "直播"` 的徽章 —— 提供商被贴到 LIVE 徽章上，的仍然是
     /// "提供商没写在歌手后面"（而且我们还改坏了别人的一个标签）⇒ ①② 必须先走。
     /// ⚠️ 三条判据都改用 `effectiveLabelText`：Spotify 的标签**未必把文字放在 `text` 里**
     /// （`attributedText` 是常态）—— 只认 `text` 会把真正的歌手行**整行跳过**，于是兜底才轮得到那个徽章。
@@ -77,7 +77,7 @@ extension NowPlayingLyricsPlate {
         }
 
         // ③ 位置兜底：标题**正下方** + 左边缘对齐（比旧判据严一档：旧判据只要求"水平有重叠"，
-        //    徽章也能满足）。三条都要过 `effectiveLabelText`。
+        // 徽章也能满足）。三条都要过 `effectiveLabelText`。
         if let titleFrame {
             let positional = candidates.filter { candidate in
                 guard candidate.label !== titleLabel else { return false }
@@ -97,7 +97,7 @@ extension NowPlayingLyricsPlate {
         }
 
         // ④ 三条都不中：把**候选原样打进日志**（只打一次）。
-        //    上一轮就是因为只有一句"找不到"，下一轮仍然只能猜 —— 这次让日志自己说出页面里有什么。
+        // 上一轮就是因为只有一句"找不到"，下一轮仍然只能猜 —— 这次让日志自己说出页面里有什么。
         if !didLogArtistLabelMissing {
             didLogArtistLabelMissing = true
             let dump = candidates.prefix(8).map { candidate -> String in
@@ -117,9 +117,8 @@ extension NowPlayingLyricsPlate {
 
     /// 标签的**有效文本**：`text` 为空就看 `attributedText`。
     ///
-    /// ★ 日志 58 的教训（用户：「歌词提供商还是没在歌手后面」）：Spotify 那一行未必用 `text`
-    ///   写入 —— 旧判据只认 `text`，于是**真正的歌手行被整行跳过**，位置兜底才挑中了
-    ///   一个 `text = "直播"` 的徽章。凡是要读标签文字的地方都走这一个口径。
+    /// 写入 —— 旧判据只认 `text`，于是**真正的歌手行被整行跳过**，位置兜底才挑中了
+    /// 一个 `text = "直播"` 的徽章。凡是要读标签文字的地方都走这一个口径。
     static func effectiveLabelText(_ label: UILabel) -> String {
         let plain = label.text ?? ""
         if !plain.isEmpty { return plain }
@@ -129,7 +128,7 @@ extension NowPlayingLyricsPlate {
     /// 当前这首的**歌手名**（页面上的歌手那一行就该写着它）。
     ///
     /// 口径与仓库另外两处一致（`LyricsWordByWord` 的壳 `:897`、`AppleMusicLyricsOverlay` 的页头 `:671`）：
-    /// 9.1.x 上要 `artistName()`，老版本只有 `artistTitle()`（见 `SPTPlayerTrack+Extension` 的说明）。
+    /// 9.1.x 上要 `artistName`，老版本只有 `artistTitle`（见 `SPTPlayerTrack+Extension` 的说明）。
     static func currentArtistName() -> String {
         let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
         let name = EeveeSpotify.hookTarget == .lastAvailableiOS14
@@ -189,27 +188,27 @@ extension NowPlayingLyricsPlate {
     }
 
     // MARK: - 让「（提供商）」永远看得见
-
-    /// 这一行**实际能被看到**的宽度（page 坐标）。
-    ///
-    /// 三道取更窄的：
-    ///   · 歌手标签自己的 `bounds.width`；
-    ///   · 标签右边缘到**页面**右边（展开态整行右移 74pt 后，标签右边缘经常正好贴着屏幕边，
-    ///     照片里 `（NetEas` 就断在那里）；
-    ///   · 祖先里**开了 `clipsToBounds`** 的右边缘（标题行的 cell 可能比屏幕还窄一截）。
-    ///
-    /// ⚠️ 这里用 `convert`（带全部祖先 transform）而不是 `untransformed` —— 后者会把标题行
-    ///    那 74pt 的平移**减掉**，量出来的是"没右移时"的宽度，反而会把提供商裁得更短。
+    //
+    // 这一行**实际能被看到**的宽度（page 坐标）。
+    //
+    // 三道取更窄的：
+    // · 歌手标签自己的 `bounds.width`；
+    // · 标签右边缘到**页面**右边（展开态整行右移 74pt 后，标签右边缘经常正好贴着屏幕边，
+    // 照片里 `（NetEas` 就断在那里）；
+    // · 祖先里**开了 `clipsToBounds`** 的右边缘（标题行的 cell 可能比屏幕还窄一截）。
+    //
+    // ⚠️ 这里用 `convert`（带全部祖先 transform）而不是 `untransformed` —— 后者会把标题行
+    // 那 74pt 的平移**减掉**，量出来的是"没右移时"的宽度，反而会把提供商裁得更短。
     static func visibleArtistLineWidth(_ label: UILabel, in page: UIView) -> CGFloat {
         let frame = label.convert(label.bounds, to: page)
         var widths: [CGFloat] = []
 
-        // ★★ 2026-10-23（用户：长名字"感觉没滚动完"）：歌手那一行是 Spotify 的
-        //    **`MarqueeLabel`**（dump 里 `MarqueeLabel@0,24,308,22,id=now-playing-subtitle-label`），
-        //    我们拼上「（提供商）」后一旦比它的**视口宽**（308pt），它就开始 marquee 滚动 ——
-        //    长名字看起来就是"滚到一半停住 / 被切掉"。所以对 MarqueeLabel **必须**用
-        //    `bounds.width`（那是视口宽），而且写进去的文本要严格落在它里面。
-        //    自撑开的普通 `UILabel` 才用页边/祖先那一路（它的 bounds 是文本的结果，不是约束）。
+        // （用户：长名字"感觉没滚动完"）：歌手那一行是 Spotify 的
+        // **`MarqueeLabel`**（dump 里 `MarqueeLabel@0,24,308,22,id=now-playing-subtitle-label`），
+        // 我们拼上「（提供商）」后一旦比它的**视口宽**（308pt），它就开始 marquee 滚动 ——
+        // 长名字看起来就是"滚到一半停住 / 被切掉"。所以对 MarqueeLabel **必须**用
+        // `bounds.width`（那是视口宽），而且写进去的文本要严格落在它里面。
+        // 自撑开的普通 `UILabel` 才用页边/祖先那一路（它的 bounds 是文本的结果，不是约束）。
         let isMarquee = NSStringFromClass(type(of: label)).contains("Marquee")
         let intrinsic = label.intrinsicContentSize.width
         let selfSizing = !isMarquee && intrinsic > 1 && abs(label.bounds.width - intrinsic) <= 1.5
@@ -244,12 +243,12 @@ extension NowPlayingLyricsPlate {
 
     /// `歌手（提供商）`，**先保证提供商完整**：放不下就从歌手名尾部裁、加省略号。
     ///
-    /// 2026-10-22（用户：图片里 `日のメゾンデ, 礼衣, 大漠波新 （NetEas` 被截断）：
+    /// （用户：图片里 `日のメゾンデ, 礼衣, 大漠波新 （NetEas` 被截断）：
     /// 以前只是把后缀拼到歌手名后面，Spotify 的标签按它自己的宽度从尾部截 ⇒ 被截掉的
     /// 恰恰是**我们新加的提供商**（信息量最大的那一段）。现在按可见宽度量一遍：
     /// 放不下就把歌手名缩短到能容下 `…（提供商）`。
     ///
-    /// ★★ 2026-10-23（照片 31：歌手名被慢慢吃光，最后只剩 `（NetEase）`）：**歌手名优先** ——
+    /// （：歌手名被慢慢吃光，最后只剩 `（NetEase）`）：**歌手名优先** ——
     /// 当连"…（提供商）"都放不下时，返回**完整歌手名**（放弃提供商），不再把整条换成提供商。
     ///
     /// 宽度量不到（首帧 / 标签还没布局）⇒ 原样返回，下一拍（0.3s）会再量。
@@ -268,7 +267,7 @@ extension NowPlayingLyricsPlate {
         }
 
         // 留 4pt：UILabel 自己还会做一次舍入/字距，量到"刚好等于宽度"时仍可能把最后一个字裁掉；
-        // MarqueeLabel 更敏感 —— 只要比视口宽一点点，它就开始滚动（用户看到的"没滚动完"）。
+        // MarqueeLabel 更敏感 —— 只要比视口宽一点点，它就开始滚动（的"没滚动完"）。
         let limit = maxWidth - 4
         if width(full) <= limit { return full }
 
@@ -276,9 +275,9 @@ extension NowPlayingLyricsPlate {
         let suffixWidth = width(suffix)
         let ellipsisWidth = width(ellipsis)
         let allowed = limit - suffixWidth - ellipsisWidth
-        // ★★ 2026-10-23（照片 31：最后只剩 `（NetEase）`）：**连"…（提供商）"都放不下时不再
-        //    只剩提供商** —— 那等于把歌手名整条抹掉，比"提供商被截断"更糟。这里直接放弃提供商、
-        //    把**完整歌手名**交回去（Spotify 若还是放不下，它自己按它的宽度截尾，至少名字在）。
+        // （：最后只剩 `（NetEase）`）：**连"…（提供商）"都放不下时不再
+        // 只剩提供商** —— 那等于把歌手名整条抹掉，比"提供商被截断"更糟。这里直接放弃提供商、
+        // 把**完整歌手名**交回去（Spotify 若还是放不下，它自己按它的宽度截尾，至少名字在）。
         guard allowed > 1 else { return base }
 
         if width(base) <= allowed { return base + ellipsis + suffix }
@@ -299,8 +298,8 @@ extension NowPlayingLyricsPlate {
 
     /// 这一行**可用宽度**的缓存（`applyProviderToArtistLine` 用）。key = 曲目 | 展开状态 | 标签对象。
     ///
-    /// ★★ 2026-10-23：**必须缓存**。每拍重新量会把"我们自己写短之后变窄的标签"当成新的上限 ⇒
-    /// 越量越小（用户看到的"慢慢往左吞"）。只在"换曲目 / 换展开状态 / 换标签 / 文本被 binder
+    /// **必须缓存**。每拍重新量会把"我们自己写短之后变窄的标签"当成新的上限 ⇒
+    /// 越量越小（的"慢慢往左吞"）。只在"换曲目 / 换展开状态 / 换标签 / 文本被 binder
     /// 写回原样"这四种情况下重算。
     static var artistFitWidthKey = ""
     static var artistFitWidth: CGFloat = 0
@@ -384,7 +383,7 @@ extension NowPlayingLyricsPlate {
         return nil
     }
 
-    /// 这一份是不是**真的在屏上**。照片 71 里那颗分享键在 815pt 那一排；
+    /// 这一份是不是**真的在屏上**。那颗分享键在 815pt 那一排；
     /// "另外那一份"（`alpha=0.50`）通常在别的卡里 / 被折起来了 ⇒ 用它把那一份筛掉。
     static func isOnScreen(_ view: UIView, in page: UIView) -> Bool {
         let frame = untransformed(view, in: page)
@@ -399,7 +398,7 @@ extension NowPlayingLyricsPlate {
     ///
     /// 三条判据都从"落点还在不在祖先的框里"推出来：有祖先 `clipsToBounds` 且框装不下落点 ⇒ 屏幕上可能
     /// **缺一块**（不自动清：清掉别人的裁剪可能把别的被裁内容一起放出来，那是更大的破坏）；
-    /// ★ **我们自己那个歌词容器**在它前面（铺满歌词区）⇒ 触摸会被我们先吃掉（比父视图边界更容易忘）；
+    /// **我们自己那个歌词容器**在它前面（铺满歌词区）⇒ 触摸会被我们先吃掉（比父视图边界更容易忘）；
     /// 有祖先（**没开裁剪也一样**）框装不下落点 ⇒ hit-test 在那一层就断了。
     static func bandNote(for view: UIView, landing: CGRect, page: UIView) -> String {
         var node = view.superview

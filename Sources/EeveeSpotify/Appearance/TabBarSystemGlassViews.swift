@@ -28,12 +28,12 @@ final class TabBarSystemGlassHost: UIView {
 /// 点击中继：系统栏 `delegate` 是 **weak** 的 ⇒ 这个对象由关联对象持有（见 `ensureBar`）。
 ///
 /// ⚠️ 这个类**故意不标 `@MainActor`**（与 `SponsorBlockOverlay` 同一个写法）：
-///    UIKit 的 delegate 回调按这个写就不用碰隔离判据；真正的活全部在
-///    `onMainThreadSync` 的闭包里干（那个闭包本身就是 `@MainActor`）。
+/// UIKit 的 delegate 回调按这个写就不用碰隔离判据；真正的活全部在
+/// `onMainThreadSync` 的闭包里干（那个闭包本身就是 `@MainActor`）。
 final class TabBarSystemGlassRelay: NSObject, UITabBarDelegate {
     /// ⚠️ Swift 里这个名字是 **`tabBar(_:didSelect:)`**（ObjC 的 `tabBar:didSelectItem:`
     /// 从 Swift 3 起就被导入成这个短名）。写成 `didSelectItem` 编译器直接报
-    /// "'tabBar(_:didSelectItem:)' has been renamed to 'tabBar(_:didSelect:)'"（2026-10-12 踩过）。
+    /// "'tabBar(_:didSelectItem:)' has been renamed to 'tabBar(_:didSelect:)'"踩过）。
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         onMainThreadSync {
             TabBarSystemGlass.forwardSelection(from: tabBar, item: item)
@@ -47,8 +47,8 @@ final class TabBarSystemGlassRelay: NSObject, UITabBarDelegate {
 /// UIKit 那侧调进来），真正的活全部在 `onMainThreadSync` 的闭包里干。
 ///
 /// ⚠️ 第四片删掉了它的第二只手势（`UIPanGestureRecognizer` "按住划"）—— 见文件头；
-///    系统栏接管触摸时这一只根本收不到触摸（手指落在我们的宿主上），只在
-///    "把触摸交还 Spotify" 那一档里起作用。
+/// 系统栏接管触摸时这一只根本收不到触摸（手指落在我们的宿主上），只在
+/// "把触摸交还 Spotify" 那一档里起作用。
 final class TabBarSystemGlassGestureRelay: NSObject {
 
     static let shared = TabBarSystemGlassGestureRelay()

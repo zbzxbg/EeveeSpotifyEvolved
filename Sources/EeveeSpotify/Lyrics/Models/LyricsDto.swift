@@ -11,41 +11,41 @@ struct LyricsDto {
     var translation: LyricsTranslationDto? = nil
     var languageCode: String? = nil
 
-    /// ★ 2026-10-11：**源明确说过"这一首是纯音乐"**。
+    /// **源明确说过"这一首是纯音乐"**。
     ///
     /// 为什么必须单开一个字段（而不是"行是空的"就当纯音乐）：
     /// 两份仓库注释都为此写过同一句话 —— *"不把上游『空歌词 → 纯音乐占位』的 bug 带过来"*
     /// （`NeteaseLyricsRepository` 的 `No usable lyrics` 分支、`GeniusLyricsRepository` 的
     /// `noSuchSong` 分支）。"查无此歌"与"这是纯音乐"在数据上**长得一样**（都是空行），
-    /// 但对用户是两句话：**「未找到歌词」** vs **「此歌曲为纯音乐。」**
+    /// 但对未找到歌词** vs **「此歌曲为纯音乐。」**
     ///
     /// 置位的地方只有两处，都是**源自己的可信分类**：
-    ///   · 网易云 lrc 里带「纯音乐」（`NeteaseLyricsRepository`）；
-    ///   · LRCLIB 的 `song.instrumental == true`（`LrclibLyricsRepository`）。
+    /// · 网易云 lrc 里带「纯音乐」（`NeteaseLyricsRepository`）；
+    /// · LRCLIB 的 `song.instrumental == true`（`LrclibLyricsRepository`）。
     var isInstrumental: Bool = false
 
-    /// ★ 2026-10-12：**源给的官方罗马字**（网易的 `romalrc`），与 `lines` **同序、同长**。
+    /// **源给的官方罗马字**（网易的 `romalrc`），与 `lines` **同序、同长**。
     ///
     /// 为什么单开一个字段、而不再像以前那样直接改写 `lines[i].content`：
-    /// 用户 2026-10-12 的判据是「罗马字要在**原文上方**，不许替换原文」。
+    /// 罗马字要在**原文上方**，不许替换原文。
     /// 官方那份罗马字的质量比本地转换好（分写是源自己做过的），所以**留着**，
-    /// 但它只能当"上方那一行" —— 也就是 `romanizedContentsForDisplay()` 的**首选**来源；
+    /// 但它只能当"上方那一行" —— 也就是 `romanizedContentsForDisplay` 的**首选**来源；
     /// 主歌词始终是 `lines[i].content`（原文）。
     ///
-    /// 空数组 ⇒ 显示层照旧自己算（`romanizedForWordByWordIfEnabled()`），与改动前一致。
+    /// 空数组 ⇒ 显示层照旧自己算（`romanizedForWordByWordIfEnabled`），与改动前一致。
     /// ⚠️ 长度必须等于 `lines.count`（显示层按下标配对）；对不上的那份**不许**用。
     var officialRomanizedLines: [String] = []
     /// 这份歌词**实际**是谁给的（形如 `"PetitLyrics"`）。
     ///
-    /// ★ 2026-10-11：**不再带 `(EeveeSpotify)` 后缀**（用户：「这个就不需要写 eveespotify
-    /// 的水印了」）。这串会同时进我们自己的页脚 / 歌手那一行、以及注入 payload 的 `providedBy`。
+    /// **不再带 `(EeveeSpotify)` 后缀**（这个就不需要写 eveespotify
+    /// 的水印了）。这串会同时进我们自己的页脚 / 歌手那一行、以及注入 payload 的 `providedBy`。
     ///
     /// 由 `CustomLyrics.storeLyricsDto(_:source:)` 在拿到数据的同一刻写入，
     /// 也就是"提供者"与"正在渲染的那份 dto"永远同源。以前提供者是另一个全局
     /// （`currentLyricsProvider`），在取词函数的**末尾**才写，而 dto 是中途就写好的，
     /// 于是出现两种可见错误：
-    ///   · 旧 overlay 在 `rebuild()` 里读到的还是上一首的提供者（永远慢一拍）；
-    ///   · Genius 兜底成功时，标签写的是"用户设的那个源"而不是真正给词的 Genius。
+    /// · 旧 overlay 在 `rebuild` 里读到的还是上一首的提供者（永远慢一拍）；
+    /// · Genius 兜底成功时，标签写的是"用户设的那个源"而不是真正给词的 Genius。
     ///
     /// 有默认值，所以各 repository 既有的
     /// `LyricsDto(lines:timeSynced:romanization:…)` 构造方式不受影响。
@@ -54,12 +54,12 @@ struct LyricsDto {
     /// 完整署名（**含社区贡献者**），形如
     /// `"Spicy Lyrics · 制作者 X · 上传者 Y"`。空 ⇒ 退回 `providerName` / 源名。
     ///
-    /// ★ 2026-10-13：为什么必须和 `providerName` 分开 —— Spicy Lyrics 的服务条款（§6）
+    /// 为什么必须和 `providerName` 分开 —— Spicy Lyrics 的服务条款（§6）
     /// 要求"回答的 provider"与"社区同步的 uploader/maker"都要展示，而**展示位置不同**：
-    ///   · `providerName`（短）贴在听歌页**歌手那一行**（`NowPlayingLyricsPlate.providerSuffix()`
-    ///     会套一层全角括号），太长会把歌手名挤掉；
-    ///   · `providerCredit`（长）进**注入 payload 的 `providedBy`** —— 那是 Spotify 原生
-    ///     歌词页/卡片底部那一行，有位置放得下。
+    /// · `providerName`（短）贴在听歌页**歌手那一行**（`NowPlayingLyricsPlate.providerSuffix`
+    /// 会套一层全角括号），太长会把歌手名挤掉；
+    /// · `providerCredit`（长）进**注入 payload 的 `providedBy`** —— 那是 Spotify 原生
+    /// 歌词页/卡片底部那一行，有位置放得下。
     /// 两个都为空时才退回用户选的源名（`toSpotifyLyricsData(source:)`）。
     var providerCredit: String = ""
 
@@ -77,12 +77,12 @@ struct LyricsDto {
         source: String,
         useInstrumentalPlaceholder: Bool = true
     ) -> LyricsData {
-        // ── 不再给"没有时间轴的源"合成时间轴（2026-09-27 删除）──────────────────
+        // ── 不再给"没有时间轴的源"合成时间轴删除）
         //
         // 这里曾经把 Genius 这类纯文本源（`timeSynced: false`）按曲目时长铺一层估算的
         // 行级时间轴，理由是"9.1.x 把无时间轴的 payload 判为不可用"。
         //
-        // 真机 A/B 结论（2026-09-27，用户关掉「补全歌词时间轴」跑了一整场）：
+        // 真机 A/B 结论补全歌词时间轴跑了一整场）：
         // 观感"差不多或略好一点"；而且**给本来没有时间轴的源伪造时间轴本身就不合语义**
         // —— Genius 的页面就没有行时间，估算出来的 offset 只会让整首都不准
         // （`SyntheticLyricTiming` 自己写着"位置不保证准确"）。
@@ -91,20 +91,20 @@ struct LyricsDto {
         //
         // ⚠️ 唯一的例外是**占位文案**（`makeUnavailableLyrics`）—— 那里仍然补时间轴。
         // 那不是"某个源的时间轴"，而是"未找到歌词"这一行能不能显示出来的前提。
-
+        //
         // 有效行 = 原始行，或（空歌词 + 纯音乐占位时）那三行占位文案。
         //
-        // ★ 2026-10-19：**空白行不进 payload** —— Spotify 原生歌词页 / 卡片照 payload 的行
-        //   逐行画，一行空内容在那里就是"一行空的"，与"漏了一句词"同形
-        //   （与 2026-10-18 用户在网易云 / Musixmatch 那两处拍板的间奏纪律同一条：
-        //    空行照样占一行高度，该丢就丢）。
-        //   判据与 `droppingBlankLinesForDisplay()` **同一份**（`LyricsLineDto.isBlankForDisplay`）。
+        // **空白行不进 payload** —— Spotify 原生歌词页 / 卡片照 payload 的行
+        // 逐行画，一行空内容在那里就是"一行空的"，与"漏了一句词"同形
+        // （与用户在网易云 / Musixmatch 那两处拍板的间奏纪律同一条：
+        // 空行照样占一行高度，该丢就丢）。
+        // 判据与 `droppingBlankLinesForDisplay` **同一份**（`LyricsLineDto.isBlankForDisplay`）。
         //
-        //   ⚠️ 整份都是空白时**原样保留**：清成空数组会掉进下面 `lines.isEmpty` 那个
-        //   "纯音乐占位"分支，等于替源宣布"这首歌是纯音乐" —— 那正是 `isInstrumental`
-        //   那段注释明令禁止的事（"查无此歌"与"这是纯音乐"必须分开）。
-        //   `blankFreeLineIndices` 给下面的译文层用：`lines` 与 `translation.lines`
-        //   按下标一一对应，剔行必须**一起**剔。
+        // ⚠️ 整份都是空白时**原样保留**：清成空数组会掉进下面 `lines.isEmpty` 那个
+        // "纯音乐占位"分支，等于替源宣布"这首歌是纯音乐" —— 那正是 `isInstrumental`
+        // 那段注释明令禁止的事（"查无此歌"与"这是纯音乐"必须分开）。
+        // `blankFreeLineIndices` 给下面的译文层用：`lines` 与 `translation.lines`
+        // 按下标一一对应，剔行必须**一起**剔。
         var blankFreeLineIndices: [Int]? = nil
         let effectiveLines: [LyricsLineDto]
         if lines.isEmpty {
@@ -129,13 +129,13 @@ struct LyricsDto {
             // 有行、且每行都带 offset → 就是"同步歌词"，如实告诉 Spotify。
             $0.timeSynchronized = effectiveLines.contains { ($0.offsetMs ?? 0) > 0 }
             $0.restriction = .unrestricted
-            // ★ 2026-10-11（用户）：「这个就不需要写 eveespotify 的水印了」。
+            // 「这个就不需要写 eveespotify 的水印了」。
             //
             // 以前这里写 `"\(source) (EeveeSpotify)"`，而 **Spotify 原生歌词页 / 卡片底部那一行
             // 是直接照 payload 的 `providedBy` 显示的** ⇒ 屏幕上就是那个水印。
             // 现在只写**源名**（`"NetEase"`）—— "词是哪来的"这条信息还在，品牌不写了。
             //
-            // ★ 2026-10-13：有**完整署名**（含 Spicy Lyrics 社区同步的 uploader/maker）时
+            // 有**完整署名**（含 Spicy Lyrics 社区同步的 uploader/maker）时
             // 优先用它 —— 条款 §6 要求这些人被署名，而原生那一行有位置。
             $0.providedBy = providerCredit.isEmpty ? "\(source)" : providerCredit
         }
@@ -147,9 +147,9 @@ struct LyricsDto {
             let sortedLines = effectiveLines.sorted { 
                 ($0.offsetMs ?? 0) < ($1.offsetMs ?? 0)
             }
-            // ★ 2026-10-11（用户）：**注入给 Spotify 的正文一律保持原文，不再罗马化**。
+            // **注入给 Spotify 的正文一律保持原文，不再罗马化**。
             //
-            // 用户原话：「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，不是在原文的
+            // 「开启歌词内的日语歌词罗马化后，是直接把原日文替换了，不是在原文的
             // 上面展示罗马字」。以前这里在 `canRomanize` 时把每行交给
             // `romanizedIfEnabled(languageHint:songLanguage:)`，于是 Spotify 原生歌词页 /
             // 卡片拿到的正文就是罗马字 —— 日文原文在原生那页上等于被删掉了，而罗马字本该
@@ -158,7 +158,7 @@ struct LyricsDto {
             //
             // 现在的口径（用户定的）：原生那页回到原文，罗马字只由我们这层画。
             // 数据来源没有变少：`LyricsDto` 里仍是无损原文，显示层照旧自己算罗马字
-            // （`romanizedForWordByWordIfEnabled()` / `romanizedContentsForDisplay()`）。
+            // （`romanizedForWordByWordIfEnabled` / `romanizedContentsForDisplay`）。
             //
             // ⚠️ 随之删掉的是这里的整首歌语言占比检测（`dominantCJKLanguageAbove`）：
             // 它此前**只**用于给罗马化选语言，留着就是一段没有消费者的计算。
@@ -167,22 +167,22 @@ struct LyricsDto {
                     // 统一行首大写：无论来源/设置，行首第一个字母都大写；
                     // 仍会跳过「「 " ・ 空格」等装饰/隐形前缀，只大写其后的第一个字母。
                     // （这不是罗马化：日文/中文正文里没有可大写的拉丁字母时它是恒等变换，
-                    //   而 `romanizedForWordByWordIfEnabled()` 对罗马字自己也会做同一步。）
+                    // 而 `romanizedForWordByWordIfEnabled` 对罗马字自己也会做同一步。）
                     $0.content = line.content.capitalizingFirstLetterIfAlphabetic()
                     $0.offsetMs = Int32(line.offsetMs ?? 0)
                 }
             }
         }
         
-        // 谁在画，谁负责译文（2026-09-25 定的口径）。
+        // 谁在画，谁负责译文定的口径）。
         //
-        //   · **有逐词数据** → 我们自己画（AM 页 / 旧层卡拉OK）→ **不把译文交给 Spotify**。
-        //     原因：Spotify 只要看到注入数据里有 translation，就会在「歌词」标题栏亮起
-        //     它自己的翻译按钮（和分享/展开并排那个）。而我们那两套渲染器都不靠它显示译文
-        //     （卡拉OK层自己画译文行），按钮点下去什么都不会变，纯属误导。
-        //   · **没有逐词数据**（只有逐行 / 连时间轴都没有）→ 我们一层都不挂，
-        //     整首交给 Spotify 原生那页/那张卡 → **把译文交给它**，让它自己的翻译按钮
-        //     （真机对照图里的 文A）来管译文。这样原生页/原生卡的译文行为与官方歌词一致。
+        // · **有逐词数据** → 我们自己画（AM 页 / 旧层卡拉OK）→ **不把译文交给 Spotify**。
+        // 原因：Spotify 只要看到注入数据里有 translation，就会在「歌词」标题栏亮起
+        // 它自己的翻译按钮（和分享/展开并排那个）。而我们那两套渲染器都不靠它显示译文
+        // （卡拉OK层自己画译文行），按钮点下去什么都不会变，纯属误导。
+        // · **没有逐词数据**（只有逐行 / 连时间轴都没有）→ 我们一层都不挂，
+        // 整首交给 Spotify 原生那页/那张卡 → **把译文交给它**，让它自己的翻译按钮
+        // （真机对照图里的 文A）来管译文。这样原生页/原生卡的译文行为与官方歌词一致。
         //
         // ⚠️ 以前这里是 `!isBetterWordByWordLyricsEnabled`（看开关），
         // 于是"AM 开着 + 这首歌只有逐行"这种最常见的组合反而不给译文 ——
@@ -195,10 +195,10 @@ struct LyricsDto {
         let suppliesTranslation = !hasUsableWordLevelData(self)
 
         if let translation = translation, suppliesTranslation {
-            // ★ 2026-10-19：上面若剔过空白行，译文必须按**同一批下标**剔 ——
-            //   `lyricsData.lines` 与 `translation.lines` 是按下标一一对应的
-            //   （渲染层那一侧同理，见 `LyricLinesAdapter.toAppleMusicLyricLines`）。
-            //   长度本来就没配对时不动它：那说明这份数据自己就没对齐，别替它猜。
+            // 上面若剔过空白行，译文必须按**同一批下标**剔 ——
+            // `lyricsData.lines` 与 `translation.lines` 是按下标一一对应的
+            // （渲染层那一侧同理，见 `LyricLinesAdapter.toAppleMusicLyricLines`）。
+            // 长度本来就没配对时不动它：那说明这份数据自己就没对齐，别替它猜。
             let translatedLines: [String]
             if let keep = blankFreeLineIndices, translation.lines.count == lines.count {
                 translatedLines = keep.map { translation.lines[$0] }
@@ -216,8 +216,8 @@ struct LyricsDto {
 }
 
 // MARK: - Per-line Language Routing
-
-/// 按指定语言对单行做罗马化（查对应 user 开关；开关关则原样返回）。
+//
+// 按指定语言对单行做罗马化（查对应 user 开关；开关关则原样返回）。
 func romanizeLine(_ line: String, as language: NLLanguage) -> String {
     switch language {
     case .japanese:
@@ -442,21 +442,21 @@ func japaneseNormalizedGap(_ gap: String) -> String {
 
 extension LyricsDto {
 
-    /// ★ 2026-10-19：**丢掉空白行**（判据：`LyricsLineDto.isBlankForDisplay`）。
+    /// **丢掉空白行**（判据：`LyricsLineDto.isBlankForDisplay`）。
     ///
     /// 为什么要有这一处：七个歌词仓库里**只有三个**自己筛过空行
     /// （`MusixmatchLyricsRepository` 的 `isMxmInterludeRow` 连带空行一起丢、
-    ///  `NeteaseLyricsRepository` 三条路各自 `.filter { !isInterludeRow(...) }`、
-    ///  `AmllTtmlParser` 的 `guard !line.primaryText.isEmpty`），
+    /// `NeteaseLyricsRepository` 三条路各自 `.filter { !isInterludeRow(...) }`、
+    /// `AmllTtmlParser` 的 `guard !line.primaryText.isEmpty`），
     /// `GeniusLyricsRepository` 只丢**首尾**空行（`LyricsMarkerFilter.mapLyricsLines`），
     /// 而 `PetitLyricsRepository` / `LrclibLyricsRepository` / `SpicyLyricsRepository`
-    /// 是**原样**把上游的行搬进 dto 的。用户看到的现象就是
+    /// 是**原样**把上游的行搬进 dto 的。的现象就是
     /// 「PetitLyrics 返回的歌词里夹着空行」—— 与其在七个仓库里各写一遍，不如在 dto
     /// **落地**这一处筛一次（调用点见下面的 `capitalizingFirstLettersForDisplay`）。
     ///
     /// ⚠️ 与 `lines` **同序同长**的两份副本必须**一起**剔 —— 渲染层是按**原数组下标**
     /// 取译文与罗马字的（`LyricLinesAdapter.toAppleMusicLyricLines` 的
-    /// `translationLines[index]`、`romanizedContentsForDisplay()` 的
+    /// `translationLines[index]`、`romanizedContentsForDisplay` 的
     /// `officialRomanizedLines[i]`），只删 `lines` 会让整份译文/罗马字错位一行。
     ///
     /// ⚠️ 只认**真正的空白**，`♪` 那类占位符不动（理由见 `LyricsLineDto.isBlankForDisplay`）。
@@ -485,23 +485,23 @@ extension LyricsDto {
     /// 规则见 `String.capitalizingFirstLetterIfAlphabetic`）——逐词行**连第一个含字母的词一起**，
     /// 这样逐词渲染与整行渲染长得一样。
     ///
-    /// ★ 2026-10-12（用户）：「如果主歌词是英文这种字母，首字母或者「后面的首个字母是不是不会大写。
-    ///   如果不会大写，改成大写」。
+    /// 「如果主歌词是英文这种字母，首字母或者「后面的首个字母是不是不会大写。
+    /// 如果不会大写，改成大写」。
     ///
     /// 查过之后的**实情**：这条约定早就有，但只做在三个地方 ——
-    ///   ① 注入给 Spotify 的 payload（`toSpotifyLyricsData`）；
-    ///   ② 罗马字（`romanizeLine` 末尾那一句）；
-    ///   ③ 罗马化那份副本（`romanizedForWordByWordIfEnabled`，含词级 token）。
+    /// ① 注入给 Spotify 的 payload（`toSpotifyLyricsData`）；
+    /// ② 罗马字（`romanizeLine` 末尾那一句）；
+    /// ③ 罗马化那份副本（`romanizedForWordByWordIfEnabled`，含词级 token）。
     /// **我们自己渲染层画的主歌词原文没做** ⇒ 同一首英文歌：Spotify 原生页首字母大写、
-    /// 我们这层小写 —— 用户看到的就是这个。
+    /// 我们这层小写 —— 的就是这个。
     ///
     /// 现在补成"**DTO 落地时就统一**"：`CustomLyrics.storeLyricsDto` 调一次，之后
     /// 播放器那层 / 全屏页 / 旧 UIKit 层 / 静态歌词档读到的都是同一份。
     /// **幂等**：payload 与罗马字那两处会再做一次，结果不变（`…IfAlphabetic` 对已大写的串是恒等）。
     func capitalizingFirstLettersForDisplay() -> LyricsDto {
-        // ★ 2026-10-19：先丢掉空白行，再统一大小写 —— 这一步是 dto 的**落地**入口
-        //   （`CustomLyrics.storeLyricsDto` 只在这里调一次），所以"筛空行"也挂在这里。
-        //   两个动作都在本类型里，且都只动 dto 的**显示形态**，不碰任何仓库的取词逻辑。
+        // 先丢掉空白行，再统一大小写 —— 这一步是 dto 的**落地**入口
+        // （`CustomLyrics.storeLyricsDto` 只在这里调一次），所以"筛空行"也挂在这里。
+        // 两个动作都在本类型里，且都只动 dto 的**显示形态**，不碰任何仓库的取词逻辑。
         var result = droppingBlankLinesForDisplay()
         result.lines = result.lines.map { line in
             var line = line
@@ -513,9 +513,9 @@ extension LyricsDto {
                 // 只大写**第一个含字母的 token**，然后就停。
                 //
                 // ⚠️ 判据是"这个 token 里有没有字母"，**不是**"这次调用有没有改动它" ——
-                //   一个字都不能少（幂等性）：`「` 这类装饰常常是**独立 token**，
-                //   若按"改动与否"判断，装饰 token 改不动 ⇒ 第二次跑时第一个词已是大写、
-                //   也"改不动" ⇒ 会继续把**第二个**词也大写。按字母判断就没有这个洞。
+                // 一个字都不能少（幂等性）：`「` 这类装饰常常是**独立 token**，
+                // 若按"改动与否"判断，装饰 token 改不动 ⇒ 第二次跑时第一个词已是大写、
+                // 也"改不动" ⇒ 会继续把**第二个**词也大写。按字母判断就没有这个洞。
                 var hasPassedFirstLetter = false
                 for word in words {
                     var word = word
@@ -536,8 +536,8 @@ extension LyricsDto {
 }
 
 // MARK: - 整行日文分词（供逐字对齐）
-
-/// 整行日文分词的一个 chunk（token 或标点间隙）。
+//
+// 整行日文分词的一个 chunk（token 或标点间隙）。
 struct JapaneseRomajiChunk {
     var original: String
     var romaji: String
@@ -549,19 +549,19 @@ struct JapaneseRomajiChunk {
 extension LyricsDto {
     /// 逐字歌词 + 对应语言罗马化开关都开启时，返回词/行文本罗马化的副本（供显示层取罗马字）。
     ///
-    /// ⚠️ 2026-10-11 起：**这份副本只用来"取罗马字那一行"**，谁都不许把它当主歌词。
-    ///   · `LyricLinesAdapter.toAppleMusicLyricLines` 只读它的 `content` 去和**原文**比，
-    ///     不同才把罗马字挂到 `LyricLine.romanization`（画在原文上方）；
-    ///   · `CustomLyrics.storeLyricsDto` 存的是**原样 dto**，不是这份副本 ——
-    ///     以前存的是它，于是"原文"在渲染前就已经变成罗马字，用户看到的是
-    ///     「直接替换原日文」而不是「原文上面一行罗马字」。
-    ///   · 喂给 Spotify 原生那页的 payload（`toSpotifyLyricsData`）同样**不再**罗马化，
-    ///     原生页回到原文（以前那句"toSpotifyLyricsData 自己会罗马化 content"已经作废）。
+    /// ⚠️起：**这份副本只用来"取罗马字那一行"**，谁都不许把它当主歌词。
+    /// · `LyricLinesAdapter.toAppleMusicLyricLines` 只读它的 `content` 去和**原文**比，
+    /// 不同才把罗马字挂到 `LyricLine.romanization`（画在原文上方）；
+    /// · `CustomLyrics.storeLyricsDto` 存的是**原样 dto**，不是这份副本 ——
+    /// 以前存的是它，于是"原文"在渲染前就已经变成罗马字，的是
+    /// 「直接替换原日文」而不是「原文上面一行罗马字」。
+    /// · 喂给 Spotify 原生那页的 payload（`toSpotifyLyricsData`）同样**不再**罗马化，
+    /// 原生页回到原文（以前那句"toSpotifyLyricsData 自己会罗马化 content"已经作废）。
     func romanizedForWordByWordIfEnabled() -> LyricsDto {
         guard NgzhwmSettingsViewModel.isWordByWordLyricsEnabled,
               romanization == .canBeRomanized else { return self }
 
-        // ── 首字母大写：**先做，且与罗马化开关无关** ──────────────────────────────
+        // ── 首字母大写：**先做，且与罗马化开关无关**
         //
         // ⚠️ 这里以前把大写和罗马化写在同一个循环里，并且上面那三个
         // `guard ...Romanization else { return self }` 会**整个函数提前返回** ——
@@ -569,7 +569,7 @@ extension LyricsDto {
         // 网易云原始文本（全小写）。
         //
         // 而喂给 Spotify 的那份（`toSpotifyLyricsData` → `LyricsDto.swift` 第 72 行）
-        // 是**无条件**做大写的。两边一对比就是用户看到的现象：
+        // 是**无条件**做大写的。两边一对比就是的现象：
         // 原生那层首字母大写、我们这层小写，"首字母有不大写"。
         //
         // 大写本来就不属于"罗马化"：它是与原生一致的显示约定（`capitalizingFirst

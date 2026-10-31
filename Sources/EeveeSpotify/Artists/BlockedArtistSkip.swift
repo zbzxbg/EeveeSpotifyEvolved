@@ -3,20 +3,19 @@ import UIKit
 
 /// 把「屏蔽的艺人」接到播放上：曲目**一开始**就跳到下一首。
 ///
-/// ── 为什么用轮询，而不是新增 hook ───────────────────────────────────────────
+/// ── 为什么用轮询，而不是新增 hook
 /// 换歌的信号在这套代码里有几条路（歌词模块的 track changed、SponsorBlock 的播放器
 /// 观察者…），但它们各自都带着"只在某个功能开着时才装"的前提；而新增 Orion hook 在
 /// **注入工具进程**里解析不到目标时有 SIGTRAP 的先例（见
 /// `CustomLyrics+AllTracksLyrics.x.swift` 顶部那段）。轮询只用已经验证可用的原语：
 ///
-///   · 曲目：`statefulPlayer.currentTrack()`（`AppleMusicLyricsPlaybackControl` 已经在用
-///     同一个调用读时长、`CustomLyrics` 用它读 `trackIdentifier`，两条都在真机跑过）；
-///   · 艺人 / 标题：**每个都先 `responds(to:)` 探一下再调** —— `SPTPlayerTrack` 是我们手写的
-///     `@objc protocol`，声明了不等于这版对象实现了（`artistTitle()` 就不是；
-///     2026-10-01 的崩溃正是它）。探测写在共用扩展里：`SPTPlayerTrack.string(ifResponding:)`；
-///   · 位置：`WordByWordPositionResolver.shared.currentPositionSeconds()`（内部自带探测）；
-///   · 跳歌：`WordByWordPlaybackControl.skipToNext()`
-///     —— 日志 8 已证明它可用（`[Shell] skipToNext via statefulPlayer.skipToNextTrack()`）。
+/// · 曲目：`statefulPlayer.currentTrack`（`AppleMusicLyricsPlaybackControl` 已经在用
+/// 同一个调用读时长、`CustomLyrics` 用它读 `trackIdentifier`，两条都在真机跑过）；
+/// · 艺人 / 标题：**每个都先 `responds(to:)` 探一下再调** —— `SPTPlayerTrack` 是我们手写的
+/// `@objc protocol`，声明了不等于这版对象实现了（`artistTitle` 就不是；
+/// 的崩溃正是它）。探测写在共用扩展里：`SPTPlayerTrack.string(ifResponding:)`；
+/// · 位置：`WordByWordPositionResolver.shared.currentPositionSeconds`（内部自带探测）；
+/// · 跳歌：`WordByWordPlaybackControl.skipToNext`
 ///
 /// 1 秒一次、只读几个字段，代价可以忽略。
 ///
@@ -30,7 +29,7 @@ enum BlockedArtistSkip {
     /// 连续跳过多少首就先停下并打一行警告。
     ///
     /// 为什么需要护栏：如果一张歌单/电台整张都是被屏蔽的艺人，没有它会一路跳到底，
-    /// 用户看到的是"歌一直在闪、什么都听不到"。停下比乱跳好 —— 而且日志里会说明原因。
+    /// 的是"歌一直在闪、什么都听不到"。
     private static let maxConsecutiveSkips = 5
 
     /// 位置超过这个秒数就不再跳（只在"刚开头"动手）。
@@ -65,13 +64,13 @@ enum BlockedArtistSkip {
             return
         }
 
-        // ⚠️ 这里**不能**写 `track.URI()?.absoluteString`：
-        //   · `SPTPlayerTrack.URI()` 返回的是**非可选**的 `any SPTURL`；
-        //   · 而 `SPTURL` 是我们手写的 `@objc protocol`（真身是 NSURL，见那个头文件），
-        //     声明里只有 `spt_trackIdentifier()` / `isPlaylistURL()`，**没有** `absoluteString`
-        //     —— 编译期直接报 "has no member 'absoluteString'"（2026-10-01 CI 就这么挂的）。
+        // ⚠️ 这里**不能**写 `track.URI?.absoluteString`：
+        // · `SPTPlayerTrack.URI` 返回的是**非可选**的 `any SPTURL`；
+        // · 而 `SPTURL` 是我们手写的 `@objc protocol`（真身是 NSURL，见那个头文件），
+        // 声明里只有 `spt_trackIdentifier` / `isPlaylistURL`，**没有** `absoluteString`
+        // —— 编译期直接报 "has no member 'absoluteString'"CI 就这么挂的）。
         // 仓库里既有的读法是扩展 `trackIdentifier`
-        // （`SPTPlayerTrack+Extension.swift`，内部就是 `URI().spt_trackIdentifier()`），
+        // （`SPTPlayerTrack+Extension.swift`，内部就是 `URI.spt_trackIdentifier`），
         // 拿到 `spotify:track:<id>` 里的 id —— 用它判断"换歌了没有"正好，比整条 URI 还稳。
         let trackKey = track.trackIdentifier
         guard !trackKey.isEmpty else { return }

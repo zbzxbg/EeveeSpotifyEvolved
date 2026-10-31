@@ -41,9 +41,9 @@ extension String {
 }
 
 // MARK: - Japanese Romanization
-
-/// 假名（平/片）→ 罗马字映射表。键为平假名码点；
-/// 片假名在转换前归一为平假名（减 0x60），只有 ー/ヴ 等例外单独处理。
+//
+// 假名（平/片）→ 罗马字映射表。键为平假名码点；
+// 片假名在转换前归一为平假名（减 0x60），只有 ー/ヴ 等例外单独处理。
 extension String {
     /// 把日语（假名+汉字）转为罗马字：
     /// - 假名部分用映射表逐字转换（正确处理促音/拗音/长音/拨音，无怪符号）；
@@ -168,10 +168,10 @@ extension String {
 
 // MARK: - DTO 落地时的显示规范化（空白行 + 大小写）
 //
-// ★ 2026-10-19：这个 extension 里是两个**落地**动作 —— 丢掉空白行、行首字母大写。
-//   `capitalizingFirstLettersForDisplay()` 是 `CustomLyrics.storeLyricsDto` 唯一的落地调用点
-//   （拿到的 dto 就在那一刻进 `currentLyricsDto`），所以两个动作都挂在它身上：
-//   七个仓库不可能各写一遍"筛空行"。
+// 这个 extension 里是两个**落地**动作 —— 丢掉空白行、行首字母大写。
+// `capitalizingFirstLettersForDisplay` 是 `CustomLyrics.storeLyricsDto` 唯一的落地调用点
+// （拿到的 dto 就在那一刻进 `currentLyricsDto`），所以两个动作都挂在它身上：
+// 七个仓库不可能各写一遍"筛空行"。
 
 extension String {
     /// 把整行日文按 CFStringTokenizer 分词，返回每个 token/间隙的（原文、罗马字、区间、前导空格）。

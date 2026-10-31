@@ -6,8 +6,8 @@ class MusixmatchLyricsRepository: LyricsRepository {
 
     /// 这一行是不是**间奏行**（整行只有 ♪ ♫ ♬ ♩ ♭ ♯ 这类音乐符号，或者本来就是空白）。
     ///
-    /// ★ 2026-10-18：判据只看内容本身、与旧开关无关 —— 间奏行现在**无条件剔除**
-    /// （用户拍板 A：「把原本有的间奏全部删掉」），见下面处理 `lyricsLines` 那一段的说明。
+    /// 判据只看内容本身、与旧开关无关 —— 间奏行现在**无条件剔除**
+    /// （把原本有的间奏全部删掉），见下面处理 `lyricsLines` 那一段的说明。
     ///
     /// 两处调用点共用这一条判据：同步档（richsync / subtitle，三份数组按下标一一对应）
     /// 与非同步档（纯文本，见 `plainLyrics` 那一段）。
@@ -17,12 +17,12 @@ class MusixmatchLyricsRepository: LyricsRepository {
         return trimmed.allSatisfy { "♪♫♬♩♭♯".contains($0) }
     }
 
-    // ⚠️ 2026-10-18：「删除间奏符号 ♪」那颗开关**整体退役** —— 键 / Toggle / 绑定日志
+    // ⚠️「删除间奏符号 ♪」那颗开关**整体退役** —— 键 / Toggle / 绑定日志
     // / l10n 一起摘掉（完整清单见 `NgzhwmSettingsViewModel` 顶部）。
     //
     // 这里原先有两个成员：
-    //   · `shouldRemoveMxmInterludeSymbol`（读 `ngzhwm_removeMxmInterludeSymbol`）；
-    //   · `cleanedMxmLyricsText`（开关开着时把**含** ♪ 的行清成空白）。
+    // · `shouldRemoveMxmInterludeSymbol`（读 `ngzhwm_removeMxmInterludeSymbol`）；
+    // · `cleanedMxmLyricsText`（开关开着时把**含** ♪ 的行清成空白）。
     // 它们只服务纯文本档，而"清成空白"恰恰是用户这次否掉的那条路：空行在渲染层里
     // 照样占一行高度，看着就是"漏了一句词"。纯文本档现在也走**整行丢弃**。
 
@@ -58,7 +58,6 @@ class MusixmatchLyricsRepository: LyricsRepository {
         selectedLanguage = language
     }
 
-    //
 
     private class CachedLyrics {
         let dto: LyricsDto
@@ -71,7 +70,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
     private let lyricsCache = NSCache<NSString, CachedLyrics>()
 
     private func getCacheKey(for query: LyricsSearchQuery) -> String {
-        // ★ 2026-10-18：这里原先还带一位「删除间奏符号 ♪」开关 —— 那颗开关已退役
+        // 这里原先还带一位「删除间奏符号 ♪」开关 —— 那颗开关已退役
         // （间奏行无条件丢弃），所以指纹少一位。缓存键变了没有副作用：它只让**升级之后**
         // 的第一首重新取一遍词，本来就不该跨版本复用旧结果。
         let romanizationSettings = [
@@ -83,16 +82,14 @@ class MusixmatchLyricsRepository: LyricsRepository {
         return "\(query.hashValue)_\(selectedLanguage)_\(romanizationSettings)"
     }
 
+    // 没有 `usertoken` 时换一个**匿名令牌**填上。
     //
-
-    /// 没有 `usertoken` 时换一个**匿名令牌**填上。
-    ///
-    /// 只填一次（填完就进 `UserDefaults.musixmatchToken`），失败**不抛** —— 这次请求照旧发出去，
-    /// 401 由 `getMacroCalls` 那边统一处理（弹窗/清令牌都在那里）。这样"没令牌"和"令牌过期"
-    /// 两条路只有一处决定成败。
-    ///
-    /// ⚠️ 这条路是同步阻塞的（最多 15s，见 `AnonymousTokenHelper.fetchTokenBlocking`）：
-    /// 它跑在歌词取词那条已经阻塞的队列上，不会卡住主线程。
+    // 只填一次（填完就进 `UserDefaults.musixmatchToken`），失败**不抛** —— 这次请求照旧发出去，
+    // 401 由 `getMacroCalls` 那边统一处理（弹窗/清令牌都在那里）。这样"没令牌"和"令牌过期"
+    // 两条路只有一处决定成败。
+    //
+    // ⚠️ 这条路是同步阻塞的（最多 15s，见 `AnonymousTokenHelper.fetchTokenBlocking`）：
+    // 它跑在歌词取词那条已经阻塞的队列上，不会卡住主线程。
     private func ensureTokenIfNeeded() {
         guard UserDefaults.musixmatchToken.isEmpty else { return }
         // 自动这条路给 6s：外层对 Musixmatch 只有 5s 预算（`CustomLyrics` 的 requestTimeout），
@@ -113,7 +110,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
         var stringUrl = "\(apiUrl)\(path)"
         var finalQuery = query
 
-        // ★ 2026-10-13：没有令牌时**自动换一个匿名令牌**再发请求。
+        // 没有令牌时**自动换一个匿名令牌**再发请求。
         //
         // 为什么必须放在这里（而不是只在设置页留一颗按钮）："没填 SpicyLyrics 密钥 → 改用
         // Musixmatch"是**自动**发生的，用户根本没去过设置页；如果 mxm 这边也因为没有令牌直接
@@ -202,7 +199,6 @@ class MusixmatchLyricsRepository: LyricsRepository {
             .replacingOccurrences(of: "\r", with: " ")
     }
 
-    //
 
     private func getMacroCalls(_ data: Data) throws -> [String: Any] {
         guard
@@ -227,7 +223,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
         if statusCode == 401 {
             writeDebugLog("[Musixmatch] 401 — invalid token")
             // 匿名令牌会过期：是它就把缓存丢掉，**下一次请求会自动换一个新的**。
-            // 用户自己填的令牌 401 了**不能替他清** —— 那是他自己要改的东西，我们只记一行。
+            // 自己填的令牌 401 了**不能替他清** —— 那是他自己要改的东西，我们只记一行。
             if UserDefaults.musixmatchTokenIsAnonymous {
                 writeDebugLog(
                     "[Musixmatch] dropping the expired anonymous token"
@@ -275,7 +271,6 @@ class MusixmatchLyricsRepository: LyricsRepository {
         return subtitle
     }
 
-    //
 
     private func getTranslations(_ spotifyTrackId: String, selectedLanguage: String) throws
         -> [String: String]
@@ -390,7 +385,6 @@ class MusixmatchLyricsRepository: LyricsRepository {
         return nil
     }
 
-    //
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         writeDebugLog("[Musixmatch] Fetching lyrics for \"\(query.title)\" - \(query.primaryArtist)")
@@ -526,12 +520,12 @@ class MusixmatchLyricsRepository: LyricsRepository {
             // 那是语言选择、不是罗马化开关，替换是用户要的）。
             var didReplaceAnyLine = false
 
-            // ★★ 2026-10-12（用户：「把 mxm 的问题解决一下」）：
+            // （把 mxm 的问题解决一下）：
             // **源给的官方罗马字**，与 `lyricsLines` **同序、同长**，由我们那层画在**原文上方**
-            // （`LyricLinesAdapter.romanizedContentsForDisplay()` 的首选来源）。
+            // （`LyricLinesAdapter.romanizedContentsForDisplay` 的首选来源）。
             //
             // ⚠️ 长度**必须**等于 `lyricsLines.count`，没匹配上的行留**空串** ——
-            //    这是那条 guard 的硬要求（长度对不上会被整份忽略 ⇒ 罗马字一行都不显示）。
+            // 这是那条 guard 的硬要求（长度对不上会被整份忽略 ⇒ 罗马字一行都不显示）。
             var officialRomanizedLines: [String] = []
 
             // subtitle_translated：MxM 返回的目标语言字幕（罗马音或真实翻译）。
@@ -550,7 +544,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
                 }
 
                 if requestedLanguage == romanizationLanguage {
-                    // 用户直接选择了罗马音语言：用 MxM 罗马音替换歌词行（按 offset 对齐）
+                    // 直接选择了罗马音语言：用 MxM 罗马音替换歌词行（按 offset 对齐）
                     for i in 0..<lyricsLines.count {
                         guard let offset = lyricsLines[i].offsetMs,
                               let roma = translatedByOffset[offset], !roma.isEmpty else { continue }
@@ -558,16 +552,16 @@ class MusixmatchLyricsRepository: LyricsRepository {
                         didReplaceAnyLine = true
                     }
                 } else if !requestedLanguage.isEmpty {
-                    // 用户选择了真实翻译语言：按 offset 对齐附加为翻译层（显示翻译按钮），
-                    // 行内容保持原文 —— ⚠️ 2026-10-04 起 `toSpotifyLyricsData` **不再**做本地罗马化
-                    // （用户要求原生那页回到原文、罗马字只由我们自己的渲染层画，
+                    // 真实翻译语言：按 offset 对齐附加为翻译层（显示翻译按钮），
+                    // 行内容保持原文 —— ⚠️起 `toSpotifyLyricsData` **不再**做本地罗马化
+                    // （原生那页回到原文、罗马字只由我们自己的渲染层画，
                     // 见 `LyricsDto.toSpotifyLyricsData` 里那段说明）。
                     translation = LyricsTranslationDto(
                         languageCode: requestedLanguage,
                         lines: lyricsLines.map { line -> String in
                             guard let offset = line.offsetMs,
                                   let t = translatedByOffset[offset] else { return "" }
-                            // ★ 2026-10-18：不再看「删除间奏符号 ♪」开关（已退役）——
+                            // 不再看「删除间奏符号 ♪」开关（已退役）——
                             // 整行只有 ♪ 的译文一律清空，与网易云 `buildTranslation` 同一条规则。
                             return t.trimmingCharacters(in: .whitespaces) == "♪" ? "" : t
                         }
@@ -576,12 +570,12 @@ class MusixmatchLyricsRepository: LyricsRepository {
             }
             // 次优先：未选择任何目标语言时，全局罗马化开关开启，尝试通过翻译接口拿 MxM 罗马音。
             //
-            // ★★ 2026-10-12（用户：「把 mxm 的问题解决一下」）：这一段以前是**替换原文**
-            //   （`lyricsLines[i].content = translationText`，按 content 匹配）——
-            //   与用户已经拍板的规矩**直接冲突**：「罗马字只画在原文上方，**绝不替换原文**」
-            //   （网易 `romalrc` 那条上一轮就是这么改的，见 `LyricsDto.officialRomanizedLines`）。
-            //   它现在走**同一套机制**：原文一个字不动，罗马字存进 `officialRomanizedLines`，
-            //   由我们那层画在原文上方 —— Spotify 原生页也照旧是原文。
+            // （把 mxm 的问题解决一下）：这一段以前是**替换原文**
+            // （`lyricsLines[i].content = translationText`，按 content 匹配）——
+            // 与罗马字只画在原文上方，**绝不替换原文**
+            // （网易 `romalrc` 那条上一轮就是这么改的，见 `LyricsDto.officialRomanizedLines`）。
+            // 它现在走**同一套机制**：原文一个字不动，罗马字存进 `officialRomanizedLines`，
+            // 由我们那层画在原文上方 —— Spotify 原生页也照旧是原文。
             // 已选择真实翻译语言时不走这里，避免 MxM 罗马音顶掉本地转换。
             else if isNgzhwmRomanizationEnabled(for: romanizationLanguage),
                 requestedLanguage.isEmpty {
@@ -606,14 +600,14 @@ class MusixmatchLyricsRepository: LyricsRepository {
                 }
             }
 
-            // ★★★ 2026-10-18（用户拍板 A：「**把原本有的间奏全部删掉**」）：
-            //   间奏行**整行删掉**，不再是"把 ♪ 清成空白、保留位置"。与网易云那一刀同一条纪律：
-            //   间奏由**时间间隙**去推（`LyricInterludeTimeline`），不靠一个占位行；
-            //   而空行在 AM 渲染层里照样占一行高度，看着就是"漏了一句词"✗。
+            // （**把原本有的间奏全部删掉**）：
+            // 间奏行**整行删掉**，不再是"把 ♪ 清成空白、保留位置"。与网易云那一刀同一条纪律：
+            // 间奏由**时间间隙**去推（`LyricInterludeTimeline`），不靠一个占位行；
+            // 而空行在 AM 渲染层里照样占一行高度，看着就是"漏了一句词"✗。
             //
-            //   ⚠️ 三份数组是**按下标一一对应**的（`lyricsLines` / `officialRomanizedLines` /
-            //      `translation.lines`）⇒ 剔行必须**一起剔**，否则罗马字与翻译会整体错位一行
-            //      （那正是用户报过的"某行翻译跑到上一行"这一类现象的同族）。
+            // ⚠️ 三份数组是**按下标一一对应**的（`lyricsLines` / `officialRomanizedLines` /
+            // `translation.lines`）⇒ 剔行必须**一起剔**，否则罗马字与翻译会整体错位一行
+            // （那正是用户报过的"某行翻译跑到上一行"这一类现象的同族）。
             let keep = lyricsLines.indices.filter { !isMxmInterludeRow(lyricsLines[$0].content) }
             let droppedRows = lyricsLines.count - keep.count
             if droppedRows > 0 {
@@ -684,14 +678,14 @@ class MusixmatchLyricsRepository: LyricsRepository {
                     throw LyricsError.musixmatchRestricted
                 }
 
-                // ★★ 2026-10-18（用户拍板 A「把原本有的间奏全部删掉」）：纯文本档也改成
-                //   **整行丢弃** —— 与同步档（见下面处理 `lyricsLines` 那一段）、与网易云
-                //   同一条纪律："清成空白"会留下一行占位高度，看着就是漏了一句词。
+                // （把原本有的间奏全部删掉）：纯文本档也改成
+                // **整行丢弃** —— 与同步档（见下面处理 `lyricsLines` 那一段）、与网易云
+                // 同一条纪律："清成空白"会留下一行占位高度，看着就是漏了一句词。
                 //
-                //   ⚠️ 顺序要紧：判据必须在 `lyricsNoteIfEmpty` **之前**用。那个 helper 会把
-                //   空串换成 "♪"（占位符），先映射一遍就等于"空行统统变成间奏行"，
-                //   而它产出的那个 ♪ 正是用户这次要清掉的东西 ——
-                //   真机上"纯文本歌词里混着一行 ♪"就是这么来的。
+                // ⚠️ 顺序要紧：判据必须在 `lyricsNoteIfEmpty` **之前**用。那个 helper 会把
+                // 空串换成 "♪"（占位符），先映射一遍就等于"空行统统变成间奏行"，
+                // 而它产出的那个 ♪ 正是用户这次要清掉的东西 ——
+                // 真机上"纯文本歌词里混着一行 ♪"就是这么来的。
                 let plainLines = plainLyrics
                     .components(separatedBy: "\n")
                     .dropLast()

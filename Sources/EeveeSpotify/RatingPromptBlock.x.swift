@@ -8,7 +8,7 @@ import StoreKit
 /// 评分对话框。它**不是** Spotify 自己的 UI ⇒ 我们那套弹窗 hook（`UpsellPopupBlocker`
 /// 拦 `SPTEncorePopUp*`）碰不到它，只能在系统这两个入口上拦。
 ///
-/// **两个入口都要拦**：`requestReview()`（老入口，Spotify 仍在用）与
+/// **两个入口都要拦**：`requestReview`（老入口，Spotify 仍在用）与
 /// `requestReviewInScene(_:)`（场景化入口）。只拦一个的话另一个照样弹。
 ///
 /// 与「隐私与上报」的分工：那边拦的是**出网的上报请求**（`TelemetryEndpointRules`），

@@ -9,24 +9,24 @@ import Foundation
 /// 谁应该跟着谁一起清，只能靠读遍全文才知道；而且**同一条判据在七八处各写一遍**
 /// （"屏幕上真的有我们的东西" = `coverHost != nil || lastContainer != nil`）。
 /// 现在：
-///   · **存储**只在这里（`isOpen` / `wantsOpen` / `intentUntil` / `retryUntil` / `pageLeaving` /
-///     `coverGeneration`），"什么组合算哪一相"在 `LyricsDoorPhase.swift` 的规则里，
-///     而**整组一起改**的那几处（点开、过期、收尾、离开页面）是这里的方法 —— 调用方不再各抄一遍；
-///   · 视图那边只把 UI 事实（`coverHost != nil || lastContainer != nil`）喂进 `phase(isLive:)`。
+/// · **存储**只在这里（`isOpen` / `wantsOpen` / `intentUntil` / `retryUntil` / `pageLeaving` /
+/// `coverGeneration`），"什么组合算哪一相"在 `LyricsDoorPhase.swift` 的规则里，
+/// 而**整组一起改**的那几处（点开、过期、收尾、离开页面）是这里的方法 —— 调用方不再各抄一遍；
+/// · 视图那边只把 UI 事实（`coverHost != nil || lastContainer != nil`）喂进 `phase(isLive:)`。
 ///
 /// ## 两条窗口（都不是"状态"，是**时间**）
 ///
 /// * `intentUntil`（1.0s）—— 「我们打算铺着」这件事**作数到什么时候**：进播放器的转场里
-///   第一拍常常量不到，但原生封面已经在动了，那一段只有"意图"能救它。
-///   铺上之后意图**一直作数**（`intentStillValid` 里 `isLive` 那一支），这是刻意的：
-///   那时按住原生封面本来就是对的。
+/// 第一拍常常量不到，但原生封面已经在动了，那一段只有"意图"能救它。
+/// 铺上之后意图**一直作数**（`intentStillValid` 里 `isLive` 那一支），这是刻意的：
+/// 那时按住原生封面本来就是对的。
 /// * `retryUntil`（2.5s ≈ 5 拍）—— 「点了但这一拍没铺上」的**重试**窗口。
-///   ⚠️ **只武装一次、不往后推**：每拍重写会让 2.5s 永远不到期，等于在听歌页上无限轮询。
+/// ⚠️ **只武装一次、不往后推**：每拍重写会让 2.5s 永远不到期，等于在听歌页上无限轮询。
 ///
 /// ## 两个**不是**状态的（故意留在这里、但不是相位）
 ///
 /// * `pageLeaving` —— "页面还在屏上、但正在走"：退出转场里我们**故意什么都不收**，
-///   好让整个动画都是我们的样子。它只作为 `.closing` 的来源出现在相位里。
+/// 好让整个动画都是我们的样子。它只作为 `.closing` 的来源出现在相位里。
 /// * `coverGeneration` —— 异步收尾的**取消令牌**（收起动画没走完又被点开 ⇒ 这一次收尾作废）。
 struct LyricsDoor {
 
@@ -36,7 +36,7 @@ struct LyricsDoor {
     /// 重试窗口（秒）。2.5s ≈ 5 拍。
     static let retryWindow: CFAbsoluteTime = 2.5
 
-    /// 「这次铺上没有回退过」。⚠️ 它在 `beginMountAttempt()` 里**先置 true**、铺失败才回退 ——
+    /// 「这次铺上没有回退过」。⚠️ 它在 `beginMountAttempt` 里**先置 true**、铺失败才回退 ——
     /// 所以 `isOpen == true` **不等于**"屏幕上真有东西"（那是 `phase(isLive:)` 的活）。
     var isOpen = false
     /// 「我们打算铺着」。比 `isOpen` 宽一档：意图一立就算数，哪怕这一拍什么都没铺上。
@@ -51,8 +51,8 @@ struct LyricsDoor {
     var coverGeneration = 0
 
     // MARK: - 判据（全部转发到 `LyricsDoorRules`，只有一处实现）
-
-    /// 这一拍处在哪一相。`isLive` = 屏幕上真有我们的东西（视图层喂进来）。
+    //
+    // 这一拍处在哪一相。`isLive` = 屏幕上真有我们的东西（视图层喂进来）。
     func phase(isLive: Bool) -> LyricsDoorPhase {
         LyricsDoorRules.phase(isLive: isLive, wantsOpen: wantsOpen, pageLeaving: pageLeaving)
     }
@@ -73,8 +73,8 @@ struct LyricsDoor {
     }
 
     // MARK: - 整组操作（调用方不再各抄一遍"这几个一起改"）
-
-    /// 用户点开 / 记忆要展开：**意图 + 寿命一起立**（意图不许永久挂着）。
+    //
+    // 点开 / 记忆要展开：**意图 + 寿命一起立**（意图不许永久挂着）。
     mutating func openIntent(at now: CFAbsoluteTime) {
         wantsOpen = true
         intentUntil = now + Self.intentLifetime

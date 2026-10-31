@@ -1,9 +1,7 @@
 import Foundation
 import UIKit
 
-/// 「艺人介绍」——**我们自己的**那一张（2026-10-18 第三轮）。
-///
-/// 用户原话：「要不点击 i 之后不要 spotify 自己的了，把原本的 spotify 的 关于艺人 给去掉，我们自己搞」。
+/// 艺人简介卡片：点 `i` 打开我们自己的这一张，不再显示 Spotify 原本那块「关于艺人」。
 ///
 /// ## 正文从哪来（为什么不自己联网取）
 ///
@@ -49,21 +47,21 @@ final class ArtistBioSheet: UIView {
         sheet.build(name: name, text: text, colour: colour)
         current = sheet
 
-        // ★★ 2026-10-31（用户：「翻译这东西**之前还是能用的**」——说得对，这是我们的回归）：
+        // （翻译这东西**之前还是能用的**——说得对，这是我们的回归）：
         //
-        //   原来是 `window.addSubview(sheet)`：卡片**裸挂在 window 上**，从正文往上的
-        //   responder chain 是 `UITextView → card → sheet → UIWindow → UIApplication`，
-        //   **一个 VC 都没有**。系统的编辑菜单里那项「翻译」要找一个 VC 来呈现它自己那张卡，
-        //   找不到就让 UIKit 在 `-[UITextInputController _translate:]` 里 NSAssert ⇒ SIGABRT
-        //   （`Spotify-2026-10-31-094701.ips`）。
+        // 原来是 `window.addSubview(sheet)`：卡片**裸挂在 window 上**，从正文往上的
+        // responder chain 是 `UITextView → card → sheet → UIWindow → UIApplication`，
+        // **一个 VC 都没有**。系统的编辑菜单里那项「翻译」要找一个 VC 来呈现它自己那张卡，
+        // 找不到就让 UIKit 在 `-[UITextInputController _translate:]` 里 NSAssert ⇒ SIGABRT
+        // （`Spotify--094701.ips`）。
         //
-        //   什么时候坏的：2026-10-11 `fd693c8`「our own artist bio sheet」把 Spotify 原生的
-        //   「关于艺人」换成了这张卡 —— 原生那一页**在 VC 里**，所以翻译一直是好的；
-        //   换成我们这张之后才崩。不是系统 bug，是宿主方式不对。
+        // 什么时候坏的：`fd693c8`「our own artist bio sheet」把 Spotify 原生的
+        // 「关于艺人」换成了这张卡 —— 原生那一页**在 VC 里**，所以翻译一直是好的；
+        // 换成我们这张之后才崩。不是系统 bug，是宿主方式不对。
         //
-        //   ⇒ 现在把它放进一个真正的 `UIViewController` 里再 present（`.overFullScreen`，
-        //     铺满整屏、背后的页面照常可见）。翻译因此恢复；万一拿不到 VC，
-        //     退回老办法 —— 卡片至少能出来（那种情况下翻译仍然拦着，见 `_translate:` 那条 hook）。
+        // ⇒ 现在把它放进一个真正的 `UIViewController` 里再 present（`.overFullScreen`，
+        // 铺满整屏、背后的页面照常可见）。翻译因此恢复；万一拿不到 VC，
+        // 退回老办法 —— 卡片至少能出来（那种情况下翻译仍然拦着，见 `_translate:` 那条 hook）。
         if let presenter = hostController(for: window) {
             let host = ArtistBioSheetHost()
             host.view.backgroundColor = .clear
@@ -85,9 +83,9 @@ final class ArtistBioSheet: UIView {
 
         sheet.alpha = 0
         UIView.animate(withDuration: 0.2) { sheet.alpha = 1 }
-        // ★★ 2026-10-11：这里原来还有一条"sheet presented + name/source/biography"的日志 ——
-        //   它与 `build` 里那条**完全重复**（`build` 就在上面一行被调用），已删。
-        //   现在那一行的内容更全：来源、**走哪条分支**、原生读到几个字，都在 `build` 里打。
+        // 这里原来还有一条"sheet presented + name/source/biography"的日志 ——
+        // 它与 `build` 里那条**完全重复**（`build` 就在上面一行被调用），已删。
+        // 现在那一行的内容更全：来源、**走哪条分支**、原生读到几个字，都在 `build` 里打。
     }
 
     /// 承载简介卡的那个 VC（只在 `present` 期间存在）。
@@ -119,26 +117,24 @@ final class ArtistBioSheet: UIView {
     static func dismissCurrent() {
         current?.removeFromSuperview()
         current = nil
-        // ★ 2026-10-31：卡现在住在 `ArtistBioSheetHost` 里 —— 只把视图摘掉会留下一个
-        //   **透明的空 VC 盖在最上面**（背后的页面就点不动了），所以要把宿主一起 dismiss。
+        // 卡现在住在 `ArtistBioSheetHost` 里 —— 只把视图摘掉会留下一个
+        // **透明的空 VC 盖在最上面**（背后的页面就点不动了），所以要把宿主一起 dismiss。
         guard let host = currentHost else { return }
         currentHost = nil
         if host.presentingViewController != nil { host.dismiss(animated: false) }
     }
 
-    // MARK: - 系统「翻译」那一条（.ips 2026-10-31 09:47:01 的崩溃点）
-
-    /// 这个视图往上有没有 `UIViewController`。
-    ///
-    /// ★★ 2026-10-31（用户：`Spotify-2026-10-31-094701.ips`）：
-    /// 崩溃栈是 `-[UIEditMenuListView _selectItemAtIndexPath:]` → `UICommand perform…`
-    /// → `-[UITextView _translate:]` → `-[UITextInputController _translate:]` → **NSAssert** → SIGABRT。
-    /// 也就是：在正文里选中一段字 → 编辑菜单点「翻译」→ 系统那条路自己断言失败。
-    ///
-    /// 我们这张卡是**直接挂在 window 上**的（`present` 里 `window.addSubview(sheet)`）——
-    /// 从正文往上的 responder chain 是 `UITextView → card → sheet → UIWindow → UIApplication`，
-    /// **一个 VC 都没有**，而系统的翻译要找一个 VC 去呈现它那张卡片。
-    /// ⇒ 这个判据就是那条 hook 的闸门：**只有"没有 VC 祖先"的文本框才拦**。
+    // 这个视图往上有没有 `UIViewController`。
+    //
+    // （用户：`Spotify--094701.ips`）：
+    // 崩溃栈是 `-[UIEditMenuListView _selectItemAtIndexPath:]` → `UICommand perform…`
+    // → `-[UITextView _translate:]` → `-[UITextInputController _translate:]` → **NSAssert** → SIGABRT。
+    // 也就是：在正文里选中一段字 → 编辑菜单点「翻译」→ 系统那条路自己断言失败。
+    //
+    // 我们这张卡是**直接挂在 window 上**的（`present` 里 `window.addSubview(sheet)`）——
+    // 从正文往上的 responder chain 是 `UITextView → card → sheet → UIWindow → UIApplication`，
+    // **一个 VC 都没有**，而系统的翻译要找一个 VC 去呈现它那张卡片。
+    // ⇒ 这个判据就是那条 hook 的闸门：**只有"没有 VC 祖先"的文本框才拦**。
     static func hasViewControllerAncestor(_ view: UIView) -> Bool {
         var responder: UIResponder? = view
         var hops = 0
@@ -180,7 +176,7 @@ final class ArtistBioSheet: UIView {
 
     /// 拦下一次「翻译」只报一行 —— 顺带把**是哪个文本框、挂在谁身上**记下来。
     ///
-    /// ★ 2026-10-31：这一行是**归因**用的。下一份日志里看到它，就等于确认
+    /// 这一行是**归因**用的。就等于确认
     /// "崩溃的是我们这张卡"；看到别的类名，就说明还有第二个文本框在踩同一个断言。
     static func reportSuppressedTranslate(_ view: UIView) {
         guard !didReportSuppressedTranslate else { return }
@@ -210,11 +206,11 @@ final class ArtistBioSheet: UIView {
         let height = min(max(240, bounds.height * 0.58), 560)
         card.frame = CGRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
         card.autoresizingMask = [.flexibleWidth, .flexibleTopMargin]
-        // ★★ 2026-10-16（用户：「把艺人页的 `i` 点击后换成**液态玻璃**，并且可下滑关闭」）：
-        //    卡片底改成**真玻璃**（`GlassCapsule.makeGlassView`：iOS 26 的 `UIGlassEffect`
-        //    带折射与边缘高光；拿不到就退 `.systemUltraThinMaterialDark`，见那个工厂的说明），
-        //    底下再垫一层**很淡的取色** —— 纯玻璃压在浅色照片上时白字会看不清，
-        //    这一层就是给对比度兜底的（原来是**不透明**色块，所以「换成玻璃」才看得出来）。
+        // （把艺人页的 `i` 点击后换成**液态玻璃**，并且可下滑关闭）：
+        // 卡片底改成**真玻璃**（`GlassCapsule.makeGlassView`：iOS 26 的 `UIGlassEffect`
+        // 带折射与边缘高光；拿不到就退 `.systemUltraThinMaterialDark`，见那个工厂的说明），
+        // 底下再垫一层**很淡的取色** —— 纯玻璃压在浅色照片上时白字会看不清，
+        // 这一层就是给对比度兜底的（原来是**不透明**色块，所以「换成玻璃」才看得出来）。
         card.backgroundColor = Self.cardColour(from: colour).withAlphaComponent(0.28)
         card.layer.cornerRadius = 24
         card.layer.cornerCurve = .continuous
@@ -251,7 +247,7 @@ final class ArtistBioSheet: UIView {
         card.addSubview(close)
 
         let footer: CGFloat = 52
-        // ★★ 2026-10-18：收下来社交链接时，正文上面让出一条 38pt 给那一排胶囊。
+        // 收下来社交链接时，正文上面让出一条 38pt 给那一排胶囊。
         let links = Array(EntityPageHeaderManager.cachedBioLinks(for: name).prefix(3))
         linkRefs = links
         artistName = name
@@ -267,9 +263,9 @@ final class ArtistBioSheet: UIView {
         bodyView.isEditable = false
         bodyView.isScrollEnabled = true
         bodyView.showsVerticalScrollIndicator = true
-        // ★★ 2026-10-16（用户：「艺人简介这部分**可能会自带社交软件链接**，比如推特、维基百科什么的」）：
-        //    那段正文是 Spotify 给的原样文本（我们一个字都不改），里面就可能有 URL ——
-        //    打开**链接识别**让它可点（点开走系统 Safari）。我们不自己解析、也不重排文字。
+        // （艺人简介这部分**可能会自带社交软件链接**，比如推特、维基百科什么的）：
+        // 那段正文是 Spotify 给的原样文本（我们一个字都不改），里面就可能有 URL ——
+        // 打开**链接识别**让它可点（点开走系统 Safari）。我们不自己解析、也不重排文字。
         bodyView.isSelectable = true
         bodyView.dataDetectorTypes = [.link]
         bodyView.textContainerInset = UIEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)
@@ -277,19 +273,6 @@ final class ArtistBioSheet: UIView {
         bodyView.textColor = UIColor.white.withAlphaComponent(0.92)
         card.addSubview(bodyView)
 
-        // ★★ 2026-10-18 第四轮：**来源由设置里那一项决定**（`UserDefaults.artistBioSource`，见
-        //    `ArtistBioSourceKind`）：
-        //      · `.automatic`（默认）—— Spotify 原生优先，读不到才退 Genius；
-        //      · `.spotify` / `.genius` / `.wikipedia` —— 只用那一个（读不到就一句说明 + 链接）。
-        //    ⚠️ `text` 是**扫列表时顺手读的**那份：`automatic` / `spotify` 用它，另两个选项**忽略**它。
-        //      ★ 2026-10-11：扫列表现在**主要为"读到正文"服务** —— 折叠排在读取之后
-        //      （`EntityPageSectionDrop` 的闸门是 `hasCapturedBio`）：读不到就**不折**。
-        // ★★ 2026-10-11（真机日志 100）：**每一档都要看得出是哪一档**。
-        //   以前四档在"取不到"时渲染出**一模一样**的卡片（同一句占位 + 底部那颗"维基百科"按钮）
-        //   ⇒ 用户换完设置再点 `i`，观感"还是之前的那个"。现在：
-        //     ① 走哪条分支、原生读到几个字，进日志；
-        //     ② 底部那行署名**永远显示**，写清实际来源与失败原因；
-        //     ③ 底部那颗按钮改成明确的**链接**文案（它本来只是个入口，不是来源标签）。
         let source = UserDefaults.artistBioSource
         writeDebugLog(
             "[ArtistBio] sheet — name \(name.isEmpty ? "MISSING" : name)"
@@ -321,11 +304,11 @@ final class ArtistBioSheet: UIView {
 
         // 页脚：左边一颗**维基百科链接**（只给入口、**不抄文本** ⇒ 不欠 CC BY-SA 的署名 ——
         // Spotify 自己的 About 页也是这么干的：`SPTArtistAbout:sArtistWikipediaButtonTitle`，dump:21079），
-        // 右边一句**永远显示**的来源署名/状态（★ 2026-10-11：以前只有成功时才显示 —— 于是四档
+        // 右边一句**永远显示**的来源署名/状态（以前只有成功时才显示 —— 于是四档
         // 在失败时长得一模一样，用户以为设置没生效）。
         let wiki = UIButton(type: .system)
-        // ★★ 2026-10-11（真机日志 100 的反馈「底部仍然显示 维基百科」）：它一直是个**入口按钮**，
-        //   但文案与"来源"混在一起，用户就把它当成了来源标签 ⇒ 换成明确的链接说法。
+        // 它一直是个**入口按钮**，
+        // 但文案与"来源"混在一起，用户就把它当成了来源标签 ⇒ 换成明确的链接说法。
         wiki.setTitle("artist_bio_open_wikipedia".localized, for: .normal)
         wiki.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
         wiki.setTitleColor(UIColor.white.withAlphaComponent(0.85), for: .normal)
@@ -333,21 +316,21 @@ final class ArtistBioSheet: UIView {
         wiki.autoresizingMask = [.flexibleTopMargin]
         wiki.contentHorizontalAlignment = .left
         wiki.addTarget(self, action: #selector(wikipediaTapped), for: .touchUpInside)
-        // ★★ 2026-10-18：**收到过真链接时这颗让位** —— 下面那一排胶囊里就有一张"维基百科"，
-        //    再挂一颗"在维基百科中打开"是重复的（而且那颗只是**搜索页**，不是艺人的条目）。
+        // **收到过真链接时这颗让位** —— 下面那一排胶囊里就有一张"维基百科"，
+        // 再挂一颗"在维基百科中打开"是重复的（而且那颗只是**搜索页**，不是艺人的条目）。
         if !links.isEmpty { wiki.isHidden = true }
         card.addSubview(wiki)
         wikiURL = Self.wikipediaURL(for: name)
 
-        // ★★ 2026-10-18（用户：「原本有的维基 / 推特链接之类的没显示」）：把 Spotify 自己那块卡里
-        //    的社交链接按钮画成**一排胶囊**，点下去**转发给那些控件本身**（走 Spotify 自己的打开逻辑，
-        //    所以是艺人真正的维基条目 / 推特账号，不是我们拼的搜索页）。
-        //    ⚠️ 控件是 weak 引用：那一格被回收之后点胶囊会走兜底（维基 → 搜索页），日志里看得出来。
+        // （原本有的维基 / 推特链接之类的没显示）：把 Spotify 自己那块卡里
+        // 的社交链接按钮画成**一排胶囊**，点下去**转发给那些控件本身**（走 Spotify 自己的打开逻辑，
+        // 所以是艺人真正的维基条目 / 推特账号，不是我们拼的搜索页）。
+        // ⚠️ 控件是 weak 引用：那一格被回收之后点胶囊会走兜底（维基 → 搜索页），
         if !links.isEmpty {
             // ⚠️ 三颗胶囊**可能放不下**：卡宽 414、左边留 12 ⇒ 可用 402pt，而三颗各最多 132pt
-            //    再加两道 8pt 间距 = 412pt ⇒ 第三颗会伸出卡片右边（`card.clipsToBounds = true`，
-            //    真机上就是半颗被裁掉）。这里按**剩余宽度**夹一次；连 66pt（最短一颗）都放不下
-            //    就停 —— 宁可少画一颗，也不画半颗。
+            // 再加两道 8pt 间距 = 412pt ⇒ 第三颗会伸出卡片右边（`card.clipsToBounds = true`，
+            // 真机上就是半颗被裁掉）。这里按**剩余宽度**夹一次；连 66pt（最短一颗）都放不下
+            // 就停 —— 宁可少画一颗，也不画半颗。
             let usableRightEdge = card.bounds.width - 12
             var chipX: CGFloat = 12
             for (index, link) in links.enumerated() {
@@ -384,8 +367,8 @@ final class ArtistBioSheet: UIView {
         creditLabel.font = .systemFont(ofSize: 12)
         creditLabel.textColor = UIColor.white.withAlphaComponent(0.55)
         creditLabel.textAlignment = .right
-        // ★★ 2026-10-11：两行 —— 失败原因那句比"来自 Genius"长
-        //   （"维基百科没有响应（本机网络可能屏蔽了它）"）。
+        // 两行 —— 失败原因那句比"来自 Genius"长
+        // （"维基百科没有响应（本机网络可能屏蔽了它）"）。
         creditLabel.numberOfLines = 2
         creditLabel.isHidden = true
         creditLabel.frame = CGRect(
@@ -412,7 +395,6 @@ final class ArtistBioSheet: UIView {
         let link = linkRefs[sender.tag]
         if let url = link.url {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
-            // 只记主机名：日志里不留整条外部链接（与仓库其它处的做法一致）。
             writeDebugLog("[ArtistBio] link tapped — \(link.kind) → opened \(url.host ?? "-")")
             return
         }
@@ -430,7 +412,7 @@ final class ArtistBioSheet: UIView {
     }
 
     /// 维基百科那条**链接**：用**搜索页**（省掉"先找条目"这一步，同名艺人也不怕），
-    /// wiki 主机与取词那条线**共用** `ArtistBioSource.wikipediaHost()`（免得两处漂）。
+    /// wiki 主机与取词那条线**共用** `ArtistBioSource.wikipediaHost`（免得两处漂）。
     private static func wikipediaURL(for name: String) -> URL? {
         guard var components = URLComponents(
             string: "https://\(ArtistBioSource.wikipediaHost())/wiki/Special:Search"
@@ -448,10 +430,10 @@ final class ArtistBioSheet: UIView {
         setCredit(credit)
     }
 
-    /// ★★ 2026-10-11（**日志 101**）：**原生正文晚一拍才抓到时，把这张已经开着的卡片补上**。
+    /// **原生正文晚一拍才抓到时，把这张已经开着的卡片补上**。
     ///
     /// 为什么需要：那张卡是懒加载的（见 `EntityPageHeaderManager.artistBiographyAppeared` 的说明）
-    /// —— 用户点 `i` 的**那一刻**它可能还没建出来，日志 101 里 `native text none` 就是这么来的，
+    /// —— 用户点 `i` 的**那一刻**它可能还没建出来，
     /// 而几秒之后卡片才露头、正文才被 `captureBioTextOnSight` 读走。
     /// 盯 6 秒（12 × 0.5s）：一拿到就写上去，仍按 `.automatic` 的口径"原生优先"，
     /// **但绝不盖掉已经真的显示出来的正文**（`hasBody`）。
@@ -537,7 +519,7 @@ final class ArtistBioSheet: UIView {
         dismiss()
     }
 
-    /// **下滑关闭**（2026-10-16，用户点名要的）。
+    /// **下滑关闭**用户点名要的）。
     ///
     /// 判据照系统 sheet：滑过卡片高度的 30% **或者**放手时向下速度 > 800pt/s 就关，
     /// 否则弹回原位（用弹簧，手感与 `GlassCapsule` 那套一致）。
@@ -588,8 +570,8 @@ final class ArtistBioSheet: UIView {
             withDuration: 0.18,
             animations: { self.alpha = 0 },
             completion: { _ in
-                // ★ 2026-10-31：现在卡住在一个宿主 VC 里 —— 只摘视图会留下一个透明的空 VC
-                //   盖在最上面（背后页面点不动），所以走 `dismissCurrent()` 把宿主一起收。
+                // 现在卡住在一个宿主 VC 里 —— 只摘视图会留下一个透明的空 VC
+                // 盖在最上面（背后页面点不动），所以走 `dismissCurrent` 把宿主一起收。
                 if ArtistBioSheet.current === self {
                     ArtistBioSheet.dismissCurrent()
                 } else {
@@ -600,15 +582,15 @@ final class ArtistBioSheet: UIView {
     }
 
     /// **下拉关闭那条手势**：只在"下拉卡片"这一种情况下开始，其余全让给正文那层滚动 ——
-    ///   · 方向必须是**向下**（横向 / 向上都不抢）；
-    ///   · 手指落在正文里、而正文**还没滚到顶** ⇒ 那是用户在滚正文，不是在下拉卡片。
+    /// · 方向必须是**向下**（横向 / 向上都不抢）；
+    /// · 手指落在正文里、而正文**还没滚到顶** ⇒ 那是用户在滚正文，不是在下拉卡片。
     ///
     /// 为什么不做"同时识别"：那样拖正文会一边滚一边把卡片往下拽，手感是坏的。
     ///
     /// ⚠️ **必须写在类体里、并且带 `override`**：`gestureRecognizerShouldBegin(_:)` 是 `UIView`
     /// 自己就有的方法（`UIKit.UIView.gestureRecognizerShouldBegin`）。写在 `extension` 里
     /// 既不能加 `override`（Swift 不允许在扩展里重写），不加又会被编译器判成"漏了 override"
-    /// —— 2026-10-17 那次 IPA build 就是这么红的。
+    /// ——那次 IPA build 就是这么红的。
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let pan = gesture as? UIPanGestureRecognizer else { return true }
 

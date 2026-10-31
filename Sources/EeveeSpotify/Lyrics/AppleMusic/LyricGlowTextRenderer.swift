@@ -3,23 +3,23 @@ import SwiftUI
 
 // 移植自 MeloX `MeloX/Features/Player/Lyrics/Shared/LyricGlowTextRenderer.swift`（GPL-3.0）。
 //
-// ★ 这是整套观感的核心渲染器 ★
+// 这是整套观感的核心渲染器
 //
 // 绘制模型：每个**字**是一个 layout run，渲染器对它做三件事——
-//   1. 先画「未唱」副本（暗、可选模糊、按焦点进度补 opacity）
-//   2. 再画「已唱」副本，但用一条**带羽化的线性渐变**裁出前沿之后的部分
-//      （前沿位置由 `LyricHighlightRevealProgress` 给出）
-//   3. 光晕是从**同一个被裁剪的已唱副本**再模糊两份、以 plusLighter 叠加出来的，
-//      所以光晕只出现在已唱的字上、贴着前沿走
+// 1. 先画「未唱」副本（暗、可选模糊、按焦点进度补 opacity）
+// 2. 再画「已唱」副本，但用一条**带羽化的线性渐变**裁出前沿之后的部分
+// （前沿位置由 `LyricHighlightRevealProgress` 给出）
+// 3. 光晕是从**同一个被裁剪的已唱副本**再模糊两份、以 plusLighter 叠加出来的，
+// 所以光晕只出现在已唱的字上、贴着前沿走
 //
 // 这套东西**必须 iOS 18 起**（`TextRenderer` / `Text.Layout` / `GraphicsContext`），
 // 因此整个类型带 `@available` 门禁；老系统走 UIKit 的降级实现。
-
-/// 绘制带时间轴的字形。
-///
-/// 每个字形在「已唱」样式横向揭开的过程中保持自己的「未唱」样式。
-/// 长音使用逐字错开的强调包络：每个字形围绕自身中心膨胀、绽放、回落，
-/// 同时后续字形进入同一动画。所有变换过程中光晕与文字保持同一合成层。
+//
+// 绘制带时间轴的字形。
+//
+// 每个字形在「已唱」样式横向揭开的过程中保持自己的「未唱」样式。
+// 长音使用逐字错开的强调包络：每个字形围绕自身中心膨胀、绽放、回落，
+// 同时后续字形进入同一动画。所有变换过程中光晕与文字保持同一合成层。
 @available(iOS 26.0, *)
 struct LyricGlowTextRenderer: TextRenderer {
     struct Style: Equatable, Sendable {

@@ -5,17 +5,17 @@ import Foundation
 /// 引擎在 `OnDeviceLyricsTranslation`（Apple 的 `Translation` 框架，纯本地）。
 /// 这一份只做四件事：
 ///
-///   1. **该不该翻**：开关打开、系统支持、这一首有行、不是纯音乐、**源自己没给译文**；
-///   2. **对齐**：只处理"每行都有时间轴、且已经按时间升序"的歌词 —— 渲染层
-///      （`LyricLinesAdapter.toAppleMusicLyricLines`）取译文时用的是
-///      **"过滤掉无时间轴的行、再按时间排序"之后的下标**，只有在这种歌词上，
-///      那个下标才和 `dto.lines` 的下标一一对应。对不上的宁可翻不了，也不要串行；
-///   3. **缓存**：按「曲目 + 目标语言」记住结果，来回切歌不重复翻；
-///   4. **回写**：翻完写进 `currentLyricsDto.translation` 并把 `currentLyricsVersion`
-///      加一 —— 两个 overlay 层都是盯着这个版本号重建的，不用另外通知。
+/// 1. **该不该翻**：开关打开、系统支持、这一首有行、不是纯音乐、**源自己没给译文**；
+/// 2. **对齐**：只处理"每行都有时间轴、且已经按时间升序"的歌词 —— 渲染层
+/// （`LyricLinesAdapter.toAppleMusicLyricLines`）取译文时用的是
+/// **"过滤掉无时间轴的行、再按时间排序"之后的下标**，只有在这种歌词上，
+/// 那个下标才和 `dto.lines` 的下标一一对应。对不上的宁可翻不了，也不要串行；
+/// 3. **缓存**：按「曲目 + 目标语言」记住结果，来回切歌不重复翻；
+/// 4. **回写**：翻完写进 `currentLyricsDto.translation` 并把 `currentLyricsVersion`
+/// 加一 —— 两个 overlay 层都是盯着这个版本号重建的，不用另外通知。
 ///
 /// ⚠️ 全程主线程读写 `currentLyricsDto` / `currentLyricsVersion`（与 `CustomLyrics` 同一条纪律）；
-///    只有 `OnDeviceLyricsTranslation.translate` 那一段在后台。
+/// 只有 `OnDeviceLyricsTranslation.translate` 那一段在后台。
 enum LyricsAutoTranslation {
 
     /// 歌词刚落地时叫一次（`CustomLyrics` 在 `currentLyricsVersion += 1` 之后）。

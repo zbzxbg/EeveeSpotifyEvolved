@@ -3,10 +3,10 @@ import UIKit
 /// 触感引擎。
 ///
 /// 三条自我约束：
-///   1. **默认关**（`UserDefaults.hapticsEnabled`）—— 否则等于给所有用户凭空加震动；
-///   2. 只用公开 API：`impactOccurred(intensity:)`（iOS 13+）与
-///      `UISelectionFeedbackGenerator`，不碰私有 `_intensity`；
-///   3. 只有 App 在前台才触发 —— 后台被系统调度时震动是"响错地方"。
+/// 1. **默认关**（`UserDefaults.hapticsEnabled`）—— 否则等于给所有用户凭空加震动；
+/// 2. 只用公开 API：`impactOccurred(intensity:)`（iOS 13+）与
+/// `UISelectionFeedbackGenerator`，不碰私有 `_intensity`；
+/// 3. 只有 App 在前台才触发 —— 后台被系统调度时震动是"响错地方"。
 enum HapticFeedback {
 
     private static let impact = UIImpactFeedbackGenerator(style: .light)

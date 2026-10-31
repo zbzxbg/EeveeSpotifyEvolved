@@ -2,23 +2,23 @@ import Foundation
 
 /// 酷狗 KRC 的解包与解析。
 ///
-/// ── 它是什么 ────────────────────────────────────────────────────────────────
+/// ── 它是什么
 /// 酷狗下发的 `content` 是 base64，解开之后是：
 ///
-///     "krc1"（4 字节魔数） + zlib( KRC 文本 XOR 16 字节密钥 )
+/// "krc1"（4 字节魔数） + zlib( KRC 文本 XOR 16 字节密钥 )
 ///
 /// 那个 16 字节密钥是酷狗**所有客户端都内置**的一串常量，不是按用户/按曲目变的 ——
 /// 所以这里写死一份。XOR 作用在 **zlib 流整体**上（含 2 字节头），所以顺序必须是
 /// 先 XOR 再解压，反过来一定失败。
 ///
-/// ── KRC 文本长什么样 ────────────────────────────────────────────────────────
-///     [行首ms,行时长ms]<字偏移ms,字时长ms,标志>字<…>字…
+/// ── KRC 文本长什么样
+/// [行首ms,行时长ms]<字偏移ms,字时长ms,标志>字<…>字…
 ///
 /// 与网易云的 yrc 只差一对括号（yrc 用圆括号）与**时间基准**：
 /// yrc 的字偏移是**整首绝对时间**，KRC 的是**相对本行行首**。
 /// 这一点搞反的表现是"第一行准、后面越来越离谱"。
 ///
-/// ── 解压 ────────────────────────────────────────────────────────────────────
+/// ── 解压
 /// 解压那一步走 `ZlibInflate`（与 QQ 音乐的 QRC 共用同一份）。那里面写着为什么
 /// 不能直接用 Apple 的 `COMPRESSION_ZLIB`（它吃裸 DEFLATE，而这两家给的是带头的 zlib 流）。
 enum KrcText {
@@ -37,8 +37,8 @@ enum KrcText {
     private static let pieceRegex = try? NSRegularExpression(pattern: "<(-?\\d+),(-?\\d+),-?\\d+>")
 
     // MARK: - 解包
-
-    /// base64 → KRC 文本。任何一步不对都返回 nil（调用方据此换下一条候选）。
+    //
+    // base64 → KRC 文本。任何一步不对都返回 nil（调用方据此换下一条候选）。
     static func decode(_ base64: String) -> String? {
         guard let packed = Data(base64Encoded: base64, options: .ignoreUnknownCharacters) else {
             return nil
@@ -60,12 +60,12 @@ enum KrcText {
     }
 
     // MARK: - 解析
-
-    /// KRC 文本 → 带词级时间轴的行。
-    ///
-    /// 词文本取"这一段的 `<…>` 到下一段的 `<…>` 之间"的**原样字符串**，不做 trim/合并：
-    /// 渲染层要求 `content` 严格等于各词 `text` 顺序拼接（见 `AmllLyricsMapper` 文件头的
-    /// 硬不变量），原样切分能**构造上**满足它；一 trim 就得自己补空格，迟早补错。
+    //
+    // KRC 文本 → 带词级时间轴的行。
+    //
+    // 词文本取"这一段的 `<…>` 到下一段的 `<…>` 之间"的**原样字符串**，不做 trim/合并：
+    // 渲染层要求 `content` 严格等于各词 `text` 顺序拼接（见 `AmllLyricsMapper` 文件头的
+    // 硬不变量），原样切分能**构造上**满足它；一 trim 就得自己补空格，迟早补错。
     static func lines(from krc: String) -> [LyricsLineDto] {
         guard let headerRegex, let pieceRegex else { return [] }
 

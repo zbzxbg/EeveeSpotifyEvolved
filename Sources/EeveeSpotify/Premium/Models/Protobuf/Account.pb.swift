@@ -5,7 +5,7 @@
 // Source: account.proto
 //
 // For information on using the generated types, please see the documentation:
-//   https://github.com/apple/swift-protobuf/
+// https://github.com/apple/swift-protobuf/
 
 import Foundation
 import EeveeSwiftProtobuf

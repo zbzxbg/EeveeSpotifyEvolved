@@ -3,40 +3,22 @@ import UIKit
 
 /// 迷你播放器左边那张封面 —— 做成**圆形**。
 ///
-/// ## 出处
+/// 判据（照 pw v0.21.1 `NowPlayingBar.x` 重写，连"往外扩到同样大小的祖先"都一样）：
+/// 只认边长 36~48、宽高差 <1、**已经有圆角**的方块；已经是圆的就不动；
+/// 然后把"与它等大的祖先"一起圆掉并 `clipsToBounds = YES`。
 ///
-/// 上游 EeveeSpotifyReincarnated 有这颗开关（`LiquidGlassOptions.roundArtwork` / 设置行
-/// `npb_round_artwork`），而 **pw v0.21.1** 的 `Redesigned/NowPlayingBar/NowPlayingBar.x`
-/// （GPL-3.0；v0.22.0 起该仓库改为 PolyForm Strict，那里的代码不可复制）把它写得最准，
-/// 这里就是照它重写的 —— 连判据和"往外扩到同样大小的祖先"都一样：
+/// 为什么"有圆角"是去重判据：Spotify 给封面方块留了 4pt 圆角，而同一个 40×40 的容器
+/// （`InformationContainer` 里那个）没有圆角 —— 靠这个区分两者，比"里面有没有图"可靠。
 ///
-/// ```objc
-/// BOOL square = size.width >= 36 && size.width <= 48 && fabs(size.width - size.height) < 1;
-/// if (!square || v.layer.cornerRadius <= 0) return;          // ★ 只认"已经有圆角"的方块
-/// if (v.layer.cornerRadius >= size.width / 2) { … return; }   // 已经是圆的：认它，不动
-/// for (u = v; u && u != card && CGSizeEqualToSize(u.bounds.size, size); u = u.superview) {
-///     roundView(u, size.width / 2); u.clipsToBounds = YES;    // 连外层同样大小的容器一起圆
-/// }
-/// ```
-///
-/// 它的树注释（`trees/home.txt`）写着那格是 `artwork 40x40 **r=4**` —— **这就是那条去重判据的来历**：
-/// Spotify 给封面方块留了 4pt 圆角，而同一个 40×40 的容器（`InformationContainer` 里那个）**没有圆角**。
-///
-/// ⚠️ 我第一版用"里面有没有图"去分辨，日志 84 证明**分不出来**（`[MiniBarArt]` 一行都没有），
-/// 而且失败时什么都不打 —— 两处都已照 pw 改正。
-///
-/// ## 真机结构（日志 82/84 逐字）
-///
+/// 真机结构：
 /// ```
 /// 9.UIView@26,3,344,48,id=SPTNowPlayingBar      ← 迷你条内容（胶囊里那条）
 /// 10.UIView@0,0,398,56,id=now-playing-bar-content
-/// 11.UIView@8,8,40,40                            ← ★ 就是它：40×40、贴左 8pt（r=4）
+/// 11.UIView@8,8,40,40                            ← 就是它：40×40、贴左 8pt（r=4）
 /// ```
 ///
-/// ## 撤回
-///
-/// 只改 `cornerRadius` 与 `masksToBounds`，**原值在改之前**记在视图自己身上（关联对象），
-/// 关开关时逐个写回（与 `DeclutterChrome` 同一条纪律：只撤我们改的）。
+/// 撤回：只改 `cornerRadius` 与 `masksToBounds`，原值在改之前记在视图自己身上（关联对象），
+/// 关开关时逐个写回 —— 与 `DeclutterChrome` 同一条纪律：只撤我们改的。
 enum MiniBarArtwork {
 
     static var isEnabled: Bool { UserDefaults.miniBarRoundArtwork }
@@ -53,7 +35,7 @@ enum MiniBarArtwork {
     /// 每一拍调（`MiniBarGlass.apply(to:)` 里），**幂等**。
     ///
     /// - Parameter content: **必须是迷你条内容视图**（`id=SPTNowPlayingBar` 那个，即
-    ///   `MiniBarGlass.findContent` 找到的那一个），不是外层 host —— 判据要相对它算。
+    /// `MiniBarGlass.findContent` 找到的那一个），不是外层 host —— 判据要相对它算。
     static func apply(to content: UIView) {
         guard isEnabled else {
             revert()
@@ -92,8 +74,8 @@ enum MiniBarArtwork {
     }
 
     // MARK: - 认那一张图（pw 的判据）
-
-    /// 找到并圆掉，返回最外层被动过的那个视图（可能是封面方块本身，也可能是包着它的同尺寸容器）。
+    //
+    // 找到并圆掉，返回最外层被动过的那个视图（可能是封面方块本身，也可能是包着它的同尺寸容器）。
     private static func roundArtwork(in root: UIView) -> UIView? {
         guard let artwork = firstArtworkCandidate(in: root) else { return nil }
         // 已经是圆的：认它、不动（pw 同一分支：`cornerRadius >= width / 2`）。

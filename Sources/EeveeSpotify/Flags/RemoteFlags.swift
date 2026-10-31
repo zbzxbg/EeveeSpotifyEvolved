@@ -1,51 +1,16 @@
 import Foundation
 
-// 远端配置（flag）的**引擎**：把用户覆盖、以及本仓库自己的强制值，装到
-// Spotify 读 flag 的那一刻。
+// 远端配置（flag）的引擎：在 Spotify 读 flag 的那一刻，把用户覆盖与本仓库的强制值装进去。
 //
-// ── 这套东西是哪来的（★ 2026-10-17 按用户要求移植）────────────────────────────────
+// 与原有的改响应体那条路并存：`SpotifyResponsePatcher` 拿到 customize 的 `assignedValues`，`DynamicModifyingFunctions.modifyAssignedValues` 按 `FlagOverrideStore.activeReplacements` 逐条改。那一层管"服务端下发时"的改写，这一层管"客户端读取时"：`RemoteConfigurationSDK` 的 `boolValueForId:defaultValue:` / `intValueForId:lower:upper:defaultValue:` / `enumValueForId:values:defaultValue:` 被截住，直接返回覆盖值。两条路读同一张表（`FlagOverrideStore`），值一定一致；差别只在于"没进 customize 响应、但客户端会去读"的那些 flag，只有这一层盖得住。
 //
-// 用户：「关于 flag 这部分，可不可以看看上游的 flag 页面设置，然后用他们的」。
-// 上游 = `SideloadLabs/EeveeSpotifyReincarnated`（本机 `EeveeSpotifyReincarnated`），
-// 文件在 `Sources/EeveeSpotify/Flags/RemoteFlags.swift` 与 `RemoteFlagsHooks.x.swift`。
-// 我们**只搬引擎与浏览器页**，覆盖表的存储仍留在本仓库自己的 `FlagOverrideStore`
-// （见下面「唯一真相」那段）。
+// 钩取值入口的好处是不需要预先知道有哪些 flag：顺手把每条读到的（种类 / 当前值 / 整数上下限 / enum 可选值）记下来，20 秒后落盘成 `flags.json`，设置页因此能列出真实存在的开关，而不是手抄一份名单。
 //
-// ── 它和本仓库原来那条路的关系 ────────────────────────────────────────────────────
+// 目标类（`RemoteConfigurationSDK` 桶里两个）：
+// · `_TtC22RemoteConfigurationSDK25ConfigurationProviderImpl`
+// · `_TtC22RemoteConfigurationSDK35ObservableConfigurationProviderImpl`
 //
-// 本仓库原来的覆盖是**改响应体**：`SpotifyResponsePatcher` 拿到 customize 的
-// `assignedValues`，`DynamicModifyingFunctions.modifyAssignedValues` 按
-// `FlagOverrideStore.activeReplacements` 逐条改（缺失且给了 scope 的还会追加一条）。
-// 那套**继续有效**，一行没动 —— 它是"服务端下发时"那张表的改写。
-//
-// 这一层管的是**另一边**：Spotify 自己的 `RemoteConfigurationSDK` 在**读**每条 flag 时
-// （`boolValueForId:defaultValue:` / `intValueForId:lower:upper:defaultValue:` /
-// `enumValueForId:values:defaultValue:`）被我们截住，直接返回覆盖值。
-// ⇒ 两条路读的是**同一张表**（`FlagOverrideStore`），值一定一致；
-//    差别只在于"没进 customize 响应、但客户端会去读"的那些 flag，只有这一层盖得住。
-//
-// ⚠️ 那也是"为什么值得搬"：上游这一层钩的是 SDK 的取值入口，于是**不需要预先知道
-//    有哪些 flag** —— 它顺手把每条读到的 flag（种类/当前值/整数上下限/enum 可选值）
-//    记下来，20 秒后落盘成 `flags.json`，设置页因此能列出**真实存在**的开关，
-//    而不是靠人手抄一份名单。
-//
-// ── 类名判据（2026-10-17 核对，硬证据）──────────────────────────────────────────
-//
-// 本机 `C:\dsh\ipa\dump-9.1.88.txt`（目标版本 9.1.88 的符号表）里逐字有：
-//   · `_TtC22RemoteConfigurationSDK25ConfigurationProviderImpl`（classes 桶）
-//   · `_TtC22RemoteConfigurationSDK35ObservableConfigurationProviderImpl`（同桶）
-//   · `boolValueForId:defaultValue:` / `intValueForId:lower:upper:defaultValue:` /
-//     `enumValueForId:values:defaultValue:`（selectors 桶）
-// ⇒ 与本仓库的目标版本对得上，不是照抄上游的版本猜测。
-//
-// ── 采集时机（"第一次启动只记不判"）──────────────────────────────────────────────
-//
-// `catalogIsCurrent` = 盘上那份 `flags.json` 的 Spotify 版本号 == 当前版本。
-// 不相等（刚升级完 Spotify）或有 `eeveeFlagCapture`（用户点了「重新扫描」）时，
-// 这一场进入**采集模式**：只记录、照样返回覆盖值；20 秒后写盘并把版本号打戳。
-// ⇒ 采集模式本身不影响行为，唯一代价是那次启动会多装一组 hook。
-
-/// 一条 flag 的取值种类。
+// 采集时机：`catalogIsCurrent` = 盘上 `flags.json` 的 Spotify 版本号 == 当前版本。不相等（刚升级完）或置了 `eeveeFlagCapture` 时进入采集模式：只记录、照样返回覆盖值，20 秒后写盘并打戳。采集模式本身不影响行为，代价只是那次启动多装一组 hook。
 enum FlagKind: String, Codable {
     case bool
     case int
@@ -94,9 +59,9 @@ private struct FlagCatalog: Codable {
 /// ## 线程
 ///
 /// `resolve` 在 Spotify 的取值热路径上（每条 flag 每一次读都会进来），所以：
-///   · `effective` 是**不可变快照**（`prepare()` 之后只读，不加锁）；
-///   · 计数与采集走 `lock`，且**只做字典写入**，不做 IO；
-///   · 落盘在 `utility` 队列上延迟 20 秒做一次（合并直播期间的所有记录）。
+/// · `effective` 是**不可变快照**（`prepare` 之后只读，不加锁）；
+/// · 计数与采集走 `lock`，且**只做字典写入**，不做 IO；
+/// · 落盘在 `utility` 队列上延迟 20 秒做一次（合并直播期间的所有记录）。
 final class RemoteFlags {
     static let shared = RemoteFlags()
 
@@ -116,7 +81,7 @@ final class RemoteFlags {
     var forced: [String: Any] { forcedStorage }
     private var forcedStorage: [String: Any] = [:]
 
-    /// `overrides + forced` 的合并结果（`prepare()` 之后只读）。
+    /// `overrides + forced` 的合并结果（`prepare` 之后只读）。
     private var effective: [String: Any] = [:]
 
     private let lock = NSLock()
@@ -136,8 +101,8 @@ final class RemoteFlags {
     }()
 
     // MARK: - 设置页那一侧
-
-    /// 当前覆盖表（从 `FlagOverrideStore` 派生；见类型说明）。
+    //
+    // 当前覆盖表（从 `FlagOverrideStore` 派生；见类型说明）。
     static var overrides: [String: Any] {
         var result: [String: Any] = [:]
         for item in FlagOverrideStore.all where item.isValid {
@@ -161,7 +126,7 @@ final class RemoteFlags {
         return result
     }
 
-    /// 启动那一刻的覆盖表快照（`static let` 惰性求值，`activateRemoteFlags()` 先摸它一下）。
+    /// 启动那一刻的覆盖表快照（`static let` 惰性求值，`activateRemoteFlags` 先摸它一下）。
     static let launchOverrides: [FlagOverride] = FlagOverrideStore.all
 
     /// 改过就必须重启才生效（远端配置按会话下发一次）。
@@ -204,10 +169,10 @@ final class RemoteFlags {
     }
 
     // MARK: - 热路径
-
-    /// 每次 Spotify 读一条 flag 都会进来一次。
-    ///
-    /// - Returns: 覆盖值；`nil` = 没覆盖，调用方自己用 `orig`。
+    //
+    // 每次 Spotify 读一条 flag 都会进来一次。
+    //
+    // - Returns: 覆盖值；`nil` = 没覆盖，调用方自己用 `orig`。
     func resolve(
         _ key: String,
         kind: FlagKind,

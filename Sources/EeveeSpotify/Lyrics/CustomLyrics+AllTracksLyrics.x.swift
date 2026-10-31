@@ -13,13 +13,13 @@ class SPTPlayerTrackHook: ClassHook<NSObject> {
         var meta = orig.metadata()
 
         // 诊断日志已移除 —— 它的使命完成了：
-        //   · 确认了这条覆写**确实被调用**（日志 9/10 里数百行 `[TrackHook]`）；
-        //   · 拿到了原始值：失败曲目 `spotify:track:5utfun3R35e5AsBalPSxBe` ⇒ `false`；
-        //   · 结论：**面 B 的门控不是这个键** —— 覆写每次都返回 `has_lyrics = "true"`，
-        //     面 B 却依然只有 SECRET 出现。说明门控读的是 Swift 内部字段、走静态派发，
-        //     ObjC 侧 getter 的改写到不了它那里（与取证报告证据 6 一致）。
+        // · 确认了这条覆写**确实被调用**；
+        // · 拿到了原始值：失败曲目 `spotify:track:5utfun3R35e5AsBalPSxBe` ⇒ `false`；
+        // · 结论：**面 B 的门控不是这个键** —— 覆写每次都返回 `has_lyrics = "true"`，
+        // 面 B 却依然只有 SECRET 出现。说明门控读的是 Swift 内部字段、走静态派发，
+        // ObjC 侧 getter 的改写到不了它那里（与取证报告证据 6 一致）。
         //
-        // 移除它的另两个理由：`metadata()` 在热路径上（一次会话刷几百行）；而且去重用的
+        // 移除它的另两个理由：`metadata` 在热路径上（一次会话刷几百行）；而且去重用的
         // 全局变量是**无锁**的，被多线程交错写 `var` 有踩坑风险。
         // 将来若要验证"线上改完之后这个值有没有变"，再加回来即可。
         meta["has_lyrics"] = NgzhwmSettingsViewModel.isLyricsFeatureDisabled ? "false" : "true"
@@ -41,7 +41,7 @@ class SPTPlayerTrackHook: ClassHook<NSObject> {
 }
 
 class LyricsScrollProviderHook: ClassHook<NSObject> {
-    // 9.1.x 上 `Lyrics_NPVCommunicatorImpl.ScrollProvider` 已不存在（真机日志 targetNotFound），
+    // 9.1.x 上 `Lyrics_NPVCommunicatorImpl.ScrollProvider` 已不存在，
     // 挪进永不激活的隔离组，避免注册期崩掉注入工具。
     typealias Group = V91UnavailableLyricsGroup
     static var targetName = HookTargetNameHelper.lyricsScrollProvider
@@ -55,8 +55,7 @@ class LyricsScrollProviderHook: ClassHook<NSObject> {
 ///
 /// 背景：ng 原来靠 `LyricsWordByWordModernHostHook` 直接 hook
 /// `Lyrics_NPVCommunicatorImpl.LyricsOnlyViewController` 拿内嵌歌词 VC；
-/// 该类在 9.1.x 上已被移除（9.1.76 主二进制类名扫描：整个二进制里都不存在
-/// `LyricsOnlyViewController`；真机日志 targetNotFound）。
+/// 该类在 9.1.x 上已被移除。
 ///
 /// 为什么不再「换个 targetName 重新 hook」：Orion 在**注册期**解析不到目标类/方法时
 /// 会走错误路径 —— 在 App 里只是一条日志，但在注入工具进程里加载同一个 dylib 时
@@ -66,7 +65,6 @@ class LyricsScrollProviderHook: ClassHook<NSObject> {
 ///
 /// 候选类名来自 9.1.76 主二进制扫描（`Lyrics_TextElementImpl` /
 /// `Lyrics_TextComponentImpl` / `Lyrics_NPVElementsKitImpl` 三个模块）；
-/// 真机日志里 statefulPlayer 也会以 `LyricsTextElementService` 特征串被取出，
 /// 与「内嵌歌词由这套组件渲染」一致。
 ///
 /// ⚠️ 查找**不是一次性的**：宿主在 `viewWillAppear` 那一刻往往还不存在（卡片要等歌词），
@@ -76,8 +74,8 @@ class LyricsScrollProviderHook: ClassHook<NSObject> {
 /// 内嵌（预览）歌词**内容视图**的已知类名。
 ///
 /// **唯一来源**，两个消费者：
-///   · `InlineLyricsHostLocator` 用它找宿主（预览卡片的歌词文本视图）；
-///   · `WordByWordHost.attach` 用它判断"没有卡片容器时，退化成挂在内容视图上"是否安全。
+/// · `InlineLyricsHostLocator` 用它找宿主（预览卡片的歌词文本视图）；
+/// · `WordByWordHost.attach` 用它判断"没有卡片容器时，退化成挂在内容视图上"是否安全。
 ///
 /// ⚠️ 日志实证（9.1.76）：`Lyrics_TextComponentImpl.LyricsView`（366x120、挂在
 /// **歌曲封面容器**里）不在这个名单里 —— 它一旦被当成歌词内容使用，整层就跑到封面上去了。
@@ -120,11 +118,11 @@ enum InlineLyricsHostLocator {
     }
 
     // MARK: 看门狗
-
-    /// 看门狗状态。
-    ///
-    /// 放在一个小类里而不是文件级 `weak var`：类型属性不能标 `weak`，
-    /// 而强引用会把正在播放页的 VC 一直留住。
+    //
+    // 看门狗状态。
+    //
+    // 放在一个小类里而不是文件级 `weak var`：类型属性不能标 `weak`，
+    // 而强引用会把正在播放页的 VC 一直留住。
     private final class Watchdog {
         static let shared = Watchdog()
         weak var root: UIViewController?
@@ -132,12 +130,12 @@ enum InlineLyricsHostLocator {
     }
 
     /// 为什么要**定时重查**而不是只查一次：
-    ///   1. 卡片是歌词到了才建的 —— `NPVScrollViewController.viewWillAppear`
-    ///      那一拍它还不存在（这正是"预览逐词几乎不挂载"的第一成因）；
-    ///   2. 卡片里的歌词是**自适应高度的表格 cell**（`Lyrics_TextElementImpl.LyricsCell`
-    ///      + `SelfSizingTableView`），换行、滚动、换歌都会把它复用重建，
-    ///      我们挂在它上面的层跟着一起消失（第二成因）；
-    ///   3. 逐词数据、开关状态都可能晚于宿主出现。
+    /// 1. 卡片是歌词到了才建的 —— `NPVScrollViewController.viewWillAppear`
+    /// 那一拍它还不存在（这正是"预览逐词几乎不挂载"的第一成因）；
+    /// 2. 卡片里的歌词是**自适应高度的表格 cell**（`Lyrics_TextElementImpl.LyricsCell`
+    /// + `SelfSizingTableView`），换行、滚动、换歌都会把它复用重建，
+    /// 我们挂在它上面的层跟着一起消失（第二成因）；
+    /// 3. 逐词数据、开关状态都可能晚于宿主出现。
     /// 三条在真机上都表现为"预览里的逐词歌词时有时无"，只有持续盯着才能自愈。
     private static func startWatchdog() {
         guard Watchdog.shared.timer == nil else { return }
@@ -160,10 +158,10 @@ enum InlineLyricsHostLocator {
             // 没有**可用的逐词数据**时查了也挂不上（`attach` 会直接返回）——
             // 这条判据必须与 `attach` 用的是同一个函数，省掉一次白遍历。
             //
-            // ⚠️ 2026-09-25 起判据从"行级"收回到"**逐词**"：只有逐行的歌现在整首交还
+            // ⚠️起判据从"行级"收回到"**逐词**"：只有逐行的歌现在整首交还
             // Spotify 原生那页/那张卡（见 `attach` 里那一段产品规则）。看门狗再去找宿主、
             // 再挂一次都是白费，还会把日志刷成 `attach declined`。数据升到逐词时
-            // `currentLyricsVersion` 会变，`refreshForCurrentLyrics()` 自己会重挂，不靠轮询。
+            // `currentLyricsVersion` 会变，`refreshForCurrentLyrics` 自己会重挂，不靠轮询。
             guard hasUsableWordLevelData(currentLyricsDto) else { return }
             // 先把"标记说全屏还挂着、其实那一层已经不在任何窗口里"的**残留**清掉 ——
             // 否则下面那道闸门会把预览层永久挡在外面（真机：全屏里点几下歌词行再退出，
@@ -224,7 +222,7 @@ enum InlineLyricsHostLocator {
     private static func lookup(from root: UIViewController) {
         guard NgzhwmSettingsViewModel.isWordByWordLyricsEnabled else { return }
         guard let match = findHost(from: root) else {
-            // ⚠️ 2026-09-27 起这句话的语义是"**这一轮没有在屏幕上的候选**"，
+            // ⚠️起这句话的语义是"**这一轮没有在屏幕上的候选**"，
             // 不再等于"9.1.x 候选类不存在"：命中的若是复用/离屏实例，`viewHost`
             // 现在直接返回 nil（理由见那里），宁可下一轮 1.5s 后再看。
             logThrottled("[WordByWord] inline host not found (no on-screen candidate) — will retry")
@@ -282,7 +280,7 @@ enum InlineLyricsHostLocator {
 
     /// 这个视图是不是"封面下那一行跟唱歌词"。
     ///
-    /// 为什么必须排除它（2026-09-30 用户反馈）：9.1.86 上
+    /// 为什么必须排除它：9.1.86 上
     /// `Lyrics_TextComponentImpl.LyricsViewControllerImplementation` 的 root view
     /// **正好就是**它（`Lyrics_TextComponentImpl.LyricsView`，366x120，待在封面容器里）。
     /// 卡片还没建出来的那一拍，`findHost` 会退化成拿这个 root view 当宿主 →
@@ -316,7 +314,7 @@ enum InlineLyricsHostLocator {
             let vc = queue.removeFirst()
             visited += 1
 
-            // ⚠️ 顺序很重要（2026-09-27，依用户反馈"AM 怎么经常挂在单行歌词上"改）：
+            // ⚠️ 顺序很重要依"AM 怎么经常挂在单行歌词上"改）：
             // **先在子树里找白名单里的卡片歌词视图**，再考虑"VC 自己的 root view"。
             //
             // 以前是反的：VC 候选一命中就 early return，而 9.1.86 上
@@ -326,7 +324,7 @@ enum InlineLyricsHostLocator {
             // 于是只要它在屏幕上，我们就再也看不到同一棵树里的卡片歌词视图
             // （`Lyrics_TextElementImpl.LyricsTextView` 342x256）→ 层挂到单行歌词那一行上；
             // 而挂上之后"已挂载"短路又会挡住随后才出现的真卡片 ——
-            // 这正是用户看到的"第一次进页面正常、切个歌回来就不行"。
+            // 这正是的"第一次进页面正常、切个歌回来就不行"。
             if let match = viewHost(in: vc.view) { return match }
 
             if controllerFallback == nil,
@@ -342,7 +340,7 @@ enum InlineLyricsHostLocator {
             queue.append(contentsOf: vc.children)
             if let presented = vc.presentedViewController { queue.append(presented) }
         }
-        // ⚠️ 2026-09-27：不再返回**离屏** fallback（见 `viewHost` 的说明）。
+        // ⚠️不再返回**离屏** fallback（见 `viewHost` 的说明）。
         // 这里返回的兜底也过了可见性判据，且 `attach` 还会复核。
         return controllerFallback
     }
@@ -365,10 +363,6 @@ enum InlineLyricsHostLocator {
                         // 离屏的复用 cell 当成命中项**直接 return** —— 而 `attach` 随后用更严的
                         // `isVisibleOnScreen` 把它拒掉，于是看门狗每 1.5s 命中同一个离屏宿主、
                         // 每 1.5s 被拒，屏幕上那份歌词**永远挂不上**。
-                        //
-                        // 真机日志 25（NE 源）：03:18:57 那次切歌之后，所有曲目都只剩
-                        // `⚠️ preview host off-screen … attach declined`，包括本来有 yrc 的歌 ——
-                        // 用户看到的就是"原本有逐字的歌没有逐字了"。
                         if view.window != nil, WordByWordHost.isVisibleOnScreen(view) { return match }
                         break
                     }
@@ -377,12 +371,11 @@ enum InlineLyricsHostLocator {
             }
             queue.append(contentsOf: view.subviews)
         }
-        // ⚠️ 2026-09-27：**没找到"在屏幕上"的候选就返回 nil**，不再拿离屏的那一份兜底。
+        // ⚠️**没找到"在屏幕上"的候选就返回 nil**，不再拿离屏的那一份兜底。
         //
         // 离屏兜底的唯一效果是让 `attach` 立刻被拒（AM 预览分支的可见性闸门），
         // 而 `attach` 在拒绝**之前**已经把 `lastPreviewController/lastPreviewContentView`
-        // 记成了这个离屏视图 —— 退出全屏时的 `reattachToInline()` 又拿它去挂，继续失败。
-        // 真机日志 17（`ただ声一つ`）：卡片容器明明在（`[PreviewShell] card container … 374x320`），
+        // 记成了这个离屏视图 —— 退出全屏时的 `reattachToInline` 又拿它去挂，继续失败。
         // 命中的却是复用的歌词视图，于是 17 秒里一轮都没挂上。
         // 返回 nil 只是让这一轮什么都不做 —— 看门狗 1.5s 后再来，那才是自愈的正确姿势。
         return nil
@@ -418,9 +411,9 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         if let page = target as? UIViewController, let pageView = page.view {
             NowPlayingOneScreen.apply(in: pageView)
             NowPlayingPageOverlay.apply(in: pageView)
-            // ★ 2026-10-04：把这一页登记给「定向转储」（`ViewTreeDumper.setPage`）——
-            //   听歌页那一棵约 800 节点，整窗 BFS 的 400 预算永远够不到头部/控件/footer。
-            //   登记只是一个指针，不改任何视图、不读任何内容。
+            // 把这一页登记给「定向转储」（`ViewTreeDumper.setPage`）——
+            // 听歌页那一棵约 800 节点，整窗 BFS 的 400 预算永远够不到头部/控件/footer。
+            // 登记只是一个指针，不改任何视图、不读任何内容。
             ViewTreeDumper.setPage(pageView)
             // ⚠️ 下面这两层都是 `@MainActor` 的，而 hook 方法**不能**标 `@MainActor`
             // （Orion 的代码生成器按源码文本拼接，会拼出 `@MainActoroverride` —— 成文规矩见
@@ -430,7 +423,7 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
                 // 「歌词进播放器」：那一刻列表/底部那一坨常常还没建好，`apply` 里的
                 // `reconcile` 对"没位置"是安静的，真正的重算交给 `DeclutterChrome` 的复查节拍。
                 NowPlayingLyricsPlate.apply(in: pageView)
-                // ★ 2026-10-23：新的「iOS 27 听歌页」（满屏封面）—— 开着时上面那层会自己让位。
+                // 新的「iOS 27 听歌页」（满屏封面）—— 开着时上面那层会自己让位。
                 NowPlayingIOS27.apply(in: pageView)
                 // 「控制键换成本地字形」的兜底落点：万一 `PlaybackControlsElementsUnit`
                 // 那个 hook 被 Orion 拒了，这条路照样能装（判据都是 id，与类名无关）。
@@ -470,12 +463,12 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
         InlineLyricsHostLocator.stopLookup()
         // 定向转储的登记也一起撤掉 —— 否则离开听歌页之后还会一直按"页面"预算转储。
         ViewTreeDumper.setPage(nil)
-        // 「歌词进播放器」那一层：★★ 2026-10-10（照片 65）**这里只记一笔，什么都不收**。
+        // 「歌词进播放器」那一层：**这里只记一笔，什么都不收**。
         //
         // 原来这里直接 `remove(...)` ⇒ 封面当场 `alpha = 1`、我们的层当场摘掉，
         // 而**退出转场里页面还在屏幕上**（滑下去 / 缩回迷你条）⇒ 整个退出动画都是
-        // **原生那张大封面**（照片 65 的闪）。现在收尾推迟到"页面真的不在窗口里"那一刻，
-        // 由 `NowPlayingLyricsPlate.reconcile()`（`DeclutterChrome` 那条 0.3s 节拍）执行 ——
+        // **原生那张大封面**。现在收尾推迟到"页面真的不在窗口里"那一刻，
+        // 由 `NowPlayingLyricsPlate.reconcile`（`DeclutterChrome` 那条 0.3s 节拍）执行 ——
         // 那时页面已经不在屏幕上了，写回封面 / 撤销几何都看不见。
         // ⚠️ 仍然走 `onMainThreadSync`（`@MainActor` 类型，而 hook 方法体是非隔离的）。
         onMainThreadSync { NowPlayingLyricsPlate.pageWillLeave() }
@@ -485,24 +478,22 @@ class NPVScrollViewControllerHook: ClassHook<NSObject> {
 /// 「仿 AM 的整页取色底」的**唯一**刷新入口（全局函数，不是某个 hook 的方法）。
 ///
 /// 调用点：
-///   1. `NPVScrollViewControllerHook.viewWillAppear` / `.viewDidAppear` —— 每次进听歌页
-///      （**传入 `target`**）；
-///   2. 设置页切那个开关时 —— 关掉要**当场**还原（那时没有 `target`）。
+/// 1. `NPVScrollViewControllerHook.viewWillAppear` / `.viewDidAppear` —— 每次进听歌页
+/// （**传入 `target`**）；
+/// 2. 设置页切那个开关时 —— 关掉要**当场**还原（那时没有 `target`）。
 ///
-/// ⚠️ **为什么必须能传 `page`**（2026-10-03 真机日志 37 换来的）：
+/// ⚠️ **为什么必须能传 `page`**：
 /// 原来这个函数只认全局 `npvScrollViewController`，而给它赋值的
 /// `provideScrollViewControllerWithDependencies:` 在 9.1.x 上已被移除、hook 被隔离在
 /// `V91UnavailableLyricsGroup` ⇒ **那个全局恒为 nil** ⇒ 函数第一行就 return，
-/// 日志里 `[NPVStyle]` 一行都没有、页面上什么都看不到。
 /// 现在 hook 直接把 `target`（它自己就是那个 VC）传进来，不再依赖那个全局。
 ///
-/// ★ 2026-10-03 夜（日志 38 之后）：日志 38 证明这条路已经通了（`[NPVStyle]` 两行），
 /// 但"垫上去了却没变化"。真正的刷新缺口在**换歌/滚动之后**
-/// （见 `NowPlayingBackdrop.reconcile()`）—— 不在这里。
+/// （见 `NowPlayingBackdrop.reconcile`）—— 不在这里。
 /// 这一版只多一件事：没有 VC 时（= 设置页切开关）退到
-/// `NowPlayingBackdrop.refreshLastPage()`，而不是干打一行"拿不到 VC"就结束。
+/// `NowPlayingBackdrop.refreshLastPage`，而不是干打一行"拿不到 VC"就结束。
 ///
-/// 取封面色与歌词配色**同一处口径**（`track.metadata()["extracted_color"]`）。
+/// 取封面色与歌词配色**同一处口径**（`track.metadata["extracted_color"]`）。
 func refreshNowPlayingBackdrop(page: UIViewController? = nil) {
     let controller = page ?? (npvScrollViewController as? UIViewController)
     guard let controller else {
@@ -520,7 +511,7 @@ func refreshNowPlayingBackdrop(page: UIViewController? = nil) {
     let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
     let hex = track?.metadata()["extracted_color"]
     if hex == nil {
-        // 这一行是 2026-10-03 补的：日志 37 里 `[NPVStyle]` **零行**，而当时分不清
+        // 而当时分不清
         // 是"没跑到"还是"跑到但没取色"。现在两种情况各有一条日志。
         writeDebugLog("[NPVStyle] no cover color extracted this time (track=\(track == nil ? "nil" : "ok")) - keeping Spotify's original backdrop")
     }

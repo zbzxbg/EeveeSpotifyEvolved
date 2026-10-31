@@ -2,40 +2,19 @@ import UIKit
 
 /// **歌单页那排 setting pill** —— 藏掉它。
 ///
-/// 用户 2026-10-17（图片 149）原话：
-///
-/// > 歌单页的**那四个设置**可以隐藏了。
-///
 /// 那排是 Spotify 自己的东西，AM 里没有：
-///
 /// ```
 /// 歌单页    ┌ + 添加 ┐ ┌ ≡ 编辑 ┐ ┌ ↕ 排序 ┐ ┌ ✎ 姓名和详情 ┐      ← 149
 /// ```
 ///
-/// ## 判据（命中一条就够）
+/// 判据：四颗的**文字逐个整串相等**。必须整串相等 —— `添加歌曲`（148 里那行）含"添加"，子串匹配会把它一起藏掉。
 ///
-/// | 判据 | 值 | 出处 |
-/// |---|---|---|
-/// | ① id 子串 | `PlaylistCuration` | 本仓库 `EntityPageSectionDrop.curationFragment`：真机日志里 `PlaylistCuration.Row.CurationActionsToolbar` 出现过 107 次、`PlaylistCuration.AddButton` 72 次 |
-/// | ② 文字 | 四颗逐个整串相等 | 兜底 |
+/// 纪律：
+/// · **记原值**（`wasHidden`），关开关 / 换页时 `restore` 原样写回 —— 与 `EntityPageAppearance` 其余十处同一个形状；
+/// · 每拍有界（≤ 900 节点 / 命中 4 个就停），页面上没有这排时**什么都不做**；
+/// · ⚠️ 藏的是**视图**，不是列表里的行高 ⇒ 若 Spotify 把这一排算进页头高度，藏完会留一条空档。
 ///
-/// ② 那条**必须整串相等**：`添加歌曲`（148 里那行）含"添加"，子串匹配会把它一起藏掉。
-///
-/// ## 纪律
-///
-/// * **记原值**（`wasHidden`），关开关 / 换页时 `restore()` 原样写回 —— 与 `EntityPageAppearance`
-///   其余十处同一个形状。
-/// * 每拍有界（≤ 900 节点 / 命中 4 个就停），页面上没有这排时**什么都不做**。
-/// * ⚠️ 藏的是**视图**，不是列表里的行高 ⇒ 若 Spotify 把这一排算进页头高度，藏完会留一条空档。
-///
-/// ## ★★ 2026-10-19：「喜欢的歌曲」那排 tags chips **不再动**
-///
-/// 用户：「已点赞的歌曲 那几个根据标签来选歌的功能**先让它留在那吧**，那些让它消失的代码先删掉。」
-///
-/// 那排从来就没认对过：旧判据 `Toolbar_Core.ToolbarChip*` 属于**搜索 / 资料库的工具条**，
-/// 不是它；后来加的形状兜底（「≥4 颗自己那段文字 ≤6 字的 UIControl」）在真机上也没命中过
-/// （日志 555 里只藏掉了歌单页那排 pill，chips 0 命中）。与其继续猜类名，先把这半边判据删干净。
-/// ⇒ 本文件现在**只管歌单页那排 pill**。
+/// 「喜欢的歌曲」那排 tags chips **不再动**：旧判据 `Toolbar_Core.ToolbarChip*` 属于搜索 / 资料库的工具条，不是它；后来加的形状兜底（≥4 颗、自己那段文字 ≤6 字的 `UIControl`）在真机上也没命中过。与其继续猜类名，那半边判据已删干净 —— 本文件现在**只管歌单页那排 pill**。
 enum EntityPageCurationHide {
 
     /// 那排 pill 的模块前缀。
@@ -68,8 +47,8 @@ enum EntityPageCurationHide {
     private static var didReport = false
 
     // MARK: - 入口
-
-    /// 每拍调一次。只在专辑 / 歌单页上由 `EntityPageAppearance.tick()` 调用。
+    //
+    // 每拍调一次。只在专辑 / 歌单页上由 `EntityPageAppearance.tick` 调用。
     static func apply(to page: UIView) {
         guard page.window != nil else { return }
 

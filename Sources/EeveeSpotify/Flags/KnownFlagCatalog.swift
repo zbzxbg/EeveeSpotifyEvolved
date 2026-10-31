@@ -10,13 +10,12 @@ enum FlagValueType: String {
 /// 一条**已知**的 Spotify 远端配置。
 ///
 /// 「已知」有**两种证据来源**（`observedValue` 与分组脚注会写清是哪一种）：
-///   1. **真机硬证据**：它出现在用户设备 9.1.86 的 `[Flags]` 调试日志里 —— 服务端确实下发过、
-///      名字与 scope 都对得上，`observedValue` 就是那次观察到的取值；
-///   2. **IPA 字面量表**（2026-10-02 起收录）：它出现在 `.spotify-ipa/flag-table.txt`
-///      （从 9.1.86 主二进制抽出的 2485 条 `scope.name`）里，但**没在设备日志里出现过**。
-///      这种条目 `observedValue` 留空 —— 点一下会写一条覆盖，**命中与否看日志里那行
-///      `[Flags] override … N match(es)`**：0 命中说明服务端没下发（`.forceBool` / `.forceEnum`
-///      / `.forceInt` 会自己追加一条，所以仍然可能生效）。
+/// 名字与 scope 都对得上，`observedValue` 就是那次观察到的取值；
+/// 2. **IPA 字面量表**起收录）：它出现在 IPA 的 flag 表
+/// （从 9.1.86 主二进制抽出的 2485 条 `scope.name`）里，
+/// 这种条目 `observedValue` 留空 —— 点一下会写一条覆盖，
+/// `[Flags] override … N match(es)`**：0 命中说明服务端没下发（`.forceBool` / `.forceEnum`
+/// / `.forceInt` 会自己追加一条，所以仍然可能生效）。
 ///
 /// 为什么需要它：让用户手打 `ios-feature-socialrecommendationsassistedcurationplugins`
 /// 这样的 scope 不现实，而写错 scope 的后果是"覆盖静默不命中"（仓库里
@@ -26,7 +25,7 @@ struct KnownFlag: Hashable {
     let scope: String
     let type: FlagValueType
 
-    /// 真机日志里观察到的那次取值，只用来给用户一个参照（不是建议）。
+    /// 只用来给用户一个参照（不是建议）。
     /// **空串 = 只在 IPA 字面量表里见过**（见上面的说明）。
     let observedValue: String
 
@@ -60,9 +59,9 @@ struct KnownFlagGroup {
     var flags: [KnownFlag]
 }
 
-/// 9.1.86 真机日志里出现过的 flag，按它影响的地方分组。
+/// 按它影响的地方分组。
 ///
-/// 数据来源：用户设备导出的 `eeveespotify_debug*.log`（19 份，2026-09-26 ~ 09-30）
+/// 数据来源：用户设备导出的 `eeveespotify_debug*.log`（19 份，~ 09-30）
 /// 里的 `[Flags] lyrics flag` / `[Flags] npv flag` 行。**没有一条是猜的。**
 ///
 /// ⚠️ 这仍然只是"服务端在这台设备上发过的子集"——日志本身对 NPV 那批有数量上限
@@ -144,12 +143,12 @@ enum KnownFlagCatalog {
             ]
         ),
 
-        // ── 2026-10-02 新增：证据来自 **IPA 字面量表**（没在设备日志里见过）─────────
+        // ──新增：证据来自 **IPA 字面量表**
         //
         // 这一组是"pw 那 25 条清理开关"里**能用 flag 直接关掉**的那部分：
         // Spotify 自己有一个"减少打扰"模块 `ios-messaging-reduceinterventions-impl`，
         // 里面**一条提示一个 flag**（账号切换 / 演唱会通知 / 现场活动 / Puffin /
-        // 智能随机 / 探索提示 / AI 歌单创建）。逐条都在 `.spotify-ipa/flag-table.txt` 里核对过，
+        // 智能随机 / 探索提示 / AI 歌单创建）。逐条都在 IPA 的 flag 表 里核对过，
         // 没有一条是照着名字猜的。
         KnownFlagGroup(
             titleKey: "flag_group_interventions",
@@ -219,15 +218,15 @@ enum KnownFlagCatalog {
             ]
         ),
 
-        // ── 2026-10-03：第二批"能关的打扰"，跨 scope ────────────────────────────────
+        // ──第二批"能关的打扰"，跨 scope
         //
         // 起因：用户问"实际能关的是不是比这多很多" —— 是。上面那组只覆盖
         // `ios-messaging-reduceinterventions-impl`（Spotify 自己那个"减少打扰"模块，
-        // 11 条已全覆盖）；而 IPA flag 表（`.spotify-ipa/flag-table.txt`，2485 条）里
+        // 11 条已全覆盖）；而 IPA flag 表（IPA 的 flag 表（2485 条））里
         // 还有一批**同性质的提示/推销**散在别的 scope。
         //
         // ⚠️ 这一组每条都只是**IPA 字面量**（`observedValue` 留空）：这台设备上没见过
-        // 服务端下发它们，所以"关掉有没有效果"要靠日志里的 `[Flags] replacement … N match(es)`
+        // 服务端下发它们，
         // 判 —— 0 命中说明这条没被下发（`.forceBool` 仍会追加一条，但效果未知）。
         //
         // 入选标准（刻意保守）：**名字里明确写着"提示/推销"**，且**关掉不会拿掉真功能**。
@@ -241,9 +240,9 @@ enum KnownFlagCatalog {
                 // Spotify Connect：名字直接就叫 disable。
                 KnownFlag("disable_connect_nudges", "ios-feature-connectnotifications", observed: ""),
                 // ⚠️ 刻意**不收**：`show_new_userawareness_nudge`
-                //（"新用户引导提示"——那是给新用户的功能，不属于"打扰"），
+                // （"新用户引导提示"——那是给新用户的功能，不属于"打扰"），
                 // 以及 `specialized_connect_nudge_for_video_variant`（变体选择器，不是开关）。
-
+                //
                 // 睡眠定时器：只在有声书上弹的推销。
                 KnownFlag("nudge_on_audiobooks", "ios-feature-sleeptimer", observed: ""),
 
@@ -268,11 +267,11 @@ enum KnownFlagCatalog {
     }
 
     /// 点一下目录行时写入的取值：
-    ///   · bool → "关"（这些条目绝大多数是卡片/入口开关）；
-    ///   · enum → **服务端下发的那个值**（日志里观察到的）。写回它本身是"钉住"，
-    ///     真正要改值的人去「Flag 覆盖」页把模式改成"写入指定值"再填；
-    ///   · int → 观察到的那个数字（`observedValue`）；**没观察到过就是 nil**，
-    ///     那一行会提示去「Flag 覆盖」页用"写入数字"自己填（例如节流秒数）。
+    /// · bool → "关"（这些条目绝大多数是卡片/入口开关）；
+    /// · enum → **服务端下发的那个值**。写回它本身是"钉住"，
+    /// 真正要改值的人去「Flag 覆盖」页把模式改成"写入指定值"再填；
+    /// · int → 观察到的那个数字（`observedValue`）；**没观察到过就是 nil**，
+    /// 那一行会提示去「Flag 覆盖」页用"写入数字"自己填（例如节流秒数）。
     static func prefilledOverride(for flag: KnownFlag) -> FlagOverride? {
         switch flag.type {
         case .bool:

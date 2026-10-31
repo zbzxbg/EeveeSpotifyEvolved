@@ -22,11 +22,11 @@ class MiniPlayerBarHideHook: ClassHook<UIView> {
         // 即使它自己后来不再收到 layout 回合。
         DeclutterChrome.note(self.target, as: .miniBar)
 
-        // ★ 迷你播放条的**液态玻璃胶囊**（`MiniBarGlass.swift`）蹭的就是这个布局回调 ——
-        //   同一个类上再挂一个 ClassHook 是没验证过的行为，所以那边只画、不钩。
-        //   顺序无所谓：藏掉时它照样画（看不见而已），开关关掉它会自己撤掉并把底色还原。
+        // 迷你播放条的**液态玻璃胶囊**（`MiniBarGlass.swift`）蹭的就是这个布局回调 ——
+        // 同一个类上再挂一个 ClassHook 是没验证过的行为，所以那边只画、不钩。
+        // 顺序无所谓：藏掉时它照样画（看不见而已），开关关掉它会自己撤掉并把底色还原。
         // ⚠️ hook 方法体是**非隔离**的（Orion 的代码生成器会把 `@MainActor` 拼坏，见
-        //   `LyricsChromeVisibility.swift` 顶上那段），所以这里必须套 `onMainThreadSync`。
+        // `LyricsChromeVisibility.swift` 顶上那段），所以这里必须套 `onMainThreadSync`。
         let host = self.target
         onMainThreadSync { MiniBarGlassPlate.apply(to: host) }
 
@@ -63,10 +63,10 @@ class SingalongLyricsLineHideHook: ClassHook<UIView> {
     }
 }
 
-/// 听歌页那排胶囊（照片 63）：「切换至视频」+「显示 / 隐藏歌词」。
+/// 听歌页那排胶囊：「切换至视频」+「显示 / 隐藏歌词」。
 ///
 /// ⚠️ 它是**通用类**（`Encore.Button.Primary`，全 App 都在用），所以判据只认**无障碍 id**
-/// （日志 54 的 `[NPVTree]` 逐字）：`lyrics-npv-switch-button` /
+/// `lyrics-npv-switch-button` /
 /// `nowplaying-npv-musicvideos-switch`。命中不了就什么都不做 —— 宁可漏，不可误伤别的按钮。
 ///
 /// 为什么挂 `Encore.Button.Primary` 而不是"每 0.3s 找一遍"：这两颗是**会随播放内容出现**
@@ -146,7 +146,7 @@ class TransportChromeHideHook: ClassHook<UIView> {
 /// 为什么是 `MainWindow`：真机树里它是 `0.MainWindow@0,0,414,896,id=spotify-main-window`，
 /// 运行期名 `_TtC30ContainerUI_RootUIInternalImpl10MainWindow`；它在**每一份**转储里都在，
 /// 而且每次布局都会走一遍 —— 拿它当节拍器，就不会再出现"目标被我们藏掉之后再没有 layout"
-/// 这种死结（日志 8 的迷你条与加号按钮就是这么坏的）。
+/// 这种死结。
 struct DeclutterReconcileGroup: HookGroup {}
 
 class DeclutterReconcileHook: ClassHook<UIView> {

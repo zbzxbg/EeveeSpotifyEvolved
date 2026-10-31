@@ -9,21 +9,21 @@ import UIKit
 /// 内容滚到其下时由系统的 `ScrollEdgeEffectView` 负责边缘模糊。我们那些补丁是为**旧设计**
 /// （没有任何底色/材质）打的，叠上去只会把玻璃压成一块不透的深色。
 ///
-/// ⚠️ **2026-10-02 更正**：这里原来说"**标签栏**自带 `UIVisualEffectView` +
-/// `_UIVisualEffectBackdropView`" —— 那是**错的**。日志 20 的全树 dump 里
+/// ⚠️ **更正**：这里原来说"**标签栏**自带 `UIVisualEffectView` +
+/// `_UIVisualEffectBackdropView`" —— 那是**错的**。
 /// `UIVisualEffectView` **只有我们自己铺的那一块**（`(8,6 398x71)`），标签栏本身没有任何材质；
 /// 系统玻璃只在**上面**那条（Platter / `ScrollEdgeEffectView`）。
 ///
-/// ⚠️ **2026-10-13 再更正**：那句话的后半（"标签栏那条玻璃得我们自己做"）也**过期**了 ——
+/// ⚠️ **再更正**：那句话的后半（"标签栏那条玻璃得我们自己做"）也**过期**了 ——
 /// 我们现在是**叠一条系统 `UITabBar`**（`TabBarSystemGlass.x.swift`，照 spoti.pw 的做法），
 /// 玻璃由 iOS 26 自己画；**自绘那块已经删除**（`TabBarGlass.x.swift` 只剩几何与标签内容取舍）。
 ///
-/// 真机证据（日志 9，玻璃构建）：
-///   · `[AMOLED] SPNavigationBar first layout — scrim=0 blur=0 bar=0 barBg=0 gradient=0`
-///     —— 旧那两层（灰 scrim `UIImageView` + 同级 `UIVisualEffectView`）**已经不存在**；
-///   · 用户反馈："标签栏看起来正常不透，不是毛玻璃也不是液态玻璃"
-///     —— 正是 `TabBarGradientView`（黑→透明、正好盖住整条）与 AMOLED 插的那层
-///     `systemThinMaterialDark` 叠在系统玻璃上的结果。
+/// 真机证据：
+/// · `[AMOLED] SPNavigationBar first layout — scrim=0 blur=0 bar=0 barBg=0 gradient=0`
+/// —— 旧那两层（灰 scrim `UIImageView` + 同级 `UIVisualEffectView`）**已经不存在**；
+/// · "标签栏看起来正常不透，不是毛玻璃也不是液态玻璃"
+/// —— 正是 `TabBarGradientView`（黑→透明、正好盖住整条）与 AMOLED 插的那层
+/// `systemThinMaterialDark` 叠在系统玻璃上的结果。
 ///
 /// 判据见 `NewDesignLanguage`：只在**删掉了 `UIDesignRequiresCompatibility` 的构建**里生效；
 /// 跑兼容模式的老构建一切照旧。
@@ -44,8 +44,8 @@ class TabBarGradientYieldHook: ClassHook<UIView> {
     func layoutSubviews() {
         orig.layoutSubviews()
 
-        // ★ 运行期兜底信号（`NewDesignLanguage` 的信号 2）：兼容构建里才扫一次。
-        // 原观察点在 AMOLED 的导航栏遍历里；2026-10-02 删 AMOLED 时搬到这里 ——
+        // 运行期兜底信号（`NewDesignLanguage` 的信号 2）：兼容构建里才扫一次。
+        // 原观察点在 AMOLED 的导航栏遍历里；删 AMOLED 时搬到这里 ——
         // 它是"万一将来 iOS 忽略 `UIDesignRequiresCompatibility`"时唯一能救我们的东西。
         if let window = self.target.window {
             onMainThreadSync { observeNewDesignMarkersIfNeeded(in: window) }
@@ -74,9 +74,9 @@ private var didReportGradientYield = false
 /// 只看"构建意图"会判错 —— 我们那些给旧设计打的补丁就会重新叠到玻璃上。
 ///
 /// 两条纪律（沿用 AMOLED 那版）：
-///   · 只在"构建意图说这是兼容模式"时才扫（`isActive` 一真就零开销）；
-///   · **只扫一次**（成不成都不再扫），而且是在**已经在走的视图子树**里认类名 ——
-///     刻意不做运行时类枚举（本仓库为 `objc_getClassList` 崩过两次）。
+/// · 只在"构建意图说这是兼容模式"时才扫（`isActive` 一真就零开销）；
+/// · **只扫一次**（成不成都不再扫），而且是在**已经在走的视图子树**里认类名 ——
+/// 刻意不做运行时类枚举（本仓库为 `objc_getClassList` 崩过两次）。
 @MainActor
 private func observeNewDesignMarkersIfNeeded(in window: UIView) {
     guard !NewDesignLanguage.isActive, !didObserveNewDesignMarkers else { return }

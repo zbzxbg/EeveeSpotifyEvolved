@@ -5,7 +5,7 @@ import ObjectiveC.runtime
 
 // MARK: - 用 App 自己的链接分发器打开一个 `spotify:` URI
 //
-// 2026-10-22（日志 5）：艺人页那张「最新发布」卡片的数据改由 Spotify 自己的 Web API 提供时，
+// 艺人页那张「最新发布」卡片的数据改由 Spotify 自己的 Web API 提供时，
 // 它手里只有一个 **`spotify:album:…`**（页面里"那一格"还没建出来，没法转发点击）。
 // 要打开它，最稳的一条路就是 App **自己的**链接分发器 —— 与真人点一条 `spotify:` 链接
 // 完全同一条链路（落地页 / 导航栈都由 Spotify 自己决定）。
@@ -20,13 +20,13 @@ import ObjectiveC.runtime
 // ```
 //
 // 两条纪律：
-//   · 单例是 **weak**（我们只是借用 App 的对象，绝不持有 —— 也就不会成环）；
-//   · 目标类不在（换版 / 改名）就只记一行日志：卡片退回"只转发页面里那一格"，不崩、不猜。
-
-/// 3 个参数的那条 `navigateToURI:options:interactionID:`。
-///
-/// `id` → `AnyObject`、`SEL` → `Selector`、`NSURL *` → `NSURL`、`options`（整数 0）→ `Int64`、
-/// `interactionID`（nil）→ `AnyObject?`。返回值在真机上是 void（pw 那边也不取）。
+// · 单例是 **weak**（我们只是借用 App 的对象，绝不持有 —— 也就不会成环）；
+// · 目标类不在（换版 / 改名）就只记一行日志：卡片退回"只转发页面里那一格"，不崩、不猜。
+//
+// 3 个参数的那条 `navigateToURI:options:interactionID:`。
+//
+// `id` → `AnyObject`、`SEL` → `Selector`、`NSURL *` → `NSURL`、`options`（整数 0）→ `Int64`、
+// `interactionID`（nil）→ `AnyObject?`。返回值在真机上是 void（pw 那边也不取）。
 private typealias SpotifyNavigateFunction = @convention(c) (
     AnyObject,
     Selector,
@@ -46,7 +46,7 @@ class SPTLinkDispatcherMainUILoadedHook: ClassHook<NSObject> {
     func setMainUILoaded(_ loaded: Bool) {
         orig.setMainUILoaded(loaded)
         // ⚠️ 先把 `target` 取成局部量再往外传（本仓库既有做法，见 `CoverFlashGuard.x.swift`）：
-        //    Orion 生成的 `target` 属性挂在 hook 实例上，闭包/属性访问别把它一起捕获住。
+        // Orion 生成的 `target` 属性挂在 hook 实例上，闭包/属性访问别把它一起捕获住。
         let dispatcher = target
         SpotifyURIOpener.attach(dispatcher)
     }
@@ -62,14 +62,14 @@ enum SpotifyURIOpener {
 
     /// 分发器抓到没有。
     ///
-    /// ★ 2026-10-31（照片 169）：没抓到时 `open` 会退回 `UIApplication.open(spotify:…)` ——
+    /// 没抓到时 `open` 会退回 `UIApplication.open(spotify:…)` ——
     /// 对 App 自己那个 scheme 是**空操作**（不会弹、也不会跳）。调用方（听歌页的歌名/艺人点击）
     /// 据此改走"转发给原生控件"，而不是让用户觉得"点上去没反应"。
     static var isReady: Bool { dispatcher != nil }
 
     // MARK: - 交给 hook 的那一半
-
-    /// `-setMainUILoaded:` 把单例交过来时调用（**主线程**，App 启动阶段）。
+    //
+    // `-setMainUILoaded:` 把单例交过来时调用（**主线程**，App 启动阶段）。
     static func attach(_ object: AnyObject) {
         guard let candidate = object as? NSObject else {
             writeDebugLog("[LinkOpen] setMainUILoaded: — the object is not an NSObject, nothing captured")
@@ -83,10 +83,10 @@ enum SpotifyURIOpener {
     }
 
     // MARK: - 打开一个 URI
-
-    /// 用 App 自己的分发器打开 `uri`。返回"有没有把这一下交出去"（不是"页面有没有跳"）。
-    ///
-    /// - Note: 卡片点击本来就在主线程；万一不是，就排到主队列再打开（导航必须在主线程）。
+    //
+    // 用 App 自己的分发器打开 `uri`。返回"有没有把这一下交出去"（不是"页面有没有跳"）。
+    //
+    // - Note: 卡片点击本来就在主线程；万一不是，就排到主队列再打开（导航必须在主线程）。
     @discardableResult
     static func open(_ uri: String) -> Bool {
         let trimmed = uri.trimmingCharacters(in: .whitespacesAndNewlines)

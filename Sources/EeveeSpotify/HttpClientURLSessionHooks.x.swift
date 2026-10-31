@@ -20,10 +20,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             let token = String(auth.dropFirst(7))
             setSpotifyAccessToken(token)
             // 只记**形状**与来源，绝不记 token 本身。
-            // 2026-09-30 再加两道：① `prefix=前6字符` 换成轮换序号 —— token 的任何片段
+            // 再加两道：① `prefix=前6字符` 换成轮换序号 —— token 的任何片段
             // 都没有调试价值，"这一场里有没有换过 token"才是判据；
             // ② 整条 URL 只留 scheme+host+path：query 里带着歌单/曲目/时区
-            // （19 号日志里 73 条 `[TokenCapture]` 每条都背着一整个 query）。
             let dotCount = token.filter { $0 == "." }.count
             let shape = "len=\(token.count) dots=\(dotCount) \(SpotifyTokenOrdinal.label(for: token))"
             writeDebugLog("[TokenCapture] \(shape) from \(DebugLogSanitizer.logSafeURL(task.currentRequest?.url))")
@@ -88,11 +87,10 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     return
                 }
 
-                // ── 分档预算 + 结果备忘（与 `SPTDataLoaderService` 那条路**对齐**）──────
+                // ── 分档预算 + 结果备忘（与 `SPTDataLoaderService` 那条路**对齐**）
                 //
-                // ⚠️ 2026-10-02（v4.11.1）：v4.11 把这套调度只写在了
+                // ⚠️（v4.11.1）：v4.11 把这套调度只写在了
                 // `DataLoaderServiceHooks`（`SPTDataLoaderService`）那一条路上，
-                // 但真机日志 28→35 **每一份**都是 `[DL]` 零行、`[HCUS]` 若干行 ——
                 // 这台设备上歌词响应走的是 `Connectivity_HttpClientKit.HttpClientURLSession`
                 // ⇒ 分档预算与结果备忘**一次都没真正生效**（用户"看不出修了什么"的直接原因）。
                 //
@@ -120,9 +118,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     semaphore.signal()
                 }
                 let waitResult = semaphore.wait(timeout: .now() + budget)
-                // ⚠️ 2026-10-03：这条路上**没有占位**了 —— 取不到真词就放行 Spotify 原始响应，
+                // ⚠️这条路上**没有占位**了 —— 取不到真词就放行 Spotify 原始响应，
                 // 与 v4.11 之前（`ffe3e69^`）的行为逐字一致。原因见下面 `else` 分支与
-                // `LyricsResponseCache.firstAttemptBudget` 的注释（日志 36 的证据链）。
+                // `LyricsResponseCache.firstAttemptBudget` 的注释。
                 let lyricsPayload: Data
                 if let customLyricsData {
                     lyricsPayload = customLyricsData
@@ -133,9 +131,8 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                         route: "HCUS", plan: plan
                     )
                 } else {
-                    // ⚠️ 2026-10-03：这里**不再交占位**，放行 Spotify 原始响应 ——
-                    // 日志 36 证明了"1.5s 到点就交占位"的代价：占位被按曲目留下，
-                    // 3 秒后真词到手也刷不进去（用户看到的就是"未找到歌词"）。
+                    // ⚠️这里**不再交占位**，放行 Spotify 原始响应 ——
+                    // 3 秒后真词到手也刷不进去（的就是"未找到歌词"）。
                     // 详见 `LyricsResponseCache.firstAttemptBudget` 的说明。
                     // 现在两条路都只交真结果；这条边只在"取词真的失败/超时"时走到。
                     lyricsPayload = buffer
@@ -159,7 +156,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
-            // patch() returned nil — no transform, but didReceiveData already
+            // patch returned nil — no transform, but didReceiveData already
             // suppressed the original. Replay or consumer hangs.
             orig.URLSession(session, dataTask: task, didReceiveData: buffer)
             orig.URLSession(session, task: task, didCompleteWithError: nil)

@@ -7,13 +7,13 @@ import ObjectiveC.runtime
 /// （同一个信号、同一套 id；9.1.88 那份解密 IPA 里
 /// `YourLibrary_CommonKit.YourLibrarySwipeableCollectionViewCellContainer` 逐字都在）。
 ///
-/// ── 目标：Apple Music 那两笔（用户 2026-10-12 点名"要 AM 的优雅感"）─────────────
-///   · **封面是连续圆角的小圆角**（AM 的唱片封面 6pt、大图 8pt，都是 `kCACornerCurveContinuous`）；
-///     Spotify 自己给的是直角味的 4pt；
-///   · **行与行之间一条发丝线，从「文字左沿」开始**（AM 的列表分隔线就是这么缩进的），
-///     而不是横贯整行。厚度是**物理发丝**（1/scale），颜色 white @ 12%（pw 的 `SGRHairline`）。
+/// ── 目标：Apple Music 那两笔（点名"要 AM 的优雅感"）
+/// · **封面是连续圆角的小圆角**（AM 的唱片封面 6pt、大图 8pt，都是 `kCACornerCurveContinuous`）；
+/// Spotify 自己给的是直角味的 4pt；
+/// · **行与行之间一条发丝线，从「文字左沿」开始**（AM 的列表分隔线就是这么缩进的），
+/// 而不是横贯整行。厚度是**物理发丝**（1/scale），颜色 white @ 12%（pw 的 `SGRHairline`）。
 ///
-/// ── 真机结构（pw 的树；我们的 dump 里同一个 id 也在）──────────────────────────
+/// ── 真机结构（pw 的树；我们的 dump 里同一个 id 也在）
 /// ```
 /// YourLibrarySwipeableCollectionViewCellContainer          ← hook 目标（复用单元）
 /// └ 402x80 的一行（id=Playlist.Row.Library / Album.Row.Library / Podcast.Row.Library）
@@ -23,15 +23,15 @@ import ObjectiveC.runtime
 ///   或者 112.67x161.33 的卡片（id=Components.UI.CardLibrary.Artwork r=4）  ← 换连续圆角 8
 /// ```
 ///
-/// ── 两条实现细节（都照 pw，理由也是他的，别再自己发明）───────────────────────
-///   1. **艺人的画像是圆的**：它的 `cornerRadius` 已经是"半边长"，**一个字节都不许改** ——
-///      判据是 `cornerRadius >= side/2 - 0.5` 就放过（真机树里 r=32 的就是这一类）；
-///   2. **发丝线用 `CALayer`，不用 view**：单元复用极快，加 view 会看到线"滑"进来 ⇒
-///      用 layer + `CATransaction.setDisableActions(true)`；形状不对（卡片）时**只是藏起来**，
-///      不删层（同一个单元一会儿还会变回行）。
+/// ── 两条实现细节（都照 pw，理由也是他的，别再自己发明）
+/// 1. **艺人的画像是圆的**：它的 `cornerRadius` 已经是"半边长"，**一个字节都不许改** ——
+/// 判据是 `cornerRadius >= side/2 - 0.5` 就放过（真机树里 r=32 的就是这一类）；
+/// 2. **发丝线用 `CALayer`，不用 view**：单元复用极快，加 view 会看到线"滑"进来 ⇒
+/// 用 layer + `CATransaction.setDisableActions(true)`；形状不对（卡片）时**只是藏起来**，
+/// 不删层（同一个单元一会儿还会变回行）。
 ///
 /// ⚠️ 还原：封面原半径/原圆角曲线记在**那颗封面自己身上**（关联对象）⇒ 单元复用也不会串；
-///    开关关掉时（本文件的 hook 每拍都会跑）**逐颗写回**。
+/// 开关关掉时（本文件的 hook 每拍都会跑）**逐颗写回**。
 enum LibraryRowsMetrics {
     /// pw 的 `SGRRadiusThumb` = 6：**行**里的 64pt 缩略图。
     static let thumbRadius: CGFloat = 6
@@ -63,16 +63,6 @@ enum LibraryRowsAppearance {
     private static let cardArtworkIdentifier = "Components.UI.CardLibrary.Artwork"
 
     /// 由 hook 在**那颗复用的单元**每次布局时调用。幂等。
-    ///
-    /// ★ 2026-10-12（真机日志 64 的 `[Tree]` 纠正）：这个 build 里**卡片封面的 id 是存在的** ——
-    /// `[Tree] #8 23.ImageView@0,0,116,116,id=Components.UI.CardLibrary.Artwork` ✓
-    /// （那一版里我报的 `⚠️ no row artwork id on a 116x143 cell` 是**假警报**：那颗 116×143 是
-    /// "添加艺人 / 添加播客"那种**占位卡**，它本来就没有封面 —— 占位卡的 id 是
-    /// `Components.UI.AddArtistCardLibrary` / `AddPodcastCardLibrary` / `AddEventCardLibrary` /
-    /// `ImportMusicCardLibrary`，见同一份 `[Tree]`。）
-    /// 所以现在：① 占位卡**不再报警**；② 两个 id 都没有时**退到"按几何认封面"**
-    /// （贴边、接近正方、40…200pt 的那个视图），并把**真实类名 + id + 半径**打进日志 ——
-    /// 下一份日志就能把 id 钉死，不用再猜。
     @MainActor
     static func apply(to cell: UIView) {
         guard isEnabled else {
@@ -279,14 +269,14 @@ enum LibraryRowsAppearance {
 }
 
 // MARK: - Hook
-
-/// 音乐库列表里**每一颗可滑动的单元**（行与网格卡片共用这一个容器类）。
-///
-/// 用 `layoutSubviews` 而不是 0.5s 节拍：单元是**复用的**，它自己每次布局就是最准的时机
-/// （pw 也是只挂这一个）。开关关掉时同一个 hook 会把它写回。
-///
-/// ⚠️ hook 方法上不写 `@MainActor`、方法体里用 `onMainThreadSync` —— 仓库成文规矩
-/// （见 `LyricsChromeVisibility.swift:3-17`）；`target` 先取成局部量再进闭包。
+//
+// 音乐库列表里**每一颗可滑动的单元**（行与网格卡片共用这一个容器类）。
+//
+// 用 `layoutSubviews` 而不是 0.5s 节拍：单元是**复用的**，它自己每次布局就是最准的时机
+// （pw 也是只挂这一个）。开关关掉时同一个 hook 会把它写回。
+//
+// ⚠️ hook 方法上不写 `@MainActor`、方法体里用 `onMainThreadSync` —— 仓库成文规矩
+// （见 `LyricsChromeVisibility.swift:3-17`）；`target` 先取成局部量再进闭包。
 class LibraryRowStyleHook: ClassHook<UIView> {
     typealias Group = LibraryAppearanceGroup
     static let targetName = "YourLibrary_CommonKit.YourLibrarySwipeableCollectionViewCellContainer"

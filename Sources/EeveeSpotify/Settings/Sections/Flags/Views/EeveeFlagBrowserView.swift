@@ -3,7 +3,7 @@ import UIKit
 
 /// 「远端开关」页 —— 把 Spotify 远端配置（flag）**自动扫出来的**清单直接摆出来改。
 ///
-/// ★ 2026-10-17（用户：「关于 flag 这部分，可不可以看看上游的 flag 页面设置，然后用他们的」）：
+/// （关于 flag 这部分，可不可以看看上游的 flag 页面设置，然后用他们的）：
 /// 这一页与 `RemoteFlags.swift` / `RemoteFlagsHooks.x.swift` 一起从上游
 /// `SideloadLabs/EeveeSpotifyReincarnated`（`Flags/FlagBrowserView.swift`）移植，
 /// 界面结构照他们的，数据源换成我们自己的 `FlagOverrideStore`（不另存一份，见
@@ -12,13 +12,13 @@ import UIKit
 /// ## 它比原来的「Flag 覆盖」页好在哪
 ///
 /// 原来那一页要用户**自己**填 name + scope + 模式（Auto/开/关/写值/写数字）+ 值，
-/// 而 flag 名得从 IPA 字面量表或日志里抄。这一页列的是**真被 Spotify 读过的东西**
+/// 这一页列的是**真被 Spotify 读过的东西**
 /// （`RemoteFlags.resolve` 顺手记下来的 `FlagInfo`：种类 / 当前值 / 整数上下限 /
 /// enum 可选值），于是：
-///   · bool → 一个菜单（自动 / 开 / 关）；
-///   · enum → 一个菜单（自动 + 服务端给的那几个取值）；
-///   · int  → 一个数字框，范围就是那条 flag 自己的 lower…upper；
-///   · 顶部一个搜索框 + 一个「只看改过的」。
+/// · bool → 一个菜单（自动 / 开 / 关）；
+/// · enum → 一个菜单（自动 + 服务端给的那几个取值）；
+/// · int → 一个数字框，范围就是那条 flag 自己的 lower…upper；
+/// · 顶部一个搜索框 + 一个「只看改过的」。
 ///
 /// ## 没扫到的时候（重要）
 ///
@@ -90,7 +90,7 @@ struct EeveeFlagBrowserView: View {
                 }
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear(perform: loadCatalogIfNeeded)
     }
@@ -115,7 +115,7 @@ struct EeveeFlagBrowserView: View {
             }
 
             // ⚠️ 这条是**本仓库的退路**，上游没有：手工写一条 flag（含"服务端从没下发过"的情况，
-            //   那种必须填 scope）。它写的是同一张表，所以两页永远一致。
+            // 那种必须填 scope）。它写的是同一张表，所以两页永远一致。
             Button(action: pushManualEditor) {
                 HStack {
                     Image(systemName: "square.and.pencil")
@@ -153,8 +153,8 @@ struct EeveeFlagBrowserView: View {
     }
 
     // MARK: - 写回
-
-    /// 把一次选择映射成 `FlagOverride`（这张表是唯一真相，见 `RemoteFlags.overrides`）。
+    //
+    // 把一次选择映射成 `FlagOverride`（这张表是唯一真相，见 `RemoteFlags.overrides`）。
     private func applyOverride(_ key: String, _ value: Any?) {
         guard let (scope, name) = Self.parseFlagKey(key) else { return }
 

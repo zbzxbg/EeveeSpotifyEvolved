@@ -2,23 +2,23 @@ import Foundation
 
 // MARK: - 「最新发布」：Spotify 自己的 Web API 那条数据线
 //
-// 2026-10-22（日志 5 的现场）：艺人页那张卡片一直不出现 —— 页面里「热门新歌 / 最新发行」那一行
+// 艺人页那张卡片一直不出现 —— 页面里「热门新歌 / 最新发行」那一行
 // 是 `RetrievalRowLoadingElementUI` 的**骨架**，Spotify 懒加载，不滚到就永远不建 ⇒
 // 只读页面的那条路（`EntityPageHeaderManager.captureLatestRelease`）**进页必然读不到**，
-// 卡片就一直空着（用户：「刚进艺人页没有，重进之后可能就有了」）。
+// 卡片就一直空着（刚进艺人页没有，重进之后可能就有了）。
 //
 // ⇒ 这里补一条**不依赖页面**的数据线：用 `DataLoaderServiceHooks` 抓下来的 Bearer token 直接问
 // `api.spotify.com`。三条纪律：
 //
-//   · **只认名字对得上的艺人**（归一化后逐字相等）。同名不同人是这张卡最容易犯的错
-//     （旧苹果目录那条就选错过：`Connect the World`）⇒ 对不上就返回 nil 并留一行日志，**绝不猜**；
-//   · 解析全部走 `Any` 转换 + 状态码判断，**不信任何字段一定存在、没有 force unwrap**；
-//   · 回调**永远在主队列**（布局 / 视图那一侧都在主线程）。
+// · **只认名字对得上的艺人**（归一化后逐字相等）。同名不同人是这张卡最容易犯的错
+// （旧苹果目录那条就选错过：`Connect the World`）⇒ 对不上就返回 nil 并留一行日志，**绝不猜**；
+// · 解析全部走 `Any` 转换 + 状态码判断，**不信任何字段一定存在、没有 force unwrap**；
+// · 回调**永远在主队列**（布局 / 视图那一侧都在主线程）。
 //
 // ⚠️ 令牌**绝不进日志**：`writeDebugLog` 会落盘、还会进系统统一日志（清不掉），
-//    所以这里连"令牌有多长"都不打。
-
-/// 一张「最新发布」卡片要的全部东西（Web API 版）。
+// 所以这里连"令牌有多长"都不打。
+//
+// 一张「最新发布」卡片要的全部东西（Web API 版）。
 struct SpotifyArtistRelease {
     let title: String
     /// 已经排好版的日期文字（`2026年8月22日` / `2026年8月` / `2026`）—— 直接交给卡片画。
@@ -63,11 +63,11 @@ enum ArtistReleasesFromSpotify {
     }()
 
     // MARK: - 名字归一化
-
-    /// 归一化：去掉变音符号、转小写、只留字母与数字。
-    ///
-    /// ⚠️ 页面那边 `ArtistLatestReleaseSource.normalized` 是 `private`，**这里另写一份**
-    /// （任务里明确允许）：两份判据一致就够，不需要为了共用去动那个旧文件。
+    //
+    // 归一化：去掉变音符号、转小写、只留字母与数字。
+    //
+    // ⚠️ 页面那边 `ArtistLatestReleaseSource.normalized` 是 `private`，**这里另写一份**
+    // 两份判据一致就够，不需要为了共用去动那个旧文件。
     static func normalized(_ text: String) -> String {
         let folded = text.folding(options: .diacriticInsensitive, locale: nil).lowercased()
         return folded.filter { character in
@@ -76,8 +76,8 @@ enum ArtistReleasesFromSpotify {
     }
 
     // MARK: - 对外的两个入口
-
-    /// 已经取到过的那一份（同步；给"每一拍都要看一眼"的布局侧用）。
+    //
+    // 已经取到过的那一份（同步；给"每一拍都要看一眼"的布局侧用）。
     static func cached(for artist: String) -> SpotifyArtistRelease? {
         let key = normalized(artist)
         // 归一化后为空 = 这个名字一个字母数字都没有；只可能来自 `fetch`，
@@ -205,9 +205,9 @@ enum ArtistReleasesFromSpotify {
     }
 
     // MARK: - 第二步：这位艺人的专辑 / 单曲
-
-    /// - Parameter withMarket: 第一次带设备地区；400 / 401 时**去掉 market 重试一次**
-    ///   （有的令牌 / 地区组合不接受 `market`，去掉之后同一个接口照样能用）。
+    //
+    // - Parameter withMarket: 第一次带设备地区；400 / 401 时**去掉 market 重试一次**
+    // （有的令牌 / 地区组合不接受 `market`，去掉之后同一个接口照样能用）。
     private static func albums(
         artistID: String,
         artist: String,
@@ -224,9 +224,8 @@ enum ArtistReleasesFromSpotify {
         let task = session.dataTask(with: makeRequest(url: url, token: token)) { data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
 
-            // ★★ 2026-10-23（日志 6 的现场：`albums failed, status 404` —— 艺术家卡一直不出现）：
-            //    带 `market` 的第一次请求在这台设备上（地区 CN）直接 404。400/401 原来的重试
-            //    覆盖不到它 ⇒ 这里把 404 也算进"去掉 market 再问一次"。
+            // 带 `market` 的第一次请求在这台设备上（地区 CN）直接 404。400/401 原来的重试
+            // 覆盖不到它 ⇒ 这里把 404 也算进"去掉 market 再问一次"。
             if withMarket, status == 400 || status == 401 || status == 404 {
                 writeDebugLog(
                     "[Release] spotify — \"\(artist)\": albums answered \(status) with a market,"
@@ -241,9 +240,9 @@ enum ArtistReleasesFromSpotify {
                 writeDebugLog(
                     "[Release] spotify — \"\(artist)\": albums failed, status \(status), \(reason)"
                 )
-                // ★★ 2026-10-23：`/artists/{id}/albums` 整条不通时还有一条**同一个令牌能走通**的路
-                //    （搜索接口在这台设备上已经证明返回 200）⇒ 去按专辑搜索里挑最新一张。
-                //    只在"已经去掉 market 仍失败"时走，避免同一个 404 问两遍。
+                // `/artists/{id}/albums` 整条不通时还有一条**同一个令牌能走通**的路
+                // （搜索接口在这台设备上已经证明返回 200）⇒ 去按专辑搜索里挑最新一张。
+                // 只在"已经去掉 market 仍失败"时走，避免同一个 404 问两遍。
                 if !withMarket {
                     searchAlbums(artist: artist, key: key, token: token)
                     return
@@ -268,7 +267,6 @@ enum ArtistReleasesFromSpotify {
 
     /// 兜底数据线：`/v1/search?type=album`。
     ///
-    /// ★★ 2026-10-23（日志 6：`albums failed, status 404`，卡片一直等页面那一行）：
     /// `/artists/{id}/albums` 在有的地区 / 令牌组合下会直接 404，而**同一个令牌**问
     /// `/v1/search` 是 200（它刚刚就在同一个会话里返回过 artist id）⇒ 用歌手名搜一批专辑，
     /// 仍然按"主艺人逐字相等 + 日期最新"来挑（解析复用 `latestRelease`，它同时认
@@ -473,7 +471,7 @@ enum ArtistReleasesFromSpotify {
         return formatter
     }()
 
-    /// `2026-08-22` / `2026-08` / `2026`。
+    /// `` / `2026-08` / `2026`。
     ///
     /// Spotify 的 `release_date` **只给到它有的那位精度**（单曲常常只到年）⇒ 三种都认，
     /// 解析不出日期就给 `(nil, nil)`（排序时排最后）。
@@ -537,8 +535,8 @@ enum ArtistReleasesFromSpotify {
     }
 
     // MARK: - 收尾
-
-    /// 清在飞、写缓存、**在主队列**把结果交给所有等着的人。
+    //
+    // 清在飞、写缓存、**在主队列**把结果交给所有等着的人。
     private static func finish(key: String, release: SpotifyArtistRelease?) {
         lock.lock()
         inFlight.remove(key)

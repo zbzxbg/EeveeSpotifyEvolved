@@ -1,45 +1,15 @@
 import Foundation
 
-// MARK: - AppleMusicOfficialTtmlLyricsRepository
+// Apple Music **官方** TTML 歌词源 —— 「实验 → 启用 Apple Music 官方 TTML 歌词」。
 //
-// Apple Music **官方** TTML 歌词源 —— 「实验 → 启用Apple Music官方TTML歌词」。
+// 与 `AmllTtmlLyricsRepository` 的区别：那个走 AMLL 社区库（api.amll.dev），格式同样是 Apple 的 TTML，但内容是网友整理搬运的，覆盖率和逐词质量参差。这里拿的是 **Apple 自己**给的那份：逐词（`syllable-lyrics`）与逐行（`lyrics`）都取、译文/音译来自 `<iTunesMetadata>` 旁挂、背景人声是 `ttm:role="x-bg"`。这三样 `AmllTtmlParser` 本来就认（AMLL 的格式就是照 Apple 长的），所以不新增第二套解析/映射，只补"怎么把官方 TTML 拿到手"。
 //
-// ── 为什么要单开一个源 ────────────────────────────────────────────────────
-// 现有的 `AmllTtmlLyricsRepository` 走的是 **AMLL 社区库**（api.amll.dev）：格式同样是
-// Apple 那套 TTML，但内容是**网友整理/搬运**的，覆盖率和逐词质量参差不齐。
-// 这个仓库拿的是 **Apple 自己**给的那份 TTML：
-//   · 逐词（`syllable-lyrics`）与逐行（`lyrics`）都取；
-//   · 译文/音译来自 Apple 的 `<iTunesMetadata>` 旁挂；
-//   · 背景人声是 Apple 的 `ttm:role="x-bg"`。
-// 三样东西现有的解析器（`AmllTtmlParser`）**本来就认** —— AMLL 的格式就是照 Apple 的格式
-// 长的。所以这一路**不新增第二套解析/映射**，只补"怎么把官方 TTML 拿到手"。
+// 认证是唯一的硬门槛：Apple 没有公开歌词 API。实测 `search` 只要网页播放器的 developer token，而 `/lyrics` 未登录返回 **404**、`/me/storefront` 返回 **403** ⇒ 歌词那一步必须有**用户自己的 Apple Music 登录态**（浏览器 Cookie 里的 `media-user-token`）。所以只做两件事：
+// ① developer token **自动**从 music.apple.com 的 JS bundle 里抓（JWT，约 70 天过期，带 `exp`，过期前 1 天重抓）；
+// ② media-user-token 由**用户在设置里粘贴**（`UserDefaults.appleMusicMediaUserToken`，见 `AppleMusicTtml+UserDefaults.swift`）。
+// 抓 token 参照 `zhaarey/apple-music-downloader` 的 `amp-api/token.go`，取歌词参照 `dropcreations/Manzana-Apple-Music-Lyrics` 的 `api/api.py`（`include[songs]=lyrics,syllable-lyrics` + `media-user-token` 头）。`amp-api.music.apple.com` 国内可直连，不需要换 host。
 //
-// ── 认证（唯一的硬门槛，也是"实验"二字的由来）─────────────────────────────
-// Apple 没有公开的歌词 API。实测（2026-10-17，本机直连）：
-//   · `GET /v1/catalog/{sf}/search` …… 只要 **网页播放器的 developer token** 就能用；
-//   · `GET /v1/catalog/{sf}/songs/{id}/lyrics` …… 未登录返回 **404**；
-//   · `GET /v1/me/storefront` …… 未登录/令牌无效返回 **403**。
-// ⇒ 歌词那一步必须有**用户自己的 Apple Music 登录态**（浏览器 Cookie 里的
-//   `media-user-token`），这也是所有能跑的同类项目（Manzana、apple-music-downloader）
-//   的共同做法。所以本仓库只做两件事：
-//   ① developer token：**自动**从 music.apple.com 的 JS bundle 里抓（JWT，约 70 天过期，
-//      带 `exp`，过期前 1 天自动重抓）；
-//   ② media-user-token：**用户在设置里粘贴**（存在 `UserDefaults.appleMusicMediaUserToken`，
-//      见 `AppleMusicTtml+UserDefaults.swift`）。
-// 抓 developer token 这一步是**照抄 `zhaarey/apple-music-downloader` 的 `internal/amp-api/token.go`**
-// （`GET music.apple.com` → 找 `/assets/index~*.js` → 在 JS 里取第一个 `eyJ…` JWT），
-// 歌曲/歌词两步照抄 `dropcreations/Manzana-Apple-Music-Lyrics` 的 `api/api.py`
-// （`include[songs]=lyrics,syllable-lyrics` + `media-user-token` 头）。
-//
-// ── 为什么不做「直连 IP / 换 Host」那一套 ─────────────────────────────────
-// `amp-api.music.apple.com` 在国内可以直连（本机实测），没有 LRCLIB 那种坏 IPv6 路径。
-//
-// ── 失败语义（与其它源一致）───────────────────────────────────────────────
-// 404 / 没取到 ttml → `.noSuchSong`（静默降级，不弹窗）
-// 400 → `.invalidSource`（include 写法不被接受，会换第二种写法重试）
-// 401/403 → `.invalidAppleMusicToken`（用户令牌坏了/过期 —— 这个必须让用户看见一次）
-// 没填令牌 → `.missingAppleMusicToken`（同上）
-// 5xx / 429 / 超时 → 退避重试，最终抛 `.unknownError`（服务侧问题，不是"没歌词"）
+// 失败语义（与其它源一致）：404 / 没取到 ttml → `.noSuchSong`（静默降级，不弹窗）；400 → `.invalidSource`（include 写法不被接受，换第二种写法重试）；401/403 → `.invalidAppleMusicToken`（用户令牌坏了或过期，这个必须让用户看见一次）。
 
 final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
 
@@ -53,8 +23,8 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
     /// 网页播放器的 JS bundle 路径（`/assets/index~bc39edf62f.js` 这种）。
     ///
     /// ⚠️ 刻意写成 `index[^/]+\.js` 而不是 `index~…`：`~` 那个分隔符是苹果当前 webpack 的
-    ///   习惯（`apple-music-downloader` 的 `token.go` 就是按 `index~` 写的），但换一次打包器
-    ///   就会变成 `index-abcdef.js`。`[^/]` 保证不会跨到别的路径，`+\.js` 靠回溯收口。
+    /// 习惯（`apple-music-downloader` 的 `token.go` 就是按 `index~` 写的），但换一次打包器
+    /// 就会变成 `index-abcdef.js`。`[^/]` 保证不会跨到别的路径，`+\.js` 靠回溯收口。
     private static let bundlePathPattern = "/assets/index[^/]+\\.js"
     /// 那个 bundle 里硬编码的 developer token（JWT，`iss` = `AMPWebPlay`）。
     private static let jwtPattern = "eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+"
@@ -141,8 +111,8 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
         )
 
         // ⚠️ 解析/映射这两段是**与 AMLL 共用**的代码（`AmllTtmlParser` / `AmllLyricsMapper`），
-        //    所以它们自己的日志仍然打成 `[AMLL]` —— 看到 `[AMTTML]` 之后紧跟几行 `[AMLL]`
-        //    属于正常，那是同一份 Apple 格式 TTML 在走同一条解析管线。
+        // 所以它们自己的日志仍然打成 `[AMLL]` —— 看到 `[AMTTML]` 之后紧跟几行 `[AMLL]`
+        // 属于正常，那是同一份 Apple 格式 TTML 在走同一条解析管线。
         writeDebugLog(
             "[AMTTML] parsing \(ttml.count) char of Apple TTML"
                 + " (the [AMLL]-tagged lines that follow come from the shared TTML parser)"
@@ -243,8 +213,8 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
     }
 
     // MARK: - developer token（网页播放器，抓取 + 缓存）
-
-    /// 网页播放器的 developer token。缓存里那份没到期就直接用。
+    //
+    // 网页播放器的 developer token。缓存里那份没到期就直接用。
     private func developerToken(forceRefresh: Bool) throws -> String {
         if !forceRefresh, let cached = Self.cachedDeveloperToken() {
             return cached
@@ -517,18 +487,18 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
     }
 
     // MARK: - 取 TTML
-
-    /// 取这首 Apple 歌曲的 TTML。逐词优先，逐行兜底。
-    ///
-    /// `include` 的写法苹果那边两种都出现过（单资源的 `include=` 与类型化的
-    /// `include[songs]=`），所以两种都试；某种写法被拒（400）也算"换下一种"，不是致命错误。
+    //
+    // 取这首 Apple 歌曲的 TTML。逐词优先，逐行兜底。
+    //
+    // `include` 的写法苹果那边两种都出现过（单资源的 `include=` 与类型化的
+    // `include[songs]=`），所以两种都试；某种写法被拒（400）也算"换下一种"，不是致命错误。
     private func fetchTtml(
         songId: String,
         context: AccountContext,
         mediaUserToken: String
     ) throws -> String {
-        //  第三种是**纯逐行**兜底：万一苹果把 `syllable-lyrics` 当成非法 include 值（400），
-        //  前两种会一起失败 —— 那时至少还能拿到逐行 TTML，而不是"这首歌没词"。
+        // 第三种是**纯逐行**兜底：万一苹果把 `syllable-lyrics` 当成非法 include 值（400），
+        // 前两种会一起失败 —— 那时至少还能拿到逐行 TTML，而不是"这首歌没词"。
         let variants: [(name: String, value: String)] = [
             ("include", "lyrics,syllable-lyrics"),
             ("include[songs]", "lyrics,syllable-lyrics"),
@@ -581,14 +551,14 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
 
     /// 从 song 资源的 `relationships` 里取 TTML：`syllable-lyrics`（逐词）优先，`lyrics` 兜底。
     ///
-    /// ⚠️ 载荷形态有**三种**（都见过/都有实现可对照，2026-10-17）：
-    ///   ① `attributes.ttml` —— 单语串（`dropcreations/Manzana...` 那个年代就是它）；
-    ///   ② `attributes.ttmlLocalizations` 是**字符串** —— 单语；
-    ///   ③ `attributes.ttmlLocalizations` 是 **`locale → ttml` 字典** —— 多语。
-    ///      这一条是照 `Takpap/apple-music-lyrics` 的缓存模型定性的：它把
-    ///      `syllable-lyrics.data[0].attributes.ttmlLocalizations` 解成
-    ///      `String` **或** `[String: String]` 两种可能（见那边的 `TTMLLocalizations`）。
-    ///   只认 ① 的话，新形态响应会"200 但取不到词" ⇒ 必须三种都试。
+    /// ⚠️ 载荷形态有**三种**（都见过/都有实现可对照，
+    /// ① `attributes.ttml` —— 单语串（`dropcreations/Manzana...` 那个年代就是它）；
+    /// ② `attributes.ttmlLocalizations` 是**字符串** —— 单语；
+    /// ③ `attributes.ttmlLocalizations` 是 **`locale → ttml` 字典** —— 多语。
+    /// 这一条是照 `Takpap/apple-music-lyrics` 的缓存模型定性的：它把
+    /// `syllable-lyrics.data[0].attributes.ttmlLocalizations` 解成
+    /// `String` **或** `[String: String]` 两种可能（见那边的 `TTMLLocalizations`）。
+    /// 只认 ① 的话，新形态响应会"200 但取不到词" ⇒ 必须三种都试。
     private static func extractTtml(from json: [String: Any], language: String) -> String? {
         guard let data = json["data"] as? [[String: Any]],
               let song = data.first,

@@ -8,8 +8,8 @@ import Foundation
 // 承载着英文词间空格，丢掉它会把整行拼成 "Yousaid"。
 //
 // 命名空间处理策略（与 AMLL 官方解析库 MeloX 的实现一致）：
-//   shouldProcessNamespaces = false  → elementName / attributeDict 里保留原始前缀（"ttm:role"）
-//   shouldReportNamespacePrefixes = true → qName 可用
+// shouldProcessNamespaces = false → elementName / attributeDict 里保留原始前缀（"ttm:role"）
+// shouldReportNamespacePrefixes = true → qName 可用
 // 然后一律按 localName（冒号后半段）匹配，这样 `ttm:role`、`itunes:key`、`xml:lang`
 // 都能用不带前缀的名字取到，不用关心投稿者写的是哪个前缀。
 
@@ -78,7 +78,7 @@ final class AmllTtmlNode {
 
     /// 只承载注音的 **`tts:ruby` 取值**（`text` = 注音文本本身，`textContainer` = 它的容器）。
     ///
-    /// ★★ 2026-10-17：**AMLL 真正的 ruby 写法不是 `<ruby>/<rt>`，而是 `tts:ruby` 属性**
+    /// **AMLL 真正的 ruby 写法不是 `<ruby>/<rt>`，而是 `tts:ruby` 属性**
     /// （官方文档 <https://amll.dev/guides/lyric/ttml> 的「Ruby 注音」一节）：
     /// ```
     /// <span tts:ruby="container">
@@ -88,7 +88,7 @@ final class AmllTtmlNode {
     ///   </span>
     /// </span>
     /// ```
-    /// 不跳这两档，`text()` 会拼成 `所しょ詮せん`（正文混进读音）；更糟的是**时间只挂在
+    /// 不跳这两档，`text` 会拼成 `所しょ詮せん`（正文混进读音）；更糟的是**时间只挂在
     /// `tts:ruby="text"` 上**，所以 `parseTimedSpans` 会把"注音"当成歌词词条、把 base 丢掉
     /// ⇒ 屏幕上整行变成一片假名读音（见 `AmllTtmlParser.rubySyllable(in:)`）。
     static let rubyAnnotationStyles: Set<String> = ["text", "textContainer"]
@@ -98,12 +98,12 @@ final class AmllTtmlNode {
 
     /// 递归拼接全部文本；`excludingRoles` 里的 role 子树整棵跳过。
     ///
-    /// ★ 2026-10-17：`<rt>` / `<rp>` 与 `tts:ruby="text"/"textContainer"` 一并跳过
+    /// `<rt>` / `<rp>` 与 `tts:ruby="text"/"textContainer"` 一并跳过
     /// （`rubyAnnotationNames` / `rubyAnnotationStyles`）。
     /// 不跳它们，正文会被拼成 `漢かん`（或 `所しょ`）—— 真机上就是那一行多出读音；
     /// 逐词 span 里的读音也会一起进词条（高亮的字范围跟着偏）。
     ///
-    /// ⚠️ 更正（2026-10-17 复核）：`Lyrics-Audit` 那份笔记里还写着"随后 mapper 的对齐
+    /// ⚠️ 更正复核）：`Lyrics-Audit` 那份笔记里还写着"随后 mapper 的对齐
     /// 不变量会把那一行的逐词丢掉" —— **不成立**。`AmllLyricsMapper.wordTokens` 拿
     /// `line.primaryText` 当期望值，而 `primaryText` 本身就是 `syllables` 的拼接
     /// （`syllables.isEmpty ? plainText : joined`）⇒ 两者恒等，那条 guard 在 AMLL 这条路上

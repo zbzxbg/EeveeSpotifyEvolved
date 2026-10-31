@@ -2,19 +2,19 @@ import Foundation
 
 // MARK: - AmllTtmlResult → LyricsDto
 //
-// ── 硬不变量 ──────────────────────────────────────────────────────────────
+// ── 硬不变量
 // 每一行的 `content` 必须严格等于该行 `words` 的 text 顺序拼接（trim 后）。
 // LyricsWordByWord 的渲染是「把 words 拼成显示文本 + 按 range 上色」，
 // 一旦两者不一致，高亮会整行错位（看起来像「逐词数据质量差」，其实是映射 bug）。
 // 因此 x-translation / x-roman 这类 span 在解析阶段就已被抽走，绝不留在词序列里；
 // 并且行 content 不是取自解析结果，而是**由词序列反推**，从构造上保证两者一致。
 //
-// ── 逐词覆盖率 ────────────────────────────────────────────────────────────
+// ── 逐词覆盖率
 // 渲染层的 hasUsableWordLevel 阈值是「≥50% 的行有 ≥2 个词」。低于阈值时保留行级时间轴、
 // 丢弃全部词级数据，让 overlay 自然回退到原生歌词滚动 —— 这比丢掉整首歌划算。
 //
-// ── 官方罗马音（x-roman）──────────────────────────────────────────────────
-// TTML 自带的 x-roman 是人工校对的逐行罗马音，质量高于本地 toJapaneseRomaji()。
+// ── 官方罗马音（x-roman）
+// TTML 自带的 x-roman 是人工校对的逐行罗马音，质量高于本地 toJapaneseRomaji。
 // 采用与 NetEase romalrc 相同的既有路径：在 repository 层直接替换主行文本并标记
 // .romanized，让本地罗马化链路整体跳过，保证 overlay 与原生歌词行看到同一份文本。
 // 只在「确实是日语歌 + 用户开了日语罗马化开关 + 官方罗马音能覆盖过半行数」时才替换，
@@ -29,10 +29,9 @@ enum AmllLyricsMapper {
     private static let japaneseRomanizationKey = "ngzhwm_japaneseRomanization"
 
     /// - Parameter authorUsername: `AmllSongItem.primaryAuthorUsername`（歌词主要贡献者的 GitHub
-    ///   用户名）。★ 2026-10-16：**AMLL 仓库 README 明确希望下游展示歌词作者**，而这一路
-    ///   以前**只把它打进日志**、从来没进过署名 —— 用户看到的署名永远是裸的源名。
+    /// 名）。**AMLL 仓库 README 明确希望下游展示歌词作者**，而这一路
+    /// 以前**只把它打进日志**、从来没进过署名 —— 的署名永远是裸的源名。
     /// - Parameter logTag: 日志前缀。默认 `AMLL`；Apple Music 官方 TTML 那条线传 `AMTTML`
-    ///   （同一个 mapper 被两个仓库复用，但日志里要能分清是哪条线在跑）。
     static func makeDto(
         _ parsed: AmllTtmlResult,
         authorUsername: String? = nil,
@@ -41,7 +40,7 @@ enum AmllLyricsMapper {
         var lines: [LyricsLineDto] = []
         var translations: [String] = []
 
-        // ── 逐行：先建主词序列，再挂上（独立的）背景人声 ──────────────────
+        // ── 逐行：先建主词序列，再挂上（独立的）背景人声
         var wordLines: [[LyricsWordDto]?] = []
         var backgroundVocals: [LyricsBackgroundVocalDto?] = []
         for line in parsed.lines {
@@ -60,8 +59,8 @@ enum AmllLyricsMapper {
                 continue
             }
 
-            // ★ 2026-10-16：把 AMLL 自己给的**行结束时间**也带上（`<p end>`）。
-            //   以前它只用来算 `lastLineEndMs` 打日志、进 DTO 就丢了。
+            // 把 AMLL 自己给的**行结束时间**也带上（`<p end>`）。
+            // 以前它只用来算 `lastLineEndMs` 打日志、进 DTO 就丢了。
             lines.append(
                 LyricsLineDto(
                     content: trimmed,
@@ -84,7 +83,7 @@ enum AmllLyricsMapper {
             lines[index].backgroundVocal = backgroundVocals[index]
         }
 
-        // ── 逐词覆盖率闸门 ────────────────────────────────────────────────
+        // ── 逐词覆盖率闸门
         let usableWordLines = wordLines.filter { ($0?.count ?? 0) >= 2 }.count
         let wordLevelUsable = usableWordLines * wordLevelCoverageDenominator
             >= lines.count * wordLevelCoverageNumerator
@@ -100,7 +99,7 @@ enum AmllLyricsMapper {
             )
         }
 
-        // ── 罗马化状态 ────────────────────────────────────────────────────
+        // ── 罗马化状态
         let contents = lines.map(\.content)
         var languageCode = contents.romanizationLanguageCode
         var romanization: LyricsRomanizationStatus = contents.canBeRomanized
@@ -119,7 +118,7 @@ enum AmllLyricsMapper {
             languageCode = "ja"
         }
 
-        // ── 翻译层 ────────────────────────────────────────────────────────
+        // ── 翻译层
         // 必须与主歌词行数完全一致（渲染层按行索引取），因此每行都占位（无翻译填空串）。
         // 注意：官方罗马音替换不改变行数，翻译索引依然有效。
         let translation = translations.contains { !$0.isEmpty }
@@ -129,9 +128,9 @@ enum AmllLyricsMapper {
             )
             : nil
 
-        // ★ 2026-10-17（用户：「歌词进播放器的时候也没有额外的歌词结构」）：
-        //   把**副唱行数**也打出来 —— 这一行以后就能直接回答"这首歌到底有没有 x-bg、
-        //   数据有没有走到渲染层"，不用再靠猜（Starboy 那份 TTML 里有 16 处 `x-bg`）。
+        // （歌词进播放器的时候也没有额外的歌词结构）：
+        // 把**副唱行数**也打出来 —— 这一行以后就能直接回答"这首歌到底有没有 x-bg、
+        // 数据有没有走到渲染层"，不用再靠猜（Starboy 那份 TTML 里有 16 处 `x-bg`）。
         let backgroundCount = lines.reduce(into: 0) { total, line in
             if line.backgroundVocal != nil { total += 1 }
         }
@@ -140,12 +139,12 @@ enum AmllLyricsMapper {
                 + " bg=\(backgroundCount), romanization=\(romanization)"
         )
 
-        // ── 署名 ──────────────────────────────────────────────────────────
-        // ★★ 2026-10-16（Q6 清点里的第 ① 条）：AMLL 的 README 明确希望下游**展示歌词作者**，
-        //    而 `AmllSongItem.primaryAuthorUsername` 这一路**只进过日志** —— 显示出来的署名
-        //    永远是裸的源名。这里的口径与 Spicy Lyrics 那条一致：
-        //      · `providerName`（短）留给听歌页歌手行 —— 仍是 "AMLL"（默认由 `CustomLyrics` 填源名）；
-        //      · `providerCredit`（长）进注入 payload 的 `providedBy` / 页脚 —— 带上作者。
+        // ── 署名
+        // （Q6 清点里的第 ① 条）：AMLL 的 README 明确希望下游**展示歌词作者**，
+        // 而 `AmllSongItem.primaryAuthorUsername` 这一路**只进过日志** —— 显示出来的署名
+        // 永远是裸的源名。这里的口径与 Spicy Lyrics 那条一致：
+        // · `providerName`（短）留给听歌页歌手行 —— 仍是 "AMLL"（默认由 `CustomLyrics` 填源名）；
+        // · `providerCredit`（长）进注入 payload 的 `providedBy` / 页脚 —— 带上作者。
         var credit = ""
         if let author = authorUsername?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty {
             // ⚠️ 署名格式刻意固定成 "AMLL · @作者"（Apple Music 官方那条线不传作者 ⇒ 没有这一行）。
@@ -164,17 +163,17 @@ enum AmllLyricsMapper {
     }
 
     // MARK: - 词序列
-
-    /// 主词序列（**不含**背景人声）。
-    /// 返回 nil 表示该行没有可用逐词数据（退回行级）。
-    ///
-    /// 背景人声（`ttm:role="x-bg"`）曾经被合并成 `主词 (背景人声)` 一行，理由是
-    /// 「渲染层是单列单行模型，表达不了行内子行」。现在渲染层用的 `SynchronizedLyricText`
-    /// 已经支持把副唱画成主歌下方的一小行，所以这里改为**分离**输出
-    /// （见 `backgroundVocalDto(for:)`）：
-    ///   · 副唱与主词时间重叠 → 两者**同时**点亮，而不是顺序点亮
-    ///   · 副唱里那些零时长 token（括号等）不再混进主词序列
-    ///     —— 那正是「带括号的行整行降级为逐行」的根因
+    //
+    // 主词序列（**不含**背景人声）。
+    // 返回 nil 表示该行没有可用逐词数据（退回行级）。
+    //
+    // 背景人声（`ttm:role="x-bg"`）曾经被合并成 `主词 (背景人声)` 一行，理由是
+    // 「渲染层是单列单行模型，表达不了行内子行」。现在渲染层用的 `SynchronizedLyricText`
+    // 已经支持把副唱画成主歌下方的一小行，所以这里改为**分离**输出
+    // （见 `backgroundVocalDto(for:)`）：
+    // · 副唱与主词时间重叠 → 两者**同时**点亮，而不是顺序点亮
+    // · 副唱里那些零时长 token（括号等）不再混进主词序列
+    // —— 那正是「带括号的行整行降级为逐行」的根因
     private static func wordTokens(for line: AmllTtmlLine, logTag: String) -> [LyricsWordDto]? {
         var tokens: [LyricsWordDto] = []
 
@@ -211,7 +210,7 @@ enum AmllLyricsMapper {
     /// 原始音节直接顺序拼接（不额外插空格、不加括号）：解析层给出的音节文本里
     /// 已经包含词间空白，与主词序列的口径一致。
     ///
-    /// ★★ 2026-10-17（§A·24「副唱自己的译文」）：`translation` 一路带到渲染层 ——
+    /// （§A·24「副唱自己的译文」）：`translation` 一路带到渲染层 ——
     /// 解析层早就从 `x-bg` 内部的 `x-translation` 收下了（`AmllTtmlBackgroundVocal.translation`），
     /// 以前在这里丢掉 ⇒ 渲染层那行"副唱下面的小字译文"永远是空的。
     private static func backgroundVocalDto(
@@ -239,8 +238,8 @@ enum AmllLyricsMapper {
     }
 
     // MARK: - 官方罗马音
-
-    /// 用官方 x-roman 替换主行文本。返回 nil 表示不适用（保持原文 + 本地罗马化）。
+    //
+    // 用官方 x-roman 替换主行文本。返回 nil 表示不适用（保持原文 + 本地罗马化）。
     private static func applyOfficialRomanization(
         to lines: [LyricsLineDto],
         parsed: AmllTtmlResult,

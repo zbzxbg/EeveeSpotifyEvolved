@@ -3,14 +3,14 @@ import Foundation
 /// 「扩展功能 → 备份与重置」的后端：把**本仓库自己写的** UserDefaults 键导出成一段 JSON，
 /// 再导入回来；以及"只重置我们的设置"。
 ///
-/// ── 三条铁律（都写在代码里，别改）────────────────────────────────────────────
-///   1. **只碰白名单**（`UserDefaults.ownedKeys`）：这个进程的 `.standard` 里同时躺着
-///      **Spotify 自己的偏好**，全导/全删会把它一起带出去或一起清掉。
-///      （`FullResetHelper` 那个"核弹"是另一个按钮的语义：重置 Spotify 状态，不是重置我们。）
-///   2. **导入只认白名单里的键**：一份手改过的文件不该能把任意键写进进程；
-///      未知键一律忽略并计数，导入完给用户一个诚实的数字。
-///   3. **Data 键单独处理**：仓库里唯一的 Data 键是 `flagOverrides`（JSON 文本），
-///      导出成**字符串**（好看、可手改），导入时再还原成 Data。其余值就是 plist 基础类型。
+/// ── 三条铁律（都写在代码里，别改）
+/// 1. **只碰白名单**（`UserDefaults.ownedKeys`）：这个进程的 `.standard` 里同时躺着
+/// **Spotify 自己的偏好**，全导/全删会把它一起带出去或一起清掉。
+/// （`FullResetHelper` 那个"核弹"是另一个按钮的语义：重置 Spotify 状态，不是重置我们。）
+/// 2. **导入只认白名单里的键**：一份手改过的文件不该能把任意键写进进程；
+/// 未知键一律忽略并计数，导入完给用户一个诚实的数字。
+/// 3. **Data 键单独处理**：仓库里唯一的 Data 键是 `flagOverrides`（JSON 文本），
+/// 导出成**字符串**（好看、可手改），导入时再还原成 Data。其余值就是 plist 基础类型。
 ///
 /// 纯 Foundation：不 import UIKit/Orion，可以被单测单独编译（与 `FlagOverrideStore` 同一纪律）。
 enum SettingsBackup {
@@ -28,8 +28,8 @@ enum SettingsBackup {
     }
 
     // MARK: - 导出
-
-    /// 把白名单里的键收集成 `[String: Any]`（plist 可序列化的值）。
+    //
+    // 把白名单里的键收集成 `[String: Any]`（plist 可序列化的值）。
     static func snapshot(in defaults: UserDefaults = UserDefaults.container) -> [String: Any] {
         var values: [String: Any] = [:]
 
@@ -70,8 +70,8 @@ enum SettingsBackup {
     }
 
     // MARK: - 导入
-
-    /// 从 JSON 文本导入。只写白名单里的键，未知键忽略并计数。
+    //
+    // 从 JSON 文本导入。只写白名单里的键，未知键忽略并计数。
     @discardableResult
     static func importText(
         _ text: String,
@@ -123,8 +123,8 @@ enum SettingsBackup {
     }
 
     // MARK: - 重置
-
-    /// 只删**我们自己的**键，返回删掉的条数。Spotify 自己的偏好一个都不碰。
+    //
+    // 只删**我们自己的**键，返回删掉的条数。Spotify 自己的偏好一个都不碰。
     @discardableResult
     static func resetToStock(in defaults: UserDefaults = UserDefaults.container) -> Int {
         var removed = 0

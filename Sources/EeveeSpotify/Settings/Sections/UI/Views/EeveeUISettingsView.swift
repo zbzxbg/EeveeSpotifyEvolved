@@ -4,7 +4,7 @@ import UIKit
 struct EeveeUISettingsView: View {
     @State var lyricsColors = UserDefaults.lyricsColors
 
-    // ★ 2026-10-13：主题（AMOLED 纯黑 + 强调色）。两颗都是**启动时读一次**，
+    // 主题（AMOLED 纯黑 + 强调色）。两颗都是**启动时读一次**，
     // 所以下面配了 `RestartSection`（改完出现「立即重启」）。
     @State private var amoledTheme = UserDefaults.amoledTheme
     @State private var accentRGB = UserDefaults.accentColorRGB
@@ -13,10 +13,10 @@ struct EeveeUISettingsView: View {
         List {
             // 主题：整页换色（Spotify 的 #121212 → 纯黑、品牌绿 → 你选的强调色）。
             // 机制在 `Sources/EeveeSpotifyC/ColorSwap.m`（颜色出生点换），说明见 `Theme`。
-            // ★ 2026-10-17：footer 从 `theme_description`（「选项生效需要重启Spotify(功能未测试)。」）
-            //   换成既有的 `restart_is_required_description`（「更改后需要重启应用程序。」）——
-            //   留下"要重启"这条真信息，去掉"功能未测试"那句过程记录（过程话不该出现在设置页，
-            //   真正验过之后它只会变成假话）。旧键已从词典删除。
+            // footer 从 `theme_description`（「选项生效需要重启Spotify(功能未测试)。」）
+            // 换成既有的 `restart_is_required_description`（「更改后需要重启应用程序。」）——
+            // 留下"要重启"这条真信息，去掉"功能未测试"那句过程记录（过程话不该出现在设置页，
+            // 真正验过之后它只会变成假话）。旧键已从词典删除。
             Section(
                 header: Text("theme_section".localized),
                 footer: Text("restart_is_required_description".localized)
@@ -104,13 +104,12 @@ struct EeveeUISettingsView: View {
             }
             
             Section {
-                // ⚠️ 2026-10-14 审计结论：这颗开关在 **Spotify 9.1.x 上点了没反应**。
+                // ⚠️审计结论：这颗开关在 **Spotify 9.1.x 上点了没反应**。
                 // 原因不在本页：`Tweak.x.swift` 的 9.1.x 分支在 `:782` 就 `return` 了，
                 // 而唯一读它、唯一 activate 它的那两行在 `:789-791`（那个 return **之后**）
                 // ⇒ `DarkPopUps` 这个组在 9.1.x 上从不激活（`DarkPopUps.x.swift`）。
                 // 想让它真的生效，得把那两行挪进 v91 分支；但 `popUpContainerViewController`
                 // 在 v91 下解析成 `UIView` 这条判据**没在真机上验过**，所以本次只记录、不改行为。
-                // 详见 `.handoffs/AUDIT_2026-10-14_FEATURES.md`（A1）。
                 Toggle(
                     "dark_popups".localized,
                     isOn: Binding<Bool>(
@@ -123,7 +122,7 @@ struct EeveeUISettingsView: View {
             SpacerView()
         }
         
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: lyricsColors)
     }

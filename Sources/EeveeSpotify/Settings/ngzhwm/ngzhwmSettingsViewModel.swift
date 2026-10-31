@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 class NgzhwmSettingsViewModel: ObservableObject {
-    // 已删除一个 key（2026-10-18）：`ngzhwm_removeMxmInterludeSymbol` ——「删除间奏符号 ♪」。
+    // 已删除一个 key：`ngzhwm_removeMxmInterludeSymbol` ——「删除间奏符号 ♪」。
     //
     // 为什么删：那颗开关对应的行为**早已是常态**——间奏行现在无条件整行丢弃
     // （网易云 `isInterludeRow` / MxM `isMxmInterludeRow`，见两个仓库里各自的说明），
@@ -17,32 +17,32 @@ class NgzhwmSettingsViewModel: ObservableObject {
     static let betterWordByWordLyricsKey = "ngzhwm_betterWordByWordLyrics"
     /// 「AMLL 优先」的 UserDefaults 键。
     ///
-    /// ⚠️ 2026-10-02 **恢复**：2026-09-25 曾因用户一句"感觉没什么用"把整条链删掉
+    /// ⚠️**恢复**：曾因用户一句"感觉没什么用"把整条链删掉
     /// （提交 `50528cd`，8 个文件），用户随后要求加回来。键名沿用旧名
     /// （`ngzhwm_amllPreferred`），设备上可能还留着上次的值。
     static let amllPreferredKey = "ngzhwm_amllPreferred"
-    // 已删除一个 key（2026-09-27）：`ngzhwm_syntheticLineTiming` —— 「补全歌词时间轴」。
+    // 已删除一个 key：`ngzhwm_syntheticLineTiming` —— 「补全歌词时间轴」。
     //
     // 为什么删：真机 A/B（用户关掉它跑了一整场）结论是"差不多、或略好一点"，而**给本来就
     // 没有时间轴的源（Genius / Petit 纯文本）伪造一层时间轴本身就不合语义** ——
     // 估算出来的 offset 只会让整首都不准。现在：
-    //   · **真实歌词源一律不再合成时间轴**（`LyricsDto.toSpotifyLyricsData` 里那段已删）；
-    //   · 只有**占位文案**仍然补（`makeUnavailableLyrics` 里写死）——
-    //     那是"未找到歌词"这一行能不能显示出来的前提，不是给某个源伪造时间轴。
+    // · **真实歌词源一律不再合成时间轴**（`LyricsDto.toSpotifyLyricsData` 里那段已删）；
+    // · 只有**占位文案**仍然补（`makeUnavailableLyrics` 里写死）——
+    // 那是"未找到歌词"这一行能不能显示出来的前提，不是给某个源伪造时间轴。
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
-    /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）—— 见 `isLyricsCardElementInjectionEnabled`。
-    ///
-    /// ⚠️ 2026-09-26 **恢复为真开关**（曾一度写死启用）：2026-09-26 的真机日志（日志 3）
-    /// 显示这个元素在部分曲目上渲染成了「即将发布 / 已预收藏」卡，需要 A/B 才能定性。
-    /// 沿用旧 key 名，设备上残留的值会被重新读起来。
+    // 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）—— 见 `isLyricsCardElementInjectionEnabled`。
+    //
+    // ⚠️**恢复为真开关**（曾一度写死启用）：的真机日志
+    // 显示这个元素在部分曲目上渲染成了「即将发布 / 已预收藏」卡，需要 A/B 才能定性。
+    // 沿用旧 key 名，设备上残留的值会被重新读起来。
     static let injectLyricsCardElementKey = "ngzhwm_injectLyricsCardElement"
     /// 「把服务端那条 `lyrics_entry_point_enabled` 钉成 true」—— 见 `isLyricsEntryPointFlagForced`。
     ///
-    /// ⚠️ 2026-09-26 由**写死**改为真开关：真机 A/B 已经排除了「补卡片元素」那一处
+    /// ⚠️由**写死**改为真开关：真机 A/B 已经排除了「补卡片元素」那一处
     /// （关掉它之后那张过期的「即将发布」卡**依然出现**），于是剩下的、唯一还能影响
     /// 正在播放页卡片渲染的我们自家改动就是这条 flag。留开关就是为了判定它。
     static let lyricsEntryPointFlagKey = "ngzhwm_lyricsEntryPointFlag"
-    // 已移除一个 key（2026-09-25）：`ngzhwm_hideOfficialLyrics` ——
+    // 已移除一个 key：`ngzhwm_hideOfficialLyrics` ——
     // 它对应的行为已在下面**写死启用**，不再读 UserDefaults。
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     static let blurredLyricsBackdropKey = "ngzhwm_blurredLyricsBackdrop"
@@ -68,13 +68,13 @@ class NgzhwmSettingsViewModel: ObservableObject {
         bool(forKey: wordByWordLyricsKey, defaultValue: true)
     }
 
-    // MARK: - ★ 2026-10-12：逐语言罗马化 / 译文的键
-
-    /// 三颗**逐语言**罗马化开关（设置 → 歌词 那一页）—— 与 `LyricLinesAdapter
-    /// .romanizationSwitchesFingerprint()`、`LyricsDto`、`AmllLyricsMapper`、
-    /// `NeteaseLyricsRepository` / `MusixmatchLyricsRepository` 里读的**是同一批键**。
-    ///
-    /// ⚠️ 那几处目前仍是**字面量**（本轮没一起改，避免把一次"加开关"扩成一次全仓重构）。
+    // MARK: -逐语言罗马化 / 译文的键
+    //
+    // 三颗**逐语言**罗马化开关（设置 → 歌词 那一页）—— 与 `LyricLinesAdapter
+    // .romanizationSwitchesFingerprint`、`LyricsDto`、`AmllLyricsMapper`、
+    // `NeteaseLyricsRepository` / `MusixmatchLyricsRepository` 里读的**是同一批键**。
+    //
+    // ⚠️ 那几处目前仍是**字面量**（本轮没一起改，避免把一次"加开关"扩成一次全仓重构）。
     static let japaneseRomanizationKey = "ngzhwm_japaneseRomanization"
     static let chineseRomanizationKey = "ngzhwm_chineseRomanization"
     static let koreanRomanizationKey = "ngzhwm_koreanRomanization"
@@ -83,7 +83,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
         bool(forKey: neteaseHideTranslationKey, defaultValue: !isChineseDevice)
     }
 
-    /// ★ 2026-10-13（用户要求：「**展示罗马化翻译 / 歌词翻译默认开启**」）——
+    /// （**展示罗马化翻译 / 歌词翻译默认开启**）——
     /// 一次性把这两类默认值**写进键里**，且**只对从没写过的键**动手。
     ///
     /// ⚠️ 为什么不是"把读取处的默认值改成 true"就完事：三颗罗马化开关在别处是**按字面量键**
@@ -91,8 +91,8 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 只改扩展页那个合成 getter 会做出一个**骗人的开关**（显示开着、歌词里却没有罗马音）✗。
     /// 写键才是"真开"。
     ///
-    /// 做法与 `LyricsOptions.applyGeniusFallbackDefaultIfNeeded()` /
-    /// `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()` **完全一致**：
+    /// 做法与 `LyricsOptions.applyGeniusFallbackDefaultIfNeeded` /
+    /// `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded` **完全一致**：
     /// 只跑一次（marker 记着），之后**尊重用户自己的开关** —— 已经手动关过的键不动。
     static func applyRomanizationAndTranslationDefaultsIfNeeded() {
         let marker = "ngzhwm_romanizationTranslationDefaultsApplied"
@@ -124,10 +124,10 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 取决于地区与语言 —— 日本用户设 PetitLyrics、大陆用户设网易云、其它地区设
     /// SpicyLyrics，各自回退到最合适的地方，不需要我们再维护地区判断。
     ///
-    /// ★ **默认开**（2026-10-13 用户要求：「AMLL优先 此功能改成默认开启」）。
+    /// **默认开**AMLL优先 此功能改成默认开启）。
     ///
     /// ⚠️ `bool(forKey:defaultValue:)` 只对**从没写过这个键**的设备用默认值 ⇒
-    /// 已经手动关过它的设备保持他关的那一档（不覆盖用户的选择）。
+    /// 已经手动关过它的设备保持他关的那一档（不覆盖）。
     static var isAmllPreferred: Bool {
         bool(forKey: amllPreferredKey, defaultValue: true)
     }
@@ -140,8 +140,8 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// **不带 (EeveeSpotify) 后缀**），而且不会跟着我们的罗马化设置走，
     /// 看起来就像"来源设置没生效 / 罗马化设置失效"。
     ///
-    /// ⚠️ **写死为 true**（2026-09-25）：这已经是修好的行为，不再是可选项 ——
-    /// 用户选定了某个来源，预期就是"要么显示这个来源的词，要么什么都不显示"，
+    /// ⚠️ **写死为 true**：这已经是修好的行为，不再是可选项 ——
+    /// 选定了某个来源，预期就是"要么显示这个来源的词，要么什么都不显示"，
     /// 而不是"取不到就悄悄换成 Spotify 的"。
     /// 想明确看官方歌词的模式仍然在：来源里选「禁用歌词替换」（`.notReplaced`）。
     static var isOfficialLyricsHidden: Bool { true }
@@ -158,12 +158,12 @@ class NgzhwmSettingsViewModel: ObservableObject {
 
     /// 「更好的逐词歌词」：Apple Music 风格的独立渲染层（需 iOS 26+）。
     ///
-    /// ★ 2026-10-11：从「默认关闭」改成「**默认开启**」。
+    /// 从「默认关闭」改成「**默认开启**」。
     ///
     /// 原话：「2 也默认打开吧」—— 因为当时它是「歌词进播放器」的第一道门禁，那个开关默认开着，
     /// 这个若还默认关，全新安装上就是"键看得见、点了没反应"。
     ///
-    /// ★★ 2026-10-12（用户：「歌词按钮点不动」→「自己画的这套视图塞不进去单纯的逐词吗」）：
+    /// （歌词按钮点不动→「自己画的这套视图塞不进去单纯的逐词吗」）：
     /// **那道门禁已经拿掉了**（`NowPlayingLyricsPlate` 现在只判「歌词进播放器」+ iOS 26）。
     /// 理由：播放器那一层**画的就是**这套渲染，在里面没有第二种渲染可选 ⇒ 把这颗开关当它的闸门
     /// 只会造成两种错误结果之一（键点不动 / 整层退出、kumone 版式消失）。
@@ -174,7 +174,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// `isLyricsBackdropMaterialEnabled`（系统材质压色带）—— 它们本来就写死跟随这一个开关。
     ///
     /// 当初默认关闭的理由（"这是整体重写，先让用户显式开启；出问题一键回到旧实现"）
-    /// 现在的状态：用户在真机上已经用了几十轮、并逐步把这块指定成主界面（照片 67→75）。
+    /// 现在的状态：用户在真机上已经用了几十轮、并逐步把这块指定成主界面。
     /// 想回到旧实现的人仍然可以在这里关掉它（关掉即 Spotify 原生歌词页回退旧 overlay）。
     ///
     /// ⚠️ 它需要 **iOS 26+**（`#available(iOS 26.0, *)`）—— 低版本设备上这个开关
@@ -196,10 +196,10 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 补上之后，缺这一项的响应会被写入这一项（byte 级，只在能完整解析时动手，
     /// 任何异常都原样放行）。见 `ScrollsitaLyricsElementInjector`。
     ///
-    /// ⚠️ 2026-09-26 **恢复为真开关**（此前一度写死 `true`）。默认 **ON** ——
+    /// ⚠️**恢复为真开关**（此前一度写死 `true`）。默认 **ON** ——
     /// 保持"404 曲目也有歌词卡片"的既有行为不变。
     ///
-    /// 为什么要留开关：日志 3 解出的元素清单显示，在 404 曲目上我们补的这一个元素
+    /// 在 404 曲目上我们补的这一个元素
     /// 是那份响应里**唯一**多出来的东西，而用户报告这些曲目上会间歇出现一张
     /// 「即将发布 / 已预收藏」卡（日期早已过期，甚至有 2021 年的）。
     /// 关掉它即可判定：那张卡到底是这个元素渲出来的，还是另一条路来的。
@@ -211,12 +211,11 @@ class NgzhwmSettingsViewModel: ObservableObject {
     ///
     /// 默认 **ON** —— 保持"9.1.86 上歌词卡片能出现"的既有行为不变。
     ///
-    /// 为什么要留开关（2026-09-26）：排查那张**日期早已过期**的「即将发布 / 已预收藏」卡。
+    /// 为什么要留开关：排查那张**日期早已过期**的「即将发布 / 已预收藏」卡。
     /// 三条路已经排掉了两条：
-    ///   · **元素列表** —— 假卡出现在原生只有 `[2,3,4]`、连 `12`（正版预热卡）都没有的曲目上；
-    ///   · **补卡片元素**（`isLyricsCardElementInjectionEnabled`）—— 真机关掉它，假卡**照样出现**；
-    ///   · **HTTP 数据** —— 九份日志里没有任何一条响应带着预热 / 发行日期，
-    ///     连 metadata / entity 类接口都不存在，那份数据 100% 在客户端本地。
+    /// · **元素列表** —— 假卡出现在原生只有 `[2,3,4]`、连 `12`（正版预热卡）都没有的曲目上；
+    /// · **补卡片元素**（`isLyricsCardElementInjectionEnabled`）—— 真机关掉它，假卡**照样出现**；
+    /// 连 metadata / entity 类接口都不存在，那份数据 100% 在客户端本地。
     ///
     /// ⇒ 我们唯一还可能"让客户端多渲染一张卡"的就是这条 flag。关掉它即可判定：
     /// 假卡消失 = 是它；假卡还在 = 与我们无关，那是 Spotify 自己拿着过期的专辑

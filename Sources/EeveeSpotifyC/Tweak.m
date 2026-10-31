@@ -36,10 +36,10 @@ void EeveeSBInvokeSeekDouble(id target, SEL selector, double argument) {
     (void)fn(target, selector, argument);
 }
 
-// ── 底色拦截（2026-10-19，从上游 `EncoreBridge.m` 移植；用户拍板 A）────────────────────
+// ── 底色拦截从上游 `EncoreBridge.m` 移植；A）
 //
 // 迷你播放条闪的就是这一条：我们把内容视图的底色清成透明 → Spotify 下一帧又写回
-// `bg=#64204C`（照片 34/36）→ 我们靠"每拍清一次 + 50ms 补清 + 0.5s 复查"去追，
+// `bg=#64204C`→ 我们靠"每拍清一次 + 50ms 补清 + 0.5s 复查"去追，
 // 而**追的过程本身就是闪**。
 //
 // 上游的做法是在**层**上断根：给这一层的 CALayer 造一个只有它自己用的子类，

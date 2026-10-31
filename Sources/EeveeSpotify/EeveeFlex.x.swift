@@ -1,9 +1,7 @@
+// EeveeFlex.x.swift
 //
-//  EeveeFlex.x.swift
-//
-//  Auto-opens FLEX explorer on first key window. Dormant unless libFLEX.dylib
-//  is LC-loaded into the app (wrapper --flex flag). Safe to keep compiled in.
-//
+// Auto-opens FLEX explorer on first key window. Dormant unless libFLEX.dylib
+// is LC-loaded into the app (wrapper --flex flag). Safe to keep compiled in.
 import Foundation
 import Orion
 import UIKit

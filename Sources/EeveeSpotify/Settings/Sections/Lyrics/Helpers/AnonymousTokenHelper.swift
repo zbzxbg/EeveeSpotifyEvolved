@@ -3,26 +3,26 @@ import Combine
 
 /// Musixmatch 的**匿名令牌**（无需授权即可换一个 `usertoken`）。
 ///
-/// ## 它现在为什么要回来（2026-10-13）
+/// ## 它现在为什么要回来
 ///
-/// 用户拍板：本仓库**不再内置** Spicy Lyrics 的默认密钥；没填密钥时这一首改用
+/// 本仓库**不再内置** Spicy Lyrics 的默认密钥；没填密钥时这一首改用
 /// **Musixmatch**（见 `CustomLyrics.loadCustomLyricsForCurrentTrack` 里那一段替换）。
 /// 而 Musixmatch 自己也要 `usertoken` —— 没有匿名令牌这条路，"回退到 mxm"对绝大多数
-/// 用户就是一句空话（会直接抛 `invalidMusixmatchToken`）。
+/// 就是一句空话（会直接抛 `invalidMusixmatchToken`）。
 ///
-/// 这条路 2026-09-27 被整块删过（提交 `271de5b`，当时删的理由是"设置页少一个按钮"），
+/// 这条路被整块删过（提交 `271de5b`，当时删的理由是"设置页少一个按钮"），
 /// 现在按同一个接口原样接回来，并补了两处：
-///   · **app_id 三个候选**（上游后来的做法）：设备推断的那个 → 另一平台的 → `web-desktop-app-v1.0`；
-///   · **同步入口**（`fetchTokenBlocking`）：取词路径是同步的，不能只留 Combine 那个 async 版本。
+/// · **app_id 三个候选**（上游后来的做法）：设备推断的那个 → 另一平台的 → `web-desktop-app-v1.0`；
+/// · **同步入口**（`fetchTokenBlocking`）：取词路径是同步的，不能只留 Combine 那个 async 版本。
 ///
 /// ## 请求形态的两条实测结论（别改）
 ///
 /// 1. **必须带 Safari 形态的 UA**（`UIDevice.safariUserAgent`）：Musixmatch 的 nginx 会对
-///    App 内 `URLSession` 的默认 UA 回 403 + 一页 nginx HTML。这一条与
-///    `MusixmatchLyricsRepository` 里用的是同一个 UA，改一处就要改两处。
+/// App 内 `URLSession` 的默认 UA 回 403 + 一页 nginx HTML。这一条与
+/// `MusixmatchLyricsRepository` 里用的是同一个 UA，改一处就要改两处。
 /// 2. host 用 `apic.musixmatch.com` —— 与 `MusixmatchLyricsRepository` 的 `apiUrl` 保持一致。
-///    （上游后来换成 `apic-appmobile.musixmatch.com`，理由是 ELB 层 403；本仓库这条 host +
-///    Safari UA 是真机上跑通过的那一套，先不跟着改。）
+/// （上游后来换成 `apic-appmobile.musixmatch.com`，理由是 ELB 层 403；本仓库这条 host +
+/// Safari UA 是真机上跑通过的那一套，先不跟着改。）
 struct AnonymousTokenHelper {
 
     private static let apiUrl = "https://apic.musixmatch.com"
@@ -44,14 +44,14 @@ struct AnonymousTokenHelper {
     }
 
     // MARK: - 两个入口
-
-    /// **同步**取一个匿名令牌。给取词路径用（那条路整条是同步的）。
-    ///
-    /// - Parameter totalBudget: **整轮**的时间上限（不是每个 app_id 各一份）。
-    ///   取词路径那边对 Musixmatch 只有 5s 预算（`CustomLyrics` 的 `requestTimeout`），
-    ///   所以自动那条路传得比 15s 小 —— 超时了也只是"这一首没赶上"，令牌下次照样会补上。
-    /// - Returns: 拿到就返回；全失败返回 `nil`（调用方按"没有令牌"处理，
-    ///   不要在这里抛 —— 弹不弹窗是上层的事）。
+    //
+    // **同步**取一个匿名令牌。给取词路径用（那条路整条是同步的）。
+    //
+    // - Parameter totalBudget: **整轮**的时间上限（不是每个 app_id 各一份）。
+    // 取词路径那边对 Musixmatch 只有 5s 预算（`CustomLyrics` 的 `requestTimeout`），
+    // 所以自动那条路传得比 15s 小 —— 超时了也只是"这一首没赶上"，令牌下次照样会补上。
+    // - Returns: 拿到就返回；全失败返回 `nil`（调用方按"没有令牌"处理，
+    // 不要在这里抛 —— 弹不弹窗是上层的事）。
     static func fetchTokenBlocking(totalBudget: TimeInterval = 15) -> String? {
         // 整轮失败后的冷却：没网时**不能**每首歌都阻塞一轮 —— 3 个 app_id × 15s 会让
         // 每一首歌词请求都白等，日志也会刷满。
@@ -145,7 +145,7 @@ struct AnonymousTokenHelper {
     ///
     /// ⚠️ 名字**不叫** `token`：设置页那个 `receiveValue { token in … }` 的闭包参数同名，
     /// 而本仓库的 `swift_member_check.py` 会把它当成"跨文件引用了别处的 private `token`"
-    /// 报出来（2026-10-13 实测）。名字错开，检查器与读代码的人都不用猜。
+    /// 报出来实测）。名字错开，检查器与读代码的人都不用猜。
     private static func parseToken(from data: Data, appId: String, status: Int) -> String? {
         let raw = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
         let preview = String(raw.prefix(200))

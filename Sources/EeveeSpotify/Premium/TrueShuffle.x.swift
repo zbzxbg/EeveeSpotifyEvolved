@@ -3,8 +3,8 @@ import ObjectiveC.runtime
 
 // Stops Smart Shuffle from injecting recommended (non-playlist) tracks into
 // the free-tier shuffle queue. Two BOOL gates on SmartShuffleHandler:
-//   - checkRecommendationsEnabled                 -> NO
-//   - recommendationIsBeingAddedWithTrackID:      -> NO
+// - checkRecommendationsEnabled -> NO
+// - recommendationIsBeingAddedWithTrackID: -> NO
 // Both bool returns, no nil-deref risk. Gated by Settings toggle.
 
 enum TrueShuffleHook {

@@ -4,10 +4,10 @@ import UIKit
 /// 「隐私与上报」页。
 ///
 /// 两个开关 + 一份关键词 + 一个计数：
-///   · 拦截开关（默认关）—— 认哪些端点是上报，靠 `TelemetryEndpointRules`；
-///   · 只观察不拦截（默认关）—— 把 host+path 打进日志，一条都不拦；
-///   · 关键词 —— 真机上观察到的端点写进来，不用重新编译；
-///   · 计数 —— 本次启动拦下的**不同**端点数量（去重，见 `TelemetryBlocker`）。
+/// · 拦截开关（默认关）—— 认哪些端点是上报，靠 `TelemetryEndpointRules`；
+/// · 只观察不拦截（默认关）—— 把 host+path 打进日志，一条都不拦；
+/// · 关键词 —— 真机上观察到的端点写进来，不用重新编译；
+/// · 计数 —— 本次启动拦下的**不同**端点数量（去重，见 `TelemetryBlocker`）。
 struct EeveePrivacySettingsView: View {
 
     @State private var blockedCount = TelemetryBlocker.sessionBlockedCount
@@ -70,7 +70,7 @@ struct EeveePrivacySettingsView: View {
                 .foregroundColor(.red)
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear {
             blockedCount = TelemetryBlocker.sessionBlockedCount

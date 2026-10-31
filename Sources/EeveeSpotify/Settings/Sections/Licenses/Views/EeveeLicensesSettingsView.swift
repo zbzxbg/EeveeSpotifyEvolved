@@ -43,7 +43,7 @@ struct EeveeLicensesSettingsView: View {
                 symbol: "lightbulb",
                 color: Color(hex: "#BF5AF2")
             ),
-            // 2026-10-03：听歌页那层"整页取色底"的配方借自 kumone（LGPL-3.0 / GPL-3.0，
+            // 听歌页那层"整页取色底"的配方借自 kumone（LGPL-3.0 / GPL-3.0，
             // 与本仓库 GPL-3.0 兼容）。这类**兼容许可**的借用必须署名，所以单列一条；
             // 上面那条 spoti.pw 属于同一类（v0.21.1 = GPL-3.0，已复用并修改），只是来路不同。
             Entry(
@@ -52,7 +52,7 @@ struct EeveeLicensesSettingsView: View {
                 symbol: "music.note.house",
                 color: Color(hex: "#FF375F")
             ),
-            // 2026-10-20：网易云歌词源的搜索/匹配思路参考了下面三个项目。
+            // 网易云歌词源的搜索/匹配思路参考了下面三个项目。
             // NeteaseCloudMusicApi 的仓库现在只剩 README、没有许可文件，所以这里**照实写没有**，
             // 不猜 SPDX；Lyricify 与 163MusicLyrics 的许可来自各自仓库的 LICENSE / README。
             Entry(
@@ -73,7 +73,7 @@ struct EeveeLicensesSettingsView: View {
                 symbol: "music.note.list",
                 color: Color(hex: "#FFD60A")
             ),
-            // 2026-10-31：酷狗 KRC / QQ 音乐 QRC 的解密算法来源。
+            // 酷狗 KRC / QQ 音乐 QRC 的解密算法来源。
             // LDDC 是 GPL-3.0-only、pyqdes 是 MIT —— 都只取了"密钥字节 + 步骤顺序"这个事实，
             // Swift 实现是自己写的（`KrcText` / `QrcText`），没有搬运代码。
             Entry(
@@ -82,9 +82,9 @@ struct EeveeLicensesSettingsView: View {
                 symbol: "lock.open",
                 color: Color(hex: "#5E5CE6")
             ),
-            // 2026-10-31：歌词源清单与「自动优选」的调度规则来自 Taurus。
+            // 歌词源清单与「自动优选」的调度规则来自 Taurus。
             // ⚠️ Taurus 是 **PolyForm Strict 1.0.0**（不允许衍生作品）——
-            //   这一条必须写清楚"没有复制代码"，否则看起来像在它的许可下分发。
+            // 这一条必须写清楚"没有复制代码"，否则看起来像在它的许可下分发。
             Entry(
                 title: "licenses_taurus".localized,
                 detailKey: "licenses_taurus_detail",
@@ -119,7 +119,7 @@ struct EeveeLicensesSettingsView: View {
                 }
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
     }
 }

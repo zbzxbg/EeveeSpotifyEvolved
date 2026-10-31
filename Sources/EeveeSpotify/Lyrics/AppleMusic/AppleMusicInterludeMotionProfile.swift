@@ -2,9 +2,9 @@ import CoreGraphics
 import Foundation
 
 // 移植自 MeloX `MeloX/Core/Lyrics/AppleMusicInterludeMotionProfile.swift`（GPL-3.0）。
-
-/// 间奏「呼吸点」的几何与时间参数（观察自 Apple Music 26.6 的
-/// `InstrumentalContentLayer` / `LyricsSpecs`）。
+//
+// 间奏「呼吸点」的几何与时间参数（观察自 Apple Music 26.6 的
+// `InstrumentalContentLayer` / `LyricsSpecs`）。
 struct AppleMusicInterludeMotionProfile: Hashable, Sendable {
     static let iOS26_6 = AppleMusicInterludeMotionProfile(
         dotCount: 3,

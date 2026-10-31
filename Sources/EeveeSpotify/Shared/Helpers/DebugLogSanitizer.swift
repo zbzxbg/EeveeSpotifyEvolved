@@ -1,37 +1,36 @@
 import Foundation
 
-/// 日志脱敏（2026-09-30 新增）。
+/// 日志脱敏新增）。
 ///
-/// ── 两层，职责不同 ─────────────────────────────────────────────────────────
+/// ── 两层，职责不同
 ///
 /// ① `sanitize(_:)` —— **写入口**，进程内永远生效（`writeDebugLog` / `writeErrorLog`
-///    与 `eeveeSanitizedNSLog` 都会过一遍）。管的是"无论如何都不该落盘"的东西：
-///    凭证、账号/设备标识、已知的用户内容 query 参数。
+/// 与 `eeveeSanitizedNSLog` 都会过一遍）。管的是"无论如何都不该落盘"的东西：
+/// 凭证、账号/设备标识、已知的用户内容 query 参数。
 ///
 /// ② `redactForSharing(_:)` —— **只在导出时**应用，给"要发到 issue / 给别人看"的那一份。
-///    管的是"日志主体本身就是用户数据"的那一类：曲目/艺人/专辑 URI、曲名、曲目 id。
-///    本地那份文件不受影响 —— 排查时你仍然需要真实曲目才能复现。
+/// 管的是"日志主体本身就是用户数据"的那一类：曲目/艺人/专辑 URI、曲名、曲目 id。
+/// 本地那份文件不受影响 —— 排查时你仍然需要真实曲目才能复现。
 ///
-/// ── 为什么脱敏必须放在写入口 ───────────────────────────────────────────────
+/// ── 为什么脱敏必须放在写入口
 /// `writeDebugLog` 同时写文件和 `os_log(privacy: .public)`；而系统统一日志**清不掉**
 /// （设置里的「清除调试日志」只清 App 容器里那份）。只在导出时脱敏的话，
-/// 系统日志里那份仍然是明文。
 ///
-/// ── 判据（来自真机日志审计，含 19 号日志）──────────────────────────────────
+/// ── 判据
 /// · **必隐**：Bearer/Authorization/Cookie 类凭证、设备唯一标识、账号标识；
 /// · **默认隐**：播放上下文/歌单、曲目与艺人、曲名、时区与地区（含 `country=`）；
 /// · **必须保留**：时间戳、接口 path、元素清单 —— 这些是排查判据本身。
-///   注意区分两层：**hex dump**（`hex512B=` / `[NPVModule] hex` / `[CASITA][HEX]`）
-///   在**本地**文件里原样保留，只在**导出那一份**被打成 `<hex-redacted>`
-///   （那些字节可解码还原成 `spotify:track:`，模式匹配看不见 —— 见规则 10）。
-///   所以本文件里**没有**任何"把 query 里所有参数一锅端"的规则 —— 只处理已知的
-///   用户内容参数，且 `[TokenCapture]` 那类整条 URL 由调用方改用 `logSafeURL(_:)`
-///   （只留 scheme+host+path）在源头掐掉。
+/// 注意区分两层：**hex dump**（`hex512B=` / `[NPVModule] hex` / `[CASITA][HEX]`）
+/// 在**本地**文件里原样保留，只在**导出那一份**被打成 `<hex-redacted>`
+/// （那些字节可解码还原成 `spotify:track:`，模式匹配看不见 —— 见规则 10）。
+/// 所以本文件里**没有**任何"把 query 里所有参数一锅端"的规则 —— 只处理已知的
+/// 内容参数，且 `[TokenCapture]` 那类整条 URL 由调用方改用 `logSafeURL(_:)`
+/// （只留 scheme+host+path）在源头掐掉。
 enum DebugLogSanitizer {
 
     // MARK: - ① 写入口：硬脱敏
-
-    /// `key=value` 形式的凭证键名。顺序无所谓（正则回溯会自己找到能匹配完整键的那一支）。
+    //
+    // `key=value` 形式的凭证键名。顺序无所谓（正则回溯会自己找到能匹配完整键的那一支）。
     private static let secretKeyAlternation = [
         "authorization", "cookie", "set-cookie", "set_cookie",
         "access_token", "refresh_token", "id_token",
@@ -56,41 +55,40 @@ enum DebugLogSanitizer {
         ("(?i)((?:\(secretKeyAlternation))\\s*=\\s*)[^&\\s,;|]+", "$1<redacted>"),
 
         // 2b. header 整行形态：`Cookie: …` / `Set-Cookie: …` / `Authorization: …`。
-        //     只靠第 2 条会漏 —— 那条要求 cookie **名字**在名单里，
-        //     而 `Set-Cookie: <别的名字>=…` 一样是凭证。这两条直接吃掉整行剩余内容。
+        // 只靠第 2 条会漏 —— 那条要求 cookie **名字**在名单里，
+        // 而 `Set-Cookie: <别的名字>=…` 一样是凭证。这两条直接吃掉整行剩余内容。
         ("(?i)((?:set-)?cookie\\s*[:=]\\s*)[^\\n]*", "$1<redacted>"),
         ("(?i)(authorization\\s*[:=]\\s*)[^\\n]*", "$1<redacted>"),
 
         // 3. JSON 形式 `"key":"value"` —— SponsorBlock 的 `"userID":"…"` 走这条。
-        //    ⚠️ 这里**必须**含 `uuid`/`videoid`：`[SB][submit]` 的响应体在出错时会把
-        //    这两项回显，而那条日志走的是 `eeveeSanitizedNSLog`（系统统一日志，清不掉）——
-        //    导出层那条 7b 永远够不着它。
+        // ⚠️ 这里**必须**含 `uuid`/`videoid`：`[SB][submit]` 的响应体在出错时会把
+        // 这两项回显，而那条日志走的是 `eeveeSanitizedNSLog`（系统统一日志，清不掉）——
+        // 导出层那条 7b 永远够不着它。
         (
             "(?i)(\"(?:userid|user_id|authorization|cookie|access_token|refresh_token|id_token|deviceid|device_id|uuid|videoid)\"\\s*:\\s*\")([^\"]*)(\")",
             "$1<redacted>$3"
         ),
 
         // 4. 设备唯一标识：`/social-connect/v2/devices/<32hex>/jam_status`。
-        //    换成**固定占位**而不是哈希 —— 一份日志里只可能有一台设备，
-        //    而固定占位保证了**跨日志不可关联**，正是我们要的。
+        // 而固定占位保证了**跨日志不可关联**，正是我们要的。
         ("(?i)(/devices/)[A-Za-z0-9._-]{6,}", "$1<device>"),
 
         // 5. 账号标识（用户名那条路径）。
         ("(?i)(spotify:user:)[A-Za-z0-9._-]+", "$1<redacted>"),
 
         // 6. 已知的用户内容 query 参数。**兜底**用：正常路径上 URL 已经在调用方
-        //    经 `logSafeURL(_:)` 掐掉了 query，这条只防"某天有人又打了一条整 URL"。
-        //    `region` 刻意**不在**名单里 —— "日区还是别的区"是有用的排查判据。
+        // 经 `logSafeURL(_:)` 掐掉了 query，这条只防"某天有人又打了一条整 URL"。
+        // `region` 刻意**不在**名单里 —— "日区还是别的区"是有用的排查判据。
         (
             "(?i)([?&](?:play_context_uri|contexturi|creatoruri|entityuri|entity_uri|signal|eagerload|timezone|locale|userid|usertoken|csrf_token|access_token)=)[^&\\s]*",
             "$1<redacted>"
         ),
 
         // 6b. 地区/时区这一类的 `key=value`（`[REVERT_WATCH] … country=jp`、`region=jp`）。
-        //     为什么单独一条而不塞进上面那份"凭证名单"：它们不是凭证，但**确实是**
-        //     "默认该隐"那一档（见文件头三档判据）；混进凭证表会让那张表说谎。
-        //     ⚠️ `enablePassiveProductStateLog` 默认为 true，所以 `country=…` 是**默认就会
-        //     进系统统一日志**的，这条不能只放在导出层。
+        // 为什么单独一条而不塞进上面那份"凭证名单"：它们不是凭证，但**确实是**
+        // "默认该隐"那一档（见文件头三档判据）；混进凭证表会让那张表说谎。
+        // ⚠️ `enablePassiveProductStateLog` 默认为 true，所以 `country=…` 是**默认就会
+        // 进系统统一日志**的，这条不能只放在导出层。
         ("(?i)(\\b(?:country|region|locale|timezone)=)[^&\\s,;|]*", "$1<redacted>"),
     ]
 
@@ -124,7 +122,7 @@ enum DebugLogSanitizer {
     /// 为什么在源头丢而不是靠 `sanitize` 兜：7 类敏感点里有 4 类（播放上下文/歌单、
     /// 曲目与艺人 URI、时区与地区、以及 `eagerload` 那种几百字节的 base64 上下文）
     /// **只出现在 query 里**；而 path 才是排查真正要看的东西（"客户端有没有发那一枪"）。
-    /// 19 号日志里 73 条 `[TokenCapture]` 各自带着一整个 query，全靠这一处收敛。
+    /// 全靠这一处收敛。
     static func logSafeURL(_ url: URL?) -> String {
         guard let url else { return "<no url>" }
         let scheme = url.scheme ?? "?"
@@ -139,8 +137,8 @@ enum DebugLogSanitizer {
     }
 
     // MARK: - ② 导出：内容假名化
-
-    /// 导出用的假名前缀。分门别类，读日志时一眼看得出是哪一类对象。
+    //
+    // 导出用的假名前缀。分门别类，读日志时一眼看得出是哪一类对象。
     private static let aliasPrefixes: [String: String] = [
         "track": "t", "artist": "ar", "album": "al", "episode": "ep",
         "show": "sh", "playlist": "pl", "concert": "co", "user": "us",
@@ -150,10 +148,10 @@ enum DebugLogSanitizer {
     ///
     /// ⚠️ 两个刻意的设计：
     /// 1. **同一份日志内保持可关联** —— 同一个 id 每次都映射到同一个假名（`t1`、`t2`…），
-    ///    否则"`[Scrollsita] manifest track=t1` 与 `injected … track=t1` 是不是同一首"
-    ///    这种判读就废了；
+    /// 否则"`[Scrollsita] manifest track=t1` 与 `injected … track=t1` 是不是同一首"
+    /// 这种判读就废了；
     /// 2. **`spotify:section:` 一律不动** —— 元素类型/版块号（`…Gq21` = 歌词卡片那一项、
-    ///    `…Gq1L` = 关于艺人）是排查元素清单的**唯一判据**，见 `ScrollsitaLyricsElementInjector`。
+    /// `…Gq1L` = 关于艺人）是排查元素清单的**唯一判据**，见 `ScrollsitaLyricsElementInjector`。
     static func redactForSharing(_ text: String) -> String {
         var aliases: [String: String] = [:]
         var counters: [String: Int] = [:]
@@ -181,11 +179,10 @@ enum DebugLogSanitizer {
             return "spotify:\(kind):\(alias(key, kind))"
         }
 
-        // 1b. 同一批 id 出现在**路径**里（`/track/2Fkz…`）——真实日志里到处都是
-        //     （`[NPVModule] … path=/merch-npv-service/v1/merch/track/<id>`、
-        //      `[HasLyricsProbe] seen path=/color-lyrics/v2/track/<id>`）。
-        //     必须和 `spotify:track:<id>` 映射到**同一个**假名，否则"这行说的和上一行是不是同一首"就对不上了。
-        //     `{10,}` 是为了避开 `/track/search` 这类非 id 段。
+        // （`[NPVModule] … path=/merch-npv-service/v1/merch/track/<id>`、
+        // `[HasLyricsProbe] seen path=/color-lyrics/v2/track/<id>`）。
+        // 必须和 `spotify:track:<id>` 映射到**同一个**假名，否则"这行说的和上一行是不是同一首"就对不上了。
+        // `{10,}` 是为了避开 `/track/search` 这类非 id 段。
         out = replacing(
             out,
             pattern: "(?i)/(track|album|artist|episode|show|playlist|concert)/([A-Za-z0-9]{10,})"
@@ -197,9 +194,9 @@ enum DebugLogSanitizer {
         }
 
         // 2. 曲名：把 `… for "标题"` / `… fetching "标题"` / `… Using "标题"` 里的引号串换成标记。
-        //    只吃引号内那一小段，不吃行尾 —— 行尾带着"行数 / provider"这类判据。
-        //    `using` 只会命中 `[Genius] Using "…"`（`[Lyrics] Using original colors`
-        //    与 `[Musixmatch] using macro matcher …` 都没有引号）。
+        // 只吃引号内那一小段，不吃行尾 —— 行尾带着"行数 / provider"这类判据。
+        // `using` 只会命中 `[Genius] Using "…"`（`[Lyrics] Using original colors`
+        // 与 `[Musixmatch] using macro matcher …` 都没有引号）。
         out = replacing(
             out,
             pattern: "(?i)((?:lyrics for|fetching|using|malformed for|no such song for)\\s+)\"[^\"]*\""
@@ -208,11 +205,11 @@ enum DebugLogSanitizer {
         }
 
         // 2c. ⚠️ 另外两条**每首歌都会打**的日志，引号前的引导词和第 2 步那批不一样，
-        //     必须单独列 —— 它们曾经**整条漏过**（审查抓出来的，见 §57.7）：
-        //       · `[Lyrics] Track "<标题>" - <艺人> (id <22 位 base62>)`（`CustomLyrics.x.swift`）
-        //       · `[Shell] legacy metadata "<标题>" — "<艺人>"`（`LyricsWordByWord.x.swift`，
-        //         分隔符是 **em dash**，所以第 3 步那条 `-` 的规则救不了它）
-        //     为什么不用"裸关键字 `track`"：那会误伤 `manifest track=spotify:track:…` 之类。
+        // 必须单独列 —— 它们曾经**整条漏过**（审查抓出来的，见 §57.7）：
+        // · `[Lyrics] Track "<标题>" - <艺人> (id <22 位 base62>)`（`CustomLyrics.x.swift`）
+        // · `[Shell] legacy metadata "<标题>" — "<艺人>"`（`LyricsWordByWord.x.swift`，
+        // 分隔符是 **em dash**，所以第 3 步那条 `-` 的规则救不了它）
+        // 为什么不用"裸关键字 `track`"：那会误伤 `manifest track=spotify:track:…` 之类。
         out = replacing(out, pattern: "(?i)(\\[Lyrics\\]\\s+Track\\s+)\"[^\"]*\"") { match, ns in
             ns.substring(with: match.range(at: 1)) + "\"<title>\""
         }
@@ -227,8 +224,8 @@ enum DebugLogSanitizer {
         }
 
         // 3. 艺人：**依赖第 2 步留下的 `<title>` 标记**，所以只会命中已经处理过的行，
-        //    不会误伤别处的 `- xxx`。`[^\n(]*` 停在 `(` 前 —— `[Lyrics] Track` 那行
-        //    的 `(id …)` 正好在艺人后面，由第 4b 步处理。
+        // 不会误伤别处的 `- xxx`。`[^\n(]*` 停在 `(` 前 —— `[Lyrics] Track` 那行
+        // 的 `(id …)` 正好在艺人后面，由第 4b 步处理。
         out = replacing(out, pattern: "(\"<title>\"\\s+-\\s+)[^\\n(]*") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<artist>"
         }
@@ -238,12 +235,12 @@ enum DebugLogSanitizer {
             ns.substring(with: match.range(at: 1)) + "<title> (id <redacted>)"
         }
         // 4b. 其余 `(id …)` 兜底。⚠️ 必须收 **base62**，不能只收数字：
-        //     `[Lyrics] Track … (id 2Fkzxa6EiI43U6s8RkLjht)` 里那个就是 Spotify 的
-        //     `trackIdentifier`（纯数字那条是 NetEase 的歌曲 id）。
+        // `[Lyrics] Track … (id 2Fkzxa6EiI43U6s8RkLjht)` 里那个就是 Spotify 的
+        // `trackIdentifier`（纯数字那条是 NetEase 的歌曲 id）。
         out = replacing(out, pattern: "(?i)\\(id\\s*[A-Za-z0-9]+\\)") { _, _ in "(id <redacted>)" }
 
         // 5. `album_id 00C345qa1C9et1uiN0yP1I` / `track_id=2094728852`（两种写法都要覆盖：
-        //    `[NPVModule]` 用空格，`[Musixmatch] macro matcher.track.get` 用等号）。
+        // `[NPVModule]` 用空格，`[Musixmatch] macro matcher.track.get` 用等号）。
         out = replacing(out, pattern: "(?i)((?:album|track)_id[=:\\s]+)[A-Za-z0-9]+") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<id>"
         }
@@ -253,7 +250,7 @@ enum DebugLogSanitizer {
             ns.substring(with: match.range(at: 1)) + "<artwork>"
         }
         // 6b. `[Artwork] fetching <url> for <id>` 与 `[Artwork] cache hit for <id>` —— 两种
-        //     写法都用 `… for <id>` 结尾，所以一条规则覆盖（`metadata keys:` 那行没有 ` for `）。
+        // 写法都用 `… for <id>` 结尾，所以一条规则覆盖（`metadata keys:` 那行没有 ` for `）。
         out = replacing(out, pattern: "(?i)(\\[Artwork\\][^\\n]*?\\bfor\\s+)[A-Za-z0-9]{10,}") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<id>"
         }
@@ -264,7 +261,7 @@ enum DebugLogSanitizer {
         }
 
         // 7b. SponsorBlock 投稿/投票里的 `"videoID":"<episode id>"` 与 `"UUID":"<segment id>"`。
-        //     它们是**内容 id**（能反查你投的是哪一集/哪一段），不是凭证，所以归导出层。
+        // 它们是**内容 id**（能反查你投的是哪一集/哪一段），不是凭证，所以归导出层。
         out = replacing(
             out,
             pattern: "(?i)(\"(?:videoID|UUID)\"\\s*:\\s*\")[^\"]*(\")"
@@ -273,10 +270,10 @@ enum DebugLogSanitizer {
         }
 
         // 8. 各仓库把曲名/艺人放在 query 里明文的那些参数。
-        //    · Musixmatch：`?q_track=独白&q_artist=DUSTCELL…`（那条 log 刻意保留其余 query，
-        //      以便和"Safari 能过"的 URL 逐字对比，所以这里只按参数名打掉这几项）；
-        //    · LRCLIB：`?track_name=…&artist_name=…`；
-        //    · Genius：`?q=…`。
+        // · Musixmatch：`?q_track=独白&q_artist=DUSTCELL…`（那条 log 刻意保留其余 query，
+        // 以便和"Safari 能过"的 URL 逐字对比，所以这里只按参数名打掉这几项）；
+        // · LRCLIB：`?track_name=…&artist_name=…`；
+        // · Genius：`?q=…`。
         out = replacing(
             out,
             pattern: "(?i)([?&](?:q_track|q_artist|q_album|track_name|artist_name|album_name|q)=)[^&\\s]*"
@@ -285,8 +282,8 @@ enum DebugLogSanitizer {
         }
 
         // 9. 整行的"原始响应体片段"：这些行**本身就是抓来的服务端内容**，
-        //    可能含曲名/艺人/歌词，靠模式匹配清不干净 —— 分享版里整段打掉。
-        //    只动 `…: ` 后面的内容，时间戳与标签（判读"这一枪有没有打"）都留着。
+        // 可能含曲名/艺人/歌词，靠模式匹配清不干净 —— 分享版里整段打掉。
+        // 只动 `…: ` 后面的内容，时间戳与标签（判读"这一枪有没有打"）都留着。
         out = replacing(
             out,
             pattern: "(?i)((?:raw XML head|raw head|richsync body head|body head):\\s*)[^\\n]*"
@@ -294,29 +291,26 @@ enum DebugLogSanitizer {
             ns.substring(with: match.range(at: 1)) + "<redacted>"
         }
         // 9b. `body: {…}` / `body={"…"}` 这种**响应体片段**（`[SB][submit] -> 200 body=…`、
-        //     `[Musixmatch] … body: …`）。⚠️ 必须用负向先行断言躲开 `body=584B` ——
-        //     `[Scrollsita] manifest track=… body=584B has5=false elements=[…]` 那行的
-        //     `body=` 是**字节数**，而它后面正是整份日志里最有价值的元素清单，
-        //     被这条规则整行吞掉就等于把排查判据删了。
+        // `[Musixmatch] … body: …`）。⚠️ 必须用负向先行断言躲开 `body=584B` ——
+        // `[Scrollsita] manifest track=… body=584B has5=false elements=[…]` 那行的
+        // `body=` 是**字节数**，
+        // 被这条规则整行吞掉就等于把排查判据删了。
         out = replacing(out, pattern: "(?i)(\\bbody[:=]\\s*)(?!\\d+B\\b)[^\\n]*") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<redacted>"
         }
 
-        // 9c. 同族的 `printable=<…>`（`[NPVModule] … printable=… | …`、`[ScrollProbe] … printable=…`）：
-        //     它是探针从响应体里捞出来的可打印串，里面是**裸的**艺人名 / 场馆 / 城市
-        //     （`… | 2026-11-07T18:00:00+0900 | esoragoto`）—— 模式匹配盖不住，整段打掉。
         out = replacing(out, pattern: "(?i)(\\bprintable=)[^\\n]*") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<redacted>"
         }
 
         // 9d. ⚠️ 还有几处"响应体片段"的**形态各不相同**（第 9a 步只认 4 个字面前缀、
-        //     第 9b 步只认 `body[:=]`），审查时发现下面这些会整条穿过去（见 §57.7）：
-        //       · `[Musixmatch] … response is not JSON / no message: <body>`
-        //       · `[NetEase] Non-200 [eapi ]status <code> for <path>: <body>`
-        //       · `[NetEase] Search response malformed for "<关键词>": <body>`
-        //       · `[SpicyLyrics] Malformed envelope for <id>: <body>`
-        //       · `[SpicyLyrics] No matching operationId 0 for <id>: <body>`
-        //     共同点是"标签 + 关键字 + `: 内容`"，所以按这个形状一次性覆盖。
+        // 第 9b 步只认 `body[:=]`），审查时发现下面这些会整条穿过去（见 §57.7）：
+        // · `[Musixmatch] … response is not JSON / no message: <body>`
+        // · `[NetEase] Non-200 [eapi ]status <code> for <path>: <body>`
+        // · `[NetEase] Search response malformed for "<关键词>": <body>`
+        // · `[SpicyLyrics] Malformed envelope for <id>: <body>`
+        // · `[SpicyLyrics] No matching operationId 0 for <id>: <body>`
+        // 共同点是"标签 + 关键字 + `: 内容`"，所以按这个形状一次性覆盖。
         out = replacing(
             out,
             pattern: "(?i)(\\[(?:Musixmatch|NetEase|SpicyLyrics)\\][^\\n]*?(?:no message|Non-200(?:\\s+\\w+)? status|Search response malformed|Malformed envelope|No matching operationId)[^\\n]*?:\\s*)[^\\n]*"
@@ -325,16 +319,16 @@ enum DebugLogSanitizer {
         }
 
         // 9f. 更一般的兜底：**`:` 后面直接跟着 `{` 或 `<` 的尾部就是原始服务端内容**
-        //     （JSON 响应体 / 非 UTF-8 占位 / XML）。这一条覆盖的是"第 9d 步没列到、
-        //     但形态一样"的那些（`[AMLL] 400 Bad Request for <id>: {…}`、
-        //     `[NetEase] Search response malformed …: {…}` 等）。
-        //     刻意**不含 `[`** —— 那一档最常见的其实是 `[Artwork] metadata keys: [...]`，
-        //     它只有 key 名、没有任何用户数据，是排查封面/背景时要看的判据。
+        // （JSON 响应体 / 非 UTF-8 占位 / XML）。这一条覆盖的是"第 9d 步没列到、
+        // 但形态一样"的那些（`[AMLL] 400 Bad Request for <id>: {…}`、
+        // `[NetEase] Search response malformed …: {…}` 等）。
+        // 刻意**不含 `[`** —— 那一档最常见的其实是 `[Artwork] metadata keys: [...]`，
+        // 它只有 key 名、没有任何用户数据，是排查封面/背景时要看的判据。
         out = replacing(out, pattern: "(?i)(:\\s*)(?=[{<])[^\\n]*") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<redacted>"
         }
         // 9e. `[SpicyLyrics]` / `[AMLL]` 的行里 `for <trackId>` 是**裸 id**（没有 URI、也不在
-        //     `/track/` 路径里），第 1/1b 步都抓不到；而且它出现在上面那些被清空的行**前半段**。
+        // `/track/` 路径里），第 1/1b 步都抓不到；而且它出现在上面那些被清空的行**前半段**。
         out = replacing(
             out,
             pattern: "(?i)(\\[(?:SpicyLyrics|AMLL)\\][^\\n]*?\\bfor\\s+(?:track\\s+)?)[A-Za-z0-9]{10,}"
@@ -343,11 +337,11 @@ enum DebugLogSanitizer {
         }
 
         // 10. **hex dump**：`[ScrollProbe] … hex512B=<hex>` 里那些字节是可以**解码还原**的
-        //     （`73706f746966793a747261636b3a` = `spotify:track:`），模式匹配看不见，
-        //     所以只能整段打掉。两种形态：
-        //       · `hex512B=<hex>`（ScrollProbe）
-        //       · `[NPVModule] hex path=… 256B=<hex>`
-        //     这两个探针在**本地**文件里原样保留，分享版里退化成 `<hex-redacted>`。
+        // （`73706f746966793a747261636b3a` = `spotify:track:`），模式匹配看不见，
+        // 所以只能整段打掉。两种形态：
+        // · `hex512B=<hex>`（ScrollProbe）
+        // · `[NPVModule] hex path=… 256B=<hex>`
+        // 这两个探针在**本地**文件里原样保留，分享版里退化成 `<hex-redacted>`。
         out = replacing(out, pattern: "(?i)(\\bhex[0-9a-f]*B=)[0-9a-f]{16,}") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<hex-redacted>"
         }
@@ -355,8 +349,8 @@ enum DebugLogSanitizer {
             ns.substring(with: match.range(at: 1)) + "<hex-redacted>"
         }
         // 10c. `[CASITA][HEX] <hex>`：同为可解码的响应体字节。那个探针默认关闭
-        //      （`CasitaResponseProbe.enabled = false`），但一旦打开就会进来，
-        //      而它走的是 NSLog（不进导出文件）→ 这里只对"导出那一份"有意义。
+        // （`CasitaResponseProbe.enabled = false`），但一旦打开就会进来，
+        // 而它走的是 NSLog（不进导出文件）→ 这里只对"导出那一份"有意义。
         out = replacing(out, pattern: "(?i)(\\[CASITA\\]\\[HEX\\]\\s*)[0-9a-f]{16,}") { match, ns in
             ns.substring(with: match.range(at: 1)) + "<hex-redacted>"
         }
@@ -365,12 +359,12 @@ enum DebugLogSanitizer {
     }
 
     // MARK: - 导出文件
-
-    /// 生成"可分享的那一份"。
-    ///
-    /// `redact == false` 时原样返回原文件（自己留档）。脱敏版写到
-    /// `eeveespotify_debug_shared.log`，**不动**原文件 —— 排查要用的真实曲目
-    /// 仍然留在 `eeveespotify_debug.log` 里。
+    //
+    // 生成"可分享的那一份"。
+    //
+    // `redact == false` 时原样返回原文件（自己留档）。脱敏版写到
+    // `eeveespotify_debug_shared.log`，**不动**原文件 —— 排查要用的真实曲目
+    // 仍然留在 `eeveespotify_debug.log` 里。
     static func sharedLogFile(from path: String, redact: Bool) -> URL? {
         let original = URL(fileURLWithPath: path)
         guard redact else { return original }
@@ -386,12 +380,12 @@ enum DebugLogSanitizer {
     }
 
     // MARK: - 内部：按正则逐段重建字符串
-
-    /// 用闭包替换所有匹配（`NSRegularExpression` 的模板替换没法做"同一个值映射到同一个假名"
-    /// 这种带状态的事，所以自己走一遍）。
-    ///
-    /// 全程用 `NSString` 下标：`NSRegularExpression` 给的是 UTF-16 range，
-    /// 与 `String.Index` 混用会在含中文/CJK 的行上错位（本仓库日志里到处都是日文曲名）。
+    //
+    // 用闭包替换所有匹配（`NSRegularExpression` 的模板替换没法做"同一个值映射到同一个假名"
+    // 这种带状态的事，所以自己走一遍）。
+    //
+    // 全程用 `NSString` 下标：`NSRegularExpression` 给的是 UTF-16 range，
+    // 与 `String.Index` 混用会在含中文/CJK 的行上错位。
     private static func replacing(
         _ input: String,
         pattern: String,
@@ -422,7 +416,6 @@ enum DebugLogSanitizer {
 
 /// 把 Bearer token 映射成**轮换序号**（`token#1` / `token#2` …）。
 ///
-/// 为什么还要留点什么：真机验证时"token 有没有换过"本身就是判据 —— 19 号日志里
 /// 一次会话中就出现过两枚。但 token 的任何片段都没有调试价值，
 /// 所以原先的 `prefix=<前6字符>` 换成只记"第几枚"。
 enum SpotifyTokenOrdinal {

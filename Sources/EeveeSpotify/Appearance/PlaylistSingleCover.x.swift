@@ -2,70 +2,28 @@ import Foundation
 import ObjectiveC.runtime
 import Orion
 
-/// 歌单封面：**四宫格 → 第一张的单张封面**（用户第 5 轮问的那条）。
+/// 歌单封面：把四宫格 mosaic 换成单张封面。
 ///
-/// ── 那个四宫格是什么（IPA + 真机日志 73/74/75，都是硬证据）──────────────────
+/// 四宫格不是视图拼的，地址本身就串着四张图的 id：
+/// `https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`（每张 40 位十六进制）。
+/// 服务端本来就支持只传一个 id —— 那时返回 640×640 的单张 JPEG（传两个反而 404），
+/// 所以把 id 收成一个即可：不换 host、不自己裁图。
 ///
-/// 1. **不是视图层拼的**，地址里就串着四张图的 id：
-///    `https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`（每张 40 位十六进制）。
-///    IPA 的 `__cstring` 里逐字有模板串 `https://mosaic.scdn.co/%lu/%@`
-///    （file 偏移 185784143，紧挨着 `https://i.scdn.co/image/%@`）。
-/// 2. **服务端本来就有"只有一张"的那一档**（本机实测）：
-///      · `mosaic.scdn.co/640/<1 个 id>` → 200 `image/jpeg`，640×640，88 KB ← **正常单张封面**
-///      · `mosaic.scdn.co/300/<1 个 id>` → 200 `image/jpeg`，300×300
-///      · `mosaic.scdn.co/640/<4 个 id>` → 200 `image/jpeg`，640×640，98 KB（四宫格）
-///      · `mosaic.scdn.co/640/<2 个 id>` → **404**
-///    ⇒ 把 id 收到一个就是"只显示一首"，不换 host、不自己裁图。
-/// 3. 客户端负责这件事的类：`SPTMosaicImageLoaderRequest`（45 个自有方法，
-///    含 `-load` / `-loadMosaic` / `-buildSingleImage` / `-buildMosaicImage`，都是零参 void；
-///    属性表里 `URL : T@"NSURL",R,N,V_URL` —— **只读、没有 `setURL:`**）。
+/// 有两条不同的路，本文件两条都堵：
+/// ① 实体页（歌单页 / 音乐库）：地址是 `spotify:mosaic:<id>:…`，流经
+///    `SPTMosaicImageLoaderRequest`，挂它的 `load` / `loadMosaic` / `URL` getter；
+/// ② 主页卡片（你的歌单 / 最近播放 / 回味无穷）：feed 直接给服务端拼好的普通图片地址，
+///    请求层的钩子看不见，于是另挂在 `+[NSURL spt_URLMosaicWithImageURLs:]`（客户端自己拼
+///    地址的构造点）与 `-[NSURL initWithString:]`（现成字符串那条）上。
 ///
-/// ── 两条不同的路（这是本文件的核心）────────────────────────────────────────
+/// ⚠️ 钩子里**绝不能自己造 URL**：`URL(string:)` 会再进来一次 → 无限递归。
+/// 收窄一律走 `SingleMosaicCover.narrowedString`（纯字符串处理）。
 ///
-/// **① 实体那条路（歌单页 / 音乐库）**：地址是 `spotify:mosaic:<id>:<id>:…`（日志 73 逐字），
-/// 流到 `SPTMosaicImageLoaderRequest`。我们挂它的 `load` / `loadMosaic` / `URL` getter，
-/// 在它拆路径之前把地址收成第一张 —— **这条已在日志 74/75 验证生效**
-/// （`rewrote N mosaic URL(s), 4 covers -> 1`，`loadMosaic(after): numberOfParts=1`）。
-///
-/// **② 主页那三个模块（你的歌单 / 最近播放 / 回味无穷）**：**不走上面那条路**。
-/// 日志 75 整场只有 4 次改写、全在歌单页，主页卡片**一次都没有**；
-/// 而如果是"客户端拿 4 张自己拼"，那也得先经过 `spotify:mosaic:` ⇒ 会被记到 ⇒ 没记到。
-/// ⇒ **feed 直接给了一条服务端已经拼好的普通图片地址**，交给通用加载器去取，
-/// 所以挂在请求层上的钩子看不见它（IPA 里主页卡片那族是 `Home_EvoECMKit.CardArtworkView`，
-/// 一张图，不是四格视图）。
-///
-/// 这一版补的就是 ②，两个缝都堵上（各自独立、都有日志，谁命中一眼看得出）：
-///   · **②′ 构造点**：`+[NSURL spt_URLMosaicWithImageURLs:]`（`BetamaxSDK` 分类里的**类方法**，
-///     从 IPA 的 `__objc_catlist` 里逐字解出来）—— 客户端自己拼 `https://mosaic.scdn.co/<size>/<ids>`
-///     时**只留第一张图**，拼出来的地址就只有一个 id；
-///   · **② 字符串层**：`-[NSURL initWithString:]` / `-initWithString:relativeToURL:` ——
-///     万一那条地址是现成字符串直接造的，这里也拦一道。
-/// 收窄之后服务端回的就是单张封面，通用加载器照常工作，不需要知道它是 mosaic。
-///
-/// ⚠️ 这个钩子里**绝对不能自己造 URL**（`URL(string:)` 会再进来一次 → 无限递归）：
-/// 收窄一律走 `SingleMosaicCover.narrowedString`（**纯字符串**）。
-///
-/// ── 纪律 ─────────────────────────────────────────────────────────────────
-///
-/// · 只动**能读懂**的两条形状：`spotify:mosaic:<40 位 hex>:…` 与 `https://mosaic.scdn.co/<size>/<40 位 hex>…`；
-///   形状对不上（含非 40 位 hex 的段、带 `?`/`#`）一律放过 —— 宁可不动，也不要拼出一个不存在的地址；
-/// · 一路 `responds(to:)` / `class_getInstanceMethod` 门禁：读不出来就当没这回事（不猜、不崩）；
-/// · **开关关掉 = 一个字节都不改**（`UserDefaults.playlistSingleCover`）；
-/// · 日志判据（下一份日志按这个读）：
-///      · ① `[SingleCover] URL: rewrote … spotify:mosaic:…` ⇒ 实体那条路（日志 74/75 已生效）
-///      · ②′ `[SingleCover] mosaic build #N: 4 image(s) -> https://mosaic.scdn.co/<size>/<40 位>` ⇒
-///        **客户端自己拼地址那条路被拦到了**；`<size>` 就是"哪一档卡片在要图"的指纹
-///        （首页顶部那排 187×48 的长方形小卡与「你的歌单」的大方卡尺寸不同）
-///      · `[SingleCover] imageIDs: 4 id(s) — <url>` ⇒ App 自己从这个地址里解出了 4 个 id
-///        （⇒ 那个地址是 mosaic，改地址有用）；只有 1 个 ⇒ **那个地址本身就是一张成品图**
-///        （服务端拼好的，改地址没用，只能改视图层）
-///      · ② `[SingleCover] initWithString: rewrote … https://mosaic.scdn.co/…` ⇒ 字符串那道也命中
-///      · `[SingleCover] … saw N mosaic string(s), left as is (…)` ⇒ 看见了但形状不认（把那行发我）
-///      · `[SingleCover] mosaic check: …` 是只读探针（`spt_isMosaicURL` 认不认 https 那种形态）
-///
-/// 对照仓库（**spoti.pw 并没有这个功能**，用户以为它有）：v0.22.0 全树只有封面**显示**
-/// 相关的做法（hero `followCover:`、"隐藏封面"collapsing、圆角），CHANGELOG / docs /
-/// 全语言文案里都没有 mosaic 或单张封面。
+/// 只处理能读懂的两条形状（`spotify:mosaic:<40 位 hex>:…` 与
+/// `https://mosaic.scdn.co/<size>/<40 位 hex>…`），形状对不上一律放过 ——
+/// 宁可不动，也不要拼出一个不存在的地址。读不出来的 API 走 `responds(to:)` /
+/// `class_getInstanceMethod` 门禁，当没这回事。开关 `UserDefaults.playlistSingleCover`
+/// 关掉时一个字节都不改。
 struct PlaylistSingleCoverGroup: HookGroup {}
 
 /// 主页那条路（地址字符串层）。单独一组：它挂的是 `NSURL`，与请求层互不影响。
@@ -78,7 +36,7 @@ struct MosaicURLProbeGroup: HookGroup {}
 enum SingleMosaicCover {
     /// https 形态的 host（API JSON / feed 里的样子）。
     static let host = "mosaic.scdn.co"
-    /// **实体那条路上真正流过来的形态**（日志 73）。
+    /// **实体那条路上真正流过来的形态**。
     static let spotifyPrefix = "spotify:mosaic:"
     /// 一张专辑封面的 id 长度（`spotify:image:<16 位尺寸><24 位摘要>`，共 40 位十六进制）。
     static let idLength = 40
@@ -89,8 +47,8 @@ enum SingleMosaicCover {
     }
 
     /// 这个地址里串着的那些 id；形状看不懂 → nil。
-    ///   · `spotify:mosaic:<id1>:<id2>:…`
-    ///   · `https://mosaic.scdn.co/<size>/<id1><id2>…`（末段是 40 的整数倍）
+    /// · `spotify:mosaic:<id1>:<id2>:…`
+    /// · `https://mosaic.scdn.co/<size>/<id1><id2>…`（末段是 40 的整数倍）
     static func idTokens(of url: URL) -> [String]? {
         let text = url.absoluteString
 
@@ -137,9 +95,9 @@ enum SingleMosaicCover {
     }
 
     // MARK: 纯字符串版（给 `NSURL` 的 init 钩子用 —— 那里**不能造 URL**）
-
-    /// 四宫格**字符串** → 只含第一张的字符串；两张以下 / 看不懂 → nil。
-    /// 全程只做字符串切分，不碰 `URL` / `URLComponents`（否则会递归回 init 钩子）。
+    //
+    // 四宫格**字符串** → 只含第一张的字符串；两张以下 / 看不懂 → nil。
+    // 全程只做字符串切分，不碰 `URL` / `URLComponents`（否则会递归回 init 钩子）。
     static func narrowedString(_ text: String) -> String? {
         if text.hasPrefix(spotifyPrefix) {
             let tail = String(text.dropFirst(spotifyPrefix.count))
@@ -185,8 +143,8 @@ enum SingleMosaicCover {
 }
 
 // MARK: - 门禁与日志（放文件作用域：hook 类里只留 Orion 认的那几样）
-
-/// 改写了几条、报了几条、字符串层看见过几条、探针问过几次。
+//
+// 改写了几条、报了几条、字符串层看见过几条、探针问过几次。
 private var singleCoverRewrites = 0
 private var singleCoverPartReports = 0
 private var singleCoverBuildLogs = 0
@@ -294,8 +252,8 @@ private func reportBuild(_ name: String) {
 }
 
 // MARK: - ① 实体那条路（歌单页 / 音乐库）：请求层
-
-/// 加载入口：拆路径之前先把地址收成第一张。
+//
+// 加载入口：拆路径之前先把地址收成第一张。
 class SPTMosaicImageLoaderRequestHook: ClassHook<NSObject> {
     typealias Group = PlaylistSingleCoverGroup
     static let targetName = "SPTMosaicImageLoaderRequest"
@@ -320,7 +278,7 @@ class SPTMosaicImageLoaderRequestHook: ClassHook<NSObject> {
 
 /// `URL` 的 getter：`initWithURL:…` 里就可能读过一次地址（那一读在 `load` 之前），
 /// 这一层把"更早的读者"也一起收进来，并且**写回对象**（所以只会记一笔，不会每次都记）。
-/// ⚠️ 这里**不读 KVC**（那会再调一次本 getter）—— 只用 `orig.URL()` 的原值。
+/// ⚠️ 这里**不读 KVC**（那会再调一次本 getter）—— 只用 `orig.URL` 的原值。
 class SPTMosaicImageLoaderRequestURLHook: ClassHook<NSObject> {
     typealias Group = PlaylistSingleCoverGroup
     static let targetName = "SPTMosaicImageLoaderRequest"
@@ -352,12 +310,12 @@ class SPTMosaicImageLoaderRequestBuildHook: ClassHook<NSObject> {
 }
 
 // MARK: - ② 主页那三个模块：地址字符串层
-
-/// `NSURL` 的 `initWithString:` / `initWithString:relativeToURL:`：
-/// **feed 给过来的那条普通地址唯一的缝**（见文件头 ②）。
-///
-/// ⚠️ 这个钩子里**不能造 URL**（`URL(string:)` 会再进来一次 → 无限递归），
-/// 所以收窄全走 `SingleMosaicCover.narrowedString`（纯字符串切分）。
+//
+// `NSURL` 的 `initWithString:` / `initWithString:relativeToURL:`：
+// **feed 给过来的那条普通地址唯一的缝**（见文件头 ②）。
+//
+// ⚠️ 这个钩子里**不能造 URL**（`URL(string:)` 会再进来一次 → 无限递归），
+// 所以收窄全走 `SingleMosaicCover.narrowedString`（纯字符串切分）。
 class MosaicURLStringHook: ClassHook<NSURL> {
     typealias Group = MosaicURLStringGroup
     static let targetName = "NSURL"
@@ -375,16 +333,16 @@ class MosaicURLStringHook: ClassHook<NSURL> {
 }
 
 // MARK: - ②′ 主页那条路的**构造点**：`+[NSURL spt_URLMosaicWithImageURLs:]`
-
-/// `+[NSURL spt_URLMosaicWithImageURLs:]`（**`BetamaxSDK` 分类，类方法**，从 IPA 的
-/// `__objc_catlist` 里逐字解出来的）—— 拿 N 张图片 URL 拼出
-/// `https://mosaic.scdn.co/<size>/<id1><id2>…`。
-///
-/// 这是"客户端自己拼四宫格地址"的那条路：**只留第一张**，拼出来的地址就只有一个 id
-/// （服务端对一个 id 的 mosaic 地址回的就是单张封面，本机实测过）。
-///
-/// 为什么这里不用 Orion：它是**类方法**，而本仓库现成的类方法写法就是手写 swizzle
-/// （`CleanShareLinks.x.swift` / `EeveePremiumForce.x.swift` 都是这个 idiom）。
+//
+// `+[NSURL spt_URLMosaicWithImageURLs:]`（**`BetamaxSDK` 分类，类方法**，从 IPA 的
+// `__objc_catlist` 里逐字解出来的）—— 拿 N 张图片 URL 拼出
+// `https://mosaic.scdn.co/<size>/<id1><id2>…`。
+//
+// 这是"客户端自己拼四宫格地址"的那条路：**只留第一张**，拼出来的地址就只有一个 id
+// （服务端对一个 id 的 mosaic 地址回的就是单张封面，本机实测过）。
+//
+// 为什么这里不用 Orion：它是**类方法**，而本仓库现成的类方法写法就是手写 swizzle
+// （`CleanShareLinks.x.swift` / `EeveePremiumForce.x.swift` 都是这个 idiom）。
 private var originalMosaicBuilderIMP: IMP?
 
 /// 只留数组里的第一张图片 URL（≤1 张时原样返回）。
@@ -416,7 +374,7 @@ func installMosaicURLBuilderHook() -> Bool {
     let origIMP = method_getImplementation(method)
     originalMosaicBuilderIMP = origIMP
     // ⚠️ 与 `CleanShareLinks.x.swift` 同一条注意：ObjC 调进来的 receiver 是**类对象**，
-    //    参数是对象指针 ⇒ 一律用 `AnyObject`，不能用 Swift 的 `Any`（那是存在性容器）。
+    // 参数是对象指针 ⇒ 一律用 `AnyObject`，不能用 Swift 的 `Any`（那是存在性容器）。
     let block: @convention(block) (AnyObject, NSArray) -> AnyObject? = { receiver, urls in
         typealias OrigFn = @convention(c) (AnyObject, Selector, NSArray) -> AnyObject?
         let callOrig = unsafeBitCast(origIMP, to: OrigFn.self)
@@ -431,9 +389,9 @@ func installMosaicURLBuilderHook() -> Bool {
 }
 
 // MARK: - ③ 只读探针：`spt_isMosaicURL` 认哪些形态
-
-/// 只打日志、不改任何东西。它回答的是"https 那种形态在 Spotify 眼里算不算 mosaic"
-/// —— 决定了 ② 到底该在字符串层做，还是该让 Spotify 自己走 mosaic 那条路。
+//
+// 只打日志、不改任何东西。它回答的是"https 那种形态在 Spotify 眼里算不算 mosaic"
+// —— 决定了 ② 到底该在字符串层做，还是该让 Spotify 自己走 mosaic 那条路。
 class NSURLMosaicCheckHook: ClassHook<NSURL> {
     typealias Group = MosaicURLProbeGroup
     static let targetName = "NSURL"
@@ -472,14 +430,13 @@ class NSURLImageIDsHook: ClassHook<NSURL> {
 }
 
 // MARK: - 装
-
-/// 装这几组。每一组都先问"它的前提在不在"，缺了就只打一行日志
-/// （不留给 Orion 报非致命错误 —— 本仓库既有做法）。
+//
+// 装这几组。每一组都先问"它的前提在不在"，缺了就只打一行日志
+// （不留给 Orion 报非致命错误 —— 本仓库既有做法）。
 func activatePlaylistSingleCover() {
     let switchState = UserDefaults.playlistSingleCover ? "ON" : "OFF"
     let name = SPTMosaicImageLoaderRequestHook.targetName
 
-    // ① 请求层（歌单页 / 音乐库）—— 已在日志 74/75 验证生效。
     if let cls = NSClassFromString(name) {
         PlaylistSingleCoverGroup().activate()
         let has: (String) -> Bool = { selector in
@@ -512,7 +469,7 @@ func activatePlaylistSingleCover() {
     }
 
     // ②′ 构造点：`+[NSURL spt_URLMosaicWithImageURLs:]`（类方法，手写 swizzle）——
-    //     **主页那三个模块最可能的缝**：客户端自己拼四宫格地址时只留第一张图。
+    // **主页那三个模块最可能的缝**：客户端自己拼四宫格地址时只留第一张图。
     if installMosaicURLBuilderHook() {
         writeDebugLog("[SingleCover] armed on +[NSURL spt_URLMosaicWithImageURLs:] (switch=\(switchState))")
     } else {

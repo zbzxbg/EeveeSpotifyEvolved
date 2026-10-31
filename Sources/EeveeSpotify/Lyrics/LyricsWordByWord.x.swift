@@ -6,18 +6,18 @@ import SwiftUI
 // MARK: - 逐字歌词渲染模块（MVP）
 //
 // 结构（按文件拆开，本文件只剩 Orion 挂载 hook）：
-//   WordByWord/WordByWordState.swift             — 全局状态（取词进度、dto 归属）
-//   WordByWord/WordByWordPositionResolver.swift  — 安全多策略定位播放进度 + 点行跳转
-//   WordByWord/WordByWordPlaybackClock.swift     — CADisplayLink 时钟
-//   WordByWord/WordByWordLyricsFacts.swift       — 逐词 / 逐行数据可用性判据（两层共用）
-//   WordByWord/LyricsWordByWordOverlayView.swift — UIKit 叠加视图
-//   WordByWord/WordByWordHost.swift              — 挂载 / 卸载
+// WordByWord/WordByWordState.swift — 全局状态（取词进度、dto 归属）
+// WordByWord/WordByWordPositionResolver.swift — 安全多策略定位播放进度 + 点行跳转
+// WordByWord/WordByWordPlaybackClock.swift — CADisplayLink 时钟
+// WordByWord/WordByWordLyricsFacts.swift — 逐词 / 逐行数据可用性判据（两层共用）
+// WordByWord/LyricsWordByWordOverlayView.swift — UIKit 叠加视图
+// WordByWord/WordByWordHost.swift — 挂载 / 卸载
 //
 // 前提（来自 Spotify 二进制逆向）：
-//   进度候选：playbackPosition(Double)、currentPlaybackTime(Double)、currentTrackTimeSecs(Int64 秒)
-//   挂载点：Lyrics_NPVCommunicatorImpl.LyricsOnlyViewController（新版）/ Lyrics_CoreImpl.LyricsOnlyViewController（iOS14）
-//   开关：复用 ngzhwm_wordByWordLyrics
-
+// 进度候选：playbackPosition(Double)、currentPlaybackTime(Double)、currentTrackTimeSecs(Int64 秒)
+// 挂载点：Lyrics_NPVCommunicatorImpl.LyricsOnlyViewController（新版）/ Lyrics_CoreImpl.LyricsOnlyViewController（iOS14）
+// 开关：复用 ngzhwm_wordByWordLyrics
+//
 // MARK: - 挂载 hook（全屏歌词 VC）
 //
 // ⚠️⚠️ **绝对不要在这些覆写方法（或 hook 类）上写 `@MainActor`。**
@@ -38,7 +38,7 @@ import SwiftUI
 
 class LyricsWordByWordModernHostHook: ClassHook<UIViewController> {
     // `Lyrics_NPVCommunicatorImpl.LyricsOnlyViewController` 在 9.1.x 上不存在
-    // （真机日志 targetNotFound）→ 隔离组，永不激活。
+    // → 隔离组，永不激活。
     // 影响：内嵌（NPV）逐词歌词在 9.1.x 上不可用；9.1.x 可用的宿主是
     // LyricsWordByWordFullscreenModernHostHook 的 FullscreenElementViewController。
     typealias Group = V91UnavailableLyricsGroup
@@ -175,9 +175,9 @@ class LyricsWordByWordFullscreenLegacyHostHook: ClassHook<UIViewController> {
         // ⚠️ 这里以前会取 `Ivars<UIView>(vc.view).headerView` 并当作
         // `keepAboveView` 传下去，想让原生 header 浮在我们的 overlay 之上。
         // 那个做法已被证伪，参数整个删掉了：
-        //   · Modern 全屏页上根本没有这个 ivar（`Ivars` 访问不存在的 ivar 是会崩的，
-        //     靠的只是"老版本上恰好存在"这种运气）；
-        //   · 就算取到，原生控件也不在这条视图链上，抬层级影响不到它们。
+        // · Modern 全屏页上根本没有这个 ivar（`Ivars` 访问不存在的 ivar 是会崩的，
+        // 靠的只是"老版本上恰好存在"这种运气）；
+        // · 就算取到，原生控件也不在这条视图链上，抬层级影响不到它们。
         //
         // 现在旧 overlay 的显隐完全由"有没有逐词数据"决定：有就画（盖住原生歌词），
         // 没有就整层透明 + 触摸穿透（原生界面与控件原样可用）。

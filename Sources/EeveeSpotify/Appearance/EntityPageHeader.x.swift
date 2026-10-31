@@ -3,42 +3,29 @@ import Orion
 import UIKit
 import ObjectiveC.runtime
 
-/// 关联对象的键。**必须放在文件作用域**：`&变量` 取到的地址要稳定且唯一，
-/// 这是本仓库既有的写法（见 `DeclutterChrome.x.swift` 的 `declutterHiddenByUsKey`）。
+/// 关联对象的键。**必须放在文件作用域**：`&变量` 取到的地址要稳定且唯一
+/// （同 `DeclutterChrome.x.swift` 的 `declutterHiddenByUsKey`）。
 var entityPageHeaderKey: UInt8 = 0
 
-/// 上一拍量"封面压没压到文字"时，这个页头的高度。
+/// 上一拍量"封面压没压到文字"时这个页头的高度。
 ///
-/// ★★ 2026-10-23（用户：「专辑页自画按键在上下划的时候有抖动」）：`probeCoverOverlap` 会改
-/// 我们那一块的高度（`header.bounds.height + coverDrop`），而滚动中页头**每帧**都在变高/变矮
-/// ⇒ 量到的重叠每帧都不一样，`coverDrop` 就在 0 / 4 / 6 之间来回翻（日志里
-/// `moved our block down 4pt` → `cleared the extra 6pt` 就是现场），按钮跟着每帧上下跳。
+/// `probeCoverOverlap` 会改我们那一块的高度（`header.bounds.height + coverDrop`），而滚动中页头
+/// 每帧都在变高变矮 ⇒ 量到的重叠每帧不同，`coverDrop` 就在 0 / 4 / 6 之间来回翻，按钮跟着上下跳。
 /// 只在页头高度**稳定**时量一次，滚动中途保持上一次的值。
 var coverProbeHeightKey: UInt8 = 0
 
-/// 页头替换：找到歌单页头、把 Spotify 那一列藏掉、把我们自己的（`EntityPageHeaderView`）摆上去。
+/// 页头替换：找到歌单页头、藏掉 Spotify 那一列、把 `EntityPageHeaderView` 摆上去。
 ///
-/// ## 为什么挂 `HeaderContentLayout`
+/// 挂 `HeaderContentLayout`：它是那一块的布局视图，每一拍折叠/展开都走 `layoutSubviews`
+/// ⇒ 一个挂点覆盖"首次出现 / 滚动折叠 / 内容晚到"三种时机。`SPTFreeTierPlaylistEncoreHeaderViewController`
+/// 在 9.1.88 上已不存在（歌单头改由 `ListUXPlatform_FreeTierPlaylistImpl` 的 slot/element 拼出来），
+/// 故不用它；计数器晚到由"每一拍重读文本"覆盖。
 ///
-/// 它是那一块的**布局视图**（真机日志：`22.HeaderContentLayout@0,0,414,485`；符号表
-/// `dump-9.1.88.txt:7799` 也在），**每一拍折叠/展开都会走它的 `layoutSubviews`** ——
-/// 一个挂点就能覆盖"首次出现 / 滚动折叠 / 内容晚到"三种时机。
+/// 作用域只到歌单页：`headerRoot` 必须是 `PL.Header`（该 id 只在歌单页出现）。专辑页共用同一个
+/// `HeaderContentLayout`，但头部结构与控件 id 都不同 ⇒ 走 `applyToAlbumPage` 那条独立的路。
 ///
-/// pw 还挂了一个 `SPTFreeTierPlaylistEncoreHeaderViewController`（它的 `viewDidLayoutSubviews`
-/// 与 `update`）——**那个类在 9.1.88 上已经不存在**（歌单头改由 `ListUXPlatform_FreeTierPlaylistImpl`
-/// 的 slot/element 类拼出来），所以这里不用它：主挂点已经够，计数器晚到那种情况由
-/// "每一拍都重读一遍文本"覆盖。
-///
-/// ## 作用域（v1 故意收窄）
-///
-/// **只作用于歌单页**：`headerRoot` 必须是 `PL.Header`（那个 id 只在歌单页出现，
-/// 真机日志 `15.UIView@…,id=PL.Header`）。专辑页用的是同一个 `HeaderContentLayout`，
-/// 但它的头部结构、控件 id 与歌单不同 ⇒ **v1 一律不碰**（少一个变量，先让歌单页验完）。
-///
-/// ## 安全阀
-///
-/// 认不出标题就整块不动（`apply` 早退，一个视图都不藏）。所以任何一环失配 = "没生效"，
-/// 而不是"歌单页坏了"。结果会在调试日志里留一行。
+/// 安全阀：认不出标题就整块不动（`apply` 早退，一个视图都不藏）。任何一环失配 = "没生效"，
+/// 而不是"歌单页坏了"。
 enum EntityPageHeaderManager {
 
     static var isEnabled: Bool { UserDefaults.entityPageAMHeader }
@@ -51,36 +38,33 @@ enum EntityPageHeaderManager {
 
     /// 页头每一拍要用的那几个视图**缓存下来**。
     ///
-    /// ★ 2026-10-13（用户：「用较快的速度往下滑，会有渲染跟不上的问题」）：pw 的 `SGRFindByIdentifier`
-    /// 带一个 `static char` key —— **命中一次之后每一拍只做一次"还在不在"的检查**，不再走子树。
-    /// 我们原来是每拍 **5 次全树 BFS**（shuffle / play / save / download / 协作者）+ 3~4 次文本遍历，
-    /// 而页头在快速滑动时**每一帧**都在折叠（`layoutSubviews` 每帧一次）⇒ 那些搜索全落在主线程上。
+    /// `SGRFindByIdentifier` 带一个 `static char` key —— 命中一次之后每拍只做"还在不在"的检查。
+    /// 原来每拍 5 次全树 BFS（shuffle / play / save / download / 协作者）+ 3~4 次文本遍历，
+    /// 而页头在快速滑动时每帧都在折叠（`layoutSubviews` 每帧一次）⇒ 那些搜索全落在主线程上。
     private static var cachedShuffle: UIView?
     private static var cachedPlay: UIView?
     private static var cachedTrailing: UIView?
     private static var cachedCreatorLink: UIView?
-    /// ★ 2026-10-13（性能）：封面元素与"那一块文字"也缓存 —— 这两次原来是**每帧**各一次整棵子树搜索
+    /// 封面元素与"那一块文字"也缓存 —— 这两次原来是**每帧**各一次整棵子树搜索
     /// （`eeveeFindView(layout, "Components.Header.UI.ArtworkImage")` / `blockIn(layout,…)`）。
     private static var cachedCover: UIView?
     private static var cachedBlock: UIView?
-    /// ★★ 2026-10-31：我们**当前这一页**画出来的那份页头（弱引用）。
+    /// 我们**当前这一页**画出来的那份页头（弱引用）。
     ///
-    /// 只给 `playlistPageDidLayout` 用：那一拍要判断"主挂点是不是已经在干活" ——
-    /// 已经是（我们那份就挂在这一页里）就什么都不做，免得每 0.5s 白扫一遍整棵页面树。
+    /// 只给 `playlistPageDidLayout` 用：那一拍判断"主挂点是不是已经在干活" —— 是就什么都不做，
+    /// 免得每 0.5s 白扫一遍整棵页面树。
     private static weak var currentHeader: EntityPageHeaderView?
     /// 页面级备用入口的节流（BFS 最多 1500 个节点，不能每帧跑）。
     private static var lastPlaylistProbe: CFAbsoluteTime = 0
-    /// ★★ 2026-10-31（电台）：页头里那几个大圆头像（见 `headerAvatars`）——
-    /// 这一拍是每帧的，按 `layout` 缓存，换页才重扫。
+    /// 页头里那几个大圆头像（见 `headerAvatars`）—— 这一拍是每帧的，按 `layout` 缓存，换页才重扫。
     private static weak var artworkScannedLayout: UIView?
     private static var cachedArtwork: [UIView] = []
-    /// ★ 2026-10-18：歌单页头里那个「在此页面上查找」搜索框（AM 页头接管后不该留着）。
+    /// 歌单页头里那个「在此页面上查找」搜索框（AM 页头接管后不该留着）。
     private static var cachedFindField: UIView?
-    /// ★ 2026-10-13（性能）：上一拍认下的那四个标签（见 `TextViews`）。
+    /// 上一拍认下的那四个标签（见 `TextViews`）。
     private static var cachedTextViews: TextViews?
-    /// 专辑页那条路（见 `applyToAlbumPage`）：头容器、封面、三个文字容器，以及"kind·日期那行晚到"
-    /// 的重试计数。**全部走缓存** —— 这一拍同样是每帧级的（pw 也是在 `layoutSubviews` 里每拍找，
-    /// 靠它的 `SGRFindByIdentifier` 不再重搜）。
+    /// 专辑页那条路（`applyToAlbumPage`）：头容器、封面、三个文字容器，以及"kind·日期那行晚到"
+    /// 的重试计数。**全部走缓存** —— 这一拍同样是每帧级的。
     private static var cachedAlbumHeader: UIView?
     private static var cachedAlbumCover: UIView?
     private static var cachedAlbumTitleRow: UIView?
@@ -88,16 +72,13 @@ enum EntityPageHeaderManager {
     private static var cachedAlbumMetadata: UIView?
     private static var albumRetryKey: UInt8 = 0
 
-    /// ★★ 2026-10-24（用户：「**专辑页首次进入可能不展示封面**」）：
+    /// `concealAlbumChrome` 的判据是"绕开封面那一支"，但它靠每一拍现找 `cover`。首次进入时封面
+    /// 往往**比页头晚一拍**才建出来 ⇒ 那一拍 `cover == nil`，装着"封面 + 标题"的 `ElementView` 被整支
+    /// `eeveeConceal` 掉；封面随后出现在这个**已经 hidden 的分支**里时，后面的每拍只递归、不整支藏，
+    /// **不会把分支放回来** ⇒ 封面永远不显示。
     ///
-    /// `concealAlbumChrome` 的判据是"**绕开封面那一支**"，但它靠每一拍现找 `cover`。
-    /// 首次进入时封面元素往往**比页头晚一拍**才建出来 ⇒ 那一拍 `cover == nil`，于是
-    /// 顶层那个装着"封面 + 标题"的 `ElementView` 被整支 `eeveeConceal` 掉；等封面
-    /// 随后出现在这个**已经 hidden 的分支**里，后面的每一拍只会"递归进去、不整支藏"，
-    /// **不会把分支放回来** ⇒ 封面永远不显示（日志里封面视图 frame 都在、就是看不见）。
-    ///
-    /// 这里把"整支藏掉"的原值记下来；一旦未来某一拍 `cover` 落在某个记录过的分支里，
-    /// 就把它原样还回去，再走正常的递归。
+    /// 这里把"整支藏掉"的原值记下来；一旦未来某一拍 `cover` 落在某个记录过的分支里，就原样还回去，
+    /// 再走正常的递归。
     private final class AlbumConcealedBranch {
         weak var view: UIView?
         private let layerHidden: Bool
@@ -126,12 +107,12 @@ enum EntityPageHeaderManager {
 
     private static var albumConcealedBranches: [AlbumConcealedBranch] = []
     private static let albumConcealedBranchLimit = 8
-    /// "封面还没建出来就先藏了头"只报一次 —— 下一次日志能直接确认这条竞态有没有发生。
+    /// "封面还没建出来就先藏了头"只报一次。
     private static var didLogAlbumBlindConceal = false
     /// 封面晚到时重跑 `applyToAlbumPage` 的计数（按页面记账）。
     ///
-    /// ★ 2026-10-24：只靠 `layoutSubviews` 不保险 —— 页头建完之后可能不再有布局回合，
-    /// 封面到了也没人把"被整支藏掉的分支"放回来。这里最多补 8 次（≈1.6s）。
+    /// 只靠 `layoutSubviews` 不保险 —— 页头建完之后可能不再有布局回合，封面到了也没人把
+    /// "被整支藏掉的分支"放回来。这里最多补 8 次（≈1.6s）。
     private static var albumCoverRetryKey: UInt8 = 0
 
     /// 艺人页那条路（见 `applyToArtistPage`）：名字、月听众那行、照片、Follow —— 同样全走缓存。
@@ -141,12 +122,12 @@ enum EntityPageHeaderManager {
     private static var cachedArtistFollow: UIView?
     /// 艺人页左边那颗 `i` 的转发目标：**艺人简介卡**（`CreatorBiographyCard`）。
     private static var cachedArtistBio: UIView?
-    /// ★★ 2026-10-18：Follow 点击后的延迟复查要用这两样（见 `refreshArtistFollow`）。
+    /// Follow 点击后的延迟复查要用这两样（见 `refreshArtistFollow`）。
     /// 都是**弱引用**：离开艺人页之后不该把整页留住。
     private static weak var lastArtistPage: UIView?
     private static weak var lastArtistHeaderView: EntityPageHeaderView?
 
-    /// ★ 2026-10-18：艺人页标签栏的**原值**记录（关开关时逐个写回）。
+    /// 艺人页标签栏的**原值**记录（关开关时逐个写回）。
     /// 视图一律弱引用 —— 离开艺人页之后不该把整页/滚动视图留住。
     private final class ArtistStripPageState {
         weak var scroll: UIScrollView?
@@ -177,11 +158,10 @@ enum EntityPageHeaderManager {
     }
 
     private static var artistStripState: ArtistStripState?
-    /// ★★ 2026-10-18 第二轮：从页面根出发那条兜底搜索**每页只试两拍**（见 `applyToArtistPage`）——
+    /// 从页面根出发那条兜底搜索**每页只试两拍**（见 `applyToArtistPage`）——
     /// 这两个数就是它的记账（换页清零；主力是 `ArtistBiographyViewHook`）。
     private static weak var artistBioSearchPage: UIView?
     private static var artistBioSearchPasses = 0
-    /// ★★ 2026-10-18 第三轮（用户：「要不点击 i 之后不要 spotify 自己的了 … 我们自己搞」）：
     /// **读到过的艺人简介**按艺人名缓存（那一块是懒加载的，读一次就够；cell 一被回收文字就没了）。
     private static var bioTexts: [String: String] = [:]
     /// 现在这一页的艺人名（`applyToArtistPage` 每拍写）—— "我们自己的艺人介绍"拿它当标题。
@@ -192,18 +172,15 @@ enum EntityPageHeaderManager {
     /// 读到的简介（没有就是 nil）。
     static func cachedBioText(for name: String) -> String? { bioTexts[name] }
 
-    /// ★★ 2026-10-18：**Spotify 自己那条数据线**（`SPTArtistAboutDataLoader`）把
-    /// `SPTArtistAbout` 交出来了 —— 这是"关于艺人"的**权威正文 + 真链接**。
+    /// **Spotify 自己那条数据线**（`SPTArtistAboutDataLoader`）交出的 `SPTArtistAbout` ——
+    /// "关于艺人"的**权威正文 + 真链接**。
     ///
-    /// 与"从界面拼文字"的区别（用户：「解决方法总不能是正则式匹配字吧」）：
-    ///   · **正文** = 模型的 `biographyText` 字段本身 ⇒ 艺人名 / "每月有 x 名听众"那两行
-    ///     **根本不在里面**，不需要任何"猜哪一行不是正文"的判据；
-    ///   · **完整**：界面 label 会被 `is_async_biography_truncation_enabled` 截断，这个字段不会；
-    ///   · **链接** = `SPTArtistSocialLink` 上的 `wikipedia` / `twitter` / … 都是 `NSURL` ⇒
-    ///     直接就是艺人真地址，不用点、不用转发、也不用拼搜索页。
+    /// 与"从界面拼文字"的区别：**正文**就是模型的 `biographyText` 字段，艺人名 / "每月有 x 名听众"
+    /// 那两行根本不在里面，不需要任何"猜哪一行不是正文"的判据；**完整**：界面 label 会被
+    /// `is_async_biography_truncation_enabled` 截断，这个字段不会；**链接**是 `SPTArtistSocialLink`
+    /// 上的 `wikipedia` / `twitter` … 都是 `NSURL`，直接就是艺人真地址。
     ///
-    /// 线程：completion 可能在后台队列 ⇒ 只在这儿读模型（纯 ObjC 读，安全），
-    /// 落库一律切主线程（`bioTexts` / `bioLinks` 的其它读点都在主线程）。
+    /// 线程：completion 可能在后台队列 ⇒ 只在这儿读模型（纯 ObjC 读，安全），落库一律切主线程。
     static func artistAboutDidLoad(_ about: AnyObject?) {
         guard let about = about as? NSObject else { return }
         // completion 可能在后台队列 ⇒ 只在这儿读模型（纯 ObjC 读，安全），落库切主线程。
@@ -216,11 +193,10 @@ enum EntityPageHeaderManager {
 
     /// 把模型落库（`bioTexts` / `bioLinks` 的其它读点都在主线程 ⇒ 这里必须主线程调）。
     ///
-    /// ⚠️ **落库的 key 必须与所有读点一致**：`cachedBioText` / `cachedBioLinks` /
-    /// `hasCapturedBio` 等读点用的都是**页面上的艺人名**
-    /// （`artistNameStorage`）。模型的 `artistName` 多数时候与它逐字相同，但**不保证**
-    /// （本地化 / 版本差异 / 空白与大小写）⇒ 只按模型名存就会出现
-    /// "hook 装上了、日志也打了 `[ArtistBio] loader — …`、卡片里却什么都没有"。
+    /// **落库的 key 必须与所有读点一致**：`cachedBioText` / `cachedBioLinks` / `hasCapturedBio`
+    /// 用的都是**页面上的艺人名**（`artistNameStorage`）。模型的 `artistName` 多数时候逐字相同，
+    /// 但**不保证**（本地化 / 版本差异 / 空白与大小写）⇒ 只按模型名存就会出现
+    /// "hook 装上了、日志也打了、卡片里却什么都没有"。
     /// 所以：**页面名为主**；模型名不同就再当别名存一份（两个读法都能命中）。
     private static func storeArtistAbout(_ about: NSObject) {
         let biography = eeveeArtistAboutBiography(from: about)
@@ -257,7 +233,7 @@ enum EntityPageHeaderManager {
         }
     }
 
-    /// `storeArtistAbout` 的落库那一半 —— **同一份数据可以写两个 key**（见那里的 ⚠️）。
+    /// `storeArtistAbout` 的落库那一半 —— **同一份数据可以写两个 key**。
     private static func applyArtistAbout(
         biography: String?,
         links: [(kind: String, url: URL)],
@@ -276,8 +252,8 @@ enum EntityPageHeaderManager {
         guard !links.isEmpty else { return }
         var refs = bioLinks[name] ?? []
         for link in links {
-            // 同一个 kind 只留一条。原来的判据是"已有一条**带 URL** 的就跳过" —— 那样
-            // 「页面扫描先存下一条读不到 URL 的 wikipedia → 模型这一轮再进一条带真地址的
+            // 同一个 kind 只留一条。判据不能是"已有一条**带 URL** 的就跳过" —— 那样
+            // 「页面扫描先存一条读不到 URL 的 wikipedia → 模型这一轮再进一条带真地址的
             // wikipedia」会**变成两条**，卡片上就是两颗"维基百科"（而卡片只取前三颗，
             // 还会把别的链接顶掉）。现在：同 kind 已存在时**用模型这条覆盖**（真地址只有
             // 模型有），已有真地址的则严格不再加。
@@ -306,10 +282,9 @@ enum EntityPageHeaderManager {
 
     /// 「关于艺人」那块里找到的**社交链接**（维基 / 推特 / …）—— 按艺人名存。
     ///
-    /// ★★ 2026-10-18（用户：「原本有的维基 / 推特链接之类的没显示」）：Spotify 自己那一块里
-    /// 就有这些链接按钮（dump:21074-21079 的 `SPTArtistAbout:sArtist*ButtonTitle`），
-    /// 我们把整块折掉之后它们一起消失。现在**露头那一刻就记下这些控件**（weak 引用），
-    /// `ArtistBioSheet` 用它们画胶囊、点下去转发给控件本身（走 Spotify 自己的打开逻辑）。
+    /// Spotify 自己那一块里就有这些链接按钮，我们把整块折掉之后它们一起消失。现在**露头那一刻
+    /// 就记下这些控件**（weak 引用），`ArtistBioSheet` 用它们画胶囊、点下去转发给控件本身
+    /// （走 Spotify 自己的打开逻辑）。
     static func cachedBioLinks(for name: String) -> [ArtistBioLinkRef] { bioLinks[name] ?? [] }
 
     private static var bioLinks: [String: [ArtistBioLinkRef]] = [:]
@@ -317,14 +292,12 @@ enum EntityPageHeaderManager {
     /// 在**一块子树**里把社交链接**认下来**（有界：默认 800 个节点、最多 6 条；空表不落库，
     /// 下一拍还能再试）。
     ///
-    /// ★★ 2026-10-18（用户：「原本有的维基 / 推特链接之类的没显示」）：Spotify 自己那块里就有
-    /// 这些链接按钮（二进制 @200596249 逐字：`SPTArtistExternalSocialLinkButton` /
-    /// `…ButtonViewModel` / `SPTArtistSocialLink`；点它走委托 `externalSocialLinkTappedForType:`），
-    /// 我们把整块折掉之后它们一起消失。现在**露头那一刻就记下这些控件**（weak 引用），
-    /// `ArtistBioSheet` 用它们画胶囊、点下去优先用读到的真链接。
+    /// 这些按钮是 `SPTArtistExternalSocialLinkButton` / `…ButtonViewModel` / `SPTArtistSocialLink`，
+    /// 点它走委托 `externalSocialLinkTappedForType:`。`ArtistBioSheet` 用记下的控件画胶囊、
+    /// 点下去优先用读到的真链接。
     ///
     /// ⚠️ 起点给**页面根**（`eeveeArtistBioSearchRoot`）而不是只给那张卡：艺人页的
-    /// `CreatorBiographyCardLayout`（二进制 @182189882）里只有 bio / 头部 / 粉丝数 / "显示更多"，
+    /// `CreatorBiographyCardLayout` 里只有 bio / 头部 / 粉丝数 / "显示更多"，
     /// **没有**社交链接按钮 —— 只扫卡片会一条都收不到。
     private static func captureBioLinks(from root: UIView, name: String, limit: Int = 800) {
         var refs = bioLinks[name] ?? []
@@ -358,10 +331,9 @@ enum EntityPageHeaderManager {
 
     /// 这一页的艺人简介**已经读到过**了吗 —— `EntityPageSectionDrop` 折叠「关于艺人」那一格之前要问它。
     ///
-    /// ★★ 2026-10-11（日志 100）：折叠与读取原本是**两条独立的线** —— 折叠按 `CreatorBiography`
-    /// 认（认得对）、读取按 `SPTArtistAboutBiographyView` 认（这一版页面上没有）⇒ 那一格被折成 0 高、
-    /// 我们的卡片又读不到文字，用户**两边都看不到**。现在读不到就**不折**（宁可留着 Spotify 那段，
-    /// 也不要都不显示）。
+    /// 折叠与读取是**两条独立的线**：折叠按 `CreatorBiography` 认（认得对），读取按
+    /// `SPTArtistAboutBiographyView` 认（这一版页面上没有）⇒ 那一格被折成 0 高、我们的卡片又读不到
+    /// 文字，两边都看不到。现在读不到就**不折**（宁可留着 Spotify 那段）。
     static var hasCapturedBio: Bool {
         !artistNameStorage.isEmpty && bioTexts[artistNameStorage] != nil
     }
@@ -391,29 +363,28 @@ enum EntityPageHeaderManager {
 
     /// 「Follow 那颗的子树」只打一次（见 `probeFollowSubtree`）。
     private static var didProbeFollow = false
-    /// ★★ 2026-10-06（照片 115-117：「**旁边还是随机播放**」）：简介卡是**懒加载**的（页面滚到
-    /// "关于"那一段才建），所以某一拍找不到它**不能**就退回 shuffle —— 那样用户看到的就永远是
-    /// shuffle。这里把**找到过的那颗控件**用 weak 记住（weak：上一页释放后自动失效，
-    /// 下一页找到就替换），于是"只要见过一次 Info，之后每一拍都还是 Info"。
+    /// 简介卡是**懒加载**的（页面滚到"关于"那一段才建），所以某一拍找不到它**不能**就退回
+    /// shuffle —— 那样的就永远是 shuffle。这里把**找到过的那颗控件**用 weak 记住
+    /// （上一页释放后自动失效，下一页找到就替换），于是"只要见过一次 Info，之后每拍都还是 Info"。
     private static weak var artistBioControl: UIView?
-    /// ★ 2026-10-13（照 AM）：右上角那颗 `⋯` —— Spotify 的菜单按钮（`Components.UI.ContextMenuButton-<hash>`）
-    /// 与**我们自己画的那一颗**（`EntityPageHeaderButton` 直接复用：它本来就是"玻璃圆 + 字形 + 转发"）。
+    /// 右上角那颗 `⋯` —— Spotify 的菜单按钮（`Components.UI.ContextMenuButton-<hash>`）
+    /// 与**我们自己画的那一颗**（`EntityPageHeaderButton` 复用：玻璃圆 + 字形 + 转发）。
     private static var cachedMore: UIView?
     private static var pinnedMore: EntityPageHeaderButton?
-    /// ★ 2026-10-16：我们那颗 `⋯` 还在屏上、可 Spotify 的源已经没了 —— 只报一次（见 `pinMoreButton`）。
+    /// 我们那颗 `⋯` 还在屏上、可 Spotify 的源已经没了 —— 只报一次（见 `pinMoreButton`）。
     private static var didReportPinnedMoreMissing = false
-    /// ★ 2026-10-18：`⋯` 挂到 window 之后，只报一次几何/可交互性（用来判断"点不到"是位置还是层级）。
+    /// `⋯` 挂到 window 之后，只报一次几何/可交互性（用来判断"点不到"是位置还是层级）。
     private static var didReportPinnedMoreGeometry = false
-    /// ★ 2026-10-18：歌单页「在此页面上查找」那一行的容器/滚动几何，只报一次（治"进入后还能往上划"）。
+    /// 歌单页「在此页面上查找」那一行的容器/滚动几何，只报一次（治"进入后还能往上划"）。
     private static var didReportPlaylistMetrics = false
-    /// ★ 2026-10-18：艺人页 section / cell 的文字探针（找「最新发行 / 艺人之选」，不用转储视图树）。
+    /// 艺人页 section / cell 的文字探针（找「最新发行 / 艺人之选」，不用转储视图树）。
     private static weak var artistProbePage: UIView?
     private static var artistProbeReports = 0
     private static var artistProbeLastPass: CFAbsoluteTime = 0
     private static var artistProbeSignature = ""
 
-    /// 尾部按钮的兜底字形：**做成常量**（原来每一拍都 `UIImage(systemName:)` 造一张新的，
-    /// 而这一拍在折叠的每一帧都会走到 —— 与"字形只取一次"同一条纪律）。
+    /// 尾部按钮的兜底字形：**做成常量** —— 这一拍在折叠的每一帧都会走到，
+    /// 每拍 `UIImage(systemName:)` 造一张新的没有意义（与"字形只取一次"同一条纪律）。
     private static let plusGlyph = UIImage(systemName: "plus")
     private static let downloadGlyph = UIImage(systemName: "arrow.down")
 
@@ -427,17 +398,13 @@ enum EntityPageHeaderManager {
 
     /// 同 `find`，但**钻到真正能响应点击的那颗控件**上。
     ///
-    /// ★★ 2026-10-17（用户真机第二轮：「艺人页 / 歌单页的**点击播放**按键没反应」「艺人页左边那颗
-    /// 应该是 `i`…但现在是歌单的**随机播放**按钮，并且点击没反应」「已经关注了但没有绿色描边」）：
-    ///
     /// 按 id 找到的往往是 `ElementView<URL, Any, Any>` 那层**包装** —— 转发打在包装上就是没反应，
-    /// `isSelected` 也恒假（永远不变绿）。`firstControl` 的注释里逐字写着这件事，但当时**只有专辑页
-    /// 那条路**（`findFloating`）真的钻了进去，歌单页与艺人页的 play / shuffle / follow 全直接
-    /// 拿了包装层 ⇒ 用户看到的就是"日志说转发成功、界面一动不动"。
+    /// `isSelected` 也恒假（永远不变绿）。所以 play / shuffle / follow 这些都必须走这条，
+    /// 否则就是"日志说转发成功、界面一动不动"。
     ///
     /// 两条纪律：
-    ///   · **钻不到就退回原来那个**（宁可保持原样，也不要因为钻而把东西丢掉）；
-    ///   · 钻过一次**把钻到的那个写回缓存** —— 否则每拍都要在包装层里再走一趟子树。
+    /// · **钻不到就退回原来那个**（宁可保持原样，也不要因为钻而把东西丢掉）；
+    /// · 钻过一次**把钻到的那个写回缓存** —— 否则每拍都要在包装层里再走一趟子树。
     private static func findControl(_ identifier: String, in root: UIView, cache: inout UIView?) -> UIView? {
         let found = find(identifier, in: root, cache: &cache)
         guard let found, !(found is UIControl) else { return found }
@@ -455,10 +422,9 @@ enum EntityPageHeaderManager {
     }
 
     // MARK: - 入口
-
-    /// 从 `HeaderContentLayout` 的 `layoutSubviews` 调用 —— **快速滑动时每一帧一次**，
-    /// 所以整段用 `PerfMeter` 记着：50 / 200 / 800 拍各报一次"一次多少毫秒"，
-    /// 下一份日志就能直接回答"是不是我们拖慢的"，而不是靠猜。
+    //
+    // 从 `HeaderContentLayout` 的 `layoutSubviews` 调用 —— **快速滑动时每一帧一次**，
+    // 所以整段用 `PerfMeter` 记着（50 / 200 / 800 拍各报一次耗时），性能回归才有判据。
     static func apply(in layout: UIView) {
         meter.measure { applyOnce(in: layout) }
     }
@@ -478,7 +444,7 @@ enum EntityPageHeaderManager {
             return view.isKind(of: fullbleedClass)
         }
 
-        // ★ 2026-10-13（性能）：这两个原来是每帧各一次整棵子树搜索，走缓存（同上面那五个挂点）。
+        // 这两个原来是每帧各一次整棵子树搜索，走缓存（同上面那五个挂点）。
         let cover = find("Components.Header.UI.ArtworkImage", in: layout, cache: &cachedCover) ?? fullbleed
         var block: UIView
         if let cached = cachedBlock, cached.window != nil, cached.isDescendant(of: layout) {
@@ -490,17 +456,14 @@ enum EntityPageHeaderManager {
         }
         guard block.bounds.height > 20 else { return }
 
-        // ★★ 2026-10-31（照片 172-174「为什么会有两个同样的字」）：生成歌单（电台 / This Is /
-        //   音乐全纪录）用的是**满幅页头**（`HeaderFullbleedCentralView`）。那个容器里**不只装图**：
-        //   pw 的真机树（`trees/continuous/4.txt:1066`，复刻在它的 `harness/playlist/main.m:525`）里
-        //   它是「图（`…ArtworkWrapper` → `Encore.ImageView`）+ 一道 `GradientView` 渐变 +
-        //   装着 **45pt 白色大标题**的 `AutoLayoutStackView`」——也就是说 Spotify 自己在这个容器里
-        //   画了一遍大标题。我们原来把整支满幅图当"封面"跳过（见 `headerArtwork` 里那句
-        //   「只认真封面，fullbleed 不算」），于是它那行标题永远留了下来，和我们画的标题叠成两个。
-        //   ⇒ 这里先把容器里**那张图**认出来：留着图，同一容器里的渐变和大标题一起藏
-        //   （`concealInside` 本来就是"逐层往下藏、遇到图片绕开"）。
-        //   ⚠️ **认不出图就整支放过** —— 空名单会把满幅图一起藏掉，pw 的原话：
-        //   "leaving a black hero for good, since concealing does not come undone"。
+        // 生成歌单（电台 / This Is / 音乐全纪录）用的是**满幅页头**（`HeaderFullbleedCentralView`）。
+        // 那个容器里**不只装图**：`…ArtworkWrapper` → `Encore.ImageView`，一道 `GradientView` 渐变，
+        // 还有一个装着 **45pt 白色大标题**的 `AutoLayoutStackView` —— Spotify 自己在这个容器里
+        // 画了一遍大标题。把整支满幅图当"封面"跳过，那行标题就留下来，和我们画的叠成两个。
+        // ⇒ 先把容器里**那张图**认出来：留着图，同一容器里的渐变和大标题一起藏
+        // （`concealInside` 本来就是"逐层往下藏、遇到图片绕开"）。
+        // ⚠️ **认不出图就整支放过** —— 空名单会把满幅图一起藏掉，而 conceal 不会自己撤销，
+        // 那就是一整块永久黑屏。
         var fullbleedKept: [UIView] = []
         if let fullbleed {
             fullbleedKept = fullbleedArtwork(in: fullbleed)
@@ -509,10 +472,9 @@ enum EntityPageHeaderManager {
 
         var texts = headerTexts(block: block, headerRoot: headerRoot)
 
-        // ★★ 2026-10-31（电台 / This Is）：按宽度挑出来的"那一块"**不一定装着标题** ——
-        //   电台页头的排版是"头像 / 大标题 / 小圆点 / 创建者 / 按钮行"各成一格，
-        //   挑到按钮行或创建者那格时标题就是空的，于是整页什么都不做（上一轮"没效果"之一）。
-        //   ⇒ 标题读不到时，**换一块再读一次**：从字号最大的标签往上爬（`textBlockAround…`）。
+        // 按宽度挑出来的"那一块"**不一定装着标题** —— 电台页头的排版是"头像 / 大标题 / 小圆点 /
+        // 创建者 / 按钮行"各成一格，挑到按钮行或创建者那格时标题就是空的，于是整页什么都不做。
+        // ⇒ 标题读不到时**换一块再读一次**：从字号最大的标签往上爬（`textBlockAroundBiggestLabel`）。
         if texts.title.isEmpty,
            let retry = textBlockAroundBiggestLabel(in: layout, cover: cover, fullbleed: fullbleed),
            retry !== block {
@@ -542,19 +504,16 @@ enum EntityPageHeaderManager {
         }
 
         // 位置：**页面宽度、居中** —— Spotify 的 block 比页面窄（真机 386 / 402）。
-        // ★★ 2026-10-18：高度再加上"给封面让出来的那一段"（见 `coverDrop`）——
-        //    贴底排 ⇒ 文字整体下移，落在封面下面。
+        // 高度再加上"给封面让出来的那一段"（见 `coverDrop`）：贴底排 ⇒ 文字整体下移，
+        // 落在封面下面。
         //
-        // ★★ 2026-10-31（This Is / 电台）：文字块可能**比我们这一份还矮** ——
-        //    生成歌单的页头是插件拼的，标题那一块常常只有一百来 pt，而我们的内容
-        //    （标题 + 创建者 + 元信息 + 一行按钮 + 描述）要两百多。原来 frame 高度就取
-        //    block 高度 ⇒ 内容从 `y` 为负的位置往上溢出块外，被上层的封面 / 渐变盖住，
-        //    看起来就是"没生效"。
-        //    这里把 frame **向上**补到"内容刚好装下"：贴底排 ⇒ 内容的绝对位置**一个点都不变**，
-        //    只是我们的 bounds 变高（不会被裁剪、`room` 也够了）。块够高时这一句是空转。
+        // 文字块可能**比我们这一份还矮**（生成歌单的页头是插件拼的，标题那一块常常只有一百来 pt，
+        // 而我们的内容要两百多）。frame 高度若只取 block 高度，内容会从负 y 溢出块外、被上层的
+        // 封面 / 渐变盖住。这里把 frame **向上**补到"内容刚好装下"：贴底排 ⇒ 内容的绝对位置
+        // **一个点都不变**，只是 bounds 变高（不会被裁剪、`room` 也够了）。块够高时这一句是空转。
         //
-        //    ⚠️ **只在没有 `PL.Header` 的那条兜底路上开**：普通歌单页的折叠行为已经调好了
-        //    （块矮下去时内容跟着页头一起走），不要因为这一句把它的裁剪边界也改掉。
+        // ⚠️ **只在没有 `PL.Header` 的那条兜底路上开**：普通歌单页的折叠行为已经调好
+        // （块矮下去时内容跟着页头一起走），不要因为这一句把它的裁剪边界也改掉。
         let x = -block.convert(.zero, to: headerRoot).x
         let isPLHeader = headerRoot.accessibilityIdentifier == "PL.Header"
         var height = block.bounds.height + coverDrop(of: header)
@@ -563,7 +522,7 @@ enum EntityPageHeaderManager {
             height = max(height, needed)
         }
         // ⚠️ 普通歌单页 `y` **恒为 0**（原来就是这样；`coverDrop` 靠"加高"把文字往下推，
-        //    改成负 y 会把那一段抵消掉）。只有兜底那条路才允许向上长。
+        // 改成负 y 会把那一段抵消掉）。只有兜底那条路才允许向上长。
         let frame = CGRect(
             x: round(x),
             y: isPLHeader ? 0 : min(0, block.bounds.height - height),
@@ -572,22 +531,19 @@ enum EntityPageHeaderManager {
         )
         if header.frame != frame { header.frame = frame }
 
-        // ★ 2026-10-17（用户：「歌单页可能会有封面挡住自画字」）：z 序与几何两道保险。
+        // z 序与几何两道保险。
         raiseToTop(header, in: headerRoot, role: "playlist")
-        // ⚠️ 2026-10-22（用户：「歌单页往下滑再回去之后，控件压在列表上了」）：
-        //    `fullbleed` 是"找不到封面时的整幅兜底"（整块页头背景）—— 它的 frame 几乎盖满
-        //    整个页头，拿来量"封面压到文字"会得到几百 pt 的假重叠，把我们的内容一路往下推。
-        //    几何判据**只认真封面**：找不到就跳过这一支（宁可这一拍不动，也不要把页头撑出边界）。
-        // ★ 2026-10-31：满幅页头要量"图到哪儿了"，量的是**容器里那张图**（`fullbleedPicture`），
-        //   不是整支容器 —— 整支会把渐变和大标题也算进去 ⇒ 几百 pt 的假重叠，把我们的内容一路推下去。
-        //   认不出图时退回原来的"这一支不量"。
+        // `fullbleed` 是"找不到封面时的整幅兜底"（整块页头背景）—— 它的 frame 几乎盖满整个页头，
+        // 拿来量"封面压到文字"会得到几百 pt 的假重叠，把我们的内容一路往下推。
+        // 几何判据**只认真封面**：找不到就跳过这一支（宁可这一拍不动，也不要把页头撑出边界）。
+        // 满幅页头量的是**容器里那张图**（`fullbleedPicture`）而不是整支容器 —— 整支会把渐变和
+        // 大标题也算进去，同样是几百 pt 的假重叠。认不出图时退回"这一支不量"。
         probeCoverOverlap(
             cover: fullbleedPicture ?? (cover === fullbleed ? nil : cover),
             headerView: header,
             role: "playlist"
         )
-        // ★★ 2026-10-18（图片 152：藏掉那排 pill 之后**留下一条空白**）：下一轮要把这条空白折掉，
-        //    得先知道"空在哪两段之间"。这里把三段高度打进日志（每页一次）：
+        // 把三段高度打进日志（每页一次）：藏掉某一段之后留下的空白，靠它定位空在哪两段之间。
         logOnce(
             "playlistGeom_" + String(describing: ObjectIdentifier(headerRoot)),
             "playlist geometry — PL.Header \(Int(headerRoot.bounds.height.rounded()))pt,"
@@ -600,18 +556,16 @@ enum EntityPageHeaderManager {
         // Spotify 那一列整列藏掉（我们自己的那份除外）。幂等；Spotify 边加载边往里加东西，
         // 所以**每一拍都要重新走一遍**。
         //
-        // ★★ 2026-10-31（照片 170：「电台歌单是三个艺人头像，这个怎么处理」）：
-        //   电台页头的"封面"**不是一张图**，是**一行三个大圆头像**（`Encore.AvatarView`，
-        //   `dump-9.1.88.txt:16203`），而且和标题常常同在一个容器里。
-        //   原来这一句是"block 的每个孩子整支藏掉" ⇒ 头像跟着一起没了，那一块变成空白。
-        //   ⇒ 改成 `concealInside(keeping:)`：**逐层往下藏，遇到图片区就绕开**。
-        //   与正常歌单页的"方封面在 block 外面、不参与 conceal"是同一条语义 ——
-        //   电台页只是把那张封面换成了三个头像，位置关系一模一样（图在上、字在下）。
+        // 电台页头的"封面"**不是一张图**，是**一行三个大圆头像**（`Encore.AvatarView`），
+        // 而且和标题常常同在一个容器里 ⇒ 整支藏掉会把头像一起删掉、那一块变成空白。
+        // 所以走 `concealInside(keeping:)`：**逐层往下藏，遇到图片区就绕开**。
+        // 与正常歌单页的"方封面在 block 外面、不参与 conceal"是同一条语义 ——
+        // 电台页只是把那张封面换成了三个头像，位置关系一模一样（图在上、字在下）。
         let artwork = headerArtwork(in: layout, cover: cover, fullbleed: fullbleed)
-        // ★★ 2026-10-31：满幅页头里**同一支容器**装着图和 Spotify 的大标题 —— 只藏标题、留图。
-        //   名单 = 图（`fullbleedArtwork`）+ 上面那份"不许藏"的（头像可能就在这层里：
-        //   电台页的三个圆头像和标题常常同容器，见 `concealInside` 那段说明）。
-        //   名单为空时整支放过（否则满幅图会跟着消失，那是一条不可逆的黑屏）。
+        // 满幅页头里**同一支容器**装着图和 Spotify 的大标题 —— 只藏标题、留图。
+        // 名单 = 图（`fullbleedArtwork`）+ 上面那份"不许藏"的（头像可能就在这层里：
+        // 电台页的三个圆头像和标题常常同容器，见 `concealInside` 那段说明）。
+        // 名单为空时整支放过（否则满幅图会跟着消失，那是一条不可逆的黑屏）。
         if let fullbleed, !fullbleedKept.isEmpty {
             concealInside(fullbleed, keeping: fullbleedKept + artwork)
             logOnce(
@@ -625,11 +579,11 @@ enum EntityPageHeaderManager {
             concealInside(sub, keeping: artwork)
         }
 
-        // ★★ 2026-10-18（用户：「歌单页的那个**搜索歌单内歌曲框**还在」）：
-        //    「在此页面上查找」那颗搜索框在 **PL.Header 里、不在 block 里**（上游
-        //    `GlassPlaylist.x` 也是从 header 里找 `Components.Header.UI.Toolbar.SearchField`）
-        //    ⇒ 上面那轮 `block.subviews` 永远命不中。AM 页头接管后它不该留在页头，
-        //    这里单独藏一次（连它的圆底包装一起，走 `wrapperFor`）。
+        // （歌单页的那个**搜索歌单内歌曲框**还在）：
+        // 「在此页面上查找」那颗搜索框在 **PL.Header 里、不在 block 里**（上游
+        // `GlassPlaylist.x` 也是从 header 里找 `Components.Header.UI.Toolbar.SearchField`）
+        // ⇒ 上面那轮 `block.subviews` 永远命不中。AM 页头接管后它不该留在页头，
+        // 这里单独藏一次（连它的圆底包装一起，走 `wrapperFor`）。
         if let findField = find(
             "Components.Header.UI.Toolbar.SearchField",
             in: headerRoot,
@@ -645,17 +599,12 @@ enum EntityPageHeaderManager {
 
         header.update(title: texts.title, creator: texts.creator, length: texts.length, about: texts.about)
 
-        // ★ 五个挂点全部走缓存（pw 的 `SGRFindByIdentifier` 同一条纪律）：命中过就不再搜树。
-        // ★★ 2026-10-17：**这三颗都改成 `findControl`** —— 按 id 拿到的是包装层时，点了没反应
-        //    （用户真机第二轮报的"歌单页点击播放没反应"）。
+        // 五个挂点全部走缓存（同 `SGRFindByIdentifier` 的纪律）：命中过就不再搜树。
+        // 这三颗都走 `findControl` —— 按 id 拿到的是包装层时，点了没反应。
         let shuffle = findControl("Components.UI.ShuffleButton", in: block, cache: &cachedShuffle)
         let play = findControl("header-play-button", in: headerRoot, cache: &cachedPlay)
         let save = findControl("Components.UI.AddToButton", in: block, cache: &cachedTrailing)
-        // ★★ 2026-10-16（用户：「喜欢的歌曲**播放键右边那颗向下箭头点了没反应**」）：
-        //    ⚠️ 2026-10-17 把 shuffle / play / save 三颗都改成了 `findControl`（按 id 拿到的常常是
-        //    `ElementView<…>` 包装层，转发打在包装上 = 没反应，见本文件 :984 那段说明），
-        //    **唯独漏了 download 这一颗** —— 而"已点赞的歌曲"那一页**走的正是它**
-        //    （日志 85 逐字：`trailing download`）。补齐：同样先钻到真正的 `UIControl`。
+        // download 也必须钻到真正的 `UIControl`（同上面三颗）—— "已点赞的歌曲"那一页走的正是它。
         let download = save == nil
             ? eeveeFindView(block, identifier: "DownloadButton.Granular*").map { firstControl(in: $0) ?? $0 }
             : nil
@@ -665,7 +614,7 @@ enum EntityPageHeaderManager {
             trailing: save ?? download,
             trailingFallback: save != nil ? plusGlyph : downloadGlyph
         )
-        // ★ 2026-10-17：长按播放键 = 随机播放（见 `EntityPageHeaderPlay.feedLongPress`）。
+        // 长按播放键 = 随机播放（见 `EntityPageHeaderPlay.feedLongPress`）。
         header.updatePlayLongPress(shuffle)
         header.updateCreatorLink(
             find("Components.PlaylistHeader.collaboratorsButton", in: block, cache: &cachedCreatorLink)
@@ -674,7 +623,7 @@ enum EntityPageHeaderManager {
         // Play 在页头的**前景区**，不在 block 里 ⇒ 单独藏一次（它自己那一拍也会再补，见下面的 hook）。
         eeveeConceal(play)
 
-        // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
+        // 把 `⋯` 钉到右上角去（照 AM）。
         pinMoreButton(in: headerRoot)
 
         logOnce(
@@ -689,13 +638,12 @@ enum EntityPageHeaderManager {
 
     /// 歌单页 **VC 自己那一拍**（taurus 的 `PlaylistField.x` 也挂在同一个 VC 上）。
     ///
-    /// ★★ 2026-10-31（This Is / 电台）：主挂点是 `HeaderContentLayout` —— 只要这一版还用那个
-    /// 布局类，它就每帧都会来。但生成歌单的页头是**插件拼的**（`ThisIsArtistHeaderPluginImpl` /
-    /// `FullBleedHeaderLayoutPluginImpl`），万一某个版本把它们换成了另一套布局类，
-    /// 主挂点就**一次都不会来**，页头再怎么写兜底也没用（这正是上一轮"改了但没效果"最可能的位置）。
+    /// 主挂点是 `HeaderContentLayout`，只要这一版还用那个布局类就每帧都会来。但生成歌单的页头是
+    /// **插件拼的**（`ThisIsArtistHeaderPluginImpl` / `FullBleedHeaderLayoutPluginImpl`），万一某个
+    /// 版本换成另一套布局类，主挂点就**一次都不会来** ⇒ 需要一条不依赖布局类的入口。
     ///
-    /// 这条入口不依赖布局类：**页面本身布局过**这件事永远会发生。找不到
-    /// `HeaderContentLayout` 就什么都不做；找到了就交给同一条 `apply`。
+    /// **页面本身布局过**这件事永远会发生。找不到 `HeaderContentLayout` 就什么都不做；
+    /// 找到了就交给同一条 `apply`。
     ///
     /// 代价：一次 BFS（≤1500 节点），**0.5s 一次**、而且"我们那份已经挂在这一页里"就直接返回
     /// ⇒ 正常页面上它几乎不进 BFS。
@@ -715,53 +663,42 @@ enum EntityPageHeaderManager {
         apply(in: layout)
     }
 
-    /// `PlayButtonView` 自己的那一拍：页面刚打开时它会**晚一步**进前景区（pw 也遇到：角上先闪一下
-    /// Spotify 自己的绿盘）。只有它确实在歌单页头里才藏 —— 专辑页那种浮动 Play 不碰。
+    /// `PlayButtonView` 自己的那一拍：页面刚打开时它会**晚一步**进前景区（角上会先闪一下 Spotify
+    /// 自己的绿盘）。只有它确实在实体页（歌单 / 专辑）里才藏 —— 艺人页那种浮动 Play 不碰。
     static func concealPlayButtonIfNeeded(_ view: UIView) {
         guard isEnabled else { return }
         guard view.accessibilityIdentifier == "header-play-button" else { return }
-        // ★★ 2026-10-13：**两个页面都藏**（歌单页的头 `PL.Header` / 专辑页的 `CreativeWorkTemplateView`）
-        //   —— 两个页面我们都在行里镜像了这颗 Play。别的页面（艺人页那种浮动 Play）不碰。
+        // **两个页面都藏**（歌单页的 `PL.Header` / 专辑页的 `CreativeWorkTemplateView`）——
+        // 两边我们都在行里镜像了这颗 Play。别的页面（艺人页那种浮动 Play）不碰。
         guard isEntityPage(of: view) else { return }
-        // ★★ 2026-10-31（This Is / 电台）：`isEntityPage` 的判据放宽到"VC 类名是歌单页"之后，
-        //   还得再问一句**我们那份页头真的挂上去了没有** —— 生成歌单的页头是插件拼的，
-        //   万一这一页最后没画成（没标题 / 找不到文字块），把 Spotify 那颗藏掉就是"两个都没有"。
-        //   ⚠️ 三条路（歌单 / 专辑 / 艺人）都会写 `currentHeader`，所以这一句不会误伤那两页。
+        // 还得再问一句**我们那份页头真的挂上去了没有** —— 生成歌单的页头是插件拼的，万一这一页
+        // 最后没画成（没标题 / 找不到文字块），把 Spotify 那颗藏掉就是"两个都没有"。
+        // ⚠️ 三条路（歌单 / 专辑 / 艺人）都会写 `currentHeader`，所以这一句不会误伤那两页。
         guard let header = currentHeader, header.window != nil else { return }
         eeveeConceal(view)
     }
 
     // MARK: - 找页面 / 找那一块
-
-    /// 往上找歌单页头的容器。找不到就返回 nil —— **专辑页与别的页面因此完全不受影响**。
-    ///
-    /// ★★ 2026-10-31（用户：「Spotify 官方的 This Is xxx 和电台歌单还没做适配」）：
-    ///
-    /// 原来只认 `PL.Header`。可那个 id **只是"普通歌单页"那一种实现的标签** ——
-    /// 9.1.88 里官方生成的歌单（This Is / 电台）是由 **slot 插件**拼页头的，符号表里逐字有
-    /// `ListUXPlatformConsumers_ThisIsArtistHeaderPluginImpl28ThisIsHeaderCreatorElementUI`
-    /// （`dump-9.1.88.txt:15289`）、`PlaylistDefaultHeaderImpl23FullBleedPlaylistHeader`
-    /// （:15083）、`FullBleedHeaderLayoutPluginImpl21FullBleedHeaderLayout`（:15394）。
-    /// 这些页头的容器**不带 `PL.Header`** ⇒ 旧判据在 `guard` 那一行就 return，
-    /// 页头保持 Spotify 原样 —— 这就是"没做适配"的真正位置（不是画得不对，是根本没进来）。
-    ///
-    /// ## 参照 taurus 的做法（PolyForm Strict 1.0.0：**只读思路，不抄代码**）
-    ///
-    /// 它的 `SGRPlaylistHeaderOf` **从不看任何 accessibility id** ——
-    /// 沿 responder chain 找**类名含 `FreeTierPlaylist` 的 VC**，页头容器直接取那个 VC 的 view。
-    /// 于是"普通歌单 / This Is / 电台"走的是**同一条**路，一个分支都不用写。
-    ///
-    /// 9.1.88 上没有那个 header VC（见文件头那段：歌单头改由 `ListUXPlatform_FreeTierPlaylistImpl`
-    /// 的 slot/element 拼出来），对应的"页头自己那一层"是 header slot 的宿主
-    /// `…ElementCollectionViewCell`。所以这里按**同一顺序**退，每一档都只看类名：
-    ///
-    ///   ① `PL.Header` —— 普通歌单，**已经真机验证过**，原样保留；
-    ///   ② 最近的 `UICollectionViewCell` 祖先（header slot 的宿主）；
-    ///   ③ `HeaderContentLayout` 自己（挂点就是它，天然在手上）；
-    ///   ④ responder chain 上第一个 VC 的 view（taurus 那一档的等价物）。
-    ///
-    /// ⚠️ ②③④ **全部要先过 `isPlaylistPage`**（VC 类名含 `FreeTierPlaylist`）——
-    /// 专辑页 / 艺人页 / 首页的 `HeaderContentLayout` 因此一个字节都不动。
+    //
+    // 往上找歌单页头的容器。找不到就返回 nil —— **专辑页与别的页面因此完全不受影响**。
+    //
+    // `PL.Header` 只是"普通歌单页"那一种实现的标签。9.1.88 里官方生成的歌单（This Is / 电台）
+    // 由 **slot 插件**拼页头（`ThisIsArtistHeaderPluginImpl`、`PlaylistDefaultHeaderImpl` /
+    // `FullBleedHeaderLayoutPluginImpl`），容器**不带 `PL.Header`** ⇒ 只认 id 的话在 `guard`
+    // 那一行就 return，页头保持 Spotify 原样（不是画得不对，是根本没进来）。
+    //
+    // 参照 taurus 的 `SGRPlaylistHeaderOf`：**从不看 accessibility id**，沿 responder chain 找
+    // 类名含 `FreeTierPlaylist` 的 VC，页头容器直接取那个 VC 的 view ⇒ 三种歌单走同一条路。
+    // 9.1.88 上没有那个 header VC，"页头自己那一层"是 header slot 的宿主
+    // `…ElementCollectionViewCell`。所以按同一顺序退，每一档都只看类名：
+    //
+    // ① `PL.Header` —— 普通歌单，原样保留；
+    // ② 最近的 `UICollectionViewCell` 祖先（header slot 的宿主）；
+    // ③ `HeaderContentLayout` 自己（挂点就是它，天然在手上）；
+    // ④ responder chain 上第一个 VC 的 view（taurus 那一档的等价物）。
+    //
+    // ⚠️ ②③④ **全部要先过 `isPlaylistPage`**（VC 类名含 `FreeTierPlaylist`）——
+    // 专辑页 / 艺人页 / 首页的 `HeaderContentLayout` 因此一个字节都不动。
     private static func playlistHeaderRoot(of view: UIView) -> UIView? {
         if let root = ancestor(of: view, identifier: "PL.Header") { return root }
         guard isPlaylistPage(of: view) else { return nil }
@@ -811,14 +748,13 @@ enum EntityPageHeaderManager {
 
     /// 这一页是不是**歌单页**（普通 / This Is / 电台都算）。
     ///
-    /// taurus 的判据：responder chain 上**第一个 VC** 的类名含 `FreeTierPlaylist`
-    /// （`SGRPlaylistHeaderOf`）。这里多认一条 `PL.Header` 祖先 —— 普通歌单页那条路
-    /// 已经验证过，不让它因为 VC 换名而失效。
+    /// taurus 的判据：responder chain 上**第一个 VC** 的类名含 `FreeTierPlaylist`。这里多认一条
+    /// `PL.Header` 祖先 —— 普通歌单页那条路已经验证过，不让它因为 VC 换名而失效。
     ///
     /// ⚠️ 只看类名、不看 id：`ThisIsArtistHeaderPluginImpl` 那类插件页头**没有** id 可看。
     /// ⚠️ 判据**故意只收 `FreeTierPlaylist`**：这一条同时管着"要不要藏 Spotify 自己那颗 Play"
-    ///    （`concealPlayButtonIfNeeded`）—— 收得太宽（比如把 `Station` 也算进来），
-    ///    万一那页根本没有我们的页头，就会变成"按钮被藏了、我们那颗又没画"。
+    /// （`concealPlayButtonIfNeeded`）—— 收得太宽（比如把 `Station` 也算进来），
+    /// 万一那页根本没有我们的页头，就会变成"按钮被藏了、我们那颗又没画"。
     private static func isPlaylistPage(of view: UIView) -> Bool {
         if ancestor(of: view, identifier: "PL.Header") != nil { return true }
         var responder: UIResponder? = view
@@ -847,8 +783,7 @@ enum EntityPageHeaderManager {
     }
 
     /// 这是不是**我们接管的那两种页面**里的视图：歌单页判 `PL.Header`（以及生成歌单那条类名判据），
-    /// 专辑页判页面 root 的 id 或它的头容器 —— 都在祖先链上，走一次就够
-    /// （pw 的 `SGRPlaylistHeaderOf` / `SGRAlbumPageOf` 也是各走一次祖先链）。
+    /// 专辑页判页面 root 的 id 或它的头容器 —— 都在祖先链上，走一次就够。
     private static func isEntityPage(of view: UIView) -> Bool {
         if isPlaylistPage(of: view) { return true }
         var node: UIView? = view
@@ -866,17 +801,14 @@ enum EntityPageHeaderManager {
     }
 
     // MARK: - 页头的 z 序与几何（"封面挡住自画的字"那两类）
-
-    /// 把承载我们文字的 view **连它到 `root` 的每一层**都提到最上（祖先链提升）。
-    ///
-    /// ★★ 2026-10-17（用户：「歌单/专辑页**可能会有封面挡住自画字**的情况。怎么办」）：
-    ///
-    /// * 只在**我们自己这一层** `bringSubviewToFront` 不够 —— 封面 / 渐变的宿主常常是
-    ///   "我们所在那一层的**兄弟**"，甚至更高一层（歌单页：我们挂在 `block` 里，封面是
-    ///   `PL.Header` 的另一个子视图；专辑页：封面是 `CreativeWorkHeader` 的另一个子视图）。
-    /// * Spotify 每次重建页头都会把这些层**重新插到我们上面**（它的布局方块不认我们的顺序）
-    ///   ⇒ 每拍沿祖先链逐层提一次，幂等、最多 8 层。
-    /// * **第一次真的发现"有人在我们上面"时记一行日志**（类名）—— 用户这句"可能"从此有判据。
+    //
+    // 把承载我们文字的 view **连它到 `root` 的每一层**都提到最上（祖先链提升）。
+    //
+    // 只在**我们自己这一层** `bringSubviewToFront` 不够 —— 封面 / 渐变的宿主常常是"我们所在
+    // 那一层的**兄弟**"，甚至更高一层（歌单页：我们挂在 `block` 里，封面是 `PL.Header` 的另一个
+    // 子视图；专辑页：封面是 `CreativeWorkHeader` 的另一个子视图）。
+    // Spotify 每次重建页头都会把这些层**重新插到我们上面**（它的布局方块不认我们的顺序）
+    // ⇒ 每拍沿祖先链逐层提一次，幂等、最多 8 层。第一次发现"有人在我们上面"时记一行类名。
     private static func raiseToTop(_ view: UIView, in root: UIView, role: String) {
         var node: UIView? = view
         var levels = 0
@@ -902,12 +834,11 @@ enum EntityPageHeaderManager {
         )
     }
 
-    /// 文字压到封面时"我们要往下让多少"（存在**我们那一份**上，只增不减）。
+    /// 文字压到封面时"我们要往下让多少"（存在**我们那一份**上）。
     ///
-    /// ★★ 2026-10-18（图片 152：歌单页那个自画标题**压在封面下缘**上）：我们这一份是
-    /// **贴底排**的（`y = bounds.height - contentBottom - contentHeight`）⇒
+    /// 我们这一份是**贴底排**的（`y = bounds.height - contentBottom - contentHeight`）⇒
     /// **只把它自己加高**（不碰 Spotify 的任何视图）就能让文字整体下移，直到落在封面下面。
-    /// 只增不减 ⇒ 不会每拍来回抖（下移之后测到的 overlap 归零，但记录不变）。
+    /// 值由 `probeCoverOverlap` 维护：自然位置不再重叠时清回 0，不会累积。
     private static var coverDropKey: UInt8 = 0
     private static let coverDropLimit: CGFloat = 140
 
@@ -917,25 +848,21 @@ enum EntityPageHeaderManager {
         return CGFloat(value)
     }
 
-    /// "封面压到我们的文字带了吗" —— 每页第一次命中记一行（两边的帧都换算到 `headerView` 里）。
+    /// "封面压到我们的文字带了吗" —— 命中时记一行（两边的帧都换算到 `headerView` 里）。
     ///
-    /// ★ 2026-10-17：这是用户那句"**可能会挡住**"的判据。z 序已由 `raiseToTop` 保证我们在最上，
-    /// 所以这里捕的是**几何上的打架**（封面下缘伸进文字带 ⇒ 字压在封面上、或封面的阴影糊住字）。
+    /// z 序已由 `raiseToTop` 保证我们在最上，所以这里捕的是**几何上的打架**（封面下缘伸进
+    /// 文字带 ⇒ 字压在封面上、或封面的阴影糊住字）。
     ///
-    /// ★★ 2026-10-22（用户报"歌单页滑一下再回去，控件压到列表上"）：上一版是**只增不减**
-    ///    且拿**已经下移过**的 `textTop` 去量 —— 滚动时封面帧一变就会再加一截，回来之后
-    ///    累加值留在那儿，内容被推出页头、压在列表上。
-    ///    现在两件事一起改：
-    ///    · 用 `textTop - currentDrop`（**没加过 drop 的自然位置**）量 ⇒ 同一个封面位置永远
-    ///      得到同一个目标值，不会累加；
-    ///    · 没有重叠时把 drop **清回 0**（`fullbleed` 那种假重叠已经被调用方挡掉，
-    ///      这里清的是"滚动过程中量到的、现在已经不成立的"那一截）。
+    /// 两条约束，缺一个就会把内容推出页头：
+    /// · 用 `textTop - currentDrop`（**没加过 drop 的自然位置**）量 ⇒ 同一个封面位置永远得到
+    /// 同一个目标值，不会累加；
+    /// · 没有重叠时把 drop **清回 0**（`fullbleed` 那种假重叠已由调用方挡掉，这里清的是
+    /// "滚动过程中量到、现在已经不成立"的那一截）。
     private static func probeCoverOverlap(cover: UIView?, headerView: EntityPageHeaderView, role: String) {
         guard let cover, headerView.bounds.height > 1, headerView.window != nil else { return }
-        // ★★ 2026-10-23（用户：「专辑页自画按键在上下划的时候有抖动」）：
-        //    只在页头高度**稳定**的那一拍量。滚动中页头每帧都在变高/变矮，而这段代码会反过来
-        //    改页头高度（`+ coverDrop`）⇒ 量一次、改一次、下一页又量到不同的值 ⇒ 按钮每帧上下跳。
-        //    中途保持上一次的 drop，停下之后这一拍再收敛。
+        // 只在页头高度**稳定**的那一拍量。滚动中页头每帧都在变高/变矮，而这段代码会反过来改
+        // 页头高度（`+ coverDrop`）⇒ 量一次、改一次、下一拍又量到不同的值 ⇒ 按钮每帧上下跳。
+        // 中途保持上一次的 drop，停下之后这一拍再收敛。
         let currentHeight = Double(headerView.bounds.height)
         let lastHeight = (objc_getAssociatedObject(headerView, &coverProbeHeightKey) as? NSNumber)?.doubleValue
         objc_setAssociatedObject(
@@ -946,9 +873,8 @@ enum EntityPageHeaderManager {
         )
         if let lastHeight, abs(currentHeight - lastHeight) > 1 { return }
 
-        // ★★ 2026-10-19（日志 555 的现场：歌单页 `text top -1pt`）：`textTop` 用 -1 表示"没有标题"，
-        //    但**标题上沿正好压在本视图顶边**时也是 -1 ⇒ 原来那句 `guard textTop > 0` 会把这种页
-        //    整段跳过（"把字挪出封面"从来没跑过）。现在先问 `hasTitle`，再把 -1 夹成 0 继续量。
+        // `textTop` 用 -1 表示"没有标题"，但**标题上沿正好压在本视图顶边**时也是 -1 ⇒
+        // 不能拿 `textTop > 0` 当判据（那种页会被整段跳过）。先问 `hasTitle`，再把 -1 夹成 0 继续量。
         guard headerView.hasTitle else { return }
         let current = coverDrop(of: headerView)
         let naturalTextTop = max(0, headerView.textTop - current)
@@ -970,7 +896,7 @@ enum EntityPageHeaderManager {
         }
         let overlap = frame.maxY - naturalTextTop
         let wanted = min(coverDropLimit, max(0, overlap))
-        // ★★ 2026-10-23：2pt 的滞回 —— 1pt 级的变化不算"需要挪"（那几个 pt 正是抖动的来源）。
+        // 2pt 的滞回 —— 1pt 级的变化不算"需要挪"（那几个 pt 正是抖动的来源）。
         guard abs(wanted - current) > 2 else { return }
         let coverBottom = Int(frame.maxY.rounded())
         let textLine = Int(naturalTextTop.rounded())
@@ -980,8 +906,7 @@ enum EntityPageHeaderManager {
                 + " — they overlap; moving our block down to \(Int(wanted.rounded()))pt"
         )
 
-        // ★★ 2026-10-18：**不再只是"记一行日志"** —— 用户要的是字别压在封面上（图片 152）。
-        //   艺人页的"字压图"是**故意**的（AM 就是那样）⇒ 只对专辑 / 歌单页动手。
+        // 艺人页的"字压图"是**故意**的（AM 就是那样）⇒ 只对专辑 / 歌单页动手。
         guard role != "artist" else { return }
         objc_setAssociatedObject(
             headerView,
@@ -998,21 +923,19 @@ enum EntityPageHeaderManager {
     }
 
     // MARK: - 专辑页（**另一条路**）
-
-    /// 专辑页那一拍。**与歌单页不是同一条路** —— 两边的头结构不同，pw 也是分开的两份
-    /// （`Album/AlbumHeader.x` 与 `Playlist/PlaylistHeader.x`）：
-    ///
-    /// ```
-    /// 歌单页（PL.Header）            封面 + **一个** block：标题 / 描述 / 创建者 / 长度 / 操作行
-    /// 专辑页（CreativeWorkHeader）   顶部 group（封面 + 标题 + 艺人）+ 底部 group（kind·日期 + 操作行）
-    /// ```
-    ///
-    /// ⇒ 歌单页那个 `blockIn`（按宽度挑一块）在专辑页会挑到**底部 group**（那里没有标题），
-    /// 所以这里**不挑块**：文字按**明确的 id** 读（`TitleRow` / `ParentRow` / `MetadataRow` ——
-    /// pw 的 `AlbumHeader.x` 用的就是这三个），我们那一份铺在**整个头**上
-    /// （pw 逐字：`setFrame(info, header.bounds)`）。
-    ///
-    /// 挂点是 `CreativeWorkTemplateView.layoutSubviews`（pw 的 `AlbumHeader.x` 也挂这里）。
+    //
+    // 专辑页那一拍。**与歌单页不是同一条路** —— 两边的头结构不同：
+    //
+    // ```
+    // 歌单页（PL.Header）            封面 + **一个** block：标题 / 描述 / 创建者 / 长度 / 操作行
+    // 专辑页（CreativeWorkHeader）   顶部 group（封面 + 标题 + 艺人）+ 底部 group（kind·日期 + 操作行）
+    // ```
+    //
+    // ⇒ 歌单页那个 `blockIn`（按宽度挑一块）在专辑页会挑到**底部 group**（那里没有标题），
+    // 所以这里**不挑块**：文字按**明确的 id** 读（`TitleRow` / `ParentRow` / `MetadataRow`），
+    // 我们那一份铺在**整个头**上（`setFrame(info, header.bounds)`）。
+    //
+    // 挂点是 `CreativeWorkTemplateView.layoutSubviews`。
     static func applyToAlbumPage(_ page: UIView) {
         guard isEnabled, !applying else { return }
         guard page.bounds.width > 120, page.bounds.height > 200 else { return }
@@ -1036,8 +959,8 @@ enum EntityPageHeaderManager {
             in: header,
             cache: &cachedAlbumCover
         )
-        // ★★ 2026-10-24：封面到了 ⇒ 把"当时因为它还没建出来而被整支藏掉"的分支放回来
-        //（先于下面的 `concealAlbumChrome`，那一趟会递归进这一支、只藏非封面的兄弟）。
+        // 封面到了 ⇒ 把"当时因为它还没建出来而被整支藏掉"的分支放回来
+        // （先于下面的 `concealAlbumChrome`，那一趟会递归进这一支、只藏非封面的兄弟）。
         if let cover {
             revealAlbumBranches(containing: cover)
             objc_setAssociatedObject(page, &albumCoverRetryKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -1068,7 +991,7 @@ enum EntityPageHeaderManager {
         }
         concealAlbumChrome(in: header, avoiding: cover, skipping: headerView)
 
-        // ★★ 2026-10-18：高度再加上"给封面让出来的那一段"（见 `coverDrop`）。
+        // 高度再加上"给封面让出来的那一段"（见 `coverDrop`）。
         let albumFrame = CGRect(
             x: 0,
             y: 0,
@@ -1077,19 +1000,18 @@ enum EntityPageHeaderManager {
         )
         if headerView.frame != albumFrame { headerView.frame = albumFrame }
 
-        // ★ 2026-10-17（用户：「专辑页可能会有封面挡住自画字」）：z 序与几何两道保险。
+        // z 序与几何两道保险。
         raiseToTop(headerView, in: header, role: "album")
         probeCoverOverlap(cover: cover, headerView: headerView, role: "album")
 
         headerView.update(title: texts.title, creator: texts.creator, length: texts.length, about: "")
 
-        // Play 与 Shuffle 在**页面上**（浮在右上角，不在头里）—— pw 的 `floatingIn` 逐字：
-        // 只搜页面的直接子视图、且宽度 ≤120 的那些（头 / wash / 列表都是整页宽，走进去等于每拍走整棵树）。
+        // Play 与 Shuffle 在**页面上**（浮在右上角，不在头里）：只搜页面的直接子视图、且宽度 ≤120
+        // 的那些（头 / wash / 列表都是整页宽，走进去等于每拍走整棵树）。
         let play = findFloating("header-play-button", in: page, cache: &cachedPlay)
         let shuffle = findFloating("Components.UI.ShuffleButton", in: page, cache: &cachedShuffle)
         let add = findControl("Components.UI.AddToButton", in: header, cache: &cachedTrailing)
-        // ★★ 2026-10-16：与歌单页那条同一个漏点 —— download 也要先钻到真正的 `UIControl`
-        //    （见上面 `applyToPlaylistPage` 里那段说明）。
+        // download 也要先钻到真正的 `UIControl`（同上面歌单页那三颗）。
         let download = add == nil
             ? eeveeFindView(header, identifier: "DownloadButton.Granular*").map { firstControl(in: $0) ?? $0 }
             : nil
@@ -1099,24 +1021,22 @@ enum EntityPageHeaderManager {
             trailing: add ?? download,
             trailingFallback: add != nil ? plusGlyph : downloadGlyph
         )
-        // ★ 2026-10-17：长按播放键 = 随机播放（见 `EntityPageHeaderPlay.feedLongPress`）。
+        // 长按播放键 = 随机播放（见 `EntityPageHeaderPlay.feedLongPress`）。
         headerView.updatePlayLongPress(shuffle)
-        // 专辑页的"创建者"就是艺人，点它开艺人页 —— pw 逐字：`[info showCreatorLink:parent]`。
+        // 专辑页的"创建者"就是艺人，点它开艺人页。
         headerView.updateCreatorLink(
             find("CreativeWorkPlatform.Components.UI.ParentRow", in: header, cache: &cachedAlbumParentRow)
         )
 
-        // ★ 2026-10-13（用户：「这播放旁边的图标是重合的还没修吗」）：三颗**都藏"包着它的最外层等尺寸
-        //   视图"**（pw 的 `wrapperFor`）—— 见那个函数的说明。另外把 shuffle 也一起藏：我们那一行里
-        //   本来就有它（左边那颗），Spotify 原生那颗**一直没被藏过**，与我们的叠在同一格。
-        //   顺便把 trailing 的源与字形打进日志：用户说右边那颗"看起来像随机播放的图标"，
-        //   这一行能直接分辨是"取错了源"还是"取错了字形"。
+        // 三颗**都藏"包着它的最外层等尺寸视图"**（`wrapperFor`）—— 见那个函数的说明。
+        // shuffle 也要藏：我们那一行里本来就有它，Spotify 原生那颗与我们的叠在同一格。
+        // trailing 的源与字形一并进日志，能分辨是"取错了源"还是"取错了字形"。
         eeveeConceal(wrapperFor(play, in: page))
         eeveeConceal(wrapperFor(shuffle, in: page))
         eeveeConceal(wrapperFor(add, in: header))
         eeveeConceal(wrapperFor(download, in: header))
 
-        // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
+        // 把 `⋯` 钉到右上角去（照 AM）。
         pinMoreButton(in: header)
         logOnce(
             "trailingSource",
@@ -1126,7 +1046,7 @@ enum EntityPageHeaderManager {
                 + " shuffle \(shuffle == nil ? "missing" : "found")"
         )
 
-        // 那行 kind·日期是 collection view 的 **cell**，晚一拍才建出来（pw 也等：最多 6 次、每次 0.25s）。
+        // 那行 kind·日期是 collection view 的 **cell**，晚一拍才建出来（最多等 6 次、每次 0.25s）。
         if texts.length.isEmpty {
             let tries = (objc_getAssociatedObject(header, &albumRetryKey) as? NSNumber)?.intValue ?? 0
             if tries < 6 {
@@ -1154,58 +1074,49 @@ enum EntityPageHeaderManager {
     }
 
     // MARK: - 艺人页（**第三条路**）
-
-    /// ★ 2026-10-13（用户：「做艺人页，看起来像 Apple Music，或者完全一样，要求优雅」）。
-    /// 照 pw 的 `Artist/ArtistHeader.x`，它开头逐字写着要的东西：
-    ///
-    /// > The photo runs full bleed across the top of the page and dissolves into the page's colour;
-    /// > the name and the monthly listeners are centred on the bottom of that dissolve; and under them
-    /// > one row -- shuffle, a white Play capsule, and Follow.
-    ///
-    /// 页面判据是 **`creator-page`**（pw 的 `ArtistField.x` 里 `kPageIdentifier` 就是这个字符串），
-    /// 页头容器是 `TemplateKit` 的 **`HeaderContainer`** —— 那个容器**身上没有 accessibility id**，
-    /// 只能按类名认（pw 的 `containerOf` 也是这么找的）。
-    ///
-    /// ⚠️ 两个**绝不能动**的地方，都是 pw 用真机崩溃换来的：
-    ///   · 这里**只用空 mask 藏东西、绝不设 hidden** —— 页头在 `OverflowStackView` 里，
-    ///     一行里最"高"的视图被 hidden 时它会 force-unwrap nil 并 trap（见 `eeveeBlank`）；
-    ///   · **不要强制** `…context_menu_in_navigation_bar_enabled_artist` 那个 flag（同一个 trap）。
-    /// ## 真机树（**我们自己打的**，2026-09-30，`readlog` 里那份 `creator-page` dump）
-    ///
-    /// 这条路**不是照 pw 的注释猜的**：下面每一行都来自我们自己日志里的实测（`[Tree] #12` 那一份），
-    /// pw 的 `ArtistHeader.x` 只在少数地方与它不同，**以我们这份为准**：
-    ///
-    /// ```
-    /// 14.TemplateView@0,0,414,896,id=creator-page
-    /// 15.UIView@0,0,414,896,id=CreativeWorkPlatform.Tab      ← 和专辑页同一个容器（要清底）
-    /// 16.UIScrollView…id=PCFFTabLayoutViewController.containerScrollView
-    /// 17.UIStackView@0,0,414,1416
-    /// 18.HeaderContainer@0,0,414,520                        ← hero 宿主（420 与 584 两档都出现过）
-    /// 19.ElementView<URL,Any,Any>@0,420,414,100
-    /// 20.ImageHeaderView@0,0,414,100
-    /// 22.ShadowContainer@0,0,414,414,alpha=-0.15,id=Components.Header.UI.ArtworkImage  ← 照片，全宽 414
-    /// 22.GradientView@0,-100,414,200                        ← 照片上那层渐变（同样要藏）
-    /// 22.AdaptiveTitle@0,-154,382,212,id=Encore.AdaptiveTitle   ← 名字
-    /// 21.UIStackView@16,-16,107,24,id=ImageHeaderView.VerifiedBadge
-    /// 23.OBJC_ONLY_Label@0,0,326,18,id=Components.Header.UI.Metadata  ← "xx 月听众"
-    /// 22.OverflowStackView@0,0,290,48                       ← ⚠️ 就是它（在里面 hidden 会 trap）
-    /// 23.ElementView<URL,Any,Any>@0,4,58,40                 ← Follow（`Encore.Button.Secondary`，"关注"）
-    /// 24.EncoreButton@0,0,48,48,id=Components.UI.ContextMenuButton-…
-    /// 22.ElementView<URL,Any,Any>@338,0,68,48               ← play（`header-play-button`）
-    /// 22.HeaderNavigationBar@0,0,414,100 > 23.GradientView@0,0,414,100
-    /// 18.UIView@0,520,414,896,id=PCFFTabLayoutViewController.tabsViewAccessibilityID
-    /// 19.UIView@0,0,414,44,id=Components.UI.TabsSectionHeading  ← Music / Video / Merch
-    /// ```
-    ///
-    /// 与 pw 注释**不同**、以我们实测为准的三处：`HeaderContainer` 是 **520 / 584pt**（pw 写 568）；
-    /// 照片是 **414×414 全宽**（pw 的树里 402 宽）；顺序上 Follow 那一行在 `OverflowStackView` 里 ——
-    /// 也就是"藏 header 里的东西不能碰 hidden"这条**在我们机器上同样成立**，不是 pw 的机器特异。
+    //
+    // 艺人页页头：照片满幅铺到页面顶部并向页面底色渐隐，名字与月听众居中落在渐隐底部，
+    // 下面一行 shuffle / 白色 Play 胶囊 / Follow（照 Apple Music）。
+    //
+    // 页面判据是 **`creator-page`**；页头容器是 `TemplateKit` 的 **`HeaderContainer`** ——
+    // 那个容器**身上没有 accessibility id**，只能按类名认。
+    //
+    // ⚠️ 两个**绝不能动**的地方：
+    // · 这里**只用空 mask 藏东西、绝不设 hidden** —— 页头在 `OverflowStackView` 里，
+    // 一行里最"高"的视图被 hidden 时它会 force-unwrap nil 并 trap（见 `eeveeBlank`）；
+    // · **不要强制** `…context_menu_in_navigation_bar_enabled_artist` 那个 flag（同一个 trap）。
+    //
+    // 真机树（`creator-page` dump）：
+    //
+    // ```
+    // 14.TemplateView@0,0,414,896,id=creator-page
+    // 15.UIView@0,0,414,896,id=CreativeWorkPlatform.Tab      ← 和专辑页同一个容器（要清底）
+    // 16.UIScrollView…id=PCFFTabLayoutViewController.containerScrollView
+    // 17.UIStackView@0,0,414,1416
+    // 18.HeaderContainer@0,0,414,520                        ← hero 宿主（420 与 584 两档都出现过）
+    // 19.ElementView<URL,Any,Any>@0,420,414,100
+    // 20.ImageHeaderView@0,0,414,100
+    // 22.ShadowContainer@0,0,414,414,alpha=-0.15,id=Components.Header.UI.ArtworkImage  ← 照片，全宽 414
+    // 22.GradientView@0,-100,414,200                        ← 照片上那层渐变（同样要藏）
+    // 22.AdaptiveTitle@0,-154,382,212,id=Encore.AdaptiveTitle   ← 名字
+    // 21.UIStackView@16,-16,107,24,id=ImageHeaderView.VerifiedBadge
+    // 23.OBJC_ONLY_Label@0,0,326,18,id=Components.Header.UI.Metadata  ← "xx 月听众"
+    // 22.OverflowStackView@0,0,290,48                       ← ⚠️ 就是它（在里面 hidden 会 trap）
+    // 23.ElementView<URL,Any,Any>@0,4,58,40                 ← Follow（`Encore.Button.Secondary`，"关注"）
+    // 24.EncoreButton@0,0,48,48,id=Components.UI.ContextMenuButton-…
+    // 22.ElementView<URL,Any,Any>@338,0,68,48               ← play（`header-play-button`）
+    // 22.HeaderNavigationBar@0,0,414,100 > 23.GradientView@0,0,414,100
+    // 18.UIView@0,520,414,896,id=PCFFTabLayoutViewController.tabsViewAccessibilityID
+    // 19.UIView@0,0,414,44,id=Components.UI.TabsSectionHeading  ← Music / Video / Merch
+    // ```
+    //
+    // 注意 `HeaderContainer` 是 **520 / 584pt**、照片是 **414×414 全宽**；Follow 那一行在
+    // `OverflowStackView` 里 —— 也就是"藏 header 里的东西不能碰 hidden"这条在本机同样成立。
     static func applyToArtistPage(_ page: UIView) {
         guard isEnabled, !applying else { return }
         guard page.accessibilityIdentifier == "creator-page" else {
-            // ★ 2026-10-18（图片 142：进页面后仍是原生左对齐页头 + 黑底）：先分清"这一页
-            //    不是艺人页"与"它是艺人页、但根 id 不叫 creator-page"。后者是我们漏接管，
-            //    下一份日志里这一行会直接给出真实 id。
+            // 先分清"这一页不是艺人页"与"它是艺人页、但根 id 不叫 creator-page"。
+            // 后者是我们漏接管，这一行会给出真实 id。
             if eeveeFindView(
                 page,
                 identifier: "Curation.FollowButtonElementKit.FollowButton",
@@ -1225,15 +1136,14 @@ enum EntityPageHeaderManager {
         applying = true
         defer { applying = false }
 
-        // ★ 2026-10-18：标签栏从"无条件藏"变成一颗开关（默认仍是藏，见 `UserDefaults.artistHideTabs`）。
+        // 标签栏是一颗开关（默认藏，见 `UserDefaults.artistHideTabs`）。
         if UserDefaults.artistHideTabs {
             hideArtistTabStrip(in: page)
         } else {
             restoreArtistStrip()
         }
 
-        // 名字：pw 的树里那是 `UIView {16, 334}` 里的 `Encore.AdaptiveTitle`（45pt）；
-        // 拿不到就退回"字号最大的那个标签"（与歌单页同一条兜底）。
+        // 名字：`Encore.AdaptiveTitle`（45pt）；拿不到就退回"字号最大的那个标签"（与歌单页同一条兜底）。
         var name = ""
         if let title = find("Encore.AdaptiveTitle", in: header, cache: &cachedArtistName),
            let label = firstLabel(in: title, skipping: nil) {
@@ -1247,25 +1157,25 @@ enum EntityPageHeaderManager {
             return
         }
 
-        // ★★ 2026-10-18 第三轮：记下艺人名（`i` 那张"我们自己的艺人介绍"拿它当标题）。
+        // 记下艺人名（`i` 那张"我们自己的艺人介绍"拿它当标题）。
         //
-        // 2026-10-18 晚：**不再安排"扫列表读简介"** —— 那一套（延后 1.5s 读一次 + 每 1.5s 补读、
-        // 最多 10 次）试过几轮都不成立：那一段是懒加载的，不滚到就不建，零滚动读到的永远是空。
-        // 已整体删除；用户侧改成"先滑到页面底部、再回来点 i"（占位符里就这么写）。
-        // ★★ 2026-10-22（Web API 那条线）：**换了一位艺人 ⇒ 上一页记下的专辑目标立刻作废**。
-        //   否则点新页面上的卡片会去打开**上一位艺人**的专辑 —— 那是这张卡最不能犯的错。
+        // **换了一位艺人 ⇒ 上一页记下的专辑目标立刻作废**：否则点新页面上的卡片会去打开
+        // **上一位艺人**的专辑 —— 那是这张卡最不能犯的错。
+        //
+        // 也不要指望"扫列表读简介"（延后读 + 定时补读）：那一段是懒加载的，不滚到就不建，
+        // 零滚动读到的永远是空。
         if !artistNameStorage.isEmpty, artistNameStorage != name {
             clearWebReleaseURI(reason: "the page moved on to another artist")
         }
         artistNameStorage = name
 
-        // 副标题：`Components.Header.UI.Metadata` —— 树里是 "58,4M monthly listeners"。
+        // 副标题：`Components.Header.UI.Metadata`（形如 "58,4M monthly listeners"）。
         var meta = ""
         if let metadata = find("Components.Header.UI.Metadata*", in: header, cache: &cachedArtistMeta) {
             meta = metadataLine(metadata)
         }
 
-        // 我们那一份：铺在**整个页头容器**上（pw：`setFrame(info, header.bounds)`，内容贴底）。
+        // 我们那一份：铺在**整个页头容器**上（`setFrame(info, header.bounds)`，内容贴底）。
         let headerView: EntityPageHeaderView
         if let existing = objc_getAssociatedObject(header, &entityPageHeaderKey) as? EntityPageHeaderView {
             headerView = existing
@@ -1280,51 +1190,45 @@ enum EntityPageHeaderManager {
         }
         if headerView.frame != header.bounds { headerView.frame = header.bounds }
         currentHeader = headerView
-        // ★★ 2026-10-18：Follow 状态复查要能找回"这一页 / 这个页头"（见 `refreshArtistFollow`）。
+        // Follow 状态复查要能找回"这一页 / 这个页头"（见 `refreshArtistFollow`）。
         lastArtistPage = page
         lastArtistHeaderView = headerView
         if headerView.onTrailingTapped == nil {
             headerView.onTrailingTapped = { EntityPageHeaderManager.refreshArtistFollow() }
         }
-        // ★★ 2026-10-17：**只有这一页的页头会缩**（520 → 100pt 的导航栏）⇒ 也只有这一页要那条
-        //    "装不下就渐隐让位"。歌单/专辑页的页头是定高的，给它打开只会把整块内容弄没（照片 124）。
+        // **只有这一页的页头会缩**（520 → 100pt 的导航栏）⇒ 也只有这一页要那条"装不下就渐隐让位"。
+        // 歌单/专辑页的页头是定高的，给它打开只会把整块内容弄没。
         headerView.fadesWhenTight = true
-        // ★★ 2026-10-18 第三轮（用户：「**spotify 的按键又靠上**」）：**贴底 0**（不是默认的 14）
-        //    ⇒ 姓名与那三颗整体下移 14pt，与 AM 的照片 118 对齐（见 `contentBottom` 那段）。
+        // **贴底 0**（不是默认的 14）⇒ 姓名与那三颗整体下移 14pt，与 AM 的页头对齐
+        // （见 `contentBottom` 那段）。
         if headerView.contentBottom != 0 { headerView.contentBottom = 0 }
 
-        // ★★ 2026-10-17（用户：图片 136 那张「最新发布」小卡片）：取这一位艺人的最新发布。
-        //
-        //    优先级（用户原话：「优先展示**艺人之选**，没有艺人之选再展示最新发布」）：
-        //      · 艺人之选是 **Spotify 自己的**板块，只能从页面里读（`captureArtistPick`，见下方说明）；
-        //      · 读不到（多半是没滚到 / 这位艺人没有那一块）⇒ 退回 `ArtistLatestReleaseSource`
-        //        （iTunes 目录；实测与图片 136 逐字一致，且**不需要令牌**）。
+        // 取这一位艺人的最新发布。优先级：
+        // · **艺人之选**是 Spotify 自己的板块，只能从页面里读（`captureArtistPick`）；
+        // · 读不到（多半是没滚到 / 这位艺人没有那一块）⇒ 退回 `ArtistLatestReleaseSource`。
         scheduleLatestRelease(for: headerView, name: name)
         // 「艺人之选」优先：它就在同一页上（懒加载板块），滚到那一块时读一次就换掉卡片内容。
         captureArtistPick(in: page)
-        // ★★ 2026-10-17（用户：「这最新发布卡片不应该是自己造吗，为什么要查询」）：
-        //    「热门新歌」那一块也在同一页上（日志 111：`[ArtistPageProbe] … [热门新歌]`）
-        //    ⇒ 卡片的数据**从页面读**；苹果目录退化成最后兜底（见 `scheduleLatestRelease`）。
+        // 「热门新歌」那一块也在同一页上 ⇒ 卡片的数据**从页面读**；苹果目录只当最后兜底
+        // （见 `scheduleLatestRelease`）。
         captureLatestRelease(in: page)
-        // ★★ 2026-10-18：那一块在列表很下面、懒加载 ⇒ 布局拍停掉之后就没人再读了
-        //    （见 `startReleasePolling`：这就是"刚进没有、重进才有"的根因）。
+        // 那一块在列表很下面、懒加载 ⇒ 布局拍停掉之后就没人再读了（见 `startReleasePolling`：
+        // 这就是"刚进没有、重进才有"的根因）。
         startReleasePolling(in: page, name: name)
-        // ★★ 2026-10-17（用户：「点击那个卡片应该是跳转到对应的专辑」）：
-        //    卡片的触摸交给 manager 转发给页面里那一张真卡（`handleReleaseCardTap`）——
-        //    卡片现在挂在页头下面那一格，`onTap` 在 `releaseCardHost(for:)` 里就接好了。
-        // ★★ 2026-10-17（用户：图片 145「这里会默认不展开『显示更多』…… 不展开又很难看」）：
-        //    进页后替用户点一次那颗展开按钮（原地铺开这一段 → 那条黑带与半截行都不再出现）。
+        // 卡片的触摸交给 manager 转发给页面里那一张真卡（`handleReleaseCardTap`）——
+        // 卡片挂在页头下面那一格，`onTap` 在 `releaseCardHost(for:)` 里就接好了。
+        // 进页后替显示更多（原地铺开这一段 → 那条黑带与半截行都不再出现）。
         scheduleSectionExpansion(in: page)
 
         // Spotify 那一列：**空 mask 藏**（不碰 hidden —— 见函数头那段）。照片归 `EntityPageAppearance`。
         let cover = find("Components.Header.UI.ArtworkImage", in: header, cache: &cachedArtistCover)
         blankArtistChrome(in: header, avoiding: cover, skipping: headerView)
 
-        // ★ 2026-10-17（用户：「艺人页同理，封面别挡住我们的字」）：z 序与几何两道保险。
+        // z 序与几何两道保险。
         raiseToTop(headerView, in: header, role: "artist")
         probeCoverOverlap(cover: cover, headerView: headerView, role: "artist")
 
-        // ★ 2026-10-18：月听众那行也做成开关（默认保留）。`meta` 仍算出来给日志用。
+        // 月听众那行是一颗开关（默认保留）。`meta` 仍算出来给日志用。
         headerView.update(
             title: name,
             creator: "",
@@ -1332,13 +1236,11 @@ enum EntityPageHeaderManager {
             about: ""
         )
 
-        // 三颗：shuffle / play / Follow。pw 从**页头**里找它们，但那一行会随 `ImageHeaderView`
-        // 一起缩成 100pt 的导航栏，所以这里和专辑页一样：浮动控件按 `floatingIn` 从**页面**找，
-        // Follow 是页头那一行里的文字按钮，按 pw 给的类名找。
+        // 三颗：shuffle / play / Follow。那一行会随 `ImageHeaderView` 一起缩成 100pt 的导航栏，
+        // 所以和专辑页一样：浮动控件从**页面**找，Follow 是页头那一行里的文字按钮。
         //
-        // ★★ 2026-10-17（用户真机第二轮：「**点击播放**没反应」「左边应该是 `i` 但现在是**随机播放**
-        //    按钮、点了也没反应」「已关注但没有绿描边」）：三颗**全部改成 `findControl`** —— 按 id
-        //    拿到的都是 `ElementView<…>` 包装层，转发打在包装上 = 没反应，`isSelected` 也恒假。
+        // 三颗**全部走 `findControl`** —— 按 id 拿到的都是 `ElementView<…>` 包装层，
+        // 转发打在包装上 = 没反应，`isSelected` 也恒假。
         let play = findControl("header-play-button", in: page, cache: &cachedPlay)
         let shuffle = findControl("Components.UI.ShuffleButton", in: page, cache: &cachedShuffle)
         let follow = findControl(
@@ -1347,79 +1249,62 @@ enum EntityPageHeaderManager {
             cache: &cachedArtistFollow
         ) ?? eeveeFindView(header, identifier: "FollowButton*").map { firstControl(in: $0) ?? $0 }
         // Follow 是**文字按钮**（"关注" / "已关注"），取不到字形 ⇒ 用一对 SF Symbol 兜底，
-        // 而且按它的选中态换字形 —— 状态因此看得见（pw 那边直接读它的字，这里读者是图标）。
+        // 而且按它的选中态换字形 —— 状态因此看得见。
         //
-        // ★★ 2026-10-06（用户：「播放页左边的按钮不应该是那个 `i` 吗，还没改？」）：照 AM 换成 Info。
-        // ★★★ 2026-10-17（**日志 94 的 `leading none` + 老树是判决**）：之前找的
-        //   `Components.UI.CreatorBiographyCard*` **是听歌页的"了解艺人"卡**（那一族树行的前缀全是
-        //   `[NPVTree]`），**艺人页上根本没有它** ⇒ 永远退回 shuffle，用户看到的就是随机播放。
-        //   艺人页真正的"关于艺人"是 **`SPTArtistAboutBiographyView`**：
+        // 左边那颗照 AM 换成 Info。**不要找 `Components.UI.CreatorBiographyCard*`** ——
+        // 那是听歌页的"了解艺人"卡，艺人页上根本没有它（那样会永远退回 shuffle）。
+        // 艺人页真正的"关于艺人"是 **`SPTArtistAboutBiographyView`**：
         //
-        //   ```
-        //   [Tree] #9  14.TemplateView@0,0,414,896,id=creator-page     ← 艺人页根
-        //   [Tree] #9  17.SPTArtistAboutBiographyView@16,82,382,1126   ← 「关于艺人」
-        //   [Tree] #7  20.SPTArtistAboutBiographyView@16,82,382,70     ← 收起态
-        //   ```
-        //
-        //   382 = 414−32（列表行的内缩），两种高度就是"收起 / 展开"。它**没有 accessibility id**，
-        //   只能按**类名**认 ⇒ `eeveeFindView(_:classNameContains:)`。旧 id 那条留着当第二顺位
-        //   （万一别的版本又用回那张卡）。
+        // 382 = 414−32（列表行的内缩），两种高度就是"收起 / 展开"。它**没有 accessibility id**，
+        // 只能按**类名**认 ⇒ `eeveeFindView(_:classNameContains:)`。旧 id 那条留着当第二顺位。
         // 缓存失效的三个条件都要看：**没找到过 / 已经不在窗口上 / 换了一页**。
         let bioStale = cachedArtistBio == nil
             || cachedArtistBio?.window == nil
             || !(cachedArtistBio?.isDescendant(of: page) ?? false)
-        // ★★ 2026-10-18 第二轮（用户：「点击 i 按键不会跳转到艺人介绍」）：**这条 BFS 只在前两拍试**。
-        //    真机日志 91 的树里 `SPTArtistAboutBiographyView` 落在**深度 20**，从页面根搜要走掉几千个节点；
-        //    日志 97 逐字 `leading MISSING`（用户按了四次，我们只把页面往下滚，从来没拿到目标）。
-        //    现在的主力是 `ArtistBiographyViewHook`（那个类出现即认下，事件驱动、零搜索），
-        //    这里只剩"钩子还没触发时"的兜底。
+        // **这条 BFS 只在前两拍试**：`SPTArtistAboutBiographyView` 落在**深度 20**，从页面根搜要走掉
+        // 几千个节点，而且它在页面刚打开时往往还没建出来。主力是 `ArtistBiographyViewHook`
+        // （那个类出现即认下，事件驱动、零搜索），这里只剩"钩子还没触发时"的兜底。
         if artistBioSearchPage !== page {
             artistBioSearchPage = page
             artistBioSearchPasses = 0
         }
         if bioStale, artistBioSearchPasses < 2 {
             artistBioSearchPasses += 1
-            // ★★ 2026-10-11（日志 100）：判据换成**真机证实过的那三个名字**（见 `eeveeArtistBioCard`）。
-            //    原来第一判据是 `SPTArtistAboutBiographyView` —— 它在这一版艺人页上一次都没出现过，
-            //    却排在前面 ⇒ 就算后面那条 id 前缀能命中，也永远轮不到。
+            // 判据用**真机证实过的那三个名字**（见 `eeveeArtistBioCard`）。不要把这个类排在
+            // 第一判据 —— 它在这一版艺人页上一次都没出现过，排前面会让后面那条 id 前缀永远轮不到。
             cachedArtistBio = eeveeArtistBioCard(in: page)
                 ?? eeveeFindView(page, classNameContains: "SPTArtistAboutBiographyView")
         }
         if let info = cachedArtistBio, let control = firstControl(in: info) { artistBioControl = control }
-        // ★★ 2026-10-06：**记住找到过的那颗**（见 `artistBioControl`）—— 那一块是懒加载的，
-        //    某一拍没有它不代表该退回 shuffle。
+        // **记住找到过的那颗**（见 `artistBioControl`）—— 那一块是懒加载的，
+        // 某一拍没有它不代表该退回 shuffle。
         let leading = artistBioControl
 
-        // ★★ 2026-10-17（用户：「如果艺人已经关注了，它应该是有**绿色描边**的，但现在没有」）：
-        //    判据从"只看 `(follow as? UIControl)?.isSelected`"换成 `eeveeIsOn` —— 三条信号一起看
-        //    （`isSelected` / 无障碍里的 `.selected` / 文字里的"已关注"），并且**四条都进日志**
-        //    （`eeveeOnSignals`），下一份日志就能告诉我们哪一条真的会变。
+        // 判据用 `eeveeIsOn` 而不是只看 `(follow as? UIControl)?.isSelected` —— 三条信号一起看
+        // （`isSelected` / 无障碍里的 `.selected` / 文字里的"已关注"），四条都进日志（`eeveeOnSignals`）。
         let followed = eeveeIsOn(follow)
         headerView.updateRow(
             shuffle: leading ?? shuffle,
             play: play,
             trailing: follow,
-            // ★★ 2026-10-16（用户：「播放按键右边的**添加艺人**显示有问题。改成**中空的五角星**
-            //    （和 AM 一样）……点击之后（即收藏艺人之后）变成现在的绿色勾」）：
-            //    未关注 ⇒ `star`（SF Symbol 的 star 本来就是中空）+ **强制用兜底字形**
-            //    （不采用 Spotify 那颗自己的"＋人"图）；已关注 ⇒ 保持原样：
-            //    Spotify 自己的绿勾优先，取不到才用 `checkmark` 兜底。
+            // 未关注 ⇒ `star`（SF Symbol 的 star 本来就是中空）+ **强制用兜底字形**
+            // （不采用 Spotify 那颗自己的"＋人"图）；已关注 ⇒ Spotify 自己的绿勾优先，
+            // 取不到才用 `checkmark` 兜底。
             trailingFallback: UIImage(systemName: followed ? "checkmark" : "star"),
             trailingPrefersFallback: !followed
         )
-        // ★★ 2026-10-17：**左边那颗永远是 `i`**（用户点名要的），不再因为"那一块还没建出来"退回
-        //    shuffle 的样子；**动作**落在"关于艺人"上（`setLeadingTarget`），目标没建出来时点它
-        //    只会把页面往下滚一屏去把它滚出来，**绝不退回去做随机播放**。
-        //    随机播放改挂**长按播放键**（见 `updatePlayLongPress`）。
-        // ★★ 2026-10-18 第二轮：**转发目标换成"关于艺人"那一块本身**（`cachedArtistBio`，不是它里面
-        //    第一颗 `UIControl`）—— 用户自己点那一块能跳转，说明处理它的那一层在**祖先链**上；
-        //    配合 `eeveeFireWide`（再往上 6 层 + cell 的选中回调）才有机会走通。
+        // **左边那颗永远是 `i`**，不因为"那一块还没建出来"退回 shuffle 的样子；**动作**落在
+        // "关于艺人"上（`setLeadingTarget`），目标没建出来时点它只会把页面往下滚一屏去把它滚出来，
+        // **绝不退回去做随机播放**。随机播放改挂**长按播放键**（见 `updatePlayLongPress`）。
+        //
+        // **转发目标用"关于艺人"那一块本身**（`cachedArtistBio`，不是它里面第一颗 `UIControl`）——
+        // 处理它的那一层在**祖先链**上，配合 `eeveeFireWide`（再往上 6 层 + cell 的选中回调）才走通。
         headerView.setLeadingTarget(cachedArtistBio, glyph: UIImage(systemName: "info.circle"))
         headerView.updatePlayLongPress(shuffle)
         headerView.updateCreatorLink(nil)
 
-        // ★ 2026-10-17（日志 94：`followSignals` 四条**全是空的**）：把 Follow 那颗的子树打一次，
-        //   看"已关注"到底画在哪个类上、状态挂在哪个属性上。只打一次。
+        // 把 Follow 那颗的子树打一次，
+        // 看"已关注"到底画在哪个类上、状态挂在哪个属性上。只打一次。
         probeFollowSubtree(follow)
 
         eeveeBlank(play)
@@ -1427,13 +1312,13 @@ enum EntityPageHeaderManager {
         eeveeBlank(follow)
         eeveeBlank(leading)
 
-        // ★ 2026-10-13（照 AM）：把 `⋯` 钉到右上角去。
+        // 把 `⋯` 钉到右上角去（照 AM）。
         pinMoreButton(in: header)
 
-        // ★★ 2026-10-17：日志要说清三件事 ——
-        //   · **左边那颗到底是谁**（简介卡 / 找不到简介卡退回的 shuffle / 压根没有）；
-        //   · 三颗各自**钻到了什么类**（`[UIControl]` = 真控件、`[wrapper]` = 还是包装层）；
-        //   · follow 的四条状态信号（哪一条真的会随"已关注"变，下一份日志就看出来了）。
+        // 日志要说清三件事 ——
+        // · **左边那颗到底是谁**（简介卡 / 找不到简介卡退回的 shuffle / 压根没有）；
+        // · 三颗各自**钻到了什么类**（`[UIControl]` = 真控件、`[wrapper]` = 还是包装层）；
+        // · follow 的四条状态信号（哪一条真的会随"已关注"变，下一份日志就看出来了）。
         let leadingKind = leading == nil
             ? "MISSING (button still shows i; tapping scrolls the page to build it)"
             : (leading === shuffle ? "shuffle-fallback" : "about(SPTArtistAboutBiographyView)")
@@ -1448,14 +1333,14 @@ enum EntityPageHeaderManager {
                 + ", followSignals \(eeveeOnSignals(follow))"
         )
 
-        // ★ 2026-10-18：找「最新发行 / 艺人之选」用（用户不想开转储视图树）。
+        // 找「最新发行 / 艺人之选」用（用户不想开转储视图树）。
         probeArtistPageSections(in: page)
     }
 
-    /// ★ 2026-10-18（用户：「播放按键和热门歌曲中间塞个方框……最新发布歌曲 / 艺人之选」）：
+    /// （播放按键和热门歌曲中间塞个方框……最新发布歌曲 / 艺人之选）：
     /// 把艺人页里**每个 CollectionViewCell 的 y / 第一个文字 / ids** 按位置打出来，
-    /// 每页最多 10 次、0.8s 节流、内容没变不重复。用户滚到「最新发行」那一段时，
-    /// 日志里就会出现那一格的真名与文字 —— 下一轮按它做方框，不用开转储视图树。
+    /// 每页最多 10 次、0.8s 节流、内容没变不重复。最新发行那一段时，
+    /// 不用开转储视图树。
     private static func probeArtistPageSections(in page: UIView) {
         if artistProbePage !== page {
             artistProbePage = page
@@ -1492,9 +1377,9 @@ enum EntityPageHeaderManager {
                     ids: ids.prefix(6).joined(separator: ",")
                 ))
 
-                // ★ 2026-10-18：cell 里那些**可能**是"最新发行 / 艺人之选"的类（Release / Carousel /
-                //    SectionHeading / Pick / Card）也单独列出来 —— 它们的 id 可能为空，
-                //    但类名 + 文字足够下一轮定位。每格最多 8 条。
+                // cell 里那些**可能**是"最新发行 / 艺人之选"的类（Release / Carousel /
+                // SectionHeading / Pick / Card）也单独列出来 —— 它们的 id 可能为空，
+                // 但类名 + 文字足够下一轮定位。每格最多 8 条。
                 var interesting: [String] = []
                 var innerQueue: [UIView] = [view]
                 var innerVisited = 0
@@ -1535,12 +1420,11 @@ enum EntityPageHeaderManager {
         }
     }
 
-    /// ★★ 2026-10-18（用户：「点击收藏之后，按钮不会变绿，删除艺人之后，才会变绿」）：
     /// **点击之后重新读一次 Follow 的状态**。
     ///
-    /// 为什么不能只靠 `applyToArtistPage` 的下一拍：`tapped()` 里那次 `refreshTint()` 发生在
-    /// **转发之前**，读到的是点击前的旧状态；而 Spotify 更新关注状态**不保证**会让页头再布局一次
-    /// （用户看到的正是"点关注不变绿、再点取消反而变绿"——迟了一整次点击）。
+    /// 不能只靠 `applyToArtistPage` 的下一拍：`tapped` 里那次 `refreshTint` 发生在**转发之前**，
+    /// 读到的是点击前的旧状态；而 Spotify 更新关注状态**不保证**会让页头再布局一次
+    /// （现象就是"点关注不变绿、再点取消反而变绿"，迟了一整次点击）。
     ///
     /// 由 `EntityPageHeaderButton.afterFire` 在点击后 0.2 / 0.7 / 1.6 / 3.0 / 5.0s 各叫一次：
     /// 重新认一次控件（Spotify 可能整颗换掉）、读状态、换 `star` / `checkmark` 与绿色描边。
@@ -1549,9 +1433,8 @@ enum EntityPageHeaderManager {
         guard let page = lastArtistPage, page.window != nil,
               let headerView = lastArtistHeaderView, headerView.window != nil else { return }
 
-        // ⚠️ **每次都重新认**（清掉缓存再搜）：Spotify 换关注状态时可能整颗 Follow 重建，
-        //    旧实例还挂在树上（只是被我们 blank 了）⇒ 只信缓存会一直读到"关注/已关注"的旧值。
-        //    一次点击最多搜 4 次，页头已建好；这比"状态永远差一拍"便宜得多。
+        // **每次都重新认**（清掉缓存再搜）：Spotify 换关注状态时可能整颗 Follow 重建，旧实例还挂在
+        // 树上（只是被我们 blank 了）⇒ 只信缓存会一直读到旧值。一次点击最多搜 4 次，页头已建好。
         cachedArtistFollow = nil
         var follow: UIView?
         if let header = artistHeaderContainer(in: page) {
@@ -1580,8 +1463,8 @@ enum EntityPageHeaderManager {
     }
 
     // MARK: - 「艺人之选」/「最新发布」卡片（艺人页三颗按钮下面那张）
-
-    /// 「艺人之选」读到的样子（标题 + 副标题 + 封面）。
+    //
+    // 「艺人之选」读到的样子（标题 + 副标题 + 封面）。
     private struct ArtistPick {
         let title: String
         let meta: String?
@@ -1593,26 +1476,15 @@ enum EntityPageHeaderManager {
     /// 每一位艺人只发一次"最新发布"请求（数据源自己还有 TTL 缓存与在飞去重）。
     private static var releaseArtist: String?
 
-    /// 用户 2026-10-17：**优先「艺人之选」，没有它再展示「最新发布」**。
-    ///
-    /// 艺人之选是 **Spotify 自己的**板块（日志 109：`[ArtistPageProbe] matches y=996 — … [艺人之选]`），
-    /// 苹果目录里没有 ⇒ 只能从页面里读。它和其它懒加载板块一样：**没滚到就不存在**，所以这里每拍
-    /// 做一次**有界**尝试（≤ 900 节点 / 深 12）：找到标题就取它**下面那一格**（同 section 的下一格，
-    /// 或下一个 section 的第一格）的封面 + 最长的一段文字 + 次长的一段；找到才换，找不到就继续用
-    /// 最新发布（**绝不拿猜出来的东西冒充**）。
     /// 找"某个标题行**下面那一格**"——「艺人之选」与「热门新歌」共用同一套。
     ///
-    /// ★ 2026-10-17（第三版，用户：「这最新发布卡片**不应该是自己造吗，为什么要查询**」）：
-    ///   它本来就在页面上 —— 日志 111 逐字：
+    /// 这两个板块都是 **Spotify 自己的**、苹果目录里没有 ⇒ 只能从页面里读。它们和其它懒加载板块
+    /// 一样：**没滚到就不存在**，所以每拍做一次**有界**尝试（≤1800 节点 / 深 14）：找到标题就取它
+    /// 下面那一格（同 section 的下一格，或下一个 section 的第一格）的封面 + 最长的一段文字 +
+    /// 次长的一段。找到才换，找不到就继续用最新发布（**绝不拿猜出来的东西冒充**）。
     ///
-    /// ```
-    /// 13:07:20 [ArtistPageProbe] matches y=996  — …NoIntrinsicContentSizeButton [艺人之选]
-    /// 13:07:20 [ArtistPageProbe] matches y=1330 — …NoIntrinsicContentSizeButton [热门新歌]
-    /// ```
-    ///
-    ///   ⇒ 先读页面（封面 + 标题 + 副标题都在那一格里），**不要**拿艺人的名字去问苹果的目录：
-    ///   那一套既受商店地区影响（`cn` 目录对这位艺人 **0 条**），又受罗马字/假名影响
-    ///   （`Nanatsukaze` vs `ナナツカゼ`）—— 全是页面里本来没有的问题。
+    /// **不要**拿艺人的名字去问苹果的目录：那一套既受商店地区影响（`cn` 目录对某些艺人 0 条），
+    /// 又受罗马字/假名影响（`Nanatsukaze` vs `ナナツカゼ`）—— 全是页面里本来没有的问题。
     ///
     /// - Returns: 那一格 + 它的 `IndexPath`（索引只进日志）。
     private static func sectionCard(
@@ -1622,9 +1494,8 @@ enum EntityPageHeaderManager {
         var queue: [(view: UIView, depth: Int)] = [(page, 0)]
         var visited = 0
 
-        // ★ 2026-10-22：900 / 12 在现在的艺人页（列表很长、每张卡十几层）不够 ——
-        //   标题行明明在屏幕上，BFS 预算先用完了 ⇒ 一直读不到「热门新歌」/「艺人之选」，
-        //   卡片就落到苹果目录（死卡）。放宽到 1800 / 深度 14；仍然有界。
+        // 900 / 12 在现在的艺人页（列表很长、每张卡十几层）不够 —— 标题行明明在屏幕上，BFS 预算
+        // 就先用完了 ⇒ 一直读不到「热门新歌」/「艺人之选」，卡片只能落到兜底。1800 / 深 14 仍然有界。
         while !queue.isEmpty, visited < 1800 {
             let (view, depth) = queue.removeFirst()
             visited += 1
@@ -1634,7 +1505,7 @@ enum EntityPageHeaderManager {
                !text.isEmpty,
                headingMatches(text) {
                 // ⚠️ `enclosingCell` 返回 `UIView?`（它同时认 table cell），而 `indexPath(for:)`
-                //    只吃 `UICollectionViewCell` ⇒ 必须显式转一次。
+                // 只吃 `UICollectionViewCell` ⇒ 必须显式转一次。
                 guard let ancestor = enclosingCell(of: label),
                       let cell = ancestor as? UICollectionViewCell,
                       let collection = eeveeEnclosingCollectionView(of: cell),
@@ -1664,8 +1535,8 @@ enum EntityPageHeaderManager {
 
     /// 「艺人之选」/「热门新歌」那一行里**第一张小卡**（横向 carousel 的 cell）。
     ///
-    /// ★ 2026-10-17（用户：「点击那个卡片应该是跳转到对应的专辑」）：卡片显示的是哪一张，
-    /// 点击就必须转发给**那一张** —— 所以数据与点击目标都取这同一颗，而不是整条 carousel 的宿主格。
+    /// 卡片显示的是哪一张，点击就必须转发给**那一张** —— 所以数据与点击目标都取这同一颗，
+    /// 而不是整条 carousel 的宿主格。
     private static func firstNestedCell(in view: UIView) -> UIView? {
         var queue: [UIView] = view.subviews
         var visited = 0
@@ -1723,8 +1594,6 @@ enum EntityPageHeaderManager {
     private static var didLogReleaseSection = false
 
     /// 那一块在 Spotify 里叫什么（多语言各写一条，与 `isPickHeading` 同一个思路）。
-    ///
-    /// 出处：日志 111 逐字 `[ArtistPageProbe] matches y=1330 — …[热门新歌]`（y=1622 又一次）。
     private static func isReleaseHeading(_ text: String) -> Bool {
         let lowered = text.lowercased()
         let needles = [
@@ -1735,17 +1604,13 @@ enum EntityPageHeaderManager {
         return needles.contains { lowered.contains($0) }
     }
 
-    /// ★★ 2026-10-17 第三版（用户：「这最新发布卡片**不应该是自己造吗，为什么要查询**」）。
-    ///
-    /// 对 —— 这一块**本来就在页面上**（`[ArtistPageProbe] … [热门新歌]`，y=1330 / 1622），
-    /// 所以这张卡片的数据**从页面里读**（同一套 `sectionCard`，与「艺人之选」共用）：
+    /// 这张卡片的数据**从页面里读**（同一套 `sectionCard`，与「艺人之选」共用）：
     ///
     /// * 封面 = 那一格里的第一张像样的图，标题 / 副标题 = 那一格里最长 / 次长的两段文字；
-    /// * **不问网络** ⇒ 没有"商店地区没这首歌"、也没有"罗马字 vs 假名对不上"这两类问题
-    ///   （用户这边艺人名就是 `Nanatsukaze`，而日本店把 `artistName` 写成 `ナナツカゼ`）。
+    /// * **不问网络** ⇒ 没有"商店地区没这首歌"、也没有"罗马字 vs 假名对不上"这两类问题。
     ///
     /// 页面那一块是懒加载的（滚到才建出来）⇒ 每拍**机会式**看一次，读到就画；
-    /// 一直读不到才由 `scheduleLatestRelease` 落到苹果目录那条兜底（见那里的 10 拍）。
+    /// 一直读不到才由 `scheduleLatestRelease` 落到兜底。
     static func captureLatestRelease(in page: UIView) {
         let name = currentArtistName
         guard !name.isEmpty else { return }
@@ -1763,8 +1628,7 @@ enum EntityPageHeaderManager {
         let card = firstNestedCell(in: found.cell) ?? found.cell
         guard let release = makePick(from: card) else { return }
         releaseSectionCache[name] = release
-        // ★ 2026-10-17（用户：「点击那个卡片应该是跳转到对应的专辑」）：
-        //   卡片显示的就是这一张小卡 ⇒ 点击转发给它（`handleReleaseCardTap`）。
+        // 卡片显示的就是这一张小卡 ⇒ 点击转发给它（`handleReleaseCardTap`）。
         setReleaseCardSource(card, name: name)
         writeDebugLog(
             "[Release] latest release from the page — \(release.title)"
@@ -1777,14 +1641,13 @@ enum EntityPageHeaderManager {
 
     /// 卡片被点了一下。
     ///
-    /// ★★ 2026-10-17（用户：「点击那个卡片应该是**跳转到对应的专辑**，而不是全部歌曲」）：
     /// 卡片不编目标，**转发给页面里那一张真卡** —— `eeveeSelectAncestorCell` 走的是
     /// `collectionView(_:didSelectItemAt:)`（真人点卡那一条），所以落地页与 Spotify 自己完全一致
     /// （专辑 / 单曲就进那一张，不会跑到「全部歌曲」）。
     ///
-    /// ★★ 2026-10-22（日志 5）：页面那一行是**懒加载骨架**、卡片的数据来自 Web API 时，
-    /// 页面上**没有**可转发的那一格 —— 这时用记下来的**专辑 URI**走 App 自己的链接分发器
-    /// （`SpotifyURIOpener.open`）。三档顺序固定：还在页面上的那一格 → 重新找到的那一格 → 专辑 URI。
+    /// 页面那一行是**懒加载骨架**、卡片的数据来自 Web API 时，页面上**没有**可转发的那一格 ——
+    /// 这时用记下来的**专辑 URI**走 App 自己的链接分发器（`SpotifyURIOpener.open`）。
+    /// 三档顺序固定：还在页面上的那一格 → 重新找到的那一格 → 专辑 URI。
     ///
     /// 三档都不成立（换页 / 数据不属于这一页 / URI 也被清了）就**什么都不做**，只留一行日志。
     private static func handleReleaseCardTap() {
@@ -1800,7 +1663,7 @@ enum EntityPageHeaderManager {
         }
 
         // ② 那一格被列表回收了（"热门新歌"在列表很下面，页头滚回去时它可能已经没了）
-        //    ⇒ 先按**标题行**重新找一次（原逻辑），找到就转发。
+        // ⇒ 先按**标题行**重新找一次（原逻辑），找到就转发。
         if releaseCardSourceName == name,
            let headerView = lastArtistHeaderView,
            let page = eeveeAncestor(withIdentifier: "creator-page", of: headerView),
@@ -1815,7 +1678,7 @@ enum EntityPageHeaderManager {
         }
 
         // ③ 卡片的数据来自 **Web API**（页面上那一行还是骨架）⇒ 用记下来的专辑 URI 打开。
-        //    ⚠️ 只认"这一页的艺人"记下的那个 URI（换页之后不能去开上一位艺人的专辑）。
+        // ⚠️ 只认"这一页的艺人"记下的那个 URI（换页之后不能去开上一位艺人的专辑）。
         guard releaseAlbumArtist == name, let uri = releaseAlbumURI, !uri.isEmpty else {
             writeDebugLog(
                 "[Release] card tapped — no page row and no album uri for \"\(name)\", nothing opened"
@@ -1831,20 +1694,12 @@ enum EntityPageHeaderManager {
 
     private static var expandScheduledPages = Set<ObjectIdentifier>()
 
-    /// 用户 2026-10-17（图片 145）：「这里会默认不展开『显示更多』这个东西，**但是不展开又很难看**」。
-    ///
     /// 那一颗是 Spotify 的 `Components.UI.ListSectionFooter.Button`：它把"热门"那一段截在 6 行，
-    /// 底部再盖一条往黑的渐变（`ScrollGradientOverlay`）让胶囊读得清 —— 用户看到的就是
-    /// **半截的第 6 行 + 一条黑带**。他自己验证过（照片 121）：「把热门歌曲十首歌展开之后就好了」。
+    /// 底部再盖一条往黑的渐变（`ScrollGradientOverlay`）让胶囊读得清 —— 看到的就是
+    /// **半截的第 6 行 + 一条黑带**。⇒ 进页后**替用户点一次**：原地铺开。
     ///
-    /// ⇒ 进页 1 秒后（等 section 建出来）**替用户点一次**：原地铺开，不再有黑带与半截行。
-    /// 每页只排一次；点到几颗、有没有点动都进日志。
-    /// ★ 2026-10-17（第二版）：**只试一次太脆**。
-    ///
-    /// 进页的 1 秒里列表还在长（`contentSize` 每拍都在变）⇒ 那一拍"热门"这一段 footer 很可能
-    /// **还没建出来**，于是只留一行 `no footer button`，用户照样看见「显示更多」。
-    /// ⇒ 改成三轮（1.0 / 2.5 / 5.0s），点到就停；三轮都没有才认输，并把轮数写进日志
-    ///   （下一份日志一眼能分出是"没找到"还是"点了没动"）。
+    /// 进页的 1 秒里列表还在长（`contentSize` 每拍都在变）⇒ 那一拍 footer 很可能**还没建出来**，
+    /// 所以试三轮（1.0 / 2.5 / 5.0s），点到就停。每页只排一次。
     private static let expandAttemptDelays: [Double] = [1.0, 2.5, 5.0]
 
     private static func scheduleSectionExpansion(in page: UIView) {
@@ -1872,27 +1727,17 @@ enum EntityPageHeaderManager {
 
     /// 这一颗是不是"**原地展开**这一段"那颗 footer。
     ///
-    /// ★★ 2026-10-17（第三版，日志 111 的现场）：上一版把判据放宽成"文字里出现
-    ///   `显示全部 / show all / see all / すべて表示` 也算" —— **那是导航**，不是展开。
-    ///   日志 111 逐字（进艺人页 1 秒后，连点三颗）：
+    /// ⚠️ 判据不能只看文字：`显示全部 / show all / see all / すべて表示` 是**导航**，不是展开 ——
+    /// 那样会点到标签栏的主页键（`NavigationButtonHome`）、或者把页面导航到「全部歌曲」。
+    /// 三条一起收：
     ///
-    /// ```
-    /// section expansion — activate.touchUpInside(…Encore…6Button9Secondary) on Components.UI.ListSectionFooter.Button
-    /// section expansion — activate.touchUpInside(…Encore…6Button8Tertiary) on Components.UI.NavigationButtonHome
-    /// section expansion — activate.touchUpInside(…Encore…6Button9Secondary) on Components.UI.ListSectionFooter.Button
-    /// ```
-    ///
-    /// 第二颗是**标签栏的主页键**（`NavigationButtonHome`），第三颗把页面**导航到了「全部歌曲」**
-    /// —— 用户的现场："进入的时候，是自动跳转 全部歌曲 这个东西的"。⇒ 判据收紧成三条：
-    ///
-    /// ① **必须**是 `ListSectionFooter` 那一族（id 里带这个词）—— 没有 id 的**一律不点**，
-    ///    这就是上一版误点主页键的来源（它当时只靠文字命中）；
+    /// ① **必须**是 `ListSectionFooter` 那一族（id 里带这个词）—— 没有 id 的**一律不点**；
     /// ② 文字里要有"**更多**"（`更多 / more / もっと`）；
     /// ③ 文字里**不能**有"**全部**"（`全部 / all / すべて`）—— 那是"去完整列表"，点了就离开这一页。
     private static func isSectionFooter(_ control: UIControl) -> Bool {
         guard (control.accessibilityIdentifier ?? "").contains("ListSectionFooter") else { return false }
         // 文字两处都看：无障碍标签是一处，`UIButton.titleLabel` / 子树里的 UILabel 是另一处
-        //（`eeveeControlText` 就是取后者 —— 自绘的 Encore 按钮往往只有它）。
+        // （`eeveeControlText` 就是取后者 —— 自绘的 Encore 按钮往往只有它）。
         let text = [
             control.accessibilityLabel ?? "",
             control.accessibilityValue ?? "",
@@ -1906,8 +1751,7 @@ enum EntityPageHeaderManager {
 
     /// 点最多**两颗**「显示更多」；**点到了返回 true**（调用方据此停止重试）。
     ///
-    /// ⚠️ 上一版最多点 4 颗 —— 页面上恰好有两颗 footer 时会连着导航两次（见 `isSectionFooter`）。
-    /// 现在判据已经排除导航型，数量也收一半。
+    /// ⚠️ 不要放宽到 4 颗 —— 页面上恰好有两颗 footer 时会连着导航两次（见 `isSectionFooter`）。
     private static func expandSectionFooters(in page: UIView) -> Bool {
         var found: [UIControl] = []
         var queue: [UIView] = [page]
@@ -1940,19 +1784,17 @@ enum EntityPageHeaderManager {
     /// 这一格属于哪一份页头（换页就重建）。
     private static weak var releaseCardOwner: EntityPageHeaderView?
 
-    /// ★★ 2026-10-31（照片 168「自画卡片有入侵」）：**卡片不再画在页头里，而是挂到页头下面那一格**。
+    /// **卡片不画在页头里，而是挂到页头下面那一格**。
     ///
-    /// 现场：卡片原来贴底排在 `EntityPageHeaderView` 内部（`contentHeight` 里多算 106pt），
-    /// 于是「页头容器要长高 106pt」—— 但 Spotify 的艺人页页头是 `UIStackView` 的 arranged subview
-    /// （日志 10 的树：`UIStackView 414×1416` = `HeaderContainer 414×520` + 内容 `414×896`），
-    /// 改 `frame` 不会让 stack 重排 ⇒ 列表仍从 520 开始，卡片正好压在列表前两行上（照片 168）。
+    /// 卡片若贴底排在 `EntityPageHeaderView` 内部（`contentHeight` 里多算 106pt），就得让
+    /// 「页头容器长高 106pt」—— 但艺人页页头是 `UIStackView` 的 arranged subview
+    /// （`UIStackView 414×1416` = `HeaderContainer 414×520` + 内容 `414×896`），改 `frame`
+    /// 不会让 stack 重排 ⇒ 列表仍从 520 开始，卡片正好压在列表前两行上。
     ///
-    /// 现在的做法：在 stack 里**页头之后**插一格（`releaseCardHost`，高度 106），卡片画在那一格里。
-    /// stack 自己会把列表推下去，页头高度 / 标题 / 三颗 / 渐变全部回到原位 —— 不再需要
-    /// `makeRoomForReleaseCard` 那套"加高容器 + 同步 headerView.frame"的补丁。
+    /// 所以在 stack 里**页头之后**插一格（`releaseCardHost`，高度 106），卡片画在那一格里。
+    /// stack 自己会把列表推下去，页头高度 / 标题 / 三颗 / 渐变全部回到原位。
     ///
-    /// 认不出 stack（页头不在 stack 里）就只打一行日志、不画卡片：
-    /// 宁可没有卡片，也不要再压住列表。
+    /// 认不出 stack（页头不在 stack 里）就只打一行日志、不画卡片：宁可没有卡片，也不要压住列表。
     static func setReleaseCard(
         for headerView: EntityPageHeaderView,
         title: String?,
@@ -2074,12 +1916,10 @@ enum EntityPageHeaderManager {
     }
 
     /// 每一位艺人只取一次「最新发布」（缓存优先 ⇒ 同步就能画）。
-    /// 每个艺人页**第一次被看到**的时刻 —— 苹果兜底按**墙钟**等，不按"第几拍"。
     ///
-    /// ★ 2026-10-17 日志 112 的现场（用户：「那个艺人页自己画的**最新发布框似乎没展示**」）：
-    /// 上一版用"页头布局跑满 10 拍"当闸门，而 `[Release]` 一行都没有 —— 说明这页的布局拍数
-    /// **根本没到 10**（页头稳定之后就不再重排），于是既没读到页面那一块、也没触发苹果兜底，
-    /// 卡片**静默地永远不出现**。⇒ 换成墙钟：进页 6 秒后还没有页面数据就去问一次，并且**一定留一行日志**。
+    /// 闸门用**墙钟**而不是"页头布局跑了几拍"：页头稳定之后就不再重排，拍数根本到不了设定值
+    /// ⇒ 既读不到页面那一块、也不触发兜底，卡片会静默地永远不出现。进页 6 秒后还没有页面数据
+    /// 就去问一次，并且**一定留一行日志**。
     private static var releaseSectionFirstSeen: [String: Date] = [:]
     private static let releaseFallbackDelay: TimeInterval = 6
 
@@ -2092,17 +1932,13 @@ enum EntityPageHeaderManager {
     private static let releasePollInterval: TimeInterval = 1.5
     private static let releasePollLifetime: TimeInterval = 90
 
-    /// ★★ 2026-10-18（用户：「这卡片的自画展示逻辑是什么，刚进艺人页没有，重进之后可能就有了」）：
+    /// **"时有时无"的根因** —— 卡片的数据要读页面里「热门新歌」那一块，而那一块在列表中很下面
+    /// （标题在 **y≈1020pt**，窗口只有 896pt），Spotify 用的是**懒加载**：没滚到就一直是
+    /// `RetrievalRowLoadingElementUI … 正在加载`。
     ///
-    /// **这就是那个"时有时无"的根因** —— 卡片的数据要读页面里「热门新歌」那一块，
-    /// 而那一块在列表中很下面（日志 222：`热门新歌` 标题在 **y=1020pt**，窗口只有 896pt），
-    /// Spotify 用的是**懒加载**：没滚到就一直是 `RetrievalRowLoadingElementUI … 正在加载`。
-    ///
-    /// 而原来唯一的读取时机是**布局拍**（`applyToArtistPage` → `captureLatestRelease`）——
-    /// 页头一旦稳定、列表不再重排，**布局拍就不来了** ⇒ 真正滚到那一块的时候没人去读；
-    /// 反过来，"重进一次"之所以可能就有了，是因为上一轮已经滚过、Spotify 手里有数据，
-    /// 那一拍建得够快。**同一个原因**也让它落到苹果目录兜底（日志 222：`no page section after 29s`），
-    /// 于是选错专辑（苹果目录里那是另一位同名艺人的 `Connect the World`）、而且不可点。
+    /// 而唯一的读取时机原来是**布局拍**（`applyToArtistPage` → `captureLatestRelease`）——
+    /// 页头一旦稳定、列表不再重排，**布局拍就不来了** ⇒ 真正滚到那一块的时候没人去读。
+    /// 同一个原因也会让它落到兜底，于是选错专辑（同名艺人）、而且不可点。
     ///
     /// ⇒ 进艺人页后**按 1.5 秒一拍去看 90 秒**（与布局拍无关）。读到就画，画完就变成
     /// 页面里那一格 ⇒ 数据对、点击也转发得动。
@@ -2131,8 +1967,8 @@ enum EntityPageHeaderManager {
             }
             captureLatestRelease(in: page)
             captureArtistPick(in: page)
-            // ★ 2026-10-22（Web API 那条线）：页面里那一行**一直是骨架**时，这一拍也顺手保证
-            //   屏幕上那张卡有数据（墙钟节流在里面；已经拿到 / 页面里已有数据时它立刻返回）。
+            // 页面里那一行**一直是骨架**时，这一拍也顺手保证屏幕上那张卡有数据
+            // （墙钟节流在里面；已经拿到 / 页面里已有数据时它立刻返回）。
             askSpotifyForLatestRelease(artist: releasePollName)
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -2140,28 +1976,27 @@ enum EntityPageHeaderManager {
     }
 
     private static func scheduleLatestRelease(for headerView: EntityPageHeaderView, name: String) {
-        // ① 已经有"艺人之选"⇒ 卡片归它（用户：优先展示艺人之选）。
+        // ① 已经有"艺人之选"⇒ 卡片归它。
         if let pick = artistPickCache[name] {
             applyPick(pick, to: headerView)
             return
         }
 
         // ② 其次是**页面上那一块**（「热门新歌」/「最新发布」，见 `captureLatestRelease`）——
-        //    这是"自己造"的那条，不问网络。
+        // 这条不问网络。
         if let release = releaseSectionCache[name] {
             applyPick(release, to: headerView)
             return
         }
 
-        // ③ ★★ 2026-10-22（日志 5 的现场）：**页面那一块只是骨架** ——
-        //    `RetrievalRowLoadingElementUI … 正在加载`，Spotify 懒加载，进页那一刻它**根本不存在**
-        //    ⇒ 只读页面的数据线永远出不来卡片。这里补一条**不依赖页面**的数据线：
-        //    用 `DataLoaderServiceHooks` 抓的令牌直接问 Spotify 自己的 Web API
-        //    （`ArtistReleasesFromSpotify`）。取回来的那一张连同**专辑 URI**一起画上去，
-        //    于是卡片既显示得出来、也点得动（`handleReleaseCardTap` 用那个 URI 打开）。
+        // ③ **页面那一块只是骨架**（`RetrievalRowLoadingElementUI … 正在加载`），Spotify 懒加载，
+        // 进页那一刻它**根本不存在** ⇒ 只读页面的数据线永远出不来卡片。这里补一条**不依赖页面**
+        // 的数据线：用 `DataLoaderServiceHooks` 抓的令牌直接问 Spotify 自己的 Web API
+        // （`ArtistReleasesFromSpotify`）。取回来的那一张连同**专辑 URI**一起画上去，
+        // 于是卡片既显示得出来、也点得动（`handleReleaseCardTap` 用那个 URI 打开）。
         //
-        //    ⚠️ 页面里的数据永远优先：一旦 `captureLatestRelease` / `captureArtistPick` 读到那一格，
-        //    `applyPick` 会清掉这里的 URI（卡片与点击都回到页面那一格）。
+        // ⚠️ 页面里的数据永远优先：一旦 `captureLatestRelease` / `captureArtistPick` 读到那一格，
+        // `applyPick` 会清掉这里的 URI（卡片与点击都回到页面那一格）。
         if let release = webReleaseApplied[name] {
             if webReleaseShownHeader !== headerView {
                 applyWebReleaseCard(release, artist: name, headerView: headerView)
@@ -2169,16 +2004,13 @@ enum EntityPageHeaderManager {
             return
         }
 
-        // ⛔ 2026-10-22（用户：「自画最新发布的卡片为什么点不动，而且似乎全部回退的
-        //    Apple 原生卡片」）：**不再拿苹果目录的发布来填这张卡**。
+        // ⛔ **不拿苹果目录的发布来填这张卡**。
         //
-        //    苹果目录（iTunes）里只有标题 / 日期 / 封面，**没有 Spotify 的专辑目标** ⇒
-        //    `applyLatestRelease` 只能把卡片设成 `isTappable = false`；用户看到的就是
-        //    "数据像是 Apple 的、点下去没反应"。更糟的是同名艺人会被目录匹配到别人
-        //    （日志 222：`Connect the World`）。
-        //    ⇒ 这一档不再画任何死卡；页面那一块还没加载出来时由上面的 ③ 补上
-        //    （Spotify 自己的 Web API，带专辑 URI ⇒ 可点，数据也对得上这位艺人）。
-        //    如果哪天真要恢复苹果目录，正确做法是拿到 Spotify 的发布 id，而不是再画一张死卡。
+        // 苹果目录（iTunes）里只有标题 / 日期 / 封面，**没有 Spotify 的专辑目标** ⇒
+        // `applyLatestRelease` 只能把卡片设成 `isTappable = false`，的就是
+        // "数据像是 Apple 的、点下去没反应"。更糟的是同名艺人会被目录匹配到别人。
+        // ⇒ 这一档不画任何死卡；页面那一块还没加载出来时由上面的 ③ 补上。
+        // 真要恢复苹果目录，正确做法是拿到 Spotify 的发布 id，而不是再画一张死卡。
         if releaseArtist != name {
             headerView.updateRelease(title: nil, date: nil, meta: nil)
         }
@@ -2195,8 +2027,8 @@ enum EntityPageHeaderManager {
                     + " asking the Web API while the page's own row is still a skeleton"
             )
         }
-        // ★ 2026-10-22：进页这一刻就把 Web API 那条请求发出去（墙钟节流在
-        //   `askSpotifyForLatestRelease` 里 —— 布局拍每帧都来，不能每帧都问）。
+        // 进页这一刻就把 Web API 那条请求发出去（墙钟节流在 `askSpotifyForLatestRelease` 里 ——
+        // 布局拍每帧都来，不能每帧都问）。
         askSpotifyForLatestRelease(artist: name)
     }
 
@@ -2217,10 +2049,9 @@ enum EntityPageHeaderManager {
 
     /// 页面里读到的卡片（「艺人之选」/「热门新歌」）—— 数据与目标都是那一格 ⇒ **可点**。
     private static func applyPick(_ pick: ArtistPick, to headerView: EntityPageHeaderView) {
-        // ★★ 2026-10-22：**页面里的数据一到，Web API 那张卡立刻作废** ——
-        //   数据与点击都回到页面那一格（用户要求：页面那一格最终读到时要替换掉 Web API 的卡片，
-        //   点击回到"转发给那一格"）。清的是**专辑 URI**，不动 `webReleaseApplied`
-        //   （离开再回来时还要能同步重画一次，见 `askSpotifyForLatestRelease`）。
+        // **页面里的数据一到，Web API 那张卡立刻作废** —— 数据与点击都回到页面那一格。
+        // 清的是**专辑 URI**，不动 `webReleaseApplied`
+        // （离开再回来时还要能同步重画一次，见 `askSpotifyForLatestRelease`）。
         clearWebReleaseURI(reason: "the page's own row now provides the card")
         headerView.updateRelease(
             title: pick.title,
@@ -2230,22 +2061,20 @@ enum EntityPageHeaderManager {
             // 只有"目标还在、而且属于**这一页**的艺人"才可点（换页后旧格子可能还活着）。
             isTappable: releaseCardSource != nil && releaseCardSourceName == currentArtistName
         )
-        // ★★ 2026-10-18：同上 —— 页头高度与卡片同一拍补上。
+        // 卡片挂在页头下面那一格，页头高度不需要动（见 `releaseCardHost(for:)`）。
     }
 
     // MARK: - 「最新发布」：Spotify Web API 那条线（页面那一行是骨架时的数据源）
     //
-    // 2026-10-22（日志 5 的现场）：进艺人页时页面里那一行是
-    // `RetrievalRowLoadingElementUI … 正在加载` 的**骨架**，Spotify 懒加载 ⇒ 只读页面的数据线
-    // 进页必然读不到（用户原话：「刚进艺人页没有，重进之后可能就有了」）。
-    // 这一段补的就是那条**不依赖页面**的路：`ArtistReleasesFromSpotify` 用抓到的令牌问
-    // Spotify 自己的 Web API，拿回"这位艺人的最新一张" + **专辑 URI**，于是卡片
-    // ① 进页很快就出现，② 点得动（`SpotifyURIOpener.open`）。
+    // 进艺人页时页面里那一行是 `RetrievalRowLoadingElementUI … 正在加载` 的**骨架**，
+    // Spotify 懒加载 ⇒ 只读页面的数据线进页必然读不到。这一段补的就是那条**不依赖页面**的路：
+    // `ArtistReleasesFromSpotify` 用抓到的令牌问 Spotify 自己的 Web API，拿回"这位艺人的最新一张"
+    // + **专辑 URI**，于是卡片 ① 进页很快就出现，② 点得动（`SpotifyURIOpener.open`）。
     //
     // 纪律：页面里的数据（艺人之选 / 热门新歌）**永远优先**；一旦读到就清掉这里的 URI，
     // 卡片与点击都回到"转发给页面那一格"。
-
-    /// 现在这张卡要打开的专辑（Web API 来源）。**必须与 `releaseAlbumArtist` 一起对得上当前页**。
+    //
+    // 现在这张卡要打开的专辑（Web API 来源）。**必须与 `releaseAlbumArtist` 一起对得上当前页**。
     private static var releaseAlbumURI: String?
     private static var releaseAlbumArtist: String?
     /// 已经画到哪一份页头上 —— 同一份页头只画一次（`updateRelease` 会重启封面下载，不能每拍都来）。
@@ -2259,9 +2088,9 @@ enum EntityPageHeaderManager {
 
     /// 问一次 Web API（**墙钟节流**）。三道闸门：
     ///
-    ///   · 页面里已经有数据（艺人之选 / 热门新歌）⇒ 不问；
-    ///   · 这位艺人已经取回来过 ⇒ 只同步重画，不问；
-    ///   · 20s 之内问过 ⇒ 跳过（`webReleaseRetryInterval`；90s 的轮询因此最多问 4 次）。
+    /// · 页面里已经有数据（艺人之选 / 热门新歌）⇒ 不问；
+    /// · 这位艺人已经取回来过 ⇒ 只同步重画，不问；
+    /// · 20s 之内问过 ⇒ 跳过（`webReleaseRetryInterval`；90s 的轮询因此最多问 4 次）。
     ///
     /// 由 `scheduleLatestRelease`（进页那一刻）与 `startReleasePolling` 的节拍各调一次。
     private static func askSpotifyForLatestRelease(artist: String) {
@@ -2270,9 +2099,8 @@ enum EntityPageHeaderManager {
             writeDebugLog("[Release] spotify — no artist name on the page yet, not asking")
             return
         }
-        // 页面里的数据优先（用户：优先艺人之选，其次页面上的最新发布）。
-        // 这一档**故意不写日志**：页面那条路自己已经有一行（`latest release from the page — …` /
-        // `artist pick — …`），而且这里的调用点是"每一拍"级的，多一行只会刷屏。
+        // 页面里的数据优先。这一档**故意不写日志**：页面那条路自己已经有一行
+        // （`latest release from the page — …` / `artist pick — …`），而这里的调用点是每拍级的。
         guard artistPickCache[artist] == nil, releaseSectionCache[artist] == nil else { return }
 
         if let release = webReleaseApplied[artist] {
@@ -2383,8 +2211,7 @@ enum EntityPageHeaderManager {
             // 有专辑 URI ⇒ 点得动（`handleReleaseCardTap` 第 ③ 档用它打开）。
             isTappable: true
         )
-        // ★★ 2026-10-18 的纪律：显卡的那一把顺手把页头补高
-        //   （否则姓名与三颗整体上移 106pt，满幅照片被吃掉一半）。
+        // 卡片挂在页头下面那一格，页头高度不需要动（见 `releaseCardHost(for:)`）。
 
         let dateText = release.dateText ?? "-"
         writeDebugLog(
@@ -2464,10 +2291,10 @@ enum EntityPageHeaderManager {
         return ArtistPick(title: title, meta: meta, artwork: image)
     }
 
-    /// ★ 2026-10-18：设置页改了「艺人页」那两格之后，如果艺人页还在下面，**当场重跑一遍**。
+    /// 设置页改了「艺人页」那两格之后，如果艺人页还在下面，**当场重跑一遍**。
     ///
-    /// 设置页是盖在艺人页上的；它自己不一定会让下面的页面再布局一次。没有这一句的话，
-    /// 用户切完开关要退回去再滚一下才看得到变化（月听众那行尤其明显）。
+    /// 设置页是盖在艺人页上的，它自己不一定会让下面的页面再布局一次 ⇒ 没有这一句，切完开关
+    /// 要退回去再滚一下才看得到变化（月听众那行尤其明显）。
     static func reapplyArtistPageAppearance() {
         guard isEnabled, !applying,
               let page = lastArtistPage, page.window != nil else { return }
@@ -2487,12 +2314,11 @@ enum EntityPageHeaderManager {
         return nil
     }
 
-    /// ★★ 2026-10-18 第二轮（用户：「点击 i 按键不会跳转到艺人介绍」）：**"关于艺人"出现的那一拍就认下它**。
+    /// **"关于艺人"出现的那一拍就认下它**。
     ///
-    /// 为什么不能靠搜：`applyToArtistPage` 里那次 BFS 从**页面根**出发，而真机日志 91 的树里
-    /// `SPTArtistAboutBiographyView` 落在**深度 20**（`21.UIScrollView` → … → 那个 section，
-    /// 旁边就是 `ArtistAboutListenersView` / `ListRow id=artist-about-listeners`）⇒ 日志 97 逐字
-    /// `leading MISSING`：用户按了四次，我们只把页面往下滚，**从来没拿到目标**。
+    /// 不能靠搜：`applyToArtistPage` 里那次 BFS 从**页面根**出发，而 `SPTArtistAboutBiographyView`
+    /// 落在**深度 20**（`21.UIScrollView` → … → 那个 section，旁边就是 `ArtistAboutListenersView` /
+    /// `ListRow id=artist-about-listeners`）⇒ 从根搜基本拿不到目标。
     /// 这个类**没有 accessibility id**，但它是 ObjC 类（`SPT*`）⇒ 直接挂它自己：事件驱动、零搜索。
     static func artistBiographyAppeared(_ view: UIView) {
         guard isEnabled else { return }
@@ -2502,14 +2328,11 @@ enum EntityPageHeaderManager {
         captureBioTextOnSight(from: view)
     }
 
-    /// ★★ 2026-10-11（**日志 101 + 图片 133 的现场**）：**这一块露头的那一刻就把正文读走**。
+    /// **这一块露头的那一刻就把正文读走**。
     ///
-    /// 以前这里只记下"它在哪儿"（给 `i` 转发用），正文全靠进页面 1.5s 那一次扫列表 —— 而这张卡
-    /// 是**懒加载**的：奈奈塚那次 1.5s 时整页还是 `leading MISSING`（日志 101 逐字），
-    /// 卡片是用户自己滚下去、之后才建出来的 ⇒ **它出现了，我们却什么都没读**：
-    /// `bioTexts` 一直空 ⇒ ① `i` 那张卡说"没有可读的介绍"；② 列表里那一段因为折叠闸门
-    /// （`hasCapturedBio`）也不折 —— 用户两边都看不到，而 Spotify 自己那份其实就在页面上
-    /// （图片 133 逐字：*Nanatsukaze is a Japan-based EDM × J-POP music duo…*）。
+    /// 这里若只记下"它在哪儿"（给 `i` 转发用）、正文靠进页面时扫一次列表，就会两头落空：这张卡
+    /// 是**懒加载**的，进页那一刻整页还没有它 ⇒ 它出现了我们什么都没读，`bioTexts` 一直空 ⇒
+    /// ① `i` 那张卡说"没有可读的介绍"；② 列表里那一段因为折叠闸门（`hasCapturedBio`）也不折。
     ///
     /// 所以：**只要它露头就读**（必须当场读 —— cell 一被回收文字就没了），并按艺人名存起来；
     /// 存下来那一刻顺手作废一次布局，折叠闸门才打得开（见 `relayoutAfterBioCapture`）。
@@ -2517,26 +2340,22 @@ enum EntityPageHeaderManager {
         let name = artistNameStorage
         guard !name.isEmpty else { return }
 
-        // ★★ 2026-10-18（照片 141）：**社交链接那颗一起收下** —— 用户点名「原本有的维基 / 推特
-        //    链接之类的没显示」。这一段是懒加载的，控件一被回收就没了 ⇒ 现在（露头那一刻）
-        //    就把它们记下来，`ArtistBioSheet` 那颗胶囊点下去时再转发给它们自己。
+        // **社交链接那颗一起收下**：这一段是懒加载的，控件一被回收就没了 ⇒ 露头那一刻就把它们
+        // 记下来，`ArtistBioSheet` 那颗胶囊点下去时再转发给它们自己。
         captureBioLinks(from: view, name: name)
 
         guard bioTexts[name] == nil, bioTexts.count < 32 else { return }
-        // ★★ 2026-10-18（用户：「那个 i 点击之后，艺人简介在内可能会有分行，现在没有」）：
-        //    同一张卡有两条读法：
-        //      · `eeveeArtistBioText` —— 按 id 读**一颗** label，最准，但 Spotify 有时把整段
-        //        塞进一个 label（段之间的换行只剩视觉段距，字符串里没有 `\n`）；
-        //      · `eeveeArtistBioBlockText` —— 把卡里**每一颗** label 按位置拼起来，段与段之间
-        //        天然有 `\n`（照片 141 那些分行就是它）。
-        //    以前是"label 优先" ⇒ 一旦 label 读得到，就永远轮不到会有分行的 block。
-        //    现在**两边都读，选换行更多的那一份**（内容由 `eeveeSanitizedArtistBio` 再收拾）。
+        // 同一张卡有两条读法：
+        // · `eeveeArtistBioText` —— 按 id 读**一颗** label，最准，但 Spotify 有时把整段塞进
+        // 一个 label（段之间的换行只剩视觉段距，字符串里没有 `\n`）；
+        // · `eeveeArtistBioBlockText` —— 把卡里**每一颗** label 按位置拼起来，段与段之间天然有 `\n`。
+        // **两边都读，选换行更多的那一份**（不要"label 优先"：那样永远轮不到会有分行的 block）。
         let labelText = eeveeArtistBioText(in: view)
         let blockText = eeveeArtistBioBlockText(in: view)
         let picked = Self.richerBioText(label: labelText, block: blockText)
         guard let raw = picked.text, !raw.isEmpty else { return }
-        // ★★ 2026-10-18：**存之前先收拾** —— 卡里那两行"艺人名 / 每月有 x 名听众"不是简介
-        //    （用户看照片 141 点名的"多出来一些其他东西"），见 `eeveeSanitizedArtistBio`。
+        // **存之前先收拾** —— 卡里那两行"艺人名 / 每月有 x 名听众"不是简介，
+        // 见 `eeveeSanitizedArtistBio`。
         let text = eeveeSanitizedArtistBio(raw, artistName: name)
         guard !text.isEmpty else { return }
         bioTexts[name] = text
@@ -2586,16 +2405,16 @@ enum EntityPageHeaderManager {
 
     /// 现在认下的"关于艺人"那一块（没有就是 nil）—— 给 `eeveeMaterialiseBio` 的"扫列表"用。
     ///
-    /// ★★ 2026-10-18 第三轮（用户：「按下 i 之后还是没有跳转到 艺人介绍」）：那一块是懒加载的，
-    /// 页面刚打开时整棵树只有 1000 来个节点 ⇒ 扫一遍列表把它逼出来之后，这里就能拿到它。
+    /// 那一块是懒加载的，页面刚打开时整棵树只有 1000 来个节点 ⇒ 扫一遍列表把它逼出来之后，
+    /// 这里就能拿到它。
     static var artistBioTarget: UIView? { cachedArtistBio }
 
     /// 藏掉艺人页头里 Spotify 自己画的东西，**绕开那张照片**，而且**只用空 mask**（见 `eeveeBlank`）。
     private static func blankArtistChrome(in root: UIView, avoiding cover: UIView?, skipping ours: UIView) {
         for sub in root.subviews {
             if sub === ours { continue }
-            // ⚠️★ 日志 90：同 `concealAlbumChrome` —— 我们自己的东西（页头、右上角那颗 ⋯、
-            //    满幅封面）一律跳过，否则艺人页上那颗 `⋯` 也是永远 hidden。
+            // 同 `concealAlbumChrome` —— 我们自己的东西（页头、右上角那颗 ⋯、满幅封面）一律跳过，
+            // 否则艺人页上那颗 `⋯` 也是永远 hidden。
             if isOurs(sub) { continue }
             if let cover {
                 if sub === cover { continue }
@@ -2608,12 +2427,8 @@ enum EntityPageHeaderManager {
         }
     }
 
-    /// **歌手页那条 tab 栏（Music / Video / Merch）要走掉** —— pw 的 `ArtistField.x` 逐字：
-    ///
-    /// > The strip is Music, Video and Merch. The Music list is the page the Music app gives an artist:
-    /// > the videos and the merch have their own tabs only so that they can be left out, so the strip
-    /// > goes and the Music list stays. … it goes invisible and the pages under it move up into its
-    /// > place and stop paging.
+    /// **歌手页那条 tab 栏（Music / Video / Merch）要走掉**：Video / Merch 两页的存在只是为了让
+    /// 它们可以被去掉，Music 列表本身要留下并上移到那一格的位置。
     ///
     /// 用 `alpha = 0`（**不是 hidden**：它在 `AutoLayoutStackView` 里，隐藏会 trap）+ 关交互，
     /// 再把同层的分页 scroll 整体上移一格的高度、并关掉分页。
@@ -2652,8 +2467,8 @@ enum EntityPageHeaderManager {
 
     /// 关掉「隐藏 Music / Video / Merch 标签栏」时，把 `hideArtistTabStrip` 动过的每一格写回。
     ///
-    /// ★ 2026-10-18：这颗开关默认是**开**（保持 2026-10-17 以来的观感）；关掉时必须能还原，
-    /// 否则用户只能重启 Spotify 才能看见标签栏。记录只存**原值**，不猜"应该是什么"。
+    /// 这颗开关默认是**开**；关掉时必须能还原，否则用户只能重启 Spotify 才能看见标签栏。
+    /// 记录只存**原值**，不猜"应该是什么"。
     static func restoreArtistStrip() {
         guard let state = artistStripState else { return }
         if let strip = state.strip {
@@ -2672,13 +2487,11 @@ enum EntityPageHeaderManager {
 
     /// 是不是**我们自己**插进 Spotify 视图树里的东西 —— 统一靠 id 前缀 `eevee-` 认。
     ///
-    /// ★ 2026-10-06（日志 90 抓到）：**藏"头里除我们那份以外的一切"时必须跳过这些**。
-    /// 原来只按两个具体 id 跳（页头 `EntityPageHeaderView` 与满幅封面 `eevee-page-hero-sharp`），
-    /// 于是后加的 `eevee-pinned-more`（右上角那颗 ⋯）被顺手藏了：它在**歌单页**是好的
-    /// （那颗挂在 `PL.Header` 上），一切到**专辑页/艺人页**就永远是 `hidden`
-    /// —— 那两条路每拍都在藏"头里除了页头以外的一切"，而它已经被搬进那棵树里了。
+    /// 藏"头里除我们那份以外的一切"时**必须跳过这些**。按具体 id 逐个跳不行：后加的
+    /// `eevee-pinned-more`（右上角那颗 ⋯）就会被顺手藏掉，切到专辑页/艺人页时永远是 `hidden`
+    /// —— 那两条路每拍都在藏"头里除了页头以外的一切"。
     ///
-    /// 判据改成前缀之后，以后再往 Spotify 的树里插自己的视图，不用回来补这一行。
+    /// 判据用前缀之后，以后再往 Spotify 的树里插自己的视图，不用回来补这一行。
     private static func isOurs(_ view: UIView) -> Bool {
         (view.accessibilityIdentifier ?? "").hasPrefix("eevee-")
     }
@@ -2694,8 +2507,7 @@ enum EntityPageHeaderManager {
     private static func concealAlbumChrome(in root: UIView, avoiding cover: UIView?, skipping ours: UIView) {
         for sub in root.subviews {
             if sub === ours { continue }
-            // ⚠️★ 日志 90：**我们自己插的一律跳过**（见 `isOurs`）—— 顺手藏掉 `eevee-pinned-more`
-            //    就是这么发生的。原来这里那一行只跳满幅封面，覆盖不到后加的东西。
+            // **我们自己插的一律跳过**（见 `isOurs`）—— 否则 `eevee-pinned-more` 会被顺手藏掉。
             if isOurs(sub) { continue }
             if let cover {
                 if sub === cover { continue }
@@ -2775,11 +2587,10 @@ enum EntityPageHeaderManager {
         )
     }
 
-    /// ★ 2026-10-17（日志 94：`followSignals isSelected=false selectedTrait=false label="-" text=""`
-    /// —— **四条信号全是空的**，所以绿描边点不亮）：把 Follow 那颗的**子树**打一次，看"已关注"
-    /// 到底画在哪个类上、状态挂在哪个属性上。只打一次，60 个节点以内。
+    /// 把 Follow 那颗的**子树**打一次，看"已关注"到底画在哪个类上、状态挂在哪个属性上。
+    /// 只打一次，60 个节点以内。
     ///
-    /// ⚠️ 为什么不能靠猜：`Encore.Button.Secondary` 是 Spotify 自己的按钮，标题可能不是 `UILabel`
+    /// ⚠️ 不能靠猜：`Encore.Button.Secondary` 是 Spotify 自己的按钮，标题可能不是 `UILabel`
     /// （SwiftUI 宿主 / 自绘都见过），状态也可能既不在 `isSelected` 也不在无障碍特征上。
     /// 这一行日志一次性把"类名 / id / label / value / 文字 / 选中特征"全列出来。
     private static func probeFollowSubtree(_ follow: UIView?) {
@@ -2813,26 +2624,22 @@ enum EntityPageHeaderManager {
         )
     }
 
-    /// **往上找"仍然恰好包着这个控件"的最外层视图** —— pw 的 `wrapperFor`（`AlbumHeader.x`）逐字：
+    /// **往上找"仍然恰好包着这个控件"的最外层视图**：那是 Spotify 布局放的 element view，
+    /// 藏它才不会连控件本身一起弄丢。
     ///
-    /// > The outermost view that still wraps the control exactly: the element view Spotify's layout
-    /// > places, so concealing it leaves the control itself alone to be read and fired.
-    ///
-    /// ★ 2026-10-13（用户：「这播放旁边的图标是重合的还没修吗…」）：**这才是"重合"的正解**。
     /// 只藏控件本身的话，那颗按钮的**圆底/边框画在它的父视图上**、还留在原地 ⇒ Spotify 的圆
     /// 与我们的玻璃圆叠在一起，看着就是"两个图标重合"。往上收到"尺寸不再变化"的那一层再藏，
     /// 整个按钮（含圆底）一起消失。
-    /// ★ 2026-10-13（用户编译报错：`value of optional type 'UIView?' must be unwrapped`）：
-    /// **参数与返回值都做成可选** —— 调用方那四颗（play / shuffle / add / download）本来就是
-    /// `UIView?`（找不到就是 nil），而 `eeveeConceal` 收的也是 `UIView?`。
-    /// 做成可选之后 `eeveeConceal(wrapperFor(play, in: page))` 一句就合法，
+    ///
+    /// 参数与返回值都做成可选：调用方那四颗（play / shuffle / add / download）本来就是 `UIView?`，
+    /// `eeveeConceal` 收的也是 `UIView?` ⇒ `eeveeConceal(wrapperFor(play, in: page))` 一句就合法，
     /// 不必在四个调用点各写一次 `if let`（那条路还会漏掉其中一个）。
     private static func wrapperFor(_ control: UIView?, in stop: UIView) -> UIView? {
         guard let control else { return nil }
         var wrapper = control
         var node: UIView? = control.superview
-        // ⚠️ 加一道**层数上限**（pw 没有，但它那边的 `stop` 就是页面）：万一祖先链上连着几层同尺寸的
-        //    包装容器，走到页面那一层就会把**整页**藏掉 —— 那是灾难性的。5 层足够收住一颗按钮。
+        // ⚠️ **层数上限**：万一祖先链上连着几层同尺寸的包装容器，走到页面那一层就会把**整页**藏掉。
+        // 5 层足够收住一颗按钮。
         var levels = 0
         while let current = node, current !== stop, levels < 5 {
             levels += 1
@@ -2844,30 +2651,22 @@ enum EntityPageHeaderManager {
         return wrapper
     }
 
-    /// ★ 2026-10-13（照 AM）：把 `⋯` **钉在页头的右上角**。
+    /// 把 `⋯` **钉在页头的右上角**（照 AM，与返回键同高）。
     ///
-    /// AM 在那一格放的是一颗"**分享 + ⋯**"的玻璃胶囊；而 **Spotify 的专辑页/艺人页没有独立的分享按钮**
-    /// —— 我们全仓日志里 `ShareButton*`（`ShareButtonNowPlayingView` / `lyrics-share-button`）只出现在
-    /// **听歌页与歌词页**，专辑页与艺人页的分享是 `⋯` 菜单里的一项。所以这里**只做 `⋯` 一颗**，
-    /// 不去造一颗点不动的假分享键（本项目纪律：绝不留下"看得见、点不动"的东西）。
-    ///
-    /// pw 的 `SGRPinnedMore` 是同一件事，它的注释逐字：
-    ///
-    /// > the Kit's pinned ⋯ (`SGRPinnedMore`) draws and fires it from the top trailing corner of the
-    /// > page, level with the back button.
+    /// AM 在那一格放的是"**分享 + ⋯**"的玻璃胶囊；而 **Spotify 的专辑页/艺人页没有独立的分享按钮**
+    /// —— `ShareButton*`（`ShareButtonNowPlayingView` / `lyrics-share-button`）只出现在听歌页与
+    /// 歌词页，专辑页与艺人页的分享是 `⋯` 菜单里的一项。所以这里**只做 `⋯` 一颗**，
+    /// 不去造一颗点不动的假分享键（纪律：绝不留下"看得见、点不动"的东西）。
     ///
     /// 藏 Spotify 行里那颗走 `wrapperFor`（连它的圆底一起）—— 否则同一页上会出现两颗 `⋯`。
     private static func pinMoreButton(in headerRoot: UIView) {
-        // ★★ 2026-10-17（用户：「歌单页右上角那三个点点击没反应」——他说这个"等会做也行"，
-        //    但根因与播放键是同一个：按 id 拿到的是 `ElementView<…>` 包装层）⇒ 一起改成 `findControl`。
+        // 走 `findControl`：根因与播放键是同一个 —— 按 id 拿到的是 `ElementView<…>` 包装层。
         guard let menu = findControl("Components.UI.ContextMenuButton*", in: headerRoot, cache: &cachedMore) else {
             // 这一页没有 `⋯`（或者还没建出来）⇒ 什么都不做，**也不留一颗假的**。
             //
-            // ★★ 2026-10-16（用户：「右上角那个**点不动**的三点」）：这里原来**静默返回**，
-            //    而 `pinnedMore` 是**文件级静态**、一旦建出来就留在屏上 —— 于是"Spotify 重建了页头、
-            //    弱引用 `source` 失效"这种情况会留下一颗**永远点不动、日志里也没有任何痕迹**的按钮。
-            //    现在留一行日志（只在"屏上已经有我们那颗"时报一次），下一份日志就能分清
-            //    "这一页没有 ⋯" 与 "有，但源丢了"。
+            // 但要留一行日志：`pinnedMore` 是**文件级静态**、一旦建出来就留在屏上 ——
+            // "Spotify 重建了页头、源失效"会留下一颗永远点不动、也没有任何痕迹的按钮。
+            // 这一行能分清"这一页没有 ⋯" 与 "有，但源丢了"。
             if let stale = pinnedMore, stale.window != nil, !didReportPinnedMoreMissing {
                 didReportPinnedMoreMissing = true
                 writeDebugLog(
@@ -2892,12 +2691,10 @@ enum EntityPageHeaderManager {
                     + " (AM's corner; Spotify keeps its own ⋯ hidden in the row)"
             )
         }
-        // ★★ 2026-10-18（用户：「**歌单页点击三点无反应**；艺人页点击三点会崩溃」）：
-        //    **挂到 window 上，不再塞进页头**。日志 105 的 `[HeaderProbe] page ids:` 里
-        //    歌单页那一段**根本没有 `eevee-pinned-more`**，而艺人页有 —— 说明它在歌单页
-        //    要么被页头/导航栏盖住、要么根本不在一条能收到触摸的链上。
-        //    window 是最后加、最上面的一层：位置用 window 坐标算，不会再被页头折叠带走。
-        //    离开实体页时由 `EntityPageAppearance.restore` 调 `removePinnedMore()` 收走。
+        // **挂到 window 上，不再塞进页头**：塞进页头时它要么被页头/导航栏盖住、
+        // 要么根本不在一条能收到触摸的链上。
+        // window 是最后加、最上面的一层：位置用 window 坐标算，不会被页头折叠带走。
+        // 离开实体页时由 `EntityPageAppearance.restore` 调 `removePinnedMore` 收走。
         guard let host = headerRoot.window else { return }
         if more.superview !== host {
             host.addSubview(more)
@@ -2924,38 +2721,30 @@ enum EntityPageHeaderManager {
             )
         }
         more.feed(from: menu)
-        // ★★ 2026-10-16（用户：「右上角那个**点不动**的三点」）：三件事一起补上 ——
-        //   ① `role = "more"`：日志里那颗原来一直是默认的 `side button`，分不出是谁（见 `tapped`）；
-        //   ② **`fireTarget = menu`**：转发目标从**弱引用** `source` 换成这颗真实控件 ——
-        //      `source` 一旦被回收（Spotify 重建页头）就变成一颗**静默失效**的按钮；
-        //   ③ `firesDeep = true`：前三档都落空时再往祖先链/选中回调那一档找（见 `eeveeFireWide`）。
+        // 三件事一起补上：
+        // ② **`fireTarget = menu`**：转发目标从**弱引用** `source` 换成这颗真实控件 ——
+        // `source` 一旦被回收（Spotify 重建页头）就变成一颗**静默失效**的按钮；
+        // ③ `firesDeep = true`：前三档都落空时再往祖先链/选中回调那一档找（见 `eeveeFireWide`）。
         //
-        // ★★ 2026-10-17 第六轮（用户：「艺人页／专辑页右上角三个点还是点不动」，日志 109 判决）：
-        //    **不再跳过 target/action**（`skipsControlAction = false`），而且**不再把源控件藏死**。
+        // **不能跳过 target/action**（`skipsControlAction = false`）：这颗按钮有
+        // `touchUpInside → EncoreControlEventHandler`，跳过它就只能落到手势那一档，而手势读不出
+        // `_targets` ⇒ `fired: NOTHING`。触发顺序：`primaryActionTriggered` → `touchUpInside` →
+        // 都没有才 `accessibilityActivate`。
         //
-        //    日志 109 的两行是关键：
-        //      · `⋯ clickability — targets=[touchUpInside=EncoreControlEventHandler…]` ⇒ 它**有** target；
-        //      · `more tapped — … fired: NOTHING (no action and no tap recogniser)` ⇒ 我们**跳过了**那一档，
-        //        而手势那一档失败（它的 `UITapGestureRecognizer` 读不出 `_targets`）。
-        //    pw 的 `SGRFire`（`Kit/SGRRestyle.m`）走的正是我们跳过的那一档：
-        //      `primaryActionTriggered` → `touchUpInside` → 都没有才 `accessibilityActivate`；
-        //    而且 pw 藏东西只加**空 mask**（`blank()` 逐字："Not hidden — the header's OverflowStackView
-        //    traps when a view in it hides, and a hidden view is one the redesign still has to read and fire"）。
-        //    我们原来用 `eeveeConceal`（`layer.isHidden` + 空 mask）⇒ 一个 **hidden** 的视图，
-        //    UIKit 侧拿不到可用的锚点，菜单自然弹不出来（日志 100 那句"发成功了但界面一动没动"）。
+        // 另外**不能把源控件藏死**：`eeveeConceal`（`layer.isHidden` + 空 mask）会留下一个
+        // **hidden** 的视图，UIKit 侧拿不到可用的锚点，菜单弹不出来。见下面 `eeveeBlank`。
         more.role = "more"
         more.fireTarget = menu
         more.skipsControlAction = false
         more.firesDeep = true
 
-        // ★★ 2026-10-17：**只遮不藏**（`eeveeBlank`：空 mask + 关交互 + 关无障碍，`isHidden` 一个都不碰）。
-        //   见上面 pw 那段引文 —— 这颗按钮**必须还是一个"活着"的控件**，菜单才弹得出来。
+        // **只遮不藏**（`eeveeBlank`：空 mask + 关交互 + 关无障碍，`isHidden` 一个都不碰）——
+        // 这颗按钮**必须还是一个"活着"的控件**，菜单才弹得出来。
         eeveeBlank(wrapperFor(menu, in: headerRoot))
     }
 
-    /// ★ 2026-10-18（用户：「歌单页进入后还是能往上接着划……进入的位置可以上移吗」）：
-    /// 把隐藏的搜索框那一行的**真实 frame / 父链 / 滚动 offset / topInset** 打一次。
-    /// 下一份日志就能分清"空档是那一行的高度"还是"contentInset 多了一截"，再决定折高度还是改 offset。
+    /// 把隐藏的搜索框那一行的**真实 frame / 父链 / 滚动 offset / topInset** 打一次，
+    /// 用来分清"空档是那一行的高度"还是"contentInset 多了一截"，再决定折高度还是改 offset。
     private static func reportPlaylistMetrics(headerRoot: UIView, findField: UIView) {
         guard !didReportPlaylistMetrics else { return }
         didReportPlaylistMetrics = true
@@ -2985,7 +2774,7 @@ enum EntityPageHeaderManager {
         )
     }
 
-    /// ★ 2026-10-18：离开实体页时把挂在 window 上的 `⋯` 收走（见 `pinMoreButton`）。
+    /// 离开实体页时把挂在 window 上的 `⋯` 收走（见 `pinMoreButton`）。
     static func removePinnedMore(reason: String = "") {
         guard let more = pinnedMore else { return }
         more.removeFromSuperview()
@@ -2998,7 +2787,7 @@ enum EntityPageHeaderManager {
         )
     }
 
-    /// 专辑页的文字：**按明确的 id 读**（pw 的 `applyHeader` 用同样这三个 id）。
+    /// 专辑页的文字：**按明确的 id 读**（`TitleRow` / `ParentRow` / `MetadataRow`）。
     private static func albumTexts(in header: UIView) -> HeaderTexts {
         var texts = HeaderTexts()
 
@@ -3025,7 +2814,7 @@ enum EntityPageHeaderManager {
     }
 
     /// 专辑页那行是**两格**（kind 与日期各是一个 cell、各一个 label）。
-    /// pw 的 `metadataText` 逐字：按**画出来的顺序**（x 从小到大）读，空格连接。
+    /// 按**画出来的顺序**（x 从小到大）读，空格连接。
     private static func metadataLine(_ root: UIView) -> String {
         var parts: [(x: CGFloat, text: String)] = []
         forEachView(root) { view in
@@ -3040,15 +2829,9 @@ enum EntityPageHeaderManager {
 
     /// 从 `root` 往下找**第一个真正的控件**（`UIControl`，含自身）。
     ///
-    /// ★★ 2026-10-06（照片 113 + 用户报的三件事其实是**同一个**根因）：
-    ///   · 专辑页的**随机播放点了没反应**；
-    ///   · 艺人页的**播放键没反应**；
-    ///   · 右边那颗**关注没有点击反馈**（"加入了音乐库会变绿"—— 状态本来是有的）。
-    ///
-    /// 因为 `findFloating` 在页面上按 id 找到的往往是**外面那层 `ElementView<…>` 包装**
-    /// （我们自己的树里那一行全是 `ElementView<URL, Any, Any>`），而不是能响应 `sendActions` /
+    /// 按 id 找到的往往是**外面那层 `ElementView<…>` 包装**，而不是能响应 `sendActions` /
     /// `handleTap` 的那颗按钮：转发打在包装上 = 没反应；`(source as? UIControl)?.isSelected`
-    /// 也恒为假 ⇒ 永远不变绿。**歌单页没有这个问题**，因为它从页头里按 id 直接拿到了真控件。
+    /// 也恒为假 ⇒ 永远不变绿（随机播放 / 播放键 / Follow 三处都是这个根因）。
     private static func firstControl(in root: UIView) -> UIView? {
         if root is UIControl { return root }
         var queue: [UIView] = root.subviews
@@ -3062,15 +2845,15 @@ enum EntityPageHeaderManager {
         return nil
     }
 
-    /// pw 的 `floatingIn`（`AlbumHeader.x`）：那两颗浮动控件是**页面的直接子视图、48pt 上下**，
-    /// 而头、wash、列表都是整页宽 —— 只搜"小尺寸的直接子视图"，免得每一拍走一整棵树。
+    /// 那两颗浮动控件是**页面的直接子视图、48pt 上下**，而头、wash、列表都是整页宽 ——
+    /// 只搜"小尺寸的直接子视图"，免得每一拍走一整棵树。
     private static func findFloating(_ identifier: String, in page: UIView, cache: inout UIView?) -> UIView? {
         if let cached = cache, cached.window != nil, cached.isDescendant(of: page) { return cached }
         var found: UIView?
         for sub in page.subviews where sub.bounds.width <= 120 {
             if let hit = eeveeFindView(sub, identifier: identifier) {
-                // ★ 钻到真正的控件（见 `firstControl`）：命中的若是包装层，点了就是没反应。
-                //   缓存里存的**也是钻过之后的那一个**，所以每拍不会重走这一趟。
+                // 钻到真正的控件（见 `firstControl`）：命中的若是包装层，点了就是没反应。
+                // 缓存里存的**也是钻过之后的那一个**，所以每拍不会重走这一趟。
                 found = firstControl(in: hit) ?? hit
                 break
             }
@@ -3083,19 +2866,18 @@ enum EntityPageHeaderManager {
     /// （封面方形与满幅图都排除掉）。
     ///
     /// 按宽度取而不是"取最靠下的"：Liked Songs 的 layout 里还有一个 45pt 的图标槽位，
-    /// 加载途中它会落在 block 下面，按"最靠下"会把它当成 block（pw 在真机上因此把页头画了两遍）。
+    /// 加载途中它会落在 block 下面，按"最靠下"会把它当成 block（页头就会画两遍）。
     private static func blockIn(_ layout: UIView, cover: UIView?, fullbleed: UIView?) -> UIView? {
         let wide = layout.bounds.width * 0.6
         var block: UIView?
         for sub in layout.subviews {
             if sub === cover || sub === fullbleed { continue }
             if sub is EntityPageHeaderView { continue }
-            // ★★ 2026-10-31：文字块**绝不能把封面包在里面** —— 下面那轮
-            //   `for sub in block.subviews { eeveeConceal(sub) }` 会把封面一起藏掉。
-            //   普通歌单页的满宽块本来就不含封面（这一句是空转），但生成歌单的页头
-            //   可能只有"一个大容器"，不挡这一下就会把整页图片藏没。
-            //   ⚠️ 只认**真封面**：`cover` 可能是"找不到封面时的整幅兜底"（`fullbleed`），
-            //      那一层本来就该被跳过（上一句），拿它当判据会把正常块也误杀。
+            // 文字块**绝不能把封面包在里面** —— 下面那轮 `concealInside` 会把封面一起藏掉。
+            // 普通歌单页的满宽块本来就不含封面（这一句是空转），但生成歌单的页头可能只有
+            // "一个大容器"，不挡这一下就会把整页图片藏没。
+            // ⚠️ 只认**真封面**：`cover` 可能是"找不到封面时的整幅兜底"（`fullbleed`），
+            // 拿它当判据会把正常块也误杀。
             if let cover, cover !== fullbleed, cover.isDescendant(of: sub) { continue }
             if sub.bounds.width < wide { continue }
             if block == nil || sub.frame.minY > block!.frame.minY { block = sub }
@@ -3139,19 +2921,18 @@ enum EntityPageHeaderManager {
     }
 
     // MARK: - 图片区（正常歌单 = 一张方封面；电台 = 一行三个大圆头像）
-
-    /// 页头里**不许藏**的那些视图（图片区）。
-    ///
-    /// ★★ 2026-10-31（照片 170 / 171）：
-    ///   · 正常歌单（171）= 一张方封面，元素 id `Components.Header.UI.ArtworkImage`；
-    ///   · 电台（170）= **一行三个大圆头像**（`Encore.AvatarView`，`dump-9.1.88.txt:16203`），
-    ///     左右两张还各自出血到屏幕外。
-    ///   两者在版式里的角色**完全一样**：图在上，标题 / 创建者 / 按钮在下。
-    ///   ⇒ 这里统一成一份"不许藏"的名单，`concealInside` 绕着它走。
+    //
+    // 页头里**不许藏**的那些视图（图片区）。
+    //
+    // · 正常歌单 = 一张方封面，元素 id `Components.Header.UI.ArtworkImage`；
+    // · 电台 = **一行三个大圆头像**（`Encore.AvatarView`），左右两张还各自出血到屏幕外。
+    //
+    // 两者在版式里的角色**完全一样**：图在上，标题 / 创建者 / 按钮在下。
+    // ⇒ 统一成一份"不许藏"的名单，`concealInside` 绕着它走。
     private static func headerArtwork(in layout: UIView, cover: UIView?, fullbleed: UIView?) -> [UIView] {
         var artwork: [UIView] = []
         // ⚠️ 只认**真封面**：`cover` 可能是"找不到封面时的整幅兜底"（`fullbleed`），
-        //    把它算进名单等于整页都不藏。
+        // 把它算进名单等于整页都不藏。
         if let cover, cover !== fullbleed { artwork.append(cover) }
         artwork.append(contentsOf: headerAvatars(in: layout))
         return artwork
@@ -3160,15 +2941,13 @@ enum EntityPageHeaderManager {
     /// 满幅页头（`HeaderFullbleedCentralView`）里**那张图** —— 除了它，容器里其余的都是
     /// Spotify 自己的 chrome（渐变 + 大标题），要藏。
     ///
-    /// 判据按**类名**，三档（前两档都在 9.1.88 的符号表里，见 `C:\dsh\ipa\dump-9.1.88.txt`）：
-    ///   · `:15891` `_TtCC28EncoreConsumerMobile_BaseKit26HeaderFullbleedCentralViewP33_…14ArtworkWrapper`
-    ///     —— 图就装在这个私有嵌套类里（pw 的真机树里对应那一格是 `Encore.ImageView`）；
-    ///   · 某些版本没有 `ArtworkWrapper` ⇒ 退回容器里第一个 `Encore.ImageView`；
-    ///   · 电台那种「图 = 一行三个大圆头像」⇒ 再退回 ≥48pt 的 `AvatarView`。
+    /// 判据按**类名**，三档：
+    /// · `…HeaderFullbleedCentralView…14ArtworkWrapper` —— 图就装在这个私有嵌套类里；
+    /// · 某些版本没有 `ArtworkWrapper` ⇒ 退回容器里第一个 `Encore.ImageView`；
+    /// · 电台那种「图 = 一行三个大圆头像」⇒ 再退回 ≥48pt 的 `AvatarView`。
     ///
     /// ⚠️ 三档都落空 ⇒ 返回空数组，调用方**整支放过**。绝不拿"容器里所有图片都留"当兜底：
-    ///    万一标题容器里也带图，那就等于什么都没藏；反过来把名单写宽一点又会把满幅图藏没
-    ///    （pw 记的那条 "black hero for good"）。
+    /// 万一标题容器里也带图，那就等于什么都没藏；反过来把名单写宽一点又会把满幅图藏没。
     private static func fullbleedArtwork(in fullbleed: UIView) -> [UIView] {
         var kept: [UIView] = []
         forEachView(fullbleed) { view in
@@ -3179,8 +2958,8 @@ enum EntityPageHeaderManager {
         if kept.isEmpty, let image = eeveeFindView(fullbleed, identifier: "Encore.ImageView") {
             kept.append(image)
         }
-        // 电台那一类：满幅头里没有 `ArtworkWrapper`，图是**一行三个大圆头像**（`Encore.FaceKit.AvatarView`，
-        // `dump-9.1.88.txt:16203`）—— 只在上面两条都落空时才扫，且只认 ≥48pt 的（创建者那行的脸堆小得多）。
+        // 电台那一类：满幅头里没有 `ArtworkWrapper`，图是**一行三个大圆头像**（`Encore.FaceKit.AvatarView`）
+        // —— 只在上面两条都落空时才扫，且只认 ≥48pt 的（创建者那行的脸堆小得多）。
         if kept.isEmpty {
             forEachView(fullbleed) { view in
                 guard NSStringFromClass(type(of: view)).contains("AvatarView"),
@@ -3194,14 +2973,14 @@ enum EntityPageHeaderManager {
     /// 页头里那几个**大圆头像**（电台）。
     ///
     /// 三条收窄，防止误伤（创建者那行的脸堆里也全是 `AvatarView`）：
-    ///   · **至少 48pt 宽** —— 脸堆里的头像只有 24pt 上下；
-    ///   · 脸堆（`FacepileView`）里的一律不算，哪怕被放大；
-    ///   · 最多收 8 个（电台是三张，留点余量）。
+    /// · **至少 48pt 宽** —— 脸堆里的头像只有 24pt 上下；
+    /// · 脸堆（`FacepileView`）里的一律不算，哪怕被放大；
+    /// · 最多收 8 个（电台是三张，留点余量）。
     ///
     /// 性能：结果按 `layout` 缓存 —— 这一拍是**每帧**的，不能每帧走一遍 1500 节点的 BFS。
     private static func headerAvatars(in layout: UIView) -> [UIView] {
         // ⚠️ 只有"页头已经撑开"（>100pt）才认缓存：第一两拍头像还没量出宽度（0pt），
-        //    那时扫出来的"没有头像"是假结论 —— 缓存住它，头像就永远不会被保护。
+        // 那时扫出来的"没有头像"是假结论 —— 缓存住它，头像就永远不会被保护。
         let settled = layout.bounds.height > 100
         if settled, artworkScannedLayout === layout,
            cachedArtwork.allSatisfy({ $0.window != nil }) {
@@ -3242,7 +3021,7 @@ enum EntityPageHeaderManager {
     /// 只藏那些"不含图片区"的孩子。
     ///
     /// 最多 8 层；到不了底就整支放过 —— 宁可留一点 Spotify 的 chrome，
-    /// 也不要再让头像消失（照片 170 那一块变空白就是它）。
+    /// 也不要再让头像消失。
     private static func concealInside(_ view: UIView, keeping artwork: [UIView], depth: Int = 0) {
         if artwork.contains(where: { $0 === view }) { return }
         guard artwork.contains(where: { $0.isDescendant(of: view) }) else {
@@ -3264,9 +3043,8 @@ enum EntityPageHeaderManager {
         var about = ""
     }
 
-    /// ★ 2026-10-13（性能）：**上一拍认下的那四个标签**。
+    /// **上一拍认下的那四个标签**。
     ///
-    /// 日志 86 逐字：`[Perf][EntityPageHeader] 200 passes, 140.53 ms total, 0.703 ms avg` ——
     /// 而 `HeaderContentLayout.layoutSubviews` 在页头折叠时**每一帧**都会来（用户那边就是
     /// 「用较快的速度往下滑，会有渲染跟不上的问题」）。原来每一拍要走 **5~8 次整棵子树遍历**：
     /// 封面 1 次 + `Metadata*` 最多 3 次 + 脸堆 1 次 + 标题 1 次 + 创建者 1 次，全落在主线程上。
@@ -3284,10 +3062,9 @@ enum EntityPageHeaderManager {
     /// 文本来源**分两级**（pw 的分法）：标题/描述优先读页面的 view model，创建者与长度读
     /// Spotify 自己那些**被藏起来的标签**（所以语言永远跟着 Spotify 走）。
     ///
-    /// ⚠️ 9.1.88 上 model 那条路的存在性**没证实**（`dump-9.1.88.txt` 里没有
-    /// `defaultHeaderViewModel` / `playlistName` 这两个名字）⇒ 一律 `responds(to:)` 守卫，
+    /// ⚠️ 9.1.88 上 model 那条路的存在性**没证实**⇒ 一律 `responds(to:)` 守卫，
     /// 拿不到就退回标签启发式。**标签兜底才是这里的主路径**。
-    /// ★ 2026-10-13（性能）：上一拍认下的四个标签还在那棵树上 ⇒ **只读 `.text`**（每帧一次，成本≈0）。
+    /// 上一拍认下的四个标签还在那棵树上 ⇒ **只读 `.text`**（每帧一次，成本≈0）。
     /// 认不出来（进页面第一拍、或者 Spotify 换了 label）才走下面那条完整的启发式。
     private static func headerTexts(block: UIView, headerRoot: UIView) -> HeaderTexts {
         if let views = cachedTextViews, let title = views.title, title.isDescendant(of: block) {
@@ -3342,14 +3119,11 @@ enum EntityPageHeaderManager {
             }
         }
 
-        // ★★ 2026-10-31（This Is / 电台）：官方生成歌单的创建者**不是脸堆**，而是
-        //   专用插件元素 —— 符号表里逐字有两支：
-        //     · `ListUXPlatformConsumers_ThisIsArtistHeaderPluginImpl28ThisIsHeaderCreatorElementUI`
-        //       （`dump-9.1.88.txt:15289`，This Is xxx）
-        //     · `ListUXPlatformConsumers_EditorialHeaderPluginImpl31EditorialHeaderCreatorElementUI`
-        //       （:15076，编辑歌单 / 电台那一类）
-        //   脸堆那条路在这类页面上永远走空 ⇒ 页头会少一行"Spotify / 艺人"。
-        //   这里按**类名**再找一次（与 taurus 同一条纪律：认类名，不认 id）。
+        // 官方生成歌单的创建者**不是脸堆**，而是专用插件元素：
+        // · `…ThisIsArtistHeaderPluginImpl…ThisIsHeaderCreatorElementUI`（This Is xxx）
+        // · `…EditorialHeaderPluginImpl…EditorialHeaderCreatorElementUI`（编辑歌单 / 电台那一类）
+        // 脸堆那条路在这类页面上永远走空 ⇒ 页头会少一行"Spotify / 艺人"。
+        // 这里按**类名**再找一次（认类名，不认 id）。
         if texts.creator.isEmpty {
             for marker in ["ThisIsHeaderCreator", "EditorialHeaderCreator"] {
                 guard let element = firstView(withClassName: marker, in: block),
@@ -3471,9 +3245,9 @@ enum EntityPageHeaderManager {
     }
 
     // MARK: - 读 view model（能找到就用，找不到算了）
-
-    /// 沿 responder 链找页面的 view model：先问 `defaultHeaderViewModel` / `headerViewModel`，
-    /// 再问 `headerController` 要一个。**每个 selector 都先 `responds(to:)`**。
+    //
+    // 沿 responder 链找页面的 view model：先问 `defaultHeaderViewModel` / `headerViewModel`，
+    // 再问 `headerController` 要一个。**每个 selector 都先 `responds(to:)`**。
     private static func viewModel(from view: UIView) -> AnyObject? {
         var responder: UIResponder? = view
         var guardCount = 0
@@ -3533,24 +3307,19 @@ func activateEntityPageHeader() {
     // 专辑页 / 艺人页那两条路都是**可选**的：类不在就少做一页（不能因为一个可选的类把整组拖垮）。
     let album = NSClassFromString(EntityPageAlbumLayoutHook.targetName) != nil
     let artist = NSClassFromString(EntityPageArtistLayoutHook.targetName) != nil
-    // ★★ 2026-10-31：**生成歌单（This Is / 电台）的备用入口** —— 同样可选、同样单独一组。
-    //    它不在 = 只影响"页头换了一套布局类名"那种情况；共用组里那几页照常。
+    // **生成歌单（This Is / 电台）的备用入口** —— 同样可选、同样单独一组。
+    // 它不在 = 只影响"页头换了一套布局类名"那种情况；共用组里那几页照常。
     let playlistPage = NSClassFromString(EntityPagePlaylistPageHook.targetName) != nil
     if playlistPage { EntityPagePlaylistPageHookGroup().activate() }
-    // ★★ 2026-10-18 第二轮：`SPTArtistAboutBiographyView` 那条也是可选的 —— 它不在就等于"关于艺人"
-    //    只能靠 `applyToArtistPage` 那条兜底搜索（每页两拍），日志里会写出来。
-    //    ★ 2026-10-11（日志 101）：**真正露头的是下面那个 `CreatorBiographyCardLayout`** ——
-    //    两个各报各的，少一个就少一条事件线（日志里必须一眼看得出缺哪个）。
     let bio = NSClassFromString(ArtistBiographyViewHook.targetName) != nil
     let bioCard = NSClassFromString(ArtistBiographyCardLayoutHook.targetName) != nil
     // ⚠️ 这一组**单独装**（见 `ArtistBioCardHookGroup` 的说明）：名字里带私有哈希，
-    //    换一版就可能解析不到 —— 解析不到就只是少一条事件线，不能连累共用组。
+    // 换一版就可能解析不到 —— 解析不到就只是少一条事件线，不能连累共用组。
     if bioCard { ArtistBioCardHookGroup().activate() }
-    // ★★ 2026-10-18：Spotify 自己的「关于艺人」数据线（`SPTArtistAboutDataLoader`）——
-    //    装得上就等于"一进页面就有**完整正文 + 真链接**"；装不上就退回界面读文字那条老路
-    //    （走的是哪一条，日志里都写清楚）。
-    //    ⚠️ 探测在 `ArtistAboutDataLoaderProbe` 里、不在 hook 类里 —— Orion 不准 hook 类
-    //       带 `static func`（见那个 enum 的说明）。
+    // Spotify 自己的「关于艺人」数据线（`SPTArtistAboutDataLoader`）——
+    // 装得上就等于"一进页面就有**完整正文 + 真链接**"；装不上就退回界面读文字那条老路
+    // ⚠️ 探测在 `ArtistAboutDataLoaderProbe` 里、不在 hook 类里 —— Orion 不准 hook 类
+    // 带 `static func`（见那个 enum 的说明）。
     let aboutLoader = ArtistAboutDataLoaderProbe.canInstall(
         className: SPTArtistAboutDataLoaderHook.targetName
     )

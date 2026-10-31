@@ -3,12 +3,12 @@ import SwiftUI
 // 移植自 MeloX `MeloX/Features/Player/Lyrics/Shared/LyricAttributedText.swift`（GPL-3.0）。
 //
 // 与 MeloX 原版的差异：
-//   1. 去掉 `nonisolated`（本项目以 Swift 5 语言模式编译，该修饰符会报
-//      "'nonisolated' modifier cannot be applied to this declaration"）。
-//   2. 属性名前缀改为 "EeveeSpotify."，避免与其它 tweak 冲突。
-//   3. 去掉了 macOS 15 的 `#unavailable` 回退分支（本项目只有 iOS）。
+// 1. 去掉 `nonisolated`（本项目以 Swift 5 语言模式编译，该修饰符会报
+// "'nonisolated' modifier cannot be applied to this declaration"）。
+// 2. 属性名前缀改为 "EeveeSpotify."，避免与其它 tweak 冲突。
+// 3. 去掉了 macOS 15 的 `#unavailable` 回退分支（本项目只有 iOS）。
 //
-// ★ 这个文件是逐字填充能否生效的关键 ★
+// 这个文件是逐字填充能否生效的关键
 //
 // `LyricTimingTextAttribute` 挂在每个字上，渲染器靠 `run[LyricTimingTextAttribute.self]`
 // 读取它来算填充前沿。但 SwiftUI 的文本布局引擎**默认不认识自定义 TextAttribute** ——
@@ -18,9 +18,9 @@ import SwiftUI
 //
 // 该修饰符是 iOS 26 引入的 —— 这正是「Apple Music 歌词层最低要求 iOS 26」的**唯一**
 // 真实技术原因。TextRenderer / Text.Layout / TextAttribute 本身 iOS 18 就有。
-
-/// 把运行期的歌词字形保存在**一个** attributed string 里。
-/// 逐字 `Text` 插值会把本地化工作嵌进每个字符里，长行会拖死布局。
+//
+// 把运行期的歌词字形保存在**一个** attributed string 里。
+// 逐字 `Text` 插值会把本地化工作嵌进每个字符里，长行会拖死布局。
 @available(iOS 26.0, *)
 struct LyricAttributedText {
     private var content: AttributedString

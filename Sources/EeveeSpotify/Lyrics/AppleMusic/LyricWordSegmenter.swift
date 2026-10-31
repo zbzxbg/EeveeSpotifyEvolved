@@ -2,9 +2,9 @@ import Foundation
 import NaturalLanguage
 
 // 移植自 MeloX `MeloX/Core/Lyrics/LyricWordSegmenter.swift`（GPL-3.0）。
-
-/// 产出「连续字符区间」，用于把一行文本切成一个个词块（驱动逐词的上浮/长音动画）。
-/// 逐段（按空白切开的短语）单独分词，可以在行内中英混排、系统分词器中途换语言时仍然覆盖。
+//
+// 产出「连续字符区间」，用于把一行文本切成一个个词块（驱动逐词的上浮/长音动画）。
+// 逐段（按空白切开的短语）单独分词，可以在行内中英混排、系统分词器中途换语言时仍然覆盖。
 enum LyricWordSegmenter {
     static func blockRanges(in text: String) -> [Range<Int>] {
         guard !text.isEmpty else { return [] }

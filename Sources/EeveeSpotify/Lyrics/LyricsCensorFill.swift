@@ -6,17 +6,17 @@ import Foundation
 // 拿**同一首轨道**在另一个源里的文本找同一句，只把星号那几段换掉 —— 绝不按"常见脏词表"
 // 硬塞（不同歌和谐的不是同一个词，硬塞会改坏本来没错的行）。
 //
-// ★ 为什么比的是"同一句里的字面片段"，而不是整份文本的重合率：
-//   这里身份是可靠的（同一 track id / 同一首歌查出来的），只是**局部**被涂掉了
-//   ⇒ 要判的只是"星号那一段该填什么"。所以用**行内字面锚点**，不是 n-gram 重合率。
+// 为什么比的是"同一句里的字面片段"，而不是整份文本的重合率：
+// 这里身份是可靠的（同一 track id / 同一首歌查出来的），只是**局部**被涂掉了
+// ⇒ 要判的只是"星号那一段该填什么"。所以用**行内字面锚点**，不是 n-gram 重合率。
 //
-// ★★ 2026-10-17：上游那份（以及我们之前照搬的那份）检测正则是 `\b\*{3,}\b`，实测
-//   **只命中 `f***k` 这种"星号两侧都紧贴字母"的写法**：
-//   `\b` 要求星号两侧是"字词字符 ↔ 非字词字符"的过渡，而 `*` 本身不是字词字符
-//   ⇒ `my **** line` / `well **** me` / `**** you` **一个都匹配不上**，于是
-//   `guard lines.contains(where: containsFullCensor)` 直接提前返回 —— 整个功能等于没接线。
-//   现在改成 `\*{3,}`（任意连续 3 个以上星号）。上游注释想排除的 `f**k` / `sh*t`
-//   本来就只有 2 个和 1 个星号，仍被 3+ 这条规则挡住，所以语义没扩大。
+// 上游那份（以及我们之前照搬的那份）检测正则是 `\b\*{3,}\b`，实测
+// **只命中 `f***k` 这种"星号两侧都紧贴字母"的写法**：
+// `\b` 要求星号两侧是"字词字符 ↔ 非字词字符"的过渡，而 `*` 本身不是字词字符
+// ⇒ `my **** line` / `well **** me` / `**** you` **一个都匹配不上**，于是
+// `guard lines.contains(where: containsFullCensor)` 直接提前返回 —— 整个功能等于没接线。
+// 现在改成 `\*{3,}`（任意连续 3 个以上星号）。上游注释想排除的 `f**k` / `sh*t`
+// 本来就只有 2 个和 1 个星号，仍被 3+ 这条规则挡住，所以语义没扩大。
 //
 // 本文件**只放纯逻辑**（无网络、无 DTO），`Tests/LyricsCensorFill` 能单独把它编进来跑。
 
@@ -38,9 +38,9 @@ enum LyricsCensorFill {
     /// 行尾就是星号（`well ****`）⇒ `["well ", ""]`。
     ///
     /// 返回 `nil` 的两种情形（都表示"补不了，也别猜"）：
-    ///   · 这行没有星号段；
-    ///   · 字面片段加起来**不足 2 个字符**（`****`、`****!` 这种整行/近乎整行被打码的，
-    ///     没有任何东西可以当锚点 —— 拿候选源的整行去填等于**凭空换掉一句歌词**）。
+    /// · 这行没有星号段；
+    /// · 字面片段加起来**不足 2 个字符**（`****`、`****!` 这种整行/近乎整行被打码的，
+    /// 没有任何东西可以当锚点 —— 拿候选源的整行去填等于**凭空换掉一句歌词**）。
     static func literalSegments(of line: String) -> [String]? {
         let nsLine = line as NSString
         let matches = censorPattern.matches(
@@ -118,8 +118,8 @@ enum LyricsCensorFill {
     /// 只回填"能唯一确定"的行，其余原样保留（宁留星号，不猜）。
     ///
     /// - Parameters:
-    ///   - lines: 打码的那份（SpicyLyrics）。
-    ///   - candidates: 候选源（未打码）的整份歌词行。
+    /// - lines: 打码的那份（SpicyLyrics）。
+    /// - candidates: 候选源（未打码）的整份歌词行。
     /// - Returns: 新行文本 + 实际补回的行数。
     static func fill(lines: [String], withCandidates candidates: [String]) -> (lines: [String], resolved: Int) {
         guard !candidates.isEmpty else { return (lines, 0) }
@@ -141,9 +141,9 @@ enum LyricsCensorFill {
             }
 
             // ② 否则在整份候选里找，且**替换词必须唯一** ——
-            //    同一行可能出现在多处（副歌），若两个位置给出的替换词不同，
-            //    说明锚点不够确定（例如 `**** you` 既能是 `I love you` 也能是 `thank you`），
-            //    此时宁可留星号。
+            // 同一行可能出现在多处（副歌），若两个位置给出的替换词不同，
+            // 说明锚点不够确定（例如 `**** you` 既能是 `I love you` 也能是 `thank you`），
+            // 此时宁可留星号。
             var found = Set<[String]>()
             for candidate in candidates {
                 guard let middles = middles(literalSegments: segments, in: candidate) else { continue }
@@ -159,8 +159,8 @@ enum LyricsCensorFill {
     }
 
     // MARK: - 私有
-
-    /// 在 `haystack` 里找 `needle`，起点不早于 `notBefore`（保证前面至少留得出 1 个字符的替换词）。
+    //
+    // 在 `haystack` 里找 `needle`，起点不早于 `notBefore`（保证前面至少留得出 1 个字符的替换词）。
     private static func firstOccurrence(
         of needle: [Character],
         in haystack: [Character],

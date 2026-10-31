@@ -4,7 +4,7 @@ struct NavigationSectionView: View {
     var color: Color
     var title: String
     var imageSystemName: String
-    /// 第二行灰色小字：这一行进去有什么。★ 2026-10-13 加 —— 根页重排后一行只有名字时
+    /// 第二行灰色小字：这一行进去有什么。加 —— 根页重排后一行只有名字时
     /// 根本看不出「扩展」里装了什么（那个杂物袋就是这么长出来的）。传 nil = 不显示。
     var subtitle: String? = nil
 

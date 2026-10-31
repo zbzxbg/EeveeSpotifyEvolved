@@ -3,11 +3,11 @@ import Foundation
 import SwiftUI
 
 // 移植自 MeloX `MeloX/Features/Player/Lyrics/Shared/LyricLongToneEmphasis.swift`（GPL-3.0）。
-
-/// 生成 Apple Music 式的「长音强调」：单个字形的缩放/光晕/上浮包络。
-///
-/// 同一音节/词内的字形共享时间轴，但**动画起始时间相互错开**：最后一个字形
-/// 恰好在第一个字形越过峰值之后进入，形成连续涌动，而不是整词同步脉冲。
+//
+// 生成 Apple Music 式的「长音强调」：单个字形的缩放/光晕/上浮包络。
+//
+// 同一音节/词内的字形共享时间轴，但**动画起始时间相互错开**：最后一个字形
+// 恰好在第一个字形越过峰值之后进入，形成连续涌动，而不是整词同步脉冲。
 @available(iOS 26.0, *)
 enum LyricLongToneEmphasis {
     struct State {

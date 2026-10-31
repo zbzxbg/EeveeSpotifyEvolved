@@ -6,35 +6,35 @@ import UIKit
 // 门禁：整层 iOS 26+（唯一硬性原因见 `LyricAttributedText.swift` 的说明 ——
 // 注册自定义 TextAttribute 需要 iOS 26 的 `attributedTextFormattingDefinition`）。
 // 老系统上 `WordByWordHost` 会走原来的 UIKit overlay，行为与改动前完全一致。
-
+//
 // MARK: - 点行跳转（**只有这一份**，两个调用点共用）
-
-/// 点某一行歌词 ⇒ 跳到**那一行的内部**（不是它的边界上）。
-///
-/// ⚠️★ 2026-10-11：把它提成一份，是因为**同一个 bug 犯了两次**。
-///
-/// 两个细节都有来历，别再各抄一份：
-///   · `rounded()` 而不是 `Int()` 截断 —— `line.time` 是 `TimeInterval(offsetMs) / 1000`，
-///     双精度存不下 26.622 这种值，会落在略小的一侧（26.621999999999999…），
-///     `Int()` 截断成 26621，比这一行的起点**少 1 毫秒**；
-///   · **+5ms** —— 播放器 seek 之后回报的位置可能略早，而时间轴的判定是
-///     `time <= playbackTime`：落在边界上就会被判成**上一行**。
-///     全屏页那条路 2026-09-28 就踩过并修了（当时只写在 `makeRootView` 的闭包里）；
-///     而"歌词进播放器"那一档是**另写的一份**、只 `rounded()` 没 `+5` ⇒
-///     用户 2026-10-11 又报了一次：**「我选中某一行歌词，定位到上一行歌词去了」**。
-///     ⇒ 现在两处都调这一个函数，不可能再各走各的。
-///
-/// （`+5ms` 若哪天仍不够，只**改这一个数**：它是"往这一行里面多走一点"的安全余量。）
+//
+// 点某一行歌词 ⇒ 跳到**那一行的内部**（不是它的边界上）。
+//
+// ⚠️把它提成一份，是因为**同一个 bug 犯了两次**。
+//
+// 两个细节都有来历，别再各抄一份：
+// · `rounded` 而不是 `Int` 截断 —— `line.time` 是 `TimeInterval(offsetMs) / 1000`，
+// 双精度存不下 26.622 这种值，会落在略小的一侧（26.621999999999999…），
+// `Int` 截断成 26621，比这一行的起点**少 1 毫秒**；
+// · **+5ms** —— 播放器 seek 之后回报的位置可能略早，而时间轴的判定是
+// `time <= playbackTime`：落在边界上就会被判成**上一行**。
+// 全屏页那条路就踩过并修了（当时只写在 `makeRootView` 的闭包里）；
+// 而"歌词进播放器"那一档是**另写的一份**、只 `rounded` 没 `+5` ⇒
+// 我选中某一行歌词，定位到上一行歌词去了**。
+// ⇒ 现在两处都调这一个函数，不可能再各走各的。
+//
+// （`+5ms` 若哪天仍不够，只**改这一个数**：它是"往这一行里面多走一点"的安全余量。）
 func seekToTappedLyricLine(_ time: TimeInterval) {
     WordByWordSeeker.seek(toMs: Int((time * 1000).rounded()) + 5)
 }
 
 // MARK: - 挂载管理
-
-/// 把 `AppleMusicLyricsOverlayView` 挂到 Spotify 的歌词容器上，并在换歌 / 切屏时就地更新。
-///
-/// ⚠️ `@MainActor` 是**必须**的，拆分时别丢：它持有 `UIHostingController` 与 SwiftUI
-/// 状态，而 `WordByWordHost` 那些调用点全在主线程上（见 `LyricsChromeVisibility` 的说明）。
+//
+// 把 `AppleMusicLyricsOverlayView` 挂到 Spotify 的歌词容器上，并在换歌 / 切屏时就地更新。
+//
+// ⚠️ `@MainActor` 是**必须**的，拆分时别丢：它持有 `UIHostingController` 与 SwiftUI
+// 状态，而 `WordByWordHost` 那些调用点全在主线程上（见 `LyricsChromeVisibility` 的说明）。
 @available(iOS 26.0, *)
 @MainActor
 final class AppleMusicLyricsOverlayHost {
@@ -85,21 +85,21 @@ final class AppleMusicLyricsOverlayHost {
 
     /// 挂载或刷新。挂载时调用一次，之后由 `tick(ms:)` 每帧驱动时间。
     /// - Parameters:
-    ///   - view: 挂到哪个视图上。全屏页传 VC 的根视图（整屏），内嵌预览传歌词容器。
-    ///   - solidBackdrop: 背景是否走"实心"档（全屏为 true）。
+    /// - view: 挂到哪个视图上。全屏页传 VC 的根视图（整屏），内嵌预览传歌词容器。
+    /// - solidBackdrop: 背景是否走"实心"档（全屏为 true）。
     ///
-    ///     ⚠️ 这个参数存在的理由，是那套"接管原生视图"的方案被真机否掉了。
+    /// ⚠️ 这个参数存在的理由，是那套"接管原生视图"的方案被真机否掉了。
     ///
-    ///     最初的目标是"让背景盖住 Spotify 的壳（品红）"。我试过三条路，全错：
-    ///       1. 让背景溢出容器 → 不可能，子视图出不了父视图 bounds；
-    ///       2. 隐藏原生歌词容器 → 全屏页根视图里**一个子视图都没有**（dump 实测），
-    ///          header / 歌词 / 控件栏都不在这一层，藏一个等于藏整页 → 整页空白；
-    ///       3. 清宿主底色 + 把整层插到最底 → 摘掉的是这一页**唯一**的背景层
-    ///          （dump: `stripped 1 background layer(s): CALayer`）→ 连底都没了。
+    /// 最初的目标是"让背景盖住 Spotify 的壳（品红）"。我试过三条路，全错：
+    /// 1. 让背景溢出容器 → 不可能，子视图出不了父视图 bounds；
+    /// 2. 隐藏原生歌词容器 → 全屏页根视图里**一个子视图都没有**（dump 实测），
+    /// header / 歌词 / 控件栏都不在这一层，藏一个等于藏整页 → 整页空白；
+    /// 3. 清宿主底色 + 把整层插到最底 → 摘掉的是这一页**唯一**的背景层
+    /// （dump: `stripped 1 background layer(s): CALayer`）→ 连底都没了。
     ///
-    ///     结论：全屏页一个原生视图都不能碰。要盖住底下的东西，只能靠自己够暗 ——
-    ///     于是有了这个参数：全屏时把舞台式暗化提到"实心"档（见
-    ///     `LyricsBackdropView.solidStageScrimAlpha`），原生 UI 则原样浮在我们上面。
+    /// 结论：全屏页一个原生视图都不能碰。要盖住底下的东西，只能靠自己够暗 ——
+    /// 于是有了这个参数：全屏时把舞台式暗化提到"实心"档（见
+    /// `LyricsBackdropView.solidStageScrimAlpha`），原生 UI 则原样浮在我们上面。
     func update(
         in view: UIView,
         sideInset: CGFloat,
@@ -112,10 +112,10 @@ final class AppleMusicLyricsOverlayHost {
         // 这是"预览歌词显示上一首歌的逐词歌词"的直接修复：露出来的原生层
         // （Spotify 渲染我们注入的那份 payload）内容是正确的，比挂一份别人的行模型好。
         //
-        // ⚠️ 2026-09-27 更正：以前这里只 `detach()` 就返回，靠注释里那句"新歌词到达后
+        // ⚠️更正：以前这里只 `detach` 就返回，靠注释里那句"新歌词到达后
         // 版本号会变，`update` 会重建模型并记下新曲目 id，自然恢复"——**那句是错的**：
         // 重建就在下面，而它被这个 guard 挡着，模型 id 永远不会更新（死锁）。
-        // 现在改走 `dropForeignLineModel`：作废模型 → 下一次 `update()` 必然重建。
+        // 现在改走 `dropForeignLineModel`：作废模型 → 下一次 `update` 必然重建。
         if hasForeignLineModel {
             dropForeignLineModel(reason: "update skipped — the line model belongs to another track")
             return
@@ -277,7 +277,7 @@ final class AppleMusicLyricsOverlayHost {
 
     /// 歌词换了一首（或重新取到）时叫一次：把新行模型就地写进已挂着的层。
     ///
-    /// 为什么需要这个入口：`update()` 只在挂载时被调用，而切歌时宿主没变、
+    /// 为什么需要这个入口：`update` 只在挂载时被调用，而切歌时宿主没变、
     /// `WordByWordHost.attach` 的提前返回不会放行 —— 全屏页开着不动切歌的话，
     /// 新歌词永远推不进这一层（"壳上的曲名换了、歌词还是上一首"）。
     /// 用上次挂载的参数重放一次 `update` 即可，什么都不用记第二份。
@@ -325,18 +325,14 @@ final class AppleMusicLyricsOverlayHost {
 
     /// 判定"行模型属于别的曲目"之后**把模型整个作废**，而不是只摘掉视图。
     ///
-    /// ⚠️ 2026-09-27（真机日志 18）修的是一个**死锁**：
-    /// `currentModelTrackId` 只在 `update()` 的重建路径里（`refreshShellMetadata`）写入，
-    /// 而 `update()` 在重建**之前**就被 `hasForeignLineModel` 挡回去 —— 于是模型一旦过期
-    /// 就再也刷不新：每次 `update()` 都静默 `detach()`，屏幕上一直没有我们这层，
+    /// ⚠️修的是一个**死锁**：
+    /// `currentModelTrackId` 只在 `update` 的重建路径里（`refreshShellMetadata`）写入，
+    /// 而 `update` 在重建**之前**就被 `hasForeignLineModel` 挡回去 —— 于是模型一旦过期
+    /// 就再也刷不新：每次 `update` 都静默 `detach`，屏幕上一直没有我们这层，
     /// 直到播放器报的曲目 id 恰好又变回旧值。
     ///
-    /// 日志 18 实测：`ただ声一つ` 的逐词数据 05:21:18 就到了，05:21:31 才 `rebuilt` ——
-    /// 中间 13 秒全是 `overlay detached` / `stale attachment cleared` 在刷屏，
-    /// 而模型 id 一直停在上上首（`7dUKNjRi…`）。用户看到的就是"原本有逐字的歌没有逐字了"。
-    ///
     /// 作废这四样之后 `hasForeignLineModel` 恒为 false（总有一侧为空），
-    /// 下一次 `update()` 必然重建模型并重挂 —— 自愈只差这一步。
+    /// 下一次 `update` 必然重建模型并重挂 —— 自愈只差这一步。
     private func dropForeignLineModel(reason: String) {
         let live = liveTrackId()
         writeDebugLog(
@@ -350,7 +346,7 @@ final class AppleMusicLyricsOverlayHost {
     }
 
     // MARK: 为什么不"接管"原生视图
-
+    //
     // 这里曾经有一整套代码：`stripHostBackground` / `restoreHostBackground`
     // （清宿主 backgroundColor 与 layer 上的底色层）、`strippedLayers` /
     // `clearedBaseColors` 两张还原表、`dumpFullscreenHierarchy` /
@@ -358,29 +354,29 @@ final class AppleMusicLyricsOverlayHost {
     //
     // 全部删掉了。真机 + dump 的证据是：全屏页的根视图里**一个子视图都没有**，
     // header / 歌词 / 控件栏都不在这一层，所以
-    //   · 隐藏任何一个"看起来像歌词容器"的视图 → 整页内容一起消失（整页空白）；
-    //   · 清根视图的底色/层 → 摘掉这一页唯一的背景层，页面连底都没了。
+    // · 隐藏任何一个"看起来像歌词容器"的视图 → 整页内容一起消失（整页空白）；
+    // · 清根视图的底色/层 → 摘掉这一页唯一的背景层，页面连底都没了。
     //
     // 一句话：这一页不是"我们的层 + 它的壳"两层结构，而是一整块我们看不透的视图，
     // 任何"刮掉一层让位"的做法都会把它刮坏。要盖住它，只能靠自己的背景够暗 ——
     // 见 `LyricsBackdropView.solidStageScrimAlpha`。
-
-    /// CADisplayLink 每帧回调入口。由 `WordByWordPlaybackClock.tickHandler` 驱动，
-    /// 避免新层自带时钟与主时钟错拍。
+    //
+    // CADisplayLink 每帧回调入口。由 `WordByWordPlaybackClock.tickHandler` 驱动，
+    // 避免新层自带时钟与主时钟错拍。
     func tick(ms: Double) {
         guard hostView != nil, !currentLines.isEmpty else { return }
         // 行模型已经不是当前这首歌的了（切歌、而新歌词还没到）→ **立刻收掉**。
         //
         // 必须每帧判：切歌不一定伴随新的歌词请求（客户端可能直接吃自己那份缓存），
         // 所以只靠"请求到达时清理"会漏。收掉之后露出来的原生层内容是正确的。
-        // 新歌词到达时 `update()` 会重建模型并重新挂上，所以这不是永久降级。
+        // 新歌词到达时 `update` 会重建模型并重新挂上，所以这不是永久降级。
         if hasForeignLineModel {
             dropForeignLineModel(reason: "tick — the line model belongs to another track")
             return
         }
         // ⚠️ "每帧置于最前"这件事**只能在这里做**。
         //
-        // `update()` 里那句 `bringSubviewToFront` 只在挂载/刷新时才跑，而预览卡片里的
+        // `update` 里那句 `bringSubviewToFront` 只在挂载/刷新时才跑，而预览卡片里的
         // 原生内容（歌词视图、Element 那些层）会在滚动、换行、cell 复用时**重排
         // subviews**，一次置前会被它们挤回去 —— 表现就是"预览里的逐词层时不时被盖住"。
         // 这一句把注释里的承诺兑现掉；已经是最前时只花一次指针比较，不重排。
@@ -432,15 +428,15 @@ final class AppleMusicLyricsOverlayHost {
             previewHeaderInset: previewHeaderInset,
             onSeek: { time in
                 // 点行跳转的算法**只有一份**（见文件开头 `seekToTappedLyricLine`）：
-                // `rounded()` + **5ms**，两个细节缺一个就会"点这一行、跳到上一行"。
+                // `rounded` + **5ms**，两个细节缺一个就会"点这一行、跳到上一行"。
                 seekToTappedLyricLine(time)
             },
             trackTitle: currentTrackTitle,
             trackArtist: currentTrackArtist,
             clock: clock,
             projection: projection,
-            // ★ 2026-10-17：这一档**保持原行为** —— 卡片预览是 17pt，副唱缩到 ~11pt 看不清；
-            //   全屏（带页脚）才画。被解绑的是"歌词进播放器"那一档（见 `NowPlayingLyricsHost`）。
+            // 这一档**保持原行为** —— 卡片预览是 17pt，副唱缩到 ~11pt 看不清；
+            // 全屏（带页脚）才画。被解绑的是"歌词进播放器"那一档（见 `NowPlayingLyricsHost`）。
             showsBackgroundVocals: showsProviderFooter
         )
     }

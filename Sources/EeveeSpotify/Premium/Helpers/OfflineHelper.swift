@@ -10,7 +10,6 @@ class OfflineHelper {
         for: .cachesDirectory, in: .userDomainMask
     ).first!
     
-    //
     
     static private let persistentCachePath = applicationSupportDirectory
         .appendingPathComponent("PersistentCache")
@@ -18,7 +17,6 @@ class OfflineHelper {
     static private let remoteConfigPath = applicationSupportDirectory
         .appendingPathComponent("remote-config")
     
-    //
     
     static private func resetPersistentCache() throws {
         try FileManager.default.removeItem(at: self.persistentCachePath)
@@ -32,7 +30,6 @@ class OfflineHelper {
         try FileManager.default.removeItem(at: self.cachesDirectory)
     }
     
-    //
     
     static func resetData(clearCaches: Bool = false) {
         try? resetPersistentCache()

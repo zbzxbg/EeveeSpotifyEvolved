@@ -122,8 +122,8 @@ private func passiveLogProductState(_ tag: String, _ dict: NSDictionary) {
     for k in premiumWatchKeys {
         guard let v = dict[k] else { continue }
 
-        // ⚠️ 2026-09-30：`name` 是这一批里**唯一可能带账号信息**的一项，而它到底是
-        // "商品名"还是"账号显示名"从代码里定不死（真机日志也没定过性）—— 于是保留
+        // ⚠️`name` 是这一批里**唯一可能带账号信息**的一项，而它到底是
+        // "商品名"还是"账号显示名"从代码里定不死—— 于是保留
         // "这一项在不在"这个判据，值一律不打。其余项（type / product / country /
         // 日期 / forced_logout…）都是排查自动登出要看的，原样保留。
         pairs.append(k == "name" ? "name=<redacted>" : "\(k)=\(v)")
@@ -133,7 +133,7 @@ private func passiveLogProductState(_ tag: String, _ dict: NSDictionary) {
         // 脱敏不能漏（见 `DebugLogSanitizer` 的说明）。
         let line = "[REVERT_WATCH][\(tag)] \(pairs.joined(separator: " "))"
         eeveeSanitizedNSLog(line)
-        // ⚠️ 2026-10-02 追加：**同一行也进导出文件**。
+        // ⚠️追加：**同一行也进导出文件**。
         // 排查"整库变黑 / 听不了歌"时，产品状态（ads / on-demand / unrestricted /
         // player-license / catalogue …）有没有被服务端改回去，是**唯一**的本地判据；
         // 而它原先只走 NSLog，导出来的 `eeveespotify_debug_shared*.log` 里根本看不到。
@@ -161,11 +161,10 @@ class CoreProductStateHook: ClassHook<NSObject> {
     }
 
     func initWithValuesDict(_ dict: NSDictionary, scheduler: UnsafeRawPointer) -> Any {
-        // ★ 2026-10-02 补：**初始那一次也要打**。
+        // 补：**初始那一次也要打**。
         //
         // 以前只有 `setOriginalValues:` / `setOverrides:` 会打 —— 于是"启动之后没再被改过"
         // 的会话里 `[REVERT_WATCH]` **一行都没有**，排查"整库变黑 / 听不了歌"时反而没有判据
-        // （日志 30 就是这样：0 行，H2 与 H1/H3 分不开）。
         // 打的是**改写前**的原始字典：要看的就是"服务端给的是什么档"。
         passiveLogProductState("init", dict)
         let d = enableDictRewrite ? rewritePremiumDict(dict) : dict

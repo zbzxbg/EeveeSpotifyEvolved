@@ -18,10 +18,10 @@ struct FlagOverride: Codable, Equatable, Identifiable {
         /// 写入 `value` 里那个 enum 值（例如 `count`）。
         ///
         /// 只改**服务端已下发**的条目 —— `EeveePropertyModification.setEnum` 不会补新条目，
-        /// 所以这条模式配不存在的 name/scope 就是空枪（日志里会显示 0 match）。
+        /// 所以这条模式配不存在的 name/scope 就是空枪。
         case set
 
-        /// 写入 `value` 里那个**整数**（2026-10-02 新增）。
+        /// 写入 `value` 里那个**整数**新增）。
         ///
         /// 对应 `EeveePropertyModification.forceInt`：命中就覆盖、没有就追加一条。
         /// 用途是 Spotify 自己的"减少打扰"（`ios-messaging-reduceinterventions-impl`）
@@ -140,10 +140,10 @@ enum FlagOverrideStore {
     }
 
     // MARK: - 加锁的读改写
-
-    /// 读-改-写必须在**同一把锁**里完成：`all` 的 getter/setter 各自加锁，
-    /// 直接把 `all` 读出来改完再写回去，两个线程同时干就会丢条目。
-    /// 今天只有设置页在写，所以这是潜伏问题而不是已发生的问题 —— 一并修掉。
+    //
+    // 读-改-写必须在**同一把锁**里完成：`all` 的 getter/setter 各自加锁，
+    // 直接把 `all` 读出来改完再写回去，两个线程同时干就会丢条目。
+    // 今天只有设置页在写，所以这是潜伏问题而不是已发生的问题 —— 一并修掉。
     private static func mutate(_ body: (inout [FlagOverride]) -> Void) {
         lock.lock(); defer { lock.unlock() }
 

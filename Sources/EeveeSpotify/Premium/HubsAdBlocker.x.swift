@@ -3,24 +3,24 @@ import Foundation
 
 // HUB JSON component structure (from open-source HubFramework):
 // Each component dict has:
-//   "component": {"namespace": "mobile", "name": "display-ad-card"}
-//     — OR in some versions just a string "mobile:display-ad-card"
-//   "id": "some-identifier"
-//   "metadata": {...}
-//   "logging": {...}
-//   "body": [...] (child components)
-//   "header": {...}
-//   "overlays": [...]
-//   "sections": [...]
+// "component": {"namespace": "mobile", "name": "display-ad-card"}
+// — OR in some versions just a string "mobile:display-ad-card"
+// "id": "some-identifier"
+// "metadata": {...}
+// "logging": {...}
+// "body": [...] (child components)
+// "header": {...}
+// "overlays": [...]
+// "sections": [...]
 //
 // Known ad component identifiers found in Spotify 9.1.x binary:
-//   mobile-display-ad-card          (namespace: mobile, name: display-ad-card)
-//   mobile-ads-display-ad-element   (namespace: mobile-ads, name: display-ad-element)
-//   mobile-ads-fullbleed-display-card
-//   mobile-ads-embedded-npv-display-card
-//   native-ad-home-shelf
-//   com.spotify.service.marquee
-
+// mobile-display-ad-card (namespace: mobile, name: display-ad-card)
+// mobile-ads-display-ad-element (namespace: mobile-ads, name: display-ad-element)
+// mobile-ads-fullbleed-display-card
+// mobile-ads-embedded-npv-display-card
+// native-ad-home-shelf
+// com.spotify.service.marquee
+//
 // Strips ad components from HUB JSON (home/browse/search) before the builder
 // renders them. Known ad ids: mobile-display-ad-card, mobile-ads-display-ad-element,
 // mobile-ads-fullbleed-display-card, native-ad-home-shelf, com.spotify.service.marquee.

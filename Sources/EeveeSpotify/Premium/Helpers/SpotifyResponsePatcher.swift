@@ -16,17 +16,11 @@ enum SpotifyResponsePatcher {
         set {
             lock.lock(); defer { lock.unlock() }
             _cachedCustomizeData = newValue
-            // ★★ 2026-10-12（对齐上游 `EeveeSpotifyReincarnated`）：**同时落盘**。
-            //   上游 `SpotifyResponsePatcher.swift:26` 就是这么写的，而它每处读取都
-            //   `?? UserDefaults.cachedCustomizeData` —— 为的是**新进程刚起、随包快照没拿到、
-            //   服务器又回 304** 那一次仍然有 body 可交（交不出 = App 拿到空配置 =
-            //   premium/可播放性降级 = 歌单发灰/歌曲消失/放不动，正是用户报的那三个症状）。
-            //
-            // ⚠️⚠️ 2026-10-12 第二轮修正：**只有"真 body"才许落盘**，并记下它是哪个版本抓的。
-            //   真机日志 69 暴露了反过来的坑：内存里的**随包种子**优先于磁盘上那份
-            //   **上一场真抓到的、同版本、且已改写过**的 body ⇒
-            //   `customize 304 -> replaying the seed, 101415 bytes`（101415 正是种子的字节数），
-            //   磁盘上更好的一份**一次都没用上**。种子现在走 `seedWithoutPersisting`。
+            // （对齐上游 `EeveeSpotifyReincarnated`）：**同时落盘**。
+            // 上游 `SpotifyResponsePatcher.swift:26` 就是这么写的，而它每处读取都
+            // `?? UserDefaults.cachedCustomizeData` —— 为的是**新进程刚起、随包快照没拿到、
+            // 服务器又回 304** 那一次仍然有 body 可交（交不出 = App 拿到空配置 =
+            // premium/可播放性降级 = 歌单发灰/歌曲消失/放不动，正是用户报的那三个症状）。
             guard !isSeeding else { return }
             UserDefaults.cachedCustomizeData = newValue
             UserDefaults.cachedCustomizeVersion = newValue == nil ? nil : currentSpotifyVersion
@@ -36,7 +30,7 @@ enum SpotifyResponsePatcher {
     /// 种子装配期间为真 ⇒ setter 不落盘（种子只活在内存里）。
     private static var isSeeding = false
 
-    /// 进程启动时刻 / "真 body 到了"是否报过（`patch()` 里那行"过了一会"的判据）。
+    /// 进程启动时刻 / "真 body 到了"是否报过（`patch` 里那行"过了一会"的判据）。
     private static let launchAt = Date()
     private static var didReportBodyArrival = false
 
@@ -47,7 +41,7 @@ enum SpotifyResponsePatcher {
 
     /// 304 回放该用哪一份 —— **同版本的落盘真 body 优先**，种子兜底。
     ///
-    /// 返回 nil 表示真的没有可回放的东西（那时 App 会拿到空配置，日志里应能看到 `Missing buffered body`）。
+    /// 返回 nil 表示真的没有可回放的东西。
     static var customizeReplay: (data: Data, source: String)? {
         let current = currentSpotifyVersion
         if let stored = UserDefaults.cachedCustomizeData,
@@ -75,44 +69,44 @@ enum SpotifyResponsePatcher {
         return _handledCustomizeTasks.remove(id) != nil
     }
 
-    // MARK: - customize 种子（2026-10-01）
-
-    /// 启动时用随包快照喂一份 `cachedCustomizeData`。
-    ///
-    /// ── 不这么做会怎样（真机实证）──────────────────────────────────────────
-    /// 冷启动第一个 `customize` 往往是 **304、没有 body**：Spotify 自己的 HTTP 缓存里
-    /// 已经有那份配置，服务器只回"没变"。于是：
-    ///
-    ///     没有 body → 进不了 `patch()` → `cachedCustomizeData` 永远是 nil
-    ///       → 304 兜底（`DataLoaderServiceHooks.x.swift` 的 304 分支）没有可回放的东西
-    ///         → `modifyRemoteConfiguration()` 一次都不跑
-    ///           → `[Flags]` 一条都不打、所有 flag 替换（含用户「Flag 覆盖」）全部静默失效
-    ///
-    /// 关键是：`cachedCustomizeData` **唯一**的写入点在 `patch()` 的 customize 分支里，
-    /// 而 `patch()` 只有在**已经拿到 body** 之后才会被调用 —— 这条路径自我死锁，
-    /// 一旦第一个响应是 304，就再也回不来了。
-    ///
-    /// ── 同设备对照（同一台 iPhone12,1 / iOS 27 / Spotify 9.1.86）────────────
-    ///   · 09-30（14 号前后的日志）：首次 customize 有数据 → `[Flags]` **61 行**；
-    ///   · 10-01（`eeveespotify_debug_shared 12.log:351`）：`[HCUS] Missing buffered body
-    ///     … /v1/customize` → `[Flags]` **0 行**。
-    /// 差别只在"这次有没有拿到 body"，不是"Spotify 不下发"。
-    ///
-    /// ── 为什么种子用 `.bnk` 是安全的 ────────────────────────────────────────
-    /// `.bnk` 是 `ResolveConfiguration` 的序列化（`BundleHelper.resolveConfiguration()`
-    /// 本来就这么读它），而 `UcsResponse+Extension` 已给出桥接：`assignedValues`
-    /// 就是 `resolve.configuration.assignedValues`。于是：
-    ///
-    ///     .bnk → ResolveConfiguration → ResolveResponse.configuration
-    ///          → UcsResponse.resolve.configuration → 包成 CustomizeMessage(response:)
-    ///
-    /// 刻意**只放这一个字段**：`CustomizeMessage` 是个 oneof（`response` / `error`），
-    /// 我们只填 `response`；种子里**不带 `attributes`** —— 那是账号态（Premium / 国家），
-    /// 必须由线上响应说了算，绝不能用旧快照去顶（`modifyRemoteConfiguration` 里的
-    /// 「覆盖配置」分支同样只动 `resolve.configuration`，理由一致）。
-    ///
-    /// 幂等：只填空位（`_cachedCustomizeData == nil`），真 body 一到就被 `patch()` 覆盖
-    /// 成线上版本，种子自然退场。
+    // MARK: - customize 种子
+    //
+    // 启动时用随包快照喂一份 `cachedCustomizeData`。
+    //
+    // ── 不这么做会怎样（真机实证）
+    // 冷启动第一个 `customize` 往往是 **304、没有 body**：Spotify 自己的 HTTP 缓存里
+    // 已经有那份配置，服务器只回"没变"。于是：
+    //
+    // 没有 body → 进不了 `patch` → `cachedCustomizeData` 永远是 nil
+    // → 304 兜底（`DataLoaderServiceHooks.x.swift` 的 304 分支）没有可回放的东西
+    // → `modifyRemoteConfiguration` 一次都不跑
+    // → `[Flags]` 一条都不打、所有 flag 替换（含Flag 覆盖）全部静默失效
+    //
+    // 关键是：`cachedCustomizeData` **唯一**的写入点在 `patch` 的 customize 分支里，
+    // 而 `patch` 只有在**已经拿到 body** 之后才会被调用 —— 这条路径自我死锁，
+    // 一旦第一个响应是 304，就再也回不来了。
+    //
+    // ── 同设备对照（同一台 iPhone12,1 / iOS 27 / Spotify 9.1.86）
+    // · 09-30（14 号前后的日志）：首次 customize 有数据 → `[Flags]` **61 行**；
+    // · 10-01（`eeveespotify_debug_shared 12.log:351`）：`[HCUS] Missing buffered body
+    // … /v1/customize` → `[Flags]` **0 行**。
+    // 差别只在"这次有没有拿到 body"，不是"Spotify 不下发"。
+    //
+    // ── 为什么种子用 `.bnk` 是安全的
+    // `.bnk` 是 `ResolveConfiguration` 的序列化（`BundleHelper.resolveConfiguration`
+    // 本来就这么读它），而 `UcsResponse+Extension` 已给出桥接：`assignedValues`
+    // 就是 `resolve.configuration.assignedValues`。于是：
+    //
+    // .bnk → ResolveConfiguration → ResolveResponse.configuration
+    // → UcsResponse.resolve.configuration → 包成 CustomizeMessage(response:)
+    //
+    // 刻意**只放这一个字段**：`CustomizeMessage` 是个 oneof（`response` / `error`），
+    // 我们只填 `response`；种子里**不带 `attributes`** —— 那是账号态（Premium / 国家），
+    // 必须由线上响应说了算，绝不能用旧快照去顶（`modifyRemoteConfiguration` 里的
+    // 「覆盖配置」分支同样只动 `resolve.configuration`，理由一致）。
+    //
+    // 幂等：只填空位（`_cachedCustomizeData == nil`），真 body 一到就被 `patch` 覆盖
+    // 成线上版本，种子自然退场。
     static func seedCustomizeDataIfNeeded() {
         lock.lock()
         let alreadySeeded = _cachedCustomizeData != nil
@@ -145,15 +139,14 @@ enum SpotifyResponsePatcher {
             // ⚠️ 关键一步：种子**在落袋之前**就要先过一遍 flag 改写。
             //
             // 为什么：304 的回放路径（`didReceiveResponse` 里那两个分支）是**直接投递
-            // 缓存字节**、不经过 `patch()` 的 —— 所以如果种子里装的是"原始配置"，
+            // 缓存字节**、不经过 `patch` 的 —— 所以如果种子里装的是"原始配置"，
             // 回放出去的就是一份**没有我们任何替换**的配置：Spotify 能正常拿到配置，
-            // 但 `[Flags]` 一行不打、所有 flag 替换失效，现象和没修一模一样（真机日志 15
-            // 就是这个：种子打出来了、`[Flags]` 却是 0 行，因为回放不跑改写）。
+            // 但 `[Flags]` 一行不打、所有 flag 替换失效，现象和没修一模一样。
             //
             // 在这里跑一次既安全又省事：`modifyRemoteConfiguration` 是纯函数级的改写
             // （只动 assign 列表 + attributes 里的账号态），不碰网络；而且它对
             // `.setBool` / `.remove` 这类"命中才改"是幂等的 —— 之后真 body 到了再走一遍
-            // `patch()` 也不会叠加出问题。
+            // `patch` 也不会叠加出问题。
             var message = CustomizeMessage()
             message.response = response
 
@@ -171,7 +164,7 @@ enum SpotifyResponsePatcher {
             modifyRemoteConfiguration(&message.response)
 
             let data = try message.serializedData()
-            // ★ 种子**只进内存**：落盘那一份要留给"上一场真抓到的 body"（见 setter 的注释）。
+            // 种子**只进内存**：落盘那一份要留给"上一场真抓到的 body"（见 setter 的注释）。
             isSeeding = true
             cachedCustomizeData = data
             isSeeding = false
@@ -187,27 +180,27 @@ enum SpotifyResponsePatcher {
     }
 
     // MARK: - customize 响应体抓取（只为替换种子）
-
-    /// 抓取一次**原始** customize 响应体到调试日志（base64），供替换种子快照。
-    ///
-    /// 放在 `patch()` 的 customize 分支入口 —— 必须在任何改写**之前**，
-    /// 否则抓到的是我们自己改过的版本。
-    ///
-    /// 为什么写进日志而不是写文件：日志是你已经在导出的那一份，不用再去容器里翻；
-    /// 用 base64 而不是 hex 是为了**减半**（100KB 的 body ≈ 133KB 文本）。
-    /// 取回后这样变成新的 `.bnk`（只需做一次）：
-    ///
-    ///     $txt = Get-Content .\eeveespotify_debug_shared.log -Raw
-    ///     $b64 = [regex]::Match($txt, '(?s)\[CustomizeBody\] base64-begin\r?\n(.*?)\r?\n\[CustomizeBody\] base64-end').Groups[1].Value
-    ///     $msg = [Convert]::FromBase64String($b64)
-    ///     # 前 N 字节是 CustomizeMessage 的字段头，跳过它才拿到 ResolveConfiguration：
-    ///     # 这里用现成的提取脚本，别手抠（见 Tools/eevee-hookfinder/ 的说明）
-    ///
-    /// ⚠️ 一次性：抓到一次就够，别留在发布版里常开。
+    //
+    // 抓取一次**原始** customize 响应体到调试日志（base64），供替换种子快照。
+    //
+    // 放在 `patch` 的 customize 分支入口 —— 必须在任何改写**之前**，
+    // 否则抓到的是我们自己改过的版本。
+    //
+    // 为什么写进日志而不是写文件：日志是你已经在导出的那一份，不用再去容器里翻；
+    // 用 base64 而不是 hex 是为了**减半**（100KB 的 body ≈ 133KB 文本）。
+    // 取回后这样变成新的 `.bnk`（只需做一次）：
+    //
+    // $txt = Get-Content .\eeveespotify_debug_shared.log -Raw
+    // $b64 = [regex]：Match($txt, '(?s)\[CustomizeBody\] base64-begin\r?\n(.*?)\r?\n\[CustomizeBody\] base64-end').Groups[1].Value
+    // $msg = [Convert]：FromBase64String($b64)
+    // # 前 N 字节是 CustomizeMessage 的字段头，跳过它才拿到 ResolveConfiguration：
+    // # 这里用现成的提取脚本，别手抠（见 Tools/eevee-hookfinder/ 的说明）
+    //
+    // ⚠️ 一次性：抓到一次就够，别留在发布版里常开。
     private static var didDumpCustomizeBody = false
 
     /// 单次抓取上限。真实 customize body 约 100KB；超过这个数说明拿到的不是它
-    /// （或结构变了），宁可不抓也不要往日志里灌一坨没用的东西。
+    /// （或结构变了），
     private static let customizeDumpLimit = 262_144
 
     static func dumpCustomizeBodyIfEnabled(_ buffer: Data) {
@@ -233,27 +226,27 @@ enum SpotifyResponsePatcher {
     }
 
     // MARK: - `has_lyrics` 线上来源探针（排障用）
-
-    /// 找出 track 元数据里的 `has_lyrics` 到底搭**哪个 HTTP 响应**过来。
-    ///
-    /// 为什么要去线上找它：
-    ///   · **面 B**（与「关于艺人」并列的「歌词」预览卡片）的门控**够不着** ——
-    ///     `SPTPlayerTrackHook.metadata()` 那个覆写实测**每次都被调用**、也**确实返回了**
-    ///     `has_lyrics = "true"`，可面 B 依然只有 SECRET 出现。说明门控读的是 Swift 内部
-    ///     字段、走静态派发，ObjC 侧 getter 的改写到不了它那里（与取证报告证据 6 一致）。
-    ///   · 而 `has_lyrics` 出现在一个 `[String: String]` 字典里，同字典里还有
-    ///     `image_url` / `title` / `duration` / `popularity` —— 这些都是**服务端下发的**。
-    ///     取证时在 IPA 的 `__cstring` 里搜不到 `has_lyrics`，也符合"键名来自服务端 JSON"。
-    ///
-    /// 所以：**如果它在线上，就能在响应里改** —— 那样 Swift 解析出来的字段一开始就是
-    /// `true`，门控自然通过。这跟 hook getter 完全是两回事。
-    ///
-    /// 本函数**只读、只打日志、不修改任何字节**。
+    //
+    // 找出 track 元数据里的 `has_lyrics` 到底搭**哪个 HTTP 响应**过来。
+    //
+    // 为什么要去线上找它：
+    // · **面 B**（与「关于艺人」并列的「歌词」预览卡片）的门控**够不着** ——
+    // `SPTPlayerTrackHook.metadata` 那个覆写实测**每次都被调用**、也**确实返回了**
+    // `has_lyrics = "true"`，可面 B 依然只有 SECRET 出现。说明门控读的是 Swift 内部
+    // 字段、走静态派发，ObjC 侧 getter 的改写到不了它那里（与取证报告证据 6 一致）。
+    // · 而 `has_lyrics` 出现在一个 `[String: String]` 字典里，同字典里还有
+    // `image_url` / `title` / `duration` / `popularity` —— 这些都是**服务端下发的**。
+    // 取证时在 IPA 的 `__cstring` 里搜不到 `has_lyrics`，也符合"键名来自服务端 JSON"。
+    //
+    // 所以：**如果它在线上，就能在响应里改** —— 那样 Swift 解析出来的字段一开始就是
+    // `true`，门控自然通过。这跟 hook getter 完全是两回事。
+    //
+    // 本函数**只读、只打日志、不修改任何字节**。
     private static var _probeReportedPaths = Set<String>()
     /// 每个 task 上一块数据的尾巴：关键字可能正好被 chunk 边界切断，
     /// 不带上这个尾巴就会漏报，进而把"在线上"误判成"不在线上"。
     private static var _probeCarry: [Int: Data] = [:]
-    /// **存活信号**。没有它，"一条都没命中"和"探针压根没编进包里"分不出来 —— 日志 10 就
+    /// **存活信号**。没有它，
     /// 栽在这里：唯一的输出只在命中时打，于是空日志既可能是"不在线上"，也可能是"没构建"。
     private static var _probeAnnounced = false
     private static var _probeScanned = 0
@@ -262,28 +255,28 @@ enum SpotifyResponsePatcher {
     private static var _probeSeenPaths = Set<String>()
 
     // MARK: `scrollsita` 专用：服务器下发的"正在播放页元素列表"
-
-    /// 要验证的推论：**"歌词卡片"这个元素，是不是服务器决定放不放的。**
-    ///
-    /// `scrollsita/v1/scroll/spotify:track:<id>` 是按曲目返回**正在播放页元素**的接口。
-    /// 若推论成立，SECRET（Spotify 有词）的响应里会出现歌词相关元素，
-    /// 而最後の希望（Spotify 没词）的不会 —— 一发就能把判据钉在服务器侧，
-    /// 也就能给"本地无解、只剩自绘"下最终结论。
-    ///
-    /// 实现要点：
-    ///   · **累积整条响应体**（chunk 会切碎，只看单块必然漏），512KB 封顶兜底；
-    ///   · 关键字用 `yric`，一次覆盖 Lyric / lyric / Lyrics / lyrics（线上用哪种大小写未知）；
-    ///   · 同一 path 每发现一个**新**关键字才报一次，不刷屏；
-    ///   · 一个关键字都没命中也把**可打印字符串**前 25 条打出来 —— 否则"没命中"和
-    ///     "这个接口根本不含字符串"分不清，又是一次白跑（日志 10 的教训）。
+    //
+    // 要验证的推论：**"歌词卡片"这个元素，是不是服务器决定放不放的。**
+    //
+    // `scrollsita/v1/scroll/spotify:track:<id>` 是按曲目返回**正在播放页元素**的接口。
+    // 若推论成立，SECRET（Spotify 有词）的响应里会出现歌词相关元素，
+    // 而最後の希望（Spotify 没词）的不会 —— 一发就能把判据钉在服务器侧，
+    // 也就能给"本地无解、只剩自绘"下最终结论。
+    //
+    // 实现要点：
+    // · **累积整条响应体**（chunk 会切碎，只看单块必然漏），512KB 封顶兜底；
+    // · 关键字用 `yric`，一次覆盖 Lyric / lyric / Lyrics / lyrics（线上用哪种大小写未知）；
+    // · 同一 path 每发现一个**新**关键字才报一次，不刷屏；
+    // · 一个关键字都没命中也把**可打印字符串**前 25 条打出来 —— 否则"没命中"和
+    // "这个接口根本不含字符串"分不清，又是一次白跑。
     private static var _probeScrollBody: [Int: Data] = [:]
     private static var _probeScrollSeen: [String: Set<String>] = [:]
 
     /// hex 报告。**用来修正上面那条推论的证据等级**：`no needle`（扫不到 "yric"）
     /// **不能**当成"服务器没下发歌词元素"——
-    ///   · scrollsita 是 protobuf，元素类型极可能是**枚举整数**，字符串永远不会出现；
-    ///   · 实测 3 条 scrollsita（含 Spotify 有词的 SECRET 与没词的 最後の希望）都是
-    ///     `no needle`，body 里只有 artist/track/section/concert URI。
+    /// · scrollsita 是 protobuf，元素类型极可能是**枚举整数**，字符串永远不会出现；
+    /// · 实测 3 条 scrollsita（含 Spotify 有词的 SECRET 与没词的 最後の希望）都是
+    /// `no needle`，body 里只有 artist/track/section/concert URI。
     /// 所以额外把响应体前 512 字节按 hex 打出来（每 path 最多 3 次、只在体积变大时），
     /// 让"两条响应到底差在哪个字段"可以离线比对，而不是只能比可打印字符串。
     private static var _probeScrollHex: [String: (size: Int, reports: Int)] = [:]
@@ -415,22 +408,22 @@ enum SpotifyResponsePatcher {
     }
 
     // MARK: 歌词响应的**原始**状态码与响应头
-
-    /// 诊断：记录 `color-lyrics` 响应的原始状态与响应头。
-    ///
-    /// 为什么盯这个 —— 它是**最后一个没查过的本地变量**：
-    ///
-    ///   · 我们的 `didReceiveResponse` 钩子对**非 200**（404）会**合成**一个 200 交付，
-    ///     而且 `headerFields: [:]` —— **响应头是空的**；
-    ///   · 对**200** 则是**原样放行**原始响应，**带真实响应头**，只在后面替换 body。
-    ///
-    /// 于是"200 + 空歌词"的歌，客户端看到的是**原始的**头；而 SECRET（有词）看到的是
-    /// "200 + 真实体 + 真实头"。**如果客户端是看响应头（或体长）决定建不建卡片，这份
-    /// 日志就能看出来 —— 而且我们能改成"合成一份有歌词的响应头"交付，那就是原生修复。**
-    ///
-    /// 反过来，如果两者头一样，头部就不是判据，那这篇排查就该收尾去做自绘兜底了。
-    ///
-    /// 只读、只打日志；同一 path 只报一次。
+    //
+    // 诊断：记录 `color-lyrics` 响应的原始状态与响应头。
+    //
+    // 为什么盯这个 —— 它是**最后一个没查过的本地变量**：
+    //
+    // · 我们的 `didReceiveResponse` 钩子对**非 200**（404）会**合成**一个 200 交付，
+    // 而且 `headerFields: [:]` —— **响应头是空的**；
+    // · 对**200** 则是**原样放行**原始响应，**带真实响应头**，只在后面替换 body。
+    //
+    // 于是"200 + 空歌词"的歌，客户端看到的是**原始的**头；而 SECRET（有词）看到的是
+    // "200 + 真实体 + 真实头"。**如果客户端是看响应头（或体长）决定建不建卡片，这份
+    // 日志就能看出来 —— 而且我们能改成"合成一份有歌词的响应头"交付，那就是原生修复。**
+    //
+    // 反过来，如果两者头一样，头部就不是判据，那这篇排查就该收尾去做自绘兜底了。
+    //
+    // 只读、只打日志；同一 path 只报一次。
     private static var _probeHeaderReported = Set<String>()
 
     static func probeLyricsResponseHeaders(url: URL, response: HTTPURLResponse) {
@@ -453,24 +446,24 @@ enum SpotifyResponsePatcher {
     }
 
     // MARK: 正在播放页的「旁路模块」接口
-
-    /// 除 `scrollsita` 的元素列表之外，正在播放页还会**单独请求**几个"模块"接口。
-    ///
-    /// 起因（2026-09-26 真机，日志 5 的 `Fade Away`）：用户看到的那张**过期**的
-    /// 「即将发布 / 已预收藏」卡，**不来自元素列表** —— 那份响应只有 `2/3/4`（没有 `12`），
-    /// 而下面这三个请求**恰好在"卡在场"的那一次出现、"卡消失"的重进那一次全都没有**：
-    ///
-    ///   · `/cultural-moments-entrypoints/v1/entrypoint?entityUri=…`  ← 按时间点出卡，最像
-    ///   · `/spotify.liveeventdistribution.v1.EventCardInfoService/EventCardInfo`
-    ///   · `/merch-npv-service/v1/merch/track/<id>`
-    ///
-    /// 对照组（日志 6 `MONTAGEM KOKORO`）：那张**正常**的预热卡（"在 6 天内发布" +
-    /// "预收藏 +"）来自元素列表里的类型 `12`，而那一整段**没有任何旁路请求**。
-    /// 另外把 `12` 那个元素拆开看，它里面只有 album URI + section URI，**没有日期字段** ——
-    /// 所以日期与"已收藏"状态都是客户端从别处取来的，元素列表这条路解释不了坏卡。
-    ///
-    /// 本探针只做一件事：把这三个接口的响应原样亮出来（状态 + 可打印串 + hex）。
-    /// **只读、只打日志、不修改任何字节**，也不参与 `shouldModify`。
+    //
+    // 除 `scrollsita` 的元素列表之外，正在播放页还会**单独请求**几个"模块"接口。
+    //
+    // 起因：的那张**过期**的
+    // 「即将发布 / 已预收藏」卡，**不来自元素列表** —— 那份响应只有 `2/3/4`（没有 `12`），
+    // 而下面这三个请求**恰好在"卡在场"的那一次出现、"卡消失"的重进那一次全都没有**：
+    //
+    // · `/cultural-moments-entrypoints/v1/entrypoint?entityUri=…` ← 按时间点出卡，最像
+    // · `/spotify.liveeventdistribution.v1.EventCardInfoService/EventCardInfo`
+    // · `/merch-npv-service/v1/merch/track/<id>`
+    //
+    // 对照组：那张**正常**的预热卡（"在 6 天内发布" +
+    // "预收藏 +"）来自元素列表里的类型 `12`，而那一整段**没有任何旁路请求**。
+    // 另外把 `12` 那个元素拆开看，它里面只有 album URI + section URI，**没有日期字段** ——
+    // 所以日期与"已收藏"状态都是客户端从别处取来的，元素列表这条路解释不了坏卡。
+    //
+    // 本探针只做一件事：把这三个接口的响应原样亮出来（状态 + 可打印串 + hex）。
+    // **只读、只打日志、不修改任何字节**，也不参与 `shouldModify`。
     static func isNPVModuleEndpoint(_ url: URL) -> Bool {
         let path = url.path.lowercased()
         return path.contains("/cultural-moments-entrypoints/")
@@ -502,7 +495,7 @@ enum SpotifyResponsePatcher {
     /// 由 `didReceiveData` 调用：累积整条响应体，**体积变大时最多 dump 3 次**。
     ///
     /// 为什么累积而不是只看第一块：这几个接口的体可能是分块到达的，
-    /// 而"过期日期 / 错误状态"这种字符串完全可能跨块（日志 10 的 `has_lyrics` 探针就栽在这上面）。
+    /// 而"过期日期 / 错误状态"这种字符串完全可能跨块。
     static func probeNPVModuleBody(url: URL, taskID: Int, data: Data) {
         guard isNPVModuleEndpoint(url), !data.isEmpty else { return }
 
@@ -535,22 +528,22 @@ enum SpotifyResponsePatcher {
     }
 
     // MARK: 「预热 / 预发行」关键字探针
-
-    /// 扫**所有**响应字节，找"这张专辑还没发行 / 可以预收藏"这类字样的来源。
-    ///
-    /// 为什么需要（2026-09-26，日志 5/6/7）：坏卡的两条路已经排除掉了 ——
-    ///   · **元素列表**：坏卡出现在元素列表里**没有 `12`** 的曲目上（Fade Away 只有 2/3/4、
-    ///     Notes of Color 只有 5/2/3/4），而且 `12` 那个元素里**只有 album URI + section URI**，
-    ///     没有任何日期字段；
-    ///   · **三个旁路模块接口**：日志 7 里它们分别返回 **503 / 404 / 404**，体里只有
-    ///     "No entrypoint is defined…" 和 "No artists with merch…"。
-    ///
-    /// 而同一首歌两次加载的 HTTP 数据**完全一样**（日志 7：两行 manifest 逐字节同形），
-    /// 卡却只在第一次出现 ⇒ 数据要么在本次会话**更早的某个响应**里（比如启动时的
-    /// `casita/v1/home` 或播放列表页），要么在客户端本地。本探针负责前者。
-    ///
-    /// 命中就打一行（同一 `path + needle` 只报一次），并带命中处前后各 80 字节的可打印上下文。
-    /// **只读、只打日志、不改任何字节。**
+    //
+    // 扫**所有**响应字节，找"这张专辑还没发行 / 可以预收藏"这类字样的来源。
+    //
+    // 为什么需要：坏卡的两条路已经排除掉了 ——
+    // · **元素列表**：坏卡出现在元素列表里**没有 `12`** 的曲目上（Fade Away 只有 2/3/4、
+    // Notes of Color 只有 5/2/3/4），而且 `12` 那个元素里**只有 album URI + section URI**，
+    // 没有任何日期字段；
+    // 体里只有
+    // "No entrypoint is defined…" 和 "No artists with merch…"。
+    //
+    // 而同一首歌两次加载的 HTTP 数据**完全一样**，
+    // 卡却只在第一次出现 ⇒ 数据要么在本次会话**更早的某个响应**里（比如启动时的
+    // `casita/v1/home` 或播放列表页），要么在客户端本地。本探针负责前者。
+    //
+    // 命中就打一行（同一 `path + needle` 只报一次），并带命中处前后各 80 字节的可打印上下文。
+    // **只读、只打日志、不改任何字节。**
     private static let preReleaseNeedles: [[UInt8]] = [
         "prerelease", "pre_release", "pre-release",
         "presave", "pre_save", "pre-save",
@@ -653,17 +646,17 @@ enum SpotifyResponsePatcher {
     }
 
     // MARK: - 「禁用歌词功能」
-
-    /// 「禁用歌词功能」是否生效。
-    ///
-    /// 选项说明原话（`ngzhwm_disable_lyrics_feature_description`）："禁用有关于自定义歌词的
-    /// 所有功能，**还会阻止 Spotify 返回其自带的歌词**"。也就是说这个开关必须**主动拦掉**两份数据：
-    ///
-    ///   1. 我们自己那份 —— `getLyricsDataForCurrentTrack` 已经在抛 `.invalidSource` ✔；
-    ///   2. **Spotify 自带那份** —— 以前两条路都漏了：
-    ///      · 200 那条：取词抛错后走 `lyricsPayload = buffer`，把官方歌词**原样放行**；
-    ///      · 404 那条：`didReceiveResponse` **无条件**合成 200 + 我们的占位。
-    ///      结果就是"开关打开后歌词照旧显示"，观感即"选项不生效"。
+    //
+    // 「禁用歌词功能」是否生效。
+    //
+    // 选项说明原话（`ngzhwm_disable_lyrics_feature_description`）："禁用有关于自定义歌词的
+    // 所有功能，**还会阻止 Spotify 返回其自带的歌词**"。也就是说这个开关必须**主动拦掉**两份数据：
+    //
+    // 1. 我们自己那份 —— `getLyricsDataForCurrentTrack` 已经在抛 `.invalidSource` ✔；
+    // 2. **Spotify 自带那份** —— 以前两条路都漏了：
+    // · 200 那条：取词抛错后走 `lyricsPayload = buffer`，把官方歌词**原样放行**；
+    // · 404 那条：`didReceiveResponse` **无条件**合成 200 + 我们的占位。
+    // 结果就是"开关打开后歌词照旧显示"，观感即"选项不生效"。
     static var isLyricsFeatureDisabled: Bool {
         NgzhwmSettingsViewModel.isLyricsFeatureDisabled
     }
@@ -704,8 +697,8 @@ enum SpotifyResponsePatcher {
                 || url.isTrialsFacade || url.isPremiumMarketing || url.isPendragonFetchMessageList
                 || url.isPushkaTokens
                 || url.path.contains("signup/public")
-                // ⚠️ ★★ 2026-10-12：**`apresolve` 从这里删掉了** —— 见
-                //    `blockedResponseData` 里那段说明（它不是登出端点，是"音频接入点在哪"）。
+                // ⚠️**`apresolve` 从这里删掉了** —— 见
+                // `blockedResponseData` 里那段说明（它不是登出端点，是"音频接入点在哪"）。
                 || url.path.contains("pses/screenconfig")
                 || url.path.contains("v1/customize")
         }
@@ -726,7 +719,7 @@ enum SpotifyResponsePatcher {
             || BrowsitaSectionStripper.shouldHandle(url)
             // 正在播放页元素列表：补卡片，或「禁用歌词功能」时**摘掉**卡片。
             // ⚠️ 注意 `BrowsitaSectionStripper.shouldHandle` 本身就覆盖 `/scrollsita/`，
-            // 所以上一行已经让这个 URL 进入改写流程 —— 这一条只决定 `patch()` 里
+            // 所以上一行已经让这个 URL 进入改写流程 —— 这一条只决定 `patch` 里
             // "要不要注入那个 5 元素"；把开关关掉**不会**影响去广告那一步。
             || ((NgzhwmSettingsViewModel.isLyricsCardElementInjectionEnabled
                  || isLyricsFeatureDisabled)
@@ -751,23 +744,21 @@ enum SpotifyResponsePatcher {
             // actual logout codepath.
             return #"{"status":"OK"}"#.data(using: .utf8)!
         }
-        // ★★ 2026-10-12（用户报了三个症状，日志 61/62 抓到现场）：
-        //   「退出重进 Spotify **大概率无法播放全部歌曲**（位置冻在 9.5s、时长却是 238s）」
-        //   「歌单里的歌**全部消失**，重进全是灰色；有时只显示一部分」
+        // 「退出重进 Spotify **大概率无法播放全部歌曲**（位置冻在 9.5s、时长却是 238s）」
+        // 「歌单里的歌**全部消失**，重进全是灰色；有时只显示一部分」
         //
-        //   **`apresolve` 以前也在上面那一串里** —— 那是**上游带过来的**一行（`git log -S` 追到
-        //   2026-09-18 的导入提交，没有任何说明）。但 `apresolve.spotify.com` **不是登出端点**：
-        //   它回答的是「**音频/内容的接入点在哪**」（真响应形如 `{"accesspoint":[…]}`）。
-        //   我们却给它回 `{"status":"OK"}` + 30 秒后整条拦掉（`shouldBlock` 里那一行，同时删了）
-        //   ⇒ App 拿不到接入点 ⇒ 三件事一起出现：
-        //     · 音频拉不下来 ⇒ **位置冻住、放不动**（正是日志 62 那条
-        //       `⚠️ position stalled at 9.5s for ~3s (dur=238.0s)`）；
-        //     · 内容请求打不到接入点 ⇒ **歌单列表空/只加载一部分**（照片 80/81：`0 分钟`、行不全）；
-        //     · 可播放性判不出来 ⇒ **整列表变灰**。
-        //   这也解释了"换代理没用"（这是本地行为）与"退出重进后大概率"（30 秒后才开始拦）。
-        //   ⇒ 现在**原样放行**：让它自己去解析接入点。登出保护一个都没少
-        //     （`session/purge` / `token/revoke` / `DeleteToken` / `signup/public` 照旧拦）。
-        //   ⚠️ `[NET] Auth request: … apresolve …` 那行**保留**（它是有用的现场判据）。
+        // **`apresolve` 以前也在上面那一串里** —— 那是**上游带过来的**一行（`git log -S` 追到
+        // 的导入提交，没有任何说明）。但 `apresolve.spotify.com` **不是登出端点**：
+        // 它回答的是「**音频/内容的接入点在哪**」（真响应形如 `{"accesspoint":[…]}`）。
+        // 我们却给它回 `{"status":"OK"}` + 30 秒后整条拦掉（`shouldBlock` 里那一行，同时删了）
+        // ⇒ App 拿不到接入点 ⇒ 三件事一起出现：
+        // `⚠️ position stalled at 9.5s for ~3s (dur=238.0s)`）；
+        // · 内容请求打不到接入点 ⇒ **歌单列表空/只加载一部分**；
+        // · 可播放性判不出来 ⇒ **整列表变灰**。
+        // 这也解释了"换代理没用"（这是本地行为）与"退出重进后大概率"（30 秒后才开始拦）。
+        // ⇒ 现在**原样放行**：让它自己去解析接入点。登出保护一个都没少
+        // （`session/purge` / `token/revoke` / `DeleteToken` / `signup/public` 照旧拦）。
+        // ⚠️ `[NET] Auth request: … apresolve …` 那行**保留**（它是有用的现场判据）。
         if url.path.contains("pses/screenconfig") {
             return #"{}"#.data(using: .utf8)!
         }
@@ -816,7 +807,7 @@ enum SpotifyResponsePatcher {
         }
         if url.isCustomize {
             // 抓取必须在**任何改写之前**：这个 buffer 是服务器原样给的那份，
-            // 下面 `serializedData()` 之后就是我们的版本了。
+            // 下面 `serializedData` 之后就是我们的版本了。
             dumpCustomizeBodyIfEnabled(buffer)
 
             var msg = try CustomizeMessage(serializedBytes: buffer)
@@ -824,15 +815,15 @@ enum SpotifyResponsePatcher {
             let data = try msg.serializedData()
             cachedCustomizeData = data
 
-            // ★★ 2026-10-12 补（用户："退出重进 ⇒ 歌曲全黑 ⇒ **过了一会**部分歌能放"）：
-            //   "过了一会"就是**这一行到启动之间的秒数** —— 服务器真 body 到达之前，
-            //   App 手上只有 304 回放的那一份（种子或上一场的 body），账号态也还没被改写。
-            //   以前没有任何一行能量这个窗口的长短 ⇒ 这条链只能靠猜。现在只报一次。
+            // 补：症状是退出重进后歌曲全黑，过一会儿部分才恢复。
+            // "过了一会"就是**这一行到启动之间的秒数** —— 服务器真 body 到达之前，
+            // App 手上只有 304 回放的那一份（种子或上一场的 body），账号态也还没被改写。
+            // 以前没有任何一行能量这个窗口的长短 ⇒ 这条链只能靠猜。现在只报一次。
             if !didReportBodyArrival {
                 didReportBodyArrival = true
-                // ⚠️ `launchAt` 是**非可选**的 `Date`（`private static let launchAt = Date()`）
-                //   ⇒ 直接算差值，**不能写 `launchAt.map { … } ?? 0`**（2026-10-12 编译错：
-                //   `value of type 'Date' has no member 'map'`）。
+                // ⚠️ `launchAt` 是**非可选**的 `Date`（`private static let launchAt = Date`）
+                // ⇒ 直接算差值，**不能写 `launchAt.map { … } ?? 0`**编译错：
+                // `value of type 'Date' has no member 'map'`）。
                 let seconds = Date().timeIntervalSince(launchAt)
                 writeDebugLog(
                     String(

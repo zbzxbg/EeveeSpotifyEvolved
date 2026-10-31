@@ -71,19 +71,19 @@ enum CleanShareLinks {
     }
 
     // MARK: - Deep link cleaning
-
-    /// Returns a copy of the URL being opened by the system with any Spotify share
-    /// links embedded in it cleaned of tracking parameters.
-    ///
-    /// The in-app share sheet's direct-destination buttons (Instagram Stories,
-    /// WhatsApp, Telegram, Messenger, …) hand the Spotify share URL to another app
-    /// through a deep link instead of the pasteboard or the share sheet, e.g.
-    ///
-    ///     whatsapp://send?text=...https://open.spotify.com/track/...?si=...
-    ///     instagram-stories://share?source_application=...&content_url=...%3Fsi%3D...
-    ///
-    /// Hooking `UIApplication.openURL` lets us clean the Spotify URL right before
-    /// it leaves the process.
+    //
+    // Returns a copy of the URL being opened by the system with any Spotify share
+    // links embedded in it cleaned of tracking parameters.
+    //
+    // The in-app share sheet's direct-destination buttons (Instagram Stories,
+    // WhatsApp, Telegram, Messenger, …) hand the Spotify share URL to another app
+    // through a deep link instead of the pasteboard or the share sheet, e.g.
+    //
+    // whatsapp://send?text=...https://open.spotify.com/track/...?si=...
+    // instagram-stories://share?source_application=...&content_url=...%3Fsi%3D...
+    //
+    // Hooking `UIApplication.openURL` lets us clean the Spotify URL right before
+    // it leaves the process.
     static func cleanedDeepLinkURL(_ url: URL) -> URL {
         guard UserDefaults.cleanShareLinks else { return url }
 

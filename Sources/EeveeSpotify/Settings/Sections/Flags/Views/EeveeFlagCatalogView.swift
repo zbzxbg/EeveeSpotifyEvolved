@@ -3,12 +3,11 @@ import UIKit
 
 /// 「已知 flag」独立页 + 过滤框。
 ///
-/// 为什么从覆盖页里拆出来：41 条目录挤在覆盖页里，那一页就成了"表格墙"（用户反馈
-/// 页面臃肿）。spoti.pw 的 All flags 也是独立页 + 搜索框，这里照同样的结构。
+/// 为什么从覆盖页里拆出来：41 条目录挤在覆盖页里，那一页就成了"表格墙"（页面臃肿）。spoti.pw 的 All flags 也是独立页 + 搜索框，这里照同样的结构。
 ///
 /// 交互只有两条：
-///   · **点一下 = 加一条覆盖**（bool 类默认"关"，enum 类默认写回服务端下发的那个值）；
-///   · **再点一下 = 取消覆盖**（回到 Spotify 自己的值）。
+/// · **点一下 = 加一条覆盖**（bool 类默认"关"，enum 类默认写回服务端下发的那个值）；
+/// · **再点一下 = 取消覆盖**（回到 Spotify 自己的值）。
 /// 绿色勾表示这条已经被覆盖。改具体取值（Auto/开/关/写值）去上一层「Flag 覆盖」页。
 struct EeveeFlagCatalogView: View {
 
@@ -41,7 +40,7 @@ struct EeveeFlagCatalogView: View {
                 }
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear {
             overrides = FlagOverrideStore.all
@@ -77,7 +76,7 @@ struct EeveeFlagCatalogView: View {
                         .font(.system(.caption, design: .monospaced))
                         .foregroundColor(.primary)
 
-                    // `observedValue` 为空 = 只在 IPA 字面量表里见过（没在设备日志里出现过），
+                    // `observedValue` 为空 = 只在 IPA 字面量表里见过，
                     // 这一行就只显示 scope，别编一个假的"观察值"出来。
                     Text(verbatim: flag.observedValue.isEmpty
                          ? flag.scope

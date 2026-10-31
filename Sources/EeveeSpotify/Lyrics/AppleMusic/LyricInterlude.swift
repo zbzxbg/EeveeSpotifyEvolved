@@ -3,7 +3,7 @@ import Foundation
 // 移植自 MeloX `MeloX/Core/Lyrics/LyricInterludeTimeline.swift` 的模型部分（GPL-3.0）。
 //
 // 这个文件**只有模型与呈现位置结构**（谁是谁、这一拍该显示什么）。检测与定位的算法在
-// 隔壁 `LyricInterludeTimeline.swift` —— 2026-10-18 补上，正是这里原先那行
+// 隔壁 `LyricInterludeTimeline.swift` ——补上，正是这里原先那行
 // "等接入间奏功能时再补"的 TODO；渲染在 `AppleMusicInterludeRow.swift`。
 
 enum LyricInterludeTimingSource: Hashable, Sendable {

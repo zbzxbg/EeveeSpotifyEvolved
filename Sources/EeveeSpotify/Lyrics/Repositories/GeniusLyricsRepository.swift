@@ -23,7 +23,7 @@ class GeniusLyricsRepository: LyricsRepository {
     ///
     /// 为什么要带着 `statusCode` / `bodyHead` 一起回传：`Search returned 0 hit(s)`
     /// 这一句以前既可能是"Genius 真没这首歌"，也可能是"接口根本没答上来（401/429/5xx）
-    /// 或返回了别的形状"。2026-09-27 日志 15 的两首 0 命中（Inferno Rise、MONTAGEM NUAR）
+    /// 或返回了别的形状"。
     /// 就没法判断是哪一种 —— 只有状态码能分开这两件事。
     private struct GeniusHTTPResult {
         let response: GeniusDataResponse?
@@ -43,7 +43,7 @@ class GeniusLyricsRepository: LyricsRepository {
         }
 
         // 以前这里是 `URL(string:)!` —— 查询里带空格/特殊字符时崩在设备上，
-        // 日志里什么都没有。改成显式抛错，至少留一行。
+        // 改成显式抛错，至少留一行。
         guard let url = URL(string: stringUrl) else {
             writeDebugLog("[Genius] Invalid URL for \(path): \(stringUrl)")
             throw LyricsError.decodingError
@@ -105,7 +105,6 @@ class GeniusLyricsRepository: LyricsRepository {
         )
     }
 
-    //
 
     private func searchSong(_ query: String) throws -> [GeniusHit] {
         let result = try perform("/search/song", query: ["q": query])
@@ -134,9 +133,7 @@ class GeniusLyricsRepository: LyricsRepository {
         return songResponse.song
     }
 
-    //
-
-    /// 上游思路：标题子串命中就取第一个命中的，否则取第一个结果（信任 Genius 相关度）。
+    // 上游思路：标题子串命中就取第一个命中的，否则取第一个结果（信任 Genius 相关度）。
     private func mostRelevantHitResult(
         hits: [GeniusHit],
         strippedTitle: String
@@ -154,10 +151,10 @@ class GeniusLyricsRepository: LyricsRepository {
     /// 第一枪（`标题 + 歌手`）0 命中时的第二枪：只拿标题搜，但**必须有一条命中歌手名**
     /// 才采用。
     ///
-    /// 依据（2026-09-26 日志 3 / 2026-09-27 日志 15）：`标题 + 歌手`这种拼接查询在
+    /// 依据：`标题 + 歌手`这种拼接查询在
     /// Genius 上会整条 0 命中 —— `Notes of Color / Yono`、`Inferno Rise / IKAN`、
     /// `MONTAGEM NUAR / LXNGVX` 都是这样，而 0 命中当前就等于"这首歌没词"（直接占位）。
-    /// 同一份日志里另有大量"标题+歌手一条就中"的例子，所以只在这一枪已经失败的分支上
+    /// 所以只在这一枪已经失败的分支上
     /// 多打一次请求，不影响任何现在能出词的歌。
     ///
     /// 为什么要卡歌手：Genius 只按标题对齐会张冠李戴（同名歌太多），
@@ -227,7 +224,6 @@ class GeniusLyricsRepository: LyricsRepository {
         // 选中的是哪一条 —— **成功与否都打**。
         //
         // 以前只有成功路径的 `[Genius] Using "…" — N line(s)` 留下标题，失败路径什么都不留：
-        // 2026-09-27 日志 16 的 `Runner` 就卡在这儿（`Search returned 1 hit(s)` 之后直接
         // `No usable lyrics`），看不出那条命中**是不是这首歌**、也看不出它的词页是不是空的。
         writeDebugLog(
             "[Genius] Chosen hit: id=\(song.id)"
@@ -242,9 +238,9 @@ class GeniusLyricsRepository: LyricsRepository {
         // 不把上游「空歌词 → 纯音乐占位」的 bug 带过来：无有效歌词就抛查无此歌。
         guard !mappedLines.isEmpty else {
             // 三种情况以前共用同一句 `No usable lyrics`，没法区分：
-            //   · `plain` 是空串（Genius 有页面但没填词）；
-            //   · 整页只有 `[Instrumental]` / `[Chorus]` 这类标注，被 mapLyricsLines 全过滤掉；
-            //   · 匹配到的压根是另一首同名歌。
+            // · `plain` 是空串（Genius 有页面但没填词）；
+            // · 整页只有 `[Instrumental]` / `[Chorus]` 这类标注，被 mapLyricsLines 全过滤掉；
+            // · 匹配到的压根是另一首同名歌。
             // 原始字符数 / 原始行数 / 开头 120 字符一起打出来，一次复现就能定性。
             writeDebugLog(
                 "[Genius] No usable lyrics — plain \(songInfo.lyrics.plain.count) char(s),"

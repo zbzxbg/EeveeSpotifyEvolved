@@ -2,7 +2,6 @@ import Foundation
 
 /// 「这一行该在哪里折」的**复核器** —— 纯逻辑：只依赖一个"给我量这段宽度"的闭包，不碰 UIKit。
 ///
-/// ★★ 2026-10-18（日志 104 的 Starboy 现场，用户：「歌词有额外换行」）：
 /// ```
 /// [LyricWrap] fs=22.0 w=334.0 layout=331.8 text=405.4 breaks=[36] "I'm tryna put you in the worst mood ↵ah"
 /// [LyricWrap] fs=22.0 w=334.0 layout=331.8 text=394.4 breaks=[]   "P1 cleaner than your church shoes ah"
@@ -12,7 +11,7 @@ import Foundation
 /// `text` 都在 405~557pt ⇒ **折行那一侧与渲染那一侧不是同一把尺子**
 /// （折行用 `CTFontCreateWithName(uiFont.fontName)`，渲染与诊断用 `UIFont.systemFont`）。
 ///
-/// 后果正是用户看到的那件事：断点被插在**太靠右**的位置 ⇒ 第一段仍然超宽 ⇒ 渲染器再折一次
+/// 后果正是的那件事：断点被插在**太靠右**的位置 ⇒ 第一段仍然超宽 ⇒ 渲染器再折一次
 /// ⇒ 屏幕上多出一行。
 ///
 /// 这个类型只做一件事：**拿渲染那把尺子复核 CoreText 的断点**，把仍然超宽的那一段再切开。
@@ -35,9 +34,9 @@ enum LyricLineBreakFitting {
 
     /// **整行重排**：完全丢掉 CoreText 的断点，用渲染那把尺子从头贪心折行。
     ///
-    /// ★★ 2026-10-17（用户：「逐词歌词**额外换行**还没修吗」+「Melox 就没这个问题」）：
+    /// （逐词歌词**额外换行**还没修吗+「Melox 就没这个问题」）：
     ///
-    /// `verifiedBreaks` 只加不删 ⇒ **CoreText 自己那个多余的断点永远留着**。日志 113 的
+    /// `verifiedBreaks` 只加不删 ⇒ **CoreText 自己那个多余的断点永远留着**。
     /// Starboy L2 就是现场：
     ///
     /// ```
@@ -86,11 +85,11 @@ enum LyricLineBreakFitting {
     /// 复核断点：返回 CoreText 的断点 ∪ 补出来的断点。
     ///
     /// - Parameters:
-    ///   - text: 整行文本（按 `Character` 切）
-    ///   - count: 字符数（调用方已经算过就传进来，省一次 `Array(text)`）
-    ///   - layoutWidth: 可用的排版宽度
-    ///   - coreTextBreaks: CoreText 给出的断点（字符下标）
-    ///   - measure: 量 `[lower, upper)` 这段文本的排版宽度 —— **必须是渲染那一侧的字体重量的**
+    /// - text: 整行文本（按 `Character` 切）
+    /// - count: 字符数（调用方已经算过就传进来，省一次 `Array(text)`）
+    /// - layoutWidth: 可用的排版宽度
+    /// - coreTextBreaks: CoreText 给出的断点（字符下标）
+    /// - measure: 量 `[lower, upper)` 这段文本的排版宽度 —— **必须是渲染那一侧的字体重量的**
     /// - Returns: 复核后的断点集合。
     static func verifiedBreaks(
         text: String,

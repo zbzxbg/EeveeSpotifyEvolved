@@ -75,7 +75,7 @@ class SpotifySessionDelegateBootstrapHook: ClassHook<NSObject>, SpotifySessionDe
                     }
                     else {
                         UserDefaults.patchType = .requests
-                        // Dispatch to main thread — calling activate() (method swizzling) from
+                        // Dispatch to main thread — calling activate (method swizzling) from
                         // a URLSession delegate background thread while inside the method being
                         // swizzled is not thread-safe and causes a first-launch crash.
                         DispatchQueue.main.async { activatePremiumPatchingGroup() }

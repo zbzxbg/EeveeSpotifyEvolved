@@ -80,13 +80,13 @@ extension EeveeLyricsSettingsViewModel {
             }
             .store(in: &cancellables)
 
-        // ── 设置项变更日志 ───────────────────────────────────────────────────
+        // ── 设置项变更日志
         //
         // ⚠️ 起因：改任何开关过去只有**副作用**日志（比如"hide translation enabled"
         // 会出现在取词流程里），没有"用户在什么时候把哪个开关改成了什么"的时间线。
         // 排查"这个行为差异是不是设置造成的"时，只能靠猜当时是什么配置。
         //
-        // 全部走 `.dropFirst()`：订阅时会先收到一次当前值，那是页面打开、不是用户改动，
+        // 全部走 `.dropFirst`：订阅时会先收到一次当前值，那是页面打开、不是用户改动，
         // 记下来会污染时间线。之后每次真实改动记一行。
         //
         // 写入量：只在用户真的拨开关时触发，不在任何每帧路径上。所以不用节流。
@@ -117,13 +117,13 @@ extension EeveeLyricsSettingsViewModel {
         // 「隐藏官方歌词」已写死启用（见 NgzhwmSettingsViewModel），设置页不再有开关，
         // 因此这里也没有可记录的绑定。
         // 已搬走：`$injectLyricsCardElement` / `$lyricsEntryPointFlag`
-        // （2026-09-27，排查型开关整体挪到「调试」页）。那两行 `[Settings] … -> ON/OFF`
-        // 分组标记跟着绑定一起搬到了 `EeveeDebugSettingsViewModel.setupBindings()`，
+        // 那两行 `[Settings] … -> ON/OFF`
+        // 分组标记跟着绑定一起搬到了 `EeveeDebugSettingsViewModel.setupBindings`，
         // 所以日志格式不变、只是由那个页面负责记录。
-        // 已删除：`$syntheticLineTiming`（2026-09-27）——「补全歌词时间轴」连同它的代码
+        // 已删除：`$syntheticLineTiming`——「补全歌词时间轴」连同它的代码
         // 一起删了（见 `EeveeDebugSettingsViewModel` 顶部说明），不再有任何绑定。
         logBooleanSetting($disableLyricsFeature, "disable lyrics feature")
-        // 已删除（2026-10-18）：`$removeMxmInterludeSymbol` ——「删除间奏符号 ♪」连同它的
+        // 已删除：`$removeMxmInterludeSymbol` ——「删除间奏符号 ♪」连同它的
         // 键与 UI 行一起摘掉了（间奏行无条件丢弃），没有可记录的绑定。
         logBooleanSetting($neteaseRomajiLocal, "NetEase romaji display mode")
         logBooleanSetting($neteaseHideTranslation, "hide NetEase translation")

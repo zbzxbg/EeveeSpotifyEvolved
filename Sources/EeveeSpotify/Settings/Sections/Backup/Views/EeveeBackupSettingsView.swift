@@ -3,12 +3,12 @@ import UIKit
 
 /// 「备份与重置」页：导出 / 导入本仓库的设置，以及"只重置我们的设置"。
 ///
-/// ── 为什么用剪贴板而不是"存文件"──────────────────────────────────────────────
+/// ── 为什么用剪贴板而不是"存文件"
 /// Spotify 的沙箱不对 Files app 开放，存进去用户**拿不出来**；剪贴板是这台设备上
 /// 一定拿得到的通道（贴进备忘录、AirDrop、发给自己都行）。所以这一页的主按钮是
 /// 「复制到剪贴板」，文本框只是让你看一眼、或者从别处粘贴进来。
 ///
-/// ── 只碰我们自己的键 ────────────────────────────────────────────────────────
+/// ── 只碰我们自己的键
 /// 导出/导入/重置都走 `UserDefaults.ownedKeys` 白名单（见 `SettingsBackup` 里的三条铁律）：
 /// 这个进程的 `.standard` 里同时躺着 **Spotify 自己的偏好**，全删会把 Spotify 的设置
 /// 一起清掉 —— 那是「重置 Spotify 状态」（另一个开关）的语义，不是这里。
@@ -33,7 +33,7 @@ struct EeveeBackupSettingsView: View {
                 }
             }
         }
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+                // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear { exportText = SettingsBackup.exportText() }
         .alert(isPresented: $confirmReset) {
@@ -94,10 +94,10 @@ struct EeveeBackupSettingsView: View {
 
             Button {
                 let result = SettingsBackup.importText(importText)
-                // ★ 2026-10-22：听歌页那五件结构改动只有「修改Spotify听歌页布局」总开关
-                //   一个合法入口，而导入是**逐键**写盘的（五颗键都在白名单里）⇒ 一份旧备份
-                //   可以把 `hideSingalongLine=false` 之类单独写回来，造成"总开关开着、功能却没开"。
-                //   导入完立刻按总开关归一一次，页面上那颗开关才始终是真相。
+                // 听歌页那五件结构改动只有「修改Spotify听歌页布局」总开关
+                // 一个合法入口，而导入是**逐键**写盘的（五颗键都在白名单里）⇒ 一份旧备份
+                // 可以把 `hideSingalongLine=false` 之类单独写回来，造成"总开关开着、功能却没开"。
+                // 导入完立刻按总开关归一一次，页面上那颗开关才始终是真相。
                 UserDefaults.normalizeNowPlayingLayoutKeys()
                 status = describe(result)
                 exportText = SettingsBackup.exportText()

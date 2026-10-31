@@ -3,24 +3,24 @@ import Orion
 import UIKit
 import ObjectiveC.runtime
 
-/// ★★ 2026-10-31（用户：「歌词偏移放到听歌页，放到右上角的按钮」→ 选定「接管 ⋯ 弹窗加一行」）：
+/// （歌词偏移放到听歌页，放到右上角的按钮→ 选定「接管 ⋯ 弹窗加一行」）：
 ///
 /// 播放页右上那颗 `⋯` 弹出的**不是 `UIMenu`，是一张 sheet**（`ContextMenuViewController`）。
 /// 想往里加一行只有两条路：
 ///
-///   ① 像 taurus 那样**整个接管重画**（`Redesigned/Player/PlayerMenu.x`，871 行：隐藏原 sheet、
-///      自己画一张卡片、按行号重建全部行）。功能最全，但 Spotify 换一版菜单结构就整块失效；
-///   ② **在它的表尾挂一行**（`tableView.tableFooterView`）。不动数据源、不动行号、
-///      不动它自己的 cell，代价是这一行只能出现在**列表最后**。
+/// ① 像 taurus 那样**整个接管重画**（`Redesigned/Player/PlayerMenu.x`，871 行：隐藏原 sheet、
+/// 自己画一张卡片、按行号重建全部行）。功能最全，但 Spotify 换一版菜单结构就整块失效；
+/// ② **在它的表尾挂一行**（`tableView.tableFooterView`）。不动数据源、不动行号、
+/// 不动它自己的 cell，代价是这一行只能出现在**列表最后**。
 ///
 /// 这里选 ② —— 我们只需要"多一个入口"，不需要重排它的菜单。判据也尽量少：
 ///
-///   · **只认播放器那一张**：正在播放页在屏上（`nowPlayingScrollViewController` 的 view 还在窗口里），
-///     或呈现者链里有 `NowPlaying` / `NPVScroll` 的类名。别处弹出的上下文菜单一个字节都不动；
-///   · **只认有歌词上下文的时候**：拿不到「当前曲目 + 歌词源」就不挂（没有可偏的对象）；
-///   · **Genius 不挂**：`LyricsTimingOffset.supportsOffset` 为假 —— 它的时间轴是纯文本推出来的，
-///     平移没有意义（与设置页同一条口径）；
-///   · 任何一环认不出 ⇒ **什么都不做，只打一行日志**（这条纪律与页头那套一致）。
+/// · **只认播放器那一张**：正在播放页在屏上（`nowPlayingScrollViewController` 的 view 还在窗口里），
+/// 或呈现者链里有 `NowPlaying` / `NPVScroll` 的类名。别处弹出的上下文菜单一个字节都不动；
+/// · **只认有歌词上下文的时候**：拿不到「当前曲目 + 歌词源」就不挂（没有可偏的对象）；
+/// · **Genius 不挂**：`LyricsTimingOffset.supportsOffset` 为假 —— 它的时间轴是纯文本推出来的，
+/// 平移没有意义（与设置页同一条口径）；
+/// · 任何一环认不出 ⇒ **什么都不做，只打一行日志**（这条纪律与页头那套一致）。
 struct PlayerMenuOffsetGroup: HookGroup {}
 
 class ContextMenuOffsetRowHook: ClassHook<UIViewController> {
@@ -83,9 +83,9 @@ enum LyricsOffsetMenuRow {
     /// 两条都不成立就当作"别处的上下文菜单"，不碰。
     private static func isPlayerMenu(_ menu: UIViewController) -> Bool {
         // ⚠️ `nowPlayingScrollViewController` 的类型是 **`@objc protocol`**，不是 `UIViewController`
-        //   —— 它上面没有 `viewIfLoaded`（2026-10-31 编译现场：`has no member 'viewIfLoaded'`）。
-        //   运行期它就是一个 VC，所以先转成 `UIViewController` 再用 `isViewLoaded`；
-        //   `isViewLoaded` 与 `viewIfLoaded != nil` 等价，**都不会顺手把视图加载出来**。
+        // —— 它上面没有 `viewIfLoaded`编译现场：`has no member 'viewIfLoaded'`）。
+        // 运行期它就是一个 VC，所以先转成 `UIViewController` 再用 `isViewLoaded`；
+        // `isViewLoaded` 与 `viewIfLoaded != nil` 等价，**都不会顺手把视图加载出来**。
         if let page = nowPlayingScrollViewController as? UIViewController,
            page.isViewLoaded,
            page.view.window != nil {
@@ -177,8 +177,8 @@ enum LyricsOffsetMenuRow {
     }
 
     // MARK: - 点开
-
-    /// `UIControl` 的 target 必须是个存活的对象 —— 用一个单例，别让行自己持有。
+    //
+    // `UIControl` 的 target 必须是个存活的对象 —— 用一个单例，别让行自己持有。
     final class Target: NSObject {
         static let shared = Target()
 
@@ -190,7 +190,7 @@ enum LyricsOffsetMenuRow {
             writeDebugLog("[LyricsOffset] player menu row tapped — \(context.trackId)")
             // 先收起整张 sheet 再弹面板。
             // ⚠️ 要 dismiss **最外层**那个 VC：`ContextMenuViewController` 通常只是 sheet 里的
-            //    子 VC，直接对它 `dismiss` 在 UIKit 里是空操作（taurus 的 `presentedSheet` 同理）。
+            // 子 VC，直接对它 `dismiss` 在 UIKit 里是空操作（taurus 的 `presentedSheet` 同理）。
             menu?.topmostPresented().dismiss(animated: true) {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     LyricsOffsetPanel.present(
@@ -219,7 +219,7 @@ enum LyricsOffsetMenuRow {
 /// 对没被 present 的 VC 调 `dismiss` 在 UIKit 里是**空操作**（taurus 的 `presentedSheet` 也是先走到顶）。
 ///
 /// ⚠️ 属性名是 `parent`：`parentViewController` 是它的**旧名**（ObjC 时代），
-///   Swift 里这么写会报 `has been renamed to 'parent'`（2026-10-31 编译现场）。
+/// Swift 里这么写会报 `has been renamed to 'parent'`编译现场）。
 private extension UIViewController {
     func topmostPresented() -> UIViewController {
         var top = self

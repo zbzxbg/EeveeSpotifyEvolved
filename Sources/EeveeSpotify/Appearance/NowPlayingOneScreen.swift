@@ -17,24 +17,23 @@ import ObjectiveC.runtime
 /// 于是上拉只拉伸回弹、下拉仍能到负偏移、**关闭手势完全不受影响**。
 ///
 /// ⚠️ **`alwaysBounceVertical` 在这一页上不是观感调参，是关闭手势链条的一环**：
-///    真机试过把它关掉 ⇒ 播放器再也划不掉（那一版当天就删了）。`content.h == bounds.h` 之后
-///    用户感到的位移纯粹是回弹；`UIScrollView` 也没有"只关一端"的公开开关
-///    ⇒ 想彻底去掉回弹只剩"自己接管下拉关闭"一条路（hook 列表 pan → 自己驱动 dismiss，
-///    前提是先用诊断回答"delegate 是谁"）。
+/// 真机试过把它关掉 ⇒ 播放器再也划不掉（那一版当天就删了）。`content.h == bounds.h` 之后
+/// 感到的位移纯粹是回弹；`UIScrollView` 也没有"只关一端"的公开开关
+/// ⇒ 想彻底去掉回弹只剩"自己接管下拉关闭"一条路（hook 列表 pan → 自己驱动 dismiss，
+/// 前提是先用诊断回答"delegate 是谁"）。
 ///
 /// ## 其它
-///   · 重算时机：蹭 `DeclutterChrome` 既有的 0.3s 复查节拍（**不新开 hook、不挂可选方法**）；
-///   · 卡片折叠那一半在 `NowPlayingOneScreenCards.x.swift`（那个必须是 Orion hook）；
-///   · 开关：听歌页 →「修改Spotify听歌页布局」总开关（2026-10-22 起把原来那颗
-///     「隐藏 Spotify 的听歌页模块」收进去了），**默认开**
-///     （`UserDefaults.nowPlayingLayout && UserDefaults.nowPlayingOneScreen`），日志 tag `[OneScreen]`。
-///     默认开的前提是"歌词进播放器"（`NowPlayingLyricsPlate`）补上了打开歌词的入口 ——
-///     否则折掉歌词卡之后，听歌页就没有"打开歌词"的地方了。
+/// · 重算时机：蹭 `DeclutterChrome` 既有的 0.3s 复查节拍（**不新开 hook、不挂可选方法**）；
+/// · 卡片折叠那一半在 `NowPlayingOneScreenCards.x.swift`（那个必须是 Orion hook）；
+/// · 开关：听歌页 →「修改Spotify听歌页布局」总开关起把原来那颗
+/// 「隐藏 Spotify 的听歌页模块」收进去了），**默认开**
+/// （`UserDefaults.nowPlayingLayout && UserDefaults.nowPlayingOneScreen`），日志 tag `[OneScreen]`。
+/// 默认开的前提是"歌词进播放器"（`NowPlayingLyricsPlate`）补上了打开歌词的入口 ——
+/// 否则折掉歌词卡之后，听歌页就没有"打开歌词"的地方了。
 enum NowPlayingOneScreen {
 
     static let logTag = "OneScreen"
 
-    /// 播放器那张列表在真机树里的 `accessibilityIdentifier` —— 日志 38 的 `[Tree]` 里就有
     /// （`6.UICollectionView@0,0,414,896,id=scrolling_npv_collection_view_accessibility_identifier`）。
     private static let listIdentifier = "scrolling_npv_collection_view_accessibility_identifier"
 
@@ -56,7 +55,7 @@ enum NowPlayingOneScreen {
     /// 合并用的占位：一次布局里几十张卡只排一枪（本仓库纪律：短促重试不叠加）。
     private static var repinScheduled = false
 
-    /// ★ 2026-10-22：这颗开关由「修改Spotify听歌页布局」总开关统一写；
+    /// 这颗开关由「修改Spotify听歌页布局」总开关统一写；
     /// 再叠一道 `nowPlayingLayout` 的门，是为了"总开关关掉 ⇒ 这一套一律不生效"
     /// （哪怕有外部写回 / 导入备份把那颗键写成了 true）。
     static var isEnabled: Bool {
@@ -64,11 +63,11 @@ enum NowPlayingOneScreen {
     }
 
     // MARK: - 对外入口
-
-    /// 进听歌页时叫一次（蹭既有的 `NPVScrollViewControllerHook.viewWillAppear` / `.viewDidAppear`）。
-    ///
-    /// 找不到列表时**刻意不打日志**：`viewWillAppear` 那一刻列表常常还没建出来，
-    /// 打了就是每进一次页面一条噪音。"真的从来找不到"由 `reconcile()` 负责上报。
+    //
+    // 进听歌页时叫一次（蹭既有的 `NPVScrollViewControllerHook.viewWillAppear` / `.viewDidAppear`）。
+    //
+    // 找不到列表时**刻意不打日志**：`viewWillAppear` 那一刻列表常常还没建出来，
+    // 打了就是每进一次页面一条噪音。"真的从来找不到"由 `reconcile` 负责上报。
     static func apply(in pageView: UIView) {
         lastPage = pageView
 
@@ -117,7 +116,7 @@ enum NowPlayingOneScreen {
 
     /// 卡片**折叠那一刻**叫一次（由 `NowPlayingOneScreenCards.x.swift` 调）。
     ///
-    /// **为什么必须有这个入口**（2026-10-03 夜用户实测）：开启「一屏」后卡片确实全没了，
+    /// **为什么必须有这个入口**夜一屏后卡片确实全没了，
     /// 但**页面还能往下滑** ⇒ 说明"钉住"要么没跑、要么跑在**卡片到货之前**：
     /// 那时内容还没变高，公式给的是 `want >= 0`，我们按纪律什么都不做（见 `pin`），
     /// 之后要是再没有布局 / 滚动回合，这个错就一直留在那儿。
@@ -166,14 +165,14 @@ enum NowPlayingOneScreen {
     }
 
     // MARK: - 钉住
-
-    /// 把列表钉在它自己的顶部。**返回这一拍有没有真的写东西**。
-    ///
-    /// 公式（pw 的注释逐句译过来）：
-    /// * `safeArea` = 安全区在"它自己的 inset"之外**额外**加的那部分，必须留着；
-    /// * `over` = 内容比可视区高出来的那部分 —— 现在全靠卡片撑着；
-    /// * 它能滚到的最远处，就是它静止时的位置：`-adjusted.top`（它自己的顶）；
-    /// * ⇒ `want` 就是"让上面那句话成立"所需的 bottom inset。
+    //
+    // 把列表钉在它自己的顶部。**返回这一拍有没有真的写东西**。
+    //
+    // 公式（pw 的注释逐句译过来）：
+    // * `safeArea` = 安全区在"它自己的 inset"之外**额外**加的那部分，必须留着；
+    // * `over` = 内容比可视区高出来的那部分 —— 现在全靠卡片撑着；
+    // * 它能滚到的最远处，就是它静止时的位置：`-adjusted.top`（它自己的顶）；
+    // * ⇒ `want` 就是"让上面那句话成立"所需的 bottom inset。
     @discardableResult
     private static func pin(_ list: UIScrollView) -> Bool {
         let bounds = list.bounds
@@ -185,9 +184,9 @@ enum NowPlayingOneScreen {
         let over: CGFloat = list.contentSize.height - bounds.height
         let want: CGFloat = -adjusted.top - over - safeArea
 
-        // ★ 目标值**不是"压 / 不压"的二选一** —— 目标永远是"让列表最多只能滚到它自己的顶"。
+        // 目标值**不是"压 / 不压"的二选一** —— 目标永远是"让列表最多只能滚到它自己的顶"。
         //
-        // 日志 40 的现场把这件事说清了：内容**刚好一屏**时 `want = +0`，而 Spotify 自己把
+        // 而 Spotify 自己把
         // `contentInset.bottom` 留了 **34**（安全区那一档）⇒ 那 34pt 就是用户还能往下滑的距离。
         // 早先两版都栽在这一支上：先按"卡片还在时"的内容压了 -1236（留下 1236pt 空白）；
         // 改成"`want >= 0` 就退回原值"之后，又把 Spotify 那 34 原样留着（还是能滑 34pt）。
@@ -222,26 +221,26 @@ enum NowPlayingOneScreen {
         return true
     }
 
-    /// ★ 一次性诊断行：把「**为什么还能往下滑**」一次问清楚。
+    /// 一次性诊断行：把「**为什么还能往下滑**」一次问清楚。
     ///
-    /// 2026-10-03 夜用户实测："卡片全没了，但还能往下滑"。当时能猜的原因有四个
+    /// 夜用户实测："卡片全没了，但还能往下滑"。当时能猜的原因有四个
     /// （没找到列表 / 没到该压的时候 / 压了但值不对 / 剩下的只是**橡皮筋回弹**），
-    /// 而日志里一条都分不开。这一行把几个数一次打出来：
-    ///   · `inset.bottom` —— 我们到底压了多少（0 = 一个字都没压）；
-    ///   · `content.h` vs `bounds.h` —— 内容比一屏高多少（高多少就该压多少）；
-    ///     ★ **两者相等 ⇒ 一点可滚范围都没有了，剩下的只可能是"回弹"**；
-    ///   · `adj.top/bottom` —— 安全区那块（公式里必须留着的）；
-    ///   · `bounce` —— **`alwaysBounceVertical`，只读**：它必须一直是 `on`。
-    ///     ⚠️ 这一格是**回归判据**：曾经我们把它写成 `false`（「禁止回弹」），
-    ///     结果**下拉关闭播放器直接坏掉**（日志 41）。它现在是只读的哨兵 ——
-    ///     `bounce=off` 再出现，就说明有人又把关闭手势链条碰断了。
-    ///   · `bounces` —— `UIScrollView.bounces`（**两端**回弹的总闸）。日志 49 里用户报
-    ///     "一屏开着还能像橡皮筋一样往下滑"，那时 `content.h==bounds.h` 已经成立
-    ///     ⇒ 剩下的就是它。**要动它必须先有"自己接管下拉关闭"的办法**（见文件头）。
-    ///   · `panRecs` / `pan=<delegate>` —— 那条列表上有几个 pan 手势，以及**第一个 pan 的
-    ///     delegate 是谁**。下拉关闭就骑在其中一个 pan 上，而 pw 说窗口那侧会让自己的
-    ///     dismiss recogniser **等它失败** ⇒ 如果我们将来要"让列表在顶部主动让位"，
-    ///     要不要接管 delegate、能不能接管，就看这一格（只读，不碰）。
+    /// 这一行把几个数一次打出来：
+    /// · `inset.bottom` —— 我们到底压了多少（0 = 一个字都没压）；
+    /// · `content.h` vs `bounds.h` —— 内容比一屏高多少（高多少就该压多少）；
+    /// **两者相等 ⇒ 一点可滚范围都没有了，剩下的只可能是"回弹"**；
+    /// · `adj.top/bottom` —— 安全区那块（公式里必须留着的）；
+    /// · `bounce` —— **`alwaysBounceVertical`，只读**：它必须一直是 `on`。
+    /// ⚠️ 这一格是**回归判据**：曾经我们把它写成 `false`（「禁止回弹」），
+    /// 结果**下拉关闭播放器直接坏掉**。它现在是只读的哨兵 ——
+    /// `bounce=off` 再出现，就说明有人又把关闭手势链条碰断了。
+    /// · `bounces` —— `UIScrollView.bounces`（**两端**回弹的总闸）。
+    /// "一屏开着还能像橡皮筋一样往下滑"，那时 `content.h==bounds.h` 已经成立
+    /// ⇒ 剩下的就是它。**要动它必须先有"自己接管下拉关闭"的办法**（见文件头）。
+    /// · `panRecs` / `pan=<delegate>` —— 那条列表上有几个 pan 手势，以及**第一个 pan 的
+    /// delegate 是谁**。下拉关闭就骑在其中一个 pan 上，而 pw 说窗口那侧会让自己的
+    /// dismiss recogniser **等它失败** ⇒ 如果我们将来要"让列表在顶部主动让位"，
+    /// 要不要接管 delegate、能不能接管，就看这一格（只读，不碰）。
     private static func logDiagnosticOnce(_ list: UIScrollView) {
         guard !didLogDiag else { return }
         didLogDiag = true
@@ -271,7 +270,7 @@ enum NowPlayingOneScreen {
         objc_setAssociatedObject(list, &originalInsetKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
-    /// 这个视图是不是挂在**我们钉住的那张列表**下面。    ///
+    /// 这个视图是不是挂在**我们钉住的那张列表**下面。 ///
     /// 卡片折叠的**最硬判据**（`NowPlayingOneScreenCards.x.swift` 用它）：跟类名、模块名
     /// 怎么变都无关 —— 我们本来就是从 `accessibilityIdentifier` 认列表的。
     /// 跳数封顶 12：卡片离列表也就几层，超过说明不是它的后代。

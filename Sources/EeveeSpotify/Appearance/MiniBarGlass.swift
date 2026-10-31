@@ -3,88 +3,51 @@ import UIKit
 import ObjectiveC.runtime
 import EeveeSpotifyC
 
-/// 迷你播放条的**液态玻璃胶囊** —— 与标签栏那条**等宽（312）、等高（60）、同圆角、同材质**。
-/// 用户 2026-10-02 拍的板：A 方案「两条要等宽」，代价是迷你条内容等比缩到 ~75%。
+/// 迷你播放条的液态玻璃胶囊：与标签栏那条等宽（360pt）、等高（60pt）、同圆角、同材质。
+/// 两条等宽的唯一办法是把迷你条内容等比缩进胶囊（只动 transform，不动 Spotify 的布局）。
 ///
-/// ── 真机形状（照片 33/34/35 逐像素 + 日志 26/27 的视图树）──────────────────────
+/// 视图层级（真机）：
 /// ```
-/// TouchPassthroughView@0,749,414,64                     ← host（414x64，后来又变成 414x98）
-///   └ … UIView@0,0,398,56 id=SPTNowPlayingBar            ← ★内容视图（裸 UIView，只能认 id）
+/// TouchPassthroughView@0,749,414,64
+///   └ … UIView@0,0,398,56 id=SPTNowPlayingBar            ← 内容视图（裸 UIView，只能认 id）
 ///        ├ UIView@8,8,40,40                              （封面）
 ///        ├ UIStackView@48,8,342,40                       （歌名/歌手 + 连接键 + 播放键）
 ///        └ UIView@8,54,382,2 id=now-playing-bar-duration （底部那条 2pt 进度线）
 /// ```
-/// 标签栏那条胶囊：**312x60**（屏幕 x 51…363、y 810…870）；迷你条内容底边到它顶边之间
-/// **有 6.5pt 间隙**（用户特别点出：别粘上；本版做成 4.5pt，仍然分得开）。
-///
-/// ── 两条等宽是怎么做到的（v4.7.1）────────────────────────────────────────────
-/// 迷你条内容真机 **398pt**，胶囊只有 **312pt** —— 唯一的办法是**把内容等比缩到里面**
-/// （`contentScale`，真机 312−16 / 398 ≈ **0.74**）。缩的是**整条内容视图的 transform**：
-///   · 不动 Spotify 的任何布局（与标签栏那四颗的收紧同一条纪律）；
-///   · 关闭开关即回 `.identity`，一点痕迹不留。
-/// 宽度取自**标签栏那条胶囊的宽度比例**（`TabBarGlassPlate.capsuleWidthRatio` × 本宿主宽），
-/// 所以换设备/换屏幕宽度两条也还是等宽；拿不到比例时退回真机实测的 `312/414`。
-///
-/// ── 三件必须一起做的事（少一件就翻车）────────────────────────────────────────
-///   ① **底色**：内容视图自己是"封面色"实心块（真机 `#64204C` / `#3F3F3F`，随封面变）。
-///      ⚠️ Spotify 会在我们清完之后**再写回来**（日志 27：16:50:19 我们清掉，16:50:20
-///      树上又是 `bg=#64204C` → 照片 34 那块紫的盖不住）。
-///      ★★ 2026-10-19（用户拍板 A，照上游）：**改成在层上断根** —— `EeveeInterceptBackground`
-///      （`Sources/EeveeSpotifyC/Tweak.m`，从上游 `EncoreBridge.m` 移植）给这一层的 CALayer
-///      换一个"只有它用"的实例子类，`setBackgroundColor:` 只回报颜色、**永远不落盘**
-///      ⇒ 之后 Spotify 再写也画不出来，**没有空窗期**。装不上时才退回老路（见 ④）。
-///   ② **不裁剪**：60pt 的胶囊比 56pt 的内容高，会被 bounds 切掉上下各 2pt。
-///      v4.7.1 起玻璃住**宿主**里（不再住内容里），所以连宿主也要不裁剪。
-///   ③ **玻璃不进内容视图**：因为内容要被缩放 —— 玻璃要是它的子视图就会跟着缩。
-///      所以玻璃插在 `host.subviews[0]`（整条内容之下、宿主背景之上），自己不受缩放影响。
-///   ④ ★ v4.8 的**底色守卫**（清 / 补清 / 0.5s 复查）现在只是**兜底**：
-///      拦截装上了 ⇒ `reconcileCoverColor()` 第一句就返回；装不上才真的跑那三件套。
-///      ⚠️ 两个驱动都是"看一眼 + 幂等清"，**不是常驻轮询**（与本仓库的纪律一致）。
-///
-/// ── v4.8（2026-10-02）：用户「液态玻璃的宽度有点少」+ 照片 36/37 ────────────────
-///   · 宽度**不写死**：跟着标签栏那条的比例走（v4.8 起标签栏那条真机是 **360pt**，
-///     本机 414 宽就是 360）；拿不到时的兜底比例也跟着改成 `360/414`。
-///   · 顺带的好处：内容要缩的比例从 `(312−16)/398 ≈ 0.74` 抬到 `(360−16)/398 ≈ 0.86`
-///     —— 歌名、连接键、播放键都比以前大一圈。
-///
-/// 开关：设置 → EeveeSpotify → 扩展功能 → **迷你播放条** →「迷你播放条用液态玻璃」，默认**开**。
-///
-/// ⚠️ **为什么不做成新的 Orion hook**：`TouchPassthroughView` 已经被 `DeclutterChrome` 的
-/// `MiniPlayerBarHideHook` 钩住了（同一个类、同一个 `layoutSubviews`）。在同一个类上再挂一个
-/// `ClassHook` 是没有验证过的行为 —— 所以这里**蹭它现成的布局回调**（那里只加一行调用），
-/// 本文件只负责"画"与"撤"。这也是本文件**不是** `.x.swift` 的原因。
-///
-/// ⚠️ **不吃触摸**：玻璃 `isUserInteractionEnabled = false`，又插在最底层 ——
-/// "点迷你条开播放页"这件事一点都没被我们碰到。
+/// 坑：内容视图是"封面色"实心块且 Spotify 会写回 → 用 `EeveeInterceptBackground` 在层上断根；
+/// 玻璃必须住宿主且不能进内容视图（内容要被缩放），宿主与内容都不能裁剪（胶囊比内容高 4pt）。
+/// 不新开 Orion hook：`TouchPassthroughView` 已被 `DeclutterChrome` 的 `MiniPlayerBarHideHook` 钩住，
+/// 同一个类上重复挂 `ClassHook` 行为未验证，所以蹭它现成的布局回调。玻璃不吃触摸。
 enum MiniBarGlassPlate {
 
+    /// 开关：设置 → EeveeSpotify → 扩展功能 → 迷你播放条 →「迷你播放条用液态玻璃」，默认开。
     static var isEnabled: Bool { UserDefaults.miniBarGlass }
 
-    /// 内容视图在真机树里的 id（它的**类名只是裸 `UIView`**，认不了类，只能认 id）。
+    /// 内容视图在真机树里的 id（它的类名只是裸 `UIView`，认不了类，只能认 id）。
     private static let contentIdentifier = "SPTNowPlayingBar"
 
     /// 内容缩到胶囊里时左右各留多少（与标签栏那条的 `sideInset` 同一个数）。
     private static let sideInset: CGFloat = 8
 
-    /// 拿不到标签栏那条的宽度比例时的兜底（真机实测 360 / 414；v4.8 起标签栏那条已加宽）。
+    /// 拿不到标签栏那条的宽度比例时的兜底（真机实测 360 / 414）。
     private static let fallbackWidthRatio: CGFloat = 360.0 / 414.0
 
     private static var plateKey: UInt8 = 0
     private static var hostClipKey: UInt8 = 0
     private static var originalColorKey: UInt8 = 0
     private static var originalClipKey: UInt8 = 0
-    /// ★★ 2026-10-19：这一层已经装了**底色拦截**（`EeveeInterceptBackground`）。
-    /// 装了之后就不再有"清 / 补清 / 复查"三件套 —— 写回在层上就被吃掉了。
+    /// 这一层已经装了底色拦截（`EeveeInterceptBackground`）。
+    /// 装了之后写回在层上就被吃掉，不再需要清 / 补清 / 复查三件套。
     private static var colorInterceptKey: UInt8 = 0
 
     /// 最近一次布局见过的 host / 内容 —— 开关被切换时当场落地用
-    /// （与 `DeclutterChrome.reconcileNow()` 同一招：不用等下一次布局、更不用重启）。
+    /// （与 `DeclutterChrome.reconcileNow` 同一招：不用等下一次布局、更不用重启）。
     private static weak var lastHost: UIView?
     private static weak var lastContent: UIView?
 
-    /// ★ v4.8 底色守卫盯的那一个内容视图（`reconcileCoverColor()` 用；weak，视图换掉自动失效）。
+    /// 兜底守卫盯的那一个内容视图（`reconcileCoverColor` 用；weak，视图换掉自动失效）。
     private static weak var colorGuardTarget: UIView?
-    /// 一轮"短促重试"的占位截止时间。作用：**每次布局不重复排队** ——
+    /// 一轮"短促重试"的占位截止时间：每次布局不重复排队。
     /// 布局回调一秒能来几十次，不节流就变成变相轮询了（仓库纪律不允许）。
     private static var guardBurstUntil: CFAbsoluteTime = 0
     /// 短促重试的节奏：写回通常发生在我们清完之后的一两帧内，5 次覆盖到 ~1.2s 就够。
@@ -102,11 +65,10 @@ enum MiniBarGlassPlate {
         lastHost = host
         let content = findContent(in: host)
 
-        // ★ 2026-10-13（用户看 pw 的截图：「底下迷你播放器的歌曲是圆形的，不是方形的」）：
-        //   封面圆角**独立于这条玻璃开关**（它自己那颗 `miniBarRoundArtwork` 管它自己）——
-        //   所以放在 `isEnabled` 早退**之前**，关掉玻璃照样是圆的。
-        //   ⚠️ 传的是 **content**（`id=SPTNowPlayingBar` 那个），不是外层 host ——
-        //   圆封面的"贴左"判据要相对它算（日志 84 那次失败就是这个原因，见 `MiniBarArtwork`）。
+        // 封面圆角独立于这条玻璃开关（由 `miniBarRoundArtwork` 自己管），
+        // 所以放在 `isEnabled` 早退之前 —— 关掉玻璃照样是圆的。
+        // 传的是 content（`id=SPTNowPlayingBar` 那个），不是外层 host：
+        // 圆封面的"贴左"判据要相对它算（见 `MiniBarArtwork`）。
         MiniBarArtwork.apply(to: content ?? host)
 
         guard isEnabled else {
@@ -116,7 +78,8 @@ enum MiniBarGlassPlate {
         guard let content, content.bounds.width > 1, content.bounds.height > 1 else { return }
         lastContent = content
 
-        // ── ① 胶囊几何：与标签栏那条**等宽**（按栏宽比例）、**等高**（共用常量）────
+        // ① 胶囊几何：与标签栏那条等宽（按栏宽比例）、等高（共用常量）。
+        // 胶囊比内容高 4pt（上下各 2pt），与标签栏那条之间仍留出可见间隙，不粘连。
         let width = capsuleWidth(in: host)
         let target = capsuleFrame(in: host, content: content, width: width)
 
@@ -144,17 +107,14 @@ enum MiniBarGlassPlate {
             host.insertSubview(plate, at: 0)
         }
 
-        // ── ② 内容等比缩进胶囊（两条等宽的唯一办法；只动 transform，不动布局）───
+        // ② 内容等比缩进胶囊（两条等宽的唯一办法；只动 transform，不动布局）。
         let scale = contentScale(contentWidth: content.bounds.width, capsuleWidth: width)
         let wanted = CGAffineTransform(scaleX: scale, y: scale)
         if content.transform != wanted { content.transform = wanted }
 
-        // ── ③ 底色：**从源头吃掉**（2026-10-19 用户拍板 A，照上游）──────────────────
-        //
-        // 以前是"每拍清一次 + 50ms 补清 + 0.5s 复查"三件套去追 Spotify 的写回，
-        // 而**追的过程本身**就是闪烁（照片 34/36/37）。现在给这一层的 CALayer 换一个
-        // 实例子类，`setBackgroundColor:` 永远不落盘（见 `Sources/EeveeSpotifyC/Tweak.m`）。
-        // 装不上（层类是 Swift 类 / KVO 子类）才退回老的三件套。
+        // ③ 底色：从源头吃掉 —— 给这一层的 CALayer 换一个实例子类，
+        // `setBackgroundColor:` 永远不落盘（见 `Sources/EeveeSpotifyC/Tweak.m`）。
+        // 装不上（层类是 Swift 类 / KVO 子类）才退回"每拍清一次 + 补清 + 复查"三件套。
         if armColorIntercept(for: content) {
             colorGuardTarget = nil
         } else {
@@ -163,11 +123,11 @@ enum MiniBarGlassPlate {
             armColorGuard()
         }
 
-        // ── ④ 不裁剪：胶囊比内容高 4pt，内容与宿主都不能裁 ──────────────────────
+        // ④ 不裁剪：胶囊比内容高 4pt，内容与宿主都不能裁。
         releaseClipping(of: content, rememberIn: &originalClipKey)
         releaseClipping(of: host, rememberIn: &hostClipKey)
 
-        // ── ⑤ 摆位：中心对齐内容（缩放是绕中心做的，所以中心不会跑）────────────
+        // ⑤ 摆位：中心对齐内容（缩放是绕中心做的，所以中心不会跑）。
         if !plate.frame.equalTo(target) { plate.frame = target }
         if abs(plate.layer.cornerRadius - GlassCapsule.cornerRadius) > 0.01 {
             plate.layer.cornerRadius = GlassCapsule.cornerRadius
@@ -176,10 +136,10 @@ enum MiniBarGlassPlate {
         report(target: target, content: content, plate: plate, scale: scale, width: width)
     }
 
-    /// 关掉开关时：**撤玻璃 + 还原**（缩放 / 底色 / 裁剪，只还原我们自己改过的）。
+    /// 关掉开关时：撤玻璃 + 还原（缩放 / 底色 / 裁剪，只还原我们自己改过的）。
     @MainActor
     static func removePlate(host: UIView?, content: UIView?) {
-        // ★ v4.8：守卫跟着一起撤 —— 关掉开关之后不该再有人去清别人的底色。
+        // 守卫跟着一起撤 —— 关掉开关之后不该再有人去清别人的底色。
         colorGuardTarget = nil
         if let host, let plate = objc_getAssociatedObject(host, &plateKey) as? UIVisualEffectView {
             plate.removeFromSuperview()
@@ -195,8 +155,8 @@ enum MiniBarGlassPlate {
             content.transform = .identity
             writeDebugLog("[MiniBarGlass] content had been scaled — restored to its original size")
         }
-        // ★★ 2026-10-19：先把"底色拦截"撤掉（把 CALayer 的真实类写回去），
-        //    下面那句 `backgroundColor = stored` 才会真的落盘。
+        // 先撤掉底色拦截（把 CALayer 的真实类写回去），
+        // 下面那句 `backgroundColor = stored` 才会真的落盘。
         var interceptedColour: UIColor?
         if let sink = objc_getAssociatedObject(content, &colourSinkKey) as? ColourSink {
             interceptedColour = sink.last
@@ -223,11 +183,10 @@ enum MiniBarGlassPlate {
         }
     }
 
-    /// 开关被手动切换时**当场落地**（与 `DeclutterChrome.reconcileNow()` 同一套）。
+    /// 开关被手动切换时**当场落地**（与 `DeclutterChrome.reconcileNow` 同一套）。
     ///
-    /// ⚠️ **不加 `@MainActor`**：设置页那个绑定闭包是 non-isolated 的（仓库既有写法），
-    /// 所以主线程这件事在方法体里用 `onMainThreadSync` 显式表达
-    /// （理由见 `LyricsChromeVisibility.swift` 顶上那段）。
+    /// **不加 `@MainActor`**：设置页那个绑定闭包是 non-isolated 的（仓库既有写法），
+    /// 所以主线程这件事在方法体里用 `onMainThreadSync` 显式表达。
     static func reconcileNow() {
         onMainThreadSync {
             guard let host = lastHost else { return }
@@ -236,11 +195,11 @@ enum MiniBarGlassPlate {
     }
 
     // MARK: - 几何
-
-    /// 胶囊宽度 = **标签栏那条的宽度**（用户要求两条等宽）。
-    ///
-    /// 用"标签栏胶囊宽 ÷ 栏宽"这个**比例** × 本宿主的宽来算 —— 换设备、换屏幕宽度都不会走样；
-    /// 标签栏还没摆过（冷启动第一帧）时退回真机实测的 `312/414`。上限是宿主自己的宽。
+    //
+    // 胶囊宽度 = 标签栏那条胶囊的宽度（两条等宽）。
+    //
+    // 用"标签栏胶囊宽 ÷ 栏宽"这个比例 × 本宿主的宽来算 —— 换设备、换屏幕宽度都不会走样；
+    // 标签栏还没摆过（冷启动第一帧）时退回兜底比例。上限是宿主自己的宽。
     @MainActor
     private static func capsuleWidth(in host: UIView) -> CGFloat {
         let ratio = TabBarGlassPlate.capsuleWidthRatio
@@ -258,7 +217,6 @@ enum MiniBarGlassPlate {
     }
 
     /// 胶囊的 frame（**宿主坐标系**）：宽度给定、高度与标签栏同、中心对齐内容的中心。
-    ///
     /// 内容的中心用 `convert(_:to:)` 取 —— 缩放是绕中心做的，所以先缩后取都一样。
     @MainActor
     private static func capsuleFrame(in host: UIView, content: UIView, width: CGFloat) -> CGRect {
@@ -275,28 +233,23 @@ enum MiniBarGlassPlate {
     }
 
     // MARK: - 底色 / 裁剪
-
-    /// 接住"被吃掉的那份颜色"的小盒子。
-    ///
-    /// 为什么不用静态变量：层会**强持有**那个闭包，而闭包在非隔离上下文里被调用 ——
-    /// 直接写 `@MainActor` 的静态量会在 Swift 6 并发检查下判错。用一个 `@unchecked Sendable`
-    /// 的小对象承接，读写都只是一次属性赋值，跨线程也安全。
+    //
+    // 接住"被吃掉的那份颜色"的小盒子。
+    //
+    // 不用静态变量：层会**强持有**那个闭包，而闭包在非隔离上下文里被调用 ——
+    // 直接写 `@MainActor` 的静态量会在 Swift 6 并发检查下判错。用一个 `@unchecked Sendable`
+    // 的小对象承接，读写都只是一次属性赋值，跨线程也安全。
     private final class ColourSink: @unchecked Sendable {
         var last: UIColor?
     }
     private static var colourSinkKey: UInt8 = 0
 
-    /// ★★ 2026-10-19（用户拍板 A，照上游）：**从源头吃掉** Spotify 写给这一层的底色。
-    ///
-    /// 做的是：给 `content.layer` 换一个"只有这个实例用"的 CALayer 子类，它的
-    /// `setBackgroundColor:` 只把颜色回报给我们、永远不落盘 ⇒ 之后谁再写都画不出来。
-    /// 玻璃是系统 `UIGlassEffect`（`GlassCapsule.makeGlassView`），与上游同源。
-    ///
-    /// 代价：装过之后这一层就**没有底色**了（那正是我们要的）；关开关时用
-    /// `EeveeRestoreBackground` 把类写回去，再把最后见过的原色还给它。
+    /// **从源头吃掉** Spotify 写给这一层的底色：给 `content.layer` 换一个"只有这个实例用"的
+    /// CALayer 子类，`setBackgroundColor:` 只把颜色回报给我们、永远不落盘。
+    /// 关开关时用 `EeveeRestoreBackground` 把类写回去，再把最后见过的原色还给它。
     ///
     /// - Returns: 装上了返回 true；装不上（Swift 层类 / KVO 子类 / 分配失败）返回 false
-    ///   ⇒ 调用方退回"每拍清一次"的老路。
+    /// ⇒ 调用方退回"每拍清一次"的老路。
     @MainActor
     private static func armColorIntercept(for content: UIView) -> Bool {
         if objc_getAssociatedObject(content, &colorInterceptKey) != nil { return true }
@@ -327,17 +280,10 @@ enum MiniBarGlassPlate {
 
     private static var didReportInterceptFailure = false
 
-    /// 清掉内容视图的"封面色底"。**每次布局都跑**，幂等。
+    /// 清掉内容视图的"封面色底"，**每次布局都跑**、幂等。
+    /// Spotify 会随封面换色、并在我们清完之后写回来，所以每次清都计数，并记下最后见到的原色用于还原。
     ///
-    /// 真机证据（日志 27）：
-    /// ```
-    /// 16:50:19  [MiniBarGlass] 已清掉迷你条的封面色底        ← 我们清了
-    /// 16:50:20  #1 9.UIView@0,0,398,56,bg=#64204C,…          ← Spotify 又写回来（照片 34 那块紫的）
-    /// 16:50:27  手动开关一次 → 再清一次 → 之后树上没有 bg 了   ← 照片 35 才干净
-    /// ```
-    /// 这正是仓库纪律里写过的"binder 写回"：值没变不写，值被写回就再清，并**计数**。
-    ///
-    /// - Returns: 这一次**真的清掉了**东西吗（v4.8 起返回值给守卫用：清到了就再排一轮短促重试）。
+    /// - Returns: 这一次**真的清掉了**东西吗（清到了就再排一轮短促重试）。
     @MainActor
     @discardableResult
     private static func clearCoverColor(of content: UIView) -> Bool {
@@ -370,35 +316,26 @@ enum MiniBarGlassPlate {
         return false
     }
 
-    /// 兜底守卫：**只看一眼**内容视图的底色，被写回来就当场清掉。★ v4.8 新增。
+    /// 兜底守卫：**只看一眼**内容视图的底色，被写回来就当场清掉。
     ///
     /// 由 `DeclutterChrome` **既有的** 0.5s 复查节拍调用（那份节拍本来就带着
-    /// "App 不在前台就不跑"的 guard）—— 不新开定时器。
-    /// 单次成本 = 一次 `backgroundColor` 读 + 一次 `window` 读；开关关着 / 没有迷你条时
-    /// 直接返回（`colorGuardTarget` 与 `lastContent` 都是 nil）。
-    ///
-    /// ★ 真机日志 28 的那个现场：切歌时 Spotify 在 00:47:46 写下 `bg=#10346C`，
-    /// 而**下一次宿主的布局回合要等到 00:47:54** —— 中间 8 秒用户看到的就是照片 36 那块蓝。
-    /// 这一支把这个窗口压到 ≤0.5s；而且**清掉之后顺手再排一轮短促重试**，
-    /// 因为"刚清完又被写回"（首帧那种）就是靠那一轮兜住的。
+    /// "App 不在前台就不跑"的 guard）—— 不新开定时器。装上拦截后这里直接返回。
+    /// 单次成本 = 一次 `backgroundColor` 读 + 一次 `window` 读。
     @MainActor
     static func reconcileCoverColor() {
         guard isEnabled else { return }
         guard let content = colorGuardTarget ?? lastContent else { return }
         guard content.window != nil else { return }
-        // ★★ 2026-10-19：装上了拦截就**没有事情可做**了（写回在层上被吃掉）。
+        // 装上了拦截就**没有事情可做**了（写回在层上被吃掉）。
         if objc_getAssociatedObject(content, &colorInterceptKey) != nil { return }
         if clearCoverColor(of: content) { armColorGuard() }
     }
 
     /// 写回之后的**短促重试**：排几次"看一眼 + 幂等清"，~1.2s 内自己收手。
     ///
-    /// 为什么需要：照片 36 那块封面色（`bg=#041454`）就是"我们清完 → Spotify 又写回来 →
-    /// 而那一帧没有宿主的布局回合"造成的。写回通常紧随我们这一次清色（同一帧或下一帧），
-    /// 所以 50ms 级看几次就够；`reconcileCoverColor()` 那 0.5s 的节拍负责漏网之鱼。
-    ///
-    /// ⚠️ **只排一轮，不叠加**（`guardBurstUntil` 占位）—— 否则每次布局都排一次，
-    /// 就成了变相轮询，正是仓库纪律里禁止的那种写法。
+    /// 写回通常紧随我们这一次清色（同一帧或下一帧），所以 50ms 级看几次就够；
+    /// `reconcileCoverColor` 那 0.5s 的节拍负责漏网之鱼。**只排一轮，不叠加**（`guardBurstUntil` 占位），
+    /// 否则每次布局都排一次就成了变相轮询。
     @MainActor
     private static func armColorGuard() {
         let now = CFAbsoluteTimeGetCurrent()
@@ -427,13 +364,13 @@ enum MiniBarGlassPlate {
     }
 
     /// 内容视图的裁剪位单独记一份（`originalClipKey`），宿主那份记在 `hostClipKey`。
-
-    // MARK: - 找内容视图 / 记账
-
+    ///
+    /// MARK: - 找内容视图 / 记账
+    ///
     /// 从 host 里找 `id=SPTNowPlayingBar` 那个内容视图。
     ///
-    /// ⚠️ **认 id 不认类**：真机树里它是一个裸 `UIView`（`9.UIView@0,0,398,56,id=SPTNowPlayingBar`），
-    /// 认类会认到半个 App 的 `UIView` 上去。走查深度 6、找不到就什么都不做（宁可漏，不可误伤）。
+    /// **认 id 不认类**：真机树里它是一个裸 `UIView`，认类会认到半个 App 的 `UIView` 上去。
+    /// 走查深度 6、找不到就什么都不做（宁可漏，不可误伤）。
     @MainActor
     private static func findContent(in host: UIView) -> UIView? {
         var found: UIView?
@@ -451,11 +388,9 @@ enum MiniBarGlassPlate {
         return found
     }
 
-    /// 报一次账：胶囊摆在哪、迷你条内容多大、缩到多少 —— 下次日志不用看图就能验这条改动。
+    /// 报一次账：胶囊摆在哪、迷你条内容多大、缩到多少 —— 连窗口坐标一起打，
+    /// 验收时"两条胶囊之间的间隙"只靠这一行加标签栏的 frame 就能算出来。
     /// 只在位置变化时报，且最多 6 条。
-    ///
-    /// ★ 顺带把**窗口坐标**也打出来：验收时要看的"两条胶囊之间的间隙"
-    /// （真机标签栏那条在窗口 y 810…870）只靠这一行 + `[Tree]` 里标签栏的 frame 就能算出来。
     @MainActor
     private static func report(
         target: CGRect,

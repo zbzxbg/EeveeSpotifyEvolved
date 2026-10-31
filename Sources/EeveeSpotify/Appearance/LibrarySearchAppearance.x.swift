@@ -5,12 +5,12 @@ import ObjectiveC.runtime
 
 /// 音乐库里的**搜索页**（头部那颗放大镜打开的那一页）—— 照 pw 的 `Redesigned/Library/LibrarySearch.x`。
 ///
-/// ── 只改形状，不画玻璃 ──────────────────────────────────────────────────────
+/// ── 只改形状，不画玻璃
 /// pw 的原文：那两个形状**自己里面**已经画了 `Reprise_LiquidGlassKit.LiquidGlass.SearchBarView`
 /// （= 系统玻璃），"**缺的只是形状**" ⇒ 我们把圆角改成**半高（胶囊）**就完事，
 /// 一行玻璃代码都不写（这与仓库"两条路互斥、别叠玻璃"的纪律一致）。
 ///
-/// ── 真机结构（pw 的树）──────────────────────────────────────────────────────
+/// ── 真机结构（pw 的树）
 /// ```
 /// YourLibrarySearchView                                     ← hook 目标
 /// ├ 与音乐库页同一个 YourLibraryContentView + 列表（不动）
@@ -65,7 +65,7 @@ enum LibrarySearchAppearance {
         LibraryAppearance.clearTopEdgeScrim(in: header)
 
         // ⚠️ "找到没"和"量到尺寸没"必须分开数：布局第一拍上形状**在**但高度还是 0
-        //    （`capsule` 会拒绝），把那种情况也算成"找不到"就会报一条假警报。
+        // （`capsule` 会拒绝），把那种情况也算成"找不到"就会报一条假警报。
         var found = 0
         var shaped = 0
         for identifier in [LibrarySearchMetrics.fieldIdentifier, LibrarySearchMetrics.buttonIdentifier] {
@@ -141,12 +141,11 @@ enum LibrarySearchAppearance {
 }
 
 // MARK: - Hook
-
-/// 库内搜索页：`YourLibrary_YourLibraryXImpl.YourLibrarySearchView`
-/// （9.1.88 的 IPA 里逐字在：`dump-9.1.88.txt`）。
-///
-/// 这一页**没有 0.5s 节拍**，所以挂在它自己的布局回合上（头部与形状都在这条链里）；
-/// 开关关掉时同一个 hook 会把它写回。
+//
+// 库内搜索页：`YourLibrary_YourLibraryXImpl.YourLibrarySearchView`
+//
+// 这一页**没有 0.5s 节拍**，所以挂在它自己的布局回合上（头部与形状都在这条链里）；
+// 开关关掉时同一个 hook 会把它写回。
 class LibrarySearchStyleHook: ClassHook<UIView> {
     typealias Group = LibraryAppearanceGroup
     static let targetName = "YourLibrary_YourLibraryXImpl.YourLibrarySearchView"

@@ -5,23 +5,22 @@ import UIKit
 
 /// **状态栏明暗跟着"页面取色"翻** —— 也就是 Apple Music 解决"照片铺到屏幕最顶"的办法。
 ///
-/// ## 为什么需要它（用户 2026-10-17 的两张 AM 截图是判决）
+/// ## 为什么需要它
 ///
-/// `C:\dsh\readpicture\118.jpg`（Nanatsukaze）状态栏是**黑字**，`119.jpg`（Michael Jackson）是
-/// **白字** —— 同一个 app、同一台机器，差别只有一个：页面取色的明暗。AM 不是靠"给照片留一条白"
+/// AM 在浅色封面上状态栏是**黑字**，深色封面上是**白字** —— 同一个 app、同一台机器，差别只有一个：页面取色的明暗。AM 不是靠"给照片留一条白"
 /// 解决刘海/灵动岛压在照片上的，**是靠翻状态栏**。
 ///
-/// 我们这边原来**一处都没碰过状态栏** ⇒ 亮封面（照片 115 的"你已点赞"）上白字直接消失。
+/// 我们这边原来**一处都没碰过状态栏** ⇒ 亮封面上白字直接消失。
 ///
 /// ## 挂点为什么是 `preferredStatusBarStyle`（实测，不是猜的）
 ///
-/// * IPA 解出来的 `C:\dsh\ipa\Payload\Spotify.app\Info.plist` 里
-///   `UIStatusBarStyle = UIStatusBarStyleLightContent`，而
-///   **`UIViewControllerBasedStatusBarAppearance` 这个键不存在** ⇒ 取默认值 `YES`
-///   ⇒ 状态栏由 **view controller 那条链**决定，不是 app 级开关。
+/// * IPA 解出来的 `Info.plist` 里
+/// `UIStatusBarStyle = UIStatusBarStyleLightContent`，而
+/// **`UIViewControllerBasedStatusBarAppearance` 这个键不存在** ⇒ 取默认值 `YES`
+/// ⇒ 状态栏由 **view controller 那条链**决定，不是 app 级开关。
 /// * 主二进制里 `statusBarStyle` / `setStatusBarStyle:` **0 次命中**（`UIApplication` 那条老路它没用），
-///   而 `preferredStatusBarStyle` / `childViewControllerForStatusBarStyle` 各有命中
-///   ⇒ 走的就是 VC 这条路，而且 app 侧几乎没有自己的状态栏机制。
+/// 而 `preferredStatusBarStyle` / `childViewControllerForStatusBarStyle` 各有命中
+/// ⇒ 走的就是 VC 这条路，而且 app 侧几乎没有自己的状态栏机制。
 ///
 /// ⇒ hook `UIViewController.preferredStatusBarStyle`：**没被我们强制时原样 `orig`**，
 /// 对 app 自己那套（歌词页、视频流里的 `ColorBasedStatusBarSettingsManager`…）完全透明。
@@ -44,7 +43,7 @@ enum EntityPageStatusBar {
     ///
     /// ⚠️ 写成"私有存储 + 只读计算属性"而不是 `private(set) static var`：本仓库的
     /// `swift_member_check.py` 那正则认不出 `private(set)` 这种修饰符写法，会把
-    /// `EntityPageStatusBar.forced` 误判成"类型里没有这个成员"（2026-10-17 实测踩到）。
+    /// `EntityPageStatusBar.forced` 误判成"类型里没有这个成员"实测踩到）。
     private static var forcedStyle: UIStatusBarStyle?
     static var forced: UIStatusBarStyle? { forcedStyle }
 
@@ -61,8 +60,7 @@ enum EntityPageStatusBar {
         reportChainOnce()
         refresh()
         // ⚠️ 拼好再传：**字符串插值里不要出现引号** —— 本仓库 `swift_member_check.py` 那套
-        //    "去掉字符串"的扫描器遇到嵌套引号会提前收尾，剩下的英文单词会被当成裸标识符误报
-        //    （2026-10-17 实测，`status` 就是这么被报出来的）。
+        // "去掉字符串"的扫描器遇到嵌套引号会提前收尾，剩下的英文单词会被当成裸标识符误报
         let described = style.map { name(of: $0) } ?? "released — the app's own style applies again"
         writeDebugLog("[\(logTag)] \(described)")
     }
@@ -87,11 +85,11 @@ enum EntityPageStatusBar {
     }
 
     // MARK: - 诊断（只打一次）
-
-    /// 把"最后是谁在决定状态栏"与"链上谁自己实现了它"报一次。
-    ///
-    /// 为什么值得这十几行：**这个 hook 有可能被 Spotify 自己的基类遮住**，而那种失败在界面上
-    /// 只表现为"状态栏没变"，与"我们算错了颜色"长得一模一样。一行日志就能把两者分开。
+    //
+    // 把"最后是谁在决定状态栏"与"链上谁自己实现了它"报一次。
+    //
+    // 为什么值得这十几行：**这个 hook 有可能被 Spotify 自己的基类遮住**，而那种失败在界面上
+    // 只表现为"状态栏没变"，与"我们算错了颜色"长得一模一样。一行日志就能把两者分开。
     private static func reportChainOnce() {
         guard !didReportChain, let root = EntityPageAppearance.frontWindow()?.rootViewController else {
             return
@@ -150,8 +148,6 @@ class EntityPageStatusBarHook: ClassHook<UIViewController> {
     }
 }
 
-/// ★★ 2026-10-10（**日志 94 那行诊断第一次跑就把答案给了**）：
-///
 /// ```
 /// deciding controller Navigation_PageAPIIntegrationImpl.MusicAppPageHostingViewController
 ///   in ContainerUI_RootUIInternalImpl.RootViewController;

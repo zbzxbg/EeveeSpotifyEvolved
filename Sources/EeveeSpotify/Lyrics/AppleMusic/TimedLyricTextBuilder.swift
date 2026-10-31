@@ -114,9 +114,8 @@ enum TimedLyricTextBuilder {
         // 折行诊断：只在「真的折了」或「文本明显超宽却没折」时各打一条。
         //
         // 用途：分辨两类原因 ——
-        //   · 日志里 layout 宽度明显偏小  → 宽度传递问题
-        //   · layout 宽度正常、断点却偏早 → CoreText 在「每字一个 run」的
-        //     字符串上词边界识别退化，导致按字断行
+        // · layout 宽度正常、断点却偏早 → CoreText 在「每字一个 run」的
+        // 字符串上词边界识别退化，导致按字断行
         // 受设置里的「开启日志记录」控制，关着时不会输出。
         logWrapDecisionIfUseful(
             source: source,
@@ -264,20 +263,20 @@ enum TimedLyricTextBuilder {
     }
 
     // MARK: - 折行诊断
-
+    //
     // MARK: - 折行诊断
-
-    /// 只在**真的折了**、或**文本明显超宽却没折**时打一条日志。
-    ///
-    /// 输出示例：
-    /// ```
-    /// [LyricWrap] w=366.0 layout=355.0 breaks=[21,29] "…and a↵brand↵new wagon"
-    /// ```
-    /// - `w`：传进来的可用宽度（应该等于容器宽 − 左右内边距）
-    /// - `layout`：实际用于测量的宽度（`w` 减去安全余量）
-    /// - `text`：**整段文本不折行时的真实宽度** —— 判断"该不该折"的硬指标
-    /// - `breaks`：CoreText 给出的折行字符下标
-    /// - 引号里的 `↵` 就是断点位置
+    //
+    // 只在**真的折了**、或**文本明显超宽却没折**时打一条日志。
+    //
+    // 输出示例：
+    // ```
+    // [LyricWrap] w=366.0 layout=355.0 breaks=[21,29] "…and a↵brand↵new wagon"
+    // ```
+    // - `w`：传进来的可用宽度（应该等于容器宽 − 左右内边距）
+    // - `layout`：实际用于测量的宽度（`w` 减去安全余量）
+    // - `text`：**整段文本不折行时的真实宽度** —— 判断"该不该折"的硬指标
+    // - `breaks`：CoreText 给出的折行字符下标
+    // - 引号里的 `↵` 就是断点位置
     private static func logWrapDecisionIfUseful(
         source: String,
         lineBreakOffsets: Set<Int>,
@@ -290,12 +289,12 @@ enum TimedLyricTextBuilder {
         // 没折行时，只在「按真实度量看它本该折」的情况下才报警，
         // 免得把一屏短的短行全打出来。
         //
-        // ★ 2026-10-12（用户：「某些歌词行会有额外换行…后面明明还有空间」）：
-        //   **这里以前是估的** —— `source.count * fontSize * 0.55`，而 0.55 那个系数是给拉丁文写的：
-        //   一行 20 个字的日文，22pt 估出来只有 242pt（低于 358pt 的可用宽）⇒ **一条都不打**。
-        //   于是整份日志 58 里 `[LyricWrap]` **零条**，而屏幕上确实有折行 —— 我们手里一行证据都没有。
-        //   现在改用**和折行同一个测量函数**（`measuredTextWidth` vs `effectiveLayoutWidth`）：
-        //   下一份日志会直接写出"这一行 text=… layout=…"以及断点，不用再猜。
+        // （某些歌词行会有额外换行…后面明明还有空间）：
+        // **这里以前是估的** —— `source.count * fontSize * 0.55`，而 0.55 那个系数是给拉丁文写的：
+        // 一行 20 个字的日文，22pt 估出来只有 242pt（低于 358pt 的可用宽）⇒ **一条都不打**。
+        // 而屏幕上确实有折行 —— 我们手里一行证据都没有。
+        // 现在改用**和折行同一个测量函数**（`measuredTextWidth` vs `effectiveLayoutWidth`）：
+        // 下一份日志会直接写出"这一行 text=… layout=…"以及断点，不用再猜。
         var shouldLog = hasBreaks
         if !hasBreaks, let constrainedWidth, constrainedWidth > 0, fontSize > 0 {
             let measured = measuredTextWidth(
@@ -335,9 +334,9 @@ enum TimedLyricTextBuilder {
         // 未折行时整段文本的实际排版宽度。
         //
         // 这是判断"该不该折"的唯一硬指标 —— 比按字符数估算可靠：
-        //   text < layout 却折了  → 折行器有问题
-        //   text ≈ w 却折了       → 余量把预算砍过头（就是之前那个 18.3pt）
-        //   text > w              → 折得理所当然
+        // text < layout 却折了 → 折行器有问题
+        // text ≈ w 却折了 → 余量把预算砍过头（就是之前那个 18.3pt）
+        // text > w → 折得理所当然
         let textWidth = String(
             format: "%.1f",
             measuredTextWidth(
@@ -347,14 +346,14 @@ enum TimedLyricTextBuilder {
             )
         )
 
-        // ★★ 2026-10-18（日志 104 的 Starboy 现场）：**折行那把尺子与渲染是不是同一把**。
+        // **折行那把尺子与渲染是不是同一把**。
         //
-        //    现场：`text=394.4 layout=331.8 breaks=[]` —— 按 331.8pt 的预算，394.4pt 的行
-        //    本该折，可 CoreText **一个断点都没给**；而已折的那 5 行 text 都在 405~557pt。
-        //    ⇒ 两处量出来的宽度对不上（`measuredTextWidth` 用的是 `UIFont.systemFont`，
-        //      折行用的是 `CTFontCreateWithName(uiFont.fontName)` —— 后者可能落到别的字面）。
-        //    这一行把**折行字体的 PostScript 名 + 它量出来的宽度**一起打出来：
-        //    下一份日志一眼就能定"该换字体构造方式"还是"该换折行算法"。
+        // 现场：`text=394.4 layout=331.8 breaks=[]` —— 按 331.8pt 的预算，394.4pt 的行
+        // 本该折，可 CoreText **一个断点都没给**；而已折的那 5 行 text 都在 405~557pt。
+        // ⇒ 两处量出来的宽度对不上（`measuredTextWidth` 用的是 `UIFont.systemFont`，
+        // 折行用的是 `CTFontCreateWithName(uiFont.fontName)` —— 后者可能落到别的字面）。
+        // 这一行把**折行字体的 PostScript 名 + 它量出来的宽度**一起打出来：
+        // 下一份日志一眼就能定"该换字体构造方式"还是"该换折行算法"。
         let uiFont = UIFont.systemFont(ofSize: fontSize, weight: fontWeight.uiKitWeight)
         let layoutFont = CTFontCreateWithName(uiFont.fontName as CFString, fontSize, nil)
         let layoutFontName = CTFontCopyPostScriptName(layoutFont) as String
@@ -363,8 +362,8 @@ enum TimedLyricTextBuilder {
             measuredTextWidth(source: source, font: layoutFont)
         )
 
-        // ★★ 2026-10-18：**复核之后最宽那一段**（= 渲染时真的会占多宽）。
-        //    它 ≤ layout ⇒ 折行与渲染终于用同一把尺子；> layout ⇒ 复核器没修掉（贴日志来）。
+        // **复核之后最宽那一段**（= 渲染时真的会占多宽）。
+        // 它 ≤ layout ⇒ 折行与渲染终于用同一把尺子；> layout ⇒ 复核器没修掉（贴日志来）。
         let characters = Array(source)
         let widestSegment = String(
             format: "%.1f",
@@ -653,16 +652,16 @@ enum TimedLyricTextBuilder {
             }
         }
 
-        // ★★ 2026-10-18（日志 104 的 Starboy 现场）：**按渲染那把尺子复核 CoreText 的断点**。
+        // **按渲染那把尺子复核 CoreText 的断点**。
         //
-        //    现场：`text=394.4 layout=331.8 breaks=[]` —— 按 331.8pt 的预算本该折的行，
-        //    CoreText 一个断点都没给；而给了断点的 5 行 text 都在 405~557pt ⇒ 折行那一侧
-        //    与渲染/诊断那一侧不是同一把尺子（`CTFontCreateWithName(uiFont.fontName)` vs
-        //    `UIFont.systemFont`）。断点太靠右 ⇒ 第一段仍超宽 ⇒ 渲染器再折一次 ⇒ 屏幕上多一行。
+        // 现场：`text=394.4 layout=331.8 breaks=[]` —— 按 331.8pt 的预算本该折的行，
+        // CoreText 一个断点都没给；而给了断点的 5 行 text 都在 405~557pt ⇒ 折行那一侧
+        // 与渲染/诊断那一侧不是同一把尺子（`CTFontCreateWithName(uiFont.fontName)` vs
+        // `UIFont.systemFont`）。断点太靠右 ⇒ 第一段仍超宽 ⇒ 渲染器再折一次 ⇒ 屏幕上多一行。
         //
-        //    复核器只**加**断点、不删（见 `LyricLineBreakFitting`）：CoreText 说对了的行逐字不动，
-        //    说漏了的行会被切开。下一份日志的 `fit=` 就是复核后**最宽那一段**的宽度 —— 它应当
-        //    小于等于 layout。
+        // 复核器只**加**断点、不删（见 `LyricLineBreakFitting`）：CoreText 说对了的行逐字不动，
+        // 说漏了的行会被切开。下一份日志的 `fit=` 就是复核后**最宽那一段**的宽度 —— 它应当
+        // 小于等于 layout。
         let characters = Array(source)
         let measure: (Range<Int>) -> CGFloat = { range in
             guard range.lowerBound >= 0, range.upperBound <= characters.count else { return 0 }
@@ -672,11 +671,11 @@ enum TimedLyricTextBuilder {
                 fontWeight: fontWeight
             )
         }
-        // ★★ 2026-10-17 第二版（用户：「逐词歌词额外换行还没修吗」，日志 113 的 Starboy L2）：
-        //   `verifiedBreaks` 只加不删，CoreText 自己那个多余断点会留成**多一行**
-        //   （现场：breaks=[31,36] ⇒ `…worst` / `mood` / `ah` 三行）。
-        //   ⇒ **整行确实超宽时改用整行重排**（丢掉 CT 断点，按渲染字体贪心折）；
-        //     整行放得下就一个断点都不需要。
+        // 第二版：
+        // `verifiedBreaks` 只加不删，CoreText 自己那个多余断点会留成**多一行**
+        // （现场：breaks=[31,36] ⇒ `…worst` / `mood` / `ah` 三行）。
+        // ⇒ **整行确实超宽时改用整行重排**（丢掉 CT 断点，按渲染字体贪心折）；
+        // 整行放得下就一个断点都不需要。
         let wholeWidth = measure(0..<characters.count)
         guard wholeWidth > layoutWidth else { return [] }
         return LyricLineBreakFitting.reflowBreaks(
@@ -709,8 +708,8 @@ enum TimedLyricTextBuilder {
             // 于是**测量与渲染变成同一个字符串** —— 余量不再补贴任何东西，
             // 只是净砍掉 18.3pt 真实可用宽度。
             // 而 18.3pt ≈ 一个短词的宽度，结果就是每一行的最后一个词被挤下去：
-            //   "Twenty racks a table cut from ↵ebony"（剩 ~30pt 却放不下 ebony）
-            //   "Bought Mama a crib and a brand ↵new wagon"（剩 ~19pt 却放不下 new）
+            // "Twenty racks a table cut from ↵ebony"（剩 ~30pt 却放不下 ebony）
+            // "Bought Mama a crib and a brand ↵new wagon"（剩 ~19pt 却放不下 new）
             //
             // 所以这里把余量降到「只够吸收舍入误差」的量级，把"放不放得下"的判断权
             // 还给真实字体度量。若实测出现长行右侧轻微溢出，用 `LyricLineFitting`

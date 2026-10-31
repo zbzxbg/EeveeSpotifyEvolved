@@ -5,21 +5,20 @@ import ObjectiveC.runtime
 
 /// 听歌页**我们自己的覆盖层** —— AM 页面（kumone 那种一屏播放器）的**地基**。
 ///
-/// ## 它是什么、**不是什么**（这一段是纪律，别再踩 2026-10-02 的坑）
+/// ## 它是什么、**不是什么**（这一段是纪律，别再踩的坑）
 ///
 /// * **是**：一层**整页透明**的 `UIView`，挂在页面根视图的**最上面**。我们自己的控件
-///   （音量条，以后还有头部一行 / 三个圆按钮）全放在它上面，用它当一个**统一的坐标系**。
-/// * **不是**"自绘壳"：2026-10-02 那版是**加模糊 / 铺实心盖住原生内容**（照片 19/20 的糊底、
-///   一整页空白），被整块删掉（`Tweak.x.swift:384-387`）。这一层**什么都不画** ——
-///   透明、无背景、无内容，只提供坐标系。
+/// （音量条，以后还有头部一行 / 三个圆按钮）全放在它上面，用它当一个**统一的坐标系**。
+/// * **不是**"自绘壳"：那版是**加模糊 / 铺实心盖住原生内容**，被整块删掉（`Tweak.x.swift:384-387`）。这一层**什么都不画** ——
+/// 透明、无背景、无内容，只提供坐标系。
 /// * 容器**只在音量那一行的范围内**吃触摸（`NowPlayingOverlayView.point(inside:)`）：
-///   Spotify 原生手势（下拉关闭 / 滚动 / 左右切歌）全部照常；只有放在它上面的**具体控件**才开交互。
-///   ★ 2026-10-12：以前写的是"整层不吃触摸"，那会让里面那颗 `MPVolumeView` **也点不到**
-///   （UIKit 的命中测试在父视图这一级就停了）—— 用户报的"音量键是个装饰"就是它。
+/// Spotify 原生手势（下拉关闭 / 滚动 / 左右切歌）全部照常；只有放在它上面的**具体控件**才开交互。
+/// 以前写的是"整层不吃触摸"，那会让里面那颗 `MPVolumeView` **也点不到**
+/// （UIKit 的命中测试在父视图这一级就停了）—— 用户报的"音量键是个装饰"就是它。
 /// * **不碰 Spotify 任何属性**（唯一会动的是"往它上面加我们自己的子视图"）⇒
-///   关掉 = 把这一层拿掉，**天然完全还原**。
+/// 关掉 = 把这一层拿掉，**天然完全还原**。
 ///
-/// ## 怎么定位（依据：日志 38 的真机树，不是猜的）
+/// ## 怎么定位
 ///
 /// 播放器底部那一坨五行（进度 / 标题 / 控件 / 图标）在
 /// `13.UIStackView@4,560,406,273,id=npv.bottomStackView` 里 —— 它**有 accessibilityIdentifier**，
@@ -30,21 +29,20 @@ import ObjectiveC.runtime
 /// ## 开关
 ///
 /// 设置 → 歌曲播放页 →「修改Spotify听歌页布局」的二级菜单 →「展示音量条」，**默认关**
-/// （2026-10-22 用户：该功能测试中，不推荐开启）。日志 tag：`[NPVPage]`。
+/// 日志 tag：`[NPVPage]`。
 /// 总开关关着时它也不出现（`isEnabled` 里带着 `nowPlayingLayout` 的门，见下）。
 enum NowPlayingPageOverlay {
 
     static let logTag = "NPVPage"
 
-    /// 播放器底部那一坨在真机树里的 id（日志 38 的 `[Tree] #7`）。
+    /// 播放器底部那一坨在真机树里的 id。
     private static let bottomAnchorIdentifier = "npv.bottomStackView"
     /// 锚点走查上限（本仓库纪律）。
     private static let maxNodes = 2000
     /// 音量那一行的尺寸。
     ///
-    /// ★ 2026-10-11（照片 69 → 照片 68）：**原来那一版"很难看"，因为它是系统原样的
-    /// `MPVolumeView`** —— iOS 26 上那是一条玻璃胶囊轨 + 一颗大钮，铺满整宽（照片 69 里
-    /// 就是那条横在页面最底、白钮贴左边缘的东西）。kumone 的（照片 68）是：
+    /// **原来那一版"很难看"，因为它是系统原样的
+    /// `MPVolumeView`** —— iOS 26 上那是一条玻璃胶囊轨 + 一颗大钮，铺满整宽。kumone 的是：
     /// **约 4pt 细轨 + 小圆钮（≈14pt）+ 两端各一个小喇叭图标**，整行**左右各内缩 ≈42pt**，
     /// 行高 24pt、夹在三键与三个圆钮之间。
     ///
@@ -58,13 +56,12 @@ enum NowPlayingPageOverlay {
     private static let volumeThumbDiameter: CGFloat = 14
     private static let volumeRowIdentifier = "eevee-npv-volume-row"
 
-    /// ★ 2026-10-11（用户报的）：两端小喇叭要**比行中线高多少 pt**。
+    /// 两端小喇叭要**比行中线高多少 pt**。
     ///
-    /// 用户原话：**「那两个扬声器的高度没有和那个调整音量的行一样高」** —— 对的。
-    /// 照片 71 逐像素量（591px → 414pt，×0.7005）：
+    /// 那两个扬声器的高度没有和那个调整音量的行一样高** —— 对的。
+    /// 逐像素量（591px → 414pt，×0.7005）：
     ///
     /// | 东西 | 像素行 | 中线 |
-    /// |---|---|---|
     /// | 音量**轨**（那 5 行实心像素） | y 1196…1200 | **839.3pt** |
     /// | **圆钮**（白色那 19 行，直径 13.3 ≈ 14pt） | y 1189…1207 | **839.2pt** |
     /// | **左**喇叭字形 | y 1196…1214 | **844.1pt** |
@@ -79,7 +76,7 @@ enum NowPlayingPageOverlay {
     /// 为什么用常量补偿而不是去问它的内部 `UISlider`：那枚 slider 是**私有层级**
     /// （本文件下方 `styleVolumeSlider` 那段注释里已经定过纪律：不猜内部结构）。
     /// ⇒ 只补偿我们**自己的**两个装饰字形（不吃触摸、不动系统那条音量条的位置），
-    ///   并且把这一行的实际 frame 打进安装日志 —— 下一份日志 + 照片一对就能判。
+    /// 并且把这一行的实际 frame 打进安装日志 —— 下一份日志。
     ///
     /// ⚠️ 这个数是**为 iOS 26 量的**；哪天系统把轨画回中线（或换了版式），把它改成 0 即可。
     private static let volumeGlyphLift: CGFloat = 5
@@ -92,19 +89,19 @@ enum NowPlayingPageOverlay {
 
     private static var didLogInstall = false
 
-    /// ★ 2026-10-22：音量条是「修改Spotify听歌页布局」的**二级菜单**项 ⇒
+    /// 音量条是「修改Spotify听歌页布局」的**二级菜单**项 ⇒
     /// 总开关关着时它也不该出现。
-    /// ★ 2026-10-23（用户：「全做」）：**iOS 27 版重新带上这一行**（AM 的播放页就有音量条，
+    /// **iOS 27 版重新带上这一行**（AM 的播放页就有音量条，
     /// 位置在传输行与工具行之间 —— 见 `ios27VolumeY`）。
-    /// ★★ 2026-10-30（用户）：「选择沉浸式的那几个按键，全部写默认开启」——
+    /// 「选择沉浸式的那几个按键，全部写默认开启」——
     /// 二级菜单删除，音量条不再看 `nowPlayingVolume`：任一布局开着就显示。
     static var isEnabled: Bool {
         UserDefaults.nowPlayingIOS27 || UserDefaults.nowPlayingLayout
     }
 
     // MARK: - 对外入口
-
-    /// 进听歌页时叫一次（蹭既有的 `NPVScrollViewControllerHook` 两个 appear 点）。
+    //
+    // 进听歌页时叫一次（蹭既有的 `NPVScrollViewControllerHook` 两个 appear 点）。
     static func apply(in pageView: UIView) {
         lastPage = pageView
 
@@ -152,8 +149,8 @@ enum NowPlayingPageOverlay {
     }
 
     // MARK: - 建层
-
-    /// 幂等：已经有就复用；被挤下去就重新置顶。
+    //
+    // 幂等：已经有就复用；被挤下去就重新置顶。
     private static func attach(to page: UIView) -> UIView {
         let overlay: UIView
         if let existing = objc_getAssociatedObject(page, &overlayKey) as? UIView {
@@ -161,18 +158,18 @@ enum NowPlayingPageOverlay {
         } else {
             overlay = NowPlayingOverlayView(frame: page.bounds)
             overlay.backgroundColor = .clear
-            // ★★ 2026-10-12（用户：「目前那个调节音量的按键是个装饰，能不能让它真的可以调节音量」）：
-            //   **不能再用 `isUserInteractionEnabled = false`。**
+            // （目前那个调节音量的按键是个装饰，能不能让它真的可以调节音量）：
+            // **不能再用 `isUserInteractionEnabled = false`。**
             //
-            //   那一句当初是为了"不吃原生手势"（下拉关闭 / 滚动 / 左右切歌），但它有个
-            //   UIKit 层面的副作用：命中测试**在父视图这一级就停了** —— 父视图关掉交互，
-            //   **整个子树**都收不到触摸，包括里面那颗**真的** `MPVolumeView`
-            //   ⇒ 音量条只能是装饰（用户报的正是这个）。
+            // 那一句当初是为了"不吃原生手势"（下拉关闭 / 滚动 / 左右切歌），但它有个
+            // UIKit 层面的副作用：命中测试**在父视图这一级就停了** —— 父视图关掉交互，
+            // **整个子树**都收不到触摸，包括里面那颗**真的** `MPVolumeView`
+            // ⇒ 音量条只能是装饰（用户报的正是这个）。
             //
-            //   现在改成"整层开着交互、但**只有音量那一行的范围**返回 true"
-            //   （`NowPlayingOverlayView.point(inside:)`）—— 与
-            //   `NowPlayingLyricsContainerView.passThroughBottom` 同一个手法：
-            //   范围之外照旧全部穿透给 Spotify。
+            // 现在改成"整层开着交互、但**只有音量那一行的范围**返回 true"
+            // （`NowPlayingOverlayView.point(inside:)`）—— 与
+            // `NowPlayingLyricsContainerView.passThroughBottom` 同一个手法：
+            // 范围之外照旧全部穿透给 Spotify。
             overlay.isUserInteractionEnabled = true
             overlay.clipsToBounds = false
             overlay.accessibilityIdentifier = "eevee-npv-overlay"
@@ -190,8 +187,8 @@ enum NowPlayingPageOverlay {
     }
 
     // MARK: - 布局
-
-    /// 把覆盖层铺满、把音量条摆到锚点下面。**返回这一拍有没有真的改东西**。
+    //
+    // 把覆盖层铺满、把音量条摆到锚点下面。**返回这一拍有没有真的改东西**。
     @discardableResult
     private static func layout(overlay: UIView, in page: UIView) -> Bool {
         var changed = false
@@ -207,8 +204,8 @@ enum NowPlayingPageOverlay {
             changed = true
         }
         layoutVolumeRow(in: overlay, frame: target)
-        // ★ 2026-10-12：把"唯一吃触摸的范围"告诉覆盖层（见 `NowPlayingOverlayView`）——
-        //   不更新它，音量条就还是没有触摸（这一层只在那一行里放行）。
+        // 把"唯一吃触摸的范围"告诉覆盖层（见 `NowPlayingOverlayView`）——
+        // 不更新它，音量条就还是没有触摸（这一层只在那一行里放行）。
         if let interactive = overlay as? NowPlayingOverlayView, interactive.interactiveFrame != target {
             interactive.interactiveFrame = target
             changed = true
@@ -222,8 +219,8 @@ enum NowPlayingPageOverlay {
                 "[\(logTag)] overlay installed \(frameText(overlay.frame))"
                     + "; bottom anchor \(bottomAnchorIdentifier) = \(anchorText)"
                     + "; volume slider \(frameText(target))"
-                    // ★ 2026-10-11：这一行的**实测**内部几何（系统那条 slider + 两个字形 + 抬了多少）——
-                    //   用户报的"喇叭和轨不一样高"就是靠这一行 + 下一张照片对出来的。
+                    // 这一行的**实测**内部几何（系统那条 slider + 两个字形 + 抬了多少）——
+                    // 报的"喇叭和轨不一样高"就是靠这一行 + 下一张照片对出来的。
                     + volumeRowInternals(in: overlay)
             )
         }
@@ -275,8 +272,8 @@ enum NowPlayingPageOverlay {
 
         let left = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-low" }
         let right = row.subviews.first { $0.accessibilityIdentifier == "eevee-npv-volume-glyph-high" }
-        // ★ 2026-10-11：两个字形要**抬到轨那条线**上（见 `volumeGlyphLift`：iOS 26 的
-        //   `MPVolumeView` 把轨画在它自己 frame 中线上方 ≈5pt，直接按行中线摆会低一颗）。
+        // 两个字形要**抬到轨那条线**上（见 `volumeGlyphLift`：iOS 26 的
+        // `MPVolumeView` 把轨画在它自己 frame 中线上方 ≈5pt，直接按行中线摆会低一颗）。
         let glyphY = (frame.height - glyph) / 2 - volumeGlyphLift
         left?.frame = CGRect(x: 0, y: glyphY, width: glyph, height: glyph)
         right?.frame = CGRect(x: frame.width - glyph, y: glyphY, width: glyph, height: glyph)
@@ -291,9 +288,9 @@ enum NowPlayingPageOverlay {
         }
 
         let row = UIView(frame: .zero)
-        // ★ 2026-10-12：**这一行必须吃触摸**，否则里面那颗 `MPVolumeView` 一样点不到
-        //   （子视图能不能收到触摸，取决于**它和它的每一个祖先**都开着交互）。
-        //   范围外的穿透由父层 `NowPlayingOverlayView.point(inside:)` 保证。
+        // **这一行必须吃触摸**，否则里面那颗 `MPVolumeView` 一样点不到
+        // （子视图能不能收到触摸，取决于**它和它的每一个祖先**都开着交互）。
+        // 范围外的穿透由父层 `NowPlayingOverlayView.point(inside:)` 保证。
         row.isUserInteractionEnabled = true
         row.accessibilityIdentifier = volumeRowIdentifier
 
@@ -336,14 +333,14 @@ enum NowPlayingPageOverlay {
         return view
     }
 
-    // MARK: - 给系统音量条换皮（照片 68 的样子）
-
-    /// ★ 2026-10-11：**只走公开接口**。
-    ///
-    /// `MPVolumeView` 内部那枚 `UISlider` 是私有层级（改 tint 属于"猜内部结构"），
-    /// 而它有三条**公开**的图片接口：`setMinimumVolumeSliderImage(_:for:)`（已播放那段）、
-    /// `setMaximumVolumeSliderImage(_:for:)`（未播放那段）、`setVolumeThumbImage(_:for:)`。
-    /// 用可拉伸的图片喂进去 ⇒ 想要多细就多细，且**不会**碰到它的内部视图。
+    // MARK: - 给系统音量条换皮
+    //
+    // **只走公开接口**。
+    //
+    // `MPVolumeView` 内部那枚 `UISlider` 是私有层级（改 tint 属于"猜内部结构"），
+    // 而它有三条**公开**的图片接口：`setMinimumVolumeSliderImage(_:for:)`（已播放那段）、
+    // `setMaximumVolumeSliderImage(_:for:)`（未播放那段）、`setVolumeThumbImage(_:for:)`。
+    // 用可拉伸的图片喂进去 ⇒ 想要多细就多细，且**不会**碰到它的内部视图。
     private static func styleVolumeSlider(_ slider: MPVolumeView) {
         guard !styledVolumeSliders.contains(slider) else { return }
         styledVolumeSliders.add(slider)
@@ -401,7 +398,7 @@ enum NowPlayingPageOverlay {
         // 安全区底：页面自己的 `safeAreaInsets` 就是最可靠的"别压到 home indicator"来源。
         let bottomLimit = page.bounds.height - page.safeAreaInsets.bottom - 4
 
-        // ★ 2026-10-23：iOS 27 版摆在**传输行与工具行之间**（AM 的目标位置）。
+        // iOS 27 版摆在**传输行与工具行之间**（AM 的目标位置）。
         if UserDefaults.nowPlayingIOS27, let centred = ios27VolumeY(in: page) {
             let y = min(centred, bottomLimit - volumeRowHeight)
             return CGRect(x: x, y: max(0, y), width: width, height: volumeRowHeight)
@@ -446,11 +443,11 @@ enum NowPlayingPageOverlay {
         }
         guard frames.count == 3 else { return nil }
         let transportBottom = frames[0].maxY
-        // ★ 2026-10-24（用户：「功能之间留的间隔不够，下面还空了很大一块」）：
-        //   工具行那三颗**我们自己画**的字形整体下移了 `footerRowYOffset`（见
-        //   `NowPlayingIOS27+Footer.placeFooter`），而原生那三颗还留在原位 ⇒ 音量条
-        //   不能再按"原生工具行上沿"居中，否则它会被挤在传输行下面 4pt。
-        //   这里把同一段偏移加上去，音量条就落在**传输行与看得见的字形之间**的正中。
+        // （功能之间留的间隔不够，下面还空了很大一块）：
+        // 工具行那三颗**我们自己画**的字形整体下移了 `footerRowYOffset`（见
+        // `NowPlayingIOS27+Footer.placeFooter`），而原生那三颗还留在原位 ⇒ 音量条
+        // 不能再按"原生工具行上沿"居中，否则它会被挤在传输行下面 4pt。
+        // 这里把同一段偏移加上去，音量条就落在**传输行与看得见的字形之间**的正中。
         let footerTop = min(frames[1].minY, frames[2].minY) + nowPlayingIOS27FooterRowYOffset
         let gap = footerTop - transportBottom
         guard gap > volumeRowHeight + 8 else { return transportBottom + gapBelowAnchor }
@@ -469,9 +466,8 @@ enum NowPlayingPageOverlay {
 
     /// `npv.bottomStackView` 在哪：**页面 → 播放器列表 → 窗口**，三跳。
     ///
-    /// 为什么要补中间那一跳（2026-10-04，日志 40/41/42/43 四次同样的现场）：
-    /// 它**不在页面根视图的子树里**（日志 42 的定向树显示它在
-    /// `scrolling_npv_collection_view_accessibility_identifier` 的子树里，`4,593,406,240`），
+    /// 为什么要补中间那一跳：
+    /// 它**不在页面根视图的子树里**，
     /// 而"窗口"那一跳也没命中 ⇒ 每次进页面都退回安全区底。
     /// 列表这一跳用的是 `NowPlayingOneScreen` 认出来的那一张（判据只留一处）。
     private static func locateBottomAnchor(in page: UIView) -> UIView? {
@@ -506,18 +502,18 @@ enum NowPlayingPageOverlay {
     }
 
     // MARK: - 整页覆盖层（只让音量那一行吃触摸）
-
-    /// 铺满整页、**只在音量那一行的范围内**吃触摸的透明层。
-    ///
-    /// ★★ 2026-10-12（用户：「目前那个调节音量的按键是个装饰，能不能让它真的可以调节音量」）：
-    ///   这一层以前是 `isUserInteractionEnabled = false`（为了不吃原生手势），而 UIKit 的命中测试
-    ///   **在父视图这一级就停了**：父层关掉交互 ⇒ **整个子树**（含那颗真的 `MPVolumeView`）
-    ///   都收不到触摸 ⇒ 音量条只能是装饰。
-    ///
-    ///   现在：整层开着交互，靠 `point(inside:)` 把"可交互范围"限死在音量那一行
-    ///   （`interactiveFrame` 每一拍由 `layout(overlay:in:)` 更新）—— 手法与
-    ///   `NowPlayingLyricsContainerView.passThroughBottom` 完全一致。
-    ///   范围之外返回 false ⇒ 照旧全部穿透给 Spotify（下拉关闭 / 滚动 / 左右切歌不受影响）。
+    //
+    // 铺满整页、**只在音量那一行的范围内**吃触摸的透明层。
+    //
+    // （目前那个调节音量的按键是个装饰，能不能让它真的可以调节音量）：
+    // 这一层以前是 `isUserInteractionEnabled = false`（为了不吃原生手势），而 UIKit 的命中测试
+    // **在父视图这一级就停了**：父层关掉交互 ⇒ **整个子树**（含那颗真的 `MPVolumeView`）
+    // 都收不到触摸 ⇒ 音量条只能是装饰。
+    //
+    // 现在：整层开着交互，靠 `point(inside:)` 把"可交互范围"限死在音量那一行
+    // （`interactiveFrame` 每一拍由 `layout(overlay:in:)` 更新）—— 手法与
+    // `NowPlayingLyricsContainerView.passThroughBottom` 完全一致。
+    // 范围之外返回 false ⇒ 照旧全部穿透给 Spotify（下拉关闭 / 滚动 / 左右切歌不受影响）。
     final class NowPlayingOverlayView: UIView {
 
         /// 唯一要吃到触摸的那条范围（本视图坐标系 = 页面坐标系，因为这一层就钉在页面原点）。

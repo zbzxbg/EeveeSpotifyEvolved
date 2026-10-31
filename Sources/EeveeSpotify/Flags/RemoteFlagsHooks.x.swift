@@ -5,19 +5,19 @@ import Orion
 // 远端配置（flag）的**读时拦截**：钩 Spotify 自己的 `RemoteConfigurationSDK`。
 //
 // 上游原型：`SideloadLabs/EeveeSpotifyReincarnated` → `Flags/RemoteFlagsHooks.x.swift`
-// （★ 2026-10-17 用户要求「用他们的」之后移植）。引擎与设置页在 `RemoteFlags.swift`。
+// （用他们的之后移植）。引擎与设置页在 `RemoteFlags.swift`。
 //
-// ── 为什么钩这三个方法就够 ────────────────────────────────────────────────────────
+// ── 为什么钩这三个方法就够
 //
 // Spotify 的远端配置最终都收敛成三种取值（bool / int / enum），客户端拿值的入口就是
 // 这三个方法：
-//   · `boolValueForId:defaultValue:`
-//   · `intValueForId:lower:upper:defaultValue:`
-//   · `enumValueForId:values:defaultValue:`
+// · `boolValueForId:defaultValue:`
+// · `intValueForId:lower:upper:defaultValue:`
+// · `enumValueForId:values:defaultValue:`
 // 覆盖到它们，就等于"不管这条 flag 从哪条链路来、有没有进 customize 响应，
 // 只要客户端问，答的都是我们的值"。
 //
-// ── 两个类，两套装法（★ 别合并）──────────────────────────────────────────────────
+// ── 两个类，两套装法（别合并）
 //
 // `_TtC22RemoteConfigurationSDK25ConfigurationProviderImpl` 是 NSObject 派生的 Swift 类
 // ⇒ Orion 的 `ClassHook` 直接可用。
@@ -25,7 +25,7 @@ import Orion
 // （没有 NSObject 基类），Orion 的 `ClassHook` 找不到可换的 objc 方法 ⇒ 手动
 // swizzle 它的三个 @objc 方法（同上游做法）。
 //
-// 类名判据：本机 `C:\dsh\ipa\dump-9.1.88.txt` 里逐字有这两个类与这三个 selector
+// 类名判据：解压产物里逐字有这两个类与这三个 selector
 // （见 `RemoteFlags.swift` 文件头）。探测不到就**什么都不装**，只写一行日志 ——
 // 这与本仓库对私有类的纪律一致（不猜、不崩）。
 
@@ -131,10 +131,10 @@ private enum ObservableFlagProviderSwizzle {
     }
 }
 
-/// 启动时调一次（`Tweak.x.swift` 的 `init()` 里，紧跟 customize 种子之后）。
+/// 启动时调一次（`Tweak.x.swift` 的 `init` 里，紧跟 customize 种子之后）。
 func activateRemoteFlags() {
     // ⚠️ 先摸一下启动快照：`needsRestart` 靠它跟当前值比。晚摸就会把"刚改过"
-    //   当成"启动时就是这样"。
+    // 当成"启动时就是这样"。
     _ = RemoteFlags.launchOverrides
 
     let flags = RemoteFlags.shared

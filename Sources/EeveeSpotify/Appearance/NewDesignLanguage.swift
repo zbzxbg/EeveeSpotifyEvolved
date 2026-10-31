@@ -7,15 +7,14 @@ import UIKit
 ///
 /// 1. **构建意图**（我们可控）：Spotify 在原版 `Info.plist` 里写了
 ///
-///        UIDesignRequiresCompatibility = true
+/// UIDesignRequiresCompatibility = true
 ///
-///    等于"要求系统用兼容模式跑我"（2026-10-01 从解密 IPA 里读到的实际值）。
-///    构建脚本（`build-ipa-local.sh` / CI 的 `liquid_glass` 开关）做的就是把这个键**删掉**。
+/// 等于"要求系统用兼容模式跑我"从解密 IPA 里读到的实际值）。
+/// 构建脚本（`build-ipa-local.sh` / CI 的 `liquid_glass` 开关）做的就是把这个键**删掉**。
 ///
 /// 2. **运行期观察**（兜底）：导航栏子树里出现了新设计才有的视图 —— SwiftUI 托管的
-///    `NavigationBarPlatterContainer_v2` / `PlatterContainerHostingView<…>`、
-///    系统的 `ScrollEdgeEffectView`。这是**正信号**：旧设计里一个都不会出现
-///    （2026-10-01 的日志 8 = 兼容构建，全程 0 处；日志 9 = 玻璃构建，大量）。
+/// `NavigationBarPlatterContainer_v2` / `PlatterContainerHostingView<…>`、
+/// 系统的 `ScrollEdgeEffectView`。这是**正信号**：旧设计里一个都不会出现
 ///
 /// 为什么需要第 2 个：万一将来某个 iOS 开始**忽略** `UIDesignRequiresCompatibility`
 /// （Apple 说这个键是过渡用的），只看第 1 个信号就会判错，我们那些"旧设计补丁"就会重新
@@ -41,7 +40,7 @@ enum NewDesignLanguage {
     private static var didReportObservation = false
 
     /// 由 `NewDesignYield.observeNewDesignMarkersIfNeeded` 扫到新设计标志时调用。
-    /// （原来挂在 `AmoledTheme` 的导航栏遍历里 —— 2026-10-02 删 AMOLED 时搬了过去。）
+    /// （原来挂在 `AmoledTheme` 的导航栏遍历里 ——删 AMOLED 时搬了过去。）
     static func noteObservedNewDesign() {
         guard !observedNewDesign else { return }
         observedNewDesign = true

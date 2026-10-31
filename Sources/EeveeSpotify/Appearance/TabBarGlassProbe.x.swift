@@ -3,19 +3,19 @@ import Orion
 import UIKit
 import ObjectiveC.runtime
 
-/// 底部标签栏玻璃 —— 第 2 版（真机照片 21 的目标形状）。
+/// 底部标签栏玻璃 —— 第 2 版。
 ///
-/// ── 照片 21 要的是什么 ──────────────────────────────────────────────────────
+/// ── 要的是什么
 /// 一条**通栏的胶囊玻璃筋**（左右留边、底边贴近 home indicator），图标浮在上面，
 /// 选中态有自己那颗会滑的深色胶囊。而我们第一版做成了"**每颗标签一块独立方玻璃**" ——
 /// 形状、观感都不是那个意思。
 ///
-/// ── 为什么必须先看 dump 再动手（两条真机实证）──────────────────────────────
-///   1. 我原以为"照片 21 那条筋是系统给的"，所以第一版是往系统玻璃上加一层 ——
-///      用户实测：**关掉我们的开关，底栏就变成透明、没有任何玻璃**。
-///      也就是说**系统没给**，那层玻璃得我们自己做，而且要做成**一个形状**（不是四块）；
-///   2. 第一版还按"每颗 103×49"铺满，等于把整条栏糊了一层 —— 又难看又挡了
-///      Spotify 自己的选中滑块。
+/// ── 为什么必须先看 dump 再动手（两条真机实证）
+/// 1. 我原以为"那条筋是系统给的"，所以第一版是往系统玻璃上加一层 ——
+/// 实测：**关掉我们的开关，底栏就变成透明、没有任何玻璃**。
+/// 也就是说**系统没给**，那层玻璃得我们自己做，而且要做成**一个形状**（不是四块）；
+/// 2. 第一版还按"每颗 103×49"铺满，等于把整条栏糊了一层 —— 又难看又挡了
+/// Spotify 自己的选中滑块。
 ///
 /// 结论：**动手之前先用真机 dump 把这条栏的内部结构量出来**（哪个视图是底、谁是
 /// 选中滑块、图标在什么位置、安全区多少）。这个探针就是干这个的：只读、只打日志、
@@ -73,20 +73,20 @@ enum TabBarGlassProbe {
         dumpWindowFrame(of: bar)
         var index = 0
         walk(bar, depth: 0, index: &index)
-        // 顺手把"哪一颗被选中"的信号摊出来（照片 21/25 里那颗明显和另外三颗不一样）。
+        // 顺手把"哪一颗被选中"的信号摊出来。
         dumpSelectionSignals(bar)
         writeDebugLog("[TabBarDump] ---- end ----")
     }
 
     /// 「哪一颗被选中」的**只读**探针。
     ///
-    /// 为什么需要它：照片 21 / 25 里那颗**被选中的标签**明显和另外三颗不一样
+    /// 为什么需要它：那颗**被选中的标签**明显和另外三颗不一样
     /// （实心、更亮，背后还有一块选中底）。要照做，先得知道**怎么判"选中了哪一颗"** ——
     /// 而我们不碰 Spotify 的视图，只能读。这一趟把四颗身上所有"可能表示选中"的信号都摊出来：
-    ///   · 无障碍 traits（`selected` 那个 bit）、
-    ///   · 各层的 `tintColor`（item 自己 + 图标 `UIImageView`）、
-    ///   · 图标图片的 `renderingMode`（`.alwaysTemplate` = 会被 tint 染色 / `.alwaysOriginal` = 原样）、
-    ///   · 文字 `UILabel.textColor`。
+    /// · 无障碍 traits（`selected` 那个 bit）、
+    /// · 各层的 `tintColor`（item 自己 + 图标 `UIImageView`）、
+    /// · 图标图片的 `renderingMode`（`.alwaysTemplate` = 会被 tint 染色 / `.alwaysOriginal` = 原样）、
+    /// · 文字 `UILabel.textColor`。
     ///
     /// 只读、只打一次，和结构 dump 同一趟。**拿到这份数据再决定要不要画"选中胶囊"。**
     @MainActor
@@ -108,7 +108,6 @@ enum TabBarGlassProbe {
     /// 往下一层一层找第一个带无障碍标识符的视图。
     ///
     /// 为什么需要它：id（`TabBar.Item.主页`）挂在**更里面那层** `TabBarItemElementView` 上，
-    /// 而 `stack` 的直接子视图是 `ElementContentView`（没 id）—— 第一次真机日志里全是 `item=?`。
     @MainActor
     private static func firstIdentifier(below view: UIView) -> String? {
         var node: UIView? = view
@@ -197,14 +196,13 @@ enum TabBarGlassProbe {
 
 /// 挂在标签栏容器上，布局好了就 dump 一次。
 ///
-/// ⚠️ **不能在 `TabBarView` 第一次 `layoutSubviews` 里 dump** —— 日志 19 实证：
 /// 那次所有内部节点都是 `frame=(0,0 0x0)`（内容还没排），测出来等于没测。
 /// 改成挂在**每一颗标签自己**的布局上，并且**等它真的有尺寸**（>1pt）再 dump，
 /// 这样拿到的才是排好之后的真 frame。
 ///
 /// 真类名：
-///   `NavigationUI_TabBarImpl.TabBarItemElementView`
-///   `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`
+/// `NavigationUI_TabBarImpl.TabBarItemElementView`
+/// `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`
 class TabBarProbeItemHook: ClassHook<UIView> {
     typealias Group = TabBarGlassProbeGroup
     static let targetName = "NavigationUI_TabBarImpl.TabBarItemElementView"

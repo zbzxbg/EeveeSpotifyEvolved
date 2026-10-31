@@ -6,33 +6,33 @@ private let liveMessagingAssignmentKeys = Set([
     "ios-feature-sidedrawer-platform.is_list_page_enabled"
 ])
 
-// MARK: - 账号档位取证（2026-10-12，**只记不改**）
-
-/// 把**改写之前**那份账号态里的档位打一行（`type` / `catalogue` / `player-license`）。
-///
-/// ── 为什么需要它 ────────────────────────────────────────────────────────
-/// 用户 2026-10-12 那轮 A/B 说"和不启用 Premium 补丁有关"，但他随后说明
-/// **自己没有真会员** ⇒ 那句只能读成"**灰 = 伪装没生效的那一档**"
-/// （免费号不打补丁本来就会灰、会放不动），而在此之前我们**没有一行日志**能回答
-/// "这次启动到底有没有看到账号态、看到的是什么档"。
-///
-/// ── 判读下一份日志 ──────────────────────────────────────────────────────
-///   · `type=free` **且**后面 `[Flags] …` 有行 ⇒ 伪装链路是通的，症状要往别处查
-///     （`SESSION_2026-10-12_NIGHT.md` §10：内容请求到底拿到了多少）；
-///   · `type=premium` ⇒ 服务端本来就给 premium（只有一个真订阅账号才会这样）；
-///   · 这一行**一次都不出现** ⇒ 这次启动我们**根本没拿到 customize 响应体** ——
-///     那正是 §9.2 那条"304 没有 body ⇒ 交不出配置 ⇒ 整库发灰 / 歌曲消失 / 放不动"的现场
-///     （`[DL] customize 304 -> replaying the seed` / `[HCUS] …` 那两行是同一件事的另一半）。
-///
-/// ⚠️ **只记不改**：`modifyAttributes` 照旧无条件跑。
-///    2026-10-12 曾短暂加过一道"服务端说 premium 就不下伪装"的闸门，**已撤**：
-///    前提（用户可能是真订阅）被用户否掉，而那道闸门唯一可能的副作用恰好是
-///    "把伪装关掉 ⇒ 又变成免费档 ⇒ 正是用户报的那个症状"。
-///
-/// ⚠️ **为什么住在这个文件、而不是 `ServerSidedFeaturePolicy.swift`**：那个文件被
-///    `.github/workflows/tests.yml` **单独**丢给 `swiftc`（只许依赖 Foundation），
-///    而这里要用的 `AccountAttribute` / `writeDebugLog` 在那里都不存在 —— 放错地方就是
-///    一串 GitHub 红叉（2026-10-12 真发生过）。**同一个契约对 tests.yml 里另外五个文件也成立。**
+// MARK: - 账号档位取证**只记不改**）
+//
+// 把**改写之前**那份账号态里的档位打一行（`type` / `catalogue` / `player-license`）。
+//
+// ── 为什么需要它
+// 那轮 A/B 说"和不启用 Premium 补丁有关"，但他随后说明
+// **自己没有真会员** ⇒ 那句只能读成"**灰 = 伪装没生效的那一档**"
+// （免费号不打补丁本来就会灰、会放不动），而在此之前我们**没有一行日志**能回答
+// "这次启动到底有没有看到账号态、看到的是什么档"。
+//
+// ── 判读下一份日志
+// · `type=free` **且**后面 `[Flags] …` 有行 ⇒ 伪装链路是通的，症状要往别处查
+// （看内容请求到底拿到了多少）；
+// · `type=premium` ⇒ 服务端本来就给 premium（只有一个真订阅账号才会这样）；
+// · 这一行**一次都不出现** ⇒ 这次启动我们**根本没拿到 customize 响应体** ——
+// 那正是 §9.2 那条"304 没有 body ⇒ 交不出配置 ⇒ 整库发灰 / 歌曲消失 / 放不动"的现场
+// （`[DL] customize 304 -> replaying the seed` / `[HCUS] …` 那两行是同一件事的另一半）。
+//
+// ⚠️ **只记不改**：`modifyAttributes` 照旧无条件跑。
+// 曾短暂加过一道"服务端说 premium 就不下伪装"的闸门，**已撤**：
+// 前提（用户可能是真订阅）被用户否掉，而那道闸门唯一可能的副作用恰好是
+// "把伪装关掉 ⇒ 又变成免费档 ⇒ 正是用户报的那个症状"。
+//
+// ⚠️ **为什么住在这个文件、而不是 `ServerSidedFeaturePolicy.swift`**：那个文件被
+// `.github/workflows/tests.yml` **单独**丢给 `swiftc`（只许依赖 Foundation），
+// 而这里要用的 `AccountAttribute` / `writeDebugLog` 在那里都不存在 —— 放错地方就是
+// 一串 GitHub 红叉真发生过）。**同一个契约对 tests.yml 里另外五个文件也成立。**
 private func reportAccountTierOnTheWire(_ attributes: [String: AccountAttribute]) {
     guard !attributes.isEmpty else { return }
     let type = attributes["type"]?.stringValue.lowercased() ?? "(absent)"
@@ -52,9 +52,9 @@ private func reportAccountTierOnTheWire(_ attributes: [String: AccountAttribute]
 private var lastReportedAccountTier: String?
 
 func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
-    // ★ 2026-10-12：**先取证，再改写** —— 这一行读的是**服务器原样给的那份**账号态，
-    //   `modifyAttributes` 跑完之后读到的就是我们自己写进去的值了。
-    //   为什么要取证、怎么判读，见 `reportAccountTierOnTheWire` 的注释。
+    // **先取证，再改写** —— 这一行读的是**服务器原样给的那份**账号态，
+    // `modifyAttributes` 跑完之后读到的就是我们自己写进去的值了。
+    // 为什么要取证、怎么判读，见 `reportAccountTierOnTheWire` 的注释。
     reportAccountTierOnTheWire(configuration.attributes.accountAttributes)
 
     modifyAttributes(&configuration.attributes.accountAttributes)
@@ -273,9 +273,7 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "enable_sponsored_podcast_sponsored_ad", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_sponsored_podcast_sponsored_ads", modification: .setBool(false)),
     
-    // ─────────────────────────────────────────────────────────────────────
     // Ad on App Open — the "Advertisement" home-screen banner (Pepsi, etc.)
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "ios-ad-on-app-open", modification: .remove),
     // The modern RemoteConfig scope for AdOnAppOpen (confirmed in binary).
     // This is the scope that the AuthFetcher re-fetches after minimumFetchIntervalSeconds
@@ -290,16 +288,12 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "ad_on_app_open_enabled", modification: .setBool(false)),
     EeveePropertyReplacement(name: "adonappopen_enabled", modification: .setBool(false)),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Marquee — full-screen artist/brand ad overlay
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "marquee", modification: .remove),
     // Modern RemoteConfig scope for Marquee (confirmed in binary as 'ios-feature-marquee').
     EeveePropertyReplacement(scope: "ios-feature-marquee", modification: .remove),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Leave Behind ads — shown when leaving Now Playing
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "leavebehindadsbase", modification: .remove),
     // Modern RemoteConfig scope for Leave Behind ads (confirmed in binary as 'ios-feature-leavebehindadsbase').
     EeveePropertyReplacement(scope: "ios-feature-leavebehindadsbase", modification: .remove),
@@ -316,63 +310,45 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "music_track_change_enabled", scope: "ios-adsnowplaying-embeddednpv-impl", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "enable_ads_on_podcast", scope: "ios-adsnowplaying-embeddednpv-impl", modification: .forceBool(false)),
 
-    // ─────────────────────────────────────────────────────────────────────
     // In-stream / audio / video stream ads
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "ios-feature-instreamads", modification: .remove),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Embedded ad CTA elements — search-page and home-page display ads
     // These scopes are responsible for the 'Advertisement' banners shown
     // in the screenshots (Cartier on Search, Ross on Home).
     // Confirmed scope names from binary analysis of the decrypted IPA.
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "ios-adsembedded-embeddedctaelements-impl", modification: .remove),
     EeveePropertyReplacement(scope: "ios-adsnowplaying-embeddednpv-impl", modification: .remove),
     EeveePropertyReplacement(scope: "ios-adsplatform-elementimpl", modification: .remove),
     EeveePropertyReplacement(scope: "ios-system-adssponsoredcontext", modification: .remove),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Ads base infrastructure
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(name: "enable_ads_connect_state_observer", scope: "ios-feature-adsbase", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_minimal_preroll_management", scope: "ios-feature-adsbase", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_swift_ads_base_movement_logger", scope: "ios-feature-adsbase", modification: .setBool(false)),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Ads Swift context tracking
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "ios-feature-adsswift", modification: .remove),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Now Playing video ads
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(name: "embedded_npv_video_show_with_canvas", scope: "ios-feature-adsnowplayingui", modification: .forceBool(false)),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Sponsored context (sponsored playlists in Now Playing bar)
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(name: "sponsored_context_mismatch_aderror_enabled", scope: "ios-feature-adssponsoredcontext", modification: .setBool(false)),
     EeveePropertyReplacement(name: "sponsored_playlist_v2_enabled", scope: "ios-feature-adssponsoredcontext", modification: .setBool(false)),
     EeveePropertyReplacement(name: "sponsored_npb_slot_fetch_enabled", scope: "ios-feature-adssponsoredcontextnpbattachment", modification: .setBool(false)),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Ads identity tracking (SKAdNetwork / attribution)
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "ios-feature-adsidentitytracking", modification: .remove),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Search page ads & promotions
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(name: "prompted_playlist_merchandizing_enabled", scope: "ios-feature-search", modification: .setBool(false)),
     EeveePropertyReplacement(name: "social_proof_playlist_enabled", scope: "ios-feature-search", modification: .setBool(false)),
     EeveePropertyReplacement(name: "social_proof_plays_in_search_enabled", scope: "ios-feature-search", modification: .setBool(false)),
     EeveePropertyReplacement(name: "video_carousel_section_enabled", scope: "ios-feature-search", modification: .setBool(false)),
     EeveePropertyReplacement(name: "watch_feed_section_enabled", scope: "ios-feature-search", modification: .setBool(false)),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Additional legacy / non-scoped ad flags
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(name: "enable_popups", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_leave_behind_ads_card_element", modification: .setBool(false)),
     EeveePropertyReplacement(name: "music_npv_leavebehinds_enabled", modification: .setBool(false)),
@@ -416,11 +392,9 @@ private let propertyReplacements = [
     // 😡😡😡 spotify, stop changing the scroll logic
     EeveePropertyReplacement(name: "should_nova_scroll_use_scrollsita", modification: .remove),
 
-    // ─────────────────────────────────────────────────────────────────────
     // Lyrics share button — Spotify gates this behind a remote-config flag
     // that is only enabled for premium accounts. Force it on so the share
     // button works even when overwrite-configuration is disabled.
-    // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(name: "enable_lyrics_share", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "lyrics_share_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_lyrics_sharing", scope: "ios-feature-lyrics", modification: .forceBool(true)),
@@ -439,32 +413,29 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "enable_share_link_preview_uploads", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_sharing_v2", modification: .forceBool(true)),
 
-    // ─────────────────────────────────────────────────────────────────────
     // 歌词可用性检查旁路 —— 让"没有官方歌词的歌"也有歌词模块
-    // ─────────────────────────────────────────────────────────────────────
     //
     // 名字逐字来自 9.1.86 解密二进制的 feature-flag 表
     // （`Scripts/dump-spotify-symbols.py` 的 [flags] 桶里确实存在
     // `enable_has_lyrics_check_bypass`，旁边还有 `enable_lyrics`）。
     // 也就是说「这首歌有没有歌词」在客户端是一道**开关控制的检查**：
-    //   · `enable_lyrics`                    —— 歌词功能总开关；
-    //   · `enable_has_lyrics_check_bypass`   —— 跳过「has_lyrics 吗」的检查，
-    //     正是"每首歌都要有歌词模块"需要的那一个。
+    // · `enable_lyrics` —— 歌词功能总开关；
+    // · `enable_has_lyrics_check_bypass` —— 跳过「has_lyrics 吗」的检查，
+    // 正是"每首歌都要有歌词模块"需要的那一个。
     //
-    // 客户端读的是 track 元数据里的 `has_lyrics` 键（真机日志的
-    // `[Artwork] metadata keys:` 一行里逐字可见）。EeveeSpotify 从 910 起就在
-    // `SPTPlayerTrackHook.metadata()` 里把它覆写成 "true"，但那条 hook 现在挂在
+    // 客户端读的是 track 元数据里的 `has_lyrics` 键。EeveeSpotify 从 910 起就在
+    // `SPTPlayerTrackHook.metadata` 里把它覆写成 "true"，但那条 hook 现在挂在
     // 9.1.x 上不存在的类上（见 CustomLyrics+AllTracksLyrics.x.swift）。
     //
     // ⚠️ 刻意只用 `setBool`（**只改已存在的值，绝不新增**），理由：
-    //   · `enable_has_lyrics_check_bypass` 这个**名字**是从 9.1.86 的 flag 表里
-    //     逐字读出来的，可靠；
-    //   · 但它归属的 **scope 名我们并不知道** —— 我先前那条
-    //     `scope: "ios-lyrics-npvcommunicator-impl"` 是**猜的**。`.forceBool` 遇到
-    //     "名字+scope 都不存在"会**凭空插一个 AssignedValue**，等于把臆造的数据
-    //     塞进 Spotify 的配置解析路径，风险与收益不成比例。
-    //   · `setBool` 只做"把服务端已经给的值钉成 true"，服务端真把它关了也能改回来，
-    //     而不存在时什么都不做 —— 收益几乎一样，副作用归零。
+    // · `enable_has_lyrics_check_bypass` 这个**名字**是从 9.1.86 的 flag 表里
+    // 逐字读出来的，可靠；
+    // · 但它归属的 **scope 名我们并不知道** —— 我先前那条
+    // `scope: "ios-lyrics-npvcommunicator-impl"` 是**猜的**。`.forceBool` 遇到
+    // "名字+scope 都不存在"会**凭空插一个 AssignedValue**，等于把臆造的数据
+    // 塞进 Spotify 的配置解析路径，风险与收益不成比例。
+    // · `setBool` 只做"把服务端已经给的值钉成 true"，服务端真把它关了也能改回来，
+    // 而不存在时什么都不做 —— 收益几乎一样，副作用归零。
     // 等真机日志确认了真实 scope 或真实开关名，再考虑升回 forceBool。
     EeveePropertyReplacement(name: "enable_has_lyrics_check_bypass", scope: "ios-feature-lyrics", modification: .setBool(true)),
     EeveePropertyReplacement(name: "enable_has_lyrics_check_bypass", modification: .setBool(true)),
@@ -472,44 +443,39 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "enable_lyrics", scope: "ios-feature-lyrics", modification: .setBool(true)),
     EeveePropertyReplacement(name: "enable_lyrics", modification: .setBool(true)),
 
-    // 「歌词入口」——2026-09-25 真机 `[Flags]` 取证：服务端下发的整份歌词 flag 清单里
-    // （日志 18 行 35–48）**只有这一项是 false**，其余全是 true：
+    // 「歌词入口」——真机 `[Flags]` 取证：服务端下发的整份歌词 flag 清单里
+    // **只有这一项是 false**，其余全是 true：
     //
-    //     ios-feature-lyrics  lyrics_entry_point_enabled = false
+    // ios-feature-lyrics lyrics_entry_point_enabled = false
     //
     // 而"与「关于艺人」并列的歌词卡片"正是这个词的字面意思（入口：点了才进全屏歌词）。
     // scope/name 都来自服务端实际下发的内容（不是猜的）。
     //
-    // ★★ 2026-10-12（用户：「退出重进 Spotify **大概率突然无法播放任何歌词**…换代理也不行，
-    //    **开启覆盖配置也只能好一小会**」）：
-    //    这里原来是 `.setBool`（**只钉已下发的值、绝不新增**），而它的"空枪"是**静默**的 ——
-    //    只要某一份 customize payload **没有**携带这条 flag（unauth 配置、增量/部分 payload
-    //    都可能没有），我们这一枪就落空，而服务端那份的取值是 **false**
-    //    （日志 59 第 16 行：`scope=ios-feature-lyrics name=lyrics_entry_point_enabled bool=false`）
-    //    ⇒ **歌词入口整个消失**，用户看到的就是"没有任何歌词"。
-    //    这也解释了"开覆盖能好一小会"：用户自己加的覆盖走的是 `.forceBool` / `.forceEnum`，
-    //    那条路**有追加能力**（日志里 `0 match(es) (server did not send it; we append our own)`）。
-    //    ⇒ 升级成 `.forceBool(true)`：**命中就钉住、没下发就补一条**。
-    //      scope 来自服务端实发内容（不是猜的），所以补进去的那条能对得上。
-    //    ⚠️ 开关仍然有效：`modifyAssignedValues` 里那条门禁照旧整条跳过（`SKIPPED: switch off`）。
+    // （退出重进 Spotify **大概率突然无法播放任何歌词**…换代理也不行，
+    // **开启覆盖配置也只能好一小会**）：
+    // 这里原来是 `.setBool`（**只钉已下发的值、绝不新增**），而它的"空枪"是**静默**的 ——
+    // 只要某一份 customize payload **没有**携带这条 flag（unauth 配置、增量/部分 payload
+    // 都可能没有），我们这一枪就落空，而服务端那份的取值是 **false**
+    // ⇒ **歌词入口整个消失**，的就是"没有任何歌词"。
+    // 这也解释了"开覆盖能好一小会"：用户自己加的覆盖走的是 `.forceBool` / `.forceEnum`，
+    // ⇒ 升级成 `.forceBool(true)`：**命中就钉住、没下发就补一条**。
+    // scope 来自服务端实发内容（不是猜的），所以补进去的那条能对得上。
+    // ⚠️ 开关仍然有效：`modifyAssignedValues` 里那条门禁照旧整条跳过（`SKIPPED: switch off`）。
     EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
 
-    // ─────────────────────────────────────────────────────────────────────
-    // ★ 2026-10-09：「封面下单行歌词」（跟唱那一行）—— **用户那个开关的第三层**。
-    // ─────────────────────────────────────────────────────────────────────
+    // 「封面下单行歌词」（跟唱那一行）—— **用户那个开关的第三层**。
     //
-    // 它由远端配置控制，真机日志 53 里逐字可见（`[Flags] lyrics flag`）：
+    // 它由远端配置控制，
     //
-    //     scope=ios-nowplaying-contentlayers-impl name=lyrics_under_cover_art_enabled bool=true
+    // scope=ios-nowplaying-contentlayers-impl name=lyrics_under_cover_art_enabled bool=true
     //
-    // **这个名字就是用户那句话**（设置页里那行开关叫「隐藏封面下单行歌词」）：
+    // **这个名字就是隐藏封面下单行歌词）：
     // 关掉它 ⇒ 那一行、以及"把封面抬起来"的布局后果、底部那颗「显示/隐藏歌词」胶囊
     // 一起消失。为什么必须做到这一层：前两层（`DeclutterChrome` 藏那一行 / 按那颗胶囊）
-    // 都只解决"看得见的那部分"——照片 58 与 60 两次现场都是这么来的。
+    // 都只解决"看得见的那部分"——与 60 两次现场都是这么来的。
     //
     // ⚠️ 只用 `setBool`（**只改服务端已下发的值，绝不新增**）：scope 与 name 都来自真机日志，
-    //    不存在"凭空插一条 AssignedValue"的风险；服务端真没下发这条时这一枪是空的，
-    //    日志里的 `[Flags] replacement … — 0 match(es)` 能一眼看出来。
+    // 不存在"凭空插一条 AssignedValue"的风险；服务端真没下发这条时这一枪是空的，
     // ⚠️ **开关关着时整条跳过**（门禁在 `modifyAssignedValues`）：用户要回 Spotify 的原样。
     EeveePropertyReplacement(
         name: "lyrics_under_cover_art_enabled",
@@ -517,16 +483,13 @@ private let propertyReplacements = [
         modification: .setBool(false)
     ),
 
-    // ★★ 2026-10-17（用户：「有会遮不住 Spotify 官方单行歌词的情况，图片 143；
-    //    未开启覆盖配置时有，开启之后似乎没有了」）：
-    //    新的「歌词内容层」元素（`ElementView<LyricsTextElementProps>`）由这两条 flag 控制
-    //    （日志 108 逐字：`is_lyrics_cover_art_refactor_enabled=true`、
-    //    `lyrics_element_migration_enabled=true`）。`lyrics_under_cover_art_enabled=false`
-    //    只关旧的那条 `singalong-lyrics-view`，管不到新元素 ⇒ 旧元素被藏了，新元素仍在，
-    //    屏幕上就出现"我们的歌词 + 官方单行"两份。
-    //    覆盖配置 ON 之所以看起来修好：整份服务端配置被换成随包快照，这两条不再为 true。
-    //    这里直接把它们钉成 false（**仍只在「隐藏封面下单行歌词」开关开着时生效**，
-    //    见 `modifyAssignedValues` 的跳过条件）；比整份覆盖配置窄得多。
+    // 新的「歌词内容层」元素（`ElementView<LyricsTextElementProps>`）由这两条 flag 控制
+    // `lyrics_under_cover_art_enabled=false`
+    // 只关旧的那条 `singalong-lyrics-view`，管不到新元素 ⇒ 旧元素被藏了，新元素仍在，
+    // 屏幕上就出现"我们的歌词 + 官方单行"两份。
+    // 覆盖配置 ON 之所以看起来修好：整份服务端配置被换成随包快照，这两条不再为 true。
+    // 这里直接把它们钉成 false（**仍只在「隐藏封面下单行歌词」开关开着时生效**，
+    // 见 `modifyAssignedValues` 的跳过条件）；比整份覆盖配置窄得多。
     EeveePropertyReplacement(
         name: "lyrics_element_migration_enabled",
         scope: "ios-nowplaying-contentlayers-impl",
@@ -545,7 +508,7 @@ private let lyricsEntryPointFlagName = "lyrics_entry_point_enabled"
 /// 「封面下单行歌词」那条 flag 的名字（同上）。
 private let singalongLineFlagName = "lyrics_under_cover_art_enabled"
 
-/// ★ 2026-10-17：新「歌词内容层」的两条 flag（同上；见 `propertyReplacements` 末尾）。
+/// 新「歌词内容层」的两条 flag（同上；见 `propertyReplacements` 末尾）。
 private let lyricsMigrationFlagName = "lyrics_element_migration_enabled"
 private let lyricsRefactorFlagName = "is_lyrics_cover_art_refactor_enabled"
 
@@ -571,14 +534,11 @@ private func reportSingalongFlagSkippedOnce() {
     )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 歌词相关 flag 取证（只读、只打日志、不改任何字节）
-// ─────────────────────────────────────────────────────────────────────────────
 //
 // 为什么需要它：`enable_lyrics` / `enable_has_lyrics_check_bypass` 这些开关的
 // **scope 名一直是我们猜的**（见上面 `propertyReplacements` 末尾那段注释），
 // 而 `setBool` 只在 `name + scope` **都命中**时才生效 —— scope 猜错，这一枪就是空的，
-// 而且**静默**：日志里没有任何痕迹能区分"服务端关了这个开关"和"我们根本没改到"。
 //
 // 服务器下发的 `assignedValues` 本来就带着真实的 `scope` 与 `name`，所以在改写它们
 // **之前**先把含 "lyric" 的全部原样打出来：一次启动就能把真实 scope 钉死。
@@ -590,12 +550,12 @@ private var reportedLyricsReplacements = Set<String>()
 
 /// 除了名字含 `lyric` 的，还要盯这一批 flag —— 它们决定**正在播放页的模块列表**怎么来：
 ///
-///   · `scroll` / `nova` —— `should_nova_scroll_use_scrollsita` 就是我们在
-///     `propertyReplacements` 里 **`.remove`** 掉的那一条（注释写着"spotify, stop changing
-///     the scroll logic"）。它的 `.remove` 到底有没有动到东西，在此之前**完全不可见**：
-///     `.remove` 命中 0 条时是静默 no-op。
-///   · `prerelease` / `presave` / `moment` / `merch` / `card` —— "即将发布 / 预收藏"那张卡
-///     的所有可能来源（见 `LYRICS_MODULE_NEXT_STEPS.md` §36/§37）。
+/// · `scroll` / `nova` —— `should_nova_scroll_use_scrollsita` 就是我们在
+/// `propertyReplacements` 里 **`.remove`** 掉的那一条（注释写着"spotify, stop changing
+/// the scroll logic"）。它的 `.remove` 到底有没有动到东西，在此之前**完全不可见**：
+/// `.remove` 命中 0 条时是静默 no-op。
+/// · `prerelease` / `presave` / `moment` / `merch` / `card` —— "即将发布 / 预收藏"那张卡
+/// 的所有可能来源。
 private let npvFlagNeedles = [
     "scroll", "nova",
     "prerelease", "pre_release", "presave", "pre_save",
@@ -676,12 +636,12 @@ private func reportLyricsReplacementOutcome(_ values: [AssignedValue]) {
 
         // 关掉开关时 `hits` 照样是 1（服务端确实下发了这条），但**我们没改**。
         // 不标出来，日志就会读成"改了"，判读 A/B 时会直接得出相反结论。
-        // ★ 2026-10-22：读 `DeclutterChrome.hideSingalongLine` 而不是裸键 —— 它把
-        //   「修改Spotify听歌页布局」总开关也算了进去。
+        // 读 `DeclutterChrome.hideSingalongLine` 而不是裸键 —— 它把
+        // 「修改Spotify听歌页布局」总开关也算了进去。
         let skipped = (name == lyricsEntryPointFlagName
                         && !NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced)
             || (name == singalongLineFlagName && !DeclutterChrome.hideSingalongLine)
-            // ★ 2026-10-17：新内容层的两条也跟「隐藏封面下单行歌词」走。
+            // 新内容层的两条也跟「隐藏封面下单行歌词」走。
             || ((name == lyricsMigrationFlagName || name == lyricsRefactorFlagName)
                 && !DeclutterChrome.hideSingalongLine)
 
@@ -694,12 +654,12 @@ private func reportLyricsReplacementOutcome(_ values: [AssignedValue]) {
 
 /// 「歌词入口」那条 flag 在**这一份 payload** 里到底有没有（**改写之前**数）。
 ///
-/// ★ 2026-10-12（用户：「退出重进 Spotify 大概率突然无法播放任何歌词」）：
-///   这条替换从 `.setBool` 升级成 `.forceBool` 之后，"服务端没下发"不再等于失效，
-///   而是**我们补一条**；而"有没有"这件事直接决定歌词入口在不在，所以必须能在日志里看见。
-///   ⚠️ 现成的 `reportLyricsReplacementOutcome` 帮不上：它`reportedLyricsReplacements`
-///   是"每个 key 只报一次"，后续 payload 全被挡住 —— 而问题恰恰出在**后续**那份 payload 上。
-///   这里只报**状态翻转**（有 → 没有，或反过来），不刷屏。
+/// （退出重进 Spotify 大概率突然无法播放任何歌词）：
+/// 这条替换从 `.setBool` 升级成 `.forceBool` 之后，"服务端没下发"不再等于失效，
+/// 而是**我们补一条**；而"有没有"这件事直接决定歌词入口在不在，
+/// ⚠️ 现成的 `reportLyricsReplacementOutcome` 帮不上：它`reportedLyricsReplacements`
+/// 是"每个 key 只报一次"，后续 payload 全被挡住 —— 而问题恰恰出在**后续**那份 payload 上。
+/// 这里只报**状态翻转**（有 → 没有，或反过来），不刷屏。
 private var entryPointFlagWasPresent: Bool?
 
 private func reportEntryPointFlagPresence(_ values: [AssignedValue]) {
@@ -719,17 +679,16 @@ private func reportEntryPointFlagPresence(_ values: [AssignedValue]) {
     )
 }
 
-/// 用户自己加的那条覆盖（设置页 → Flag 覆盖）有没有**真的够到**服务端下发的配置。
+/// 自己加的那条覆盖（设置页 → Flag 覆盖）有没有**真的够到**服务端下发的配置。
 ///
 /// 为什么单独打一行：`reportLyricsReplacementOutcome` 只覆盖 `isFlagOfInterest`
-/// （歌词 + NPV 两批），于是用户在设置页里写的**任意** flag 看不到命中数 ——
-/// "覆盖没生效"和"生效了但界面没变"在日志里长得一模一样。2026-10-01 试
-/// `ios-reprise-liquid-glass-override.mode` 时就卡在这里。
+/// （歌词 + NPV 两批），于是设置页里写的**任意** flag 看不到命中数 ——
+/// 试 `ios-reprise-liquid-glass-override.mode` 时就卡在这里。
 ///
 /// 读数：
-///   · `1 match(es)` → 服务端下发了，我们改到了它；
-///   · `0 match(es) (server did not send it…)` → 服务端根本没下发这一条，
-///     改的是我们自己追加的那个（`.forceEnum` 才有追加能力；`.setEnum` 时代这里是空枪）。
+/// · `1 match(es)` → 服务端下发了，我们改到了它；
+/// · `0 match(es) (server did not send it…)` → 服务端根本没下发这一条，
+/// 改的是我们自己追加的那个（`.forceEnum` 才有追加能力；`.setEnum` 时代这里是空枪）。
 ///
 /// ⚠️ 在**改写之前**调用 —— 数的是"服务端给了几条"，不是"改完剩几条"。
 private var reportedUserOverrideOutcomes = Set<String>()
@@ -756,16 +715,16 @@ private func reportUserOverrideOutcomes(_ values: [AssignedValue]) {
 private func modifyAssignedValues(_ values: inout [AssignedValue]) {
     dumpLyricsFlags(values)
     dumpNPVFlags(values)
-    // ★ 2026-10-12：**在改写之前**先记一次"这份 payload 到底有没有那条 flag"（见下面的说明）。
+    // **在改写之前**先记一次"这份 payload 到底有没有那条 flag"（见下面的说明）。
     reportEntryPointFlagPresence(values)
     reportUserOverrideOutcomes(values)
 
-    // 用户自定义覆盖追加在**内置替换之后**：数组顺序即应用顺序，所以设置页里
+    // 自定义覆盖追加在**内置替换之后**：数组顺序即应用顺序，所以设置页里
     // 的 On/Off 能压过仓库自己的默认值（见 `FlagOverride+Replacement.swift`）。
     //
-    // ★★ 2026-10-16：「实验」页里靠 flag 落地的那些（目前只有 Instagram 分享位）插在
-    //    内置与用户覆盖**之间**：既是"我们自己的默认"，又允许用户用「Flag 覆盖」压过它。
-    //    关着实验时 `ExperimentFlagReplacements.active` 是空数组 ⇒ 这一段等于不存在。
+    // 「实验」页里靠 flag 落地的那些（目前只有 Instagram 分享位）插在
+    // 内置与用户覆盖**之间**：既是"我们自己的默认"，又允许Flag 覆盖压过它。
+    // 关着实验时 `ExperimentFlagReplacements.active` 是空数组 ⇒ 这一段等于不存在。
     //
     // ⚠️ 下面那条「歌词入口」flag 的跳过开关**只作用于内置项**：用户自己在设置页
     // 写了一条同名覆盖，那是他的明确意图，不该被我们的 A/B 开关吞掉。
@@ -786,9 +745,9 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
             continue
         }
 
-        // ★ 2026-10-09：同一条纪律给「封面下单行歌词」——用户把那个开关关掉时，
-        //   这一条内置替换**整条跳过**，让 Spotify 的行为原样保留（他没有要求我们改它）。
-        //   ★ 2026-10-22：跟着总开关走（`DeclutterChrome.hideSingalongLine` 里带总开关的门）。
+        // 同一条纪律给「封面下单行歌词」——用户把那个开关关掉时，
+        // 这一条内置替换**整条跳过**，让 Spotify 的行为原样保留（他没有要求我们改它）。
+        // 跟着总开关走（`DeclutterChrome.hideSingalongLine` 里带总开关的门）。
         if index < builtInReplacementCount,
            replacement.name == singalongLineFlagName,
            !DeclutterChrome.hideSingalongLine {
@@ -796,7 +755,7 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
             continue
         }
 
-        // ★ 2026-10-17：新内容层的两条也跟同一个开关走（见 `propertyReplacements` 末尾）。
+        // 新内容层的两条也跟同一个开关走（见 `propertyReplacements` 末尾）。
         if index < builtInReplacementCount,
            (replacement.name == lyricsMigrationFlagName || replacement.name == lyricsRefactorFlagName),
            !DeclutterChrome.hideSingalongLine {
@@ -875,14 +834,14 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
 
 /// **档位核心**：服务器就算一颗都没发，这几颗也必须写 —— 它们决定"App 认为自己是会员"。
 ///
-/// ★★ 2026-10-12（用户问"Reincarnated 他们的解锁配置不能用吗"）：
+/// （用户问"Reincarnated 他们的解锁配置不能用吗"）：
 /// 对照他们的 `EeveePremiumForce.x.swift`，我们把"**什么时候**写"改成了两档 ——
-///   · **核心集合（下面这些）**：无条件写（他们叫 `seedAlways`，理由一致）；
-///   · **其余每一颗**：**只在服务端确实下发了它的时候**才覆盖 ⇒ **绝不凭空造键**。
+/// · **核心集合（下面这些）**：无条件写（他们叫 `seedAlways`，理由一致）；
+/// · **其余每一颗**：**只在服务端确实下发了它的时候**才覆盖 ⇒ **绝不凭空造键**。
 ///
 /// 他们踩过的那一脚写在原注释里，逐字是：
-///   `// Over-seeding caused greyed-out tracks (streaming-rules mismatch).`
-///   `// Only seed the safe core set; dates and logout keys override-only.`
+/// `// Over-seeding caused greyed-out tracks (streaming-rules mismatch).`
+/// `// Only seed the safe core set; dates and logout keys override-only.`
 /// 我们以前是**无条件写 ~30 颗**（`loudness-levels`、`mixing-tools=EDIT`、`libspotify`、
 /// `mobile`、`your-library-tags` … 服务器没发也造）⇒ 正是他们说的 over-seeding。
 private let premiumCoreKeys: Set<String> = [
@@ -977,8 +936,8 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
         $0.stringValue = "premium"
     }
 
-    // ★ 2026-10-12 新加：他们的核心集合里有 `product`，我们**以前一颗都不碰** ⇒
-    //   `type=premium` 而 `product` 还是服务端那份（free）—— 核心集合内部就不一致。
+    // 新加：他们的核心集合里有 `product`，我们**以前一颗都不碰** ⇒
+    // `type=premium` 而 `product` 还是服务端那份（free）—— 核心集合内部就不一致。
     premium["product"] = AccountAttribute.with {
         $0.stringValue = "premium"
     }
@@ -1044,10 +1003,10 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
         $0.boolValue = true
     }
 
-    // ★★ 2026-10-12 新加（同样来自 Reincarnated）：**反登出**那一族。
-    //   他们原注释：服务器推这些键就是为了触发 `ForcedLogoutDaemon` / `AccessTokenRevokerDaemon`。
-    //   如果"退出重进后歌曲全黑、过一会又回来"其实是**会话被判失效**，这一族就是解药。
-    //   语义与别人一致：**只在服务端下发了它们的时候**才压回去。
+    // 新加（同样来自 Reincarnated）：**反登出**那一族。
+    // 他们原注释：服务器推这些键就是为了触发 `ForcedLogoutDaemon` / `AccessTokenRevokerDaemon`。
+    // 如果"退出重进后歌曲全黑、过一会又回来"其实是**会话被判失效**，这一族就是解药。
+    // 语义与别人一致：**只在服务端下发了它们的时候**才压回去。
     premium["forced_logout"] = AccountAttribute.with {
         $0.stringValue = ""
     }
@@ -1117,8 +1076,8 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
     }
 
     // ③ 一行判据：**"有没有凭空造键"从今往后是看得见的**。
-    //   下一份日志里若 `skipped` 一大堆，就说明服务器本来就没发那些键 ——
-    //   而它们以前是被我们造出来的（Reincarnated 认定这就是灰歌的来源）。
+    // 就说明服务器本来就没发那些键 ——
+    // 而它们以前是被我们造出来的（Reincarnated 认定这就是灰歌的来源）。
     writeDebugLog(
         "[Premium] attributes — core \(seeded) seeded, \(overridden) overridden, \(skipped.count) left alone"
             + " (the server never sent them; inventing them is what greys tracks out)"

@@ -1,26 +1,26 @@
 // 「队列页」—— 把 Spotify 自己的「队列」卡片做成 MeloX / AM 那种形状
-// （用户 2026-10-24：「队列页：顶部当前歌 + 一排圆按钮 + 原生列表」）。
+// （队列页：顶部当前歌 + 一排圆按钮 + 原生列表）。
 //
 // ## 为什么是"插一块"而不是"重排"
 //
 // 那张卡是 Spotify **正在正常工作**的系统弹窗（拖动、移除、点播全在里面），而我们
-// **一次都没有它的视图树**（`[QueueProbe]` 在历史日志里零命中）。整页重排 = 盲改一个能用
+// **一次都没有它的视图树**。整页重排 = 盲改一个能用
 // 的弹窗，风险不成比例。所以这一版只做**加法**：
 //
-//   · 找到那张卡的**列表**（`UITableView`），把我们的头部塞进 `tableHeaderView`
-//     —— 这是 UIKit 自己的机制：列表内容**自动**被推到下面，不用改任何原生 frame、
-//     不用 contentInset、不需要知道它原来的布局，撤掉就是 `tableHeaderView = nil`；
-//   · 头部 = **当前歌曲行**（48pt 圆角封面 + 歌名 + 艺人）+ **一排三颗圆按钮**
-//     （随机 / 循环 / 定时器）；
-//   · 三颗按钮**不自己实现功能**：在卡片里按无障碍名（"随机 / 循环 / 定时"，
-//     英文界面是 "shuffle / repeat / timer"）找**卡片自己那三颗**，点到就
-//     `sendActions(for: .touchUpInside)` 转发给它 —— 找不到的那颗**不画**（不放假按钮），
-//     并在日志里写明。这也是为什么"原生列表不动"：我们只加了一行头。
+// · 找到那张卡的**列表**（`UITableView`），把我们的头部塞进 `tableHeaderView`
+// —— 这是 UIKit 自己的机制：列表内容**自动**被推到下面，不用改任何原生 frame、
+// 不用 contentInset、不需要知道它原来的布局，撤掉就是 `tableHeaderView = nil`；
+// · 头部 = **当前歌曲行**（48pt 圆角封面 + 歌名 + 艺人）+ **一排三颗圆按钮**
+// （随机 / 循环 / 定时器）；
+// · 三颗按钮**不自己实现功能**：在卡片里按无障碍名（"随机 / 循环 / 定时"，
+// 英文界面是 "shuffle / repeat / timer"）找**卡片自己那三颗**，点到就
+// `sendActions(for: .touchUpInside)` 转发给它 —— 找不到的那颗**不画**（不放假按钮），
+// 这也是为什么"原生列表不动"：我们只加了一行头。
 //
 // ## 顺带：这一版会自己把那张卡的视图树打进日志
 //
 // 第一次认出队列卡片时打一份 `[QueuePage] tree — …`（类名 / frame / id / alpha）。
-// 以后不管有没有开「转储视图树」，日志里都会有这份树 —— 下一轮据此把
+// 以后不管有没有开「转储视图树」，
 // "队列/编辑/正在播放 N" 那一行、以及三颗原生钮的确切位置一次对齐。
 //
 // 日志 tag：`[QueuePage]`。开关跟着「iOS 27 听歌页」（它才有那颗队列键）。
@@ -69,7 +69,7 @@ enum QueuePage {
     /// 找原生三颗按钮的节流计数（没找齐时约 3 秒扫一次，别每拍 BFS）。
     static var controlSearchTicks = 0
 
-    /// ★ 2026-10-24（用户：「改队列这个事情先回退吧」）：**整条队列改版先关掉**。
+    /// （改队列这个事情先回退吧）：**整条队列改版先关掉**。
     ///
     /// 上一版把 Spotify 的队列卡加了一层头部、又把它从半屏 sheet 抬到整页高度；用户看过后
     /// 决定先回退到 Spotify 原生那张卡。这里只把入口关掉 —— 定时器那一步会走
@@ -138,11 +138,11 @@ enum QueuePage {
     }
 
     // MARK: - 找那张卡
-
-    /// 当前屏幕上那张队列卡片（`Queue_ViewImpl.QueueViewController`）。
-    ///
-    /// 从每个窗口的根 VC 往下走 `presentedViewController` **和** `children`
-    /// （它是弹出来的 sheet，通常在 presented 链上）。
+    //
+    // 当前屏幕上那张队列卡片（`Queue_ViewImpl.QueueViewController`）。
+    //
+    // 从每个窗口的根 VC 往下走 `presentedViewController` **和** `children`
+    // （它是弹出来的 sheet，通常在 presented 链上）。
     private static func presentedQueueSheet() -> UIViewController? {
         var roots: [UIViewController] = []
         for scene in UIApplication.shared.connectedScenes {
@@ -246,8 +246,8 @@ enum QueuePage {
               let title = titleLabel, let artist = artistLabel else { return false }
 
         let track = statefulPlayer?.currentTrack()
-        // ⚠️ 用 `string(ifResponding:)` 取，**不要**直接调 `artistTitle()`：
-        //    那个选择器在 9.1.x 上不存在（见 `SPTPlayerTrack+Extension` 的说明）。
+        // ⚠️ 用 `string(ifResponding:)` 取，**不要**直接调 `artistTitle`：
+        // 那个选择器在 9.1.x 上不存在（见 `SPTPlayerTrack+Extension` 的说明）。
         let titleText = track?.string(ifResponding: "trackTitle") ?? ""
         let byName = track?.string(ifResponding: "artistName") ?? ""
         let artistText = byName.isEmpty
@@ -393,8 +393,8 @@ enum QueuePage {
     }
 
     // MARK: - 转发那一下
-
-    /// 圆按钮被点了（`QueuePageTapTarget` 转进来）：把这一下交给卡片自己那颗。
+    //
+    // 圆按钮被点了（`QueuePageTapTarget` 转进来）：把这一下交给卡片自己那颗。
     static func tapButton(index: Int) {
         guard index >= 0, index < nativeTargets.count, let target = nativeTargets[index] else {
             writeDebugLog("[\(logTag)] button \(index) has no native target — nothing to forward to")

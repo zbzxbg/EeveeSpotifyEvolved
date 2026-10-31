@@ -1,9 +1,9 @@
 // 挡掉 Spotify 的 ClientMessagingPlatform（CMP）**营销面** —— 就是那两样东西：
-//   · 全屏接管页："welcome back / Ends soon: 2 months of Premium"；
-//   · 首页横幅："Final call: Get 2 months for $6.99"。
+// · 全屏接管页："welcome back / Ends soon: 2 months of Premium"；
+// · 首页横幅："Final call: Get 2 months for $6.99"。
 //
 // 移植自上游 `EeveeSpotifyReincarnated/Sources/EeveeSpotify/ClientMessagingPlatformBlocker.x.swift`
-// （195 行）。目标类名已用本仓库的 `C:\dsh\ipa\dump-9.1.88.txt` **逐条核对过**，7 个全在，
+// （195 行）。目标类名已用本仓库的解压产物**逐条核对过**，7 个全在，
 // 连 `P33_…` 那个哈希都一致。
 //
 // ## 为什么请求侧已经挡了，还要这一层
@@ -19,7 +19,7 @@
 //
 // ## 与其它拦截器的分工
 //
-// `UpsellPopupBlocker`（Encore 弹窗）/ `UpsellServiceBlocker`（服务 `.load()` 饿死）管的是
+// `UpsellPopupBlocker`（Encore 弹窗）/ `UpsellServiceBlocker`（服务 `.load` 饿死）管的是
 // 另一批目标；这三个是并列的，不重叠。三者都是**启动即生效、没有开关**（与那两个保持一致）。
 
 import Foundation

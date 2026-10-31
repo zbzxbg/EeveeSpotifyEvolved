@@ -4,7 +4,7 @@ import UIKit
 
 // ⚠️ `@available(iOS 26.0, *)` 不能丢：这个时钟只服务于 iOS 26 那一层自绘歌词
 // （`AppleMusicLyricsOverlayHost` 就是 `@available(iOS 26.0, *)` 的）。
-// 2026-10-17 的拆分把这条属性漏在了原文件末尾，CI 直接报 "expected declaration"。
+// 的拆分把这条属性漏在了原文件末尾，CI 直接报 "expected declaration"。
 @available(iOS 26.0, *)
 final class AppleMusicLyricsClock: ObservableObject {
     /// 当前播放时间（秒）。每帧更新，驱动整页重绘。
@@ -28,12 +28,12 @@ enum AppleMusicLyricsBackdrop {
     /// 背景：模糊封面（复用 `LyricsBackdropView` 的取图与缓存/材质逻辑）。
     ///
     /// `style` 由调用方按「是不是全屏」决定：
-    ///   · 全屏 → `.stage`：铺满整屏 + 均匀暗化
-    ///   · 预览 → `.card`：只在卡片内，上下暗中间透
+    /// · 全屏 → `.stage`：铺满整屏 + 均匀暗化
+    /// · 预览 → `.card`：只在卡片内，上下暗中间透
     ///
     /// - Parameter solid: 全屏专档。见 `LyricsBackdropView.solidStageScrimAlpha`：
-    ///   全屏时背景要负责"压住"底下的原生页面（我们不再动任何原生视图），
-    ///   所以需要比默认更实。
+    /// 全屏时背景要负责"压住"底下的原生页面（我们不再动任何原生视图），
+    /// 所以需要比默认更实。
     @ViewBuilder
     static func makeBackground(
         style: LyricsBackdropView.Style,

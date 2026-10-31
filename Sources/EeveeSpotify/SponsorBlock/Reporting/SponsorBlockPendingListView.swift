@@ -21,7 +21,7 @@ struct SponsorBlockPendingListView: View {
                     HStack {
                         Button {
                             UIPasteboard.general.string = userID
-                            // ★ 2026-10-11 修：原来是 `NSLocalizedString("user_id_copied", …)` ——
+                            // 修：原来是 `NSLocalizedString("user_id_copied", …)` ——
                             // 它查的是 **Bundle.main**（= Spotify.app），我们的
                             // `EeveeSpotify.bundle` 根本不在那儿 ⇒ 永远查不到 ⇒ 弹出的是**键名本身**
                             // "user_id_copied"（"it" 里那条意译一直没被用上也是同一个原因）。

@@ -24,21 +24,21 @@ struct EeveeLyricsSettingsView: View {
                 disableLyricsSection()
             }
             
-            // ★ 2026-10-31：自动优选链路里也包含 NetEase，所以这两项对它同样要能改 ——
-            //   否则选了「自动优选」的用户永远调不到网易云的罗马字 / 译文行为。
+            // 自动优选链路里也包含 NetEase，所以这两项对它同样要能改 ——
+            // 否则选了「自动优选」的用户永远调不到网易云的罗马字 / 译文行为。
             if viewModel.lyricsSource == .netease || viewModel.lyricsSource == .autoSelect {
                 neteaseRomajiLocalSection()
                 neteaseHideTranslationSection()
-                // ★ 2026-10-23（用户：「设置页里面放个可点击进去的页面吧」）：歌词偏移
-                //   从本页拆出去成了独立页（`EeveeLyricsOffsetSettingsView`，2026-10-24 起
-                //   对所有源生效），入口在根设置页「播放与歌词」组里，与「歌词 / 听歌页 /
-                //   补丁」那些并排。
+                // （设置页里面放个可点击进去的页面吧）：歌词偏移
+                // 从本页拆出去成了独立页（`EeveeLyricsOffsetSettingsView`，起
+                // 对所有源生效），入口在根设置页「播放与歌词」组里，与「歌词 / 听歌页 /
+                // 补丁」那些并排。
             }
             
             if viewModel.lyricsSource != .notReplaced {
                 // 「AMLL 优先」需要有一个「用户自己选的源」作为回退目标，
                 // 所以来源为 Genius / 自动优选 / LRCLIB / AMLL 时不展示。
-                // ★ 2026-10-02 恢复（2026-09-25 曾整段删除）。
+                // 恢复曾整段删除）。
                 if viewModel.lyricsSource != .genius
                     && viewModel.lyricsSource != .autoSelect
                     && viewModel.lyricsSource != .lrclib
@@ -61,8 +61,8 @@ struct EeveeLyricsSettingsView: View {
                 // getter），不再有开关。
                 romanizationSection()
 
-                // ★ 2026-10-31（用户：「只做系统翻译」）：源没给译文时，用 Apple 的翻译框架
-                //   在手机上翻一遍（纯本地）。只处理"每行都有时间轴"的歌词。
+                // 源没给译文时，用 Apple 的翻译框架
+                // 在手机上翻一遍（纯本地）。只处理"每行都有时间轴"的歌词。
                 lyricsAutoTranslateSection()
                 
                 // 自动优选链路包含 Musixmatch，其语言项同样可配置。
@@ -71,7 +71,7 @@ struct EeveeLyricsSettingsView: View {
                 }
             }
             
-            // 已移除一节（2026-10-18）：「删除间奏符号 ♪」那颗 Toggle。
+            // 已移除一节：「删除间奏符号 ♪」那颗 Toggle。
             // 它的行为已经无条件生效（间奏行整行丢弃），开关留着只是个空壳 ——
             // 键、属性、绑定日志与 l10n 一起摘掉，理由见 `NgzhwmSettingsViewModel` 顶部。
             
@@ -82,7 +82,7 @@ struct EeveeLyricsSettingsView: View {
         // 那个 publisher 全工程没有任何一处 `send`（死订阅），而匿名令牌选项本身
         // 也已整体移除 —— 两个一起去掉。
         // 手动填令牌的弹窗保留，改由下面这个绑定在"选中 Musixmatch 那一刻"调用。
-                // ★ 2026-10-12：inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
+        // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
     }
@@ -148,9 +148,9 @@ struct EeveeLyricsSettingsView: View {
     }
     
     /// 「AMLL 优先」：勾选后先向 AMLL 要逐词歌词，没正常返回再回退到
-    /// 用户在来源选择器里设置的那个源。选项依赖逐词歌词，未开启时整体禁用。
+    /// 在来源选择器里设置的那个源。选项依赖逐词歌词，未开启时整体禁用。
     ///
-    /// ★ 2026-10-02 恢复（2026-09-25 曾整段删除，连带两个 l10n 键）。
+    /// 恢复曾整段删除，连带两个 l10n 键）。
     @ViewBuilder private func amllPreferredSection() -> some View {
         Section {
             Toggle(
@@ -173,11 +173,11 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
-    /// ★ 2026-10-31：**歌词系统翻译**（Apple `Translation` 框架，纯本地）。
+    /// **歌词系统翻译**（Apple `Translation` 框架，纯本地）。
     ///
     /// 只对"源自己没给译文"的歌词生效，翻完在每行原文下面多一行译文。
     /// 要求：**iOS 26+**（`TranslationSession` 的公开初始化器从 26.0 才有，不是 18），
-    /// 且用户已在「设置 → App → 翻译 → 语言」里下好两种语言。
+    /// 且设置 → App → 翻译 → 语言里下好两种语言。
     @ViewBuilder private func lyricsAutoTranslateSection() -> some View {
         Section {
             Toggle(
@@ -185,7 +185,7 @@ struct EeveeLyricsSettingsView: View {
                 isOn: $viewModel.lyricsAutoTranslate
             )
             // ⚠️ iOS 26 以下这颗开关**什么都不做**（`TranslationSession` 没有公开构造入口）。
-            //   置灰而不是藏起来：footer 已经写明版本要求，藏起来只会让人以为功能被删了。
+            // 置灰而不是藏起来：footer 已经写明版本要求，藏起来只会让人以为功能被删了。
             .disabled(!OnDeviceLyricsTranslation.isAvailable)
         } footer: {
             Text("lyrics_auto_translate_description".localized)
@@ -203,13 +203,13 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
-    // 已移除两个 Section（2026-09-27）：`injectLyricsCardElementSection()` /
-    // `lyricsEntryPointFlagSection()` —— 它们是**排查/验证型**开关，已整体挪到
+    // 已移除两个 Section：`injectLyricsCardElementSection` /
+    // `lyricsEntryPointFlagSection` —— 它们是**排查/验证型**开关，已整体挪到
     // 「调试」页（`EeveeDebugSettingsView`）。key 与 l10n 都没变，用户已设的值照旧生效。
-    // 同批**删除**的 `syntheticLineTimingSection()`（「补全歌词时间轴」）是另一回事：
+    // 同批**删除**的 `syntheticLineTimingSection`（「补全歌词时间轴」）是另一回事：
     // 验证完毕、功能整体删掉，key 与 l10n 也一起删了，不再有任何入口。
-
-    // 已移除一个 Section（2026-09-25）：`hideOfficialLyricsSection()` ——
+    //
+    // 已移除一个 Section：`hideOfficialLyricsSection` ——
     // 它的开关价值只在"验证修复有没有用"那一步，验证完就写死启用了。
     // 那个 l10n 键也一并删除（见 en/zh-CN 的 Localizable.strings）。
 

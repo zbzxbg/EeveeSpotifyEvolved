@@ -21,17 +21,17 @@ var currentLyricsTimingOffsetAppliedMs: Int = 0
 /// 供 `reapplyLyricsTimingOffset` 与设置页读取。
 var currentLyricsSource: LyricsSource?
 
-/// ★ 2026-10-11（用户提的现场）：**这一次"取词"走到哪一步了。**
+/// **这一次"取词"走到哪一步了。**
 ///
 /// 为什么需要它：以前只有"有词 / 没词"两态，而"没词"其实是**三件不同的事** ——
 /// **还在查** / **查完了没找到** / **源明确说是纯音乐**。
-/// 三者被压成同一个"点了没反应"（用户原话：「那个歌词按钮是不是点不开」），
+/// 三者被压成同一个"点了没反应"（那个歌词按钮是不是点不开），
 /// 而用户要的是：**键随时能按**，按开之后在歌词的位置写清楚是哪一种。
 ///
 /// 写入点（`CustomLyrics.x.swift`，只有三处）：
-///   · 请求开始 / 切歌 ⇒ `.loading`；
-///   · `storeLyricsDto` ⇒ `.found`（有数据；纯音乐那种看 `LyricsDto.isInstrumental`）；
-///   · 取词失败 ⇒ `.failed`。
+/// · 请求开始 / 切歌 ⇒ `.loading`；
+/// · `storeLyricsDto` ⇒ `.found`（有数据；纯音乐那种看 `LyricsDto.isInstrumental`）；
+/// · 取词失败 ⇒ `.failed`。
 enum LyricsLookupState {
     case idle
     case loading
@@ -43,20 +43,11 @@ var currentLyricsLookupState: LyricsLookupState = .idle
 
 /// `currentLyricsDto` 这份数据**属于哪一首**（曲目 id）。
 ///
-/// ── 为什么需要它（日志 28 的真机现场）────────────────────────────────────
+/// ── 为什么需要它
 /// 切歌**不一定**伴随一次歌词请求：客户端命中自己的歌词存储 / 离线歌词时不会有
-/// `color-lyrics` 请求，于是 `resetWordByWordLyrics()` 根本不会被调用，
+/// `color-lyrics` 请求，于是 `resetWordByWordLyrics` 根本不会被调用，
 /// `currentLyricsDto` 还是上一首的。而壳上的曲名是每帧从播放器实时读的 ——
 /// 于是出现那种状态：**壳写着新歌名、歌词内容还是上一首的**。
-///
-/// 日志 28 的实证（Planetarium - waka ↔ ただ声一つ - Rokudenashi 来回切）：
-/// ```
-/// [Shell] legacy metadata "Planetarium" — "waka"          ← 壳：这首歌
-/// [WordByWord] word-level judge: 31/33 … render mode=word ← 模型：上一首的 33 行
-/// ```
-/// 而 Planetarium 自己的 dto 是 23 行、无逐词（`Applied official romaji (23 line(s))`）。
-/// 两次切回 Planetarium（15:16:12 / 15:16:59）都**没有** `[Lyrics] Request for`，
-/// 所以 dto 一直没被换掉。
 ///
 /// AM 层早就有这条判据（`AppleMusicLyricsOverlayHost.hasForeignLineModel` +
 /// `currentModelTrackId`，每帧在 `tick` 里比对），旧层一直缺 —— 这份记录就是把它
@@ -68,7 +59,7 @@ var currentLyricsDtoTrackId: String = ""
 
 /// 最终生效的歌词背景色（ARGB），CustomLyrics 算完 colors 后写入，供 overlay 与原生模块同色。
 var currentLyricsBackgroundColorARGB: UInt32 = 0
-/// 歌词提供者文本（如 "PetitLyrics"；★ 2026-10-11 起不带 `(EeveeSpotify)` 后缀），
+/// 歌词提供者文本（如 "PetitLyrics"；起不带 `(EeveeSpotify)` 后缀），
 /// 用于 overlay 页脚、以及**播放器页歌手那一行的右边**（`歌手（提供商）`）。
 var currentLyricsProvider: String = ""
 
