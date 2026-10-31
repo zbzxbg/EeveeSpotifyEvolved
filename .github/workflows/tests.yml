@@ -87,6 +87,10 @@ jobs:
         run: python3 Tools/eevee-hookfinder/swift_string_check.py
       - name: Guard — static member scopes (Sources)
         run: python3 Tools/eevee-hookfinder/swift_member_check.py
+      # 上面那条自己的假阳性回归：闭包参数（带返回类型）与 `case` 模式绑定都是绑定、不是引用，
+      # 必须不报；真·跨文件裸引用必须照旧报出，否则这条 guard 会开始吞真问题。
+      - name: Guard — static member check fixtures
+        run: python3 Tests/Tools/MemberCheckFixtures/test.py
       - name: Guard — Orion hooks (import / orig / Group / final)
         run: python3 Tools/eevee-hookfinder/orion_hook_guard.py
       - name: Guard — l10n keys

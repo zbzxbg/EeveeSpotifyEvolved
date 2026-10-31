@@ -473,6 +473,14 @@ def main(argv: list[str]) -> int:
             # 纯正则分不出"这一处是绑定、那一处是值"，而误报会淹掉真问题（仓库老规矩：宁可漏）。
             if re.search(r"\{\s*" + re.escape(name) + r"\s+in\b", src):
                 continue
+            # 带返回类型的闭包参数：`map { candidate -> (String?, String)? in`。
+            # 上面那条只认 `{ name in` 这种不写类型的写法，写了 `-> …` 就漏。
+            if re.search(r"\{\s*[^{}\n]*\b" + re.escape(name) + r"\b[^{}\n]*->", src):
+                continue
+            # `case` 模式里的绑定：`case let (a?, candidate?)` / `case let .foo(candidate)`。
+            # 绑定不是引用；名字在这类行里出现一次就不必再查。
+            if re.search(r"\bcase\b[^\n]*\b" + re.escape(name) + r"\b", src):
+                continue
             if re.search(r"\bfor\s*\(?[^)\n]*\b" + re.escape(name) + r"\b[^)\n]*\)?\s+in\b", src):
                 continue
             live.append(name)
