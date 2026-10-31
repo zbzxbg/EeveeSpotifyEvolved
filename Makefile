@@ -122,3 +122,13 @@ internal-stage::
 # or `swift --version` jumps a major.
 build-eeveeswiftprotobuf:
 	bash Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
+
+# ── 注释卫生 ────────────────────────────────────────────────────────────────
+# 注释只解释「代码现在做什么 / 为什么这样做 / 有什么坑」。
+# 截图编号、日志编号、dump 出来的符号表行号、与用户的对话、日期戳、试错轮次
+# 都属于开发过程，读者既无法核对也用不上 —— 这些由下面的脚本挡在门外。
+# 规则说明见 Scripts/check_comment_hygiene.py 的文档字符串。
+lint-comments:
+	python3 Scripts/check_comment_hygiene.py
+
+lint: lint-comments
