@@ -12,7 +12,14 @@ Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass l
 
 </div>
 
-<!-- Screenshots go here (6 images, side by side) once they are ready. -->
+<p align="center">
+  <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
+  <img src="docs/screenshots/lyrics.webp" width="15%" alt="Word-by-word lyrics with translation, credit line showing AMLL">
+  <img src="docs/screenshots/album.webp" width="15%" alt="Apple Music–style single page with a blurred backdrop">
+  <img src="docs/screenshots/playlist.webp" width="15%" alt="Playlist page with a single cover instead of the four-up mosaic">
+  <img src="docs/screenshots/artist.webp" width="15%" alt="Apple Music–style artist page">
+  <img src="docs/screenshots/home.webp" width="15%" alt="Home, with the liquid-glass tab bar">
+</p>
 
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
