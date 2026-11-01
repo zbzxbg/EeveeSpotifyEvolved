@@ -108,8 +108,8 @@ show_instagram_destination_description = "始终把 Instagram 作为分享目标
 amll_fuzzy_search = "AMLL 模糊搜索";
 amll_fuzzy_search_description = "选项生效需要开启「AMLL 优先」或歌词来源选择 AMLL。选项开启后AMLL的歌词搜索会从精确搜索转换为模糊搜索。";
 
-pseudo_word_by_word_lyrics = "伪逐字填充";
-pseudo_word_by_word_lyrics_description = "只影响「给了行时间轴但没给逐字」的歌词源（LRCLIB、PetitLyrics、没有逐字档的网易云与 Musixmatch、QQ 音乐与酷狗的 LRC 兜底）：这一行会按估算的演唱时长逐字填亮，而不是整行一次亮起。估算是近似的，可能比实际唱得快或慢；行起点不会被改动。";
+pseudo_word_by_word_lyrics = "启用伪逐字";
+pseudo_word_by_word_lyrics_description = "选项开启后会估算行级歌词时间轴，并补充成逐词歌词，但字级精度可能欠佳。字级精度取决于原本的行级歌词精度。";
 
 spicy_cross_validation = "SpicyLyrics交叉验证";
 spicy_cross_validation_description = "选项开启后会解决SpicyLyrics返回的歌词可能被打码和谐的问题。";

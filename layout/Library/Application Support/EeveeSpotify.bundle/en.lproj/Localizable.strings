@@ -114,8 +114,8 @@ show_instagram_destination_description = "Always show the Instagram share destin
 amll_fuzzy_search = "AMLL fuzzy search";
 amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or the lyrics source is AMLL. When on, AMLL's lyrics search changes from an exact search to a fuzzy search.";
 
-pseudo_word_by_word_lyrics = "Pseudo word-by-word fill";
-pseudo_word_by_word_lyrics_description = "Only affects providers that give line timing but no word timing (LRCLIB, PetitLyrics, NetEase or Musixmatch without word timing, and the LRC fallbacks of QQ Music and KuGou): the line fills in character by character over an estimated vocal length instead of lighting up all at once. The estimate is approximate, so the fill can run ahead of or behind the voice; the line's real start time never changes.";
+pseudo_word_by_word_lyrics = "Enable pseudo word-by-word";
+pseudo_word_by_word_lyrics_description = "When on, line-level lyrics timing is estimated and expanded into word-by-word lyrics. Character-level precision may be imperfect, and depends on how precise the original line-level lyrics are.";
 
 spicy_cross_validation = "Spicy Lyrics cross-validation";
 spicy_cross_validation_description = "Fixes the case where the lyrics Spicy Lyrics returns have words censored out.";
