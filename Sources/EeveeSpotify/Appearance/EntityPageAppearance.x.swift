@@ -174,8 +174,8 @@ enum EntityPageAppearance {
     /// 满幅页头里**Spotify 自己那张图**（`HeaderFullbleedCentralView` 的 `ArtworkWrapper`），页头那边每拍写。
     ///
     /// 它是 Spotify 给这一版页头**专用的宽图**、裁法也正是页头要的那一版 ⇒ hero 优先拿它当图源。
-    /// 反过来借那张 262pt 的方封面时：640² 铺到 414pt 宽，3× 屏上要放大到约 1240px，
-    /// 半张图是插值出来的 ⇒ 看着就是糊的。
+    /// 反过来说，借那张 262pt 的方封面时：它最大只有 640²，而页头满宽在 414pt / 2× 屏上就要 828px、
+    /// 3× 屏上要 1242px ⇒ 图是被放大出来的，越大越糊（专辑页没有第二张图，只有这一档可借）。
     static weak var fullbleedPictureView: UIView?
     /// 被我们藏掉的 wash 视图（**记原值**，关开关原样撤回）—— 见 `concealWash` / `revealWash`。
     private static var concealedWash: [
