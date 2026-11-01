@@ -116,6 +116,8 @@ final class QQMusicLyricsRepository: LyricsRepository {
 
         let payload = LyricsSourceHTTP.dig(lyricRoot, [Self.lyricKey, "data"]) as? [String: Any]
         let encoded = payload?["lyric"] as? String ?? ""
+        let romaPayload = payload?["roma"] as? String
+        let romaType = Self.intValue(payload?["roma_t"])
 
         // `qrc_t != 0` 表示 `lyric` 里是**加密的逐字 QRC**；等于 0 才是 base64 的明文 LRC。
         // 两个字段都可能是数字也可能是字符串（不同接口版本不一致），统一按 int 读。
@@ -125,7 +127,7 @@ final class QQMusicLyricsRepository: LyricsRepository {
                 writeDebugLog(
                     "[QQMusic] song \(songId): \(dto.lines.count) word-timed line(s) from QRC"
                 )
-                return dto
+                return Self.attachingOfficialRomaji(to: dto, payload: romaPayload, type: romaType)
             }
             writeDebugLog("[QQMusic] song \(songId): QRC would not decrypt — trying plain LRC")
         }
@@ -143,7 +145,81 @@ final class QQMusicLyricsRepository: LyricsRepository {
         }
 
         writeDebugLog("[QQMusic] song \(songId): \(dto.lines.count) line-timed line(s) from LRC")
-        return dto
+        return Self.attachingOfficialRomaji(to: dto, payload: romaPayload, type: romaType)
+    }
+
+    // MARK: - 官方罗马字
+
+    /// 把 QQ 的官方罗马字（`roma` 字段）贴到歌词上。
+    ///
+    /// 它和正文是**两个独立的加密 QRC**（同一套 `QrcText` 解），但**行不保证一一对应**：
+    /// 罗马音那侧还会下发只有时间、没有字的行（解析器会丢掉），主歌词这侧又刚剔掉了
+    /// 制作信息行。所以按**行起始时间**配，不按下标 —— 与 Musixmatch 把 richsync
+    /// 按行起点贴回行级是同一套做法。
+    ///
+    /// 只在这一首**有罗马音、且解得开**时才动 `officialRomanizedLines`；
+    /// 配对率低于 60% 视为“两份不是同一版词”，整份不用（宁可退回本地转换）。
+    private static func attachingOfficialRomaji(
+        to dto: LyricsDto,
+        payload romaPayload: String?,
+        type romaType: Int
+    ) -> LyricsDto {
+        guard romaType != 0,
+              let payload = romaPayload, !payload.isEmpty else { return dto }
+
+        guard let romaDto = QrcText.dto(fromEncrypted: payload) else {
+            writeDebugLog("[QQMusic] roma would not decrypt — keeping lyrics without official romaji")
+            return dto
+        }
+
+        var byStart: [Int: String] = [:]
+        for line in romaDto.lines {
+            guard let start = line.offsetMs else { continue }
+            let text = line.content.trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty, byStart[start] == nil else { continue }
+            byStart[start] = text
+        }
+        guard !byStart.isEmpty else { return dto }
+
+        var romaji: [String] = []
+        romaji.reserveCapacity(dto.lines.count)
+        var matched = 0
+        for line in dto.lines {
+            guard let start = line.offsetMs,
+                  let hit = byStart[start] ?? nearby(start, in: byStart) else {
+                romaji.append("")
+                continue
+            }
+            romaji.append(hit)
+            matched += 1
+        }
+
+        guard matched * 5 >= dto.lines.count * 3 else {
+            writeDebugLog(
+                "[QQMusic] official romaji matched \(matched)/\(dto.lines.count) line(s) — dropped"
+            )
+            return dto
+        }
+
+        var result = dto
+        result.officialRomanizedLines = romaji
+        // 语言写进 dto：显示层按它挑「该看哪个罗马化开关」（ja/zh/ko 三个键）。
+        if let languageCode = dto.lines.map(\.content).romanizationLanguageCode,
+           !languageCode.isEmpty {
+            result.languageCode = languageCode
+        }
+        writeDebugLog("[QQMusic] official romaji attached — \(matched)/\(dto.lines.count) line(s)")
+        return result
+    }
+
+    /// 两份 QRC 的行起点常差 1~2ms（同一次转码的取整不同；实测 `947` 对 `946`）⇒
+    /// 按最近的起点匹配，容差 100ms。逐毫秒扫是因为差值是 1 这种，不能用固定步长。
+    private static func nearby(_ start: Int, in map: [Int: String]) -> String? {
+        for delta in 1...100 {
+            if let hit = map[start + delta] { return hit }
+            if let hit = map[start - delta] { return hit }
+        }
+        return nil
     }
 
     /// QQ 的 `songName` / `singerName` / `albumName` 要 base64 的 UTF-8。
