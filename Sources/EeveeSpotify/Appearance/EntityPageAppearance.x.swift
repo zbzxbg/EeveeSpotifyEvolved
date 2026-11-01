@@ -1942,7 +1942,9 @@ enum EntityPageAppearance {
         }
 
         // 认不出来时**说一次原因**：下一份日志里这一行就是"官方歌单为什么还是没渐变"的答案。
-        if !didReportNoTarget, let host = EntityPageHeaderManager.headerHost, host.window != nil {
+        if !didReportNoTarget,
+           EntityPageHeaderManager.isHeaderVisible,
+           let host = EntityPageHeaderManager.headerHost, host.window != nil {
             didReportNoTarget = true
             writeDebugLog(
                 "[\(logTag)] no target — header host \(String(describing: type(of: host))) is on screen,"
@@ -1964,6 +1966,8 @@ enum EntityPageAppearance {
     ///
     /// 封面故意留 nil：满幅图不是方封面，交给 `ensureHero` 会被当成卡片套圆角。
     private static func fullbleedPlaylistTarget(in window: UIWindow) -> Target? {
+        // 页头必须还在**最前面那一页**上（被设置页 / 弹层盖住、或已经滑走的都不算）。
+        guard EntityPageHeaderManager.isHeaderVisible else { return nil }
         guard let picture = fullbleedPictureView, picture.window != nil else { return nil }
         guard let host = EntityPageHeaderManager.headerHost, host.window != nil,
               picture.isDescendant(of: host) || host.isDescendant(of: picture) else { return nil }

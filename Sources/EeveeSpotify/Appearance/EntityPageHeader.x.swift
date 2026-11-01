@@ -65,6 +65,10 @@ enum EntityPageHeaderManager {
     /// 也是满幅页头找页面根/找图源的起点。
     static var headerHost: UIView? { currentHeaderRoot }
 
+    /// 我们那一份页头是不是**还在最前面那一页上**（`refreshPinnedMore` 用的同一条判据）。
+    /// `EntityPageAppearance` 拿它挡"换页动画里上一页的满幅图"。
+    static var isHeaderVisible: Bool { isHeaderOnScreen() }
+
     /// 页面级备用入口的节流（BFS 最多 1500 个节点，不能每帧跑）。
     private static var lastPlaylistProbe: CFAbsoluteTime = 0
     /// 页头里那几个大圆头像（见 `headerAvatars`）—— 这一拍是每帧的，按 `layout` 缓存，换页才重扫。
