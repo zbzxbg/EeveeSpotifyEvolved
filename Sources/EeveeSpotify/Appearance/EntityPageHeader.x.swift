@@ -613,7 +613,7 @@ enum EntityPageHeaderManager {
         )
         // 把三段高度打进日志（每页一次）：藏掉某一段之后留下的空白，靠它定位空在哪两段之间。
         // 后面两个数是给"生成歌单的按键压到列表第一行"留的判据：我们的内容要 `need` 那么高，
-        // 而 Spotify 给页头留的那一格（日志里的 `host`）可能更矮 —— 内容比那一格高就会溢到列表上。
+        // 而 Spotify 给页头留的那一格（`host` 那一项）可能更矮 —— 内容比那一格高就会溢到列表上。
         logOnce(
             "playlistGeom_" + String(describing: ObjectIdentifier(headerRoot)),
             "playlist geometry — PL.Header \(Int(headerRoot.bounds.height.rounded()))pt,"
@@ -1083,6 +1083,8 @@ enum EntityPageHeaderManager {
             header.bringSubviewToFront(headerView)
         }
         currentHeader = headerView
+        // 专辑页的标题小一档：34pt 的长标题会折成两行大字（AM 的专辑页也不是那个尺寸）。
+        headerView.titleSize = .compact
         if cover == nil, !didLogAlbumBlindConceal {
             didLogAlbumBlindConceal = true
             writeDebugLog(

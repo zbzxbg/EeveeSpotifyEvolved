@@ -1970,7 +1970,7 @@ enum EntityPageAppearance {
             return Target(page: generated.page, cover: nil, color: generated.color, kind: .playlist)
         }
 
-        // 认不出来时**说一次原因**：下一份日志里这一行就是"官方歌单为什么还是没渐变"的答案。
+        // 认不出来时**说一次原因**：一行诊断就能回答"官方歌单为什么还是没渐变"。
         if !didReportNoTarget,
            EntityPageHeaderManager.isHeaderVisible,
            let host = EntityPageHeaderManager.headerHost, host.window != nil {

@@ -41,6 +41,12 @@ enum NowPlayingBackdrop {
     private static let minHeight: CGFloat = 150
     /// 径向白光晕的半径：kumone 是 `endRadius: 700`（**点**，不是比例）。
     private static let haloEndRadius: CGFloat = 700
+    /// 底板**明度上限**（HSB 的 brightness）。
+    ///
+    /// kumone 直接拿 `extracted_color` 当底，而白底封面的取色可以接近纯白 —— 曲名 / 歌词 /
+    /// 控件全是白字，那一屏就读不出来。压到这一档：色相与饱和度不动，白字读得清；
+    /// 暗封面本来就在这之下，一个字节都不变。
+    private static let maxBaseBrightness: CGFloat = 0.45
     /// 重找节流：我们那层不见了的时候，别每 0.3s 走一遍页面树。
     private static let researchInterval: CFAbsoluteTime = 1.0
 
@@ -375,9 +381,10 @@ enum NowPlayingBackdrop {
     /// 换色。`animated` 走 `CATransaction`（**不是** `UIView.animate` —— 这里动的是
     /// `CAGradientLayer.colors`，是 CALayer 的隐式动画，kumone 的 `.easeInOut(0.8)` 同义）。
     private static func applyColors(_ layers: Layers, from base: UIColor, animated: Bool) {
+        let readable = base.withBrightnessCapped(at: maxBaseBrightness)
         let colors: [CGColor] = [
-            base.cgColor,
-            base.darkened(by: 0.35).cgColor,
+            readable.cgColor,
+            readable.darkened(by: 0.35).cgColor,
         ]
 
         CATransaction.begin()
@@ -571,5 +578,14 @@ private extension UIColor {
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard getHue(&h, saturation: &s, brightness: &b, alpha: &a) else { return self }
         return UIColor(hue: h, saturation: s, brightness: max(0, b - amount), alpha: a)
+    }
+
+    /// 明度压到上限（保持色相 / 饱和度）—— 白封面取出来的近白色压成"深一点的同色"，
+    /// 白字才读得清。
+    func withBrightnessCapped(at ceiling: CGFloat) -> UIColor {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard getHue(&h, saturation: &s, brightness: &b, alpha: &a) else { return self }
+        guard b > ceiling else { return self }
+        return UIColor(hue: h, saturation: s, brightness: ceiling, alpha: a)
     }
 }

@@ -74,6 +74,14 @@ enum NowPlayingIOS27 {
     static let maxFieldBrightness: CGFloat = 0.38
     /// 平均色 → 字段色时的饱和度倍率（AM 的渐变会刻意过饱和专辑图）。
     static let fieldSaturationBoost: CGFloat = 1.45
+    /// 模糊底"白到白字读不清"的那条线：封面的平均亮度超过它，就在模糊底上再压一层黑。
+    ///
+    /// 模糊底是**整张封面**铺满整页，字段色只在它下面 —— 白封面时中间那块（曲名、
+    /// 歌词、时间、控件全是白字）就是一片白。压黑的量按"超出去多少"线性给，
+    /// 暗封面完全不加（观感与不压时一模一样）。
+    static let readableBackdropBrightness: CGFloat = 0.45
+    /// 可读性压黑的上限（白封面的极端情况）。
+    static let maxReadabilityScrimAlpha: CGFloat = 0.58
     /// 顶部导航那三件的 id。
     ///
     /// · `now-playing-minimize-button` —— 左上那颗向下箭头（48×48，`Tertiary`）；
@@ -137,6 +145,8 @@ enum NowPlayingIOS27 {
     static weak var fieldSolid: UIView?
     /// 封面的**模糊延续**（下半屏那块）：AM 的背景不是纯黑，是同一张封面的模糊拷贝再压暗。
     static weak var fieldBackdrop: UIImageView?
+    /// 上一次打日志时的可读性压黑量（只在明显变化时再打一行）。
+    private static var lastReadabilityScrim: CGFloat = -1
     static weak var fieldBlack: UIView?
     /// 上一次做模糊底用的源图 + 结果（同一张只算一次）。
     static var lastBackdropSource: UIImage?
@@ -1315,6 +1325,15 @@ enum NowPlayingIOS27 {
         let colour = fieldColour(from: image)
         lastFieldImage = image
         lastFieldTrackId = NowPlayingLyricsPlate.currentTrackId() ?? ""
+        // 模糊底是整张封面铺满整页 ⇒ 白封面时白字（曲名 / 歌词 / 控件）读不清，补一层黑。
+        let readability = readabilityScrimAlpha(for: image)
+        if abs(readability - lastReadabilityScrim) > 0.04 {
+            lastReadabilityScrim = readability
+            writeDebugLog(
+                "[\(logTag)] readability scrim \(Int(readability * 100))%"
+                    + " — the blurred cover is \(readability > 0 ? "too light for the white text" : "dark enough")"
+            )
+        }
         // 模糊底：同一张源图只算一次（换歌才重做）。
         if lastBackdropSource !== image {
             lastBackdropSource = image
@@ -1330,6 +1349,7 @@ enum NowPlayingIOS27 {
         let apply: () -> Void = {
             fieldSolid?.backgroundColor = colour
             fieldBackdrop?.image = lastBackdropImage
+            fieldBlack?.backgroundColor = UIColor.black.withAlphaComponent(readability)
         }
         // 只对我们自己的 wrapper 做交叉淡入（对外层 cell 做 transition 会连 Spotify 的内容一起快照）。
         if let wrapper = fieldHost, wrapper.window != nil {
@@ -1404,6 +1424,21 @@ enum NowPlayingIOS27 {
             brightness: min(max(brightness, 0.10), maxFieldBrightness),
             alpha: 1
         )
+    }
+
+    /// 模糊底需要补多少黑，白字才读得清（0 = 不补）。
+    ///
+    /// 模糊底就是这张封面缩到 48pt 再铺满整页，平均值几乎一样 ⇒ 用封面的平均色当代理。
+    /// 暗封面完全不加（观感与不压时一致），越白补得越多，封顶 `maxReadabilityScrimAlpha`。
+    private static func readabilityScrimAlpha(for image: UIImage) -> CGFloat {
+        guard let average = averageColour(of: image) else { return 0 }
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 1
+        guard average.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return 0 }
+        let brightness = 0.299 * red + 0.587 * green + 0.114 * blue
+        let over = brightness - readableBackdropBrightness
+        guard over > 0 else { return 0 }
+        let room = 1 - readableBackdropBrightness
+        return min(maxReadabilityScrimAlpha, over / room * maxReadabilityScrimAlpha)
     }
 
     /// 一张图的**平均色**（`CIAreaAverage` 渲染到 1×1 再读那一个像素）。

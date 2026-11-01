@@ -603,6 +603,10 @@ final class EntityPageHeaderView: UIView {
     /// （AM 的标题**很大** —— photo_1 里 `Abel Tesfaye` 一个人占掉大半个屏宽）：
     /// 22 → **34**，缩放基准同时从 `.title2` 换成 `.largeTitle`（`makeLabel` 走 `UIFontMetrics`，
     /// 基准不换的话辅助功能字号下的比例会不对）。
+    ///
+    /// ⚠️ 这是**艺人页 / 歌单页**的档位。**专辑页**用同一档会把长标题折成两行大字
+    /// （`ミステリー (feat. 重音テト)` 就是现场）—— 那一页的标题和"艺人名 + 元信息"排在同一列，
+    /// AM 那边也小一截 ⇒ 专辑页设 `titleSize = .compact`（见 `applyToAlbumPage`）。
     private let titleLabel = EntityPageHeaderView.makeLabel(
         style: .largeTitle, size: 34, weight: .bold, color: .label, lines: 2, alignment: .center
     )
@@ -626,6 +630,30 @@ final class EntityPageHeaderView: UIView {
 
     /// 创建者那一行背后那个 Spotify 控件（点了打开作者页）——被藏起来、只负责响应。
     private weak var creatorLink: UIView?
+
+    /// 标题字号档位：`large` = 艺人页 / 歌单页，`compact` = 专辑页。
+    enum TitleSize {
+        case large
+        case compact
+
+        var metrics: (style: UIFont.TextStyle, size: CGFloat) {
+            switch self {
+            case .large:   return (.largeTitle, 34)
+            case .compact: return (.title2, 24)
+            }
+        }
+    }
+
+    /// 换档位时重算字体（`contentHeight` 与 `layoutSubviews` 都靠 `sizeThatFits`，下一拍自然跟着变）。
+    var titleSize: TitleSize = .large {
+        didSet {
+            guard oldValue != titleSize else { return }
+            let metrics = titleSize.metrics
+            titleLabel.font = UIFontMetrics(forTextStyle: metrics.style)
+                .scaledFont(for: .systemFont(ofSize: metrics.size, weight: .bold))
+            setNeedsLayout()
+        }
+    }
 
     private static func makeLabel(
         style: UIFont.TextStyle, size: CGFloat, weight: UIFont.Weight,
