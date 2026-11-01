@@ -34,13 +34,6 @@ overwrite_configuration_description = "Sustituye la configuración remota por la
 
 do_not_replace_lyrics = "No reemplazar las letras";
 lyrics_source = "Fuente de letras";
-lyrics_source_description = "Puedes seleccionar la fuente de letras que prefieras.
-
-Genius: Ofrece la mejor calidad de letras, proporciona el mayor número de canciones y actualiza las letras más rápidamente. No ofrece ni ofrecerá sincronización temporal.
-
-LRCLIB: Es el servicio más abierto y ofrece letras sincronizadas con el tiempo. Sin embargo, carece de letras para muchas canciones.
-
-Musixmatch: El servicio que utiliza Spotify. Ofrece letras sincronizadas con el tiempo para muchas canciones, pero necesitarás un token de usuario para utilizar esta fuente.";
 lyrics_additional_info = "Si EeveeSpotify no puede encontrar una canción o procesar la letra, verás un mensaje: \"No se ha podido cargar la letra de esta canción\". La letra puede ser incorrecta para algunas canciones cuando se utiliza Genius debido a la forma en que el programa busca las canciones. He conseguido que funcione en la mayoría de los casos.";
 petitlyrics_description = "PetitLyrics: Ofrece un montón de letras en japonés sincronizadas con el tiempo y algunas internacionales.";
 

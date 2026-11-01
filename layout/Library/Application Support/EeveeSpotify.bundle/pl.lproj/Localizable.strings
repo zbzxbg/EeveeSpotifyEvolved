@@ -38,13 +38,6 @@ true_shuffle_dec = "Blokuje funkcję Smart Shuffle z darmowej wersji Spotify prz
 
 do_not_replace_lyrics = "Nie zastępuj tekstów";												
 lyrics_source = "Źródło tekstów";
-lyrics_source_description = "Możesz wybrać źródło które najbardziej Tobie odpowiada.
-
-Genius: Najlepsza jakość, najczęściej aktualizowane źródło. Nie jest i nigdy nie będzie zsynchronizowane z utworem.
-
-LRCLIB: Najbardziej otwarte źródło, oferuje zsynchronizowane teksty. Brakuje w nim jednak wielu utworów.
-
-Musixmatch: Używane przez Spotify, oferuje zsynchronizowane teksty dla wielu utworów. Wymaga tokenu użytkownika.";
 lyrics_additional_info = "Jeśli EeveeSpotify nie znajdzie utworu lub tekstu, pojawi się komunikat \"Nie udało się załadować tekstu\". Teksty z Genius mogą być błędne z powodu sposobu wyszukiwania utworów. W większości przypadków działa to poprawnie.";
 // ⛔ `spicylyrics_description` 于 2026-10-13 **从这里删除**（不是改词）：
 //    这条波兰语正文写的是"用 Spotify 的 token 取词、不需要额外配置"，而 2026-10-13 起

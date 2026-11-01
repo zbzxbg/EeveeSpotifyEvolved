@@ -39,13 +39,6 @@ true_shuffle_dec = "阻止 Spotify 的智慧型隨機播放將歌曲加入隨機
 
 do_not_replace_lyrics = "使用原生歌詞";
 lyrics_source = "歌詞來源";
-lyrics_source_description = "您可以選擇所喜歡的歌詞來源
-
-Genius: 最佳、最多、最新的歌詞來源，但不具備同步歌詞。
-
-LRCLIB: 最開放的歌詞來源，並且提供同步歌詞，然而缺失大量歌曲。
-
-Musixmatch: 大部分地區 Spotify 預設使用的來源。雖然提供大量的同步歌詞與翻譯，您需要擁有使用者權杖以使用。";
 lyrics_additional_info = "若 EeveeSpotify 無法提供歌詞，則您會看到「無法加載歌詞」提示（可隱藏）。以 Genius 為來源時可能會由於 EeveeSpotify 查找歌詞方式的問題而出現曲詞對應錯誤的問題，不過在大部分情況下可以正常運作。";
 petitlyrics_description = "PetitLyrics: 日本區 Spotify 預設歌詞來源，提供大量的已同步日文歌歌詞和部分外文歌歌詞。";
 

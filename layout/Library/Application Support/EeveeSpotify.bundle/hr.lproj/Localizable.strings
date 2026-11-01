@@ -33,13 +33,6 @@ overwrite_configuration_description = "Zamijenite udaljenu konfiguraciju s preuz
 
 do_not_replace_lyrics = "Ne zamjenjuj tekstove";
 lyrics_source = "Izvor tekstova";
-lyrics_source_description = "Možete odabrati željeni izvor tekstova.
-
-Genius: Nudi najbolju kvalitetu tekstova, pruža najviše pjesama i najbrže ažurira tekstove. Nije i nikada neće biti sinkroniziran s vremenom.
-
-LRCLIB: Najotvorenija usluga, nudi sinkronizirane tekstove. Međutim, nedostaju tekstovi za mnoge pjesme.
-
-Musixmatch: Usluga koju koristi Spotify. Pruža sinkronizirane tekstove za mnoge pjesme, ali potreban vam je korisnički token za korištenje ovog izvora.";
 lyrics_additional_info = "Ako EeveeSpotify ne može pronaći pjesmu ili obraditi tekstove, vidjet ćete poruku 'Nije moguće učitati tekstove za ovu pjesmu'. Tekstovi mogu biti pogrešni za neke pjesme kada se koristi Genius zbog načina na koji tweak pretražuje pjesme. U većini slučajeva sam to uspio riješiti.";
 petitlyrics_description = "PetitLyrics: Nudi mnoštvo sinkroniziranih japanskih i nekih međunarodnih tekstova.";
 

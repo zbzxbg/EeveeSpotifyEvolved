@@ -33,13 +33,6 @@ overwrite_configuration_description = "Substitueix la configuració remota amb l
 
 do_not_replace_lyrics = "No substituir les lletres";
 lyrics_source = "Font de les lletres";
-lyrics_source_description = "Pots seleccionar la font de lletres que prefereixis.
-
-Genius: Ofereix les lletres de més qualitat, té disponibles la major part de cançons i és el que actualitza més ràpidament les lletres, però no està ni mai estarà sincronitzat amb els temps de la cançó.
-
-LRCLib: És el servei més obert, ofereix lletres sincronitzades amb els temps de les cançons. No obstant, manca les lletres per moltes cançons.
-
-Musixmatch: És el servei que utilitza Spotify. Forneix lletres sincronitzades amb el temps de moltes cançons, però necessitaràs un token d'usuari per utilitzar-lo.";
 lyrics_additional_info = "Si l'EeveeSpotify no pot trobar una cançó o processar-ne la lletra, es mostrarà el missatge «No s'ha pogut carregar la lletra d'aquesta cançó». La lletra podria ser incorrecta per algunes de les cançons quan s'utilitza Genius degut al mètode que s'utilitza per trobar les cançons. He aconseguit fer-ho funcionar per la majoria de casos.";
 petitlyrics_description = "PetitLyrics: Ofereix una abundància de lletres sincronitzades amb els temps de les cançons en japonès i per algunes lletres de cançons internacionals.";
 

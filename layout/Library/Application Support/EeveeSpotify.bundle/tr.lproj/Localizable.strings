@@ -38,13 +38,6 @@ true_shuffle_dec = "Spotify'ın ücretsiz sürümündeki Akıllı Karıştırma 
 
 do_not_replace_lyrics = "Şarkı Sözlerini Değiştirme";
 lyrics_source = "Şarkı Sözü Kaynağı";
-lyrics_source_description = "Tercih ettiğiniz şarkı sözü kaynağını seçebilirsiniz.
-
-Genius: En kaliteli şarkı sözlerini sunar, en fazla şarkıyı barındırır ve sözleri en hızlı günceller. Zaman senkronizasyonu yoktur ve asla olmayacaktır.
-
-LRCLIB: Zaman senkronizeli şarkı sözleri sunan en açık servistir. Ancak birçok şarkı için sözleri eksiktir.
-
-Musixmatch: Spotify'ın kullandığı servistir. Birçok şarkı için zaman senkronizeli sözler sağlar, ancak bu kaynağı kullanmak için bir kullanıcı jetonuna ihtiyacınız vardır.";
 lyrics_additional_info = "EeveeSpotify bir şarkıyı bulamazsa veya sözleri işleyemezse \"Bu şarkı için şarkı sözleri yüklenemedi\" mesajını görürsünüz. Genius kullanılırken tweak'in şarkı arama yöntemi nedeniyle bazı şarkıların sözleri yanlış olabilir. Çoğu durumda çalışacak şekilde ayarlanmıştır.";
 petitlyrics_description = "PetitLyrics: Bol miktarda zaman senkronizeli Japonca ve bazı uluslararası şarkı sözleri sunar.";
 

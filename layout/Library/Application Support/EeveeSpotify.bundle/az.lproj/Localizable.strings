@@ -28,7 +28,6 @@ overwrite_configuration_description = "Uzaqdan alınmış konfiqurasiyanı Premi
 
 do_not_replace_lyrics = "Mahnı sözlərini dəyişmə";
 lyrics_source = "Mahnı sözü mənbəyi";
-lyrics_source_description = "İstədiyiniz mənbəni seçin:\n\nGenius: Ən yüksək keyfiyyətli mahnı sözlərini təqdim edir, sürətli yenilənir, lakin heç vaxt zamanla sinxronlaşdırılmış mahnı sözləri təqdim etmir və etməyəcək.\n\nLRCLIB: Tamamilə açıqdır, zamanla sinxronlaşdırılmış mahnı sözləri təqdim edir, lakin bəzi mahnılarda ümumiyyətlə mahnı sözləri yoxdur.\n\nMusixmatch: Spotify-ın istifadə etdiyi xidmət. Çox sayda mahnı üçün zamanla sinxronlaşdırılmış mahnı sözləri təqdim edir, lakin istifadəçi tokeni tələb edir.";
 lyrics_additional_info = "Əgər EeveeSpotify mahnını tapmasa və ya mahnı sözlərini işləyə bilməsə, 'Bu mahnıya mahnı sözləri tapılmadı' mesajı görünəcək. Genius istifadə edilərkən bəzi uyğunluq səhvləri ola bilər, çünki sistem öz axtarış metodundan istifadə edir — əksər hallarda düzgün işləyir.";
 petitlyrics_description = "PetitLyrics: Yapon dilində və bəzi beynəlxalq mahnılar üçün zamanla sinxronlaşdırılmış mahnı sözləri təqdim edir.";
 

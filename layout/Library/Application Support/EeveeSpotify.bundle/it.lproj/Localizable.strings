@@ -35,13 +35,6 @@ overwrite_configuration_description = "Sostituisci la configurazione remota con 
 
 do_not_replace_lyrics = "Non sostituire i testi";
 lyrics_source = "Fonte dei testi";
-lyrics_source_description = "Puoi selezionare, per i testi, la fonte che preferisci.
-
-Genius: Offre il maggior numero di canzoni, testi di qualità maggiore e li aggiorna più rapidamente, tuttavia i testi non sono e non saranno mai sincronizzati.
-
-LRCLIB: Il servizio più aperto, offre testi sincronizzati, ma manca di molti brani.
-
-Musixmatch: Lo stesso servizio utilizzato da Spotify. Fornisce testi sincronizzati per molte canzoni, ma è necessario un token utente per poter utilizzare questa fonte.";
 lyrics_additional_info = "Se EeveeSpotify non riesce a trovare una canzone oppure a elaborare i testi, vedrai il messaggio \"Impossibile caricare il testo per questa canzone\". I testi potrebbero comunque essere errati per alcune canzoni quando si usa Genius, a causa del modo in cui il tweak cerca le canzoni. Ho fatto in modo che funzioni nella maggior parte dei casi.";
 petitlyrics_description = "PetitLyrics: Offre numerosi testi sincronizzati in giapponese e altri internazionali.";
 

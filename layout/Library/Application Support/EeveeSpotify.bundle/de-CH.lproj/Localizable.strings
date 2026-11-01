@@ -28,13 +28,6 @@ overwrite_configuration_description = "Ersetz d'fernkonfiguration mit em dumpete
 // Lyrics
 
 lyrics_source = "Songtext Quelle";
-lyrics_source_description = "Du chasch d'Quelle uswähle, vo wo d'Lyrics cho söttend.
-
-Genius: Biätet de bescht Qualität, het de meiste Lieder und aktualisiert d'Lyrics am schnellste. Bütet aber kei Ziit synchronisierti Lyrics a.
-
-LRCLIB: Isch diä meischt offeni Quelle, wo Ziit synchronisierti Lyrics abütet. Het aber nid für alli Lieder Lyrics.
-
-Musixmatch: Isch d'Quelle, wo Spotify benutzt. Bütet Ziit synchronisierti Lyrics für meh Lieder a, aber du bruchsch en Token, um die Quelle z'nutze.";
 
 lyrics_additional_info = "Wänn de tweak keis lied oder the lyrics nid finde chan, wird en \"Chan kei Lyrics für das Lied lade\" Nachricht usgäh. Die Lyrics chönd falsch sii für einigi Lieder wäg de art wiä de tweak lieder suecht. Ich ha's aber i de meischte Fäll zum laufe bracht.";
 

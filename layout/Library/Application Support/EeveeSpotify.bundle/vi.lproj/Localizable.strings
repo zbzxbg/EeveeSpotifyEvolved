@@ -38,13 +38,6 @@ true_shuffle_dec = "Chặn tính năng Trộn bài thông minh của gói miễn
 
 do_not_replace_lyrics = "Không thay thế lời bài hát";
 lyrics_source = "Nguồn lời bài hát";
-lyrics_source_description = "Bạn có thể chọn nguồn lời bài hát mà bạn thích.
-
-Genius: Cung cấp lời bài hát có chất lượng tốt nhất, hỗ trợ nhiều bài hát nhất và cập nhật lời bài hát nhanh nhất, tuy nhiên lời bài hát sẽ không được đồng bộ thời gian (time-synced).
-
-LRCLIB: Dịch vụ mã nguồn mở, cung cấp lời bài hát đồng bộ thời gian. Tuy nhiên, nguồn này thiếu lời cho nhiều bài hát.
-
-Musixmatch: Dịch vụ mà Spotify sử dụng. Cung cấp lời bài hát khớp thời gian cho nhiều bài hát, nhưng bạn sẽ cần token người dùng để sử dụng nguồn này.";
 lyrics_additional_info = "Nếu EeveeSpotify không thể tìm thấy bài hát hoặc xử lý lời bài hát, bạn sẽ thấy thông báo \"Không thể tải lời bài hát cho bài hát này\". Lời bài hát có thể bị sai đối với một số bài hát khi sử dụng Genius do cách bản vá tìm kiếm bài hát. Tôi đã tối ưu để nó hoạt động tốt trong hầu hết các trường hợp.";
 petitlyrics_description = "PetitLyrics: Cung cấp nhiều lời bài hát tiếng Nhật và một số bài hát quốc tế đồng bộ thời gian.";
 

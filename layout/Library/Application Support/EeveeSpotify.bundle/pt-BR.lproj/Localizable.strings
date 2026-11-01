@@ -28,13 +28,6 @@ overwrite_configuration_description = "Substitui a configuração remota pela Pr
 // Lyrics
 
 lyrics_source = "Fonte de letras";
-lyrics_source_description = "Você pode selecionar a letra de sua preferência.
-
-Genius: Oferece letras de melhor qualidade, maior número de músicas e atualização das letras com mais rapidez. Não é e nunca será sincronizado com o tempo.
-
-LRCLIB: Serviço com maior abertura, oferecendo letras sincronizadas com o tempo. No entanto, faltam letras para muitas músicas.
-
-Musixmatch: Serviço Padrão do Spotify. Fornece letras sincronizadas com o tempo para muitas músicas, mas você precisará de um token de usuário para usar esta fonte.";
 lyrics_additional_info = "Se o ajuste não conseguir encontrar uma música ou processar a letra, você verá uma mensagem \"Não foi possível carregar a letra desta música\". A letra pode estar errada para algumas músicas ao usar o Genius devido a como o ajuste pesquisa músicas. Eu fiz isso funcionar na maioria dos casos.";
 petitlyrics_description = "PetitLyrics: Oferece muitas letras japonesas sincronizadas com o tempo e algumas letras internacionais.";
 

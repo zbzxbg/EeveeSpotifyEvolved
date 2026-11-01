@@ -34,13 +34,6 @@ overwrite_configuration_description = "Remplacez la configuration à distance pa
 
 do_not_replace_lyrics = "Ne pas remplacer les paroles";
 lyrics_source = "Source des paroles";
-lyrics_source_description = "Vous pouvez choisir la source des paroles que vous préférez.
-
-Genius : Offre les meilleures paroles en termes de qualité, propose le plus de titres et met à jour les paroles le plus rapidement. Ne sera jamais synchronisé avec le temps.
-
-LRCLIB : Le service le plus ouvert, offrant des paroles synchronisées. Cependant, il manque des paroles pour de nombreux titres.
-
-Musixmatch : Le service utilisé par Spotify. Propose des paroles synchronisées pour de nombreux titres, mais vous aurez besoin d'un jeton utilisateur pour utiliser cette source.";
 lyrics_additional_info = "Si le tweak ne parvient pas à trouver un titre ou à traiter les paroles, vous verrez le message « Impossible de charger les paroles de ce titre ». Les paroles peuvent être incorrectes pour certains titres avec Genius en raison de la façon dont le tweak recherche les titres. J'ai fait en sorte que cela fonctionne dans la plupart des cas.";
 petitlyrics_description = "PetitLyrics : Propose de nombreuses paroles japonaises synchronisées et quelques paroles internationales.";
 

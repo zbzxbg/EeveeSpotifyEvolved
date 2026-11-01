@@ -33,13 +33,6 @@ overwrite_configuration_description = "A távoli konfiguráció helyettesíthet�
 
 do_not_replace_lyrics = "Ne cserélje le a dalszövegeket";
 lyrics_source = "Szövegek forrása";
-lyrics_source_description = "Kiválaszthatja a kívánt szövegforrást.
-
-Genius: A legjobb minőségű dalszövegeket kínálja, a legtöbb dalt tartalmazza, és a leggyorsabban frissíti a dalszövegeket. Nem rendelkezik és soha nem is fog időszinkronizálni.
-
-LRCLIB: A legnyitottabb szolgáltatás, amely időszinkronizált dalszövegeket kínál. Sok dalhoz azonban nincs dalszöveg.
-
-Musixmatch: A Spotify által használt szolgáltatás. Sok dalhoz kínál időszinkronizált dalszövegeket, de ennek a forrásnak a használatához felhasználói tokenre van szükség.";
 lyrics_additional_info = "Ha az EeveeSpotify nem talál egy dalt vagy nem tudja feldolgozni a dalszövegeket, akkor a \„Nem sikerült betölteni a dalszövegeket\” üzenet jelenik meg. A Genius használatakor előfordulhat, hogy a dalszövegek nem megfelelőek egyes dalok esetében, mivel a tweak a dalok keresése miatt nem találja meg a dalszövegeket. A legtöbb esetben sikerült megoldanom.";
 petitlyrics_description = "PetitLyrics: Rengeteg időszinkronizált japán és néhány nemzetközi dalszöveget kínál.";
 

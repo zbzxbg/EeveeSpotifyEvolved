@@ -48,11 +48,11 @@ extension EeveeLyricsSettingsView {
 
         var isFirst = true
         for source in LyricsSourceOrder.defaultOrder {
-            guard let key = Self.sourceDescriptionKey(for: source) else { continue }
+            guard let description = Self.sourceDescription(for: source) else { continue }
             // 总说明与逐源介绍之间空一行；介绍之间保持原来的紧凑排法。
             text.append(isFirst ? "\n\n" : "\n")
             isFirst = false
-            text.append(key.localized)
+            text.append(description)
         }
 
         // 「听歌页样式是 spotify 原生时，自动优选不可选择」。
@@ -71,23 +71,23 @@ extension EeveeLyricsSettingsView {
         return Text(text)
     }
 
-    /// 每个源对应的介绍文案键。取不了词的项（不替换 / 自动选择本身 / 实验源）返回 nil。
+    /// 每个源对应的介绍文案。取不了词的项（不替换 / 自动选择本身 / 实验源）返回 nil。
     ///
-    /// 放在这里而不是 `LyricsSource` 上：它只服务这一段页脚，而 `LyricsSource` 是
-    /// 存储与链路都要用的类型，不该知道"设置页的某段文案存在哪个键"。
-    private static func sourceDescriptionKey(for source: LyricsSource) -> String? {
+    /// 返回的是**文案**而不是键名：`l10n_lint.py` 只认 `"key".localized` 这种字面量形状，
+    /// 键名一旦被塞进"返回键名的映射"就查不到，这些文案会被误报成 unused。
+    private static func sourceDescription(for source: LyricsSource) -> String? {
         switch source {
-        case .genius:          return "genius_description"
-        case .lrclib:          return "lrclib_description"
-        case .musixmatch:      return "musixmatch_description"
-        case .petit:           return "petitlyrics_description"
-        case .spicy:           return "spicylyrics_description"
-        case .netease:         return "netease_description"
-        case .amllTtml:        return "amll_description"
-        case .bini:            return "bini_description"
-        case .unison:          return "unison_description"
-        case .qqMusic:         return "qqmusic_description"
-        case .kugou:           return "kugou_description"
+        case .genius:          return "genius_description".localized
+        case .lrclib:          return "lrclib_description".localized
+        case .musixmatch:      return "musixmatch_description".localized
+        case .petit:           return "petitlyrics_description".localized
+        case .spicy:           return "spicylyrics_description".localized
+        case .netease:         return "netease_description".localized
+        case .amllTtml:        return "amll_description".localized
+        case .bini:            return "bini_description".localized
+        case .unison:          return "unison_description".localized
+        case .qqMusic:         return "qqmusic_description".localized
+        case .kugou:           return "kugou_description".localized
         case .notReplaced, .autoSelect, .appleMusicOfficialTtml:
             return nil
         }

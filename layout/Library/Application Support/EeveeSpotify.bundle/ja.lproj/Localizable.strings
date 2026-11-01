@@ -34,13 +34,6 @@ overwrite_configuration_description = "アプリの見た目や操作感をプ�
 
 do_not_replace_lyrics = "歌詞を置き換えない";
 lyrics_source = "歌詞の提供元";
-lyrics_source_description = "歌詞の提供元を選択できます。
-
-Genius：最高品質の歌詞を提供し、取り扱い曲数も豊富で歌詞の更新もすばやく行われますが、歌詞の同期はされません。
-
-LRCLIB：歌詞の同期はされますが、取り扱い曲数は少ないです。
-
-Musixmatch：Spotifyが使用している提供元です。取り扱い曲数が豊富ですが、使用するにはユーザートークンが必要です。";
 lyrics_additional_info = "歌詞を読み込めないときは、「この曲の歌詞を読み込めませんでした」と表示されます。検索方法のしくみの問題でGeniusを使用している場合は誤った歌詞が表示される場合があります。";
 petitlyrics_description = "PetitLyrics：日本語の歌詞が豊富で、一部の海外の曲の歌詞も表示できます。歌詞の同期もされます。";
 

@@ -28,13 +28,6 @@ overwrite_configuration_description = "Remote configuration lai dumped Premium c
 
 do_not_replace_lyrics = "Lyrics replace nagarne";
 lyrics_source = "Lyrics ko Source";
-lyrics_source_description = "Tapai le man parne lyrics ko source chhannu saknuhunchha.
-
-Genius: Sabai bhanda ramro lyric source, dherai geet haru ko lyrics dincha, ra sabai bhanda chito update garcha. Tara time-synced kaile hudaina.
-
-LRCLIB: Sabai bhanda khulla service, time-synced lyrics dincha. Tara, dherai geet haru ko lyrics hudaina.
-
-Musixmatch: Yo Service Spotify le use garcha. Dherai geet haru ko time-synced lyrics dincha, tara yo source use garna user token chahinchha.";
 lyrics_additional_info = "Yadi EeveeSpotify le kunai geet khojna nasake ya lyrics process garna nasake, tapai le 'Yo geet ko lyrics load garna sakiyena' vanera message dekhnuhunechha. Genius prayog garda kunai kunai geet haru ko lyrics galat huna sakcha tweak le kasari khojcha bhanne kurama adharit hunale. Maile yo sakesamma kaam garne banayeko chu.";
 petitlyrics_description = "PetitLyrics: Dherai Japanese ra kehi international geet haru ko time-synced lyrics dincha.";
 

@@ -31,13 +31,6 @@ overwrite_configuration_description = "Ersetze die Remote-Konfiguration mit der 
 
 do_not_replace_lyrics = "Lyrics nicht ersetzen";
 lyrics_source = "Lyrics-Quelle";
-lyrics_source_description = "Du kannst die gewünschte Lyrics-Quelle auswählen.
-
-Genius: Bietet qualitativ hochwertige Lyrics, deckt die meisten Songs ab und aktualisiert Lyrics am schnellsten. Keine und niemals zeitsynchronisierte Lyrics.
-
-LRCLIB: Der offenste Dienst, der zeitsynchronisierte Lyrics bietet. Hat jedoch bei vielen Songs keine Lyrics.
-
-Musixmatch: Der von Spotify verwendete Dienst. Bietet zeitsynchronisierte Lyrics für viele Songs, erfordert jedoch einen Benutzertoken, um diese Quelle zu verwenden.";
 lyrics_additional_info = "Wenn EeveeSpotify keinen Song findet oder die Lyrics nicht verarbeiten kann, wird die Meldung „Die Lyrics für diesen Song konnten nicht geladen werden“ angezeigt. Bei Genius könnten einige Lyrics falsch sein, da der Tweak Songs auf eine bestimmte Weise durchsucht. In den meisten Fällen funktioniert es jedoch.";
 petitlyrics_description = "PetitLyrics: Bietet viele zeitsynchronisierte japanische und einige internationale Lyrics.";
 
