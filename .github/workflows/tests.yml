@@ -249,6 +249,22 @@ jobs:
                  -o lyrics-match-tests
           ./lyrics-match-tests
 
+      # QQ 音乐加密 QRC 的 DES **变体**（`QrcDES`）。
+      # 它不是标准 3DES：S 盒 S4 有一处 `10`（标准是 `1`）、密钥扩展 PC-2 的 D 半段
+      # 下标整体少 1 ⇒ CommonCrypto 的 `kCCAlgorithm3DES` 解出来永远是随机字节
+      # （本仓库的 QQ 逐字档就是这么长期空转的）。这套实现是从
+      # `L-1124/QQMusicApi` 的 Python 版移植的，512 个 S 盒数字 + 三组位置换，
+      # 抄错一位的后果是"静默解不开"，所以这里用同一份 Python 生成的固定向量钉住：
+      # 单块钉 DES 本身，整段钉"解密 + zlib 解压"整条链路。
+      # （本机没有 Swift 工具链，这个测试只有在 CI 才会跑。）
+      - name: QQ QRC DES variant (decrypt + inflate)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/QrcDES.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/ZlibInflate.swift \
+                 Tests/QrcDES/main.swift \
+                 -o qrc-des-tests
+          ./qrc-des-tests
+
       # 2026-10-17：「SpicyLyrics 交叉验证」的**补词判据**（`LyricsCensorFill`）。
       # 三件事必须钉住：
       #   ① 检测正则 —— 上游的 `\b\*{3,}\b` 实测只命中 `f***k`，`my **** line` 一个都

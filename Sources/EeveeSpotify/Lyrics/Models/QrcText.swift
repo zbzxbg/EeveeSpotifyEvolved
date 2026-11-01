@@ -1,4 +1,3 @@
-import CommonCrypto
 import Foundation
 
 /// QQ 音乐 QRC 的解密与解析 —— 逐字那一档。
@@ -12,13 +11,15 @@ import Foundation
 ///
 /// ── 解密（三步，缺一不可）
 /// 1. **hex 解码**（云端返回的是十六进制字符串；也见过 base64 形态，两种都试）；
-/// 2. **3DES 解密**，ECB、无填充、密钥写死 24 字节；
+/// 2. **3DES 解密** —— ⚠️ 但**不是标准 3DES**：QQ 用的是自己的 DES 变体，
+///    S 盒与 PC-2 各有一处偏差，见 `QrcDES` 文件头；
 /// 3. **zlib 解压**（走 `ZlibInflate`，与酷狗 KRC 共用）。
 ///
-/// 密钥 `!@#)(*$%123ZXC!@!@#)(NHL` 与"三步顺序"由两个独立项目交叉验证过：
-/// `chenmozhijin/LDDC`（GPL-3.0，`core/decryptor/__init__.py` 的 `QRC_KEY`）与
-/// `naiyQAQ/pyqdes`（MIT，`main.cpp` 里三个 8 字节密钥 + `ddes/des/ddes` 的顺序）。
-/// 两者的字节序完全一致 —— 所以 `CCCrypt(kCCAlgorithm3DES, kCCDecrypt, ECB)` 就是它。
+/// ⚠️ 第 2 步是**踩过的坑**：这里原本用 CommonCrypto 的 `kCCAlgorithm3DES` 直接解，
+/// 看着"密钥对、ECB、无填充"样样都对，可解出来的首块永远不是 `78 9c` —— 因为
+/// QQ 加密时用的不是标准 DES。表现是**解密恒失败**：QRC 逐字档永远拿不到，
+/// 一路退化成行级 LRC 或直接没有歌词。换成 `QrcDES` 之后实测能解开
+/// （`晴天` / `夜に駆ける` 都验证过）。
 ///
 /// ── 与 yrc / KRC 的两处格式差异（都踩过）
 /// · **时间戳写在文字后面**：`词(起始,时长)`，不是 `(起始,时长)词`；
@@ -26,8 +27,8 @@ import Foundation
 /// 但不同来源的样本里也见过相对行首的，所以这里**逐行探测**（见 `lines(from:)`）。
 enum QrcText {
 
-    /// 24 字节 = k1|k2|k3，每个 8 字节。顺序错了会解出一堆乱码然后解压失败。
-    private static let tripleDESKey = Array("!@#)(*$%123ZXC!@!@#)(NHL".utf8)
+    /// DES 块长（8 字节）。密文长度必须是它的整数倍。
+    private static let blockSize = 8
 
     /// 解密后的正文有时裹在 `<Lyric_1 LyricType="1" LyricContent="…"/>` 里。
     private static let wrapperRegex = try? NSRegularExpression(
@@ -45,9 +46,19 @@ enum QrcText {
     // 加密串 → QRC 正文。任何一步不对都返回 nil。
     static func decode(_ encrypted: String) -> String? {
         guard let cipher = cipherBytes(encrypted) else { return nil }
-        guard let plain = threeDESDecrypt(cipher) else { return nil }
-        guard let inflated = ZlibInflate.inflate(plain) else { return nil }
-        return String(data: inflated, encoding: .utf8)
+        guard let plain = QrcDES.decrypt(cipher) else { return nil }
+        guard let inflated = ZlibInflate.inflate([UInt8](plain)) else { return nil }
+        return String(data: strippingBOM(inflated), encoding: .utf8)
+    }
+
+    /// 解出来的明文可能带 UTF-8 BOM（`EF BB BF`）。不剥的话第一行是 `\u{FEFF}[ti:…]`，
+    /// 后面所有 `^\\[` 开头的判据（标题头、时间行）都会对不上。
+    private static func strippingBOM(_ data: Data) -> Data {
+        guard data.count >= 3,
+              data[data.startIndex] == 0xEF,
+              data[data.startIndex + 1] == 0xBB,
+              data[data.startIndex + 2] == 0xBF else { return data }
+        return data.dropFirst(3)
     }
 
     /// 云端给的是 hex；备一份 base64 的尝试（代价只有几微秒，比"某个条目解不开"划算）。
@@ -55,9 +66,9 @@ enum QrcText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        if let hex = hexDecoded(trimmed), hex.count % kCCBlockSize3DES == 0 { return hex }
+        if let hex = hexDecoded(trimmed), hex.count % blockSize == 0 { return hex }
         if let base64 = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-           base64.count % kCCBlockSize3DES == 0 { return base64 }
+           base64.count % blockSize == 0 { return base64 }
         return nil
     }
 
@@ -74,37 +85,6 @@ enum QrcText {
             index = next
         }
         return Data(bytes)
-    }
-
-    private static func threeDESDecrypt(_ data: Data) -> Data? {
-        let blockSize = kCCBlockSize3DES
-        let keyLength = tripleDESKey.count
-        let total = data.count
-        guard total > 0, total % blockSize == 0 else { return nil }
-
-        var output = Data(count: total)
-        var moved = 0
-
-        let status: CCCryptorStatus = output.withUnsafeMutableBytes { outBytes in
-            data.withUnsafeBytes { inBytes in
-                tripleDESKey.withUnsafeBufferPointer { keyBytes in
-                    CCCrypt(
-                        CCOperation(kCCDecrypt),
-                        CCAlgorithm(kCCAlgorithm3DES),
-                        // ECB + **不加填充**：密文本身就是 8 的整数倍，加填充会把尾部弄坏。
-                        CCOptions(kCCOptionECBMode),
-                        keyBytes.baseAddress, keyLength,
-                        nil,
-                        inBytes.baseAddress, total,
-                        outBytes.baseAddress, total,
-                        &moved
-                    )
-                }
-            }
-        }
-
-        guard status == kCCSuccess, moved == total else { return nil }
-        return output
     }
 
     // MARK: - 解析
