@@ -21,6 +21,12 @@ struct LyricsContributor: Equatable {
         case maker
         /// 翻译者（目前只有网易云的 `transUser.nickname` 会给）。
         case translator
+        /// 作词者（目前只有 PetitLyrics 的 `writer` 会给）。
+        ///
+        /// ⚠️ 与 `.maker` 不是一回事：`.maker` 是"把这份歌词做出来的人"（Spicy Lyrics
+        /// 的社区同步），`.lyricist` 是"这首歌的词是谁写的"（曲目元信息，来自版权方）。
+        /// 混用会让中文那行把「作词」显示成「制作者」。
+        case lyricist
 
         /// l10n 键（与上游同名）。要显示的中文/英文在 `LyricsContributor+Display.swift`。
         var localizationKey: String {
@@ -28,6 +34,7 @@ struct LyricsContributor: Equatable {
             case .uploader:   return "lyrics_uploaded_by"
             case .maker:      return "lyrics_made_by"
             case .translator: return "lyrics_translated_by"
+            case .lyricist:   return "lyrics_written_by"
             }
         }
     }

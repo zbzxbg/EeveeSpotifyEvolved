@@ -91,6 +91,7 @@ class PetitLyricsRepository: LyricsRepository {
             searchResult.lyricsId,
             availableLyricsType: searchResult.availableLyricsType
         )
+        let credits = Self.contributors(searchResult: searchResult, song: song)
         
         guard let lyricsData = Data(base64Encoded: song.lyricsData) else {
             throw LyricsError.decodingError
@@ -170,7 +171,7 @@ class PetitLyricsRepository: LyricsRepository {
                 writeDebugLog("[Petit] dropped \(droppedBlankLines) blank line(s) (no text)")
             }
             writeDebugLog("[Petit] Words-synced lyrics — \(mergedLines.count) line(s)\(preserveWords ? " (word-by-word preserved)" : "")")
-            return LyricsDto(
+            var dto = LyricsDto(
                 lines: mergedLines.map {
                     LyricsLineDto(
                         content: $0.linestring,
@@ -183,6 +184,8 @@ class PetitLyricsRepository: LyricsRepository {
                     ? .canBeRomanized
                     : .original
             )
+            dto.providerContributors = credits
+            return dto
             
         case .plain:
             let stringLyrics = String(data: lyricsData, encoding: .utf8)!
@@ -191,15 +194,54 @@ class PetitLyricsRepository: LyricsRepository {
             let lines = stringLyrics.components(separatedBy: .newlines)
                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             writeDebugLog("[Petit] Plain lyrics — \(lines.count) line(s)")
-            return LyricsDto(
+            var dto = LyricsDto(
                 lines: lines.map { LyricsLineDto(content: $0) },
                 timeSynced: false,
                 romanization: lines.canBeRomanized ? .canBeRomanized : .original
             )
+            dto.providerContributors = credits
+            return dto
             
         default:
             throw LyricsError.decodingError
         }
+    }
+
+    // MARK: - 署名
+    //
+    // `<song>` 节点里有两条**曲目元信息**，与"这份词条是谁做的"必须分开：
+    // · `writer` = 作詞者（词是谁写的）⇒ `.lyricist`，中文那行显示「作词 X」；
+    // · `postUserName` = 把词条投到 PetitLyrics 的账号 ⇒ `.uploader`。
+    //
+    // 搜索与取词两个接口回的节点形状相同，但**取词那一次可能缺字段** ⇒ 逐字段回退到搜索结果。
+    // 官方词条的投稿者固定写作 `PetitLyrics`（那一栏不是一个真人）⇒ 按名字过滤掉，
+    // 否则每一首官方 J-POP 词下面都会挂一个"上传者 PetitLyrics"。
+    private static let officialPosterName = "PetitLyrics"
+
+    private static func contributors(
+        searchResult: PetitSong,
+        song: PetitSong
+    ) -> [LyricsContributor] {
+        var contributors: [LyricsContributor] = []
+
+        let writer = (searchResult.writer ?? song.writer ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !writer.isEmpty {
+            contributors.append(LyricsContributor(role: .lyricist, name: writer, url: nil))
+        }
+
+        let poster = (searchResult.postUserName ?? song.postUserName ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !poster.isEmpty, poster != Self.officialPosterName {
+            contributors.append(LyricsContributor(role: .uploader, name: poster, url: nil))
+        }
+
+        writeDebugLog(
+            "[Petit] credits — writer=\(writer.isEmpty ? "nil" : writer),"
+                + " poster=\(poster.isEmpty ? "nil" : poster),"
+                + " \(contributors.count) kept"
+        )
+        return contributors
     }
 
     private static var didDumpRawXml = false

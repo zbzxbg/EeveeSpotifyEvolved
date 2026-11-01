@@ -6,7 +6,7 @@
 //
 // 版式就照原生标题行那一块（缩略图右边、与缩略图顶对齐）：
 // · 第一行（原来放歌名的位置）= **歌词来源**（`NetEase` / `AMLL` / `Spicy Lyrics`…）；
-// · 第二行（原来放艺人的位置）= **上传者 / 制作者 / 翻译者**（有哪条写哪条）。
+// · 第二行（原来放艺人的位置）= **作词 / 上传者 / 制作者 / 翻译者**（有哪条写哪条）。
 //
 // 它只在 `NowPlayingIOS27.lyricsModeActive` 时可见；原生标题行在同一段里淡出
 // （见 `NowPlayingIOS27.placeTitleRow`），收起歌词时两者一起还原。
@@ -73,7 +73,7 @@ final class NowPlayingIOS27LyricsCreditView: UIView {
 //
 // 「缩略图右边那两行写什么」——只在这一处拼，视图负责显示。
 //
-// 第一行 = 歌词来源（`currentLyricsProvider`）；第二行 = 上传者 / 制作者 / 翻译者。
+// 第一行 = 歌词来源（`currentLyricsProvider`）；第二行 = 作词 / 上传者 / 制作者 / 翻译者。
 // **没有第二行就不画**（`subtitleLabel.isHidden`），不写"暂无署名"这种占位。
 @MainActor
 enum NowPlayingLyricsCreditInfo {

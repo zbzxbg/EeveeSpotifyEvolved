@@ -50,6 +50,9 @@ lyrics_uploaded_by = "上传者";
 // ★ 2026-10-24：页内歌词署名第二行用（目前只有网易云的 transUser 会给翻译者）。
 lyrics_translated_by = "翻译者";
 lyrics_source_unknown = "来源未知";
+// 作词者（曲目元信息）。与上面三条不是一组：那是社区贡献者（Spicy Lyrics 条款要求署名），
+// 这一条是「这首歌的词谁写的」，目前只有 PetitLyrics 的 `<writer>` 会给。
+lyrics_written_by = "作词";
 netease_description = "NetEase：即网易云音乐。";
 amll_description = "AMLL：提供高质量逐词歌词和丰富的歌词结构。具体介绍可前往amll.dev查看。";
 bini_description = "BiniLyrics：提供TTML歌词以及逐行歌词。";
