@@ -217,6 +217,14 @@ enum EntityPageAppearance {
     /// 「页头归我们管、但 `currentTarget()` 一条都没认出来」只报一次 —— 下一份日志就能看出
     /// 是哪一类页面漏了（不报的话只能看到"这页没有 [PageField] 行"）。
     private static var didReportNoTarget = false
+    /// 「窗口里找到了歌单封面元素、但那张图还是空的」只报一次。
+    ///
+    /// 这一档以前是**静默的**：那条路会返回一个 `color == nil` 的 Target，`tick` 认为
+    /// "这一页有目标" ⇒ 既不铺底、也不报"认不出页面"。官方歌单（满幅页头）上还留着一套
+    /// 不显示的普通歌单页头，先被这条捡走，整页就一张底都没有。
+    private static var didReportCoverlessArtwork = false
+    /// 「页头已经交下来一张满幅图、但后面某一条过不去」只报一次（带原因）。
+    private static var didReportFullbleedMiss = false
     /// Spotify 自己的按键里，**这些 id 片段**的一律藏掉（见 `hideChrome`）。
     ///
     /// `Components.UI.AddToButton` / `DownloadButton.Granular.None` /
@@ -1825,6 +1833,10 @@ enum EntityPageAppearance {
         didReportGenerated = false
         didReportFullbleed = false
         didReportNoTarget = false
+        didReportCoverlessArtwork = false
+        didReportFullbleedMiss = false
+        snapshotColourPicture = nil
+        snapshotColourValue = nil
         lastLoggedHex = nil
     }
 
@@ -1865,16 +1877,15 @@ enum EntityPageAppearance {
         guard !candidates.isEmpty else { return nil }
 
         let windowRect = window.bounds
-        func visibleArea(_ page: UIView) -> CGFloat {
-            guard page.window != nil, !page.isHidden, page.alpha > 0.01 else { return 0 }
-            let rect = page.convert(page.bounds, to: window)
-            let clipped = rect.intersection(windowRect)
-            guard !clipped.isNull else { return 0 }
-            return max(0, clipped.width) * max(0, clipped.height)
-        }
+        func visibleArea(_ page: UIView) -> CGFloat { onScreenArea(page, in: window) }
         let threshold = windowRect.width * windowRect.height * 0.15
         let visible = candidates.filter { visibleArea($0) >= threshold }
-        let pool = visible.isEmpty ? candidates : visible
+        // **只收还在屏上的**。以前 `visible` 为空时直接退回"全部候选"，于是一个已经翻到
+        // 后面 / 被盖住的旧实体页也能被选中：取色底铺上去，屏上却什么都没有
+        // （"官方歌单还是没有渐变"的另一条来路）。
+        let onScreen = candidates.filter { visibleArea($0) > 0 }
+        let pool = visible.isEmpty ? onScreen : visible
+        guard !pool.isEmpty else { return nil }
 
         func zPath(_ view: UIView) -> [Int] {
             var path: [Int] = []
@@ -1921,17 +1932,35 @@ enum EntityPageAppearance {
             )
         }
 
-        // 歌单页：root 的 id 还没拿到 ⇒ 从封面元素往上找"占满屏"的那一层。
-        if let art = firstView(in: window, withAnyIdentifier: coverIdentifiers),
-           let page = pageRoot(from: art, in: window) {
-            return Target(page: page, cover: art, color: coverColor(art), kind: .playlist)
-        }
-
         // **满幅页头**那一族（电台 / This Is / 音乐全纪录 / 官方编辑歌单）：页面里没有方封面，
-        // 上面两条都认不出 ⇒ 这一页一层取色底都没铺过。页头那边每拍把满幅那张图写在
-        // `fullbleedPictureView` 上（`EntityPageHeaderManager.applyOnce`），这里直接拿它取色。
+        // 页头那边每拍把满幅那张图写在 `fullbleedPictureView` 上
+        // （`EntityPageHeaderManager.applyOnce`），这里直接拿它取色。
+        //
+        // ⚠️ 这一档必须排在"普通歌单封面"前面：这一族常常还留着一套**不显示的**普通歌单页头
+        // （`PL.Header` + 空的 `ArtworkImage`）。先走下面那条会认到那张空封面、返回一个
+        // `color == nil` 的 Target ⇒ `ensureField` 静默返回，整页一张底都没有 ——
+        // 这正是"官方歌单还是没有渐变"的来源。
         if let fullbleed = fullbleedPlaylistTarget(in: window) {
             return fullbleed
+        }
+
+        // 歌单页：root 的 id 还没拿到 ⇒ 从封面元素往上找"占满屏"的那一层。
+        if let art = firstView(in: window, withAnyIdentifier: coverIdentifiers),
+           let page = pageRoot(from: art, in: window),
+           onScreenArea(page, in: window) > 0 {
+            // **没有颜色就不算目标**：`ensureField` 拿不到颜色只会 `return`，而 `tick` 会把
+            // "有一个 Target" 当成认出了这一页 ⇒ 既不铺底也不报"认不出页面"。
+            // 图还没加载时继续往下试生成歌单那一档，都不成立就交给最后一次诊断。
+            if let colour = coverColor(art) {
+                return Target(page: page, cover: art, color: colour, kind: .playlist)
+            }
+            if !didReportCoverlessArtwork {
+                didReportCoverlessArtwork = true
+                writeDebugLog(
+                    "[\(logTag)] playlist cover element found in the window but its image is still"
+                        + " empty — not painting a guess, waiting for the artwork"
+                )
+            }
         }
 
         // **生成歌单**（电台 / This Is / 音乐全览 / 每日推荐）：页头是 **slot 插件拼的**，
@@ -1967,18 +1996,52 @@ enum EntityPageAppearance {
     /// 封面故意留 nil：满幅图不是方封面，交给 `ensureHero` 会被当成卡片套圆角。
     private static func fullbleedPlaylistTarget(in window: UIWindow) -> Target? {
         // 页头必须还在**最前面那一页**上（被设置页 / 弹层盖住、或已经滑走的都不算）。
-        guard EntityPageHeaderManager.isHeaderVisible else { return nil }
         guard let picture = fullbleedPictureView, picture.window != nil else { return nil }
+        guard EntityPageHeaderManager.isHeaderVisible else {
+            reportFullbleedMiss("our header is not on screen")
+            return nil
+        }
+        // 从这里开始：页头确实交下来一张满幅图 ⇒ 这一页大概率就是这一族。
+        // 后面任何一条过不去都**说一次原因** —— 这一档以前是静默返回的
+        // （只表现为这页一行 `[PageField]` 都没有），根本看不出是哪一步。
         guard let host = EntityPageHeaderManager.headerHost, host.window != nil,
-              picture.isDescendant(of: host) || host.isDescendant(of: picture) else { return nil }
+              picture.isDescendant(of: host) || host.isDescendant(of: picture) else {
+            reportFullbleedMiss("the picture does not belong to the current header root")
+            return nil
+        }
         // 图要真的在屏上、而且在页头上半区（"翻页动画里的上一页"和"滚下去的旧图"都不算）。
         let frame = picture.convert(picture.bounds, to: window)
         guard frame.width >= 40, frame.height >= 40,
               window.bounds.intersects(frame),
-              frame.minY < window.bounds.height * 0.6 else { return nil }
-        guard let page = playlistPageRoot(near: picture, in: window),
-              pageIsInFront(page, in: window) else { return nil }
-        guard let colour = coverColor(picture) else { return nil }
+              frame.minY < window.bounds.height * 0.6 else {
+            reportFullbleedMiss("the picture is off screen (frame \(frameText(frame)))")
+            return nil
+        }
+        guard let page = playlistPageRoot(near: picture, in: window) else {
+            reportFullbleedMiss("no playlist page root above the picture")
+            return nil
+        }
+        guard onScreenArea(page, in: window) > 0 else {
+            reportFullbleedMiss("the page root is off screen")
+            return nil
+        }
+        guard pageIsInFront(page, in: window) || pageHoldsOurHeader(page) else {
+            reportFullbleedMiss(
+                "the page root \(String(describing: type(of: page))) is not the front page"
+            )
+            return nil
+        }
+        // 三种读法：`UIImageView.image` → `layer.contents` → 把这一帧缩出来取平均色。
+        // 满幅页头那一支容器里**不一定**装着 `UIImageView`（有的版本自己往 layer 里画），
+        // 只认第一条会让这一族永远取不到颜色。
+        guard let colour = coverColor(picture)
+                ?? layerContentsColour(picture)
+                ?? snapshotColour(of: picture) else {
+            reportFullbleedMiss(
+                "the picture carries no readable colour (\(String(describing: type(of: picture))))"
+            )
+            return nil
+        }
 
         if !didReportFullbleed {
             didReportFullbleed = true
@@ -1991,6 +2054,16 @@ enum EntityPageAppearance {
             )
         }
         return Target(page: page, cover: nil, color: colour, kind: .playlist)
+    }
+
+    /// 满幅页头那一档**没认出来**时的一次性说明（原因 + 停在哪个 VC）。
+    private static func reportFullbleedMiss(_ reason: String) {
+        guard !didReportFullbleedMiss else { return }
+        didReportFullbleedMiss = true
+        writeDebugLog(
+            "[\(logTag)] full-bleed page not painted — \(reason);"
+                + " front VC \(frontControllerDescription())"
+        )
     }
 
     /// 沿 responder chain 找类名含 `FreeTierPlaylist` 的 VC 的 view；找不到就退回
@@ -2020,6 +2093,17 @@ enum EntityPageAppearance {
     private static func pageIsInFront(_ page: UIView, in window: UIWindow) -> Bool {
         guard let front = frontController(in: window), let root = front.viewIfLoaded else { return true }
         return page === root || page.isDescendant(of: root) || root.isDescendant(of: page)
+    }
+
+    /// 这个页面**装着当前页头**吗 —— `pageIsInFront` 的备用判据。
+    ///
+    /// `frontController` 那一圈要穿过 Spotify 好几层容器 VC，任何一个环节换了形状都会
+    /// 让"最前面那个 VC"落到别处；而满幅页头这一族的页面根是从**页头自己的** responder chain
+    /// 找出来的，`headerHost` 一定属于当前那一页 ⇒ "页面里装着当前页头"同样能证明
+    /// 它不是正在滑走的那一页，而且不依赖 VC 树的形状。
+    private static func pageHoldsOurHeader(_ page: UIView) -> Bool {
+        guard let host = EntityPageHeaderManager.headerHost else { return false }
+        return host === page || host.isDescendant(of: page)
     }
 
     /// 日志用：窗口最前面那个 VC 的类名（认不出页面时用来说明"停在哪一层"）。
@@ -2081,6 +2165,7 @@ enum EntityPageAppearance {
         // 会被这一条抢先认下（页面根从"最外层 scroll 的父视图"变成 VC 的 view，垫底层换了一级）。
         // 早一两拍不铺底，比铺错一层便宜。
         guard let best else { return nil }
+        guard onScreenArea(page, in: window) > 0 else { return nil }
 
         let color = coverColor(best.view)
         if !didReportGenerated {
@@ -2210,9 +2295,53 @@ enum EntityPageAppearance {
         return nil
     }
 
+    /// 图**直接画在 `layer.contents`** 上的那一档（`Encore.ImageView` 这类不是 `UIImageView`）。
+    private static func layerContentsColour(_ root: UIView) -> UIColor? {
+        guard let image = firstLayerContentsImage(root.layer) else { return nil }
+        return averageColor(of: image)
+    }
+
+    private static func firstLayerContentsImage(_ layer: CALayer, depth: Int = 0) -> CGImage? {
+        if let image = layer.contents as? CGImage { return image }
+        guard depth < 4 else { return nil }
+        for sub in layer.sublayers ?? [] {
+            if let hit = firstLayerContentsImage(sub, depth: depth + 1) { return hit }
+        }
+        return nil
+    }
+
+    private static weak var snapshotColourPicture: UIView?
+    private static var snapshotColourValue: UIColor?
+
+    /// 最后一档：那一支容器既没有 `UIImageView`、`layer.contents` 也不是图
+    /// （自己 `draw(_:)` 画的）。把它**当前这一帧**缩到 8×8 取平均色。
+    ///
+    /// 只在"这一页真的有满幅页头"时才走到；成功一次就缓存，失败不缓存
+    /// （图晚一点加载出来的话，下一拍还能再试）。
+    private static func snapshotColour(of view: UIView) -> UIColor? {
+        guard view.bounds.width > 1, view.bounds.height > 1 else { return nil }
+        if snapshotColourPicture === view, let cached = snapshotColourValue { return cached }
+        let size = CGSize(width: 8, height: 8)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { _ in
+            _ = view.drawHierarchy(
+                in: CGRect(origin: .zero, size: size),
+                afterScreenUpdates: false
+            )
+        }
+        guard let colour = averageColor(of: image) else { return nil }
+        snapshotColourPicture = view
+        snapshotColourValue = colour
+        return colour
+    }
+
     /// 1×1 重绘 = 平均色（与听歌页那条路同一个思路，省掉一遍像素遍历）。
     private static func averageColor(of image: UIImage) -> UIColor? {
         guard let cgImage = image.cgImage else { return nil }
+        return averageColor(of: cgImage)
+    }
+
+    private static func averageColor(of cgImage: CGImage) -> UIColor? {
         var pixel: [UInt8] = [0, 0, 0, 0]
         guard let context = CGContext(
             data: &pixel,
@@ -2279,6 +2408,17 @@ enum EntityPageAppearance {
         cachedTopEdgeSource = image
         cachedTopEdgeColour = colour
         return colour
+    }
+
+    /// 这个视图在窗口里**还能看到多少面积**（点²）。0 = 不在屏上（隐藏 / 滑出去 / 被裁掉）。
+    ///
+    /// 取色底只能铺到"看得见的那一页"上：老的封面元素与上一页的实体页常常还挂在窗口里，
+    /// 只按 id / 类名去找会把底铺到看不见的那一层 —— 屏上就什么变化都没有。
+    private static func onScreenArea(_ view: UIView, in window: UIView) -> CGFloat {
+        guard view.window != nil, !view.isHidden, view.alpha > 0.01 else { return 0 }
+        let rect = view.convert(view.bounds, to: window).intersection(window.bounds)
+        guard !rect.isNull else { return 0 }
+        return max(0, rect.width) * max(0, rect.height)
     }
 
     // MARK: - 小工具
