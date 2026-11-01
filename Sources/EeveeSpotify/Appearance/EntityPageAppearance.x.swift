@@ -212,6 +212,11 @@ enum EntityPageAppearance {
     private static var didReportMissingColour = false
     /// 「这一页是**生成歌单**（插件拼页头）、取色底按 VC 那一层铺」只报一次。
     private static var didReportGenerated = false
+    /// 「这一页是**满幅页头**（电台 / 官方编辑歌单），取色底按页头那张图铺」只报一次。
+    private static var didReportFullbleed = false
+    /// 「页头归我们管、但 `currentTarget()` 一条都没认出来」只报一次 —— 下一份日志就能看出
+    /// 是哪一类页面漏了（不报的话只能看到"这页没有 [PageField] 行"）。
+    private static var didReportNoTarget = false
     /// Spotify 自己的按键里，**这些 id 片段**的一律藏掉（见 `hideChrome`）。
     ///
     /// `Components.UI.AddToButton` / `DownloadButton.Granular.None` /
@@ -1382,7 +1387,7 @@ enum EntityPageAppearance {
                 }
             }
 
-            guard depth < 12 else { continue }
+            guard depth < 10 else { continue }
             queue.append(contentsOf: view.subviews.map { ($0, inHeader, depth + 1) })
         }
 
@@ -1818,6 +1823,8 @@ enum EntityPageAppearance {
         didReport = false
         didReportMissingColour = false
         didReportGenerated = false
+        didReportFullbleed = false
+        didReportNoTarget = false
         lastLoggedHex = nil
     }
 
@@ -1920,13 +1927,103 @@ enum EntityPageAppearance {
             return Target(page: page, cover: art, color: coverColor(art), kind: .playlist)
         }
 
+        // **满幅页头**那一族（电台 / This Is / 音乐全纪录 / 官方编辑歌单）：页面里没有方封面，
+        // 上面两条都认不出 ⇒ 这一页一层取色底都没铺过。页头那边每拍把满幅那张图写在
+        // `fullbleedPictureView` 上（`EntityPageHeaderManager.applyOnce`），这里直接拿它取色。
+        if let fullbleed = fullbleedPlaylistTarget(in: window) {
+            return fullbleed
+        }
+
         // **生成歌单**（电台 / This Is / 音乐全览 / 每日推荐）：页头是 **slot 插件拼的**，
         // 既没有 `PL.Header`，封面也不叫上面那两个 id ⇒ 前两条都认不出，于是这一页
-        // **一层取色底都没铺**（"这三页的取色底没生效"）。判据放在最后：只有前两条都不成立时才走。
+        // **一层取色底都没铺**（"这三页的取色底没生效"）。判据放在最后：只有前面都不成立时才走。
         if let generated = generatedPlaylistPage(in: window) {
             return Target(page: generated.page, cover: nil, color: generated.color, kind: .playlist)
         }
+
+        // 认不出来时**说一次原因**：下一份日志里这一行就是"官方歌单为什么还是没渐变"的答案。
+        if !didReportNoTarget, let host = EntityPageHeaderManager.headerHost, host.window != nil {
+            didReportNoTarget = true
+            writeDebugLog(
+                "[\(logTag)] no target — header host \(String(describing: type(of: host))) is on screen,"
+                    + " but this page matched neither a cover id nor a generated/full-bleed shape"
+                    + " (fullbleed picture \(fullbleedPictureView == nil ? "absent" : "present"),"
+                    + " front VC \(frontControllerDescription()) )"
+            )
+        }
         return nil
+    }
+
+    /// **满幅页头**那一族的目标：页面根 + 取色。
+    ///
+    /// 页面根优先用**页面自己的 VC view**（taurus 的 `SGRPlaylistHeaderOf` 那条 responder chain）：
+    /// 垫在 scroll 里那一层会随内容滚，底就跟着脏到哪。找不到再退回 `pageRoot(from:)`。
+    ///
+    /// 判据要求那张图**属于当前页头容器**（`EntityPageHeaderManager.headerHost`）：
+    /// 换页时旧页可能还在窗口里，`fullbleedPictureView` 是个弱引用、不能只凭 `window != nil`。
+    ///
+    /// 封面故意留 nil：满幅图不是方封面，交给 `ensureHero` 会被当成卡片套圆角。
+    private static func fullbleedPlaylistTarget(in window: UIWindow) -> Target? {
+        guard let picture = fullbleedPictureView, picture.window != nil else { return nil }
+        guard let host = EntityPageHeaderManager.headerHost, host.window != nil,
+              picture.isDescendant(of: host) || host.isDescendant(of: picture) else { return nil }
+        // 图要真的在屏上、而且在页头上半区（"翻页动画里的上一页"和"滚下去的旧图"都不算）。
+        let frame = picture.convert(picture.bounds, to: window)
+        guard frame.width >= 40, frame.height >= 40,
+              window.bounds.intersects(frame),
+              frame.minY < window.bounds.height * 0.6 else { return nil }
+        guard let page = playlistPageRoot(near: picture, in: window),
+              pageIsInFront(page, in: window) else { return nil }
+        guard let colour = coverColor(picture) else { return nil }
+
+        if !didReportFullbleed {
+            didReportFullbleed = true
+            let size = picture.bounds.size
+            writeDebugLog(
+                "[\(logTag)] full-bleed playlist — the header picture is"
+                    + " \(Int(size.width.rounded()))x\(Int(size.height.rounded())),"
+                    + " colour #\(hex(of: colour)); this family has no square cover id,"
+                    + " so the field had never been painted here"
+            )
+        }
+        return Target(page: page, cover: nil, color: colour, kind: .playlist)
+    }
+
+    /// 沿 responder chain 找类名含 `FreeTierPlaylist` 的 VC 的 view；找不到就退回
+    /// "最外层 scroll 的父视图"（`pageRoot(from:)`）。
+    private static func playlistPageRoot(near view: UIView, in window: UIWindow) -> UIView? {
+        var responder: UIResponder? = view
+        var hops = 0
+        while let current = responder, hops < 40 {
+            hops += 1
+            if let controller = current as? UIViewController,
+               NSStringFromClass(type(of: controller)).contains("FreeTierPlaylist"),
+               let page = controller.viewIfLoaded, page.window != nil,
+               page.bounds.width > 120, page.bounds.height > 120 {
+                return page
+            }
+            responder = current.next
+        }
+        return pageRoot(from: view, in: window)
+    }
+
+    /// 解析出来的页面是不是**真的在最前面**。
+    ///
+    /// `fullbleedPictureView` 与 `headerHost` 都可能还是上一页的（两者都是弱引用，且页头那边
+    /// 故意不主动清 `currentHeaderRoot`）：换页动画里旧页还在窗口里，只看 `window != nil`
+    /// 会把取色底 / 状态栏色铺到正在滑出去的那一页上。这里要求它是窗口最前面那个 VC 的 view
+    /// 本身、或它的祖先 / 子孙 —— 新页的 VC 一旦成为 front，旧页就落选。
+    private static func pageIsInFront(_ page: UIView, in window: UIWindow) -> Bool {
+        guard let front = frontController(in: window), let root = front.viewIfLoaded else { return true }
+        return page === root || page.isDescendant(of: root) || root.isDescendant(of: page)
+    }
+
+    /// 日志用：窗口最前面那个 VC 的类名（认不出页面时用来说明"停在哪一层"）。
+    private static func frontControllerDescription() -> String {
+        guard let window = frontWindow(), let controller = frontController(in: window) else {
+            return "none"
+        }
+        return NSStringFromClass(type(of: controller))
     }
 
     /// **生成歌单那一族**的页面根与取色。
@@ -1939,16 +2036,28 @@ enum EntityPageAppearance {
     /// 封面视图**故意不交给 `Target.cover`**：`ensureHero` 的卡片分支会给它套 8pt 圆角
     /// （`roundCoverCard`），而那几张是**圆形头像**，改了就是"圆变方"。
     private static func generatedPlaylistPage(in window: UIWindow) -> (page: UIView, color: UIColor?)? {
-        guard let controller = frontController(in: window) else { return nil }
+        // 第一选择是窗口最前面那个 VC；它认不出歌单时，沿**页头自己的** responder chain 再找一次
+        // （插件拼页头的页面会挂在容器 VC 的某个孩子下面，`frontController` 的 `children.last`
+        // 可能刚好走不到）。
+        var controller = frontController(in: window)
+        if !playlistControllerMatches(controller) {
+            controller = playlistController(near: EntityPageHeaderManager.headerHost) ?? controller
+        }
+        guard let controller, playlistControllerMatches(controller),
+              let page = controller.viewIfLoaded else { return nil }
         let name = NSStringFromClass(type(of: controller))
-        guard name.contains("FreeTierPlaylist"), let page = controller.viewIfLoaded else { return nil }
+
+        // 页头那一块优先（`headerHost` 是页头容器）：图一定在它里面，不必从 VC view 一级级往下钻。
+        let searchRoot = EntityPageHeaderManager.headerHost.flatMap { host -> UIView? in
+            host.window != nil && host.isDescendant(of: page) ? host : nil
+        } ?? page
 
         var best: (view: UIView, area: CGFloat)?
-        var queue: [(view: UIView, depth: Int)] = [(page, 0)]
+        var queue: [(view: UIView, depth: Int)] = [(searchRoot, 0)]
         var visited = 0
         var hasPLHeader = false
         let headerBottom = page.bounds.height * 0.6
-        while !queue.isEmpty, visited < 600 {
+        while !queue.isEmpty, visited < 800 {
             let (view, depth) = queue.removeFirst()
             visited += 1
             // 普通歌单页也是 `FreeTierPlaylist`，但它有自己的封面 id、上面第二条已经接走了；
@@ -1960,7 +2069,7 @@ enum EntityPageAppearance {
                 let area = imageView.bounds.width * imageView.bounds.height
                 if area > (best?.area ?? 0) { best = (imageView, area) }
             }
-            guard depth < 8 else { continue }
+            guard depth < 10 else { continue }
             for sub in view.subviews { queue.append((sub, depth + 1)) }
         }
         guard !hasPLHeader else { return nil }
@@ -1983,6 +2092,26 @@ enum EntityPageAppearance {
             )
         }
         return (page, color)
+    }
+
+    /// 这一个 VC 是不是**歌单页**（普通 / This Is / 电台都算）。判据与页头那边一致：只看类名。
+    private static func playlistControllerMatches(_ controller: UIViewController?) -> Bool {
+        guard let controller else { return false }
+        return NSStringFromClass(type(of: controller)).contains("FreeTierPlaylist")
+    }
+
+    /// 沿 responder chain 找插着这个视图的**歌单 VC**（taurus 的 `SGRPlaylistHeaderOf` 那条）。
+    private static func playlistController(near view: UIView?) -> UIViewController? {
+        var responder: UIResponder? = view
+        var hops = 0
+        while let current = responder, hops < 40 {
+            hops += 1
+            if let controller = current as? UIViewController {
+                if playlistControllerMatches(controller) { return controller }
+            }
+            responder = current.next
+        }
+        return nil
     }
 
     /// 窗口**最前面**那一个 VC：presented → tab 选中项 → nav 可见项 → split 最后一项，

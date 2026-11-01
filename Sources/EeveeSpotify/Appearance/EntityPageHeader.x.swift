@@ -60,6 +60,11 @@ enum EntityPageHeaderManager {
     /// 重钉一次（见 `refreshPinnedMore`）。没有这个落点，`⋯` 就只能等下一次**布局回合**
     /// ——也就是必须有别的交互触发一次布局 —— 才回来。
     private static weak var currentHeaderRoot: UIView?
+
+    /// 当前这一页的**页头容器**（弱引用）。`EntityPageAppearance` 用它判断"这一页的页头确实归我们管"，
+    /// 也是满幅页头找页面根/找图源的起点。
+    static var headerHost: UIView? { currentHeaderRoot }
+
     /// 页面级备用入口的节流（BFS 最多 1500 个节点，不能每帧跑）。
     private static var lastPlaylistProbe: CFAbsoluteTime = 0
     /// 页头里那几个大圆头像（见 `headerAvatars`）—— 这一拍是每帧的，按 `layout` 缓存，换页才重扫。
