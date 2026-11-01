@@ -131,8 +131,13 @@ enum KrcText {
     // —— `type == 0` 是罗马字、`type == 1` 是译文，两者都是"每个时间行一组词"。
     // 下标与时间行严格一一对应（实测《夜に駆ける》69 个时间行 ↔ 69 组）。
     //
-    // 这里只取 `type == 0`；译文那条先不接（要接得先解决"译文语言是什么"）。
+    // 这里取 `type == 0`（罗马字）与 `type == 1`（译文）两条，按同一个行下标贴回去。
     private static func romanizedRows(from krc: String) -> [[String]]? {
+        languageRows(from: krc, type: 0)
+    }
+
+    /// `[language:<base64>]` 里指定 `type` 那一组（0 = 罗马字，1 = 译文）。
+    private static func languageRows(from krc: String, type: Int) -> [[String]]? {
         for row in krc.components(separatedBy: .newlines) {
             let trimmed = row.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("[language:"), trimmed.hasSuffix("]") else { continue }
@@ -142,7 +147,7 @@ enum KrcText {
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let entries = root["content"] as? [[String: Any]] else { return nil }
 
-            for entry in entries where (entry["type"] as? Int) == 0 {
+            for entry in entries where (entry["type"] as? Int) == type {
                 return entry["lyricContent"] as? [[String]]
             }
             return nil
@@ -203,11 +208,22 @@ enum KrcText {
         return dto(from: text)
     }
 
-    /// 制作信息行（`作词：X`）在这里剔掉：不是歌词，但里面的作词者要留下来当署名。
-    /// 过滤放在 dto 这一层而不是 `lines(from:)` 里，滤镜才能读到"剔之前"的行。
+    /// 两类非歌词行在这里剔掉：
+    /// · 制作信息（`词：X`）—— 不是歌词；
+    /// · 开头那条「歌名 - 歌手」页眉行（判据见 `LyricsCreditLine.isTitleArtistHeader`）。
+    /// 过滤放在 dto 这一层而不是 `lines(from:)` 里，罗马字/译文才能按**时间行下标**继续对齐。
+    ///
+    /// 署名只用文件头的 `[by:]`（众包贡献者），不再从正文的「词：」里取作词者 ——
+    /// 那是曲目元信息，不是"这份歌词是谁贡献的"。
     static func dto(from krc: String) -> LyricsDto? {
+        let tags = LyricsCreditLine.headerTags(in: krc)
         let all = rows(from: krc)
-        let kept = all.filter { !LyricsCreditLine.isCreditLine($0.line.content) }
+        let kept = all.filter {
+            !LyricsCreditLine.isCreditLine($0.line.content)
+                && !LyricsCreditLine.isTitleArtistHeader(
+                    $0.line.content, title: tags.title, artist: tags.artist
+                )
+        }
         guard !kept.isEmpty else { return nil }
 
         let lines = kept.map(\.line)
@@ -217,8 +233,8 @@ enum KrcText {
             timeSynced: true,
             romanization: contents.canBeRomanized ? .canBeRomanized : .original
         )
-        if let lyricist = all.compactMap({ LyricsCreditLine.lyricist(in: $0.line.content) }).first {
-            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
+        if let by = tags.by {
+            dto.providerContributors = [LyricsContributor(role: .uploader, name: by, url: nil)]
         }
         // 语言写进 dto：显示层按它挑"该看哪个罗马化开关"（ja/zh/ko 三个键）。
         if let languageCode = contents.romanizationLanguageCode, !languageCode.isEmpty {
@@ -227,6 +243,43 @@ enum KrcText {
         if let romanized = romanizedLines(from: krc, rows: kept) {
             dto.officialRomanizedLines = romanized
         }
+        if let translated = translatedLines(from: krc, rows: kept) {
+            dto.translation = LyricsTranslationDto(languageCode: "zh", lines: translated)
+        }
         return dto
+    }
+
+    // MARK: - 官方译文（`[language:…]` 的 `type == 1`）
+    //
+    // 与罗马字同一个容器、同一套下标：`type 0` 是罗马字、`type 1` 是译文（实测《夜に駆ける》
+    // 69 行 ↔ 69 组；译文前几组常是空串或「以下歌词翻译由…提供」那种声明行）。
+    // 译文与 `lines` 必须**同序同长**（显示层按下标配对，见 `LyricsDto.droppingBlankLinesForDisplay`）。
+    private static func translatedLines(
+        from krc: String,
+        rows: [(index: Int, line: LyricsLineDto)]
+    ) -> [String]? {
+        guard let source = languageRows(from: krc, type: 1), !source.isEmpty else { return nil }
+
+        var out: [String] = []
+        out.reserveCapacity(rows.count)
+        for row in rows {
+            guard row.index < source.count else { return nil }
+            let text = source[row.index].joined().trimmingCharacters(in: .whitespaces)
+            let original = row.line.content.trimmingCharacters(in: .whitespaces)
+            // 声明行、占位行、以及"译文和原文一模一样"（中文歌常见）都不算译文。
+            out.append(isTranslationNotice(text) || text == original ? "" : text)
+        }
+        guard out.contains(where: { !$0.isEmpty }) else { return nil }
+        return out
+    }
+
+    /// `[language:]` 里那几条声明行（不是歌词）。**窄判据**：只有在整行都像声明时才丢。
+    private static func isTranslationNotice(_ text: String) -> Bool {
+        guard !text.isEmpty else { return true }
+        if text == "//" { return true }
+        for marker in ["以下歌词", "翻译由", "本翻译作品", "TME享有", "QQ音乐"] {
+            if text.contains(marker) { return true }
+        }
+        return false
     }
 }

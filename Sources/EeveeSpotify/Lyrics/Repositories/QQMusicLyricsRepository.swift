@@ -95,7 +95,7 @@ final class QQMusicLyricsRepository: LyricsRepository {
                     "singerName": Self.base64(lead),
                     "songID": songId,
                     "songName": Self.base64(title),
-                    "trans": 0,
+                    "trans": 1,
                     "trans_t": 0,
                     "type": 0
                 ]
@@ -112,6 +112,8 @@ final class QQMusicLyricsRepository: LyricsRepository {
         let encoded = payload?["lyric"] as? String ?? ""
         let romaPayload = payload?["roma"] as? String
         let romaType = Self.intValue(payload?["roma_t"])
+        let transPayload = payload?["trans"] as? String
+        let transType = Self.intValue(payload?["trans_t"])
 
         // `qrc_t != 0` 表示 `lyric` 里是**加密的逐字 QRC**；等于 0 才是 base64 的明文 LRC。
         // 两个字段都可能是数字也可能是字符串（不同接口版本不一致），统一按 int 读。
@@ -121,7 +123,10 @@ final class QQMusicLyricsRepository: LyricsRepository {
                 writeDebugLog(
                     "[QQMusic] song \(songId): \(dto.lines.count) word-timed line(s) from QRC"
                 )
-                return Self.attachingOfficialRomaji(to: dto, payload: romaPayload, type: romaType)
+                let translated = Self.attachingTranslation(
+                    to: dto, payload: transPayload, type: transType
+                )
+                return Self.attachingOfficialRomaji(to: translated, payload: romaPayload, type: romaType)
             }
             writeDebugLog("[QQMusic] song \(songId): QRC would not decrypt — trying plain LRC")
         }
@@ -139,7 +144,8 @@ final class QQMusicLyricsRepository: LyricsRepository {
         }
 
         writeDebugLog("[QQMusic] song \(songId): \(dto.lines.count) line-timed line(s) from LRC")
-        return Self.attachingOfficialRomaji(to: dto, payload: romaPayload, type: romaType)
+        let translated = Self.attachingTranslation(to: dto, payload: transPayload, type: transType)
+        return Self.attachingOfficialRomaji(to: translated, payload: romaPayload, type: romaType)
     }
 
     // MARK: - 官方罗马字
@@ -207,13 +213,91 @@ final class QQMusicLyricsRepository: LyricsRepository {
     }
 
     /// 两份 QRC 的行起点常差 1~2ms（同一次转码的取整不同；实测 `947` 对 `946`）⇒
-    /// 按最近的起点匹配，容差 100ms。逐毫秒扫是因为差值是 1 这种，不能用固定步长。
-    private static func nearby(_ start: Int, in map: [Int: String]) -> String? {
-        for delta in 1...100 {
+    /// 按最近的起点匹配。逐毫秒扫是因为差值是 1 这种，不能用固定步长。
+    ///
+    /// 默认 100ms 给罗马字；译文是另一份 LRC，和正文分行不完全一致，用 250ms 更稳。
+    private static func nearby(_ start: Int, in map: [Int: String], maxDelta: Int = 100) -> String? {
+        for delta in 1...max(1, maxDelta) {
             if let hit = map[start + delta] { return hit }
             if let hit = map[start - delta] { return hit }
         }
         return nil
+    }
+
+    // MARK: - 官方译文
+
+    /// 把 QQ 的官方译文（`data.trans`）贴到歌词上。
+    ///
+    /// `trans_t != 0` 时 `trans` 是**加密的 LRC**（正文是 `[mm:ss.xx]译文` 行，不是逐字 QRC），
+    /// 用同一个 `QrcText.decode` 解就行；`trans_t == 0` 时是 base64 明文 LRC。
+    ///
+    /// 译文与正文**不保证一一对应**：前几行常是 `//` 或「TME享有本翻译作品的著作权」声明，
+    /// 也有整行漏翻的 ⇒ 按**行起点**配，配不到留空串（与 romaji 同一套做法）。
+    /// 配对率低于 40% 视为"两份不是同一版"，整份不用。
+    private static func attachingTranslation(
+        to dto: LyricsDto,
+        payload: String?,
+        type: Int
+    ) -> LyricsDto {
+        guard let payload, !payload.isEmpty else { return dto }
+
+        let text: String?
+        if type != 0 {
+            text = QrcText.decode(payload)
+        } else if let data = Data(base64Encoded: payload, options: .ignoreUnknownCharacters) {
+            text = String(data: data, encoding: .utf8)
+        } else {
+            text = nil
+        }
+        guard let text, !text.isEmpty else {
+            writeDebugLog("[QQMusic] translation would not decode — keeping lyrics without it")
+            return dto
+        }
+
+        var byStart: [Int: String] = [:]
+        for line in LrcText.lines(from: text) {
+            guard let start = line.offsetMs else { continue }
+            let value = line.content.trimmingCharacters(in: .whitespaces)
+            guard !value.isEmpty, !isTranslationNotice(value), byStart[start] == nil else { continue }
+            byStart[start] = value
+        }
+        guard !byStart.isEmpty else { return dto }
+
+        var lines: [String] = []
+        lines.reserveCapacity(dto.lines.count)
+        var matched = 0
+        for line in dto.lines {
+            let original = line.content.trimmingCharacters(in: .whitespaces)
+            guard let start = line.offsetMs,
+                  let hit = byStart[start] ?? nearby(start, in: byStart, maxDelta: 250),
+                  hit != original else {
+                lines.append("")
+                continue
+            }
+            lines.append(hit)
+            matched += 1
+        }
+
+        guard matched * 5 >= dto.lines.count * 2 else {
+            writeDebugLog(
+                "[QQMusic] official translation matched \(matched)/\(dto.lines.count) line(s) — dropped"
+            )
+            return dto
+        }
+
+        var result = dto
+        result.translation = LyricsTranslationDto(languageCode: "zh", lines: lines)
+        writeDebugLog("[QQMusic] official translation attached — \(matched)/\(dto.lines.count) line(s)")
+        return result
+    }
+
+    /// 译文里的声明/占位行（不是歌词）。
+    private static func isTranslationNotice(_ text: String) -> Bool {
+        if text == "//" { return true }
+        for marker in ["TME享有", "翻译作品", "以下歌词", "翻译由", "QQ音乐"] {
+            if text.contains(marker) { return true }
+        }
+        return false
     }
 
     /// QQ 的 `songName` / `singerName` / `albumName` 要 base64 的 UTF-8。

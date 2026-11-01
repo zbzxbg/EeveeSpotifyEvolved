@@ -57,12 +57,20 @@ enum LrcText {
 
     /// 解析成 dto。没有一行带时间轴 ⇒ nil（交给调用方判"这个源没答上来"）。
     ///
-    /// 制作信息行（`[00:02.25]词：周杰伦` —— QQ 的官方词就是这么下发的）在这里剔掉：
-    /// 它们**不是歌词**，但里面那一句「词：」正是署名要的作词者。过滤放在 dto 这一层
-    /// 而不是 `lines(from:)` 里，是为了让"剔之前"的行还能被 `LyricsCreditLine` 读到。
+    /// 两类非歌词行在这里剔掉：制作信息（`[00:02.25]词：周杰伦`）与开头的「歌名 - 歌手」页眉行
+    /// （判据见 `LyricsCreditLine.isTitleArtistHeader`，用的是同一份 `[ti:]/[ar:]` 文件头）。
+    ///
+    /// 署名只认 `[by:]` 里的**众包贡献者**，不再从正文的「词：」里取作词者 ——
+    /// 那是曲目元信息，不是"这份歌词是谁贡献的"。
     static func dto(from text: String) -> LyricsDto? {
+        let tags = LyricsCreditLine.headerTags(in: text)
         let all = lines(from: text)
-        let kept = all.filter { !LyricsCreditLine.isCreditLine($0.content) }
+        let kept = all.filter {
+            !LyricsCreditLine.isCreditLine($0.content)
+                && !LyricsCreditLine.isTitleArtistHeader(
+                    $0.content, title: tags.title, artist: tags.artist
+                )
+        }
         guard !kept.isEmpty else { return nil }
         let contents = kept.map(\.content)
         var dto = LyricsDto(
@@ -70,8 +78,8 @@ enum LrcText {
             timeSynced: true,
             romanization: contents.canBeRomanized ? .canBeRomanized : .original
         )
-        if let lyricist = all.compactMap({ LyricsCreditLine.lyricist(in: $0.content) }).first {
-            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
+        if let by = tags.by {
+            dto.providerContributors = [LyricsContributor(role: .uploader, name: by, url: nil)]
         }
         return dto
     }

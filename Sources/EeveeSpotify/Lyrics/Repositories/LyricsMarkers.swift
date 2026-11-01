@@ -241,6 +241,11 @@ enum LyricsCreditLine {
         "作词", "作詞", "词", "詞", "LYRICIST", "WRITTEN BY", "LYRICS BY"
     ]
 
+    /// 「歌名 - 歌手」那条页眉行的分隔符（半角/全角破折号，两侧必须有空格）。
+    private static let titleArtistSeparator = try? NSRegularExpression(pattern: "\\s[-–—－]\\s")
+    /// 文件头标签 `[ti:…]` / `[ar:…]` / `[by:…]`。
+    private static let headerTag = try? NSRegularExpression(pattern: "\\[([A-Za-z]+):([^\\]]*)\\]")
+
     /// 冒号前是角色（可能多个），冒号后是名字。
     struct Parsed {
         let roles: [String]
@@ -321,5 +326,63 @@ enum LyricsCreditLine {
             line = String(line[line.index(after: close)...]).trimmingCharacters(in: .whitespaces)
         }
         return line
+    }
+
+    // MARK: - 歌词文件头（`[ti:]` / `[ar:]` / `[by:]`）
+
+    /// 歌词文件头里的三样：歌名 / 歌手 / **这份词是谁贡献的**。
+    ///
+    /// 酷狗 KRC、QQ 的 QRC 与纯文本 LRC 开头都是同一套 `[ti:]/[ar:]/[by:]` 标签：
+    /// · `ti` / `ar` 用来认「歌名 - 歌手」那条页眉行；
+    /// · `by` 是**众包歌词的贡献者**（上传者），不是曲目元信息里的作词者。
+    ///
+    /// ⚠️ **不能要求整行就是标签**：QQ 的 QRC 把正文塞进 `LyricContent="…"` 属性，
+    /// 第一个标签前面带着 `Lyric_1 LyricType="1" LyricContent="`（实测 `ti` 因此一直读不到，
+    /// 连带「歌名 - 歌手」那条页眉行也没被删）。这里按行找 `[key:value]`，不要求行首。
+    ///
+    /// 只扫前 80 行：真歌词里偶尔会有 `[xxx]` 形式的行，不该把整份文件当标签表读。
+    static func headerTags(in text: String) -> (title: String?, artist: String?, by: String?) {
+        var title: String?
+        var artist: String?
+        var by: String?
+        guard let tag = headerTag else { return (nil, nil, nil) }
+        var scanned = 0
+        for rawLine in text.components(separatedBy: .newlines) {
+            scanned += 1
+            if scanned > 80 { break }
+            let ns = rawLine as NSString
+            let matches = tag.matches(in: rawLine, range: NSRange(location: 0, length: ns.length))
+            for match in matches where match.numberOfRanges >= 3 {
+                let key = ns.substring(with: match.range(at: 1)).lowercased()
+                let value = ns.substring(with: match.range(at: 2))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !value.isEmpty else { continue }
+                switch key {
+                case "ti": if title == nil { title = value }
+                case "ar": if artist == nil { artist = value }
+                case "by": if by == nil { by = value }
+                default: break
+                }
+            }
+        }
+        return (title, artist, by)
+    }
+
+    /// 「**歌名 - 歌手**」这种页眉行（酷狗 / QQ 的歌词第一行常是它，形如 `[00:00.00]歌名 - 歌手`）。
+    ///
+    /// 它不是歌词，但既不是 `词：` 那种制作信息、也带时间戳，前面几道过滤器都接不住。
+    /// 判据用同一份文件头：破折号左边要等于 `[ti:]`（允许括号后缀），右边要含 `[ar:]`。
+    /// **两条都成立才删** —— 真歌词里的破折号不会被这一条误伤。
+    static func isTitleArtistHeader(_ text: String, title: String?, artist: String?) -> Bool {
+        guard let title, let artist else { return false }
+        let ns = text as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        guard let match = titleArtistSeparator?.firstMatch(in: text, range: full),
+              match.range.location != NSNotFound else { return false }
+        let left = ns.substring(to: match.range.location)
+        let right = ns.substring(from: NSMaxRange(match.range))
+        guard !left.isEmpty, !right.isEmpty else { return false }
+        guard LyricsMatch.titlesMatch(left, title) else { return false }
+        return LyricsMatch.sameArtist(right, artist)
     }
 }

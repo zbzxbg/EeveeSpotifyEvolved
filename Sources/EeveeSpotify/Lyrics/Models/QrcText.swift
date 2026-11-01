@@ -95,8 +95,14 @@ enum QrcText {
     }
 
     static func dto(from qrc: String) -> LyricsDto? {
+        let tags = LyricsCreditLine.headerTags(in: qrc)
         let all = lines(from: qrc)
-        let kept = all.filter { !LyricsCreditLine.isCreditLine($0.content) }
+        let kept = all.filter {
+            !LyricsCreditLine.isCreditLine($0.content)
+                && !LyricsCreditLine.isTitleArtistHeader(
+                    $0.content, title: tags.title, artist: tags.artist
+                )
+        }
         guard !kept.isEmpty else { return nil }
         let contents = kept.map(\.content)
         var dto = LyricsDto(
@@ -104,10 +110,10 @@ enum QrcText {
             timeSynced: true,
             romanization: contents.canBeRomanized ? .canBeRomanized : .original
         )
-        // QQ 官方词开头那一串「词：/曲：/编曲：/制作人：」带时间戳下发，剔掉之后
-        // 里面的「词：」正好是作词者（见 `LyricsCreditLine`）。
-        if let lyricist = all.compactMap({ LyricsCreditLine.lyricist(in: $0.content) }).first {
-            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
+        // 署名只认文件头 `[by:]` 里的**众包贡献者**（QQ Music 把"歌词贡献者"写在这里），
+        // 不再从正文的「词：」里取作词者。
+        if let by = tags.by {
+            dto.providerContributors = [LyricsContributor(role: .uploader, name: by, url: nil)]
         }
         return dto
     }

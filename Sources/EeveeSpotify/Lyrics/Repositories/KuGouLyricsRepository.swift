@@ -89,7 +89,12 @@ final class KuGouLyricsRepository: LyricsRepository {
                 for candidate in candidates.prefix(Self.maxTriedCandidates) {
                     guard downloadsLeft > 0 else { return nil }
                     downloadsLeft -= 1
-                    guard let dto = tryDownload(candidate) else { continue }
+                    guard let downloaded = tryDownload(candidate) else { continue }
+                    var dto = downloaded
+                    // 众包贡献者来自**条目元信息**（`nickname` / `transname`），
+                    // 覆盖 KRC 文件头 `[by:]` 那一档（酷狗这边通常为空）。
+                    let contributors = Self.contributors(for: candidate)
+                    if !contributors.isEmpty { dto.providerContributors = contributors }
 
                     if expectsCJK, Self.bodyLooksRomanized(dto) {
                         writeDebugLog(
@@ -103,6 +108,8 @@ final class KuGouLyricsRepository: LyricsRepository {
                     writeDebugLog(
                         "[KuGou] lyrics \(candidate.id) gave \(dto.lines.count) line(s)"
                             + (dto.lines.contains { !($0.words ?? []).isEmpty } ? ", word timed" : "")
+                            + (dto.translation?.lines.contains { !$0.isEmpty } == true ? ", translated" : "")
+                            + (contributors.isEmpty ? "" : ", credit \(contributors.map(\.name).joined(separator: "/"))")
                     )
                     return dto
                 }
@@ -322,6 +329,10 @@ final class KuGouLyricsRepository: LyricsRepository {
         let isUserUploaded: Bool
         /// 曲库返回顺序（同分兜底）。
         let order: Int
+        /// **这份歌词的众包贡献者**（酷狗回包的 `nickname`）与译文贡献者（`transname`）。
+        /// 曲目元信息里的作词者不从这里取 —— 那是另一回事。
+        let uploader: String?
+        let translator: String?
     }
 
     private func lyricCandidates(for song: SongHit, wanted: [String], trackMs: Int) -> [Candidate] {
@@ -333,7 +344,9 @@ final class KuGouLyricsRepository: LyricsRepository {
                     accessKey: song.albumAudioId,
                     durationMs: song.durationMs,
                     isUserUploaded: false,
-                    order: 0
+                    order: 0,
+                    uploader: nil,
+                    translator: nil
                 )
             ]
         }
@@ -376,7 +389,9 @@ final class KuGouLyricsRepository: LyricsRepository {
                     accessKey: accessKey,
                     durationMs: durationMs,
                     isUserUploaded: (entry["product_from"] as? String) == "ugc",
-                    order: out.count
+                    order: out.count,
+                    uploader: Self.nonEmptyString(entry["nickname"]),
+                    translator: Self.nonEmptyString(entry["transname"])
                 )
             )
         }
@@ -394,6 +409,25 @@ final class KuGouLyricsRepository: LyricsRepository {
         if let text = value as? String { return text }
         if let number = value as? NSNumber { return number.stringValue }
         return nil
+    }
+
+    /// 非空字符串（酷狗把这些字段下发为空串而不是省略）。
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        guard let text = string(in: value)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// 这一条歌词的**众包贡献者**：上传者 + （不同人的）译文贡献者。
+    private static func contributors(for candidate: Candidate) -> [LyricsContributor] {
+        var out: [LyricsContributor] = []
+        if let uploader = candidate.uploader {
+            out.append(LyricsContributor(role: .uploader, name: uploader, url: nil))
+        }
+        if let translator = candidate.translator, translator != candidate.uploader {
+            out.append(LyricsContributor(role: .translator, name: translator, url: nil))
+        }
+        return out
     }
 
     /// JSON 里的整数可能是 `NSNumber`，也可能是 `"127"` 这样的字符串。

@@ -311,6 +311,7 @@ jobs:
                  Sources/EeveeSpotify/Lyrics/Models/LyricsError.swift \
                  Sources/EeveeSpotify/Lyrics/Models/LyricsWordDto.swift \
                  Sources/EeveeSpotify/Lyrics/Models/LyricsBackgroundVocalDto.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsMatch.swift \
                  Sources/EeveeSpotify/Lyrics/Repositories/LyricsMarkers.swift \
                  Tests/AmllTtmlRuby/main.swift \
                  -o amll-ttml-ruby-tests
@@ -327,6 +328,7 @@ jobs:
                  Sources/EeveeSpotify/Lyrics/Models/LyricsError.swift \
                  Sources/EeveeSpotify/Lyrics/Models/LyricsWordDto.swift \
                  Sources/EeveeSpotify/Lyrics/Models/LyricsBackgroundVocalDto.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsMatch.swift \
                  Sources/EeveeSpotify/Lyrics/Repositories/LyricsMarkers.swift \
                  Tests/AmllTtmlApple/main.swift \
                  -o amll-ttml-apple-tests
