@@ -24,10 +24,16 @@ final class QQMusicLyricsRepository: LyricsRepository {
     private init() {}
 
     private static let api = "https://u.y.qq.com/cgi-bin/musicu.fcg"
+    /// 老的网页搜索接口。`musicu.fcg` 的搜索偶尔整段不返回结果（同一请求隔几秒重发就恢复，code=2001），
+    /// 这一条是同一份曲库的另一个入口，用来兜住那种情况。
+    private static let legacySearchAPI = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp"
     private static let lyricKey = "music.musichallSong.PlayLyricInfo.GetPlayLyricInfo"
 
     /// QQ 的 `interval` 是整秒，比别的源粗；6 秒容差是 Taurus 用的值。
     private static let lengthSlackSeconds = 6
+
+    /// 歌手对不上时（Spotify 给罗马字、QQ 写给日文/中文名）只认**更紧**的时长差。
+    private static let tightSlackSeconds = 2
 
     private static let headers = [
         "Referer": "https://y.qq.com/",
@@ -47,32 +53,17 @@ final class QQMusicLyricsRepository: LyricsRepository {
         let seconds = (query.durationMs ?? 0) / 1000
 
         writeDebugLog("[QQMusic] searching \"\(title)\" — \(lead)")
-        let searchBody: [String: Any] = [
-            "comm": ["ct": "19", "cv": "1859", "uin": "0"],
-            "req": [
-                "module": "music.search.SearchCgiService",
-                "method": "DoSearchForQQMusicDesktop",
-                "param": [
-                    "query": "\(title) \(lead)",
-                    "search_type": 0,
-                    "grp": 1,
-                    "num_per_page": 8,
-                    "page_num": 1
-                ]
-            ]
-        ]
-
-        guard let searchRoot = LyricsSourceHTTP.postJSON(
-            url, body: searchBody, headers: Self.headers, tag: "QQMusic"
-        ) else {
-            throw LyricsError.noSuchSong
+        var titles: [String] = []
+        for variant in [title] + query.titleVariants {
+            let trimmed = variant.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !titles.contains(trimmed) else { continue }
+            titles.append(trimmed)
         }
-
-        let list = LyricsSourceHTTP.dig(searchRoot, ["req", "data", "body", "song", "list"]) as? [Any]
-        guard let songId = pickSong(in: list ?? [], title: title, artist: lead, seconds: seconds) else {
+        let hits = searchSongs(titles: Array(titles.prefix(2)), artist: lead)
+        guard let songId = pickSong(in: hits, titles: titles, artist: lead, seconds: seconds) else {
             writeDebugLog(
-                "[QQMusic] \"\(title)\" — \(lead): no candidate matched the length"
-                    + " (slack \(Self.lengthSlackSeconds)s)"
+                "[QQMusic] \"\(title)\" — \(lead): \(hits.count) hit(s), none was this recording"
+                    + " (slack \(Self.lengthSlackSeconds)s; \(Self.tightSlackSeconds)s when the singer does not match)"
             )
             throw LyricsError.noSuchSong
         }
@@ -86,7 +77,10 @@ final class QQMusicLyricsRepository: LyricsRepository {
                 // 从 `qrc: 0` 改成 `qrc: 1, crypt: 1` —— 要逐字。
                 // 参数表照 `chenmozhijin/LDDC` 的 `get_lyrics`（它拿到的是能解开的 QRC）：
                 // `songName` / `singerName` / `albumName` 是 **base64 的 UTF-8**，
-                // `interval` 是**秒**，其余几个 `*_t` 是"要不要翻译/罗马音"的开关，这里全关。
+                // `interval` 是**秒**，其余几个 `*_t` 是"要不要翻译/罗马音"的开关。
+                //
+                // ⚠️ `roma` 不置 1 时 `data.roma` 恒为空 —— 服务端只在被要求时才下发那份
+                // 官方逐词罗马字。文件头说的"有罗马音就用"因此在这之前是**永远走不到**的分支。
                 "param": [
                     "albumName": Self.base64(query.albumTitle ?? ""),
                     "crypt": 1,
@@ -96,7 +90,7 @@ final class QQMusicLyricsRepository: LyricsRepository {
                     "lrc_t": 0,
                     "qrc": 1,
                     "qrc_t": 0,
-                    "roma": 0,
+                    "roma": 1,
                     "roma_t": 0,
                     "singerName": Self.base64(lead),
                     "songID": songId,
@@ -234,44 +228,173 @@ final class QQMusicLyricsRepository: LyricsRepository {
         return 0
     }
 
-    /// 第一条"就是这首歌"的录音。
+    // MARK: - 搜歌
+    //
+    // 两个入口、两种查询串，合并去重：
+    // · `musicu.fcg` 是桌面端搜索，结果里 `title` 常带译名后缀（`人マニア (人狂热症)`）；
+    // · `client_search_cp` 是网页搜索，同一个曲库的另一条路 —— 前者整段失败时兜底。
+    // 查询串先试**纯歌名**、再试「歌名 艺人」：日文歌的艺人字段两边写法常常不同，
+    // 带着罗马字艺人搜反而会把正确的条目挤出前 8 条之外。
+    private struct SongHit {
+        let id: Int
+        let title: String
+        let singers: [String]
+        let durationMs: Int
+        /// 在合并后的命中列表里的位置。同分时保留**搜索相关性顺序**（曲库把原版排前面），
+        /// 而不是按 id 挑一个 —— 后者等于掷骰子。
+        let order: Int
+    }
+
+    private func searchSongs(titles: [String], artist: String) -> [SongHit] {
+        var hits: [SongHit] = []
+        func append(_ batch: [SongHit]) {
+            for hit in batch where !hits.contains(where: { $0.id == hit.id }) {
+                hits.append(SongHit(id: hit.id, title: hit.title, singers: hit.singers,
+                                    durationMs: hit.durationMs, order: hits.count))
+            }
+        }
+
+        // 每一轮都是**同步阻塞**的网络往返，所以"命中即停"：纯歌名的结果通常已经把原版排在最前，
+        // 再补「歌名 艺人」只会把预算翻倍（这条源在自动优选里只有 5 秒）。
+        for title in titles {
+            append(musicuSearch(title))
+            if !hits.isEmpty { return hits }
+            append(musicuSearch("\(title) \(artist)"))
+            if !hits.isEmpty { return hits }
+        }
+
+        // 两个接口都只是"同一份曲库的两个入口"：上面整段空手才走网页那条。
+        for title in titles {
+            append(legacySearch(title))
+            if !hits.isEmpty { return hits }
+            append(legacySearch("\(title) \(artist)"))
+            if !hits.isEmpty { return hits }
+        }
+        return hits
+    }
+
+    private func musicuSearch(_ query: String) -> [SongHit] {
+        guard let url = URL(string: Self.api) else { return [] }
+        let body: [String: Any] = [
+            "comm": ["ct": "19", "cv": "1859", "uin": "0"],
+            "req": [
+                "module": "music.search.SearchCgiService",
+                "method": "DoSearchForQQMusicDesktop",
+                "param": [
+                    "query": query,
+                    "search_type": 0,
+                    "grp": 1,
+                    "num_per_page": 10,
+                    "page_num": 1
+                ]
+            ]
+        ]
+        guard let root = LyricsSourceHTTP.postJSON(
+            url, body: body, headers: Self.headers, tag: "QQMusic"
+        ), let list = LyricsSourceHTTP.dig(root, ["req", "data", "body", "song", "list"]) as? [Any] else {
+            return []
+        }
+        return Self.songHits(from: list)
+    }
+
+    private func legacySearch(_ query: String) -> [SongHit] {
+        var components = URLComponents(string: Self.legacySearchAPI)
+        components?.queryItems = [
+            URLQueryItem(name: "w", value: query),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "n", value: "10"),
+            URLQueryItem(name: "p", value: "1"),
+            URLQueryItem(name: "cr", value: "1"),
+            URLQueryItem(name: "t", value: "0")
+        ]
+        guard let url = components?.url,
+              let root = LyricsSourceHTTP.getJSON(url, headers: Self.headers, tag: "QQMusic"),
+              let list = LyricsSourceHTTP.dig(root, ["data", "song", "list"]) as? [Any] else {
+            return []
+        }
+        return Self.songHits(from: list)
+    }
+
+    /// 把两种搜索响应的条目归一。字段名不同：`musicu` 用 `id`，网页那条用 `songid`。
+    private static func songHits(from list: [Any]) -> [SongHit] {
+        var out: [SongHit] = []
+        for item in list {
+            guard let song = item as? [String: Any] else { continue }
+            guard let id = (song["id"] as? NSNumber)?.intValue
+                    ?? (song["songid"] as? NSNumber)?.intValue else { continue }
+
+            let name = (song["title"] as? String)
+                ?? (song["songname"] as? String)
+                ?? (song["name"] as? String)
+                ?? ""
+            let singers = ((song["singer"] as? [Any]) ?? []).compactMap { entry -> String? in
+                guard let singer = entry as? [String: Any] else { return nil }
+                return singer["name"] as? String
+            }
+            let interval = (song["interval"] as? NSNumber)?.intValue ?? 0
+            out.append(
+                SongHit(
+                    id: id,
+                    title: name,
+                    singers: singers,
+                    durationMs: interval > 0 ? interval * 1000 : 0,
+                    order: out.count
+                )
+            )
+        }
+        return out
+    }
+
+    // MARK: - 挑歌
+
+    /// 这一条候选是不是"就是这首歌"的录音。
     ///
-    /// 与 Taurus 同一条判据：**标题去掉标点后必须完全相等**（不接受包含），
-    /// 歌手用互相包含，时长在容差内。标题用相等而不是包含，是因为
-    /// "`晴天` 与 `晴天 (Live)` 去掉标点后是 `晴天` 与 `晴天live`"——
-    /// 用包含会把 Live 版放进来，而那正是最常配错的一类。
+    /// 三条闸，按"多可信"排：
+    /// · **标题**：`LyricsMatch.titlesMatch`（`key` 相等，或去掉括号段后相等）；
+    /// · **时长**：差 ≤ 6s；
+    /// · **歌手**：对得上就放行；对不上时（Spotify 给罗马字、QQ 写日文/中文名）
+    ///   还要求时长差 ≤ 2s —— 只靠"同名 + 差不多长"会配到翻唱。
+    ///
+    /// 排序：先"歌手对得上"、再"时长最接近"、最后**搜索相关性顺序**
+    /// （曲库把原版排在翻唱前面；同分时按 id 挑等于掷骰子）。
     private func pickSong(
-        in list: [Any],
-        title: String,
+        in hits: [SongHit],
+        titles: [String],
         artist: String,
         seconds: Int
     ) -> Int? {
-        let wanted = LyricsMatch.key(title)
-        guard !wanted.isEmpty else { return nil }
+        guard titles.contains(where: { !LyricsMatch.key($0).isEmpty }) else { return nil }
+        let trackMs = seconds > 0 ? seconds * 1000 : nil
 
-        for item in list {
-            guard let song = item as? [String: Any] else { continue }
+        struct Scored {
+            let hit: SongHit
+            let artistMatched: Bool
+            let gap: Int
+        }
 
-            let name = (song["title"] as? String) ?? (song["songname"] as? String) ?? ""
-            guard LyricsMatch.key(name) == wanted else { continue }
-
-            let length = (song["interval"] as? NSNumber)?.intValue ?? 0
+        var scored: [Scored] = []
+        for hit in hits {
+            guard LyricsMatch.titlesMatch(hit.title, anyOf: titles) else { continue }
             guard LyricsMatch.lengthMatches(
-                length > 0 ? length * 1000 : nil,
-                seconds > 0 ? seconds * 1000 : nil,
+                hit.durationMs > 0 ? hit.durationMs : nil,
+                trackMs,
                 slackMs: Self.lengthSlackSeconds * 1000
             ) else { continue }
 
-            let singers = (song["singer"] as? [Any]) ?? []
-            let sung = singers.contains { entry in
-                guard let singer = entry as? [String: Any] else { return false }
-                return LyricsMatch.sameArtist(singer["name"] as? String, artist)
-            }
-            guard sung else { continue }
+            let artistMatched = hit.singers.contains { LyricsMatch.sameArtist($0, artist) }
+            let gap = LyricsMatch.lengthGap(hit.durationMs, trackMs) ?? Int.max
+            if !artistMatched, gap > Self.tightSlackSeconds * 1000 { continue }
 
-            if let id = (song["id"] as? NSNumber)?.intValue { return id }
+            scored.append(Scored(hit: hit, artistMatched: artistMatched, gap: gap))
         }
 
-        return nil
+        return scored.sorted { left, right in
+            // 1. 歌手对得上（曲库写日文/中文、我们手上是罗马字时这一条对不上，见上面三条闸）；
+            // 2. 时长最接近；
+            // 3. 搜索相关性顺序 —— 曲库把原版排在翻唱前面。
+            if left.artistMatched != right.artistMatched { return left.artistMatched }
+            if left.gap != right.gap { return left.gap < right.gap }
+            return left.hit.order < right.hit.order
+        }.first?.hit.id
     }
 }

@@ -64,6 +64,40 @@ require(LyricsMatch.lengthMatches(213_000, nil, slackMs: 2_000), "missing track 
 require(LyricsMatch.lengthMatches(0, 214_000, slackMs: 2_000), "zero candidate length passes")
 require(LyricsMatch.lengthMatches(nil, nil, slackMs: 2_000), "both missing passes")
 
+// MARK: - titlesMatch：曲库的标题后缀（译名 / Explicit / feat.）
+
+require(LyricsMatch.baseTitle("人マニア (人狂热症) (Explicit)") == "人マニア",
+        "trailing bracketed suffixes are dropped")
+require(LyricsMatch.baseTitle("晴天（Live）") == "晴天", "full-width brackets are dropped too")
+require(LyricsMatch.baseTitle("Hello") == "Hello", "a title without brackets is untouched")
+require(LyricsMatch.baseTitle("(Intro)") == "", "a title that is only a bracket segment leaves nothing")
+require(LyricsMatch.baseTitle(nil) == "", "nil gives an empty base title")
+require(LyricsMatch.titlesMatch("人マニア (人狂热症) (Explicit)", "人マニア"),
+        "the catalogue's translated/explicit suffix still matches")
+require(LyricsMatch.titlesMatch("晴天（Live）", "晴天"), "a bracketed live marker is stripped")
+require(LyricsMatch.titlesMatch("ユリイカ", "ユリイカ"), "an exact title matches")
+require(LyricsMatch.titlesMatch("人マニア (feat. 重音テト)", "人マニア"),
+        "a feat. suffix is a bracket segment")
+// ❗不能退化成"包含"：`晴天` 不该命中 `晴天霹雳`，`ユリイカ` 不该命中 `ユリイカ English ver.`。
+require(LyricsMatch.titlesMatch("晴天霹雳", "晴天") == false, "prefix-only containment is not a match")
+require(LyricsMatch.titlesMatch("ユリイカ English ver.", "ユリイカ") == false,
+        "an unbracketed version marker is not a match")
+require(LyricsMatch.titlesMatch(nil, "人マニア") == false, "nil candidate never matches")
+require(LyricsMatch.titlesMatch("人マニア", "") == false, "empty target never matches")
+// 落单的左括号按"吞掉后半段"处理（括号是成对的；这是调用方唯一能拿到的确定性行为）。
+require(LyricsMatch.baseTitle("Hello (Live") == "Hello", "an unmatched opening bracket drops the rest")
+require(LyricsMatch.titlesMatch("人マニア (人狂热症) (Explicit)", anyOf: ["Yurieka", "人マニア"]),
+        "anyOf accepts the localised title")
+require(LyricsMatch.titlesMatch("ユリイカ", anyOf: ["Yurieka"]) == false,
+        "anyOf does not accept a title that matches none")
+
+// MARK: - lengthGap：只给排序用，不知道就是 nil
+
+require(LyricsMatch.lengthGap(127_000, 127_242) == 242, "the gap is absolute")
+require(LyricsMatch.lengthGap(127_242, 127_000) == 242, "argument order does not matter")
+require(LyricsMatch.lengthGap(0, 127_000) == nil, "zero candidate length is unknown")
+require(LyricsMatch.lengthGap(127_000, nil) == nil, "missing track length is unknown")
+
 // MARK: - 结果
 
 if failures == 0 {

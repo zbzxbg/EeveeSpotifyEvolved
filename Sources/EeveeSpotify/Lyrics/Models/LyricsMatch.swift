@@ -25,6 +25,55 @@ enum LyricsMatch {
             .joined()
     }
 
+    /// 标题的**主名**：去掉成对的括号段（`(Live)`、`（人狂热症）`、`[Explicit]`、`【…】`）。
+    ///
+    /// 曲库给同一个录音的写法差别极大：QQ 会用「人マニア (人狂热症) (Explicit)」，酷狗的 KRC
+    /// 条目同样带后缀。只比 `key` 的话这些条目全部对不上，链路上就表现为「搜到了、但没一条算命中」。
+    ///
+    /// 括号段是**成对**的：嵌套的括号会整体跳过（`(a (b))` 只留空），落单的右括号按普通字符处理。
+    static func baseTitle(_ text: String?) -> String {
+        guard let text, !text.isEmpty else { return "" }
+        var depth = 0
+        var out = ""
+        for character in text {
+            switch character {
+            case "(", "（", "[", "【", "〔", "｛", "{":
+                depth += 1
+            case ")", "）", "]", "】", "〕", "｝", "}":
+                if depth > 0 { depth -= 1 }
+            default:
+                if depth == 0 { out.append(character) }
+            }
+        }
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 候选标题与目标标题是否指**同一首**。
+    ///
+    /// 判据：`key` 相等，或去掉括号段之后相等。两条**都不含"包含"**：
+    /// `晴天` 与 `晴天 (Live)` 靠括号剥掉之后相等（时长闸门再挡一次），
+    /// 而 `ユリイカ` 与 `ユリイカ (English ver.)` 也走同一条 —— 这类翻唱/改版主要靠时长区分。
+    static func titlesMatch(_ candidate: String?, _ wanted: String?) -> Bool {
+        let candidateKey = key(candidate)
+        let wantedKey = key(wanted)
+        guard !candidateKey.isEmpty, !wantedKey.isEmpty else { return false }
+        if candidateKey == wantedKey { return true }
+        let candidateBase = key(baseTitle(candidate))
+        let wantedBase = key(baseTitle(wanted))
+        return !candidateBase.isEmpty && candidateBase == wantedBase
+    }
+
+    /// 候选标题是否命中**任意一个**目标标题（曲目名 / 本地化名 / 用户榜单上的写法）。
+    static func titlesMatch(_ candidate: String?, anyOf wanted: [String]) -> Bool {
+        wanted.contains { titlesMatch(candidate, $0) }
+    }
+
+    /// 两个时长的差值（毫秒）。任一未知 ⇒ nil（调用方按"不参与排序"处理）。
+    static func lengthGap(_ candidateMs: Int?, _ trackMs: Int?) -> Int? {
+        guard let candidateMs, candidateMs > 0, let trackMs, trackMs > 0 else { return nil }
+        return abs(candidateMs - trackMs)
+    }
+
     /// 主艺人：`A feat. B` / `A ft. B` / `A & B` 都取 `A`。
     ///
     /// 曲库那边的歌手字段常常把合作者全塞进来（`米津玄師 feat. 菅田将暉`），
