@@ -39,48 +39,58 @@ extension EeveeLyricsSettingsView {
         )
     }
 
+    /// 「歌词来源」页脚：一句总说明 + 每个源的介绍。
+    ///
+    /// 介绍**按「自动选择」的默认询问顺序**排（`LyricsSourceOrder.defaultOrder`），
+    /// 读起来就是自动优选实际会走的先后。以后改默认顺序，这里跟着变，不必再手抄一份。
     private func lyricsSourceFooter() -> some View {
-        var text = "lyrics_source_description".localized
+        var text = "lyrics_source_restart_note".localized
 
-        text.append("\n")
-        text.append("petitlyrics_description".localized)
-
-        text.append("\n")
-        text.append("spicylyrics_description".localized)
-
-        text.append("\n")
-        text.append("netease_description".localized)
-
-        text.append("\n")
-        text.append("amll_description".localized)
-
-        // Taurus 有、我们原来缺的四个源。顺序与选择器里一致。
-        text.append("\n")
-        text.append("bini_description".localized)
-
-        text.append("\n")
-        text.append("unison_description".localized)
-
-        text.append("\n")
-        text.append("qqmusic_description".localized)
-
-        text.append("\n")
-        text.append("kugou_description".localized)
+        var isFirst = true
+        for source in LyricsSourceOrder.defaultOrder {
+            guard let key = Self.sourceDescriptionKey(for: source) else { continue }
+            // 总说明与逐源介绍之间空一行；介绍之间保持原来的紧凑排法。
+            text.append(isFirst ? "\n\n" : "\n")
+            isFirst = false
+            text.append(key.localized)
+        }
 
         // 「听歌页样式是 spotify 原生时，自动优选不可选择」。
         // 选项本身会被滤掉（见 `lyricsSourceSection`），所以这里也不能再介绍它 ——
         // 换成一句"为什么没有它"，否则用户只会以为功能丢了。
-        text.append("\n")
+        text.append("\n\n")
         if LyricsSource.autoSelect.isAvailableInCurrentNowPlayingStyle {
             text.append("lyrics_source_auto_description".localized)
         } else {
             text.append("lyrics_source_auto_unavailable".localized)
         }
-        
+
         text.append("\n\n")
         text.append("lyrics_additional_info".localized)
-        
+
         return Text(text)
+    }
+
+    /// 每个源对应的介绍文案键。取不了词的项（不替换 / 自动选择本身 / 实验源）返回 nil。
+    ///
+    /// 放在这里而不是 `LyricsSource` 上：它只服务这一段页脚，而 `LyricsSource` 是
+    /// 存储与链路都要用的类型，不该知道"设置页的某段文案存在哪个键"。
+    private static func sourceDescriptionKey(for source: LyricsSource) -> String? {
+        switch source {
+        case .genius:          return "genius_description"
+        case .lrclib:          return "lrclib_description"
+        case .musixmatch:      return "musixmatch_description"
+        case .petit:           return "petitlyrics_description"
+        case .spicy:           return "spicylyrics_description"
+        case .netease:         return "netease_description"
+        case .amllTtml:        return "amll_description"
+        case .bini:            return "bini_description"
+        case .unison:          return "unison_description"
+        case .qqMusic:         return "qqmusic_description"
+        case .kugou:           return "kugou_description"
+        case .notReplaced, .autoSelect, .appleMusicOfficialTtml:
+            return nil
+        }
     }
     
     @ViewBuilder func lyricsSourceSection() -> some View {
