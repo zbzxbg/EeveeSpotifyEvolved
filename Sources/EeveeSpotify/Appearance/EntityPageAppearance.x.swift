@@ -168,9 +168,8 @@ enum EntityPageAppearance {
     private static var cachedTopEdgeColour: UIColor?
     /// 那一条**当前用着哪个颜色**（`#RRGGBB`）：换封面才重写 layer，0.6s 那一拍不重复写。
     private static var scrimColourKey: String?
-    /// 「化开落在哪一段」这页打过没有（一页一条，见 `ensureSharpHero`）。
+    /// 化开区间、图源尺寸这两条日志这页打过没有（各一条）。
     private static var didReportMelt = false
-    /// 「这一页的图源是哪一张」打过没有（一页一条）。
     private static var didReportHeroSource = false
     /// 满幅页头里**Spotify 自己那张图**（`HeaderFullbleedCentralView` 的 `ArtworkWrapper`），页头那边每拍写。
     ///
@@ -1154,8 +1153,7 @@ enum EntityPageAppearance {
         if !view.frame.equalTo(frame) { view.frame = frame }
         if view.image !== source {
             view.image = source
-            // 一页一条：**这一页的图源是哪一张、多大**。糊不糊就看这一行 —— 宽度小于宿主宽 × 屏比
-            // 就是被放大过（方封面 640² 铺 414pt 宽在 3× 屏上要 1240px）。
+            // 一页一条：图源尺寸。小于宿主宽 × 屏比就是被放大过的。
             if !didReportHeroSource {
                 didReportHeroSource = true
                 writeDebugLog(
@@ -1188,9 +1186,7 @@ enum EntityPageAppearance {
             meltEnd = imageHeight
         }
         applyDissolveMask(to: view, solidUntil: meltStart, goneAt: meltEnd)
-        // 一页一条：化开**落在哪一段**。它与"屏上那张图是不是这一张"是两个独立的问题 ——
-        // 页头把 Spotify 自己那张满幅图让出来之后（`EntityPageHeader` 的 `hidFullbleedPicture`），
-        // 这条日志就是"化开真的在可见区里"的证据。
+        // 一页一条：化开收在哪一段（页头可见区里的位置）。
         if !didReportMelt {
             didReportMelt = true
             writeDebugLog(
