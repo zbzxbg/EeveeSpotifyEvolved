@@ -501,6 +501,11 @@ enum EntityPageHeaderManager {
             }
         }
 
+        // 满幅那张图**交给 hero 当图源**：它是 Spotify 给这一版页头专配的宽图，比 262pt 那张
+        // 方封面清晰得多，裁法也正是页头要的那一版（见 `EntityPageAppearance.fullbleedPictureImage`）。
+        // 认不出满幅图时写 nil，hero 退回方封面那条老路。
+        EntityPageAppearance.fullbleedPictureView = fullbleedPicture
+
         var texts = headerTexts(block: block, headerRoot: headerRoot)
 
         // 按宽度挑出来的"那一块"**不一定装着标题** —— 电台页头的排版是"头像 / 大标题 / 小圆点 /

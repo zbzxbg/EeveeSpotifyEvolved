@@ -170,6 +170,14 @@ enum EntityPageAppearance {
     private static var scrimColourKey: String?
     /// 「化开落在哪一段」这页打过没有（一页一条，见 `ensureSharpHero`）。
     private static var didReportMelt = false
+    /// 「这一页的图源是哪一张」打过没有（一页一条）。
+    private static var didReportHeroSource = false
+    /// 满幅页头里**Spotify 自己那张图**（`HeaderFullbleedCentralView` 的 `ArtworkWrapper`），页头那边每拍写。
+    ///
+    /// 它是 Spotify 给这一版页头**专用的宽图**、裁法也正是页头要的那一版 ⇒ hero 优先拿它当图源。
+    /// 反过来借那张 262pt 的方封面时：640² 铺到 414pt 宽，3× 屏上要放大到约 1240px，
+    /// 半张图是插值出来的 ⇒ 看着就是糊的。
+    static weak var fullbleedPictureView: UIView?
     /// 被我们藏掉的 wash 视图（**记原值**，关开关原样撤回）—— 见 `concealWash` / `revealWash`。
     private static var concealedWash: [
         (view: UIView, layerHidden: Bool, hadMask: Bool, interactive: Bool, accessibilityHidden: Bool)
@@ -997,7 +1005,7 @@ enum EntityPageAppearance {
             // 现在藏的动作只留在两处，两处都要求"**我们真有图**"：
             // · `ensureSharpHero`（宿主认出来之后，藏 + 铺同一拍）；
             // · `layoutPass`（每帧补的那道保险，判据是 `sharpHero.image != nil`）。
-            guard let source = coverImage(in: cover) else { return }
+            guard let source = fullbleedPictureImage() ?? coverImage(in: cover) else { return }
             ensureSharpHero(cover: cover, source: source, page: target.page)
             return
         }
@@ -1144,7 +1152,18 @@ enum EntityPageAppearance {
         }
 
         if !view.frame.equalTo(frame) { view.frame = frame }
-        if view.image !== source { view.image = source }
+        if view.image !== source {
+            view.image = source
+            // 一页一条：**这一页的图源是哪一张、多大**。糊不糊就看这一行 —— 宽度小于宿主宽 × 屏比
+            // 就是被放大过（方封面 640² 铺 414pt 宽在 3× 屏上要 1240px）。
+            if !didReportHeroSource {
+                didReportHeroSource = true
+                writeDebugLog(
+                    "[\(logTag)] hero source \(Int(source.size.width))x\(Int(source.size.height))"
+                        + " in a \(Int(host.bounds.width))pt-wide header (screen \(Int(UIScreen.main.scale))x)"
+                )
+            }
+        }
 
         // **起点绑图高（66%），终点绑名字上沿** —— 见 `meltStartRatio` 那段。
         // mask 作用在 `view` 自己的坐标里，而照片上移了 `rise` ⇒ 名字的本地 y 要把 `rise` 加回来
@@ -1692,6 +1711,8 @@ enum EntityPageAppearance {
         revealNativeCover()
         revealWash()
         didReportMelt = false
+        didReportHeroSource = false
+        fullbleedPictureView = nil
         // 单调高度是记在**那块 plane** 上的（换页面时 plane 可能被复用）⇒ 撤的时候一起清掉，
         // 否则下一个页面的 hero 会一上来就是上一个页面那么高。
         if let plane = sharpHero?.superview {
@@ -1704,6 +1725,14 @@ enum EntityPageAppearance {
     /// 封面元素里那张真图。
     private static func coverImage(in root: UIView) -> UIImage? {
         firstImageView(in: root)?.image
+    }
+
+    /// 满幅页头那张图的**图源**（比方封面清晰、裁法也正是页头那一版）；没有就 nil。
+    ///
+    /// 只认**这一页里、还在窗口上**的那张 —— 页头换页后残留的旧引用不该再被借来当图源。
+    private static func fullbleedPictureImage() -> UIImage? {
+        guard let picture = fullbleedPictureView, picture.window != nil else { return nil }
+        return firstImageView(in: picture)?.image
     }
 
     // MARK: - ③ 藏掉 Spotify 自己那些按键
