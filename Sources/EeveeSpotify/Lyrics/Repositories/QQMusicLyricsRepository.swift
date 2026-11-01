@@ -59,7 +59,7 @@ final class QQMusicLyricsRepository: LyricsRepository {
             guard !trimmed.isEmpty, !titles.contains(trimmed) else { continue }
             titles.append(trimmed)
         }
-        let hits = searchSongs(titles: Array(titles.prefix(2)), artist: lead)
+        let hits = searchSongs(titles: Array(titles.prefix(2)), artist: lead, seconds: seconds)
         guard let songId = pickSong(in: hits, titles: titles, artist: lead, seconds: seconds) else {
             writeDebugLog(
                 "[QQMusic] \"\(title)\" — \(lead): \(hits.count) hit(s), none was this recording"
@@ -329,7 +329,13 @@ final class QQMusicLyricsRepository: LyricsRepository {
         let order: Int
     }
 
-    private func searchSongs(titles: [String], artist: String) -> [SongHit] {
+    /// 搜候选。**"命中即停"的判据是"能挑出这首歌"，不是"回包里有点东西"**。
+    ///
+    /// 以前只要第一轮搜索回了哪怕一页**无关**结果就返回：`104Hz` 的纯歌名搜索回的是
+    /// `404Hz` 那些歌（标题一条都对不上）⇒ 一次命中都没有、也不会再试「歌名 艺人」，
+    /// 而后者第一条就是 `104Hz / ミセカイ / 272s`。现在先用 `pickSong` 判一次，
+    /// 挑得出来才停；挑不出来继续试下一个查询串。
+    private func searchSongs(titles: [String], artist: String, seconds: Int) -> [SongHit] {
         var hits: [SongHit] = []
         func append(_ batch: [SongHit]) {
             for hit in batch where !hits.contains(where: { $0.id == hit.id }) {
@@ -337,22 +343,26 @@ final class QQMusicLyricsRepository: LyricsRepository {
                                     durationMs: hit.durationMs, order: hits.count))
             }
         }
-
-        // 每一轮都是**同步阻塞**的网络往返，所以"命中即停"：纯歌名的结果通常已经把原版排在最前，
-        // 再补「歌名 艺人」只会把预算翻倍（这条源在自动优选里只有 5 秒）。
-        for title in titles {
-            append(musicuSearch(title))
-            if !hits.isEmpty { return hits }
-            append(musicuSearch("\(title) \(artist)"))
-            if !hits.isEmpty { return hits }
+        func hasUsablePick() -> Bool {
+            pickSong(in: hits, titles: titles, artist: artist, seconds: seconds) != nil
         }
 
-        // 两个接口都只是"同一份曲库的两个入口"：上面整段空手才走网页那条。
+        // 每一轮都是**同步阻塞**的网络往返（这条源在自动优选里只有 5 秒）⇒ 能挑出来就停。
+        for title in titles {
+            append(musicuSearch(title))
+            if hasUsablePick() { return hits }
+            append(musicuSearch("\(title) \(artist)"))
+            if hasUsablePick() { return hits }
+        }
+
+        // 两个接口打的是同一份曲库；`musicu` 整段空手（偶发 code=2001）时才走网页那条。
+        // 回了一堆**对不上**的条目不算空手 —— 再打一次网页接口只会多花一轮往返。
+        guard hits.isEmpty else { return hits }
         for title in titles {
             append(legacySearch(title))
-            if !hits.isEmpty { return hits }
+            if hasUsablePick() { return hits }
             append(legacySearch("\(title) \(artist)"))
-            if !hits.isEmpty { return hits }
+            if hasUsablePick() { return hits }
         }
         return hits
     }
