@@ -142,6 +142,15 @@ enum EntityPageAppearance {
     private static var field: GradientView?
     /// 铺在最上面的那张**清晰满幅**封面（见 `ensureHero`）。
     private static var sharpHero: UIImageView?
+    /// 我们自己那张满幅照片**已经在画图**了吗。
+    ///
+    /// 页头那边据此决定要不要把 Spotify 自己那张满幅图让出来：那张图是 `_backgroundViewContainer`
+    /// 那支之外的页头内容，画在我们这张**上面** ⇒ 化开蒙版与顶上那条纱全落在被盖住的那一层上，
+    /// 屏上是硬边、顶上也没有纱。图没到的那几拍返回 false，页头先留着 Spotify 那张，免得空一块。
+    static var isHeroDrawing: Bool {
+        guard let hero = sharpHero else { return false }
+        return hero.image != nil && hero.window != nil && hero.bounds.width > 1 && hero.bounds.height > 1
+    }
     /// 满幅 hero 的**单调高度**（"到过的最深处"），存在**那块 plane** 上（pw 的 `kHeroHeightKey`）。
     private static var heroHeightKey: UInt8 = 0
     /// hero 的最小高度（pw 的 `kMinHero = 120`）：比这矮就不画，免得出来一条细带。
@@ -159,6 +168,8 @@ enum EntityPageAppearance {
     private static var cachedTopEdgeColour: UIColor?
     /// 那一条**当前用着哪个颜色**（`#RRGGBB`）：换封面才重写 layer，0.6s 那一拍不重复写。
     private static var scrimColourKey: String?
+    /// 「化开落在哪一段」这页打过没有（一页一条，见 `ensureSharpHero`）。
+    private static var didReportMelt = false
     /// 被我们藏掉的 wash 视图（**记原值**，关开关原样撤回）—— 见 `concealWash` / `revealWash`。
     private static var concealedWash: [
         (view: UIView, layerHidden: Bool, hadMask: Bool, interactive: Bool, accessibilityHidden: Bool)
@@ -1158,6 +1169,17 @@ enum EntityPageAppearance {
             meltEnd = imageHeight
         }
         applyDissolveMask(to: view, solidUntil: meltStart, goneAt: meltEnd)
+        // 一页一条：化开**落在哪一段**。它与"屏上那张图是不是这一张"是两个独立的问题 ——
+        // 页头把 Spotify 自己那张满幅图让出来之后（`EntityPageHeader` 的 `hidFullbleedPicture`），
+        // 这条日志就是"化开真的在可见区里"的证据。
+        if !didReportMelt {
+            didReportMelt = true
+            writeDebugLog(
+                "[\(logTag)] dissolve \(Int(meltStart))..\(Int(meltEnd))pt of the"
+                    + " \(Int(imageHeight))pt picture, in a \(frameText(host.bounds)) host"
+                    + " — the picture itself fades into the field, there is no strip pasted under it"
+            )
+        }
 
         // 顶上那条纱**挂在照片自己身上**、颜色取**照片顶边那一小条** ——
         // 不再是"页面取色"。
@@ -1669,6 +1691,7 @@ enum EntityPageAppearance {
         removeScrim()
         revealNativeCover()
         revealWash()
+        didReportMelt = false
         // 单调高度是记在**那块 plane** 上的（换页面时 plane 可能被复用）⇒ 撤的时候一起清掉，
         // 否则下一个页面的 hero 会一上来就是上一个页面那么高。
         if let plane = sharpHero?.superview {

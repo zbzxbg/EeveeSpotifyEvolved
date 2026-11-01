@@ -471,16 +471,35 @@ enum EntityPageHeaderManager {
         // ⚠️ **认不出图就整支放过** —— 空名单会把满幅图一起藏掉，而 conceal 不会自己撤销，
         // 那就是一整块永久黑屏。
         var fullbleedKept: [UIView] = []
+        // 满幅头里**那张图**：`probeCoverOverlap` 用它量重叠，与"不许藏"名单是两件事 ——
+        // 交给 hero 画的时候，图反而要从名单里拿掉（名单里只剩同容器的大标题）。
+        var fullbleedPicture: UIView?
+        // 这张图**已经交给 hero 画**了 ⇒ Spotify 那份（连它上面那层渐变）要一起让位。
+        var fullbleedHandedOver = false
         if let fullbleed {
-            fullbleedKept = fullbleedArtwork(in: fullbleed)
+            let picture = fullbleedArtwork(in: fullbleed)
+            fullbleedPicture = picture.first
+            fullbleedKept = picture
             // 认出了图才把**渐变**也加进"不许藏"的名单：那层渐变是页头自己的下缘化开，
             // 藏掉之后页头就成了一块硬边纯色（"生成歌单没有渐变"就是这么来的）。
             // ⚠️ 名单为空的"整支放过"安全阀不能被它破坏，所以只在非空时合并。
-            if !fullbleedKept.isEmpty {
-                fullbleedKept += fullbleedGradients(in: fullbleed)
+            if !picture.isEmpty {
+                // 我们自己那张满幅照片已经在画这张图时，Spotify 这份是**压在我们上面**的
+                // （它是页头内容那支，晚于 `_backgroundViewContainer` 挂上）⇒ 化开蒙版与顶上那条纱
+                // 全画在被盖住的那一层上：屏上是硬边，状态栏上也没有那条同色的纱。
+                // 这时把图与渐变一起让位，页头只剩我们自己画的。图没到的那几拍
+                // `isHeroDrawing` 为 false，照旧留着，免得页头先空一块。
+                // ⚠️ 电台那一族认出来的是**一行大圆头像**（`AvatarView`），不是一张图 —— 留着：
+                // hero 画的是方封面，替换不出那一排的排版。
+                let avatarsOnly = picture.allSatisfy { NSStringFromClass(type(of: $0)).contains("AvatarView") }
+                if EntityPageAppearance.isHeroDrawing, !avatarsOnly {
+                    fullbleedHandedOver = true
+                    fullbleedKept = []
+                } else {
+                    fullbleedKept += fullbleedGradients(in: fullbleed)
+                }
             }
         }
-        let fullbleedPicture = fullbleedKept.first
 
         var texts = headerTexts(block: block, headerRoot: headerRoot)
 
@@ -605,14 +624,22 @@ enum EntityPageHeaderManager {
         // 名单 = 图（`fullbleedArtwork`）+ 上面那份"不许藏"的（头像可能就在这层里：
         // 电台页的三个圆头像和标题常常同容器，见 `concealInside` 那段说明）。
         // 名单为空时整支放过（否则满幅图会跟着消失，那是一条不可逆的黑屏）。
-        if let fullbleed, !fullbleedKept.isEmpty {
+        if let fullbleed, fullbleedHandedOver || !fullbleedKept.isEmpty {
             concealInside(fullbleed, keeping: fullbleedKept + artwork)
-            logOnce(
-                "hidFullbleedTitle",
-                "full-bleed header: kept the picture (\(fullbleedKept.count) view(s)) and concealed"
-                    + " everything else in that container — Spotify draws its big title in there,"
-                    + " which is the second copy of the page title"
-            )
+            if fullbleedHandedOver {
+                logOnce(
+                    "hidFullbleedPicture",
+                    "full-bleed header: let Spotify's own picture go — our sharp hero draws it now,"
+                        + " so the dissolve and the top band land on the picture that is on screen"
+                )
+            } else {
+                logOnce(
+                    "hidFullbleedTitle",
+                    "full-bleed header: kept the picture (\(fullbleedKept.count) view(s)) and concealed"
+                        + " everything else in that container — Spotify draws its big title in there,"
+                        + " which is the second copy of the page title"
+                )
+            }
         }
         for sub in block.subviews where sub !== header {
             concealInside(sub, keeping: artwork)
