@@ -90,9 +90,13 @@ Free profiles usually have no wildcard, so both builds ship without the Watch ap
 ## Requirements
 
 - iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
-- Spotify 9.1.88 (current public release: [`v1.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases))
+- Spotify 9.1.x — current public release: [`v1.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
 
-Verified on: iPhone 11 · Spotify 9.1.88 · iOS 27.0.1 · certificate-signed · LCSign · rootless deb.
+| Spotify | How far it has been checked |
+|---|---|
+| **9.1.88** | Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb |
+| **9.1.94** | Static check only: every hook target, `@objc` method list and runtime UI identifier still resolves; the on-device look-and-feel has not been re-calibrated |
+| other **9.1.x** | Untested, same code path |
 
 ## Credits
 

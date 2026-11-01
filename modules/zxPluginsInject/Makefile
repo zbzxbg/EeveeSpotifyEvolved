@@ -1,5 +1,5 @@
-# 最低部署版本跟随主工程（2026-10-13：14.0 → 16.1），理由见根目录 Makefile 顶上那段。
-TARGET := iphone:clang:latest:16.1
+# 最低部署版本跟随主工程（根目录 Makefile 的 `TARGET`），理由见那里顶上那段。
+TARGET := iphone:clang:latest:17.4
 ARCHS := arm64
 
 include $(THEOS)/makefiles/common.mk

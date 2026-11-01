@@ -1,4 +1,4 @@
-# ── 最低部署版本：17.4（2026-10-31 从 16.1 提上来）──────────────────────────
+# ── 最低部署版本：17.4 ──────────────────────────────────────────────────────
 # README 的「System Requirements」写的是 **Minimum: iOS 17.4 / Recommended: iOS 26**。
 #
 # 为什么提到 17.4：
@@ -39,7 +39,7 @@ EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Os
 
 # ── 系统翻译：Translation.framework 现在是**强链接**（最低版本 17.4 起它一定在）──
 # `Sources/EeveeSpotify/Lyrics/OnDeviceLyricsTranslation.swift` 里有 `import Translation`。
-# 2026-10-31 把最低部署版本提到 17.4 之前，这里曾经要 `-weak_framework Translation` +
+# 最低部署版本低于 17.4 时，这里曾经要 `-weak_framework Translation` +
 # `-Xfrontend -disable-autolink-framework`：否则 iOS 16 / 17.0–17.3 上 dyld 找不到
 # 这个框架，**App 一启动就崩**。门槛提上去之后那两行**故意删掉了** ——
 # 留着反而多一层构建期风险，而且弱链接会把"框架真的缺了"这件事藏起来。
@@ -131,4 +131,10 @@ build-eeveeswiftprotobuf:
 lint-comments:
 	python3 Scripts/check_comment_hygiene.py
 
-lint: lint-comments
+# ── 部署底线一致性 ──────────────────────────────────────────────────────────
+# 同一个 iOS 最低版本写在六个地方（两个 TARGET、control 的 firmware、三处 cyan -m），
+# 任何一处落后都是"装得上、启动加载不了"的静默失效。规则见脚本的文档字符串。
+lint-deploy-target:
+	python3 Scripts/check_deploy_target.py
+
+lint: lint-comments lint-deploy-target

@@ -72,11 +72,11 @@ INJECT=("$DYLIB_SRC")
 [ -n "$FRAMEWORK_SRC" ] && INJECT+=("$FRAMEWORK_SRC")
 [ -n "$BUNDLE_SRC" ]    && INJECT+=("$BUNDLE_SRC")
 rm -f "$OUT_IPA"
-# 最低 OS 版本跟随工程底线（2026-10-13：15.0 → 16.1）。
-# 为什么必须一起改：`cyan -m` 是把**输出 IPA 的 MinimumOSVersion** 盖成这个值。tweak 的
-# dylib 现在按 16.1 编译（根目录 Makefile 的 TARGET），如果这里还写 15.0，iOS 15 / 16.0
-# 的机器装得上、但 dyld 加载不了那个 dylib ⇒ 静默失效。
-cyan -i "$VANILLA_IPA" -o "$OUT_IPA" -f "${INJECT[@]}" -c 9 -m 16.1 -du
+# 最低 OS 版本跟随工程底线（根目录 Makefile 的 `TARGET`）。`cyan -m` 是把**输出 IPA 的
+# MinimumOSVersion** 盖成这个值，而 tweak 的 dylib 是按 `TARGET` 编译的：这里写低了就会
+# 出现"装得上、但 dyld 加载不了那个 dylib"的静默失效（`TARGET` 提到 17.4 之后，
+# `Translation.framework` 是强链接，低版本系统上根本不存在这个框架）。
+cyan -i "$VANILLA_IPA" -o "$OUT_IPA" -f "${INJECT[@]}" -c 9 -m 17.4 -du
 
 color "6/6  ipapatch LC-inject zxPluginsInject (patched copy)"
 # 先复制再注入：$OUT_IPA 保持"无 patch"那份（tweak 本体），另一个文件才带
