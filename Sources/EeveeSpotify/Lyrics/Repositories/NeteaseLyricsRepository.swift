@@ -545,14 +545,9 @@ class NeteaseLyricsRepository: LyricsRepository {
         return name
     }
 
-    /// 回包里的两位署名 → 显示层用的 contributors（顺序：作词、上传者、翻译者）。
+    /// 回包里的两位署名 → 显示层用的 contributors（上传者、翻译者）。
     private func contributors(from raw: RawLyrics) -> [LyricsContributor] {
         var result: [LyricsContributor] = []
-        // 网易云的 LRC 开头通常就带「作词 : 方文山」——这一行刚被 `isCreditLine` 从正文里
-        // 剔掉，顺手当署名（`.lyricist` 与"上传者"是两个人，别混）。
-        if let lrc = raw.lrc, let name = LyricsCreditLine.lyricist(inLyrics: lrc) {
-            result.append(LyricsContributor(role: .lyricist, name: name, url: nil))
-        }
         if let name = raw.lyricUser {
             result.append(LyricsContributor(role: .uploader, name: name, url: nil))
         }

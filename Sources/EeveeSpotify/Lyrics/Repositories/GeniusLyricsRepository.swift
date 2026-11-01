@@ -262,11 +262,8 @@ class GeniusLyricsRepository: LyricsRepository {
             romanization: romanization,
             languageCode: songInfo.language
         )
-        // Genius 的词页开头偶有「作词 : X」这类制作信息行 —— 正文那边由
-        // `LyricsMarkerFilter` 统一剔掉，这里把作词者留下当署名。
-        if let lyricist = LyricsCreditLine.lyricist(inLyrics: songInfo.lyrics.plain) {
-            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
-        }
+        // Genius 的词页开头偶有「作词 : X」这类制作信息行 —— 那是曲目元信息，
+        // 正文那边由 `LyricsMarkerFilter` 统一剔掉，不拿来当署名。
         return dto
     }
 }

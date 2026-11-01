@@ -210,7 +210,7 @@ class PetitLyricsRepository: LyricsRepository {
     // MARK: - 署名
     //
     // `<song>` 节点里有两条**曲目元信息**，与"这份词条是谁做的"必须分开：
-    // · `writer` = 作詞者（词是谁写的）⇒ `.lyricist`，中文那行显示「作词 X」；
+    // · `writer` = 作詞者（词是谁写的）—— 曲目元信息，**不参与署名**；
     // · `postUserName` = 把词条投到 PetitLyrics 的账号 ⇒ `.uploader`。
     //
     // 搜索与取词两个接口回的节点形状相同，但**取词那一次可能缺字段** ⇒ 逐字段回退到搜索结果。
@@ -224,12 +224,6 @@ class PetitLyricsRepository: LyricsRepository {
     ) -> [LyricsContributor] {
         var contributors: [LyricsContributor] = []
 
-        let writer = (searchResult.writer ?? song.writer ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !writer.isEmpty {
-            contributors.append(LyricsContributor(role: .lyricist, name: writer, url: nil))
-        }
-
         let poster = (searchResult.postUserName ?? song.postUserName ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !poster.isEmpty, poster != Self.officialPosterName {
@@ -237,8 +231,7 @@ class PetitLyricsRepository: LyricsRepository {
         }
 
         writeDebugLog(
-            "[Petit] credits — writer=\(writer.isEmpty ? "nil" : writer),"
-                + " poster=\(poster.isEmpty ? "nil" : poster),"
+            "[Petit] credits — poster=\(poster.isEmpty ? "nil" : poster),"
                 + " \(contributors.count) kept"
         )
         return contributors
