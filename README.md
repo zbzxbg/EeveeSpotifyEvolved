@@ -24,7 +24,7 @@ Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass l
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
 > [!NOTE]
-> Tested on Spotify 9.1.88, including with the Genius fallback enabled.
+> Tested on Spotify version 9.1.88,the baseline version is iOS 26+.
 
 ## Features
 
@@ -33,7 +33,6 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - **12 sources** — Spicy Lyrics, AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
 - **Auto Select** — asks the sources in an order you choose and keeps the finest timing: word-by-word beats line-by-line, which beats plain text. A plain-text answer never ends the search.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling.
-- **Romanization** — Chinese, Korean and Japanese can be shown or hidden independently.
 
 ### Look and feel
 
@@ -57,7 +56,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 | Your setup | Download |
 | --- | --- |
-| Jailbroken | the `.deb` (rootless and roothide variants) |
+| Jailbroken | `.deb` (rootless and roothide variants) |
 | TrollStore | `-patched.ipa` |
 | Paid developer certificate (1 year) | `-patched.ipa` |
 | SideStore / AltStore / Sideloadly / free or enterprise certificate | `.ipa` (no patch) |
