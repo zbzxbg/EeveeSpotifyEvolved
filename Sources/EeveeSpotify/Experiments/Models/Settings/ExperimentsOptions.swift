@@ -31,19 +31,30 @@ struct ExperimentsOptions: Codable, Equatable {
     /// 见 `AppleMusicTtml+UserDefaults.swift`）。没填令牌时这一源直接抛
     /// `.missingAppleMusicToken`，界面上表现为"未找到歌词" + 一次提示弹窗。
     var appleMusicOfficialTtml: Bool
+    /// 「伪逐字填充」—— 只有**行级**时间轴的来源（LRCLIB / PetitLyrics /
+    /// 没有逐字档的网易云与 Musixmatch / QQ 与酷狗的 LRC 兜底），把整行按
+    /// **估算演唱时长**逐字填亮，而不是一次亮起。
+    ///
+    /// 为什么放在「实验」里：它确实在编时间（行内分布是估的），估偏了前沿就会提前/滞后。
+    /// 实现见 `PseudoWordTiming`；接线在 `LyricLinesAdapter.toAppleMusicLyricLines()`。
+    /// ⚠️ 它**不改变** `timingKind`（仍是 `.lineSynchronized`）—— 改了会让间奏判定
+    /// 把估算值当作者时间轴。
+    var pseudoWordByWordLyrics: Bool
 
     init(
         liveContainerSharing: Bool,
         showInstagramDestination: Bool = false,
         amllFuzzySearch: Bool = false,
         spicyLyricsCrossValidation: Bool = false,
-        appleMusicOfficialTtml: Bool = false
+        appleMusicOfficialTtml: Bool = false,
+        pseudoWordByWordLyrics: Bool = false
     ) {
         self.liveContainerSharing = liveContainerSharing
         self.showInstagramDestination = showInstagramDestination
         self.amllFuzzySearch = amllFuzzySearch
         self.spicyLyricsCrossValidation = spicyLyricsCrossValidation
         self.appleMusicOfficialTtml = appleMusicOfficialTtml
+        self.pseudoWordByWordLyrics = pseudoWordByWordLyrics
     }
 
     /// 手写解码：`liveContainerSharing` 之外那些都是**后加的**字段，早期盘上根本没有它们。
@@ -58,6 +69,8 @@ struct ExperimentsOptions: Codable, Equatable {
         spicyLyricsCrossValidation = try container.decodeIfPresent(Bool.self, forKey: .spicyLyricsCrossValidation)
             ?? false
         appleMusicOfficialTtml = try container.decodeIfPresent(Bool.self, forKey: .appleMusicOfficialTtml)
+            ?? false
+        pseudoWordByWordLyrics = try container.decodeIfPresent(Bool.self, forKey: .pseudoWordByWordLyrics)
             ?? false
     }
 }

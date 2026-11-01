@@ -189,26 +189,11 @@ struct LyricLine: Identifiable, Hashable, Sendable {
             .isEmpty
     }
 
-    /// 均匀按「字」拆分整行时长，用于没有逐字时间轴的来源（LRCLIB / Genius 等）。
-    /// 注意：只在渲染时按需调用，不写回数据模型。
-    func makePseudoSyllables() -> [LyricSyllable] {
-        guard syllables.isEmpty,
-              let duration,
-              duration > 0 else { return [] }
-
-        let characters = Array(text)
-        guard !characters.isEmpty else { return [] }
-
-        let characterDuration = duration / Double(characters.count)
-        return characters.enumerated().map { index, character in
-            let startTime = time + Double(index) * characterDuration
-            return LyricSyllable(
-                text: String(character),
-                startTime: startTime,
-                endTime: startTime + characterDuration
-            )
-        }
-    }
+    // `makePseudoSyllables()` 已删除：它（从 MeloX 原样带过来的死代码，全仓零调用）
+    // 把整行**显示时长**均分给每一个字符，连句尾那段静音也填了 —— 于是填充前沿会
+    // 一直推进到下一句开口，且与间奏判定（`contentEndTime` 用的是**估算演唱时长**）
+    // 对不上。要做伪逐字请用 `PseudoWordTiming.pieces(for:startTime:nextStartTime:)`：
+    // 它按估算演唱时长铺、夹到下一行、空格不占时间，且只产渲染用的数据。
 
     func attachingTranslation(_ translation: String?) -> LyricLine {
         LyricLine(

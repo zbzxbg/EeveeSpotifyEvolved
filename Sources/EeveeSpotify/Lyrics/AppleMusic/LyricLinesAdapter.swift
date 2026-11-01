@@ -169,12 +169,36 @@ extension LyricsDto {
                 ? TimeInterval(indexed[index + 1].element.offsetMs ?? startMs) / 1000
                 : nil
 
-            let syllables = Self.syllables(
+            let authoredSyllables = Self.syllables(
                 for: line,
                 startTime: startTime,
                 nextStartTime: nextStartTime
             )
-            let isPrecise = !syllables.isEmpty
+            let isPrecise = !authoredSyllables.isEmpty
+
+            // 没有作者逐字时间轴时的**伪逐字**（实验开关，默认关）。
+            //
+            // ⚠️ 合成的那份**只给渲染层用**，`timingKind` 仍按"有没有作者时间轴"决定 ——
+            // 见 `PseudoWordTiming` 文件头第 1 条：标成 `.precise` 会让间奏判定
+            // 把估算值当作者时间轴。
+            let syllables: [LyricSyllable]
+            if isPrecise {
+                syllables = authoredSyllables
+            } else if UserDefaults.experimentsOptions.pseudoWordByWordLyrics {
+                syllables = PseudoWordTiming.pieces(
+                    for: line.content,
+                    startTime: startTime,
+                    nextStartTime: nextStartTime
+                ).map { piece in
+                    LyricSyllable(
+                        text: piece.text,
+                        startTime: piece.startTime,
+                        endTime: piece.endTime
+                    )
+                }
+            } else {
+                syllables = []
+            }
 
             let duration: TimeInterval?
             if isPrecise {

@@ -67,6 +67,17 @@ struct EeveeExperimentsSettingsView: View {
                 )
             }
 
+            // 伪逐字填充（**默认关**）。
+            // 只对"给了行时间、没给逐字"的源生效：整行按估算演唱时长逐字填亮。
+            // 行内分布是估的 ⇒ 放在实验页；`timingKind` 不动，间奏判定不受影响
+            // （见 `PseudoWordTiming` 文件头）。
+            Section(footer: Text("pseudo_word_by_word_lyrics_description".localized)) {
+                Toggle(
+                    "pseudo_word_by_word_lyrics".localized,
+                    isOn: $experimentsOptions.pseudoWordByWordLyrics
+                )
+            }
+
             // SpicyLyrics 交叉验证（**默认关**）。
             // 补的是"上游把词和谐成星号"，判据在 `LyricsCensorFill`，
             // 接线在 `LyricsUncensorFill`（挂在 `SpicyLyricsRepository.parseLyricsData` 之后）。

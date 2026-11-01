@@ -265,6 +265,20 @@ jobs:
                  -o qrc-des-tests
           ./qrc-des-tests
 
+      # 伪逐字填充（`PseudoWordTiming`，实验页开关、默认关）。
+      # 它是**在编时间**（行内分布是估的），三条不变量必须钉死：
+      # 拼回来的文本逐字等于原行（渲染层按字符下标记时）、最后一片不越过下一行
+      # 且不超估算、空格零时长但仍占位（否则后面字符下标前移）。
+      # 纯 Foundation（只依赖 `LyricVocalDurationEstimator`），所以能进这里；
+      # 真正的接线点 `LyricLinesAdapter` 要 MeloX 的渲染模型，进不来。
+      - name: Pseudo word-by-word fill (experimental)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/AppleMusic/LyricVocalDurationEstimator.swift \
+                 Sources/EeveeSpotify/Lyrics/AppleMusic/PseudoWordTiming.swift \
+                 Tests/PseudoWordTiming/main.swift \
+                 -o pseudo-word-timing-tests
+          ./pseudo-word-timing-tests
+
       # 2026-10-17：「SpicyLyrics 交叉验证」的**补词判据**（`LyricsCensorFill`）。
       # 三件事必须钉住：
       #   ① 检测正则 —— 上游的 `\b\*{3,}\b` 实测只命中 `f***k`，`my **** line` 一个都
