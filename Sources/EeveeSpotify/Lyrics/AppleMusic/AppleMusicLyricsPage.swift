@@ -878,6 +878,8 @@ struct AppleMusicLyricsPage: View {
             // 数据由 `LyricLinesAdapter` 用仓库既有罗马化管线填好（逐语言开关已过滤，
             // 与原文相同的行是 nil）。
             romanization: line.romanization,
+            // 源给了逐词罗马字时，那一行也按词亮（数据见 `LyricLine.romanizationSyllables`）。
+            romanizationSyllables: line.romanizationSyllables,
             backgroundVocal: line.backgroundVocal,
             // 显式传真实宽度，不要再依赖 SwiftUI 推断（那正是文字溢出的原因）。
             constrainedWidth: availableWidth,

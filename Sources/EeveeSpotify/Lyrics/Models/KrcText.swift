@@ -184,6 +184,39 @@ enum KrcText {
         return out
     }
 
+    /// 逐词罗马字：与 `romanizedLines` 读的是同一份 `[language:]` type 0，
+    /// 但**保留词边界**，让渲染层能把罗马字那一行也做成逐字填充。
+    ///
+    /// KRC 的罗马字组和词片是同一套切分（`<…>词` 有几段，`type 0` 就有几组），
+    /// 所以只在"组数 == 那一行的词数"时才敢挂；对不上就留空数组，
+    /// 由显示层退回整行罗马字。
+    private static func romanizedWordGroups(
+        from krc: String,
+        rows: [(index: Int, line: LyricsLineDto)]
+    ) -> [[String]]? {
+        guard let source = romanizedRows(from: krc), !source.isEmpty else { return nil }
+
+        var out: [[String]] = []
+        out.reserveCapacity(rows.count)
+        var matchedAny = false
+        for row in rows {
+            guard row.index < source.count else { return nil }
+            let groups = source[row.index]
+            if let words = row.line.words, !words.isEmpty, groups.count == words.count {
+                out.append(groups)
+                matchedAny = true
+            } else {
+                out.append([])
+            }
+        }
+        guard matchedAny else { return nil }
+
+        // 与 `romanizedLines` 同一道闸：韩文歌的 type 0 是中文谐音，不是罗马字。
+        guard hanRatio(out.flatMap { $0 }.joined()) <= 0.3 else { return nil }
+
+        return out
+    }
+
     /// 一段文本里汉字占"非空白字符"的比例。
     private static func hanRatio(_ text: String) -> Double {
         var total = 0
@@ -242,6 +275,9 @@ enum KrcText {
         }
         if let romanized = romanizedLines(from: krc, rows: kept) {
             dto.officialRomanizedLines = romanized
+            if let groups = romanizedWordGroups(from: krc, rows: kept) {
+                dto.officialRomanizedWordGroups = groups
+            }
         }
         if let translated = translatedLines(from: krc, rows: kept) {
             dto.translation = LyricsTranslationDto(languageCode: "zh", lines: translated)

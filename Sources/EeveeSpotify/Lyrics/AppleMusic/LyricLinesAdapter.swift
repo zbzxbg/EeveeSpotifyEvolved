@@ -242,6 +242,12 @@ extension LyricsDto {
                     ? romanizedContents[pair.offset]
                     : nil
             )
+            // 罗马字那一行的**逐字**时间轴（只有给出词级罗马字的源才有）。
+            let romanizationSyllables = Self.romanizationSyllables(
+                for: line,
+                index: pair.offset,
+                groups: officialRomanizedWordGroups
+            )
 
             return LyricLine(
                 id: Self.lineID(index: index, startMs: startMs),
@@ -258,7 +264,7 @@ extension LyricsDto {
                 text: line.content,
                 syllables: syllables,
                 romanization: romanization,
-                romanizationSyllables: [],
+                romanizationSyllables: romanizationSyllables,
                 translation: Self.normalized(translationText),
                 agent: nil,
                 backgroundVocal: Self.backgroundVocal(for: line)
@@ -288,6 +294,39 @@ extension LyricsDto {
             return nil
         }
         return trimmedRomanized
+    }
+
+    /// 罗马字那一行的**逐字**时间轴：把源给的逐词罗马字挂到正文那几个词的时间上。
+    ///
+    /// 判据只有一条 —— **组数必须等于词数**。KRC 的罗马字组和词片本来同切分，
+    /// 但中间还会经过按行过滤（`droppingBlankLinesForDisplay`），所以这里再判一次；
+    /// 对不上就返回空，渲染层会退回"整行罗马字"那种静态画法。
+    ///
+    /// 首字母大写只在第一组上做：源给的罗马字全是小写，而整行那条路径
+    /// （`romanizedContentsForDisplay`）会给行首字母大写 —— 两条路显示的是同一行，
+    /// 大小写必须一致，否则看起来像少做了一步。
+    private static func romanizationSyllables(
+        for line: LyricsLineDto,
+        index: Int,
+        groups: [[String]]
+    ) -> [LyricSyllable] {
+        guard index < groups.count, groups[index].count > 0,
+              let words = line.words,
+              words.count == groups[index].count else { return [] }
+
+        let texts = groups[index]
+        var out: [LyricSyllable] = []
+        out.reserveCapacity(words.count)
+        for wordIndex in 0..<words.count {
+            var text = texts[wordIndex]
+            if wordIndex == 0 { text = text.capitalizingFirstLetterIfAlphabetic() }
+            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            let start = TimeInterval(words[wordIndex].startMs) / 1000
+            let end = words[wordIndex].endMs.map { TimeInterval($0) / 1000 } ?? start
+            guard end >= start else { continue }
+            out.append(LyricSyllable(text: text, startTime: start, endTime: end))
+        }
+        return out
     }
 
     /// 背景人声/副唱 → MeloX 的背景人声模型。

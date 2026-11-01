@@ -35,6 +35,15 @@ struct LyricsDto {
     /// 空数组 ⇒ 显示层照旧自己算（`romanizedForWordByWordIfEnabled`），与改动前一致。
     /// ⚠️ 长度必须等于 `lines.count`（显示层按下标配对）；对不上的那份**不许**用。
     var officialRomanizedLines: [String] = []
+
+    /// **源给的逐词罗马字**，与 `lines` 同序；每一项按那一行的 `words` **逐词对齐**。
+    ///
+    /// 与 `officialRomanizedLines` 是同一份数据的两种粒度：那份是整行字符串（静态
+    /// 显示用），这份保留词边界，渲染层据此把罗马字那一行也做成逐字填充。
+    ///
+    /// 只有给出词级罗马字的源才有。某一行的词数对不上就**留空数组** ——
+    /// 宁可退回整行显示，也不能让读音和原文错位。
+    var officialRomanizedWordGroups: [[String]] = []
     /// 这份歌词**实际**是谁给的（形如 `"PetitLyrics"`）。
     ///
     /// **不再带 `(EeveeSpotify)` 后缀**（这个就不需要写 eveespotify
@@ -471,6 +480,9 @@ extension LyricsDto {
         // 两份按下标对齐的副本：长度对不上就当它本来就没配对（渲染层同样会自己放弃）。
         if officialRomanizedLines.count == lines.count {
             result.officialRomanizedLines = keep.map { officialRomanizedLines[$0] }
+        }
+        if officialRomanizedWordGroups.count == lines.count {
+            result.officialRomanizedWordGroups = keep.map { officialRomanizedWordGroups[$0] }
         }
         if let translation, translation.lines.count == lines.count {
             result.translation = LyricsTranslationDto(

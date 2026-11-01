@@ -1733,6 +1733,12 @@ enum NowPlayingIOS27 {
     /// ② 链接分发器没抓到 ⇒ `open` 退回 `UIApplication.open(spotify:…)`，对 App 自己
     /// 就是空操作。两种都表现为"点上去什么都不发生"。
     /// ⇒ 拿不到 URI / 分发器没就绪时，把这一下**转发给原生标题行**（`eeveeFire`）。
+    /// AM 样式那条路（`AppleMusicTitleTaps`）也走这里，不另写一套 URL 逻辑。
+    static func openAlbumFromTitleTap() { openCurrentAlbum() }
+
+    /// AM 样式那条路点歌手的入口，见 `openArtistFromTitleTap` 的调用方 `AppleMusicTitleTaps`。
+    static func openArtistFromTitleTap() { openCurrentArtist() }
+
     private static func openCurrentAlbum() {
         let uri = currentTrackMetadata()["album_uri"]
         if SpotifyURIOpener.isReady, let uri, !uri.isEmpty {

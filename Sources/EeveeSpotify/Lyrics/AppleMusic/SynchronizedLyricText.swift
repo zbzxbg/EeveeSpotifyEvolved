@@ -42,6 +42,12 @@ struct SynchronizedLyricText: View {
     /// `error: cannot find 'romanization' in scope`（当时我在 `body` 里写了这一行、
     /// 却没有把它加成视图的入参）。自检规则 ⑤ 现在会提前抓这一形态。
     let romanization: String?
+    /// 罗马字那一行的**逐字**时间轴（可选）。
+    ///
+    /// 只有给出词级罗马字的源才有（酷狗 KRC 的 `[language:]` type 0）。非空时罗马字
+    /// 走与主歌词同一个渲染器，跟着唱到哪个词亮哪个词；为空则退回 `romanization`
+    /// 的整行静态画法 —— 两条路显示的文本必须一致（都由 `LyricLinesAdapter` 生成）。
+    let romanizationSyllables: [LyricSyllable]
     /// 副唱/背景人声（可选），按位置画在主歌上方或下方。
     let backgroundVocal: LyricBackgroundVocal?
     /// 文本最大宽度（决定折行）。
@@ -76,6 +82,7 @@ struct SynchronizedLyricText: View {
         focusStrength: Double,
         translation: String? = nil,
         romanization: String? = nil,
+        romanizationSyllables: [LyricSyllable] = [],
         backgroundVocal: LyricBackgroundVocal? = nil,
         constrainedWidth: CGFloat?,
         alignment: SynchronizedLyricTextAlignment = .leading,
@@ -93,6 +100,7 @@ struct SynchronizedLyricText: View {
         self.focusStrength = focusStrength
         self.translation = translation
         self.romanization = romanization
+        self.romanizationSyllables = romanizationSyllables
         self.backgroundVocal = backgroundVocal
         self.constrainedWidth = constrainedWidth
         self.alignment = alignment
@@ -131,7 +139,9 @@ struct SynchronizedLyricText: View {
             // · 与主歌词的间距用 Apple Music 自己的 `transliterationSpacing = 5`
             // （`AppleMusicLyricsSupplementalTextProfile` 里那个常量本来就写着"音译"）；
             // · 颜色/焦点跟随与译文同一条公式，再淡一档。
-            if let romanization, !romanization.isEmpty {
+            if !romanizationSyllables.isEmpty {
+                romanizationTimedText
+            } else if let romanization, !romanization.isEmpty {
                 romanizationText(romanization)
             }
 
@@ -313,8 +323,77 @@ struct SynchronizedLyricText: View {
             )
     }
 
-    // MARK: 译文
+    /// 罗马字那一行（**有词级时间轴时**）：与主歌词同一个渲染器，只是字号更小、
+    /// 不发光、不抬升 —— 它仍然只是"读音提示"，不该和正文抢注意力。
+    ///
+    /// 文本由 `romanizationSyllables` 拼出来，与静态那条路（`romanizationText`）用的是
+    /// 同一份数据（`LyricLinesAdapter` 保证两条路的文字一致），所以开关上不会"换一种写法"。
+    private var romanizationTimedText: some View {
+        let romanizationFontSize = typography.supplementalFontSize * 0.85
 
+        return TimedLyricTextBuilder.text(
+            from: romanizationSyllables,
+            constrainedWidth: constrainedWidth,
+            fontSize: romanizationFontSize,
+            fontWeight: .regular
+        )
+        .font(.system(size: romanizationFontSize, weight: .regular))
+        .foregroundStyle(primaryColor)
+        .multilineTextAlignment(alignment.textAlignment)
+        .lineSpacing(typography.wrappedLineSpacing)
+        // 与 `lyricText` 同一套：先注册逐字时间轴作用域，再挂渲染器。
+        .lyricTextAttributes()
+        .textRenderer(
+            LyricGlowTextRenderer(
+                playbackTime: playbackTime,
+                style: romanizationRendererStyle,
+                layoutConfiguration: .init(
+                    width: constrainedWidth,
+                    centersLines: alignment == .center
+                ),
+                appliesTimingEffects: appliesTimingEffects,
+                timingEffectsStrength: focusStrength
+            )
+        )
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+        .padding(.bottom, AppleMusicLyricsSupplementalTextProfile.iOS26_6.transliterationSpacing)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(
+            maxWidth: .infinity,
+            alignment: alignment.frameAlignment
+        )
+    }
+
+    /// 罗马字行用的渲染器档位：把主歌词那份的**发光与抬升关掉**，其余不动。
+    private var romanizationRendererStyle: LyricGlowTextRenderer.Style {
+        let profile = Self.profile
+        return LyricGlowTextRenderer.Style(
+            glowRadius: CGFloat(profile.glowRadius),
+            glowOpacity: 0,
+            glowsLongSyllablesOnly: false,
+            longSyllableDetectionMode: .character,
+            longSyllableDurationThreshold: 0.55,
+            unplayedOpacity: profile.selectedUpcomingTextOpacity,
+            focusOpacityEndpoints: LyricFocusOpacityEndpoints(
+                deselected: profile.deselectedTextOpacity,
+                selected: profile.selectedTextOpacity,
+                selectedUpcoming: profile.selectedUpcomingTextOpacity
+            ),
+            maximumUnplayedBlurRadius: 0,
+            playedRise: 0,
+            maximumLongSyllableScale: CGFloat(profile.emphasisScaleRange.upperBound),
+            longSyllableExpansionPadding: 0,
+            highlightGradientWidth: 1,
+            lineProgressionGradientFeather: CGFloat(profile.lineProgressionGradientFeather),
+            highlightGradientReduction: 0,
+            lineFinishProgressAnimationDuration: profile.lineFinishProgressAnimationDuration,
+            liftMode: .character
+        )
+    }
+
+    // MARK: 译文
     private func translationText(_ translation: String) -> some View {
         Text(translation)
             .font(

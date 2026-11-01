@@ -272,6 +272,7 @@ final class AppleMusicLyricsOverlayHost {
         hostingController?.view.removeFromSuperview()
         hostingController = nil
         hostView = nil
+        AppleMusicTitleTaps.clear()
         writeDebugLog("[AppleMusicLyrics] overlay detached")
     }
 
@@ -384,6 +385,16 @@ final class AppleMusicLyricsOverlayHost {
            let host = hostingView.superview,
            host.subviews.last !== hostingView {
             host.bringSubviewToFront(hostingView)
+        }
+        // 标题/歌手那两行的透明命中区：壳铺满整页并吃掉触摸，原生 label 在它下面。
+        //
+        // 只在**整页**那一层挂（预览卡片里 label 在卡片外面，挂上去只会盖错位置）：
+        // 判据是宿主宽度接近窗口宽度。
+        if let hostingView = hostingController?.view,
+           let host = hostingView.superview,
+           host.bounds.width > 1,
+           host.bounds.width >= (host.window?.bounds.width ?? host.bounds.width) - 1 {
+            AppleMusicTitleTaps.place(in: host, on: hostingView)
         }
         clock.submit(seconds: ms / 1000)
         // 自绘壳的进度条 / 时间 / 播放键状态也走同一个时钟。
