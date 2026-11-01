@@ -56,15 +56,24 @@ enum LrcText {
     }
 
     /// 解析成 dto。没有一行带时间轴 ⇒ nil（交给调用方判"这个源没答上来"）。
+    ///
+    /// 制作信息行（`[00:02.25]词：周杰伦` —— QQ 的官方词就是这么下发的）在这里剔掉：
+    /// 它们**不是歌词**，但里面那一句「词：」正是署名要的作词者。过滤放在 dto 这一层
+    /// 而不是 `lines(from:)` 里，是为了让"剔之前"的行还能被 `LyricsCreditLine` 读到。
     static func dto(from text: String) -> LyricsDto? {
-        let parsed = lines(from: text)
-        guard !parsed.isEmpty else { return nil }
-        let contents = parsed.map(\.content)
-        return LyricsDto(
-            lines: parsed,
+        let all = lines(from: text)
+        let kept = all.filter { !LyricsCreditLine.isCreditLine($0.content) }
+        guard !kept.isEmpty else { return nil }
+        let contents = kept.map(\.content)
+        var dto = LyricsDto(
+            lines: kept,
             timeSynced: true,
             romanization: contents.canBeRomanized ? .canBeRomanized : .original
         )
+        if let lyricist = all.compactMap({ LyricsCreditLine.lyricist(in: $0.content) }).first {
+            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
+        }
+        return dto
     }
 
     private static func offsetMs(of match: NSTextCheckingResult, in ns: NSString) -> Int? {

@@ -117,14 +117,21 @@ enum KrcText {
         return dto(from: text)
     }
 
+    /// 制作信息行（`作词：X`）在这里剔掉：不是歌词，但里面的作词者要留下来当署名。
+    /// 过滤放在 dto 这一层而不是 `lines(from:)` 里，滤镜才能读到"剔之前"的行。
     static func dto(from krc: String) -> LyricsDto? {
-        let parsed = lines(from: krc)
-        guard !parsed.isEmpty else { return nil }
-        let contents = parsed.map(\.content)
-        return LyricsDto(
-            lines: parsed,
+        let all = lines(from: krc)
+        let kept = all.filter { !LyricsCreditLine.isCreditLine($0.content) }
+        guard !kept.isEmpty else { return nil }
+        let contents = kept.map(\.content)
+        var dto = LyricsDto(
+            lines: kept,
             timeSynced: true,
             romanization: contents.canBeRomanized ? .canBeRomanized : .original
         )
+        if let lyricist = all.compactMap({ LyricsCreditLine.lyricist(in: $0.content) }).first {
+            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
+        }
+        return dto
     }
 }

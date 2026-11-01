@@ -545,9 +545,14 @@ class NeteaseLyricsRepository: LyricsRepository {
         return name
     }
 
-    /// 回包里的两位署名 → 显示层用的 contributors（顺序：先歌词、后翻译）。
+    /// 回包里的两位署名 → 显示层用的 contributors（顺序：作词、上传者、翻译者）。
     private func contributors(from raw: RawLyrics) -> [LyricsContributor] {
         var result: [LyricsContributor] = []
+        // 网易云的 LRC 开头通常就带「作词 : 方文山」——这一行刚被 `isCreditLine` 从正文里
+        // 剔掉，顺手当署名（`.lyricist` 与"上传者"是两个人，别混）。
+        if let lrc = raw.lrc, let name = LyricsCreditLine.lyricist(inLyrics: lrc) {
+            result.append(LyricsContributor(role: .lyricist, name: name, url: nil))
+        }
         if let name = raw.lyricUser {
             result.append(LyricsContributor(role: .uploader, name: name, url: nil))
         }
@@ -598,16 +603,10 @@ class NeteaseLyricsRepository: LyricsRepository {
 
     // MARK: - LRC 解析
     //
-    // 过滤网易 LRC 里「作词 : XXX」这类歌曲制作信息行。
-    private static let creditLinePattern =
-        "^\\s*(作词|作曲|编曲|制作人|制作助理|混音|混音师|母带|母带工程师|录音|录音师|" +
-        "监制|和声|和音|吉他|贝斯|鼓|键盘|钢琴|小提琴|大提琴|弦乐|制作|出品|发行|" +
-        "配唱|统筹|企划|推广|文案|摄影|封面|导演|经纪人|" +
-        "Program|Programming|Vocal|Lyrics|Composer|Arranger|Producer|" +
-        "Recorded|Mixed|Mastered)\\s*[:：]"
-
+    // 过滤网易 LRC 里「作词 : XXX」这类歌曲制作信息行。判据和 QQ / 酷狗 / Genius 共用
+    // `LyricsCreditLine`（那边多认繁体、以及合并式「作词/作曲 : x」——腾讯系下发的就是这种）。
     private func isCreditLine(_ content: String) -> Bool {
-        content ~= Self.creditLinePattern
+        LyricsCreditLine.isCreditLine(content)
     }
 
     /// 是否为 ♪ 间奏行：空行，或整行只有 ♪ 符号（含多个 ♪ / 前后空白）。
@@ -1475,16 +1474,6 @@ class NeteaseLyricsRepository: LyricsRepository {
                         ).trimmingCharacters(in: .whitespaces)
                         guard !stripped.isEmpty, !isCreditLine(stripped),
                               !LyricsMarkerFilter.isNonLyricLine(stripped) else { continue }
-                        // 合并式制作信息（如「作词/作曲 : xxx」）isCreditLine 匹配不到，单独兜住：
-                        // 以制作关键词开头且后面带冒号，视为制作信息，不收录。
-                        let creditKeywords = ["作词", "作曲", "编曲", "混音", "混音师", "母带",
-                                              "录音", "录音师", "制作", "出品", "发行", "监制",
-                                              "和声", "配唱", "统筹", "企划", "推广", "文案",
-                                              "摄影", "封面", "导演", "经纪人"]
-                        if creditKeywords.contains(where: { stripped.hasPrefix($0) }),
-                           stripped.contains(":") || stripped.contains("：") {
-                            continue
-                        }
                         fallbackLines.append(LyricsLineDto(content: content, offsetMs: nil))
                     }
                     guard !fallbackLines.isEmpty else {

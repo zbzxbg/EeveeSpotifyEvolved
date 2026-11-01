@@ -256,11 +256,17 @@ class GeniusLyricsRepository: LyricsRepository {
         }
 
         writeDebugLog("[Genius] Using \"\(song.title)\" — \(mappedLines.count) line(s)")
-        return LyricsDto(
+        var dto = LyricsDto(
             lines: mappedLines.map { LyricsLineDto(content: $0) },
             timeSynced: false,
             romanization: romanization,
             languageCode: songInfo.language
         )
+        // Genius 的词页开头偶有「作词 : X」这类制作信息行 —— 正文那边由
+        // `LyricsMarkerFilter` 统一剔掉，这里把作词者留下当署名。
+        if let lyricist = LyricsCreditLine.lyricist(inLyrics: songInfo.lyrics.plain) {
+            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
+        }
+        return dto
     }
 }

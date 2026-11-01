@@ -115,14 +115,21 @@ enum QrcText {
     }
 
     static func dto(from qrc: String) -> LyricsDto? {
-        let parsed = lines(from: qrc)
-        guard !parsed.isEmpty else { return nil }
-        let contents = parsed.map(\.content)
-        return LyricsDto(
-            lines: parsed,
+        let all = lines(from: qrc)
+        let kept = all.filter { !LyricsCreditLine.isCreditLine($0.content) }
+        guard !kept.isEmpty else { return nil }
+        let contents = kept.map(\.content)
+        var dto = LyricsDto(
+            lines: kept,
             timeSynced: true,
             romanization: contents.canBeRomanized ? .canBeRomanized : .original
         )
+        // QQ 官方词开头那一串「词：/曲：/编曲：/制作人：」带时间戳下发，剔掉之后
+        // 里面的「词：」正好是作词者（见 `LyricsCreditLine`）。
+        if let lyricist = all.compactMap({ LyricsCreditLine.lyricist(in: $0.content) }).first {
+            dto.providerContributors = [LyricsContributor(role: .lyricist, name: lyricist, url: nil)]
+        }
+        return dto
     }
 
     /// QRC 正文 → 带词级时间轴的行。
