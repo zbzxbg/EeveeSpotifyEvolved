@@ -2031,12 +2031,10 @@ enum EntityPageAppearance {
             )
             return nil
         }
-        // 三种读法：`UIImageView.image` → `layer.contents` → 把这一帧缩出来取平均色。
-        // 满幅页头那一支容器里**不一定**装着 `UIImageView`（有的版本自己往 layer 里画），
+        // 两种读法：`UIImageView.image` → 把这一帧缩出来取平均色。
+        // 满幅页头那一支容器里**不一定**装着 `UIImageView`（有的版本把图画在 layer 上），
         // 只认第一条会让这一族永远取不到颜色。
-        guard let colour = coverColor(picture)
-                ?? layerContentsColour(picture)
-                ?? snapshotColour(of: picture) else {
+        guard let colour = coverColor(picture) ?? snapshotColour(of: picture) else {
             reportFullbleedMiss(
                 "the picture carries no readable colour (\(String(describing: type(of: picture))))"
             )
@@ -2295,26 +2293,11 @@ enum EntityPageAppearance {
         return nil
     }
 
-    /// 图**直接画在 `layer.contents`** 上的那一档（`Encore.ImageView` 这类不是 `UIImageView`）。
-    private static func layerContentsColour(_ root: UIView) -> UIColor? {
-        guard let image = firstLayerContentsImage(root.layer) else { return nil }
-        return averageColor(of: image)
-    }
-
-    private static func firstLayerContentsImage(_ layer: CALayer, depth: Int = 0) -> CGImage? {
-        if let image = layer.contents as? CGImage { return image }
-        guard depth < 4 else { return nil }
-        for sub in layer.sublayers ?? [] {
-            if let hit = firstLayerContentsImage(sub, depth: depth + 1) { return hit }
-        }
-        return nil
-    }
-
     private static weak var snapshotColourPicture: UIView?
     private static var snapshotColourValue: UIColor?
 
-    /// 最后一档：那一支容器既没有 `UIImageView`、`layer.contents` 也不是图
-    /// （自己 `draw(_:)` 画的）。把它**当前这一帧**缩到 8×8 取平均色。
+    /// 最后一档：那一支容器里没有 `UIImageView`，图是直接画在 layer 上的
+    /// （`Encore.ImageView` 那一类）。把它**当前这一帧**缩到 8×8 取平均色。
     ///
     /// 只在"这一页真的有满幅页头"时才走到；成功一次就缓存，失败不缓存
     /// （图晚一点加载出来的话，下一拍还能再试）。
