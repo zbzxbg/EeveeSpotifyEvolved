@@ -12,6 +12,11 @@ import UIKit
 /// 壳移动/置于最前时按钮跟着走，天然在上面。
 ///
 /// 动作复用 `NowPlayingIOS27` 的两个入口（打开当前专辑 / 当前艺人），不另写一套 URL 逻辑。
+///
+/// `@MainActor`：全部是 UIKit 视图操作，调用方（`AppleMusicLyricsOverlayHost.tick`）与
+/// 被转发的动作（`NowPlayingIOS27`）都在主 actor 上 —— 标出来才不会在 `UIAction` 的
+/// 闭包里被当成"从 actor 之外调用"。
+@MainActor
 enum AppleMusicTitleTaps {
 
     /// 当前挂载的壳。换壳（切页、重建 hosting）时要把旧按钮一起丢掉。
@@ -67,7 +72,9 @@ enum AppleMusicTitleTaps {
         on container: UIView,
         frame: CGRect,
         identifier: String,
-        action: @escaping () -> Void
+        // 显式标 `@MainActor`：这个闭包最终会去调 `NowPlayingIOS27` 那个主 actor 上的入口，
+        // 不标的话它就是普通非隔离闭包，编译器会拒绝里面的调用。
+        action: @escaping @MainActor () -> Void
     ) {
         guard frame.width > 1, frame.height > 1 else {
             slot?.isHidden = true
@@ -84,7 +91,13 @@ enum AppleMusicTitleTaps {
             // 两行文字本身已经有读屏内容；这颗只是透明命中区，别让读屏多读一条。
             button.isAccessibilityElement = false
             button.accessibilityIdentifier = identifier
-            button.addAction(UIAction { _ in action() }, for: .touchUpInside)
+            // `UIAction` 的 handler 是**非隔离**闭包（UIKit 类型，不继承外面的 actor），
+            // 而 `action` 是 `@MainActor` 的 ⇒ 这里显式声明"我确实在主 actor 上"。
+            // 安全性由 UIKit 保证：控件事件一律在主线程投递。
+            button.addAction(
+                UIAction { _ in MainActor.assumeIsolated { action() } },
+                for: .touchUpInside
+            )
             container.addSubview(button)
         }
 
