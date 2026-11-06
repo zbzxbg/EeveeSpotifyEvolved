@@ -43,9 +43,9 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 <details>
 <summary>Lyrics source details</summary>
 
-- The default order is `AMLL → Spicy Lyrics → PetitLyrics → NetEase → QQ Music → KuGou → Unison → Musixmatch → BiniLyrics → LRCLIB → Genius`. Drag to reorder it under Settings → Lyrics → Lyrics Source Order.
-- The order only decides **who is asked first**; it never decides who wins. A word-by-word answer always beats a line-by-line one, which always beats plain text.
-- With word-by-word lyrics on, Auto Select keeps looking for a word-timed answer for up to 4 seconds after the first line-timed one. That cap exists so the lyrics card is not delayed past the point where it can still be built.
+- The default order is `AMLL → Spicy Lyrics → PetitLyrics → KuGou → NetEase → QQ Music → Unison → Musixmatch → BiniLyrics → LRCLIB → Genius`. Drag to reorder it under Settings → Lyrics → Lyrics Source Order.
+- The order only decides **who is asked first**; it never decides who wins. A word-by-word answer always beats a line-by-line one, which always beats plain text. Among answers with the same timing tier, the one that also carries a translation, official romanization, or word-level romanization (whichever switch asks for it) wins; a tie keeps the first arrival.
+- With word-by-word lyrics on, Auto Select may keep asking until 4 seconds after the chain started — to upgrade a line-timed answer to a word-timed one, or to find one that also has the translation / romanization the current settings ask for. That cap exists so the lyrics card is not delayed past the point where it can still be built.
 - Auto Select is only offered when the now-playing style is **Immersive** or **Apple Music**. With Spotify's own layout the lyrics go straight into Spotify's card, so a single source is used instead.
 - Word-timed sources: Spicy Lyrics, AMLL, PetitLyrics, NetEase (yrc), QQ Music (QRC), KuGou (KRC), Unison, Musixmatch (richsync), BiniLyrics, Apple Music TTML. LRCLIB is line-timed, Genius is plain text.
 - The Apple Music official TTML source is under Settings → Experiments. It needs your own `media-user-token`, because Apple has no public lyrics API.
