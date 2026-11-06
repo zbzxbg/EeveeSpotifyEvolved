@@ -41,8 +41,8 @@ enum QrcPayloadWrapper {
         }
 
         // 属性值与 `"/>` 之间通常隔着空行（QQ 回包就是 `…正文…\n\n"/>`）。
-        // 那段空白不属于正文：留着会让"正文以引号结尾"和"正文以换行结尾"变成两回事，
-        // 行数统计也会多出一条空行。只裁尾，不裁头 —— 正文第一行就是 `[ti:…]`。
+        // 那段空白不属于正文：留着会让正文多出两个尾部换行，按换行切分时多出空段，
+        // 也让"正文以引号结尾"变得看不出来。只裁尾，不裁头 —— 正文第一行是 `[ti:…]`。
         var body = String(tail[..<closing.lowerBound])
         while let last = body.last, last.isWhitespace {
             body.removeLast()

@@ -17,7 +17,7 @@ import UIKit
 /// ⚠️ 「NetEase 交叉验证」与「PetitLyrics 回退 NetEase」两个实验**已整体撤掉**
 /// （NE 目前只在来源说明里标注"不推荐非中国用户使用"）。
 /// 这一页现在只留 Instagram 分享位、AMLL 模糊搜索、伪逐字、更激进的标注删除、
-/// SpicyLyrics 交叉验证、Apple 官方 TTML，以及逐词时间轴回退。
+/// SpicyLyrics 交叉验证、Apple 官方 TTML，以及 PetitLyrics 回退逐行。
 struct EeveeExperimentsSettingsView: View {
     @State var experimentsOptions = UserDefaults.experimentsOptions
 

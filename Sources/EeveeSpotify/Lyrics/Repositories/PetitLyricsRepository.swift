@@ -350,7 +350,7 @@ class PetitLyricsRepository: LyricsRepository {
     ///
     /// Petit 有一部分 `wordsSynced` 是**等距编出来的**：每行每个词固定同一个 step，
     /// 而 step 的大小（80 / 15 / 5 / 2 …）与这首歌的行间距毫无关系 ⇒ 整行词轴只占
-    /// 行间距的一小截。真点出来的词时间这一比值在 65% 以上；编出来的在 15% 上下。
+    /// 行间距的一小截。真点出来的词时间这一比值在 65% 以上；等距编出来的只有 15% 上下。
     ///
     /// 只统计「≥2 个词、行间距为正、词轴跨度为正」的行 —— 单词行（间奏/语气词）没有
     /// 跨度可量；可比行不足 3 组时返回 1（不判，宁可照用）。
@@ -375,7 +375,7 @@ class PetitLyricsRepository: LyricsRepository {
 
     /// 覆盖率中位数低于这个值 ⇒ 认为这一首的词轴不可信，整首退回行级。
     ///
-    /// 阈值取在两端的中间：正常歌 65%–98%，编出来的那几首 15% 上下。
+    /// 阈值取在两端的中间：点出来的词时间 65%–98%，等距编的 15% 上下。
     private static let minimumWordTimingCoverage = 0.5
 
     /// Petit 的 wordsSynced 词元素带 `wordstring`（词文本，含空格 token）+ starttime + endtime。

@@ -58,7 +58,7 @@ struct ExperimentsOptions: Codable, Equatable {
     /// 于是句与句之间几乎每一处都冒出呼吸点。
     ///
     /// **默认开**：开了只会少一层本就可疑的逐字高亮，不会让正确的时间轴变差 ——
-    /// 覆盖率中位数在正常歌里是 65% 以上，编出来的那几首在 15% 上下，两端分得很开。
+    /// 覆盖率中位数在两种数据上差一个量级（点出来的 65% 以上，等距编的 15% 上下）。
     var petitLyricsLineFallback: Bool
 
     init(
