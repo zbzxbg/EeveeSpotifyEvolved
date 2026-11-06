@@ -243,11 +243,18 @@ extension LyricsDto {
                     : nil
             )
             // 罗马字那一行的**逐字**时间轴（只有给出词级罗马字的源才有）。
-            let romanizationSyllables = Self.romanizationSyllables(
-                for: line,
-                index: pair.offset,
-                groups: officialRomanizedWordGroups
-            )
+            //
+            // ⚠️ 必须与静态那一行走**同一道开关**：`romanization` 是
+            // `romanizedContentsForDisplay` 得出的（那里按语言开关过滤过），而这份逐字时间轴
+            // 直接来自 dto ⇒ 不挡的话，用户把「日语罗马化」关掉之后静态行消失了、逐字行
+            // 还在 —— 屏幕上多出一行怎么关都关不掉的罗马字。
+            let romanizationSyllables = isOfficialRomanizationEnabled(for: languageCode)
+                ? Self.romanizationSyllables(
+                    for: line,
+                    index: pair.offset,
+                    groups: officialRomanizedWordGroups
+                )
+                : []
 
             return LyricLine(
                 id: Self.lineID(index: index, startMs: startMs),
