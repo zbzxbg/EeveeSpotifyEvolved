@@ -32,7 +32,7 @@ jobs:
       - name: Toolchain check
         run: swiftc --version
 
-      # ── 语法门（2026-10-16 加，实测 run #291 = 373 个文件 1m28s 全过）────────────
+      # ── 语法门 ────────────────────────────────────────────────
       #
       # `swiftc -parse` 只做**语法**分析、**不解析 import** ⇒ 它能把带 UIKit / Orion 的
       # 视图文件也过一遍 —— 那几个文件本机编不了、CI 里那些 swiftc 步骤也编不了，
@@ -41,7 +41,7 @@ jobs:
       # 它挡的正是历史上"白跑一轮"的那两类：**非法转义**（`\uXXXX`，Swift 只认 `\u{XXXX}`）
       # 与**括号/引号不配** —— 两者都是纯语法错，`-parse` 一定报。
       #
-      # ⚠️ **逐个文件**跑，不是一次传 370 个：一个文件的错不会掩盖别的，日志里也直接写明是哪个文件。
+      # ⚠️ **逐个文件**跑，不是一次传 370 个：一个文件的错不会掩盖别的，输出里也直接写明是哪个文件。
       # ⚠️ 末尾 `total > 200` 是**防空跑**：`find` 要是因为路径写错返回空集，
       #    这个脚本会"全过"（`fails` 恒为 0）—— 那种绿比红还坏。
       - name: Syntax gate — swiftc -parse over every Swift source
@@ -60,20 +60,20 @@ jobs:
           test "$total" -gt 200
           test "$fails" -eq 0
 
-      # ── 守卫：六条"必然编译错"的纯文本检查（2026-10-16 接进来，2026-10-17 补第六条）──────
+      # ── 守卫：六条"必然编译错"的纯文本检查 ──────────────────────
       #
-      # 这五个脚本从 2026-10-01 起就是"每轮改完手动跑一遍"的纪律，但它们**从来没进过任何
+      # 这五个脚本一直是"每轮改完手动跑一遍"的纪律，但它们**从来没进过任何
       # workflow**（全仓 grep 只有注释提到它们）⇒ 一次普通 push 之后没人拦这五类错，
       # 只有等你真去打包 IPA 那一轮才炸 —— 而本机（Windows）**没有 Swift 工具链**，
       # 带 UIKit / Orion 的视图文件在本机永远编不了，这几个脚本是那批文件**唯一的自动反馈**。
       #
-      # 放进来的代价约 8 秒（实测：brace 1.1s / string 0.6s / member 3.3s / orion 2.3s /
+      # 放进来的代价约 8 秒（brace 1.1s / string 0.6s / member 3.3s / orion 2.3s /
       # l10n 0.4s），收益是**每一次 push 都跑**，而不是靠人记得。
       #
       # ⚠️ 那五个脚本**都不扫 `Tests/`**（那里的 `main.swift` 是断言程序，不是被注入的源码）
       #    —— 所以最后单独给 `Tests/` 补一条括号/字符串检查。
       #
-      # ★ 2026-10-17 追加第六条（真机 build 现场）：`swift_import_check.py`
+      # 第六条（真机 build 现场）：`swift_import_check.py`
       #   ——「用了 Foundation 的符号却没 import Foundation」。
       #   现场：`ExperimentsOptions.swift` 一直只有 Bool 字段（`Codable`/`Decoder` 在 stdlib 里）
       #   ⇒ 不 import 也能编过；加了一句 `Locale.current.region?.identifier` 之后真机直接报
@@ -125,7 +125,7 @@ jobs:
                  -o url-ad-tests
           ./url-ad-tests
 
-      # ── 2026-10-03 补齐：下面这四条**本来只有 `builddeb.yml`（手动、要填 tag）会跑** ──
+      # ── 下面这四条**本来只有 `builddeb.yml`（手动、要填 tag）会跑** ──
       #
       # 为什么必须搬到这里：本仓库没有 Mac，`builddeb.yml` 是 `workflow_dispatch` 手动的 ⇒
       # 一次普通 push 之后，这四块逻辑**没人替我们验**。而它们覆盖的正是最容易改坏的几处：
@@ -164,10 +164,10 @@ jobs:
                  -o bundled-configuration-policy-tests
           ./bundled-configuration-policy-tests
 
-      # 2026-10-13：SpicyLyrics 从内部 `/query`（SLObjPack 打包）搬到官方
+      # SpicyLyrics 从内部 `/query`（SLObjPack 打包）搬到官方
       # `GET /v1/lyrics/<id>`（普通 JSON），中间那座桥是 `SLObjPackValue.fromJSON`；
       # 同时把音节拼接规则抽成 `SpicySyllableText` —— 它是**前瞻**语义
-      # （看前一个音节的 IsPartOfWord），本仓库曾读反，实测 36% 的歌词行会拼错。
+      # （看前一个音节的 IsPartOfWord）；读反的话 36% 的歌词行会拼错。
       # 这三个被测文件都是纯 Foundation，所以能进这里；`SpicyLyricsRepository`
       # 本身带 Orion/UIKit 依赖，进不来。
       - name: SpicyLyrics v1 JSON mapping + syllable join + attribution
@@ -182,7 +182,7 @@ jobs:
                  -o spicy-lyrics-json-mapping-tests
           ./spicy-lyrics-json-mapping-tests
 
-      # 2026-10-18：间奏（三个呼吸点）的**纯逻辑**两层 ——
+      # 间奏（三个呼吸点）的**纯逻辑**两层 ——
       # `LyricInterludeTimeline`（哪两句之间算间奏、这一拍该显示什么）与
       # `AppleMusicInterludeDotsPresentation`（三个点各多亮、整排缩放/淡出）。
       # 它们没有任何 UI 依赖，所以能进这里；渲染层 `AppleMusicInterludeRow` 要 SwiftUI，进不来。
@@ -201,7 +201,7 @@ jobs:
                  -o lyric-interlude-tests
           ./lyric-interlude-tests
 
-      # 2026-10-16：「歌词进播放器」那层的**相位机**（关 / 展开中 / 开 / 收起中）与三条窗口的规则
+      # 「歌词进播放器」那层的**相位机**（关 / 展开中 / 开 / 收起中）与三条窗口的规则
       # （`LyricsDoorPhase.swift`）。它把原来散在六个旗标里、在七八处各写一遍的判据收成一处。
       # 纯 Foundation，所以能进这里；视图层 `NowPlayingLyricsPlate.swift` 要 UIKit/Orion，进不来
       # —— 但那一层现在**只把 UI 事实喂给这套规则**，判定本身在这里被测着。
@@ -212,10 +212,10 @@ jobs:
                  -o lyrics-door-phase-tests
           ./lyrics-door-phase-tests
 
-      # 2026-10-18：**折行复核器**（`LyricLineBreakFitting`）—— 日志 104 的 Starboy 现场：
+      # **折行复核器**（`LyricLineBreakFitting`）—— Starboy 那次的现场：
       # `text=394.4 layout=331.8 breaks=[]`（按预算本该折，CoreText 一个断点都没给）⇒ 折行那一侧
       # 量与渲染那一侧不是同一把尺子，断点太靠右 ⇒ 第一段仍超宽 ⇒ 渲染再折一次 ⇒ 屏幕上多出一行
-      # （用户报的"额外换行"）。
+      # （"额外换行"那个现象）。
       #
       # 复核器是**纯逻辑**（只吃一个"量这段宽度"的闭包）所以能进这里；真正调用它的
       # `TimedLyricTextBuilder` 要 UIKit/CoreText，进不来 —— 但"只加断点不删"与
@@ -227,7 +227,7 @@ jobs:
                  -o lyric-line-break-fitting-tests
           ./lyric-line-break-fitting-tests
 
-      # 2026-10-17：LRCLIB 的按行拆分（`LyricsLineSplitting`）—— 两条路原来都写
+      # LRCLIB 的按行拆分（`LyricsLineSplitting`）—— 两条路原来都写
       # `components(separatedBy: "\n").dropLast()`：那是**假定响应末尾有换行**。
       # 没有尾换行的响应里，`dropLast()` 丢的是**最后一行真歌词**，而且静默
       # （日志只少一个数字，没有任何东西会变红）。纯 Foundation，所以能进这里。
@@ -238,7 +238,7 @@ jobs:
                  -o lrclib-line-splitting-tests
           ./lrclib-line-splitting-tests
 
-      # 2026-10-31：新接的四个源（BiniLyrics / Unison / QQ 音乐 / 酷狗）都是"按名字搜、
+      # 新接的四个源（BiniLyrics / Unison / QQ 音乐 / 酷狗）都是"按名字搜、
       # 自己在结果里挑一条"。挑错的代价是把**别人的词**配到这首歌上（翻唱 / Live / 同曲异名），
       # 而且用户看不出来 —— 所以那四条判据（归一化 / 主艺人 / 歌手互相包含 / 时长容差）
       # 必须钉死。`LyricsMatch.swift` 只依赖 Foundation，所以能进这里。
@@ -309,9 +309,9 @@ jobs:
                  -o pseudo-word-timing-tests
           ./pseudo-word-timing-tests
 
-      # 2026-10-17：「SpicyLyrics 交叉验证」的**补词判据**（`LyricsCensorFill`）。
+      # 「SpicyLyrics 交叉验证」的**补词判据**（`LyricsCensorFill`）。
       # 三件事必须钉住：
-      #   ① 检测正则 —— 上游的 `\b\*{3,}\b` 实测只命中 `f***k`，`my **** line` 一个都
+      #   ① 检测正则 —— 上游的 `\b\*{3,}\b` 只命中 `f***k`，`my **** line` 一个都
       #      不命中 ⇒ 那个功能从来没真正接线过。现在必须是"任意 3+ 星号"。
       #   ② CJK 回归 —— 旧算法按空格切词，中日韩整行只有 1 个"词" ⇒ **任何**候选行都被
       #      当成匹配、整行被换成别的歌词。必须只换星号那一段。
@@ -324,13 +324,13 @@ jobs:
                  -o lyrics-censor-fill-tests
           ./lyrics-censor-fill-tests
 
-      # 2026-10-17：AMLL TTML 的 **ruby 注音**（`<ruby>漢<rt>かん</rt></ruby>`）不能被当歌词 ——
+      # AMLL TTML 的 **ruby 注音**（`<ruby>漢<rt>かん</rt></ruby>`）不能被当歌词 ——
       # `text()` 原来把 `rt` 里的读音也拼进正文，于是 ① 那一行多出读音；② 有逐词 span 的行
       # 更糟：`primaryText` 含读音、与词条拼接结果不一致 ⇒ mapper 的不变量失败 ⇒ **整行降级为逐行**
       # （逐词高亮消失）。这一步把"注音被剔除"与"没有注音的行不受影响"一起钉住。
       # 解析层是纯 Foundation（`XMLParser`），所以能进这里；mapper 那层要 `LyricsDto` 的依赖链，进不来。
       #
-      # 2026-10-17 第二轮：AMLL 真正的 ruby 写法是 **`tts:ruby` 属性**（时间只挂在
+      # AMLL 真正的 ruby 写法是 **`tts:ruby` 属性**（时间只挂在
       # `tts:ruby="text"` 上），不是 HTML 的 `<ruby>/<rt>` —— 两种都在测。
       # 顺带把 `LyricsBackgroundVocalDto`（副唱 DTO）也编进来，锁住 §A·24 新加的
       # `translation` 字段形状（它只依赖 `LyricsWordDto`，纯 Foundation）。
@@ -347,7 +347,7 @@ jobs:
                  -o amll-ttml-ruby-tests
           ./amll-ttml-ruby-tests
 
-      # 2026-10-17：Apple Music **官方** TTML（「实验 → 启用Apple Music官方TTML歌词」）
+      # Apple Music **官方** TTML（「实验 → 启用Apple Music官方TTML歌词」）
       # 的三处苹果特有写法 —— `<p>` 不带 begin/end（时间只在 span 上）、译文侧挂的
       # `for` 在 `<translation>` 容器上、背景人声 `ttm:role="x-bg"`。
       # 解析器与 AMLL 共用（不新增第二套），所以这里只是把"苹果那份文件长什么样"钉住。
@@ -373,7 +373,7 @@ jobs:
                  -o lyrics-notice-policy-tests
           ./lyrics-notice-policy-tests
 
-      # 2026-10-16：「歌词进播放器」的**状态机**（`LyricsDoor`）—— 那六个旗标的唯一存储，
+      # 「歌词进播放器」的**状态机**（`LyricsDoor`）—— 那六个旗标的唯一存储，
       # 以及整组操作（点开 / 失败 / 重试 / 过期 / 收尾 / 离开页面）。它和相位规则一起编。
       - name: Lyrics door state machine (player lyrics layer)
         run: |
@@ -387,7 +387,7 @@ jobs:
       - name: Resolve-configuration snapshot
         run: python3 Tests/ResolveConfigurationSnapshot/test.py
 
-      # 2026-10-17：真机日志分诊工具（`Tools/log_triage.py`）。B 组那几件（§3 歌单页搜索条 /
+      # 真机日志分诊工具（`Tools/log_triage.py`）。B 组那几件（§3 歌单页搜索条 /
       # §4 折叠 / §12 关于艺人 / §16 间奏 / §17 阈值 / §18 NetEase / §23+§30 折行与 AMLL）
       # 全都等同一份日志；那个脚本把"该看什么"写成程序（只读、不联网、不进构建产物）。
       # 这里只做一次语法检查 —— 免得日志来了才发现脚本自己坏了。

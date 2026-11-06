@@ -4,7 +4,7 @@ name: Bump version
 #
 # 改两处（README 不动 —— 版本引用由维护者手改）：
 #   · `control:Version`（deb / 两个 IPA workflow 在运行时读它）；
-#   · `Tweak.x.swift` 的 `static let version`（设置页与启动日志显示）。
+#   · `Tweak.x.swift` 的 `static let version`（设置页与启动时打印的版本号）。
 #
 # 代码里不再有 build number：设置页只显示 `v2.0.0-beta`，启动日志也只写版本。
 #

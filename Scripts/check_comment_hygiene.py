@@ -23,8 +23,10 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE_DIRS = ("Sources", "modules")
+YAML_DIRS = (".github/workflows",)
 SKIP_DIR_PARTS = ("Dependencies", "Generated", "swiftprotobuf")
 SUFFIXES = (".swift", ".m", ".mm", ".h", ".xm", ".c", ".cpp")
+YAML_SUFFIXES = (".yml", ".yaml")
 
 COMMENT_PREFIXES = ("//", "/*", "*", "*/")
 
@@ -139,9 +141,18 @@ def iter_files():
             for name in sorted(filenames):
                 if name.endswith(SUFFIXES):
                     yield os.path.join(dirpath, name)
+    for base in YAML_DIRS:
+        root = os.path.join(ROOT, base)
+        if not os.path.isdir(root):
+            continue
+        for name in sorted(os.listdir(root)):
+            if name.endswith(YAML_SUFFIXES):
+                yield os.path.join(root, name)
 
 
-def is_comment(line):
+def is_comment(line, path=""):
+    if path.lower().endswith(YAML_SUFFIXES):
+        return line.lstrip().startswith("#")
     return line.lstrip().startswith(COMMENT_PREFIXES)
 
 
@@ -161,7 +172,7 @@ def scan(path):
         stripped = line.strip()
         if stripped.startswith("/*"):
             in_block = True
-        if not (in_block or is_comment(line)):
+        if not (in_block or is_comment(line, path)):
             continue
         # 围栏里的内容（视图树、示例代码）是逐字材料，不做文字风格检查
         if stripped.lstrip("/*").strip().startswith("```"):

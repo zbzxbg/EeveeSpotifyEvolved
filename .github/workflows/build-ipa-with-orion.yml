@@ -122,7 +122,7 @@ jobs:
       # sha256 6316e49d487c29aa1ea03767fb8a78b5ea5588b609bdeb8bf6f4528537766658）。
       # 这样 fork 用户不用研究任何东西，也不再依赖第三方 release。
       #
-      # ⚠️ 2026-10 实测：`orion_url` 留空时那条「从 theos 子模块自编」的路**跑不通**
+      # ⚠️ `orion_url` 留空时那条「从 theos 子模块自编」的路**跑不通**
       #    —— GitHub runner 上的 Xcode 缺 iOS 平台组件，xcodebuild 找不到
       #    `{ generic:1, platform:iOS }` 目标并报 "iOS 26.1 is not installed"。
       #    自编分支因此只作备用保留；要复活它，先解决 runner 上的平台组件问题。
@@ -176,7 +176,7 @@ jobs:
             # ⚠️ 必须排除 __MACOSX：这份 zip 是在 macOS 上打的，带 AppleDouble
             # 元数据目录，里面同样有一个 `__MACOSX/Orion.framework`（只有 `._Orion`，
             # 没有真正的 `Orion`）。`find` 的遍历顺序会让它先命中，于是后面
-            # "没有 Orion 这个二进制" 直接 fail —— 实测踩过。
+            # "没有 Orion 这个二进制" 直接 fail。
             rm -rf "$RUNNER_TEMP/orion/__MACOSX"
           fi
 
@@ -220,7 +220,7 @@ jobs:
           # ⚠️ NO_JBROOT=1 不能去掉。rootless 的 dylib 链着 libroot
           # (/var/jb/usr/lib/libroot.dylib)，而装这份 IPA 的设备（TrollStore /
           # 侧载）没有 /var/jb —— libroot 是**加载期**依赖，dyld 一失败
-          # App 直接起不来，日志里只有一句 dlerror。这份 deb 只当 dylib 的
+          # App 直接起不来，只剩一句 dlerror。这份 deb 只当 dylib 的
           # 来源、不发布（越狱包由 builddeb.yml 出），所以放心按本模式编。
           THEOS_PACKAGE_SCHEME=rootless NO_JBROOT=1 make package FINALPACKAGE=1
           DEB_PATH=$(find packages -name "com.eevee.spotify_*.deb" | head -1)
@@ -257,7 +257,7 @@ jobs:
           EEVEE_VERSION=$(grep -E '^Version:' control | awk '{print $2}')
           OUT="Outputs/IPAS/EeveeSpotify-${EEVEE_VERSION}-${SPOT_VERSION}-orion.ipa"
 
-          # ★ 本工作流存在的理由：Orion.framework 显式进 INJECT（不再赌 cyan 的
+          # 本工作流存在的理由：Orion.framework 显式进 INJECT（不再赌 cyan 的
           #   extras 自动兜底）。cyan 按 basename 分类，`.framework` 会被拷进
           #   Payload/Spotify.app/Frameworks/。
           INJECT=("$DYLIB_SRC" "$ORION_FW")
@@ -342,11 +342,10 @@ jobs:
           APP="Payload/Spotify.app"
 
           # Liquid glass switch (ON by default = the current baseline).
-          # See Tools/eevee-hookfinder/FLAGS_9186_DESIGN.md.
           # Spotify itself ships UIDesignRequiresCompatibility=true in its Info.plist, which asks
           # iOS 26 to run it in COMPATIBILITY MODE - so the whole app stays out of the new design
           # language. Removing the key puts the UI into it (SwiftUI Platter navigation bar, system
-          # glass tab bar). Verified on device 2026-10-01, which is why it is the default now.
+          # glass tab bar), which is why it is the default now.
           # To get Spotify's original look back: set the liquid_glass input to false and re-run.
           if [ "${{ inputs.liquid_glass || 'true' }}" = "true" ]; then
             plutil -remove UIDesignRequiresCompatibility "$APP/Info.plist" 2>/dev/null || true
@@ -393,7 +392,7 @@ jobs:
             echo "::warning::could not fetch OpenSpotifySafariExtension, skipping (does not affect Orion)"
           fi
 
-          # ★ 应用图标（CFBundleAlternateIcons）—— **不注册的话设置里的「应用图标」页是空的**。
+          # 应用图标（CFBundleAlternateIcons）—— **不注册的话设置里的「应用图标」页是空的**。
           #
           # iOS 只认 **app 的 Info.plist 里注册过**的图标：光把 PNG 放进 .app 不够，
           # 必须在 `CFBundleIcons → CFBundleAlternateIcons` 下写出「名字 → CFBundleIconFiles」。

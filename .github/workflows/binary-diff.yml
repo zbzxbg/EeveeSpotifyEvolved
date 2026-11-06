@@ -56,7 +56,7 @@ jobs:
           # 内部魔数表，同一份文件可能报 `application/zip` 或 `application/x-ios-app`。
           # 上游原版这里只允许 `application/zip`，于是 decrypt.* 这类直链（`file`
           # 报 x-ios-app）会在**下载成功之后**被判成"不是有效 IPA"直接失败 ——
-          # 实测踩过：wget 拿满 163333452 字节，紧接着 `Not a valid IPA:
+          # wget 拿满 163333452 字节，紧接着 `Not a valid IPA:
           # application/x-ios-app`。本仓库其它工作流（buildpatched / buildnopatch /
           # build-and-release-yourself）用的都是"两个都放行"，这里对齐。
           file_type=$(file --mime-type -b spotify.ipa)
@@ -77,12 +77,12 @@ jobs:
       - name: Extract Spotify version
         id: ver
         run: |
-          # ⚠️ 这里原来是：
+          # ⚠️ 不能写成：
           #     SPOT_VERSION=$(unzip -p ... | plutil -extract CFBundleShortVersionString raw - \
           #                    || echo "unknown")
           # `||` 在 `$()` 里给**整个管道**兜底 —— plutil 一失败，`echo "unknown"` 的
-          # 输出就**变成版本号**，于是后面全变成 dump-unknown.txt / symbol-diff-unknown。
-          # （实测踩过：artifact 名字就是 symbol-diff-unknown.zip。）
+          # 输出就**变成版本号**，于是后面全变成 dump-unknown.txt / symbol-diff-unknown。  # noqa: comment-hygiene
+          # （artifact 名字就是 symbol-diff-unknown.zip。）
           #
           # 另外 `plutil -` 从 stdin 读在 Linux 上本来就不稳（依赖 libplist-utils 是否
           # 真的装上），而 Info.plist 很可能是二进制 plist。
@@ -103,7 +103,7 @@ jobs:
               print("::warning::version probe failed: %r" % (exc,))
           print("version=%s" % version)
           PY
-          # 把结果回显到日志（$GITHUB_OUTPUT 的内容不会自动出现在日志里）
+          # 把结果回显出来（$GITHUB_OUTPUT 的内容不会自动出现在 Actions 的输出里）
           echo "Spotify version: $(grep '^version=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)"
 
       - name: Dump symbols
