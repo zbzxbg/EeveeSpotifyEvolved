@@ -18,6 +18,12 @@ import Foundation
 ///
 /// 所以这个源在自动优选里现在是 **word 档**（`canProduceWordTiming == true`），
 /// 具体这一首给到哪一档，由 `hasUsableWordLevelData` 按解析出来的行判。
+///
+/// ── 官方罗马字（`data["roma"]`）
+/// 它也是同一套加密 QRC，只是切分按**音节**（`沈む` → `shi`+`zu`+`mu`），
+/// 与正文的逐**字**切分不同。所以同时给两个粒度：
+/// `officialRomanizedLines`（整行，静态显示用）与 `officialRomanizedWordGroups`
+/// （逐词，罗马字那一行跟着逐字亮）；后者按时间分区对齐，见 `wordGroups(for:romaji:)`。
 final class QQMusicLyricsRepository: LyricsRepository {
 
     static let shared = QQMusicLyricsRepository()
@@ -150,15 +156,30 @@ final class QQMusicLyricsRepository: LyricsRepository {
 
     // MARK: - 官方罗马字
 
-    /// 把 QQ 的官方罗马字（`roma` 字段）贴到歌词上。
+    /// 音节归主词用的容差。两份 QRC 出自同一次转码：行起点实测只差 0~1ms，
+    /// 词起点的抖动也在 2ms 内。30ms 既够吸收取整，又小于最短的一个字
+    /// （实测约 50ms），不会把下一个字的音节抢过来。
+    private static let wordRomajiSlackMs = 30
+
+    /// 逐词组要求"拿到罗马音的主词占比"不低于此值。同一版词实测是 90.6%~100%
+    /// （10 首日语歌合计 4694/4819 ≈ 97.4%），80% 留出余量；低于它按
+    /// "两份不是同一版词"处理 —— 逐词贴错位比整行缺字更难发现。
+    private static let wordRomajiCoverageFloor = 0.8
+
+    /// 把 QQ 的官方罗马字（`roma` 字段）贴到歌词上：**行级字符串 + 逐词组**。
     ///
     /// 它和正文是**两个独立的加密 QRC**（同一套 `QrcText` 解），但**行不保证一一对应**：
     /// 罗马音那侧还会下发只有时间、没有字的行（解析器会丢掉），主歌词这侧又刚剔掉了
     /// 制作信息行。所以按**行起始时间**配，不按下标 —— 与 Musixmatch 把 richsync
     /// 按行起点贴回行级是同一套做法。
     ///
-    /// 只在这一首**有罗马音、且解得开**时才动 `officialRomanizedLines`；
-    /// 配对率低于 60% 视为“两份不是同一版词”，整份不用（宁可退回本地转换）。
+    /// 逐词组见 `wordGroups(for:romaji:)`：罗马音那份按**音节**切、主歌词按**字**切，
+    /// 词数常常不等（实测 10 首日语歌 505 个时间行里只有 123 行相等）⇒ 只能按时间分区，
+    /// 不能按下标。整行就是拉丁字母的行（副歌里的英文句）罗马音那份常常整行不给，
+    /// 所以行配对率在不同歌上从 70% 到 100% 都见过 —— 这类行没有罗马音是对的。
+    ///
+    /// 只在这一首**有罗马音、且解得开**时才动这两个字段；行配对率低于 60% 视为
+    /// “两份不是同一版词”，整份不用（宁可退回本地转换）。
     private static func attachingOfficialRomaji(
         to dto: LyricsDto,
         payload romaPayload: String?,
@@ -172,26 +193,44 @@ final class QQMusicLyricsRepository: LyricsRepository {
             return dto
         }
 
-        var byStart: [Int: String] = [:]
+        // 行起点 → 罗马音那一行（同一起点取第一行）。保留整行对象是为了同时拿到它的
+        // 词与音节文本：逐词组要按那一行的音节起点分区，行级字符串只要文本。
+        var byStart: [Int: LyricsLineDto] = [:]
         for line in romaDto.lines {
             guard let start = line.offsetMs else { continue }
-            let text = line.content.trimmingCharacters(in: .whitespaces)
-            guard !text.isEmpty, byStart[start] == nil else { continue }
-            byStart[start] = text
+            guard !line.content.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            guard byStart[start] == nil else { continue }
+            byStart[start] = line
         }
         guard !byStart.isEmpty else { return dto }
 
         var romaji: [String] = []
         romaji.reserveCapacity(dto.lines.count)
+        var groups: [[String]] = []
+        groups.reserveCapacity(dto.lines.count)
         var matched = 0
+        var coveredWords = 0
+        var totalWords = 0
+
         for line in dto.lines {
             guard let start = line.offsetMs,
-                  let hit = byStart[start] ?? nearby(start, in: byStart) else {
+                  let romaLine = byStart[start] ?? nearbyLine(start, in: byStart) else {
                 romaji.append("")
+                groups.append([])
                 continue
             }
-            romaji.append(hit)
+            romaji.append(romaLine.content.trimmingCharacters(in: .whitespaces))
             matched += 1
+
+            let lineGroups = wordGroups(for: line, romaji: romaLine)
+            groups.append(lineGroups)
+            // 只统计"确实有词级时间轴、且组数对得上"的行 —— 覆盖率闸只看这些行。
+            if let words = line.words, !words.isEmpty, lineGroups.count == words.count {
+                totalWords += words.count
+                coveredWords += lineGroups.reduce(0) { count, group in
+                    group.trimmingCharacters(in: .whitespaces).isEmpty ? count : count + 1
+                }
+            }
         }
 
         guard matched * 5 >= dto.lines.count * 3 else {
@@ -208,8 +247,73 @@ final class QQMusicLyricsRepository: LyricsRepository {
            !languageCode.isEmpty {
             result.languageCode = languageCode
         }
+
+        // 逐词组单独一道闸：主词被罗马音覆盖的比例太低就不挂（行级字符串照旧留着）。
+        // 全部行都没有词级时间轴时（LRC 那条路）`totalWords == 0`，这里自然不挂。
+        if totalWords > 0,
+           Double(coveredWords) >= Double(totalWords) * wordRomajiCoverageFloor {
+            result.officialRomanizedWordGroups = groups
+        } else {
+            writeDebugLog(
+                "[QQMusic] word romaji covered \(coveredWords)/\(totalWords) word(s) — line-level only"
+            )
+        }
         writeDebugLog("[QQMusic] official romaji attached — \(matched)/\(dto.lines.count) line(s)")
         return result
+    }
+
+    /// 把一行罗马音**音节**按"相对行首的起点"分到主词的每一格。
+    ///
+    /// 规则：一个音节归到**起点不晚于它（含容差）的最后一个主词**。等价于"按主词起点
+    /// 切时间轴"：主词区间里的音节归它，词与词缝隙里的音节归前面那个（后面那个的起点还没到）。
+    ///
+    /// 返回数组的长度**恒等于** `line.words.count`，可能是空串 —— 显示层要求组数 == 词数，
+    /// 多一组少一组都会整行退回静态字符串。空串只在"罗马音把两个主词合成一个音节"时出现
+    /// （`フ`+`ェ` 写成 `fe`、`じ`+`ゃ` 写成 `ja`），显示层跳过空组，其余词照旧逐字亮。
+    ///
+    /// 两个构造上的性质，是这条规则相对"按词下标配"的全部好处：
+    /// · 音节按顺序**全部**用掉 ⇒ 各组拼起来就是整行的罗马字全文，不会漏字；
+    /// · 词数相等时它自然退化成一一对应（`スピカ` 34 行全是这样），词数不等时
+    ///   也不会把某个音节的文本挪到时间上不对的那个词上。
+    ///
+    /// 没有词级时间轴的行（LRC 来的）返回 `[]`。
+    private static func wordGroups(for line: LyricsLineDto, romaji: LyricsLineDto) -> [String] {
+        guard let words = line.words, !words.isEmpty,
+              let syllables = romaji.words, !syllables.isEmpty,
+              let lineStart = line.offsetMs,
+              let romajiStart = romaji.offsetMs else { return [] }
+
+        // 罗马音和原文一样（整行就是拉丁字母那种）不算罗马字：不挂组，否则显示层会
+        // 多画一行只重复原文的"罗马字"。静态那条路有同一道判据
+        // （`LyricLinesAdapter.romanization(original:romanized:)`）。
+        let original = line.content.trimmingCharacters(in: .whitespaces)
+        let romanized = romaji.content.trimmingCharacters(in: .whitespaces)
+        guard romanized.compare(original, options: .caseInsensitive) != .orderedSame else { return [] }
+
+        let offsets = words.map { max($0.startMs - lineStart, 0) }
+        var buckets = [[String]](repeating: [], count: words.count)
+        var word = 0
+        for syllable in syllables {
+            let offset = syllable.startMs - romajiStart
+            while word + 1 < offsets.count,
+                  offsets[word + 1] <= offset + wordRomajiSlackMs {
+                word += 1
+            }
+            buckets[word].append(syllable.text)
+        }
+
+        var groups = buckets.map { $0.joined() }
+        // 首尾空白与行级字符串（那边 `trimmingCharacters` 过）对齐：渲染层把组的文本
+        // 直接拼起来显示，多一个空格就与"整行罗马字"那条路差一个字。
+        if let first = groups.firstIndex(where: { !$0.isEmpty }) {
+            groups[first] = String(groups[first].drop(while: { $0 == " " || $0 == "\t" }))
+        }
+        if let last = groups.lastIndex(where: { !$0.isEmpty }) {
+            var text = groups[last]
+            while let tail = text.last, tail == " " || tail == "\t" { text.removeLast() }
+            groups[last] = text
+        }
+        return groups
     }
 
     /// 两份 QRC 的行起点常差 1~2ms（同一次转码的取整不同；实测 `947` 对 `946`）⇒
@@ -217,6 +321,19 @@ final class QQMusicLyricsRepository: LyricsRepository {
     ///
     /// 默认 100ms 给罗马字；译文是另一份 LRC，和正文分行不完全一致，用 250ms 更稳。
     private static func nearby(_ start: Int, in map: [Int: String], maxDelta: Int = 100) -> String? {
+        for delta in 1...max(1, maxDelta) {
+            if let hit = map[start + delta] { return hit }
+            if let hit = map[start - delta] { return hit }
+        }
+        return nil
+    }
+
+    /// `nearby` 的"要整行"版本：逐词组还要那一行的音节起点，不只是文本。
+    private static func nearbyLine(
+        _ start: Int,
+        in map: [Int: LyricsLineDto],
+        maxDelta: Int = 100
+    ) -> LyricsLineDto? {
         for delta in 1...max(1, maxDelta) {
             if let hit = map[start + delta] { return hit }
             if let hit = map[start - delta] { return hit }
