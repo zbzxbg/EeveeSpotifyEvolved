@@ -33,6 +33,12 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
+        // 记下这一次歌词请求的「会话 + URL」：换来源时要把这一条从会话自己的 URL 缓存里
+        // 删掉（见 `LyricsURLCachePurge`），否则客户端可能吃缓存、我们没机会换 payload。
+        if url.isLyrics {
+            LyricsURLCachePurge.remember(session: session, url: url)
+        }
+
         if CasitaResponseProbe.shouldProbe(url) {
             CasitaResponseProbe.flush(task, url: url)
         }

@@ -91,6 +91,11 @@ extension EeveeLyricsSettingsViewModel {
                 // 请求过，只有重启才会重取。
                 if LyricsResponseCache.currentSignature != previousSignature {
                     LyricsResponseCache.shared.noteSettingsChanged()
+                    // 把**当前这一首**的歌词响应从 URL 缓存里删掉：下一次请求就会回源，
+                    // 钩子重新取词、交给播放器新来源的词（命中与否都会打一行，见
+                    // `LyricsURLCachePurge`）。缓存里没有它也照样清 —— 那一层若在客户端
+                    // 自己的模型里，只有重启能换过来。
+                    LyricsURLCachePurge.purgeLastRequest(reason: "lyrics source changed")
                 }
             }
             .store(in: &cancellables)
