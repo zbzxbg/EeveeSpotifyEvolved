@@ -11,17 +11,16 @@ import Foundation
 // <p> 内其它文本 → 同样作为一个词（无时间）
 // ttm:role="x-translation" → 抽走，成为 LyricsTranslationDto.lines[行索引]
 // ttm:role="x-roman" → 抽走，成为行级官方罗马音
-// ttm:role="x-bg" → 抽走，合并到行尾（本文件的 v1 策略，见下）
+// ttm:role="x-bg" → 抽成**独立的背景人声子树**（见下）
 // iTunesMetadata 的 <text for="L1"> → 侧挂翻译/音译，按 itunes:key 关联
 // body dur / 末行 end → 交给 repository 做身份复核
 //
 // ── x-bg（背景人声）的处理
 // 背景人声在 TTML 里是嵌在同一个 <p> 内的独立计时子树，和主词时间重叠（对唱/和声）。
-// 本项目的渲染层是「单列单行」模型（Spotify 原生歌词表格 + LyricsWordByWord overlay），
-// 表达不了行内子行，因此 v1 采用**合并到行尾**：
-// content = "主词文本 (背景人声文本)"
-// 背景词作为词条追加在末尾，时间保持原值。这样内容不丢、content == words 拼接 的不变量成立、
-// 高亮不错位；代价是背景人声从「同时」退化为「顺序」点亮。
+// 解析层把它单独取出来（`AmllTtmlBackgroundVocal`：文本、音节、是否有自己的翻译、
+// 出现在主词之前还是之后），**不**并进主行文本 —— 合并会把"同时演唱"退化成
+// "先唱完主歌再唱副唱"，而且主行的 `content == words 拼接` 不变量也会被打破。
+// 渲染层（`SynchronizedLyricText`）把它画成主行上方/下方的一小行，时间轴独立。
 // 同一 <p> 里的 x-translation 只取 <p> 直接子级的那个（背景人声内部的翻译优先级更低）。
 
 struct AmllTtmlSyllable {
