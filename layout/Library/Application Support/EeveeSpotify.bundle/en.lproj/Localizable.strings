@@ -107,7 +107,7 @@ dark_popups = "Dark PopUps";
 livecontainer_sharing = "Share to LiveContainer";
 livecontainer_sharing_description = "Share to LiveContainer and copy the URL if the selected destination is not supported.";
 
-experiments_page_warning = "Please note: the features below may be untested. Turning on anything on this page is not recommended. If you are willing to test for the developer, you are welcome to switch them on — none of them will crash the tweak.";
+experiments_page_warning = "Please note: the features below may be untested. If you are willing to test them for me, you are welcome to switch them on — none of them will crash the tweak.";
 
 show_instagram_destination = "Show Instagram Destination";
 show_instagram_destination_description = "Always show the Instagram share destination. %@";
@@ -117,6 +117,9 @@ amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or t
 
 pseudo_word_by_word_lyrics = "Enable pseudo word-by-word";
 pseudo_word_by_word_lyrics_description = "When on, line-level lyrics timing is estimated and expanded into word-by-word lyrics. Character-level precision may be imperfect, and depends on how precise the original line-level lyrics are.";
+
+petitlyrics_line_fallback = "PetitLyrics: fall back to line level";
+petitlyrics_line_fallback_description = "When on, if the lyrics PetitLyrics returns do not have a normal word-by-word timeline, the whole song falls back to line-synced lyrics.";
 
 aggressive_marker_removal = "Remove lyrics annotations more aggressively";
 aggressive_marker_removal_description = "When on, every lyric line wrapped in [ ] is removed, without checking whether the text inside is a known section name. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed (e.g. [I love you]).";

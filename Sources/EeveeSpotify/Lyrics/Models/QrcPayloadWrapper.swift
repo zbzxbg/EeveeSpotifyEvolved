@@ -40,7 +40,14 @@ enum QrcPayloadWrapper {
             return String(tail)
         }
 
-        return unescapeXML(String(tail[..<closing.lowerBound]))
+        // 属性值与 `"/>` 之间通常隔着空行（QQ 回包就是 `…正文…\n\n"/>`）。
+        // 那段空白不属于正文：留着会让"正文以引号结尾"和"正文以换行结尾"变成两回事，
+        // 行数统计也会多出一条空行。只裁尾，不裁头 —— 正文第一行就是 `[ti:…]`。
+        var body = String(tail[..<closing.lowerBound])
+        while let last = body.last, last.isWhitespace {
+            body.removeLast()
+        }
+        return unescapeXML(body)
     }
 
     /// 属性值里的 `&quot;` 之类要还原 —— 正文裹在 XML 属性里时，`"` **本该**写成实体。

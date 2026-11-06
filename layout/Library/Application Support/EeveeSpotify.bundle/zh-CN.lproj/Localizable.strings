@@ -103,7 +103,7 @@ dark_popups = "深色弹窗";
 livecontainer_sharing = "分享到 LiveContainer";
 livecontainer_sharing_description = "如果不支持所选分享目标，则分享到 LiveContainer 并复制 URL。";
 
-experiments_page_warning = "请注意：以下功能可能未经测试。不推荐开启本页的任何功能。如果你愿意为开发者测试的话，也可以打开它们测试一下，这些功能不会导致插件崩溃。";
+experiments_page_warning = "请注意：以下功能可能未经测试。如果你愿意为我测试的话，也可以打开它们测试一下，这些功能不会导致插件崩溃。";
 
 show_instagram_destination = "显示 Instagram 分享目标";
 show_instagram_destination_description = "始终把 Instagram 作为分享目标。%@";
@@ -113,6 +113,9 @@ amll_fuzzy_search_description = "选项生效需要开启「AMLL 优先」或歌
 
 pseudo_word_by_word_lyrics = "启用伪逐字";
 pseudo_word_by_word_lyrics_description = "选项开启后会估算行级歌词时间轴，并补充成逐词歌词，但字级精度可能欠佳。字级精度取决于原本的行级歌词精度。";
+
+petitlyrics_line_fallback = "PetitLyrics回退逐行";
+petitlyrics_line_fallback_description = "选项开启后，如果PetitLyrics返回的歌词不是正常的逐词时间轴，整首歌会回退为行级歌词。";
 
 aggressive_marker_removal = "更激进的删除歌词标注术语";
 aggressive_marker_removal_description = "选项开启后会删除歌词所有被 [] 包裹的歌词行，目前仅对 Genius 生效。它也可能误删整行带方括号的真歌词（例如 [I love you]）。";

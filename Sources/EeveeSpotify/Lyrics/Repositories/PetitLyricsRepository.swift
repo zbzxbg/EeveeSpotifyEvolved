@@ -157,7 +157,20 @@ class PetitLyricsRepository: LyricsRepository {
                 writeDebugLog("[Petit] line span: first=\(firstLine)ms last=\(lastLine)ms (\(lyrics.lines.count) lines)")
             }
 
-            let preserveWords = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
+            let wordByWordEnabled = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
+            // 这一首的词轴值不值得用：见 `wordTimingCoverage`。不可信就整首退回行级
+            // （实验开关，默认开）—— 否则逐字高亮一两秒扫完，剩下的时间被间奏判定
+            // 当成"没人唱"，每两句之间都冒出呼吸点。
+            let coverage = Self.wordTimingCoverage(mergedLines)
+            let unreliable = coverage < Self.minimumWordTimingCoverage
+            let fallback = unreliable && UserDefaults.experimentsOptions.petitLyricsLineFallback
+            let preserveWords = wordByWordEnabled && !fallback
+            if wordByWordEnabled && unreliable {
+                writeDebugLog(
+                    "[Petit] word timing covers \(Int(coverage * 100))% of a line (median) — "
+                        + (fallback ? "line-level fallback" : "kept (experiment off)")
+                )
+            }
             // 「Petit 会返回空白行歌词 ⇒ AM 呼吸灯过后（间奏）
             // 是一行空白而不是下一行歌词」。
             //
@@ -332,6 +345,38 @@ class PetitLyricsRepository: LyricsRepository {
         }
         return result
     }
+
+    /// 这一首的逐词时间轴「每行的词轴占行间距多少」的中位数。
+    ///
+    /// Petit 有一部分 `wordsSynced` 是**等距编出来的**：每行每个词固定同一个 step，
+    /// 而 step 的大小（80 / 15 / 5 / 2 …）与这首歌的行间距毫无关系 ⇒ 整行词轴只占
+    /// 行间距的一小截。真点出来的词时间这一比值在 65% 以上；编出来的在 15% 上下。
+    ///
+    /// 只统计「≥2 个词、行间距为正、词轴跨度为正」的行 —— 单词行（间奏/语气词）没有
+    /// 跨度可量；可比行不足 3 组时返回 1（不判，宁可照用）。
+    private static func wordTimingCoverage(_ lines: [PetitLyricsLine]) -> Double {
+        var ratios: [Double] = []
+        for index in lines.indices.dropLast() {
+            let line = lines[index]
+            let next = lines[index + 1]
+            guard line.words.count > 1,
+                  let start = line.words.first?.starttime,
+                  let nextStart = next.words.first?.starttime,
+                  nextStart > start else {
+                continue
+            }
+            let span = lineEndMs(line) - start
+            guard span > 0 else { continue }
+            ratios.append(Double(span) / Double(nextStart - start))
+        }
+        guard ratios.count >= 3 else { return 1 }
+        return ratios.sorted()[ratios.count / 2]
+    }
+
+    /// 覆盖率中位数低于这个值 ⇒ 认为这一首的词轴不可信，整首退回行级。
+    ///
+    /// 阈值取在两端的中间：正常歌 65%–98%，编出来的那几首 15% 上下。
+    private static let minimumWordTimingCoverage = 0.5
 
     /// Petit 的 wordsSynced 词元素带 `wordstring`（词文本，含空格 token）+ starttime + endtime。
     ///

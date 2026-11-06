@@ -51,6 +51,15 @@ struct ExperimentsOptions: Codable, Equatable {
     /// ⚠️ 它会误删"整行被方括号包住的真歌词"（`[I love you]` 这种写法确实存在，但极少）；
     /// 默认关，就是这个原因。
     var aggressiveMarkerRemoval: Bool
+    /// 「PetitLyrics 回退逐行」—— PetitLyrics 有一部分 `wordsSynced` 不是真点出来的：
+    /// 每行每个词固定同一个 step，而 step 的大小（80 / 15 / 5 / 2 …）与这首歌的行间距无关 ⇒
+    /// 整行词轴只占行间距的一小截（判据见 `PetitLyricsRepository.wordTimingCoverage`）。
+    /// 后果是逐字高亮一两秒就扫完整句、剩下时间被间奏判定当成"没人唱"，
+    /// 于是句与句之间几乎每一处都冒出呼吸点。
+    ///
+    /// **默认开**：开了只会少一层本就可疑的逐字高亮，不会让正确的时间轴变差 ——
+    /// 覆盖率中位数在正常歌里是 65% 以上，编出来的那几首在 15% 上下，两端分得很开。
+    var petitLyricsLineFallback: Bool
 
     init(
         liveContainerSharing: Bool,
@@ -59,7 +68,8 @@ struct ExperimentsOptions: Codable, Equatable {
         spicyLyricsCrossValidation: Bool = false,
         appleMusicOfficialTtml: Bool = false,
         pseudoWordByWordLyrics: Bool = false,
-        aggressiveMarkerRemoval: Bool = false
+        aggressiveMarkerRemoval: Bool = false,
+        petitLyricsLineFallback: Bool = true
     ) {
         self.liveContainerSharing = liveContainerSharing
         self.showInstagramDestination = showInstagramDestination
@@ -68,6 +78,7 @@ struct ExperimentsOptions: Codable, Equatable {
         self.appleMusicOfficialTtml = appleMusicOfficialTtml
         self.pseudoWordByWordLyrics = pseudoWordByWordLyrics
         self.aggressiveMarkerRemoval = aggressiveMarkerRemoval
+        self.petitLyricsLineFallback = petitLyricsLineFallback
     }
 
     /// 手写解码：`liveContainerSharing` 之外那些都是**后加的**字段，早期盘上根本没有它们。
@@ -87,5 +98,10 @@ struct ExperimentsOptions: Codable, Equatable {
             ?? false
         aggressiveMarkerRemoval = try container.decodeIfPresent(Bool.self, forKey: .aggressiveMarkerRemoval)
             ?? false
+        // 默认**开**：缺键时按"新功能已启用"处理，否则一次升级会把新功能关掉。
+        petitLyricsLineFallback = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .petitLyricsLineFallback
+        ) ?? true
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// 「实验」页：只放**尚未真机定性**的功能（默认关，用户主动开）。
+/// 「实验」页：只放**尚未真机定性**的功能（默认关，用户主动开；下面那个回退开关例外）。
 ///
 /// 准入三条：
 /// ① 还没在真机上验证过效果；
@@ -10,9 +10,14 @@ import UIKit
 /// 三条里占一条才进来。**行为早已定性、只是"依赖外部"的开关不属于这里** ——
 /// 「分享到 LiveContainer」因此搬到「杂项设定」（见 `EeveeMiscellaneousSettingsView`）。
 ///
+/// 「PetitLyrics 回退逐行」是唯一**默认开**的一项：它把一层本就可疑的逐字高亮
+/// 摘掉，判据是覆盖率中位数（见 `ExperimentsOptions.petitLyricsLineFallback`），
+/// 关掉只是"强行按行换算单位后照用"。
+///
 /// ⚠️ 「NetEase 交叉验证」与「PetitLyrics 回退 NetEase」两个实验**已整体撤掉**
 /// （NE 目前只在来源说明里标注"不推荐非中国用户使用"）。
-/// 这一页现在只留 Instagram 分享位、AMLL 模糊搜索、SpicyLyrics 交叉验证、Apple 官方 TTML。
+/// 这一页现在只留 Instagram 分享位、AMLL 模糊搜索、伪逐字、更激进的标注删除、
+/// SpicyLyrics 交叉验证、Apple 官方 TTML，以及逐词时间轴回退。
 struct EeveeExperimentsSettingsView: View {
     @State var experimentsOptions = UserDefaults.experimentsOptions
 
@@ -74,6 +79,16 @@ struct EeveeExperimentsSettingsView: View {
                 Toggle(
                     "pseudo_word_by_word_lyrics".localized,
                     isOn: $experimentsOptions.pseudoWordByWordLyrics
+                )
+            }
+
+            // PetitLyrics 回退逐行（**默认开**）。
+            // 只管"这一首的词轴值不值得用"：覆盖率中位数低于阈值就整首退回行级，
+            // 关闭后仍按行换算单位照用（判据见 `PetitLyricsRepository.wordTimingCoverage`）。
+            Section(footer: Text("petitlyrics_line_fallback_description".localized)) {
+                Toggle(
+                    "petitlyrics_line_fallback".localized,
+                    isOn: $experimentsOptions.petitLyricsLineFallback
                 )
             }
 
