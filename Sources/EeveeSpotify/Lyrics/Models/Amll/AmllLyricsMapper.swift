@@ -43,6 +43,9 @@ enum AmllLyricsMapper {
         // ── 逐行：先建主词序列，再挂上（独立的）背景人声
         var wordLines: [[LyricsWordDto]?] = []
         var backgroundVocals: [LyricsBackgroundVocalDto?] = []
+        /// 官方罗马字，**与 `lines` 同序同长**（被丢弃的行不占位）—— 它是"正文上方那一行"，
+        /// 不是正文。旧实现直接拿它替换 `content`，于是日文正文整个消失。
+        var officialRomanizations: [String] = []
         for line in parsed.lines {
             let tokens = wordTokens(for: line, logTag: logTag)
             // 行文本直接用 primaryText（解析层保证它**不含** x-bg），
@@ -70,6 +73,9 @@ enum AmllLyricsMapper {
                 )
             )
             translations.append(line.translation ?? "")
+            officialRomanizations.append(
+                (line.romanization ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            )
             wordLines.append(tokens)
             backgroundVocals.append(background)
         }
@@ -100,27 +106,56 @@ enum AmllLyricsMapper {
         }
 
         // ── 罗马化状态
+        //
+        // 官方罗马字（`x-roman` / 侧挂的 transliteration 轨）**只当"正文上方那一行"**：
+        // `lines` 永远是原文（日文），罗马字进 `officialRomanizedLines`，显示层按行下标配对
+        // （见 `LyricLinesAdapter.romanizedContentsForDisplay`）。
+        //
+        // ⚠️ 旧实现在这里把 `content` 换成罗马音、并把 `words` 清空 —— 表现是"开 AMLL 后
+        // 日文正文变成一整屏罗马字、逐字高亮也没了"。这与网易云/酷狗/QQ 已经改掉的那条
+        // 是同一个病，判据与那几家对齐：
+        // · 开关关着 ⇒ 连官方那份都不存（与网易 `romalrc` 一样，"取用时按开关存"）；
+        // · 覆盖过半才收（个别行缺 `x-roman` 可以接受，整首对不上就整份丢弃）；
+        // · 收下时 `languageCode` 记成 ja，显示层据此挑日语那个罗马化开关。
         let contents = lines.map(\.content)
         var languageCode = contents.romanizationLanguageCode
-        var romanization: LyricsRomanizationStatus = contents.canBeRomanized
+        let romanization: LyricsRomanizationStatus = contents.canBeRomanized
             ? .canBeRomanized
             : .original
+        var officialRomanizedLines: [String] = []
 
         if parsed.hasRomanization,
-           let replaced = applyOfficialRomanization(
-               to: lines,
-               parsed: parsed,
-               languageCode: languageCode,
-               logTag: logTag
-           ) {
-            lines = replaced
-            romanization = .romanized
-            languageCode = "ja"
+           UserDefaults.standard.bool(forKey: japaneseRomanizationKey),
+           isJapanese(parsed: parsed, languageCode: languageCode) {
+            // 行数对不上就不用（显示层按下标配对，错一行整份都会串）。
+            let covered = officialRomanizations.filter { !$0.isEmpty }.count
+            if officialRomanizations.count == lines.count, covered > 0, covered * 2 >= lines.count {
+                officialRomanizedLines = officialRomanizations
+                languageCode = "ja"
+                writeDebugLog(
+                    "[\(logTag)] kept official romanization for \(covered)/\(lines.count) line(s)"
+                )
+            } else if officialRomanizations.count != lines.count {
+                writeDebugLog(
+                    "[\(logTag)] official romanization line count mismatch"
+                        + " (\(officialRomanizations.count) vs \(lines.count)) — discarded"
+                )
+            } else {
+                writeDebugLog(
+                    "[\(logTag)] official romanization covers only \(covered)/\(lines.count)"
+                        + " line(s) — discarded"
+                )
+            }
+        } else if parsed.hasRomanization {
+            writeDebugLog(
+                "[\(logTag)] official romanization present, but Japanese romanization is off"
+                    + " or the song is not Japanese — keeping original"
+            )
         }
 
         // ── 翻译层
         // 必须与主歌词行数完全一致（渲染层按行索引取），因此每行都占位（无翻译填空串）。
-        // 注意：官方罗马音替换不改变行数，翻译索引依然有效。
+        // 官方罗马音只进 `officialRomanizedLines`，不碰 `lines`（行数与顺序都不变）⇒ 翻译索引依然有效。
         let translation = translations.contains { !$0.isEmpty }
             ? LyricsTranslationDto(
                 languageCode: preferredTranslationLanguageCode(parsed) ?? languageCode ?? "zh",
@@ -158,6 +193,7 @@ enum AmllLyricsMapper {
             romanization: romanization,
             translation: translation,
             languageCode: languageCode,
+            officialRomanizedLines: officialRomanizedLines,
             providerCredit: credit
         )
     }
@@ -235,67 +271,6 @@ enum AmllLyricsMapper {
             translation: background.translation
         )
         return dto.isEmpty ? nil : dto
-    }
-
-    // MARK: - 官方罗马音
-    //
-    // 用官方 x-roman 替换主行文本。返回 nil 表示不适用（保持原文 + 本地罗马化）。
-    private static func applyOfficialRomanization(
-        to lines: [LyricsLineDto],
-        parsed: AmllTtmlResult,
-        languageCode: String?,
-        logTag: String = "AMLL"
-    ) -> [LyricsLineDto]? {
-        guard UserDefaults.standard.bool(forKey: japaneseRomanizationKey) else {
-            writeDebugLog("[\(logTag)] official romanization present, but Japanese romanization is off — keeping original")
-            return nil
-        }
-
-        guard isJapanese(parsed: parsed, languageCode: languageCode) else {
-            writeDebugLog("[\(logTag)] official romanization present, but song is not Japanese — keeping original")
-            return nil
-        }
-
-        // 逐行顺序配对：原文行（解析层的 lines）与官方罗马音一一对齐。
-        // 解析层的 lines 与 mapper 的 lines 顺序一致，只是 mapper 可能少几行空行，
-        // 因此按「原文非空」过滤出配对序列。
-        let pairs = parsed.lines
-            .filter { !$0.primaryText.isEmpty }
-            .map { ($0.primaryText, $0.romanization ?? "") }
-
-        guard pairs.count == lines.count else {
-            writeDebugLog(
-                "[\(logTag)] official romanization line count mismatch (\(pairs.count) vs \(lines.count)) — discarding"
-            )
-            return nil
-        }
-
-        var replaced: [LyricsLineDto] = []
-        replaced.reserveCapacity(lines.count)
-        var covered = 0
-
-        for (index, line) in lines.enumerated() {
-            let romanization = pairs[index].1
-            guard !romanization.isEmpty else {
-                replaced.append(line)
-                continue
-            }
-            covered += 1
-            replaced.append(
-                LyricsLineDto(content: romanization, offsetMs: line.offsetMs, words: nil)
-            )
-        }
-
-        // 有过半的行拿到官方罗马音才采用（个别行缺 x-roman 可以接受，整首对不上就放弃）。
-        guard covered > 0, covered * 2 >= lines.count else {
-            writeDebugLog("[\(logTag)] official romanization covers only \(covered)/\(lines.count) line(s) — discarding")
-            return nil
-        }
-
-        writeDebugLog("[\(logTag)] applied official romanization to \(covered)/\(lines.count) line(s)")
-
-        // 官方罗马音是行级的、没有词级时间轴，替换后词级文本已不对应，整体丢弃。
-        return replaced
     }
 
     private static func isJapanese(parsed: AmllTtmlResult, languageCode: String?) -> Bool {
