@@ -15,7 +15,7 @@ Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass l
 <p align="center">
   <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
   <img src="docs/screenshots/lyrics.webp" width="15%" alt="Word-by-word lyrics with translation, credit line showing AMLL">
-  <img src="docs/screenshots/album.webp" width="15%" alt="Apple Music–style single page with a blurred backdrop">
+  <img src="docs/screenshots/album.webp" width="15%" alt="Apple Music–style album page with a blurred backdrop">
   <img src="docs/screenshots/playlist.webp" width="15%" alt="Playlist page with a single cover instead of the four-up mosaic">
   <img src="docs/screenshots/artist.webp" width="15%" alt="Apple Music–style artist page">
   <img src="docs/screenshots/home.webp" width="15%" alt="Home, with the liquid-glass tab bar">
@@ -31,7 +31,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 ### Lyrics
 
 - **12 sources** — Spicy Lyrics, AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
-- **Auto Select** — asks the sources in an order you choose and keeps the finest timing: word-by-word beats line-by-line, which beats plain text. A plain-text answer never ends the search.
+- **Auto Select** — asks the sources in an order you choose and keeps the best answer: word-by-word beats line-by-line, which beats plain text; within the same tier it prefers the answer that also has the translation, official romanization or word-level romanization your settings ask for. A plain-text answer never ends the search.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling.
 
 ### Look and feel
