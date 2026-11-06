@@ -214,6 +214,11 @@ enum EntityPageAppearance {
     private static var didReportGenerated = false
     /// 「这一页是**满幅页头**（电台 / 官方编辑歌单），取色底按页头那张图铺」只报一次。
     private static var didReportFullbleed = false
+    /// 「满幅页头 + 前面那个 VC 只是页面 chrome，靠**页面装着页头**这条证据认下」只报一次。
+    ///
+    /// 这一行就是"这一族终于铺上底了"的凭据：VC 那一圈在这类页面上永远看不到实体页，
+    /// 只看 `front VC` 会以为它没通过。
+    private static var didReportHeaderAnchor = false
     /// 「页头归我们管、但 `currentTarget()` 一条都没认出来」只报一次 —— 下一份日志就能看出
     /// 是哪一类页面漏了（不报的话只能看到"这页没有 [PageField] 行"）。
     private static var didReportNoTarget = false
@@ -1721,7 +1726,10 @@ enum EntityPageAppearance {
         revealWash()
         didReportMelt = false
         didReportHeroSource = false
-        fullbleedPictureView = nil
+        // ⚠️ **这里不清 `fullbleedPictureView`**。`tick` 换页那一拍是"先 `restore()` 再重跑"：
+        // 清掉之后，紧接着那次重跑再读到的就是 nil ⇒ 满幅页头那一族每拍都在"认出页面 → 撤掉"
+        // 之间打转，底永远铺不上。它本来就是**弱引用**，而且所有读取点都要求它**在当前页头容器里**
+        // （`fullbleedPlaylistTarget` / `fullbleedPictureImage`）⇒ 留着它不会串到上一页。
         // 单调高度是记在**那块 plane** 上的（换页面时 plane 可能被复用）⇒ 撤的时候一起清掉，
         // 否则下一个页面的 hero 会一上来就是上一个页面那么高。
         if let plane = sharpHero?.superview {
@@ -1738,9 +1746,13 @@ enum EntityPageAppearance {
 
     /// 满幅页头那张图的**图源**（比方封面清晰、裁法也正是页头那一版）；没有就 nil。
     ///
-    /// 只认**这一页里、还在窗口上**的那张 —— 页头换页后残留的旧引用不该再被借来当图源。
+    /// 只认**这一页的页头里、还在窗口上**的那张 —— 页头换页后残留的旧引用不该再被借来当图源。
+    /// `fullbleedPictureView` 现在是弱引用、换页时也不再主动清（见 `removeHero`）⇒ 这里必须
+    /// 用与 `fullbleedPlaylistTarget` 同一条"属于当前页头容器"的判据挡住上一页那张。
     private static func fullbleedPictureImage() -> UIImage? {
         guard let picture = fullbleedPictureView, picture.window != nil else { return nil }
+        guard let host = EntityPageHeaderManager.headerHost,
+              picture.isDescendant(of: host) || host.isDescendant(of: picture) else { return nil }
         return firstImageView(in: picture)?.image
     }
 
@@ -1832,6 +1844,7 @@ enum EntityPageAppearance {
         didReportMissingColour = false
         didReportGenerated = false
         didReportFullbleed = false
+        didReportHeaderAnchor = false
         didReportNoTarget = false
         didReportCoverlessArtwork = false
         didReportFullbleedMiss = false
@@ -1988,7 +2001,8 @@ enum EntityPageAppearance {
     /// **满幅页头**那一族的目标：页面根 + 取色。
     ///
     /// 页面根优先用**页面自己的 VC view**（taurus 的 `SGRPlaylistHeaderOf` 那条 responder chain）：
-    /// 垫在 scroll 里那一层会随内容滚，底就跟着脏到哪。找不到再退回 `pageRoot(from:)`。
+    /// 垫在 scroll 里那一层会随内容滚，底就跟着脏到哪。VC 认不出来时从**页头那一层**
+    /// 往上找占满窗口的那一层，最后才退回 `pageRoot(from:)`。
     ///
     /// 判据要求那张图**属于当前页头容器**（`EntityPageHeaderManager.headerHost`）：
     /// 换页时旧页可能还在窗口里，`fullbleedPictureView` 是个弱引用、不能只凭 `window != nil`。
@@ -2025,11 +2039,61 @@ enum EntityPageAppearance {
             reportFullbleedMiss("the page root is off screen")
             return nil
         }
-        guard pageIsInFront(page, in: window) || pageHoldsOurHeader(page) else {
+        // 页面根必须是**装着页头的那一层**，不能是页头内部那一层。
+        //
+        // 这一族的满幅页头里还套着一层和页面同尺寸的容器（图 + 渐变 + 遮罩），
+        // 只按几何找"占满屏"会先落到它上面 ⇒ 底插在页头里：到不了列表下面，
+        // 还会跟着页头的折叠 / 裁切一起跑。
+        guard !pageIsInsideHeader(page) else {
+            reportFullbleedMiss(
+                "the page root \(String(describing: type(of: page))) sits inside our header"
+            )
+            return nil
+        }
+        // 「这一页在最前面」有两条证据，任意一条成立即可：
+        //
+        // ① `pageIsInFront`：页面根就是最前面那个 VC 的 view（或它的祖先 / 子孙）。
+        // ② `pageHoldsOurHeader`：页面根装着**当前这一份页头**。
+        //
+        // 生成歌单这一族只能用 ②：`frontController` 的 `children.last` 会停在迷你条
+        // （`NowPlaying_BarImpl.DurationViewController` 那一类页面 chrome）⇒ ① 恒不成立，
+        // 但那不代表页面被盖住 —— 页头还在这一页里。
+        //
+        // ⚠️ ② 单独用**不够**：被全屏播放器 / 弹层盖住时页头也还挂在窗口里，
+        // 换页动画里正在滑走的那一页也装着上一份页头。所以 ② 这一支另外要求
+        // "页面根真的是一整页、而且前面没有一层占满窗口的视图"，见下面两段。
+        let frontByController = pageIsInFront(page, in: window)
+        let holdsHeader = pageHoldsOurHeader(page)
+        guard frontByController || holdsHeader else {
             reportFullbleedMiss(
                 "the page root \(String(describing: type(of: page))) is not the front page"
             )
             return nil
+        }
+        let pageFrame = page.convert(page.bounds, to: window)
+        if !frontByController {
+            guard page.window === window else {
+                reportFullbleedMiss("the page that holds our header is in another window")
+                return nil
+            }
+            // 页面根必须真的是"一整页"：从窗口原点开始、够宽够高。
+            // 换页动画里正在滑出去的那一页原点不在 0,0，这一条就把它挡住了。
+            guard pageFrame.width >= window.bounds.width * 0.9,
+                  pageFrame.height >= window.bounds.height * 0.6,
+                  pageFrame.minX <= 1, pageFrame.minY <= 1 else {
+                reportFullbleedMiss(
+                    "the page that holds our header is not a full page"
+                        + " (frame \(frameText(pageFrame)))"
+                )
+                return nil
+            }
+            if let cover = fullScreenCover(inFrontOf: page, in: window) {
+                reportFullbleedMiss(
+                    "the page that holds our header is covered by"
+                        + " \(String(describing: type(of: cover)))"
+                )
+                return nil
+            }
         }
         // 两种读法：`UIImageView.image` → 把这一帧缩出来取平均色。
         // 满幅页头那一支容器里**不一定**装着 `UIImageView`（有的版本把图画在 layer 上），
@@ -2041,6 +2105,17 @@ enum EntityPageAppearance {
             return nil
         }
 
+        if !frontByController, !didReportHeaderAnchor {
+            didReportHeaderAnchor = true
+            writeDebugLog(
+                "[\(logTag)] full-bleed page accepted on the header anchor — page root"
+                    + " \(String(describing: type(of: page))) \(frameText(pageFrame))"
+                    + " holds our header and nothing full-screen is in front of it;"
+                    + " the front VC chain stops at \(frontControllerDescription())"
+                    + " (page chrome), so the controller check cannot see this page"
+                    + " — painting the field from colour #\(hex(of: colour))"
+            )
+        }
         if !didReportFullbleed {
             didReportFullbleed = true
             let size = picture.bounds.size
@@ -2066,20 +2141,132 @@ enum EntityPageAppearance {
 
     /// 沿 responder chain 找类名含 `FreeTierPlaylist` 的 VC 的 view；找不到就退回
     /// "最外层 scroll 的父视图"（`pageRoot(from:)`）。
+    ///
+    /// 为什么要走两遍同一条链：满幅页头那一族的图埋在 Encore 的包装层里，比页头那一层深十几级。
+    /// 从图往上走会先撞上 hop 上限，而**页头那一层一定到得了** —— 页头那边用的正是同一个上限
+    /// 判过"这是歌单页"（`isPlaylistPage`）。两次用同一个上限，这一页就不该因为起点更深而落空。
     private static func playlistPageRoot(near view: UIView, in window: UIWindow) -> UIView? {
+        // **装着我们页头**的那一层优先：这一档的判据（`pageHoldsOurHeader`）要的就是它。
+        // 页头不在时不做这条限制（换页第一拍页头可能还没写回来）。
+        let host = EntityPageHeaderManager.headerHost
+        func accepts(_ page: UIView) -> Bool {
+            guard let host else { return true }
+            return pageHoldsOurHeader(page) && page !== host
+        }
+        if let page = pageControllerView(in: view), accepts(page) { return page }
+        if let host = host, host.window != nil {
+            if let page = pageControllerView(in: host) { return page }
+            // 页面 VC 认不出来时，从**页头那一层**往上找真的占满窗口的那一层。
+            // 从图往上找可能落在页头内部（这一族的满幅页头里有一层和页面同尺寸的容器）。
+            if let page = presentationPageRoot(above: host, in: window) { return page }
+        }
+        return pageRoot(from: view, in: window)
+    }
+
+    /// responder chain 上第一个歌单 VC 的 view（`viewIfLoaded`、在窗口里、尺寸像个页面）。
+    ///
+    /// hop 上限与页头那边的 `isPlaylistPage` 一致：那边能过的页面，这里也要能过。
+    private static func pageControllerView(in view: UIView) -> UIView? {
         var responder: UIResponder? = view
         var hops = 0
-        while let current = responder, hops < 40 {
+        while let current = responder, hops < 60 {
             hops += 1
             if let controller = current as? UIViewController,
-               NSStringFromClass(type(of: controller)).contains("FreeTierPlaylist"),
+               playlistControllerMatches(controller),
                let page = controller.viewIfLoaded, page.window != nil,
                page.bounds.width > 120, page.bounds.height > 120 {
                 return page
             }
             responder = current.next
         }
-        return pageRoot(from: view, in: window)
+        return nil
+    }
+
+    /// 从页头往上找**真的占满窗口**的那一层（页面本体）。
+    ///
+    /// 只在页面 VC 认不出来时用：它不依赖 VC 树的形状，只依赖几何 —— 页头所在的那一页一定有一层
+    /// 占满窗口的容器，从页头往上走，第一个满足的就是它。
+    ///
+    /// `UIScrollView` 跳过：垫在 scroll 上会随内容一起滚（`pageRoot` 的注释里那条纪律）。
+    private static func presentationPageRoot(above view: UIView, in window: UIWindow) -> UIView? {
+        guard view.window === window else { return nil }
+        let bounds = window.bounds
+        var node: UIView? = view.superview
+        var levels = 0
+        while let current = node, current !== window, levels < 40 {
+            levels += 1
+            if !(current is UIScrollView) {
+                let frame = current.convert(current.bounds, to: window)
+                if frame.width >= bounds.width - 1,
+                   frame.height >= bounds.height - 1,
+                   frame.minX <= 1, frame.minY <= 1 {
+                    return current
+                }
+            }
+            node = current.superview
+        }
+        return nil
+    }
+
+    /// 页面根是不是**落在页头容器内部**（满幅页头里那一层和页面同尺寸的容器）。
+    private static func pageIsInsideHeader(_ page: UIView) -> Bool {
+        guard let host = EntityPageHeaderManager.headerHost else { return false }
+        return page === host || page.isDescendant(of: host)
+    }
+
+    /// 页面根前面**压着一层占满窗口、真会画东西的视图**吗（全屏播放器 / 正在进来的下一页）。
+    ///
+    /// 只看 `presentedViewController` 不够：那一圈问的是"谁弹了页"，而全屏播放器 / 转场里的
+    /// 下一页也可能是直接加在窗口层级里的一层。这里按 subview 下标（UIKit 的绘制顺序）往上走，
+    /// 取**最近**的那一层 —— 返回非 nil 就说明这一页被盖住了。
+    ///
+    /// ⚠️ **透明层不算遮挡**：转场里有一层只吃手势、什么都不画的整页视图；把它算进来的话
+    /// 这一族会一直判成"被盖住"。
+    private static func fullScreenCover(inFrontOf page: UIView, in window: UIWindow) -> UIView? {
+        var node: UIView? = page
+        var levels = 0
+        while let current = node, current !== window, levels < 40 {
+            levels += 1
+            guard let parent = current.superview else { break }
+            if let index = parent.subviews.firstIndex(of: current) {
+                for sibling in parent.subviews.dropFirst(index + 1) {
+                    if coversWindow(sibling, in: window) { return sibling }
+                }
+            }
+            node = parent
+        }
+        return nil
+    }
+
+    /// 这一层是不是**真的遮住整页**：自己占满窗口，而且它自己或子树里有一层不透明的整页视图。
+    ///
+    /// 只判"占满窗口"不够：转场里那层容器也占满窗口，可它什么都不画。玩家的全屏页则不同 ——
+    /// 容器可能是透明的，真正不透明的那一层在它里面。
+    private static func coversWindow(_ view: UIView, in window: UIWindow) -> Bool {
+        guard view.window != nil, !view.isHidden, view.alpha > 0.01 else { return false }
+        let frame = view.convert(view.bounds, to: window)
+        guard frame.width >= window.bounds.width - 1,
+              frame.height >= window.bounds.height - 1,
+              frame.minX <= 1, frame.minY <= 1 else { return false }
+        return paintsOverWindow(view, in: window, depth: 0)
+    }
+
+    /// 这一层（或它**里面**占满窗口的那一层）有没有不透明的底色。
+    private static func paintsOverWindow(_ view: UIView, in window: UIWindow, depth: Int) -> Bool {
+        if view.isOpaque { return true }
+        if let colour = view.backgroundColor, colour.cgColor.alpha > 0.01 { return true }
+        guard depth < 3 else { return false }
+        var visited = 0
+        for sub in view.subviews {
+            visited += 1
+            guard visited < 200 else { break }
+            guard !sub.isHidden, sub.alpha > 0.01 else { continue }
+            let frame = sub.convert(sub.bounds, to: window)
+            guard frame.width >= window.bounds.width * 0.95,
+                  frame.height >= window.bounds.height * 0.95 else { continue }
+            if paintsOverWindow(sub, in: window, depth: depth + 1) { return true }
+        }
+        return false
     }
 
     /// 解析出来的页面是不是**真的在最前面**。
@@ -2099,6 +2286,9 @@ enum EntityPageAppearance {
     /// 让"最前面那个 VC"落到别处；而满幅页头这一族的页面根是从**页头自己的** responder chain
     /// 找出来的，`headerHost` 一定属于当前那一页 ⇒ "页面里装着当前页头"同样能证明
     /// 它不是正在滑走的那一页，而且不依赖 VC 树的形状。
+    ///
+    /// ⚠️ 它**只证明"页头在这一页里"**，不证明这一页没被盖住（被弹层盖住时页头也还在窗口里）。
+    /// "有没有被盖住"由 `fullbleedPlaylistTarget` 里的整页几何与 `fullScreenCover` 两条补上。
     private static func pageHoldsOurHeader(_ page: UIView) -> Bool {
         guard let host = EntityPageHeaderManager.headerHost else { return false }
         return host === page || host.isDescendant(of: page)
