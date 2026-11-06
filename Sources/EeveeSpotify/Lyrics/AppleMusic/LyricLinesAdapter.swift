@@ -371,11 +371,43 @@ extension LyricsDto {
             // 副唱**自己的**译文一路带上去 ——
             // 渲染层（`SynchronizedLyricText.backgroundVocalRow`）会把它画成
             // 副唱下面那一小行；以前这里硬编码 `nil`，那条链断在最后一步。
-            translation: background.translation,
+            //
+            // 但它的译文经常只是"把副唱那句话去掉括号再说一遍"（TTML 里 x-bg 的
+            // x-translation 常常就是正文本身，例如 `(「My God」)` ↔ `「My God」`），
+            // 照搬会画出一模一样的两行。这类重复译文直接丢掉。
+            translation: deduplicatedTranslation(
+                background.translation,
+                sameAs: text
+            ),
             position: background.isBeforePrimary
                 ? .beforePrimary
                 : .afterPrimary
         )
+    }
+
+    /// 译文与原文只差括号 / 引号 / 空白 / 大小写时，认为它是同一句话 ⇒ 不显示译文行。
+    private static func deduplicatedTranslation(
+        _ translation: String?,
+        sameAs text: String
+    ) -> String? {
+        guard let translation else { return nil }
+        let strippedTranslation = comparableForDuplicateCheck(translation)
+        let strippedText = comparableForDuplicateCheck(text)
+        guard !strippedTranslation.isEmpty else { return nil }
+        return strippedTranslation == strippedText ? nil : translation
+    }
+
+    /// 去掉空白与成对的括号/引号后再比较。
+    ///
+    /// 只做"去掉"、不做替换：副唱里那些括号本身是语义（念白、合唱标记），
+    /// 这里只服务于"两行是不是同一句话"这一个判断。
+    private static func comparableForDuplicateCheck(_ text: String) -> String {
+        let dropped: Set<Character> = [
+            " ", "\t", "\n", "\u{3000}",
+            "(", ")", "（", "）", "[", "]", "【", "】",
+            "「", "」", "『", "』", "\"", "'", "“", "”", "‘", "’"
+        ]
+        return String(text.lowercased().filter { !dropped.contains($0) })
     }
 
     // MARK: - 私有

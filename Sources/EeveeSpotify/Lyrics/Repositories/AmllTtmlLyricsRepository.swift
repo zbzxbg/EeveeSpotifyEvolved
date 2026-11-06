@@ -479,18 +479,29 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     private func logSummary(item: AmllSongItem, parsed: AmllTtmlResult, dto: LyricsDto) {
         let wordLines = dto.lines.filter { ($0.words?.count ?? 0) >= 2 }.count
         let translationCount = dto.translation?.lines.filter { !$0.isEmpty }.count ?? 0
-        let romanizationState = switch dto.romanization {
-        case .romanized: "official"        // repository 层已用 x-roman 替换主行文本
-        case .canBeRomanized: "deferred"   // 交给显示层的本地罗马化链路
-        case .original: "none"
+        // 官方罗马字现在是**独立一行**（`officialRomanizedLines`），不再替换正文 ——
+        // 只按 `dto.romanization` 判会把"已经收下"说成"没生效"。
+        let hasOfficialRow = !dto.officialRomanizedLines.isEmpty
+        let romanizationState: String
+        if hasOfficialRow {
+            romanizationState = "official row"
+        } else if dto.romanization == .romanized {
+            romanizationState = "official (merged into the text)"
+        } else if dto.romanization == .canBeRomanized {
+            romanizationState = "deferred"
+        } else {
+            romanizationState = "none"
         }
         writeDebugLog(
             "[AMLL] \(dto.lines.count) line(s), \(wordLines) word-level, "
                 + "\(translationCount) translated, romanization=\(romanizationState), "
                 + "lang=\(dto.languageCode ?? "?")"
         )
-        if parsed.hasRomanization, romanizationState == "deferred" {
-            writeDebugLog("[AMLL] TTML carries x-roman but it was not applied (see mapper log above)")
+        if parsed.hasRomanization, !hasOfficialRow, dto.romanization != .romanized {
+            writeDebugLog(
+                "[AMLL] TTML carries x-roman but it was not kept — covered less than half,"
+                    + " the Japanese romanization switch is off, or the song is not Japanese"
+            )
         }
         if let declared = parsed.declaredDurationMs, let lastEnd = parsed.lastLineEndMs {
             writeDebugLog("[AMLL] declared dur \(declared)ms, last line end \(lastEnd)ms (neither is audio length)")
