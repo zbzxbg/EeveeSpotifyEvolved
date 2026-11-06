@@ -427,11 +427,19 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
             // 这一跳最多等多久：单源上限、总预算余额、以及（手里已有逐行时的）升级预算，
             // 三者取最小。少了最后一项，一次慢请求就能把"最多再等 4 秒"变成 9 秒。
+            //
+            // 「同档质量面还没齐」用的是**同一个** `upgradeBudget` 窗口（见
+            // `LyricsAutoSelect.shouldStop`）：不夹这一下，窗口过后起跑的那个源照样会跑满
+            // 自己的单源超时（3~5 秒）—— 与上面那条是同一类超支。
             var timeout = min(
                 LyricsAutoSelect.timeout(for: source),
                 LyricsAutoSelect.totalBudget - elapsed
             )
             if let best, best.tier == .line, LyricsAutoSelect.wantsWordTiming {
+                timeout = min(timeout, LyricsAutoSelect.upgradeBudget - elapsed)
+            } else if let best,
+                      best.tier >= LyricsAutoSelect.wantedTier,
+                      !LyricsAutoSelect.missingFacets(of: best.dto).isEmpty {
                 timeout = min(timeout, LyricsAutoSelect.upgradeBudget - elapsed)
             }
             guard timeout > 0 else {

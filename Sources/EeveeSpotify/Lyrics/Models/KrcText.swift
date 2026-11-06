@@ -132,6 +132,16 @@ enum KrcText {
     // 下标与时间行严格一一对应（实测《夜に駆ける》69 个时间行 ↔ 69 组）。
     //
     // 这里取 `type == 0`（罗马字）与 `type == 1`（译文）两条，按同一个行下标贴回去。
+    //
+    // ⚠️ `type 0` 不是纯拉丁：酷狗自己会把促音 っ/ッ 与长音符 ー 原样留成一个词，
+    // 同一份里还会整组留着汉字（`届` / `温` / `酩` / `酊`），于是 `ずっと` 的组是
+    // `["zu ", "っ", "to  "]`（拼出来是 `zu っto`）。修复放在这里而不是行级：
+    // 逐词罗马字要求"组数 == 词数"，只改行级字符串会让它退回整行。
+    // 规则（含"汉字为什么是丢掉"的取舍）见 `JapaneseRomajiRepair` 文件头。
+    //
+    // ⚠️ 这里返回的是**修之前**的原始组。修复由两个消费者在过完"韩文谐音"那道闸之后
+    // 自己调（`romanizedLines` / `romanizedWordGroups`）：那道闸靠**汉字占比**判
+    // "这不是罗马字"，而修复会把汉字丢掉 —— 先修的话占比恒为 0，谐音轨会被放进来。
     private static func romanizedRows(from krc: String) -> [[String]]? {
         languageRows(from: krc, type: 0)
     }
@@ -165,23 +175,31 @@ enum KrcText {
     ) -> [String]? {
         guard let source = romanizedRows(from: krc), !source.isEmpty else { return nil }
 
-        var out: [String] = []
-        out.reserveCapacity(rows.count)
+        var raw: [String] = []
+        var groups: [[String]] = []
+        raw.reserveCapacity(rows.count)
+        groups.reserveCapacity(rows.count)
         for row in rows {
             guard row.index < source.count else { return nil }
-            out.append(source[row.index].joined().trimmingCharacters(in: .whitespaces))
+            raw.append(source[row.index].joined().trimmingCharacters(in: .whitespaces))
+            groups.append(source[row.index])
         }
 
         // 整份都是空串 ⇒ 当没有罗马字（否则显示层会画一行空白）。
-        guard out.contains(where: { !$0.isEmpty }) else { return nil }
+        guard raw.contains(where: { !$0.isEmpty }) else { return nil }
 
         // 韩文歌的 `type 0` **不是罗马字，是中文谐音**（"马列做 say it back" 那种）。
         // 判据用汉字占比：真罗马字几乎不含汉字，谐音轨则一大半是。
         // 不挡的话，只要「日语罗马化」那个开关是开的（显示层对日语是先看它、
         // 不看曲目语言），韩文歌就会顶着罗马字那一行显示中文谐音。
-        guard hanRatio(out.joined()) <= 0.3 else { return nil }
+        //
+        // ⚠️ 这道闸必须判**修之前**的原文（`raw`）：`JapaneseRomajiRepair` 会丢掉汉字，
+        // 修完再算占比恒为 0 —— 谐音轨会被当成罗马字放进来，再被删掉大半汉字、
+        // 只剩拼音碎片。修复所以放在闸**之后**。
+        guard hanRatio(raw.joined()) <= 0.3 else { return nil }
 
-        return out
+        guard let repaired = JapaneseRomajiRepair.repairedWordGroups(groups) else { return nil }
+        return repaired.map { $0.joined().trimmingCharacters(in: .whitespaces) }
     }
 
     /// 逐词罗马字：与 `romanizedLines` 读的是同一份 `[language:]` type 0，
@@ -190,31 +208,39 @@ enum KrcText {
     /// KRC 的罗马字组和词片是同一套切分（`<…>词` 有几段，`type 0` 就有几组），
     /// 所以只在"组数 == 那一行的词数"时才敢挂；对不上就留空数组，
     /// 由显示层退回整行罗马字。
+    ///
+    /// `JapaneseRomajiRepair` 逐组替换文本、**从不增删组**，所以这道"组数 == 词数"的闸
+    /// 修假名前后是同一个结论 —— 否则修完 `zu っto` 就没有逐词罗马字了。
+
     private static func romanizedWordGroups(
         from krc: String,
         rows: [(index: Int, line: LyricsLineDto)]
     ) -> [[String]]? {
         guard let source = romanizedRows(from: krc), !source.isEmpty else { return nil }
 
-        var out: [[String]] = []
-        out.reserveCapacity(rows.count)
-        var matchedAny = false
+        var groups: [[String]] = []
+        var matched: [Bool] = []
+        groups.reserveCapacity(rows.count)
+        matched.reserveCapacity(rows.count)
         for row in rows {
             guard row.index < source.count else { return nil }
-            let groups = source[row.index]
-            if let words = row.line.words, !words.isEmpty, groups.count == words.count {
-                out.append(groups)
-                matchedAny = true
-            } else {
-                out.append([])
-            }
+            let rowGroups = source[row.index]
+            let wordCount = row.line.words?.count ?? 0
+            groups.append(rowGroups)
+            matched.append(wordCount > 0 && rowGroups.count == wordCount)
         }
-        guard matchedAny else { return nil }
+        guard matched.contains(true) else { return nil }
 
         // 与 `romanizedLines` 同一道闸：韩文歌的 type 0 是中文谐音，不是罗马字。
-        guard hanRatio(out.flatMap { $0 }.joined()) <= 0.3 else { return nil }
+        // 同样判**修之前**的原文，只算"组数 == 词数"的那几行（与原实现同口径）。
+        let matchedText = zip(groups, matched)
+            .filter { $0.1 }
+            .flatMap { $0.0 }
+            .joined()
+        guard hanRatio(matchedText) <= 0.3 else { return nil }
 
-        return out
+        guard let repaired = JapaneseRomajiRepair.repairedWordGroups(groups) else { return nil }
+        return repaired.enumerated().map { matched[$0.offset] ? $0.element : [] }
     }
 
     /// 一段文本里汉字占"非空白字符"的比例。

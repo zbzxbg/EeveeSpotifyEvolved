@@ -269,6 +269,19 @@ jobs:
                  -o qrc-des-tests
           ./qrc-des-tests
 
+      # 酷狗 KRC `[language:]` type 0 是**逐词罗马字**，但酷狗自己没转全：促音 っ/ッ
+      # 与长音符 ー 各自占一个词片，于是 `ずっと` 的组是 `["zu ", "っ", "to  "]`，
+      # 拼出来就是 `zu っto` —— 罗马字那一行里夹着假名。
+      # `JapaneseRomajiRepair` 只依赖 Foundation，所以能在这里编；`KrcText` 本身拖着
+      # `LyricsDto` / `ZlibInflate`，进不来（真正的接线在 `KrcText.romanizedRows`）。
+      # 断言钉三件事：组数不变（逐词罗马字的挂载闸）、结果里无假名、促音合成整词。
+      - name: KuGou KRC romaji repair (kana leftovers)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/JapaneseRomajiRepair.swift \
+                 Tests/KuGouRomaji/main.swift \
+                 -o kugou-romaji-repair-tests
+          ./kugou-romaji-repair-tests
+
       # 伪逐字填充（`PseudoWordTiming`，实验页开关、默认关）。
       # 它是**在编时间**（行内分布是估的），三条不变量必须钉死：
       # 拼回来的文本逐字等于原行（渲染层按字符下标记时）、最后一片不越过下一行

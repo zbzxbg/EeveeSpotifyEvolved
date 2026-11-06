@@ -1,0 +1,421 @@
+import Foundation
+
+/// 酷狗 KRC `[language:]` type 0（官方罗马字）的假名 / 汉字残留修复。
+///
+/// ── 为什么需要
+/// 那一条是"逐词罗马字"，正常只该有拉丁字母；酷狗自己没转全的部分会原样留着原文。
+/// 常见的有两类：
+/// · 促音 っ/ッ 与长音符 ー —— 它们在词片切分里各自占一个词，于是 `ずっと` 的
+///   罗马字组是 `["zu ", "っ", "to  "]`，拼出来就是 `zu っto`；
+/// · 汉字 —— 同一份 KRC 里 `届` / `温` / `酩` / `酊` 会整组原样留着（`["ai ", "no ",
+///   "kalada ", "温", "to ", …]`）。对读者来说"罗马字行里夹着汉字"和夹着假名是同一个 bug。
+///
+/// ── 为什么在**组**这一层修
+/// 显示层挂逐词罗马字那条路要求 `groups.count == words.count`
+/// （见 `KrcText.romanizedWordGroups`）：只改行级字符串会让它整份退回"整行罗马字"。
+/// 逐组修完，行级（各组 `joined()`）与词级（同一份组）两条粒度同时正确。
+///
+/// ── 规则
+/// · 纯促音组：双写的辅音放进**这一组**（它在时间轴上占着 っ 那段时长），并把两侧的
+///   空白吃掉 —— 促音属于前一个词，`zu っto` 必须合成 `zutto`，不能是 `zu tto`。
+///   KRC 的词间空格挂在**上一组**的末尾，所以"吃掉"是清掉上一组的尾随空白。
+/// · 纯长音组：元音并到上一组末尾、本组留空（`e ko ー ha` → `e koo ha`）。
+/// · 其余组：假名段按假名表转写；**汉字直接丢掉**；拉丁与标点原样保留。
+/// · 转不出来的假名（半角片假名、ゐ ゑ 等）同样丢掉。
+///
+/// ── 契约
+/// 返回的字符串里**不出现假名、也不出现汉字**（`repairedWordGroups` 最后再查一遍，
+/// 查出来就整份返回 nil，让显示层退回本地转换）。
+///
+/// ⚠️ 为什么汉字是"丢掉"而不是"读出读音"：读音要靠 CFStringTokenizer
+///   （`LyricsDto+Romanization.toJapaneseRomaji` 那条链，含 NaturalLanguage），
+///   而本文件是纯 Foundation、并且在**取词解析**这一层跑 —— 这里只有"一组词"的字符串，
+///   没有可靠的分词上下文；硬读一个音只会把多音字读错（`温` 在 `体温` 里是 `on`，
+///   `温かい` 里是 `atatakai`）。丢字只少一段读音，留字会把汉字
+///   画进罗马字行 —— 两害相权，加上"组数必须等于词数"这条对齐硬约束（不能删组，
+///   只能把该组的文本清空），丢字是这里唯一诚实的选择。
+///
+/// ⚠️ 假名表与 `LyricsDto.swift` 的 `japaneseKanaMap` 同源（键为平假名码点、
+///   片假名减 0x60 归一，促音 / 拗音 / 长音的规则一致）。没有直接复用那一份：
+///   `Tests/KuGouRomaji` 只编本文件 + Foundation，而 `LyricsDto.swift` 拖着
+///   NaturalLanguage 与整条 DTO 依赖链。两处改动必须按这个约定同步。
+enum JapaneseRomajiRepair {
+
+    // MARK: - 对外
+
+    /// 修一整批行（每行一组词）。
+    ///
+    /// 返回 nil 表示修完仍有假名 / 汉字残留（按构造不该发生）—— 调用方据此当作
+    /// "没有官方罗马字"，让显示层退回本地转换，而不是把原文画到罗马字那一行。
+    static func repairedWordGroups(_ rows: [[String]]) -> [[String]]? {
+        var out: [[String]] = []
+        out.reserveCapacity(rows.count)
+        for row in rows {
+            let repaired = repairedRow(row)
+            guard !repaired.contains(where: { containsKana($0) || containsHan($0) }) else {
+                return nil
+            }
+            out.append(repaired)
+        }
+        return out
+    }
+
+    /// 这段文本里有假名吗。
+    ///
+    /// 范围刻意**剔掉** U+30A0（゠）与 U+30FB（・）：它们在 Unicode 区块里与假名相邻，
+    /// 但是标点 —— 当假名处理会把 `・` 从罗马字那一行里删掉（酷狗用 `・` 做分隔确实出现过）。
+    static func containsKana(_ text: String) -> Bool {
+        text.unicodeScalars.contains { isKanaScalar($0.value) }
+    }
+
+    /// 这段文本里有汉字（Han ideograph）吗。
+    ///
+    /// 范围与 `KrcText.hanRatio` 同一套（扩展 A / 基本区 / 兼容区 / 扩展 B 及以后）：
+    /// 那个比例闸用来挡韩文谐音轨，判据必须口径一致。
+    /// 刻意**不含** U+3005（々）这类 CJK 符号：Unicode 类别不同（Lm），不是汉字。
+    static func containsHan(_ text: String) -> Bool {
+        text.unicodeScalars.contains { isHanScalar($0.value) }
+    }
+
+    // MARK: - 逐行修复
+
+    private static func repairedRow(_ groups: [String]) -> [String] {
+        guard !groups.isEmpty else { return groups }
+
+        var leading: [String] = []
+        var core: [String] = []
+        var trailing: [String] = []
+        leading.reserveCapacity(groups.count)
+        core.reserveCapacity(groups.count)
+        trailing.reserveCapacity(groups.count)
+        for group in groups {
+            let edges = splitEdgeWhitespace(group)
+            leading.append(edges.leading)
+            core.append(edges.core)
+            trailing.append(edges.trailing)
+        }
+
+        // 促音有两种出现方式：自成一"组"（酷狗的常规写法），或挂在组尾（`かっ`）。
+        // 两种都先记成"待定"：下一组的读音算出来之后才知道该双写哪个辅音。
+        var pendingGeminate = false
+        var geminateGroup: Int? = nil
+
+        for index in core.indices {
+            let text = core[index]
+            guard !text.isEmpty else { continue }
+
+            if isOnlyGeminate(text) {
+                geminateGroup = index
+                pendingGeminate = true
+                core[index] = ""
+                continue
+            }
+
+            if isOnlyLongVowelMark(text) {
+                // 长音是**上一个音节**的延长：元音接在上一组的读音后面（在它的尾随空白之前），
+                // 本组留空。元音接到了上一组，所以本组两侧的空白要么已被上一组带着、
+                // 要么挪给上一组，否则两个词会粘在一起。
+                if let previous = previousNonEmptyCore(before: index, in: core) {
+                    let vowel = lastVowel(of: core[previous])
+                    if !vowel.isEmpty {
+                        core[previous] += String(repeating: vowel, count: text.count)
+                    }
+                    if trailing[previous].isEmpty {
+                        trailing[previous] = trailing[index].isEmpty ? leading[index] : trailing[index]
+                    }
+                }
+                leading[index] = ""
+                trailing[index] = ""
+                core[index] = ""
+                continue
+            }
+
+            let romanized = romanizeMixedKana(text)
+            var newCore = romanized.text
+            var glued = false
+
+            if pendingGeminate {
+                let prefix = geminationPrefix(newCore)
+                if !prefix.isEmpty {
+                    if let carrier = geminateGroup {
+                        // 促音自成一组的常规形状：辅音落在促音那一组（它有自己的时长），
+                        // 上一组的尾随空白与下一组的前导空白都清掉，三个组拼成 `zutto`。
+                        core[carrier] = prefix
+                        if let previous = previousNonEmptyCore(before: carrier, in: core) {
+                            trailing[previous] = ""
+                        }
+                        leading[carrier] = ""
+                        trailing[carrier] = ""
+                    } else {
+                        newCore = prefix + newCore
+                        if let previous = previousNonEmptyCore(before: index, in: core) {
+                            trailing[previous] = ""
+                        }
+                    }
+                    glued = true
+                }
+                // 下一组以元音开头（促音后面没有可双写的辅音）时 prefix 为空：
+                // 促音不发音，但**不动空白** —— 否则 `zu っ a` 会粘成 `zua`。
+                pendingGeminate = false
+                geminateGroup = nil
+            }
+
+            if glued {
+                leading[index] = ""
+            }
+            core[index] = newCore
+
+            // 组尾的 っ（`かっ` 这种）把双写状态传给下一组。
+            if romanized.pendingGeminate {
+                pendingGeminate = true
+            }
+        }
+
+        var out: [String] = []
+        out.reserveCapacity(groups.count)
+        for index in groups.indices {
+            out.append(leading[index] + core[index] + trailing[index])
+        }
+        return out
+    }
+
+    /// 把一组里混着的假名段转写掉，非假名部分原样保留。
+    private static func romanizeMixedKana(_ text: String) -> (text: String, pendingGeminate: Bool) {
+        var result = ""
+        var buffer = ""
+        var pending = false
+
+        func flushBuffer() {
+            guard !buffer.isEmpty else { return }
+            let converted = romanizeKanaRun(buffer, prior: result, pendingGeminate: pending)
+            result += converted.romanized
+            pending = converted.pendingGeminate
+            buffer = ""
+        }
+
+        for scalar in text.unicodeScalars {
+            let piece = String(scalar)
+            if isKanaScalar(scalar.value) {
+                buffer += piece
+                continue
+            }
+            if isHanScalar(scalar.value) {
+                // 汉字转不出来（见文件头那段取舍）：直接丢，罗马字行里不能留汉字。
+                // 不 flush 假名缓冲 —— 被丢的字两侧的假名仍是同一段读音。
+                continue
+            }
+            // 叠字符 々 / 〆 不是汉字（Unicode 类别 Lm / Lo，不在 Han 区块里），但它们是
+            // 日语书写符号 —— 留在罗马字行里和留下汉字是同一种观感。它们表示"重复前一个字"，
+            // 而前一个（汉）字在上一行分支里已经被丢掉、没有读音可重复 ⇒ 只能一起丢。
+            if scalar.value == 0x3005 || scalar.value == 0x3006 {
+                continue
+            }
+            flushBuffer()
+            if pending {
+                result += geminationPrefix(piece)
+                pending = false
+            }
+            result += piece
+        }
+        flushBuffer()
+
+        return (result, pending)
+    }
+
+    /// 纯假名段的逐字转写。促音状态可以带进带出（与 `japaneseKanaRomaji` 同一套语义）。
+    private static func romanizeKanaRun(
+        _ text: String,
+        prior: String,
+        pendingGeminate: Bool
+    ) -> (romanized: String, pendingGeminate: Bool) {
+        let scalars = Array(text.unicodeScalars)
+        var result = ""
+        var pending = pendingGeminate
+        var index = 0
+
+        while index < scalars.count {
+            let value = scalars[index].value
+
+            // 长音：重复前一个元音（只写 ASCII，避免 macron 之类的怪字符）。
+            if value == 0x30FC {
+                let source = result.isEmpty ? prior : result
+                if let last = source.last, "aeiou".contains(last) {
+                    result.append(last)
+                }
+                index += 1
+                continue
+            }
+
+            // 促音：先记下，等下一个音节双写辅音。
+            if value == 0x3063 || value == 0x30C3 {
+                pending = true
+                index += 1
+                continue
+            }
+
+            guard let hiragana = hiraganaScalar(value),
+                  let base = kanaRomaji[hiragana] else {
+                // 表里没有的假名（半角假名 / ゐ ゑ 等）：丢掉，保住"无假名"契约。
+                index += 1
+                continue
+            }
+
+            var romaji = base
+
+            // 拗音：i 段假名 + 小 ゃ/ゅ/ょ。
+            if base.count >= 2, base.hasSuffix("i"),
+               index + 1 < scalars.count,
+               let nextHiragana = hiraganaScalar(scalars[index + 1].value),
+               let vowel = smallYouonVowel(nextHiragana) {
+                let stem = String(base.dropLast())
+                if stem.hasSuffix("sh") || stem.hasSuffix("ch") || stem.hasSuffix("j") {
+                    romaji = stem + vowel
+                } else {
+                    romaji = stem + "y" + vowel
+                }
+                index += 2
+            } else {
+                index += 1
+            }
+
+            if pending {
+                romaji = geminated(romaji)
+                pending = false
+            }
+            result += romaji
+        }
+
+        return (result, pending)
+    }
+
+    // MARK: - 假名判定与表
+
+    private static func isKanaScalar(_ value: UInt32) -> Bool {
+        switch value {
+        case 0x3041...0x3096,        // 平假名
+             0x3099...0x309C,        // 浊点 / 半浊点（结合用）
+             0x309D...0x309F,        // ゝ ゞ ゟ
+             0x30A1...0x30FA,        // 片假名
+             0x30FC...0x30FF,        // ー ヽ ヾ ヿ
+             0x31F0...0x31FF,        // 片假名扩展
+             0xFF66...0xFF9F:        // 半角片假名（含半角浊点）
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// 汉字（Han ideograph）的码点范围 —— 与 `KrcText.hanRatio` 逐段一致。
+    private static func isHanScalar(_ value: UInt32) -> Bool {
+        switch value {
+        case 0x3400...0x4DBF,        // 扩展 A
+             0x4E00...0x9FFF,        // 基本区
+             0xF900...0xFAFF,        // 兼容汉字
+             0x20000...0x2FA1F:      // 扩展 B 及以后（含兼容补充）
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isOnlyGeminate(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        return text.allSatisfy { $0 == "っ" || $0 == "ッ" }
+    }
+
+    private static func isOnlyLongVowelMark(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        return text.allSatisfy { $0 == "ー" }
+    }
+
+    private static func lastVowel(of text: String) -> String {
+        guard let last = text.last, "aeiou".contains(last) else { return "" }
+        return String(last)
+    }
+
+    /// 促音双写时**放进促音那一组**的前缀：下一音节的第一个辅音（`ch`/`sh`/`ts` 取 `t`/`s`/`t`）。
+    /// 与 `japaneseGeminated` 同一条规则，只是那个函数给的是"整段双写后的读音"，这里只要前缀。
+    private static func geminationPrefix(_ romaji: String) -> String {
+        if romaji.hasPrefix("ch") { return "t" }
+        if romaji.hasPrefix("sh") { return "s" }
+        if romaji.hasPrefix("ts") { return "t" }
+        guard let first = romaji.first, first.isLetter, !"aeiou".contains(first) else { return "" }
+        return String(first)
+    }
+
+    /// 促音让下一音节双写辅音（`to` → `tto`）。与 `LyricsDto.swift` 的 `japaneseGeminated` 一致。
+    private static func geminated(_ romaji: String) -> String {
+        guard let first = romaji.first else { return romaji }
+        if romaji.hasPrefix("ch") { return "t" + romaji }
+        if romaji.hasPrefix("sh") { return "s" + romaji }
+        if romaji.hasPrefix("ts") { return "t" + romaji }
+        if first.isLetter, !"aeiou".contains(first) { return String(first) + romaji }
+        return romaji
+    }
+
+    private static func hiraganaScalar(_ value: UInt32) -> UInt32? {
+        if (0x3041...0x3096).contains(value) { return value }
+        if (0x30A1...0x30F6).contains(value) { return value - 0x60 }
+        return nil
+    }
+
+    private static func smallYouonVowel(_ hiragana: UInt32) -> String? {
+        switch hiragana {
+        case 0x3083: return "a"
+        case 0x3085: return "u"
+        case 0x3087: return "o"
+        default: return nil
+        }
+    }
+
+    // MARK: - 空白与相邻组
+
+    private static func splitEdgeWhitespace(
+        _ text: String
+    ) -> (leading: String, core: String, trailing: String) {
+        let leadingCount = text.prefix(while: { isWhitespace($0) }).count
+        guard leadingCount < text.count else { return (text, "", "") }
+        let trailingCount = text.reversed().prefix(while: { isWhitespace($0) }).count
+        let start = text.index(text.startIndex, offsetBy: leadingCount)
+        let end = text.index(text.endIndex, offsetBy: -trailingCount)
+        return (String(text[..<start]), String(text[start..<end]), String(text[end...]))
+    }
+
+    private static func isWhitespace(_ character: Character) -> Bool {
+        String(character).unicodeScalars.allSatisfy {
+            CharacterSet.whitespacesAndNewlines.contains($0)
+        }
+    }
+
+    private static func previousNonEmptyCore(before index: Int, in core: [String]) -> Int? {
+        var candidate = index - 1
+        while candidate >= 0 {
+            if !core[candidate].isEmpty { return candidate }
+            candidate -= 1
+        }
+        return nil
+    }
+
+    // MARK: - 假名表
+    //
+    // 键为平假名码点；片假名由 `hiraganaScalar` 减 0x60 归一后查同一张表。
+    private static let kanaRomaji: [UInt32: String] = [
+        0x3042: "a", 0x3044: "i", 0x3046: "u", 0x3048: "e", 0x304A: "o",
+        0x304B: "ka", 0x304D: "ki", 0x304F: "ku", 0x3051: "ke", 0x3053: "ko",
+        0x304C: "ga", 0x304E: "gi", 0x3050: "gu", 0x3052: "ge", 0x3054: "go",
+        0x3055: "sa", 0x3057: "shi", 0x3059: "su", 0x305B: "se", 0x305D: "so",
+        0x3056: "za", 0x3058: "ji", 0x305A: "zu", 0x305C: "ze", 0x305E: "zo",
+        0x305F: "ta", 0x3061: "chi", 0x3064: "tsu", 0x3066: "te", 0x3068: "to",
+        0x3060: "da", 0x3062: "ji", 0x3065: "zu", 0x3067: "de", 0x3069: "do",
+        0x306A: "na", 0x306B: "ni", 0x306C: "nu", 0x306D: "ne", 0x306E: "no",
+        0x306F: "ha", 0x3072: "hi", 0x3075: "fu", 0x3078: "he", 0x307B: "ho",
+        0x3070: "ba", 0x3073: "bi", 0x3076: "bu", 0x3079: "be", 0x307C: "bo",
+        0x3071: "pa", 0x3074: "pi", 0x3077: "pu", 0x307A: "pe", 0x307D: "po",
+        0x307E: "ma", 0x307F: "mi", 0x3080: "mu", 0x3081: "me", 0x3082: "mo",
+        0x3084: "ya", 0x3086: "yu", 0x3088: "yo",
+        0x3089: "ra", 0x308A: "ri", 0x308B: "ru", 0x308C: "re", 0x308D: "ro",
+        0x308F: "wa", 0x3092: "wo", 0x3093: "n",
+        0x3041: "a", 0x3043: "i", 0x3045: "u", 0x3047: "e", 0x3049: "o",
+        0x3083: "ya", 0x3085: "yu", 0x3087: "yo", 0x308E: "wa", 0x3094: "vu"
+    ]
+}
