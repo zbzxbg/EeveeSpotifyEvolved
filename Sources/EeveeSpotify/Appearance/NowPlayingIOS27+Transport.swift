@@ -48,10 +48,28 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
     /// 下面那块替身上 —— 与顺序无关。
     var excludedRects: [CGRect] = []
 
+    /// 底排字形**下面**那条空带的顶边（本层坐标 = 页面坐标；`nil` = 不接管）。
+    ///
+    /// 那一条空带里没有任何可交互的东西，触摸却会继续落到下面的 Spotify 视图上、触发
+    /// 它自己的点击行为（整页被顶起来 / 歌词区被拆掉）。让替身在这一带返回自己：
+    /// 命中测试到本层就停了，下面的视图收不到这一下；而本层只会执行 `actionZones`
+    /// （这条带里一格都没有）⇒ 点了什么都不发生。
+    /// ⚠️ 只改命中测试，本层**不装任何拖动手势**：因此这一带里的"点"被吞掉，
+    /// 从这一带**起手**的拖动也不再落到下面的列表上（本层不解释它）；这条带在歌词区
+    /// 之下、三颗可点区之下，歌词滚动与三颗键的动作都不经过它。
+    var inertTopY: CGFloat?
+
     private func accepts(_ point: CGPoint) -> Bool {
         guard !excludedRects.contains(where: { $0.contains(point) }) else { return false }
+        if isInert(point) { return true }
         return zones.contains { $0.rect.contains(point) }
             || actionZones.contains { $0.rect.contains(point) }
+    }
+
+    /// 点是不是落在"字形下面那条空带"里。
+    private func isInert(_ point: CGPoint) -> Bool {
+        guard let top = inertTopY, bounds.contains(point) else { return false }
+        return point.y >= top
     }
 
     /// 抬手时才执行动作（与原生按钮的 `.touchUpInside` 同一时机；
@@ -105,8 +123,66 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
            !excludedRects.contains(where: { $0.contains(point) }) {
             return self
         }
+        // 字形下面那条空带：**接住但什么都不做**（见 `inertTopY`）。
+        // 先判三块可点区：这条带与它们的下沿有几 pt 重叠，三颗键的动作必须照旧生效。
+        if isInert(point), !excludedRects.contains(where: { $0.contains(point) }) {
+            logInertStripTapOnce(at: point, with: event)
+            return self
+        }
         return nil
     }
+
+    /// 一次性现场：这一下**原本会落到谁身上、谁的手势会接住它**。
+    ///
+    /// 从这里返回 `self` 之后 UIKit 就不会再去问下面的视图，所以只能在返回之前按
+    /// `page.subviews` 的**逆序把命中测试重放一遍**（跳过本层）：第一个非 nil 的结果
+    /// 就是原来会接住这一下的视图。类名 + 无障碍 id + 祖先链上的手势识别器一次打全，
+    /// 下一份日志才能回答"页面为什么跳"，而不是继续猜。
+    ///
+    /// 一次性标记放在**本类实例**上：替身重建一次就允许再报一次；tag 写字面量
+    /// （与 `NowPlayingIOS27.logTag` 同值），免得从命中测试里去够那个 `@MainActor` 类型的状态。
+    private func logInertStripTapOnce(at point: CGPoint, with event: UIEvent?) {
+        guard !didLogInertStripTap, let page = superview else { return }
+        didLogInertStripTap = true
+
+        let inPage = convert(point, to: page)
+        var hit: UIView?
+        for sub in page.subviews.reversed() where sub !== self {
+            if let found = sub.hitTest(sub.convert(inPage, from: page), with: event) {
+                hit = found
+                break
+            }
+        }
+
+        var chain: [String] = []
+        var gestures: [String] = []
+        var node = hit
+        var hops = 0
+        while let current = node, hops < 6 {
+            let identifier = current.accessibilityIdentifier.map { "#\($0)" } ?? ""
+            chain.append(NSStringFromClass(type(of: current)) + identifier)
+            gestures.append(contentsOf: (current.gestureRecognizers ?? []).map {
+                NSStringFromClass(type(of: $0))
+            })
+            node = current.superview
+            hops += 1
+        }
+        let pageGestures = (page.gestureRecognizers ?? []).map {
+            NSStringFromClass(type(of: $0))
+        }
+        writeDebugLog(
+            "[iOS27] footer strip tap at y=\(Int(point.y)) — underneath:"
+                + " \(hit.map { NSStringFromClass(type(of: $0)) } ?? "nil")"
+                + " id=\(hit?.accessibilityIdentifier ?? "nil")"
+                + "; chain \(chain.isEmpty ? "nil" : chain.joined(separator: " < "))"
+                + "; gestures \(gestures.isEmpty ? "none" : gestures.joined(separator: ", "))"
+                + "; page gestures \(pageGestures.isEmpty ? "none" : pageGestures.joined(separator: ", "))"
+                + " (swallowed — the band below the glyphs does nothing)"
+        )
+    }
+
+    /// 这条带被点到时只打一行（实例级：替身重建一次就允许再报一次）。
+    private var didLogInertStripTap = false
 }
 
 @MainActor

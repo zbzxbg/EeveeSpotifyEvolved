@@ -537,9 +537,6 @@ enum NowPlayingIOS27 {
             lyricsModeRevealed = true
             changed = true
         }
-        // 页内歌词时，歌名/艺人那两行只是原生 label，不吃触摸 ——
-        // 在它们上面各盖一颗透明按钮（点歌名开专辑、点艺人开艺人页）。
-        if placeTitleTapTargets(in: page) { changed = true }
         if placeNavChrome(in: page) { changed = true }
         // 进度条（4pt 轨 + 藏圆钮 + 等宽时间），见 `NowPlayingIOS27+Progress.swift`。
         // 它只换 UISlider 的三张图与两颗标签的字体，不碰几何、不碰手势。
@@ -555,6 +552,12 @@ enum NowPlayingIOS27 {
         // 歌词区左下角那块「歌词来源 / 提供者/翻译者」。
         // 收起时保留视图、alpha 归 0（和歌词一起淡出），下一次打开直接淡入。
         if placeLyricsCredit(in: page) { changed = true }
+        // 页内歌词时，歌名/艺人那两行只是原生 label，不吃触摸 ——
+        // 在它们上面各盖一颗透明按钮（点歌名开专辑、点艺人开艺人页）。
+        // ⚠️ 必须排在 `updateLyricsStage` / `placeLyricsCredit` **之后**：歌词宿主每拍都会
+        // 把自己的容器 `bringSubviewToFront` 一次，排在它前面的话按钮下一拍就又被压在下面；
+        // 排最后才能保证这一拍结束时按钮在最上层（两者不重叠，但层序必须是我们占先）。
+        if placeTitleTapTargets(in: page) { changed = true }
 
         guard let shell = resolvedShell(in: page) else {
             // **别在没图的时候硬留一个洞**。兜底找一次原生封面：
@@ -1614,24 +1617,14 @@ enum NowPlayingIOS27 {
             removeTitleTapTargets()
             return false
         }
-        guard let title = labelOnPage(
-            identifier: NowPlayingLyricsPlate.titleLabelIdentifier,
-            in: page
-        ), let artist = labelOnPage(
-            identifier: NowPlayingLyricsPlate.subtitleLabelIdentifier,
-            in: page
-        ) else {
-            if !didLogMissingTapLabels {
-                didLogMissingTapLabels = true
-                writeDebugLog("[\(logTag)] title/artist labels not found — no tap targets")
-            }
-            return false
-        }
+        // 两行**各自认、各自挂**：其中一行认不出来时另一行照样能点，
+        // 不再因为"两颗必须同时找到"而整对放弃。
+        let titleLine = titleTapLine(in: page)
+        let artistLine = artistTapLine(in: page)
+        let titleFrame = titleLine.map { tapFrame(for: $0, in: page) } ?? .null
+        let artistFrame = artistLine.map { tapFrame(for: $0, in: page) } ?? .null
 
         var changed = false
-        let titleFrame = tapFrame(for: title, in: page)
-        let artistFrame = tapFrame(for: artist, in: page)
-
         if let button = makeTapTarget(
             existing: titleTapButton,
             in: page,
@@ -1641,6 +1634,10 @@ enum NowPlayingIOS27 {
         ) {
             if titleTapButton !== button { titleTapButton = button; changed = true }
             if button.frame != titleFrame { button.frame = titleFrame; changed = true }
+        } else {
+            // 这一行量不到了（页面重建 / 歌词收起）：旧按钮不要留在回收的页面上。
+            titleTapButton?.removeFromSuperview()
+            titleTapButton = nil
         }
         if let button = makeTapTarget(
             existing: artistTapButton,
@@ -1651,19 +1648,90 @@ enum NowPlayingIOS27 {
         ) {
             if artistTapButton !== button { artistTapButton = button; changed = true }
             if button.frame != artistFrame { button.frame = artistFrame; changed = true }
+        } else {
+            artistTapButton?.removeFromSuperview()
+            artistTapButton = nil
         }
 
-        // 「挂上了」这条日志放在**这一层**：两个尺寸（`titleFrame` / `artistFrame`）是这里的局部量，
-        // `makeTapTarget` 里看不到它们（否则报 `cannot find 'titleFrame' in scope`）。
+        // 「挂上了」这条日志放在**这一层**：命中区尺寸与落到哪个类上都是这里的局部量。
         if !didLogTitleTapTargets, titleTapButton != nil || artistTapButton != nil {
             didLogTitleTapTargets = true
             writeDebugLog(
                 "[\(logTag)] title/artist tap targets mounted"
-                    + " (title \(Int(titleFrame.width))×\(Int(titleFrame.height)),"
-                    + " artist \(Int(artistFrame.width))×\(Int(artistFrame.height)))"
+                    + " (title \(describeLine(titleLine, titleFrame)),"
+                    + " artist \(describeLine(artistLine, artistFrame)))"
+            )
+        }
+        // 只挂上一半时也要留一行现场：下一份日志才能分清"id 根本没给"与"给了但不在屏上"。
+        if (titleLine == nil || artistLine == nil), !didLogMissingTapLabels {
+            didLogMissingTapLabels = true
+            writeDebugLog(
+                "[\(logTag)] tap target line missing —"
+                    + " title \(describeCandidate(NowPlayingLyricsPlate.titleLabelIdentifier, in: page)),"
+                    + " artist \(describeCandidate(NowPlayingLyricsPlate.subtitleLabelIdentifier, in: page))"
             )
         }
         return changed
+    }
+
+    /// 点歌名的那一行。
+    private static func titleTapLine(in page: UIView) -> UIView? {
+        lineOnPage(identifier: NowPlayingLyricsPlate.titleLabelIdentifier, in: page)
+    }
+
+    /// 点歌手的那一行。
+    ///
+    /// `now-playing-subtitle-label` **不是每份播放页树都给它**（`NowPlayingLyricsPlate.artistLabel`
+    /// 早就因此带了一条"按文本 / 位置认"的兜底）⇒ id 认不到时直接借那一条，
+    /// 不在这里再抄一套判据。
+    private static func artistTapLine(in page: UIView) -> UIView? {
+        if let line = lineOnPage(identifier: NowPlayingLyricsPlate.subtitleLabelIdentifier, in: page) {
+            return line
+        }
+        guard let artist = NowPlayingLyricsPlate.artistLabel(in: page) else { return nil }
+        return artist
+    }
+
+    /// 页面上那一行（按 id 认），**不要求它自己就是 `UILabel`**。
+    ///
+    /// 这两个 id 在部分 Spotify 版本里挂在**包着 label 的 Encore 包装层**（`SPTEncoreLabel`
+    /// 那一类 `UIView`）上，真正写字的是它的子 `UILabel` —— 只认 `as? UILabel` 会让整条
+    /// 查找落空，表现为"这两行根本没有点击区"。这里先认 id，再把包装层里那颗 `UILabel`
+    /// 换出来当命中区；换不出来（还没建好 / 结构变了）就用包装层自己的框。
+    ///
+    /// 也不套"中线要落在页面 20%…80%"那道闸门：这一行被挪到缩略图右边之后本来就贴近
+    /// 左边缘，窄机型 / 长标题会贴着那条线。真正的判据是"它在当前这一页上"，与底排三颗同一档。
+    private static func lineOnPage(identifier: String, in page: UIView) -> UIView? {
+        var queue: [UIView] = [page]
+        var visited = 0
+        while !queue.isEmpty, visited < 3000 {
+            let view = queue.removeFirst()
+            visited += 1
+            if view.accessibilityIdentifier == identifier,
+               isControlOnPage(view, in: page, requireAlpha: false, horizontalMargin: 0) {
+                if let label = textLabel(in: view) {
+                    let rect = label.convert(label.bounds, to: page)
+                    if rect.width > 1, rect.height > 1 { return label }
+                }
+                return view
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    /// 包装层里真正写字的那颗 `UILabel`（自己就是 `UILabel` 时原样返回）。
+    private static func textLabel(in view: UIView) -> UILabel? {
+        if let label = view as? UILabel { return label }
+        var queue: [UIView] = view.subviews
+        var visited = 0
+        while !queue.isEmpty, visited < 24 {
+            let candidate = queue.removeFirst()
+            visited += 1
+            if let label = candidate as? UILabel { return label }
+            queue.append(contentsOf: candidate.subviews)
+        }
+        return nil
     }
 
     /// 返回可复用的按钮；页面换了 / 旧的被摘了就新建一颗。
@@ -1692,31 +1760,45 @@ enum NowPlayingIOS27 {
             page.addSubview(button)
         }
         if button.frame != frame { button.frame = frame }
+        // 每拍都确认一次层序：歌词容器 / 歌词署名每拍都会自己 `bringSubviewToFront`，
+        // 而"已经被谁压住"这件事本 tick 内看不出来（它们都是这一拍里后加的）。
         if page.subviews.last !== button {
             page.bringSubviewToFront(button)
         }
         return button
     }
 
-    private static func tapFrame(for label: UILabel, in page: UIView) -> CGRect {
-        let rect = label.convert(label.bounds, to: page).insetBy(dx: -6, dy: -6)
+    /// 命中区 = 那一行的 bounds 四周各放 6pt（手指比字大），再夹回页面。
+    private static func tapFrame(for line: UIView, in page: UIView) -> CGRect {
+        let rect = line.convert(line.bounds, to: page).insetBy(dx: -6, dy: -6)
         return rect.intersection(page.bounds)
     }
 
-    private static func labelOnPage(identifier: String, in page: UIView) -> UILabel? {
+    /// 诊断用的短描述：这一行落在哪个类上、命中区多大。
+    private static func describeLine(_ line: UIView?, _ frame: CGRect) -> String {
+        guard let line else { return "missing" }
+        return "\(Int(frame.width))×\(Int(frame.height)) on \(NSStringFromClass(type(of: line)))"
+    }
+
+    /// 诊断用：这个 id 在页面上到底有没有、是什么类、在不在屏上。
+    private static func describeCandidate(_ identifier: String, in page: UIView) -> String {
         var queue: [UIView] = [page]
         var visited = 0
+        var first: UIView?
         while !queue.isEmpty, visited < 3000 {
             let view = queue.removeFirst()
             visited += 1
-            if let label = view as? UILabel,
-               label.accessibilityIdentifier == identifier,
-               isControlOnPage(label, in: page) {
-                return label
+            if view.accessibilityIdentifier == identifier {
+                first = first ?? view
+                if isControlOnPage(view, in: page, requireAlpha: false, horizontalMargin: 0) {
+                    return "\(NSStringFromClass(type(of: view))) on page"
+                }
             }
             queue.append(contentsOf: view.subviews)
         }
-        return nil
+        guard let first else { return "no view with this id" }
+        let rect = first.convert(first.bounds, to: page)
+        return "\(NSStringFromClass(type(of: first))) off page at \(Int(rect.minX)),\(Int(rect.minY))"
     }
 
     private static func removeTitleTapTargets() {
