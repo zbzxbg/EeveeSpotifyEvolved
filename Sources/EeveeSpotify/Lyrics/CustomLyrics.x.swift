@@ -734,7 +734,10 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     /// · 禁用歌词替换（`notReplaced`）—— 那就是明确要看官方歌词；
     /// · 「隐藏 Spotify 官方歌词」开关关着；
     /// · 歌词功能整体被禁用。
-    private func unavailableLyricsPayload(original: Lyrics?) -> Lyrics? {
+    ///
+    /// - Parameter note: 占位里追加的一行说明（例如"取词期间切了歌"）。失败原因能说清时传它，
+    ///   否则只写「未找到歌词」。占位的构造见 `makeUnavailableLyrics`。
+    private func unavailableLyricsPayload(original: Lyrics?, note: String? = nil) -> Lyrics? {
         // 「Apple Music 官方 TTML」是**总覆盖**实验 —— 它连"要不要顶掉官方歌词"这两个策略
         // 开关一起忽略（否则隐藏 Spotify 官方歌词时，实验取词失败会掉回
         // Spotify 自己的词，看起来像"实验根本没生效"）。
@@ -746,7 +749,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             return nil
         }
 
-        return makeUnavailableLyrics(originalColors: original?.colors, note: nil)
+        return makeUnavailableLyrics(originalColors: original?.colors, note: note)
     }
 
     /// 构造「没有歌词」的替身 payload —— 与 `unavailableLyricsPayload` 同一份内容，
@@ -1163,12 +1166,17 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
         if !shouldDropResponse {
             resetWordByWordLyrics()
             // 别让 Spotify 把它自己的官方歌词顶上来 —— 用我们自己的占位替换掉。
-            if let placeholder = unavailableLyricsPayload(original: originalLyrics) {
+            //
+            // `note` 是**失败原因**那一行：切歌竞态（`trackMismatch`）要说清"不是词库没词"，
+            // 否则用户只看到「未找到歌词」就会去换来源。这个分支在
+            // `isOfficialLyricsHidden` 恒为真时是**唯一**走得到的失败出口，所以说明必须挂
+            // 在这里（挂在下面那个"放行官方歌词"的分支上就永远不会显示）。
+            if let placeholder = unavailableLyricsPayload(original: originalLyrics, note: placeholderNote) {
                 writeDebugLog("[Lyrics] official lyrics hidden — serving our placeholder")
                 return try placeholder.serializedBytes()
             }
-            // 「隐藏官方歌词」关着 → 本来该放行官方歌词。但如果是 trackMismatch /
-            // noCurrentTrack，连"官方歌词"都不能确定属于这一首，同样不能空手而归。
+            // 兜底：「隐藏官方歌词」关着时上面返回 nil（继续用官方歌词），但 trackMismatch /
+            // noCurrentTrack 连"官方歌词属于哪一首"都不确定，同样不能空手而归。
             if lyricsError == .trackMismatch || lyricsError == .noCurrentTrack {
                 writeDebugLog("[Lyrics] \(lyricsError!) — serving fallback so the card is created")
                 if let data = unavailableLyricsBytes(original: originalLyrics, note: placeholderNote) {
