@@ -2222,6 +2222,10 @@ enum EntityPageAppearance {
     ///
     /// ⚠️ **透明层不算遮挡**：转场里有一层只吃手势、什么都不画的整页视图；把它算进来的话
     /// 这一族会一直判成"被盖住"。
+    ///
+    /// ⚠️ **系统 chrome 不算遮挡**：iOS 26 的浮动标签栏容器（`_UIFloatingBarContainerView`）
+    /// 是整窗 frame、但只在底部画一条胶囊 —— 它排在页面之上的窗口层级里，按"整窗 + 有底色"
+    /// 判会把它当成全屏播放器，于是官方歌单这一族永远铺不上底。标签栏 / 导航栏 / 迷你条同理。
     private static func fullScreenCover(inFrontOf page: UIView, in window: UIWindow) -> UIView? {
         var node: UIView? = page
         var levels = 0
@@ -2230,6 +2234,7 @@ enum EntityPageAppearance {
             guard let parent = current.superview else { break }
             if let index = parent.subviews.firstIndex(of: current) {
                 for sibling in parent.subviews.dropFirst(index + 1) {
+                    guard !isChromeLayer(sibling) else { continue }
                     if coversWindow(sibling, in: window) { return sibling }
                 }
             }
@@ -2238,10 +2243,23 @@ enum EntityPageAppearance {
         return nil
     }
 
-    /// 这一层是不是**真的遮住整页**：自己占满窗口，而且它自己或子树里有一层不透明的整页视图。
+    /// 窗口层级里的系统 chrome（整窗 frame 但只画底部一条的那种）。
+    private static func isChromeLayer(_ view: UIView) -> Bool {
+        let name = NSStringFromClass(type(of: view))
+        for fragment in ["FloatingBar", "TabBar", "NavigationBar", "StatusBar", "MiniPlayer"] {
+            if name.contains(fragment) { return true }
+        }
+        return false
+    }
+
+    /// 这一层是不是**真的遮住整页**：自己占满窗口，且自己或子树里有一层有可见底色的整页视图。
     ///
     /// 只判"占满窗口"不够：转场里那层容器也占满窗口，可它什么都不画。玩家的全屏页则不同 ——
     /// 容器可能是透明的，真正不透明的那一层在它里面。
+    ///
+    /// ⚠️ 不能拿 `view.isOpaque` 当"会画东西"：`UIView.isOpaque` 默认就是 true，一个
+    /// `backgroundColor == nil` 的容器也满足它 —— 浮动标签栏容器就是这样被判成遮挡的。
+    /// 只认**真的设了底色的**那一层（自己，或它里面占满窗口的子树）。
     private static func coversWindow(_ view: UIView, in window: UIWindow) -> Bool {
         guard view.window != nil, !view.isHidden, view.alpha > 0.01 else { return false }
         let frame = view.convert(view.bounds, to: window)
@@ -2251,9 +2269,8 @@ enum EntityPageAppearance {
         return paintsOverWindow(view, in: window, depth: 0)
     }
 
-    /// 这一层（或它**里面**占满窗口的那一层）有没有不透明的底色。
+    /// 这一层（或它**里面**占满窗口的那一层）有没有可见底色。
     private static func paintsOverWindow(_ view: UIView, in window: UIWindow, depth: Int) -> Bool {
-        if view.isOpaque { return true }
         if let colour = view.backgroundColor, colour.cgColor.alpha > 0.01 { return true }
         guard depth < 3 else { return false }
         var visited = 0
