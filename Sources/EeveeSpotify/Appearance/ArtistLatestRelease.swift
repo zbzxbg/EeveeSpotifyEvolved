@@ -63,23 +63,10 @@ enum ArtistLatestReleaseSource {
     //
     // 取这位艺人的最新一条发布；已经有缓存 / 已经有请求在飞时不重复发。
     //
-    // **只查"设备地区"那一家店是不够的**。
-    //
-    // ```
-    // [Release] iTunes search — "Nanatsukaze"
-    // [Release] "Nanatsukaze" — no usable release in the iTunes response   ← 4 秒后
-    // [Release] no release for "Nanatsukaze" — the card stays hidden
-    // ```
-    //
-    // 本机实测`entity=album&limit=10`）：
-    //
-    // | country | resultCount | artistName |
-    // | `cn`（这台设备的地区） | **0** | — |
-    // | `jp` | 10 | `ナナツカゼ`（假名，与页面上的 `Nanatsukaze` 对不上） |
-    // | `us` | 10 | **`Nanatsukaze`** ✓ |
-    //
-    // ⇒ 按 **设备地区 → `us` → `jp`** 依次试，第一个能给出"艺人名对得上"的结果就用它。
-    // 中国大陆的 iTunes 目录**根本没有这位艺人的东西**，这条链是唯一能出卡车的路。
+    // **只查"设备地区"那一家店是不够的**：中国大陆的 iTunes 目录里很多艺人根本没有东西
+    // （`resultCount = 0`）；而 `jp` 店给的是假名（`ナナツカゼ`），与页面上的
+    // `Nanatsukaze` 对不上。⇒ 按 **设备地区 → `us` → `jp`** 依次试，第一个能给出
+    // "艺人名对得上"的结果就用它。
     //
     // - Note: 回调**一定**在主队列上。
     static func fetch(artist: String, completion: @escaping (ArtistLatestRelease?) -> Void) {

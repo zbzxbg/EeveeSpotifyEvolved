@@ -42,7 +42,7 @@ final class EntityPageHeaderButton: UIControl {
     /// 关态颜色 / 开态颜色（开态按源控件的 `isSelected` 判断）。
     var glyphColor: UIColor = .label
     var onGlyphColor: UIColor = .systemGreen
-    /// 这颗按钮的**身份**（`shuffle` / `trailing`）—— 只进日志：用户报"右边那颗和别的按钮重合"时，
+    /// 这颗按钮的**身份**（`shuffle` / `trailing`）—— 只进日志：排查"右边那颗和别的按钮重合"时，
     var role = "side button"
 
     /// （如果未收藏艺人，点击收藏之后，按钮不会变绿，删除艺人之后，才会变绿）：
@@ -68,7 +68,7 @@ final class EntityPageHeaderButton: UIControl {
 
     /// （歌单页右上角有一个**点不动的三点按键**）：
     /// Spotify 那颗 `⋯` 是 `Encore.Button` 一族，菜单靠**它自己的交互**弹出来，不是 target/action ——
-    /// 界面一动不动）。
+    /// 所以送 target/action 时界面一动不动。
     /// ⇒ 这一颗**跳过第 ① 档**（送 target/action），直接走手势那一档（见 `eeveeFire` 的三档）。
     var skipsControlAction = false
 
@@ -223,7 +223,7 @@ final class EntityPageHeaderButton: UIControl {
         }
 
         // ⚠️ 不要在这些字符串**插值里写引号**：`swift_member_check.py` 的去字符串扫描器会提前
-        // 收尾、把剩下的英文当裸标识符误报踩过，见 `EntityPageStatusBar`）。先拼好。
+        // 收尾、把剩下的英文当裸标识符误报（踩过，见 `EntityPageStatusBar`）。先拼好。
         let kind = (target ?? source).map { NSStringFromClass(type(of: $0)) } ?? "-"
         let isControl = (target ?? source) as? UIControl != nil
         let signals = eeveeOnSignals(source)
@@ -289,8 +289,8 @@ final class EntityPageHeaderButton: UIControl {
 ///
 /// （回退点击播放按键的播放按钮变透明的设计（设计成和旁边那两个按键
 /// 一样的透明背景，只有线条吧）→ 随后「这个播放按钮的图标太丑了，换回之前那个图标」）：
-/// 第一版把字形画成**中空描边三角**，用户看真机后觉得太丑 ⇒ **字形换回 SF Symbol
-/// `play.fill`（实心三角）**；背景仍保持用户点名要的"和两侧一样的透明玻璃圆"，
+/// 字形用 **SF Symbol `play.fill`（实心三角）**，不要画中空描边三角；背景仍保持
+/// "和两侧一样的透明玻璃圆"，
 /// 不再恢复白色圆盘。
 /// ⚠️ 玻璃仍是 `eeveeMakeLightGlassView`（和两侧同一个函数），不是另写一套。
 final class EntityPageHeaderPlay: UIControl {
@@ -313,8 +313,8 @@ final class EntityPageHeaderPlay: UIControl {
         glyphView.contentMode = .scaleAspectFit
         // 两侧字形用的是 `.label`（深色界面上就是白）—— 中间这颗跟它们走，不再用黑色。
         glyphView.tintColor = .label
-        // 字形回到**实心三角**（`play.fill`）。上一版的中空描边三角用户看真机后
-        // 说"太丑"，这里不再自己画图，直接用系统符号（加粗一档，放在 52pt 画布里分量够）。
+        // 字形用**实心三角**（`play.fill`）：中空描边三角太丑，这里不自己画图，
+        // 直接用系统符号（加粗一档，放在 52pt 画布里分量够）。
         glyphView.image = Self.playGlyphImage()
         glyphView.isUserInteractionEnabled = false
         addSubview(glyphView)

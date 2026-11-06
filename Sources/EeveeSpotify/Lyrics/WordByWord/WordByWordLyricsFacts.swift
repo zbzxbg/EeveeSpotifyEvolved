@@ -22,23 +22,22 @@ func hasUsableWordLevelData(_ dto: LyricsDto?) -> Bool {
 
 /// 逐**行**数据是否可用：时间同步 + 至少一半的行带 `offsetMs`。
 ///
-/// ⚠️ **它现在不再是挂载判据**起）：挂不挂我们那层只看 `hasUsableWordLevelData`。
-/// 只有逐行的歌整首交还 Spotify 原生那页/那张卡（产品规则见 `WordByWordHost.attach`
-/// 里那道 guard 的注释）—— 原生本来就会照 payload 的 `offsetMs` 做逐行高亮 + 滚动，
-/// 我们那套壳（自绘标题/进度条/三键、行下译文）反而对不上。
+/// ⚠️ **它现在不再是挂载判据**：挂不挂我们那层只看 `hasUsableWordLevelData`。只有逐行的
+/// 歌整首交还 Spotify 原生那页 / 那张卡（产品规则见 `WordByWordHost.attach` 里那道 guard
+/// 的注释）—— 原生本来就会照 payload 的 `offsetMs` 做逐行高亮 + 滚动，我们那套壳
+/// （自绘标题 / 进度条 / 三键、行下译文）反而对不上。
 ///
 /// `line timing 32/32 -> line-level=Y`、以及 `attach` 被拒时那句 `line-level usable=…`，
-/// 都是它 —— 排查"这首歌为什么没有逐词层"时，这两行能直接区分
-/// "源只给了行级"和"源根本没给时间轴"。
+/// 都是它 —— 排查"这首歌为什么没有逐词层"时，这两行能直接区分"源只给了行级"和"源根本
+/// 没给时间轴"。
 ///
-/// ── 历史（留档，别再改回去）
-/// 这一档曾经是"降级渲染"的判据：没有逐字、但有逐行时仍然由我们渲染（当前行整行点亮），
-/// 理由是"否则网易云 `yrc absent` 那一批会让整层消失、露出 Spotify 官方供应商"。
-/// 真机对照图推翻了它：官方供应商那一层早就由 payload 侧的
-/// 「隐藏官方歌词」兜住了，而"逐行的歌套着逐词的壳"是实打实的观感错误。
+/// ── 别再改回去
+/// 这一档不能当"降级渲染"的判据：那会让没有逐字、但有逐行的歌由我们渲染（当前行整行点亮）。
+/// 那是错的：官方供应商那一层早就由 payload 侧的「隐藏官方歌词」兜住了，而"逐行的歌套着
+/// 逐词的壳"是实打实的观感错误。
 ///
-/// 阈值与 `hasUsableWordLevelData` 一样取 50%：低于一半行有时间轴的数据
-/// （坏 lrc、只有零星几行带时间）本来也不该由我们渲染。
+/// 阈值与 `hasUsableWordLevelData` 一样取 50%：低于一半行有时间轴的数据（坏 lrc、只有
+/// 零星几行带时间）本来也不该由我们渲染。
 func hasUsableLineLevelData(_ dto: LyricsDto?) -> Bool {
     guard let dto, dto.timeSynced else { return false }
     let lines = dto.lines

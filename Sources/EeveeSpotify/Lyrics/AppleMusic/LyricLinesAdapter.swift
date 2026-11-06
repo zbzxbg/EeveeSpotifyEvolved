@@ -78,7 +78,7 @@ extension LyricsDto {
         // （`MusixmatchLyricsRepository` 里对应 rc/rj/rk，起也存进同一个字段）。
         // 写死日语 ⇒ 中文/韩文歌曲的官方罗马字被**整份忽略**（只能退回本地转换，等于白存）。
         // 现在改成"**这门语言的开关开着**，或日语开关开着" —— 后半句是网易那份的既有行为，
-        // 一个字都不动（那条路真机验证过，不许顺手改）。
+        // 一个字都不动（那条路不要顺手改）。
         if isOfficialRomanizationEnabled(for: languageCode),
            !officialRomanizedLines.isEmpty,
            officialRomanizedLines.count == lines.count {
@@ -290,7 +290,7 @@ extension LyricsDto {
     /// 为什么：`romanizedForWordByWordIfEnabled` 顺手会把行首字母大写
     /// （`capitalizingFirstLetterIfAlphabetic`，那是仓库的显示约定），而**原文**没有那一步。
     /// 于是 "i love you" 这种全小写的拉丁行会算成"罗马字与原文不同"⇒ 上面多出一行
-    /// 只差一个字母大小写的"罗马字"（用户报的罗马化那一条修完之后才会露出来 ——
+    /// 只差一个字母大小写的"罗马字"（罗马化那一条修完之后才会露出来 ——
     /// 以前原文早就被整行替换成罗马字了，这一支根本走不到）。
     private static func romanization(original: String, romanized: String?) -> String? {
         guard let romanized else { return nil }
@@ -467,7 +467,7 @@ extension LyricsDto {
             guard let wordEnd = resolvedEnd, wordEnd >= wordStart else {
                 // 时间戳反了（end < start）才是真坏数据，丢这一个词即可。
                 //
-                // 曾经这里写的是 `wordEnd > wordStart` 并把整行作废，结果是：
+                // 不能写 `wordEnd > wordStart` 并把整行作废 —— 结果是：
                 // AMLL 故意给括号/间隔标记零时长，任何带背景人声的行都会整行
                 // 退回行级（表现为「带括号的行不逐词」）。零时长在渲染上是安全的 ——
                 // `LyricHighlightRevealProgress` 有 `guard duration > 0 else { return 1 }`，
@@ -487,7 +487,7 @@ extension LyricsDto {
         // 至少要有一个**真正占时长**的音节才值得走精确时间轴；
         // 全零时长的行等价于行级，交给调用方退回。
         //
-        // 曾经这里要求 count >= 2，于是「单字行」（比如独立一句 "ah"）也被降级成行级，
+        // 不能要求 count >= 2：那样「单字行」（比如独立一句 "ah"）也被降级成行级，
         // 那是没必要的：单字行同样能正常填充。
         guard result.contains(where: { $0.endTime > $0.startTime }) else {
             return []

@@ -32,7 +32,7 @@ enum TabBarGlassPlate {
 
     /// 上下留边**已经不在这里**：高度改由 `GlassCapsule.height` 统一给，
     /// 因为迷你播放条那条胶囊**与这条等高**（见 `GlassCapsule` 的说明）。
-    /// 这里曾经是个"胖瘦旋钮"（5 → 53pt；8 → 60pt），取值 8。
+    /// 这是"胖瘦旋钮"（5 → 53pt；8 → 60pt），取值 8。
     ///
     /// 左右留边：胶囊 = **有文字版式那条带子** + 左右各这么多。
     /// ⚠️ 不再是"栏宽 − 固定值"：四颗被收紧之后，胶囊要贴着那一行走，不然又变成一条长条。
@@ -85,7 +85,7 @@ enum TabBarGlassPlate {
     // 这个系统的液态玻璃和原本自己做的尺寸不一样 …… **你和自绘的对齐就行**。
     // 现在自绘那条**已经删除**，所以这里就是"这条栏的胶囊该多大"的**唯一**判据：
     // · 宽：**贴着图标那一行**（+ 左右留边），上限是"栏宽 − sideInset×2"；
-    // · 高：**与迷你播放条那条胶囊同一个数**（`GlassCapsule.height` = 真机实测 60）。
+    // · 高：**与迷你播放条那条胶囊同一个数**（`GlassCapsule.height` = 60）。
     // 隐藏标签文字开关如何，高度都按"有文字"版式算；
     // · 纵向：以 `band.midY` 为心，越出栏顶/栏底都有上限（`maxOverhang`）。
     //
@@ -142,7 +142,7 @@ enum TabBarGlassPlate {
 
         return (0..<items.count).map { index in
             // 用**等分布局推算**中心，而不是读 `item.frame.midX`：
-            // Apple 对 `frame` 的说明是"transform 非恒等时该值未定义"，实测它会把我们
+            // Apple 对 `frame` 的说明是"transform 非恒等时该值未定义"，而它确实会把我们
             // 上一轮写进去的位移算进去 → 每轮又按"已经被挪过的位置"再收一次 →
             // 收敛点整体偏移，**两端最明显**（第 4 颗「创建」偏得最多）。
             let localMidX = stack.bounds.width * (CGFloat(index) + 0.5) / count
@@ -415,32 +415,27 @@ enum TabBarGlassPlate {
     /// 最近一次见到的那条栏（设置页拨开关时当场落地用；弱引用）。
     private static weak var lastTabBar: UIView?
 
-    /// 藏掉「创建」那一颗 ⇒ **玻璃上只剩主页 / 搜索 / 音乐库三颗**。
+    /// 藏掉「创建」那一颗 ⇒ **玻璃上只剩主页 / 搜索 / 音乐库三颗**，并且**宽度不变**。
     ///
-    /// 「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。
-    /// 即液态玻璃只显示主页，搜索，音乐库三个按键」。
-    ///
-    /// ──（第二条要求）：**「关掉创建之后，液态玻璃的宽度不变」**
-    /// 原来藏的是**整颗 arranged subview**（`isHidden = true`）：`UIStackView` 会把它的位置
-    /// **让给另外三颗** ⇒ 两条宽度一起缩：
-    /// · 我们自己的几何（`tightenOffsets` / `measure` 都走 `visibleItems`）也跟着按 3 颗量，
-    /// 而上面那条迷你播放条按 `capsuleWidthRatio` **等宽跟随** ⇒ 一起缩（用户报的就是这个）。
+    /// ── 为什么不能直接 `isHidden` 整颗 arranged subview
+    /// `UIStackView` 会把它的位置**让给另外三颗** ⇒ 两条宽度一起缩：我们自己的几何
+    /// （`tightenOffsets` / `measure` 都走 `visibleItems`）按 3 颗量，上面那条迷你播放条
+    /// 按 `capsuleWidthRatio` **等宽跟随**，于是也一起缩。
     ///
     /// 现在改成**保住槽位、只把那颗藏起来**：
     /// · `alpha = 0` —— 看不见（UIKit 的命中测试本来就跳过 alpha < 0.01 的视图 ⇒ 也点不到）；
     /// · `isUserInteractionEnabled = false` —— 显式写死，不依赖上面那条副作用。
-    /// 于是第 4 个槽**仍然在**：`UIStackView` 照旧排四格、几何照旧按四颗量、系统栏照旧镜像四格
-    /// （第四格无图无字、`isEnabled = false`）⇒ **两条胶囊的宽度与"创建还在"时一模一样**。
+    /// 于是第 4 个槽**仍然在**：`UIStackView` 照旧排四格、几何照旧按四颗量、系统栏照旧镜像
+    /// 四格（第四格无图无字、`isEnabled = false`）⇒ 两条胶囊的宽度与"创建还在"时一模一样。
     ///
-    /// ⚠️ 别再对**整条栏的每一颗**用这一招：文件头那张事故表里的"整条栏点不动"就是
-    /// `alpha = 0` 按在 item 视图上、UIKit 跳过命中测试造成的。**只对要它消失的那一颗用**，
-    /// 另外三颗的 `alpha` 一个字都不动。
+    /// ⚠️ 别再对**整条栏的每一颗**用这一招：`alpha = 0` 按在 item 视图上会让 UIKit 跳过
+    /// 命中测试，整条栏就点不动了。**只对要它消失的那一颗用**，另外三颗的 `alpha`
+    /// 一个字都不动。
     ///
-    /// ── 判据为什么是类名
-    /// 真机树：第 4 颗是 `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，
-    /// 另外三颗是 `NavigationUI_TabBarImpl.TabBarItemElementView`
-    /// （id 依次 `TabBar.Item.主页` / `搜索` / `音乐库` / `创建`）。文字随语言变（`创建` / `Create`），
-    /// 所以认类名 —— 与 pw hook 那颗用的也是同一个类名。
+    /// 判据为什么是类名：真机树里第 4 颗是
+    /// `CreateMenu_TabBarItemImpl.CreateMenuTabBarItemView`，另外三颗是
+    /// `NavigationUI_TabBarImpl.TabBarItemElementView`（id 依次 `TabBar.Item.主页` / `搜索` /
+    /// `音乐库` / `创建`）。文字随语言变（`创建` / `Create`），所以认类名。
     ///
     /// 幂等；**每拍都跑**（Spotify 可能把它显示回来 —— 与 `applyLabelVisibility` 同一条纪律）。
     @MainActor
@@ -524,16 +519,14 @@ enum TabBarGlassPlate {
 
     /// 标签栏上**占着槽位的那几颗**（`isHidden` 的不算）。
     ///
-    /// （创建之后玻璃宽度不变**"）：藏「创建」的做法
-    /// 从 `isHidden = true` 改成**保住槽位、只把内容藏掉**（`alpha = 0` + 点不到，见
-    /// `applyCreateTabVisibility`）⇒ 它**仍然算在这里面**（四颗）：
+    /// 藏「创建」的做法从 `isHidden = true` 改成**保住槽位、只把内容藏掉**（`alpha = 0` +
+    /// 点不到，见 `applyCreateTabVisibility`）⇒ 它**仍然算在这里面**（四颗）：
     /// · 我们自己的几何按四颗量（`tightenOffsets` / `measure`）；
     /// · 系统栏也照旧镜像四格（第四格空着、点不动）。
     /// 两头都不再因为"少了一颗"而缩窄。
     ///
     /// 为什么需要它：`stack.subviews` 里可能有 Spotify 自己 `isHidden` 掉的颗
-    /// ⇒ 凡是"按颗数几何 / 编号"的地方都必须走这里。
-    /// 两条路共用这一处判据：系统玻璃镜像几格、几何量几颗，都以它为准。
+    /// ⇒ 凡是"按颗数几何 / 编号"的地方都必须走这里。两条路共用这一处判据。
     @MainActor
     static func visibleItems(in stack: UIView) -> [UIView] {
         stack.subviews.filter { !$0.isHidden }

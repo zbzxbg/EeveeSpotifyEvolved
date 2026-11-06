@@ -284,10 +284,10 @@ final class WordByWordHost {
     /// showsProviderFooter: 是否在底部显示「歌词提供者」（全屏显示，内嵌不显示）。
     /// showsTranslation: 是否显示行级译文（全屏显示；内嵌「预览歌词」不显示）。
     ///
-    /// 这里曾经还有一个 `keepAboveView`（把原生 header 抬到 overlay 之上）。
-    /// 已删除：它依赖"原生控件是本视图的直接子视图"这个**不成立**的假设，
-    /// 而且取 header 用的 `Ivars` 在 Modern 全屏页上会命中不存在的 ivar（崩）。
-    /// 旧 overlay 的显隐现在完全由"有没有逐词数据"决定，不需要它。
+    /// ⚠️ 不要再加 `keepAboveView`（把原生 header 抬到 overlay 之上）：它依赖"原生控件是本
+    /// 视图的直接子视图"这个**不成立**的假设，而且取 header 用的 `Ivars` 在 Modern 全屏页上
+    /// 会命中不存在的 ivar（崩）。
+    /// 旧 overlay 的显隐完全由"有没有逐词数据"决定，不需要它。
     ///
     /// - Returns: 这一层现在是不是**挂着的**。调用方（`refreshForCurrentLyrics` /
     /// `reattachToInline`）据此决定要不要让看门狗立刻重找宿主 ——
@@ -392,42 +392,21 @@ final class WordByWordHost {
         if #available(iOS 26.0, *),
            usable,
            NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled {
-            // 这里**不碰任何原生视图**：不隐藏、不清底色、不动 z 序。
+            // 这里**不碰任何原生视图**：不隐藏、不清底色、不动 z 序。全屏页的 header / 歌词 /
+            // 控件栏都不在根视图这一层，藏「歌词容器」等于藏整页；清根视图背景则摘掉唯一的
+            // 背景层。我们只把自己那块背景做够暗盖住底下
+            // （`LyricsBackdropView.solidStageScrimAlpha`，判据 showsProviderFooter 只在全屏为 true）。
             //
-            // 全屏页曾经被这么「接管」过，结果是整页空白：
-            // · 隐藏 `Lyrics_FullscreenElementPageImpl.LyricsView` →
-            // 全屏页根视图里**一个子视图都没有**，
-            // Spotify 那一页的 header / 歌词 / 控件栏都不在根视图这一层，
-            // 所以「藏歌词容器」等于把整页内容一起藏了；
-            // · 清根视图的 `backgroundColor` / layer → 摘掉的是这一页唯一的背景层，
-            // 页面连底都没了。
+            // 挂载点：预览挂到**卡片容器**、铺满整张卡片。卡片外壳（顶部「歌词」+ 分享/展开那
+            // 一行）是 Element 框架画的，我们的层原来挂在歌词视图（卡片里的一块内容）上 —— 子视图
+            // 盖不住父视图自己的背景，那一行 39pt 永远是专辑纯色。现在壳这一层由我们画
+            // （`previewHeader`）。全屏不受影响：它挂 vc.view，本来就自己画整套壳。
             //
-            // 现在的策略：原生 UI 全部原样保留，我们只负责把自己那块背景做够暗，
-            // 让它盖住底下的东西（`LyricsBackdropView.solidStageScrimAlpha`）。
-            // 这个判据用的是 showsProviderFooter —— 它只在全屏页为 true。
-            // ── 挂载点：预览挂到**卡片容器**上，自己出壳
-            //
-            // 预览卡片的「壳」（顶部 `歌词` + 分享/展开那一行、四周留白）是 Spotify 的
-            // Element 框架画的，而我们的层原来是挂在**歌词视图**（卡片里的一块内容）上。
-            // 子视图盖不住父视图自己的背景，所以那一行 39pt 永远是专辑纯色 ——
-            // 塞背景层 / 清容器底色 / 每帧重清 / 画出 bounds 之外 / 改注入的背景色
-            // 这五种办法全部无效，原因就在这。
-            //
-            // 现在换思路：把我们的层挂到**卡片容器**上、铺满整张卡片。
-            // 壳这一层从此由我们画（`previewHeader` 就是那一行）。
-            //
-            // 全屏不受影响：它本来就挂 vc.view，并且自己画了整套壳。
-            //
-            // ── 预览的宿主判据（严格）
-            // 必须**先找到卡片容器**（见 `cardContainer` 的四条证据）。找不到卡片时，
-            // 只有当内容视图本身是「已知的卡片歌词视图类」、或者是个**不自称歌词**的
-            // 普通视图（老版本的 `LyricsOnlyViewController.view` 就是这种）才允许退化挂载。
-            //
-            // 要拒的正是这一种：`Lyrics_TextComponentImpl.LyricsView`（366x120，实际待在
-            // **歌曲封面容器** 366x432 里）—— 名字里带 Lyrics、却不在「卡片歌词视图」名单里，
-            // 卡片那一刻也还没建出来。退化挂载的后果是整层跑到封面上
-            // （`[PreviewShell] card container=UIView 366x432`）。
-            // 拒绝之后什么都不挂，看门狗会在卡片建好时自己挂上来。
+            // 宿主判据（严格）：必须先找到卡片容器（见 `cardContainer` 的四条证据）；找不到时，
+            // 只有内容视图是已知的卡片歌词视图类、或是不自称歌词的普通视图
+            // （老版本的 `LyricsOnlyViewController.view`）才允许退化挂载。要拒的是
+            // `Lyrics_TextComponentImpl.LyricsView`：名字带 Lyrics 却不在名单里，退化挂载会让整层
+            // 跑到歌曲封面上。拒绝后什么都不挂，看门狗在卡片建好时再挂。
             let className = NSStringFromClass(type(of: view))
             let isKnownLyricsContent = inlineLyricsContentClassNames.contains(className)
             let claimsToBeLyrics = className.contains("Lyrics")
@@ -456,7 +435,7 @@ final class WordByWordHost {
             // 为什么必须这样：自适应 cell 会复用出**离屏的歌词视图实例**，而卡片本身在
             // 屏幕上；判内容视图等于把这首歌的逐词层永久拒掉。
             //
-            // 诊断行里带出**每个条件**的实测值（window / hidden / alpha / frame / 可见比例）：
+        // 诊断行里带出**每个条件**的取值（window / hidden / alpha / frame / 可见比例）：
             // 判据一共六个条件，只写一句 off-screen 时根本分不出是哪一条不过。
             let mountTarget = showsProviderFooter ? view : (card ?? view)
             if !showsProviderFooter, !Self.isVisibleOnScreen(mountTarget) {
@@ -490,12 +469,12 @@ final class WordByWordHost {
                 )
                 mountView = view
             }
-            // 卡片比歌词视图高出来的那段（实测 39～64pt）= 我们自绘标题栏要占的高度。
+        // 卡片比歌词视图高出来的那段（39～64pt）= 我们自绘标题栏要占的高度。
             // 全屏传 62（曲名 + 歌手两行，与页面默认值一致）。
             //
             // 预览要做范围检查：量出来的差值可能是**错的**（内容视图与卡片不等高，
             // 或者某一方还没布局完）。离谱的值会让标题栏占掉半张卡片、把歌词推下去 ——
-            // 这时宁可传 0，让页面退回实测默认值（预览标题栏一行 ≈ 39pt）。
+        // 这时宁可传 0，让页面退回默认值（预览标题栏一行 ≈ 39pt）。
             let measuredInset = mountView.bounds.height - view.bounds.height
             let headerInset: CGFloat
             if showsProviderFooter {
@@ -806,7 +785,7 @@ final class WordByWordHost {
 
     /// 通用容器是否"**像卡片**"（④ 的判据）。
     ///
-    /// 真卡片的实测特征：`Lyrics_CardElementImpl.CardView 374x320` ← 歌词 `342x256`，
+    /// 真卡片的特征：`Lyrics_CardElementImpl.CardView 374x320` ← 歌词 `342x256`，
     /// 高 64pt（标题栏 + 留白）、宽 32pt（左右各 16pt）。
     ///
     /// 不能只查 `height <= previewCardMaxHeight`：`Lyrics_NPVContainerKit.LyricsContainerView
@@ -830,7 +809,7 @@ final class WordByWordHost {
     /// 卡片相对歌词内容允许高出的范围：只比内容高一点（标题栏），不能是一个大容器。
     private static let previewMinCardExtraHeight: CGFloat = 4
     private static let previewCardMaxExtraHeight: CGFloat = 140
-    /// 卡片相对歌词内容允许宽出的范围（左右各一点内边距，实测 16pt/侧）。
+    /// 卡片相对歌词内容允许宽出的范围（左右各一点内边距，16pt/侧）。
     private static let previewCardMaxExtraWidth: CGFloat = 60
     /// 卡片本体的合理高度上限：超过它就不是卡片，而是整页 / 滚动容器。
     private static let previewCardMaxHeight: CGFloat = 500
@@ -936,7 +915,7 @@ final class WordByWordHost {
     /// 单槽诊断节流：同一条消息 `interval` 秒内只记一次。
     /// 让 `attach` 的**每一条放弃路径**都留下原因。
     ///
-    /// 起因：`attach` 里有多个 `return false`，其中几处曾经是**静默**的。
+    /// 起因：`attach` 里有多个 `return false`，其中几处是**静默**的。
     /// 「只有 `refresh for current lyrics (version N)` 然后什么都没有」，和「这个函数
     /// 压根没被调用过」完全无法区分 —— 排查「为什么没挂上」时全靠猜。
     ///
@@ -1022,7 +1001,7 @@ final class WordByWordHost {
         return visible.width * visible.height >= frame.width * frame.height * 0.5
     }
 
-    /// `isVisibleOnScreen` 的**逐条件实测值**，只为日志。
+    /// `isVisibleOnScreen` 的**逐条件取值**，只为日志。
     ///
     /// 为什么需要：拒绝日志只有一句「off-screen」，而那个判据有六个条件
     /// （window / 窗口尺寸 / hidden / alpha / 尺寸下限 / 中心点在窗口内 / 至少一半面积可见）。

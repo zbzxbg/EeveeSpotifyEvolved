@@ -698,7 +698,7 @@ enum TimedLyricTextBuilder {
         let containsWordSpacing = source.contains { $0.isWhitespace }
         let safetyMargin: CGFloat
         if usesTimedRunBoundaries, containsLatinText, containsWordSpacing {
-            // ⚠️ 这里曾经照抄 MeloX 的 `max(w * 0.05, fs * 0.5)` → 366 × 5% = 18.3pt。
+            // ⚠️ 不要照抄 MeloX 的 `max(w * 0.05, fs * 0.5)` → 366 × 5% = 18.3pt。
             //
             // 那个余量在 MeloX 里有意义：它**测量**用的是带「每字一个 run」的字符串
             // （测得偏宽），而**渲染**交给 SwiftUI 的是干净的逐字 Text 拼接。
@@ -712,8 +712,8 @@ enum TimedLyricTextBuilder {
             // "Bought Mama a crib and a brand ↵new wagon"（剩 ~19pt 却放不下 new）
             //
             // 所以这里把余量降到「只够吸收舍入误差」的量级，把"放不放得下"的判断权
-            // 还给真实字体度量。若实测出现长行右侧轻微溢出，用 `LyricLineFitting`
-            // 的超宽缩放兜（那条路径是 MeloX 验证过的，本就是这套设计的配套件）。
+            // 还给真实字体度量。若真出现长行右侧轻微溢出，用 `LyricLineFitting`
+            // 的超宽缩放兜（那条路径 MeloX 也在用，本就是这套设计的配套件）。
             safetyMargin = max(fontSize * 0.1, 0.5)
         } else {
             safetyMargin = max(fontSize * 0.02, 0.5)

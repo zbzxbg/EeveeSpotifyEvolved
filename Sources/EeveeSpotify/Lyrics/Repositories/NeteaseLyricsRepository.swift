@@ -9,7 +9,7 @@ import CommonCrypto
 // music.163.com 的 weapi 接口要求每个请求体携带 params / encSecKey 两个
 // 加密字段，但整套加密是「无状态」的：AES 密钥、IV 与 RSA 公钥都是全网
 // 写死的常量，不涉及任何用户身份，因此无需像 Musixmatch 那样要求用户
-// 提供 token。实测 2026 年当前状态下，搜索（search/get）与歌词
+// 提供 token。搜索（search/get）与歌词
 // （song/lyric）接口仅需 `Cookie: os=pc` 即可匿名访问；
 // register/anonimous 匿名注册接口已废弃（返回「参数错误」），不再调用。
 // 若响应下发会话 cookie 会自动持久化并随后续请求携带。
@@ -438,13 +438,13 @@ class NeteaseLyricsRepository: LyricsRepository {
 
     // MARK: - 接口
     //
-    // 搜索走 **cloudsearch/pc**换）。
+    // 搜索走 **cloudsearch/pc**。
     //
     // 旧 `/weapi/search/get` 在「被标记的出口」（机房 IP、共享住宅 IP）会返回**诱饵结果**：
-    // 歌名里带一个随机数字、和查询毫无关系（实测 `告白气球 周杰伦` → `48`、`Himitsu MIMI`
-    // → `29`），而 cloudsearch 在同样的出口上给的是真结果。成熟项目也都走 cloudsearch：
-    // Lyricify 用 `interface.music.163.com/eapi/cloudsearch/pc`（注释写明「可以在外网使用」），
-    // 163MusicLyrics 用 `weapi/cloudsearch/get/web`，并在 `abroad: true` 时解码被加密的 result。
+    // 歌名里带一个随机数字、和查询毫无关系，而 cloudsearch 在同样的出口上给的是真结果。
+    // 成熟项目也都走 cloudsearch：Lyricify 用
+    // `interface.music.163.com/eapi/cloudsearch/pc`，163MusicLyrics 用
+    // `weapi/cloudsearch/get/web`，并在 `abroad: true` 时解码被加密的 result。
     //
     // 字段差异：cloudsearch 用 `ar`（歌手）、`dt`（毫秒时长）、`al`（专辑）、`alia`/`tns`
     // （别名/译名）；旧的 search/get 用 `artists`/`duration`/`album`。选歌那边两种都读。
@@ -611,10 +611,8 @@ class NeteaseLyricsRepository: LyricsRepository {
     /// （见下面两处 `.filter { !isInterludeRow(...) }`）；
     /// ② 翻译错位修复时「哪一行算间奏」的判定。
     ///
-    /// ⚠️它不再与任何开关有关。原先那对
-    /// `shouldRemoveInterludeSymbol`（读 `ngzhwm_removeMxmInterludeSymbol`）与
-    /// `cleanedInterludeSymbol`（把含 ♪ 的行清成空白）**已随开关一起删除** ——
-    /// 开关开着关着结果一样，留着就是编译错与"按了没反应"的空壳。
+    /// ⚠️ 它与任何开关都无关（不再有「删除间奏符号 ♪」那颗开关）：
+    /// 开着关着结果一样，留着开关就是编译错与"按了没反应"的空壳。
     private func isInterludeRow(_ content: String) -> Bool {
         let trimmed = content.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty || trimmed.allSatisfy { $0 == "♪" }
@@ -768,7 +766,7 @@ class NeteaseLyricsRepository: LyricsRepository {
                 continue
             }
             // 翻译里 ♪ 单独作为一行的，清成空白（保持行数对齐）——
-            // 原先由「删除间奏符号 ♪」开关控制，那颗开关已退役，
+            // 不再有「删除间奏符号 ♪」开关（已退役），
             // 这里与主歌词同一条纪律：**无条件**处理。
             if translated.trimmingCharacters(in: .whitespaces) == "♪" {
                 translatedLines.append("")
@@ -908,10 +906,10 @@ class NeteaseLyricsRepository: LyricsRepository {
             return cached.dto
         }
 
-        // ── 搜索重做）
+        // ── 搜索重做
         //
         // ① 查询串按「标题变体」逐个试：NetEase 的搜索对文字敏感，日文名能搜到，
-        // 罗马字名常常只搜到翻唱/同曲异名（实测 `Himitsu MIMI` 前 30 条里没有
+        // 罗马字名常常只搜到翻唱/同曲异名（`Himitsu MIMI` 前 30 条里没有
         // MIMI 的《ヒミツ》，`MIMI ヒミツ` 第 2 条就是）。标题变体来自
         // `trackTitle` + metadata 的本地化 `title`（见 `CustomLyrics`）。
         // ② 候选收齐后按 标题/艺人/时长/专辑 打分，`alia`/`tns`（别名/译名）参与匹配。
@@ -1014,13 +1012,9 @@ class NeteaseLyricsRepository: LyricsRepository {
 
         // ── 选歌：标题 / 艺人 / 时长 / 专辑 打分
         //
-        // 历史：第一版只看第一位；第二版"时长对得上就取"（完全不看歌手），
-        // 里的翻唱/伴奏全被选中；中间那版要求歌手 + 时长，但 artist 字段读错了（读 `ar`，
-        // 旧 search/get 返回的是 `artists`）⇒ 闸门从未生效，只剩"第一个时长相符的"。
-        //
-        // 现在：字段按**两种端点都能认**的形状读（`ar`/`artists`、`dt`/`duration`），
+        // 字段按**两种端点都能认**的形状读（`ar`/`artists`、`dt`/`duration`），
         // 再按分数挑最高的一条；`alia`/`tns`（别名/译名）参与标题匹配 —— 罗马字标题
-        // 能靠译名对上日文条目（实测 `Zankoku na Tenshi no Thesis` 的 `alia` 里就有英文名）。
+        // 能靠译名对上日文条目（`Zankoku na Tenshi no Thesis` 的 `alia` 里就有英文名）。
         func normalized(_ raw: String) -> String {
             raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
@@ -1302,13 +1296,13 @@ class NeteaseLyricsRepository: LyricsRepository {
             // Rokudenashi」：yrc 123 字 vs lrc 357 字；ytlrc 只有 55 字符 ⇒
             // "歌词缺少 + 翻译不见"）。判据：yrc 正文 < lrc 正文的 90%。
             // 这种 yrc 一律丢掉，先保证正文与翻译正确（走 lrc + tlyric）。
-            // ② **没有 yrc**：的规则 —— 找**同名同艺人**（专辑不比）
-            // 的兄弟条目用它的 yrc/ytlrc；时长夹 ±5s。
+            // ② **没有 yrc**：找**同名同艺人**的兄弟条目（专辑不比），
+            // 用它那份 yrc/ytlrc；时长夹 ±5s。
             //
             // ⚠️ 残 yrc 还有一条**修复**路径（阶段 B）：同名 + 时长差 ≤2s，且兄弟的
             // yrc 正文同样覆盖 lrc ≥90% ⇒ 采用。这一档**不要求艺人名相同**：
             // 正文覆盖已经证明是同一份词，而"Rokudenashi"与"ロクデナシ"本来就是
-            // 同一个艺人的罗马字/日文写法（报的现场）。
+            // 同一个艺人的罗马字/日文写法。
             // 没有覆盖率这道门就不会用 —— 那正是那版被回退的原因。
             if preferWordByWord {
                 var yrcRaw: (yrc: String?, ytlrc: String?)? = nil
@@ -1557,7 +1551,7 @@ class NeteaseLyricsRepository: LyricsRepository {
         // 展示罗马字」，并选了"原生那页也回到日文原文，罗马字只由我们这层画"。
         //
         // 这一段以前是把 `lines[i].content` **换成**官方 `romalrc`（并顺带把残留日文的行
-        // 用本地转换补齐），于是屏幕上**日文原文整个没了** —— 正是用户报的那件事，
+        // 用本地转换补齐），于是屏幕上**日文原文整个没了**，
         // 只是走的是另一条路（逐字 yrc 那条已经在 `storeLyricsDto` / `toSpotifyLyricsData` 改掉）。
         //
         // 现在：官方那份**留着**（它质量比本地转换好），但存进 `officialRomanizedLines`

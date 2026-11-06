@@ -32,15 +32,3 @@ func onMainThreadSync(_ body: @escaping @MainActor () -> Void) {
     }
 }
 
-// ── 这里曾经有一个 `LyricsChromeVisibilityController`
-//
-// 它干的是"全屏页停顿 3 秒就把 Spotify 的界面淡掉"（沉浸模式，读法 A），
-// 做法是把原生 header / 控件栏的 alpha 淡到 0。**已经删掉了**，原因：
-//
-// 1. 自己出壳之后，原生那一页被我们的实心背景整个盖住 —— 它的界面本来就看不见，
-// "再把它淡掉"没有任何视觉收益，只会多一条依赖私有视图的脆弱链路；
-// 2. 日志实测（`[ChromeVisibility] adopted 1 container(s)`）表明 `headerView`
-// 这条线索在 Modern 全屏页上根本不成立，能拿到的只有 `ElementView` 一个整页容器，
-// 而淡掉它等于淡掉整页。
-//
-// 现在"沉浸"这件事由自绘壳负责：它就是页面的一部分，不需要跟原生视图打交道。

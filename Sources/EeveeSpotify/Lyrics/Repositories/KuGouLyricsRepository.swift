@@ -466,7 +466,7 @@ final class KuGouLyricsRepository: LyricsRepository {
     /// 正文是不是**罗马字 / 拼音版**：CJK 字符占比过低，而拉丁字母不少。
     ///
     /// 判据用"占比"而不是"有没有拉丁字母"：日文歌的正文里常有英文单词，
-    /// 而罗马字版**整首**都是拉丁字母（实测 `o yo gu yo u ni …` 里一个汉字/假名都没有）。
+    /// 而罗马字版**整首**都是拉丁字母（`o yo gu yo u ni …` 里一个汉字/假名都没有）。
     private static func bodyLooksRomanized(_ dto: LyricsDto) -> Bool {
         var cjk = 0
         var latin = 0

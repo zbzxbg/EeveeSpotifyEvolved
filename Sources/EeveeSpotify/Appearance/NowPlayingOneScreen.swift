@@ -7,29 +7,28 @@ import ObjectiveC.runtime
 /// Music app / kumone 那种"一屏一首歌、滚不动"。
 ///
 /// 算法借自 spoti.pw v0.21.1（GPL-3.0）的 `Redesigned/Player/PlayerCards.x` / `PlayerScroll.x`，
-/// 落地是本地 Swift 实现。**许可边界：只许借 ≤ v0.21.1**；v0.22.0 起是 PolyForm Strict，一行不能碰。
+/// 落地是本地 Swift 实现。**许可边界：只许借 ≤ v0.21.1**；v0.22.0 起是 PolyForm Strict，
+/// 一行不能碰。
 ///
 /// ## 为什么是"钉住范围"而不是"关掉滚动"
 /// 下拉关闭挂在**列表自己的 pan recogniser** 上（`SPTBarInteractivePresentationController
-/// scrollViewDidAppear:` 取走它、让 dismiss 识别器等它失败，且只在列表处于 / 高于顶部时才启动）：
-/// **把滚动关掉会把那个 recogniser 一起带走 ⇒ 播放器再也划不掉。**
+/// scrollViewDidAppear:` 取走它、让 dismiss 识别器等它失败，且只在列表处于 / 高于顶部时
+/// 才启动）：**把滚动关掉会把那个 recogniser 一起带走 ⇒ 播放器再也划不掉。**
 /// 所以这里只关"范围"：把 `contentInset.bottom` 设成"让列表最多滚到它自己的顶部"。
 /// 于是上拉只拉伸回弹、下拉仍能到负偏移、**关闭手势完全不受影响**。
 ///
 /// ⚠️ **`alwaysBounceVertical` 在这一页上不是观感调参，是关闭手势链条的一环**：
-/// 真机试过把它关掉 ⇒ 播放器再也划不掉（那一版当天就删了）。`content.h == bounds.h` 之后
-/// 感到的位移纯粹是回弹；`UIScrollView` 也没有"只关一端"的公开开关
-/// ⇒ 想彻底去掉回弹只剩"自己接管下拉关闭"一条路（hook 列表 pan → 自己驱动 dismiss，
-/// 前提是先用诊断回答"delegate 是谁"）。
+/// 关掉它 ⇒ 播放器再也划不掉。`content.h == bounds.h` 之后感到的位移纯粹是回弹；
+/// `UIScrollView` 也没有"只关一端"的公开开关 ⇒ 想彻底去掉回弹只剩"自己接管下拉关闭"
+/// 一条路（hook 列表 pan → 自己驱动 dismiss，前提是先用诊断回答"delegate 是谁"）。
 ///
 /// ## 其它
 /// · 重算时机：蹭 `DeclutterChrome` 既有的 0.3s 复查节拍（**不新开 hook、不挂可选方法**）；
 /// · 卡片折叠那一半在 `NowPlayingOneScreenCards.x.swift`（那个必须是 Orion hook）；
-/// · 开关：听歌页 →「修改Spotify听歌页布局」总开关起把原来那颗
-/// 「隐藏 Spotify 的听歌页模块」收进去了），**默认开**
-/// （`UserDefaults.nowPlayingLayout && UserDefaults.nowPlayingOneScreen`），日志 tag `[OneScreen]`。
-/// 默认开的前提是"歌词进播放器"（`NowPlayingLyricsPlate`）补上了打开歌词的入口 ——
-/// 否则折掉歌词卡之后，听歌页就没有"打开歌词"的地方了。
+/// · 开关：听歌页 →「修改Spotify听歌页布局」总开关下，**默认开**
+///   （`UserDefaults.nowPlayingLayout && UserDefaults.nowPlayingOneScreen`），tag `[OneScreen]`。
+///   默认开的前提是"歌词进播放器"（`NowPlayingLyricsPlate`）补上了打开歌词的入口 ——
+///   否则折掉歌词卡之后，听歌页就没有"打开歌词"的地方了。
 enum NowPlayingOneScreen {
 
     static let logTag = "OneScreen"
@@ -223,7 +222,7 @@ enum NowPlayingOneScreen {
 
     /// 一次性诊断行：把「**为什么还能往下滑**」一次问清楚。
     ///
-    /// 夜用户实测："卡片全没了，但还能往下滑"。当时能猜的原因有四个
+    /// 现象："卡片全没了，但还能往下滑"。可能的原因有四个
     /// （没找到列表 / 没到该压的时候 / 压了但值不对 / 剩下的只是**橡皮筋回弹**），
     /// 这一行把几个数一次打出来：
     /// · `inset.bottom` —— 我们到底压了多少（0 = 一个字都没压）；
@@ -231,7 +230,7 @@ enum NowPlayingOneScreen {
     /// **两者相等 ⇒ 一点可滚范围都没有了，剩下的只可能是"回弹"**；
     /// · `adj.top/bottom` —— 安全区那块（公式里必须留着的）；
     /// · `bounce` —— **`alwaysBounceVertical`，只读**：它必须一直是 `on`。
-    /// ⚠️ 这一格是**回归判据**：曾经我们把它写成 `false`（「禁止回弹」），
+    /// ⚠️ 这一格是**回归判据**：写成 `false`（「禁止回弹」）的话，
     /// 结果**下拉关闭播放器直接坏掉**。它现在是只读的哨兵 ——
     /// `bounce=off` 再出现，就说明有人又把关闭手势链条碰断了。
     /// · `bounces` —— `UIScrollView.bounces`（**两端**回弹的总闸）。

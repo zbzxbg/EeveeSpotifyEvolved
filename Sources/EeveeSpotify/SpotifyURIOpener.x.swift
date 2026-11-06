@@ -26,7 +26,7 @@ import ObjectiveC.runtime
 // 3 个参数的那条 `navigateToURI:options:interactionID:`。
 //
 // `id` → `AnyObject`、`SEL` → `Selector`、`NSURL *` → `NSURL`、`options`（整数 0）→ `Int64`、
-// `interactionID`（nil）→ `AnyObject?`。返回值在真机上是 void（pw 那边也不取）。
+// `interactionID`（nil）→ `AnyObject?`。返回值是 void（pw 也不取）。
 private typealias SpotifyNavigateFunction = @convention(c) (
     AnyObject,
     Selector,
@@ -64,7 +64,7 @@ enum SpotifyURIOpener {
     ///
     /// 没抓到时 `open` 会退回 `UIApplication.open(spotify:…)` ——
     /// 对 App 自己那个 scheme 是**空操作**（不会弹、也不会跳）。调用方（听歌页的歌名/艺人点击）
-    /// 据此改走"转发给原生控件"，而不是让用户觉得"点上去没反应"。
+    /// 据此改走"转发给原生控件"，而不是"点上去没反应"。
     static var isReady: Bool { dispatcher != nil }
 
     // MARK: - 交给 hook 的那一半

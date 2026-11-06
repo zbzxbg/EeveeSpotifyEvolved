@@ -35,22 +35,20 @@ enum PlayerStateProbe {
     private static var didReportStall = false
     private static var didReportFirst = false
 
-    /// （退出重进 Spotify 大概率突然**无法播放全部歌曲**…点一下灰色歌曲
+    /// 退出重进 Spotify 后大概率突然**无法播放全部歌曲**，点一下灰色歌曲又好了 —— 现场长这样：
     ///
     /// ```
     /// [PLAYER] track changed — pos=0.0s dur=0.0s        ← 启动：一个曲目都没载入
     /// [NET]    Auth request: POST login5.spotify.com/v4/login
     /// [NET]    Auth request: GET  apresolve.spotify.com/
     /// [NET]    Auth request: POST login5.spotify.com/v3/login
-    /// …（用户点了一行灰歌）⇒ dur=272 / 215 / 262 / 162 …   ← 又能放了
+    /// …（点了一行灰歌）⇒ dur=272 / 215 / 262 / 162 …   ← 又能放了
     /// ```
     ///
-    /// 而**旧探针在这个状态是哑的**：它只在 `duration > 0` 时判"卡住"，`dur=0` 直接 `return`
-    /// ⇒ "什么都没有"这件事一行都没有。
-    /// 现在补两件事，都只报一次：
-    /// · **长时间没有曲目** ⇒ 一行 `⚠️ no track loaded …`（这就是"点了没反应"的现场）；
-    /// · **启动到第一首的秒数** ⇒ 一行 `first track after launch — Xs`
-    /// （冷启动要等多久 / 要不要点一下，全看这个数字）。
+    /// 而**旧探针在这个状态是哑的**：它只在 `duration > 0` 时判"卡住"，`dur=0` 直接
+    /// `return` ⇒ "什么都没有"这件事一行都没有。现在补两件事，都只报一次：
+    /// · **长时间没有曲目** ⇒ 一行 `⚠️ no track loaded …`（"点了没反应"的现场）；
+    /// · **启动到第一首的秒数** ⇒ 一行 `first track after launch — Xs`。
     private static var beatsWithoutTrack = 0
     private static var didReportNoTrack = false
     private static var launchAt: CFAbsoluteTime?

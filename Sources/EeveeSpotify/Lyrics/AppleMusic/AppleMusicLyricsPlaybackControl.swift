@@ -180,16 +180,14 @@ enum WordByWordPlaybackControl {
     //
     // 按**无障碍 id** 点一个原生控件。
     //
-    // 比按标签找可靠得多 —— 标签是给 VoiceOver 看的、会随语言/文案变，
-    // 而 id 是开发定义的稳定标识。真机 dump 已确认这几颗都有 id：
-    // · `lyrics-expand-button` 「将歌词界面扩展至全屏」
-    // · `lyrics-share-button` 「分享歌词」
+    // 比按标签找可靠得多 —— 标签是给 VoiceOver 看的、会随语言/文案变，而 id 是开发定义的
+    // 稳定标识。这几颗都有 id：
+    // · `lyrics-expand-button`「将歌词界面扩展至全屏」
+    // · `lyrics-share-button`「分享歌词」
     // · `SPTNowPlayingNextTrackButton` / `SPTNowPlayingPreviousTrackButton`
     //
-    // ⚠️ 为什么必须优先用 id：按标签全局找、取"面积最大"的做法**选错过**——
-    // 卡片上的"展开"和 Now Playing 页那颗同名按钮同时在窗口里，
-    // 结果选中了页面别处那颗（真机 dump：frame=(-36,692)；卡片那颗在 (334,360)），
-    // 于是"点我们画的方框没反应"。
+    // ⚠️ 必须优先用 id：按标签全局找、取"面积最大"会**选错** —— 卡片上的"展开"和 Now
+    // Playing 页那颗同名按钮同时在窗口里，可能选中页面别处那颗，于是"点我们画的方框没反应"。
     @discardableResult
     static func tapControl(withIdentifier identifier: String, action: String) -> Bool {
         guard let window = keyWindow else { return false }
@@ -437,7 +435,7 @@ enum WordByWordPlaybackControl {
     //
     // 播放键的标签：**当前状态是"播放中"时它叫 Pause**，所以两组都要匹配。
     //
-    // 这里用 `exactMatch: true`（配合下面的排除词），原因是真机实测：
+    // 这里用 `exactMatch: true`（配合下面的排除词）：
     // 模糊匹配下"暂停键"会切到**专辑页** —— 那是命中了标签里带 "play/播放" 的
     // 别的控件（例如"播放专辑"）。精确相等 + 排除词两道闸门能挡住它。
     private static let playPauseLabels = ["pause", "play", "暂停", "播放", "继续"]

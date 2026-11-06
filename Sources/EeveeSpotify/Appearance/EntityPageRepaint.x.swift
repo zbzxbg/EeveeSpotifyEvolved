@@ -70,7 +70,7 @@ class PlaylistListBackgroundHook: ClassHook<UIScrollView> {
         orig.layoutSubviews()
         guard EntityPageRepaint.root != nil else { return }
         // ⚠️ `UIColor.cgColor` 是**非可选**的 `CGColor` ⇒ 不能写 `let cg = colour.cgColor` 那种可选绑定
-        // （第一版就是这么写的，编译器报 "initializer for conditional binding must have Optional type"）。
+        // （写成可选绑定的话，编译器报 "initializer for conditional binding must have Optional type"）。
         guard let colour = target.backgroundColor else { return }
         guard EntityPageRepaint.isBaseSurface(colour.cgColor) else { return }
         target.backgroundColor = .clear
@@ -88,7 +88,7 @@ func eeveeClearBaseSurface(_ view: UIView, depth: Int = 0) {
     if let colour = view.backgroundColor, EntityPageRepaint.isBaseSurface(colour.cgColor) {
         view.backgroundColor = .clear
     }
-    // 而屏幕上明明是"你已点赞 / 显示更多"那一片黑）：**直接画在 layer 上的底色也要清**。
+    // 而屏幕上明明是"你已点赞 / 显示更多"那一片黑。**直接画在 layer 上的底色也要清**。
     // 我们的 `CALayer` 钩子只在"**写入的那一刻**"拦得住；页面是在我们接管**之前**就建好的、
     // 那些 layer 早就画上了，钩子一概听不到。所以这里两种都要看。
     if let layerColour = view.layer.backgroundColor, EntityPageRepaint.isBaseSurface(layerColour) {
@@ -139,7 +139,7 @@ class AlbumCellBackgroundHook: ClassHook<UIView> {
     }
 }
 
-/// 手法照本仓库已经验证过的那条（`PlayerCardCellHook`，`PlayerDeclutter.x.swift:253`）与 pw 的
+/// 手法照本仓库既有的那条（`PlayerCardCellHook`，`PlayerDeclutter.x.swift:253`）与 pw 的
 /// `ArtistSections.x`：cell 在 `preferredLayoutAttributesFittingAttributes(_:)` 里被问"你要多高"时
 /// 回答 **0** ✓。两个目标各认各的：
 ///
@@ -178,7 +178,7 @@ enum EntityPageSectionDrop {
     /// **类名那一段**（Swift mangled 名里真正稳定的模块名）。
     ///
     /// 与 `PlayerDeclutter.PlayerCard.markers` 的 `.aboutArtist: ["CreatorBiography"]`
-    /// **一字不差** —— 那一套在听歌页是实测可用的（上游 `PlayerDeclutter.x.swift:30` 同样这么写），
+    /// **一字不差** —— 那一套在听歌页已经验证可用（上游 `PlayerDeclutter.x.swift:30` 同样这么写），
     /// 而它在艺人页要认的是同一张卡。
     ///
     /// ⚠️ 这一条是**关键**：本仓库自己那条真机树的注释
@@ -197,7 +197,7 @@ enum EntityPageSectionDrop {
     /// 艺人页那两族的**统一判据**：子树里任意**类名**或任意 **accessibility id**
     /// 含其中之一 ⇒ 折。
     ///
-    /// 判据统一成"子串"。这套写法本仓库已经有**两处实测可用**：
+    /// 判据统一成"子串"。这套写法本仓库已经有**两处**在用：
     /// · `PlayerDeclutter.PlayerCard.markers`（听歌页卡片，含 `.aboutArtist → "CreatorBiography"`）；
     /// · 上游 `PlaylistHides.isPills`（id 子串）。
     /// 而之前漏掉的两个模块，各自的真实名字都只有这种写法认得出来：
@@ -247,8 +247,8 @@ enum EntityPageSectionDrop {
             didReport = false
         }
 
-        // （用户报的"歌单页那排 pill / 喜欢的歌曲那排 chips 没隐藏"）：
-        // **这份 dump 原来只在 `creator-page` 上跑** ⇒ 歌单页上我们**从来没有**那份
+        // 歌单页那排 pill / 喜欢的歌曲那排 chips 没隐藏，原因就在这里：
+        // dump 只覆盖 `creator-page` ⇒ 歌单页上我们**一直没有**那份
         // `cell #… ids=[…]` 清单，也就无法判断那排 pill 到底在不在某个 cell 里
         // （决定"折成 0 高"还是"只能藏、留 52pt 空档"）。这里放宽成
         // **creator-page 或带 `PL.Header` 的歌单页**；`reportArtistCellsOnce` 自己按页记账，
@@ -423,7 +423,7 @@ enum EntityPageSectionDrop {
     /// （`_TtC22Lyrics_CardElementImpl19LyricsCardElementUI` 这类）。
     ///
     /// 这套写法与 `PlayerDeclutter.PlayerCard.markers` / 上游 `PlaylistHides.isPills` 一致
-    /// —— 那两处都是实测可用的。
+    /// —— 那两处都是同一套写法。
     private static func containsMarker(_ root: UIView, _ fragment: String) -> Bool {
         var queue: [UIView] = [root]
         var visited = 0

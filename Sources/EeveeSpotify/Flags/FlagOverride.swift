@@ -21,7 +21,7 @@ struct FlagOverride: Codable, Equatable, Identifiable {
         /// 所以这条模式配不存在的 name/scope 就是空枪。
         case set
 
-        /// 写入 `value` 里那个**整数**新增）。
+        /// 写入 `value` 里那个**整数**（没命中就新增）。
         ///
         /// 对应 `EeveePropertyModification.forceInt`：命中就覆盖、没有就追加一条。
         /// 用途是 Spotify 自己的"减少打扰"（`ios-messaging-reduceinterventions-impl`）

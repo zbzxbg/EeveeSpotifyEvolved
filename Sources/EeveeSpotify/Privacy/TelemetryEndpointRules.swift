@@ -129,7 +129,7 @@ enum TelemetryEndpointRules {
         guard let host = url.host?.lowercased(), !host.isEmpty else { return false }
 
         // 主机规则先判：`https://log.spotify.com` 这种 path 为空（或 `/`）的 URL
-        // 也必须是上报端点 —— 早期版本把 `!path.isEmpty` 放在前面，它会被漏掉。
+        // 也必须是上报端点 —— 把 `!path.isEmpty` 放在前面就会漏掉它。
         if telemetryHosts.contains(host) { return true }
 
         let path = url.path.lowercased()

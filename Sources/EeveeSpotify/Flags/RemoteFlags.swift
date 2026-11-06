@@ -77,7 +77,7 @@ final class RemoteFlags {
     ///
     /// ⚠️ 写成"私有存储 + 只读计算属性"而不是 `private(set) var`：仓库的
     /// `swift_member_check.py` 会把 `private(set)` 误解析成一个名叫 `set` 的私有成员，
-    /// 于是全仓每一处 `.set` 都被判成"跨文件访问私有属性"（实测 17 条假红）。
+    /// 于是全仓每一处 `.set` 都被判成"跨文件访问私有属性"（17 条假红）。
     var forced: [String: Any] { forcedStorage }
     private var forcedStorage: [String: Any] = [:]
 

@@ -1,23 +1,20 @@
 import Foundation
 
-// 传输层加固，从上游 `EeveeSpotifyReincarnated` 的同名文件移植
-// （上游 313 行 / 我们原来 145 行）。移植的是**取词之前的那一段**，不是取词逻辑本身：
+// 传输层加固，移植自上游 `EeveeSpotifyReincarnated` 的同名文件。
+// 移植的是**取词之前的那一段**，不是取词逻辑本身：
 //
-// ① `LrclibTLSDelegate` —— 用对端证书链**重建** trust 再按原域名验链。
-// 对"直连 IP"的请求，直接复用 URLSession 给的那个 trust 对象做链构建会失败
+// ① `LrclibTLSDelegate` —— 用对端证书链**重建** trust 再按原域名验链。对"直连 IP"的
+// 请求，直接复用 URLSession 给的那个 trust 对象做链构建会失败
 // （errSSLXCertChainInvalid / -9802），哪怕证书本身没问题。
 // ② `resolveIPv4` —— 有些网络到 lrclib.net 的 IPv6 路径是坏的（TCP 层 ETIMEDOUT），
 // 显式解成 IPv4 直连，TLS 域名校验交给上面那个 delegate。
-// ③ 会话：`ephemeral` + 10s 超时。原来用 `.default` 且用系统默认超时（LRCLIB 偶尔
-// 慢到 4s 都回不来，实测会稳定超时）；直连失败还会**回退域名再试一次**。
-// ④ `perform` 不再强解 `URL(...)!` / `data!`，并把解码失败时的响应体前 300 字节写进日志
-// （原来只报 `decodingError`，看不出是"没这首歌"还是"回了个 HTML"）。
+// ③ 会话：`ephemeral` + 10s 超时（LRCLIB 偶尔慢到 4s 都回不来）；直连失败还会
+// **回退域名再试一次**。
+// ④ `perform` 不再强解 `URL(...)!` / `data!`，并把解码失败时的响应体前 300 字节写进
+// 日志 —— 否则只看得到 `decodingError`，分不清是"没这首歌"还是"回了个 HTML"。
 //
 // 取词语义（instrumental 的 `isInstrumental` 标记、逐条调试日志、plainLyrics 缺失即
-// `decodingError`）**保持本仓库原样**，没有跟着上游改 —— 那几处是我们按听歌页需求
-// 特意加的（见下面 `getLyrics` 里的说明）。
-//
-// 对"直连 IP"的请求，按**原域名**重建并校验证书链。
+// `decodingError`）**保持本仓库原样**，没有跟着上游改（见下面 `getLyrics` 里的说明）。
 private class LrclibTLSDelegate: NSObject, URLSessionTaskDelegate {
     let expectedHost: String
 
@@ -305,7 +302,7 @@ class LrclibLyricsRepository: LyricsRepository {
         // 那会做出一个"0 行但标记为 timeSynced"的结果（听歌页上就是一片空白），
         // 落到下面按 plainLyrics 取才是对的。
         if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {
-            // 原来是 `components(separatedBy: "\n").dropLast` —— 那假定源以换行收束；
+            // 不能用 `components(separatedBy: "\n").dropLast` —— 那假定源以换行收束；
             // 没有尾换行的响应里**最后一行真歌词会被静默丢掉**（理由与判据见 `LyricsLineSplitting`）。
             let lines = LyricsLineSplitting.splitDroppingTrailingNewline(syncedLyrics)
             writeDebugLog("[LRCLIB] Synced lyrics — \(lines.count) line(s)")

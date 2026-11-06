@@ -2,42 +2,23 @@ import Foundation
 
 // MARK: - 自动优选（auto select）
 //
-// 取代原来的「多级回退」。两者唯一的、也是全部的区别：
+// 排序依据两层，顺序不可颠倒：
 //
-// 多级回退 —— **谁先答出来就用谁**（Mxm → PL → LRC → Gen，第一个非空即返回）。
-// 自动优选 —— **谁的时间轴更细就用谁**：先到的纯文本 / 逐行歌词先留在手里，
-// 链路继续往下问，直到拿到逐字歌词，或者为「升级」预留的预算用完。
+// 1. **时间轴档次**（逐字 > 逐行 > 纯文本）永远先比。判据复用渲染层那两个
+//    `hasUsableWordLevelData` / `hasUsableLineLevelData`（`WordByWordLyricsFacts.swift`），
+//    口径只有一份 —— 否则会出现「优选认为是逐字、渲染层认为不是」。
+// 2. **同档质量面**（`LyricsAutoSelectFacets`）：有没有译文、有没有官方罗马字、罗马字
+//    是不是逐词的。同档里只认严格更多，一样多时按链路顺序。
 //
-// 为什么必须保留「先到先用」那一半：Spotify 的歌词卡片是**等这次响应**才建的
-// （见 `LyricsResponseCache` 文件头那张真机实测表：响应晚于 1~4 秒就赶不上建列表那一刻）。
-// 所以链路不能为了逐字歌词一路问到底 —— 手里已经有一份逐行歌词时，最多再等
-// `upgradeBudget` 秒，到点就交手里的那份。这条规则与 Taurus 一致：
-// 它同样把「第一个有时间轴的答案就收工」当成链路的硬规则，理由也是卡片会等不到。
+// 链路顺序由用户自己排（`LyricsSourceOrder`），只决定「先问谁」，不决定「谁赢」。
 //
-// 另一条同样来自观察它的行为：**纯文本不能终止查找**。Genius 那种没有时间轴的源答上来
-// 之后，链路必须继续问后面能给时间轴的源 —— 否则「有没有歌词」会被一个最差的答案决定。
+// 两条硬规则：**纯文本不能终止查找**（否则「有没有歌词」会被最差的答案决定）；手里
+// 已有逐行歌词时最多再等 `upgradeBudget` 秒 —— Spotify 的歌词卡片等这次响应才建
+// （见 `LyricsResponseCache`）。
 //
-// 链路顺序是**用户自己排的**（设置 → 歌词 → 来源顺序，见 `LyricsSourceOrder`），
-// 但**顺序只决定"先问谁"，不决定"谁赢"**：
-// 逐字永远赢逐行，逐行永远赢纯文本，与谁先被问到无关。
-//
-// 一份歌词的排序依据有**两层**，顺序不可颠倒：
-//
-// 1. **时间轴档次**（逐字 > 逐行 > 纯文本）—— 永远先比。判据不新写一套：直接用渲染层
-//    那两个 `hasUsableWordLevelData` / `hasUsableLineLevelData`
-//    （`WordByWord/WordByWordLyricsFacts.swift`）。口径必须只有一份 —— 否则会出现
-//    「优选认为这是逐字、渲染层认为不是」这种自相矛盾的结果。
-//
-// 2. **同档质量面**（facets，见下面 `LyricsAutoSelectFacets`）—— 只有档次**相同**时才比：
-//    有没有译文、有没有官方罗马字、罗马字是不是逐词的。这三样决定屏幕上多不多一行、
-//    那一行能不能逐字亮，用户已经在设置里表达过要不要，所以它们必须参与优选；
-//    但在同档里**只认严格更多**，一样多时仍然是"先到先用"（链路顺序就是同档优先级）。
-//
-// ⚠️ 为什么没有独立的断言程序：`isBetter` / `shouldStop` 读的是 `LyricsDto`（拖
-//    NaturalLanguage 与整条 DTO 链）、`hasUsableWordLevelData`（`WordByWordLyricsFacts`
-//    要 Orion / UIKit / SwiftUI）、`NgzhwmSettingsViewModel`（设置页要 SwiftUI）。
-//    这几份都不是纯 Foundation 文件，编不进 `Tests/` 里那种"只编被测文件"的程序。
-//    所以质量面的排序规则靠下面每条注释的**不变量**约束，改动时必须逐条对照。
+// ⚠️ 没有独立断言程序：`isBetter` / `shouldStop` 依赖的 `LyricsDto`、
+//    `WordByWordLyricsFacts`、`NgzhwmSettingsViewModel` 都拖着 UIKit / SwiftUI，
+//    编不进 `Tests/` 那种只编被测文件的程序。改动时逐条对照下面的不变量。
 
 enum LyricsTimingTier: Int, Comparable {
     /// 没有时间轴（Genius 那种纯文本），或者时间轴稀疏到不可用。
@@ -106,11 +87,11 @@ enum LyricsAutoSelect {
 
     // MARK: - 预算
     //
-    // 单个源的等待上限。分两档，沿用旧「多级回退」真机调过的值：
+    // 单个源的等待上限。分两档，沿用「多级回退」时期的值：
     // 只打一个接口的源（LRCLIB / AMLL / Spicy）3 秒足够；
     // 要先搜索再取词的源（MxM / Petit / 网易 / Genius）给 5 秒。
     //
-    // ⚠️ Genius 曾经是 3 秒，
+    // ⚠️ Genius 不要设 3 秒，
     // 而同一场里它又有正常出词的例子 —— 3 秒那一档经常是"超时被跳过"而不是"被评估"。
     static let fastSourceTimeout: TimeInterval = 3
     static let slowSourceTimeout: TimeInterval = 5

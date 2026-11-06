@@ -311,7 +311,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             // **我选的那个源**"，而 `requestSingleSource` 的 `allowGeniusFallback` 默认是 true
             // ⇒ 否则真实链会变成
             // AMLL → Genius（AMLL 那跳自带的兜底）→ 用户源（多半再自带一次 Genius）
-            // 也就是 AM→Gen→NE→Gen，**比用户以为的多一跳、还多花一次 Genius 的时间**。
+            // 也就是 AM→Gen→NE→Gen，**比预期多一跳、还多花一次 Genius 的时间**。
             // 要的是 **AM → NE → Gen**（Genius 只在"用户源也失败"时兜一次）。
             let amllResult = try? requestSingleSource(
                 .amllTtml,
@@ -536,7 +536,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     // 为什么要显式带着"实际源"：这个方法在失败时会用 Genius 兜底重试，此时
     // 返回的是 Genius 的歌词，而调用方传进来的 `source` 是用户设的那个源。
     // 只回传 dto 的话，来源标签就会写成明明拿的是 Genius 的歌词，
-    // 底部却写着 PetitLyrics）。
+    // 底部却写着 PetitLyrics。
     private struct SourceLyricsResult {
         let dto: LyricsDto
         let source: LyricsSource
@@ -594,16 +594,15 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                 }
             }
 
-            // 注意顺序：Genius 失败不再兜底为空歌词（与既有行为一致）——
-            // allowGeniusFallback 在用户设置本身就是 Genius 时为 false。
-            //
-            // ── Genius 兜底的三道门
-            // 每一道没过都**必须留一行日志**：静默 rethrow 会让"开关关着"和"真的没词"
-            // 看起来一模一样，事后无法区分。
-            //
-            // 门 1：来源本来就是 Genius —— 回退到自己没有意义（设置页对 Genius /
-            // 自动优选来源也不显示那个开关）。以前这里会真的再打一次 Genius 请求，
-            // 就是这么来的。
+                // 注意顺序：Genius 失败不再兜底为空歌词（与既有行为一致）——
+                // allowGeniusFallback 在用户设置本身就是 Genius 时为 false。
+                //
+                // ── Genius 兜底的三道门
+                // 每一道没过都**必须留一行日志**：静默 rethrow 会让"开关关着"和"真的没词"
+                // 看起来一模一样，事后无法区分。
+                //
+                // 门 1：来源本来就是 Genius —— 回退到自己没有意义（设置页对 Genius / 自动优选
+                // 来源也不显示那个开关）。
             if source == .genius {
                 writeDebugLog("[Lyrics] Genius failed — source is already Genius, no fallback")
                 throw error
@@ -987,7 +986,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     /// 不是用户设的那个）。来源标签与注入给 Spotify 的 `providedBy` 都用它。
     ///
     /// ⚠️ `durationMs` 参数已删 —— 它唯一的用途是给无时间轴的源合成时间轴，
-    /// 那条兜底整体删掉了（见 `LyricsDto.toSpotifyLyricsData` 顶部说明）。
+    /// 那条兜底已经不存在了（见 `LyricsDto.toSpotifyLyricsData` 顶部说明）。
     private func makeLyrics(
         from dto: LyricsDto,
         source: LyricsSource

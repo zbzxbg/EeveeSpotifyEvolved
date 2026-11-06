@@ -22,8 +22,8 @@ struct LyricsSearchQuery: Hashable {
     /// metadata 里的本地化 `title`）。
     ///
     /// 为什么需要：NetEase 的搜索**对文字敏感** —— 日文名能搜到，罗马字名常常只搜到
-    /// 翻唱/同曲异名实测：`Himitsu MIMI` 前 30 条里没有 MIMI 的
-    /// 《ヒミツ》，`MIMI ヒミツ` 第 2 条就是）。搜索时逐个试，命中高置信度就停。
+    /// 翻唱/同曲异名：`Himitsu MIMI` 前 30 条里没有 MIMI 的
+    /// 《ヒミツ》，`MIMI ヒミツ` 第 2 条就是。搜索时逐个试，命中高置信度就停。
     var titleVariants: [String] = []
 
     /// 专辑名（metadata `album_title`）。**只用于候选打分**，不进搜索串 ——

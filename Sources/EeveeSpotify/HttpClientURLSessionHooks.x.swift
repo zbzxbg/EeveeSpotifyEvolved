@@ -102,7 +102,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 //
                 // 现在两条路共用 `LyricsResponseCache`（同一个共享实例、同一套计数），
                 // 各自打自己的 `[DL]` / `[HCUS]` 结果行。语义与理由见
-                // `LyricsResponseCache` 的文件头（含真机四档实测数据）。
+                // `LyricsResponseCache` 的文件头（含四档对照数据）。
                 let cache = LyricsResponseCache.shared
                 let cacheSignature = LyricsResponseCache.currentSignature
                 let plan = cache.budgetPlan(forPath: url.path, signature: cacheSignature)

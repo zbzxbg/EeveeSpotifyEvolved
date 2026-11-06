@@ -34,7 +34,7 @@ final class NowPlayingLyricsHost {
     /// 罗马化那三个开关的**指纹**（逐语言，就是"歌词页面里的选择"）。
     ///
     /// ⚠️ 实现**只有一份**：`romanizationSwitchesFingerprint`（`LyricLinesAdapter.swift` 开头）——
-    /// 同一个判据抄两份，迟早只修一份那个 `seekToTappedLyricLine` 就是教训）。
+    /// 同一个判据抄两份，迟早只修一份（`seekToTappedLyricLine` 就是教训）。
     ///
     /// 它进 `isCurrent` ⇒ 用户一改开关，下一拍（≤0.3s）就会走 `updateLines` 把行模型重写一遍，
     /// 罗马字立刻出现/消失，不用等换歌。
@@ -72,7 +72,7 @@ final class NowPlayingLyricsHost {
             trackTitle: "",
             trackArtist: "",
             // ⚠️ **参数顺序必须与结构体里的属性声明顺序完全一致** —— SwiftUI 的逐成员初始化器
-            // 是位置敏感的CI 抓到：我把 `transparentBackdrop` 写在 `previewHeaderInset`
+            // 是位置敏感的（CI 抓到：把 `transparentBackdrop`
             // 后面，编译器报 "argument labels do not match"）。
             transparentBackdrop: true,
             clock: clock,

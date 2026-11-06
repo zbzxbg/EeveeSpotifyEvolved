@@ -2,33 +2,26 @@ import Foundation
 
 /// Unison（`unison.boidu.dev`）—— Better Lyrics 的众包歌词库，人工打轴的 TTML。
 ///
-/// ── 接口
-/// 读取接口的公开文档在 `github.com/better-lyrics/unison`（源码 AGPL-3.0）与
-/// `docs.betterlyrics.org/unison`：
-///
 /// GET /lyrics?song=<曲名>&artist=<艺人>[&album=<专辑>][&duration=<秒>]
 /// → {"success": true,
-/// "data": {"song", "artist", "lyrics",
-/// "format": "ttml" | "lrc" | "plain",
-/// "syncType": "richsync" | "linesync" | "plain",
-/// "confidence": "low" | "medium" | "high",
-/// "id", "videoId", "language", "score", "voteCount"}}
-///
+///   "data": {"song", "artist", "lyrics", "format": "ttml" | "lrc" | "plain",
+///            "syncType": "richsync" | "linesync" | "plain",
+///            "confidence": "low" | "medium" | "high",
+///            "id", "videoId", "language", "score", "voteCount"}}
 /// 没命中时**没有 `data`**，只有 `{"success": false, "error", "code", "hint"}`。
+/// 公开文档在 `github.com/better-lyrics/unison`（AGPL-3.0）与 `docs.betterlyrics.org/unison`。
 ///
 /// ── 匹配是谁做的
-/// **服务端**。它按 `v` → `isrc` → `song + artist` 的顺序找；歌手按完整署名比
-/// （查 `Madvillain` 能命中署名为 `Madvillain, Madlib, MF Doom` 的那首）；
-/// 给了 `duration` 就按 **±2 秒**收窄。所以这里不再拿时长兜一道：
-/// · 响应里**根本没有 `duration` 字段** —— 早期版本按它比对，那个分支从来没执行过；
-/// · 服务端的 ±2 秒比我们原来打算兜的 ±4 秒更严，重复一遍只会误杀。
+/// **服务端**，按 `v` → `isrc` → `song + artist` 的顺序找；歌手按完整署名比；给了
+/// `duration` 就按 **±2 秒**收窄。所以这里不再拿时长兜一道：响应里**根本没有
+/// `duration` 字段**，而服务端的 ±2 秒比我们要兜的 ±4 秒更严，重复一遍只会误杀。
 ///
 /// 客户端只做三件事：确认 `success`、只收 `format == "ttml"`、能解析出至少一行。
 /// 它也会回 LRC 和纯文本，那两样别的源都有，没有理由用它。
 ///
 /// ── 为什么不用 `syncType` 定时
-/// `richsync` 只说明它自己认为这份是逐字；最终是逐字还是逐行，由
-/// `hasUsableWordLevelData` 按解析出来的行判 —— 那是自动优选与渲染层共用的唯一口径。
+/// `richsync` 只说明它自己认为这份是逐字；最终逐字还是逐行由 `hasUsableWordLevelData`
+/// 按解析出来的行判 —— 那是自动优选与渲染层共用的唯一口径。
 final class UnisonLyricsRepository: LyricsRepository {
 
     static let shared = UnisonLyricsRepository()

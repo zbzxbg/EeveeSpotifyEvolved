@@ -339,7 +339,7 @@ class MosaicURLStringHook: ClassHook<NSURL> {
 // `https://mosaic.scdn.co/<size>/<id1><id2>…`。
 //
 // 这是"客户端自己拼四宫格地址"的那条路：**只留第一张**，拼出来的地址就只有一个 id
-// （服务端对一个 id 的 mosaic 地址回的就是单张封面，本机实测过）。
+// （服务端对一个 id 的 mosaic 地址回的就是单张封面）。
 //
 // 为什么这里不用 Orion：它是**类方法**，而本仓库现成的类方法写法就是手写 swizzle
 // （`CleanShareLinks.x.swift` / `EeveePremiumForce.x.swift` 都是这个 idiom）。

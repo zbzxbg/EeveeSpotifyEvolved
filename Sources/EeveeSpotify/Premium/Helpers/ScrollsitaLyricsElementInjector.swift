@@ -2,33 +2,19 @@ import Foundation
 
 /// 往 `scrollsita/v1/scroll/spotify:track:<id>` 的响应里补一个「歌词卡片」元素。
 ///
-/// ── 为什么怀疑卡片位置出自这里
-///
 /// 该接口按曲目返回**正在播放页的元素列表**（`关于艺人`、`探索 <artist>`、canvas …）。
-/// 同一批样本按 wire format 解出来的元素（括号里是元素的内层字段号）：
+/// 元素 `5` 只引用曲目 URI、不引用艺人，且只在"Spotify 有官方歌词"的曲目上出现；
+/// 卡片上显示的 provider 是我们自己写死的 `EeveeForce…` ⇒ **卡片的内容**来自我们替换的
+/// color-lyrics 响应，**卡片的位置/存在性**来自这份元素列表。没有 `5` 的曲目则什么都不
+/// 显示（连封面下那行也没有），与这一点吻合。
 ///
-/// | 曲目 | color-lyrics | 元素 |
-/// | `7dUKNjRiLxS2OXRldCIjH4`（SECRET） | **200**（Spotify 有官方词） | **5**, 2, 3, 4 |
-/// | `5utfun3R35e5AsBalPSxBe`（最後の希望） | 404 | 2, 3, 4 |
-/// | `1MbA2hu0f2NCnO114X1BP6` | 404 | 2, 3, 4 |
-///
-/// 那个多出来的 `5` **只引用曲目 URI**（不引用艺人），且只在"Spotify 有官方歌词"的曲目上
-/// 出现。而唯一一次肉眼确认看到歌词卡片（卡片上显示的 provider 是我们自己写死的
-/// `EeveeForce…`）正是 SECRET —— 也就是说：**卡片的内容**来自我们替换的 color-lyrics
-/// 响应，**卡片的位置/存在性**来自这份元素列表。
-///
-/// 这与"开关关掉后 404 曲目什么都不显示"也吻合：没有 `5` → 没有卡片；
-/// payload 无时间轴 → 连封面下那行（面 A）也没有。
-///
-/// → 假设：`5` = 歌词卡片元素，服务端只对自己库里有词的曲目下发。
-/// 那就把缺的这一项**补进响应里** —— 这是唯一能改到它的位置。
-///
-/// 若要验证这个假设，见 `EeveeSpotifySettingsView` 里那个实验开关（默认关）。
+/// ⇒ 把缺的这一项补进响应里 —— 这是唯一能改到它的位置。验证用的实验开关在
+/// `EeveeSpotifySettingsView`（默认关）。
 ///
 /// ── 安全边界（重要）
 /// · 只在 `shouldHandle` 命中的 path 上动手，且**只在缺少 `5` 时**追加；
 /// · 全程按 protobuf wire format 解析，任何一步不符合预期 → 返回 nil（**原样放行**，
-/// 绝不"猜着改"）—— 坏掉的响应会让整个正在播放页出问题，宁可什么都不做；
+///   绝不"猜着改"）—— 坏掉的响应会让整个正在播放页出问题，宁可什么都不做；
 /// · 组装完再重新解析一遍自检，过不了就返回 nil。
 enum ScrollsitaLyricsElementInjector {
 
@@ -97,7 +83,7 @@ enum ScrollsitaLyricsElementInjector {
             let type = innerKey >> 3
             if type == lyricsElementFieldNumber { has5 = true }
 
-            // 上限：元素最多列 12 个（实测一条响应 2–6 个；5utfun 那种 33KB 的推广响应会更多）。
+            // 上限：元素最多列 12 个（一条响应通常 2–6 个；5utfun 那种 33KB 的推广响应会更多）。
             if descriptions.count < 12 {
                 let uris = spotifyURIs(in: item)
                 descriptions.append(uris.isEmpty ? "\(type)" : "\(type){\(uris.joined(separator: ","))}")

@@ -3,7 +3,7 @@ import UIKit
 import ObjectiveC
 import SwiftUI
 
-// MARK: - 逐字歌词渲染模块（MVP）
+// MARK: - 逐字歌词渲染模块
 //
 // 结构（按文件拆开，本文件只剩 Orion 挂载 hook）：
 // WordByWord/WordByWordState.swift — 全局状态（取词进度、dto 归属）
@@ -22,18 +22,16 @@ import SwiftUI
 //
 // ⚠️⚠️ **绝对不要在这些覆写方法（或 hook 类）上写 `@MainActor`。**
 //
-// Orion 的代码生成器是按**源码文本**拼接的：给覆写方法加 `@MainActor`，生成的
-// `EeveeSpotify.xc.swift` 里会拼出 `@MainActoroverride` 这种非法属性，`override`
-// 关键字也一起丢掉，整个文件报一串语法错误；而且它生成的 C 跳板是非隔离的，
-// 同步调用被标成 `@MainActor` 的方法又构成隔离违规。
+// Orion 按**源码文本**拼接：给覆写方法加 `@MainActor` 会拼出 `@MainActoroverride` 这种
+// 非法属性，`override` 关键字也一起丢掉；它生成的 C 跳板是非隔离的，同步调用被标成
+// `@MainActor` 的方法又构成隔离违规。
 //
-// 正确的写法：方法保持非隔离，**在方法体里**用 `onMainThreadSync { }`
-// （定义在 `LyricsChromeVisibility.swift`）把"这是主线程"表达出来。
-// 它已经是主线程时是同步执行的，不改变任何时序；`viewWillDisappear` 里的清理
-// 因此仍然是同步的。
+// 正确写法：方法保持非隔离，**在方法体里**用 `onMainThreadSync { }`
+// （定义在 `LyricsChromeVisibility.swift`）—— 已是主线程时同步执行，不改变时序，
+// `viewWillDisappear` 里的清理因此仍然是同步的。
 //
-// 顺带：**内嵌（预览）**那两处沿用原有的 `DispatchQueue.main.async` 延后一拍再挂载，
-// 写在 `onMainThreadSync` 里面；**全屏**那两处已改到 `viewWillAppear` 里直接挂 ——
+// **内嵌（预览）**那两处沿用 `DispatchQueue.main.async` 延后一拍再挂载，写在
+// `onMainThreadSync` 里面；**全屏**那两处必须在 `viewWillAppear` 里直接挂 ——
 // 多拖一拍会让转场动画期间露出 Spotify 自己的全屏歌词（"进入时一闪"）。
 
 class LyricsWordByWordModernHostHook: ClassHook<UIViewController> {
@@ -97,7 +95,7 @@ class LyricsWordByWordFullscreenModernHostHook: ClassHook<UIViewController> {
         let vc = target
         // 挂载点：**整屏的 vc.view**，除此之外什么都不做。
         //
-        // 这里曾经把 overlay 挂到「歌词内容」子模块
+        // 不要把 overlay 挂到「歌词内容」子模块
         // `Lyrics_FullscreenElementPageImpl.LyricsView`（frame=0,104 414x570），
         // 后果是背景只能铺在 570pt 的容器内、容器边界上留一道"壳 / 肉"接缝 ——
         // 这是要消除的东西，所以改成挂整屏。
@@ -172,17 +170,14 @@ class LyricsWordByWordFullscreenLegacyHostHook: ClassHook<UIViewController> {
         let vc = target
         // 挂到 vc.view（整屏）。
         //
-        // ⚠️ 这里以前会取 `Ivars<UIView>(vc.view).headerView` 并当作
-        // `keepAboveView` 传下去，想让原生 header 浮在我们的 overlay 之上。
-        // 那个做法已被证伪，参数整个删掉了：
-        // · Modern 全屏页上根本没有这个 ivar（`Ivars` 访问不存在的 ivar 是会崩的，
-        // 靠的只是"老版本上恰好存在"这种运气）；
-        // · 就算取到，原生控件也不在这条视图链上，抬层级影响不到它们。
+        // ⚠️ 不要试图取 `Ivars<UIView>(vc.view).headerView` 当 `keepAboveView` 传给 overlay
+        // 让原生 header 浮在上面：Modern 全屏页上根本没有这个 ivar（`Ivars` 访问不存在的
+        // ivar 会崩），而且就算取到，原生控件也不在这条视图链上，抬层级影响不到它们。
         //
-        // 现在旧 overlay 的显隐完全由"有没有逐词数据"决定：有就画（盖住原生歌词），
+        // 旧 overlay 的显隐完全由"有没有逐词数据"决定：有就画（盖住原生歌词），
         // 没有就整层透明 + 触摸穿透（原生界面与控件原样可用）。
         //
-        // ⚠️ 时机从 `viewDidAppear` 提前到 `viewWillAppear`（同 modern hook）：
+        // ⚠️ 时机是 `viewWillAppear` 而不是 `viewDidAppear`（同 modern hook）：
         // 避免转场动画期间露出 Spotify 自己的全屏歌词。
         onMainThreadSync {
             WordByWordHost.shared.attach(

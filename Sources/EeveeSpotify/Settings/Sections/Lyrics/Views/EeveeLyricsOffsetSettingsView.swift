@@ -1,19 +1,17 @@
 import Foundation
 import SwiftUI
 
-/// 「歌词偏移」独立页从歌词设置页里拆出来；从"只做网易云"改成所有源）。
+/// 「歌词偏移」独立页（从歌词设置页里拆出来；从"只做网易云"改成所有源）。
 ///
-/// 为什么单独一页（设置页里面放个可点击进去的页面吧，和那些功能一样——
-/// 这个功能会随听歌不断长出新的条目，内嵌在歌词页里越拖越长；拆成子页之后
-/// 入口和「歌词 / 听歌页 / 补丁」那些在同一组，页内只留这一件事。
+/// 为什么单独一页：这个功能会随听歌不断长出新的条目，内嵌在歌词页里越拖越长；拆成子页
+/// 之后入口和「歌词 / 听歌页 / 补丁」那些在同一组，页内只留这一件事。
 ///
-/// 「把歌词偏移这个东西做成对全部歌词源都生效，但记录的时候，
-/// 要连带把歌词源记录，genius不用歌词偏移这个东西」。于是：
+/// 偏移对**全部歌词源**生效，但记录时**连带把源记下来**，于是：
 /// · 每一条记录都是「源 + 曲目」，行里把源名画出来（同一首歌换源就是另一条）；
 /// · Genius 进来时只显示一句说明，不给 ± 按钮（它没有可信时间轴，挪了没意义）。
 ///
-/// 只有**单条偏移**去掉「默认偏移」）：默认值是"所有歌词一起挪"，
-/// 实际没什么用，还会让"这首歌到底存了多少"更难看清。
+/// 只有**单条偏移**，没有「默认偏移」：默认值是"所有歌词一起挪"，实际没什么用，还会让
+/// "这首歌到底存了多少"更难看清。
 struct EeveeLyricsOffsetSettingsView: View {
 
     @State private var currentSongTrackId = ""
@@ -181,7 +179,7 @@ struct EeveeLyricsOffsetSettingsView: View {
         // ⚠️ 这里必须用 `Section(header:footer:content:)`（header/footer 是 **View**、content 是
         // 尾随闭包）—— `Section(header: X) { … } footer: { … }` 这种写法在本仓库的
         // SwiftUI 版本里没有对应重载，会被解析成 `init(header:footer:content:)` 而编译失败
-        // 实测：「incorrect argument label … have 'header:_:footer:'」）。
+        // （「incorrect argument label … have 'header:_:footer:'」）。
         Section(
             header: Text("lyrics_offset_saved".localized),
             footer: Text("lyrics_offset_saved_count".localizeWithFormat(savedEntries.count))

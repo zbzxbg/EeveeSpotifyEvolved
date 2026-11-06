@@ -35,7 +35,7 @@ enum SpicyLyricsAttribution {
     ///
     /// 条款 §6 要的是 *"credit **and link** the uploader, and the maker where one is given.
     /// Use the `url` on each contributor as the link target."*
-    /// 所以 `username` 用来显示、`url` 用来当点击目标（实测形如 `https://spicylyrics.org/uid/…`）。
+    /// 所以 `username` 用来显示、`url` 用来当点击目标（形如 `https://spicylyrics.org/uid/…`）。
     ///
     /// 上游偶尔只给其一 ⇒ **缺什么就少什么，不编造**；`apple_music` / `spotify` 两个商业源
     /// 根本没有这个节点，本来就该只有 provider。

@@ -161,7 +161,7 @@ enum NowPlayingLyricsPlate {
     /// 走查上限（本仓库纪律）。
     static let maxNodes = 800
 
-    // MARK: 「歌词键」那一枚从"隐形热区"改成"看得见的按钮"）
+    // MARK: 「歌词键」那一枚（从"隐形热区"改成"看得见的按钮"）
     //
     // 圆形键的边长（与 Spotify 自己的图标键同尺）。
     static let toggleSide: CGFloat = 44

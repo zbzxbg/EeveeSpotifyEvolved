@@ -4,7 +4,7 @@ import Foundation
 //
 // 与 `AmllTtmlLyricsRepository` 的区别：那个走 AMLL 社区库（api.amll.dev），格式同样是 Apple 的 TTML，但内容是网友整理搬运的，覆盖率和逐词质量参差。这里拿的是 **Apple 自己**给的那份：逐词（`syllable-lyrics`）与逐行（`lyrics`）都取、译文/音译来自 `<iTunesMetadata>` 旁挂、背景人声是 `ttm:role="x-bg"`。这三样 `AmllTtmlParser` 本来就认（AMLL 的格式就是照 Apple 长的），所以不新增第二套解析/映射，只补"怎么把官方 TTML 拿到手"。
 //
-// 认证是唯一的硬门槛：Apple 没有公开歌词 API。实测 `search` 只要网页播放器的 developer token，而 `/lyrics` 未登录返回 **404**、`/me/storefront` 返回 **403** ⇒ 歌词那一步必须有**用户自己的 Apple Music 登录态**（浏览器 Cookie 里的 `media-user-token`）。所以只做两件事：
+// 认证是唯一的硬门槛：Apple 没有公开歌词 API。`search` 只要网页播放器的 developer token，而 `/lyrics` 未登录返回 **404**、`/me/storefront` 返回 **403** ⇒ 歌词那一步必须有**用户自己的 Apple Music 登录态**（浏览器 Cookie 里的 `media-user-token`）。所以只做两件事：
 // ① developer token **自动**从 music.apple.com 的 JS bundle 里抓（JWT，约 70 天过期，带 `exp`，过期前 1 天重抓）；
 // ② media-user-token 由**用户在设置里粘贴**（`UserDefaults.appleMusicMediaUserToken`，见 `AppleMusicTtml+UserDefaults.swift`）。
 // 抓 token 参照 `zhaarey/apple-music-downloader` 的 `amp-api/token.go`，取歌词参照 `dropcreations/Manzana-Apple-Music-Lyrics` 的 `api/api.py`（`include[songs]=lyrics,syllable-lyrics` + `media-user-token` 头）。`amp-api.music.apple.com` 国内可直连，不需要换 host。
@@ -226,7 +226,7 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
         var assetPath = Self.firstMatch(Self.bundlePathPattern, in: page)
 
         if assetPath == nil {
-            // 部分地区（本机实测是中国大陆出口）首页会先 302 到 `/<region>/new`；
+            // 部分地区（中国大陆出口）首页会先 302 到 `/<region>/new`；
             // 那个页面同样带 bundle 路径，但保险起见再用 `/us/browse` 试一次。
             page = try fetchText("\(Self.webBase)/us/browse", label: "music.apple.com/us/browse")
             assetPath = Self.firstMatch(Self.bundlePathPattern, in: page)
@@ -551,13 +551,10 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
 
     /// 从 song 资源的 `relationships` 里取 TTML：`syllable-lyrics`（逐词）优先，`lyrics` 兜底。
     ///
-    /// ⚠️ 载荷形态有**三种**（都见过/都有实现可对照，
-    /// ① `attributes.ttml` —— 单语串（`dropcreations/Manzana...` 那个年代就是它）；
+    /// ⚠️ 载荷形态有**三种**：
+    /// ① `attributes.ttml` —— 单语串（最早就是它）；
     /// ② `attributes.ttmlLocalizations` 是**字符串** —— 单语；
     /// ③ `attributes.ttmlLocalizations` 是 **`locale → ttml` 字典** —— 多语。
-    /// 这一条是照 `Takpap/apple-music-lyrics` 的缓存模型定性的：它把
-    /// `syllable-lyrics.data[0].attributes.ttmlLocalizations` 解成
-    /// `String` **或** `[String: String]` 两种可能（见那边的 `TTMLLocalizations`）。
     /// 只认 ① 的话，新形态响应会"200 但取不到词" ⇒ 必须三种都试。
     private static func extractTtml(from json: [String: Any], language: String) -> String? {
         guard let data = json["data"] as? [[String: Any]],

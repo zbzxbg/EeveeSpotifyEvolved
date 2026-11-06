@@ -25,7 +25,7 @@ extension EeveeLyricsSettingsView {
 
     /// 来源选择器的绑定。
     ///
-    /// ⛔（填令牌弹窗**已删除**。
+    /// ⛔ 填令牌弹窗**已删除**。
     /// 令牌输入框就在这个 Picker 下面（`musixmatchTokenField`），没有令牌时取词路径
     /// 也会自己换一个匿名令牌（`AnonymousTokenHelper`），没必要在选中的那一刻打断用户。
     /// 这里现在只负责把新来源写回 view model。
@@ -217,9 +217,7 @@ extension EeveeLyricsSettingsView {
     
     /// Musixmatch 用户令牌输入框。
     ///
-    /// ⚠️ 这里的注释在改过一次：原先写"「请求匿名令牌」按钮已整体移除、
-    /// 现在令牌**只能手填**"，但**下面 `:196-212` 又把它接回来了**，
-    /// 文档与代码不一致。当前实况是：
+    /// ⚠️ 现状（别再照旧注释写成"按钮已移除、只能手填"）：
     /// · 令牌**可以**手填（这一栏）；
     /// · 没填 / 填得不合法时，多出一颗「请求匿名令牌」按钮（只在
     /// `!viewModel.isMusixmatchTokenValid` 时显示）；

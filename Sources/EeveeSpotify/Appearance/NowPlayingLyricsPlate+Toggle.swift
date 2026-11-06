@@ -99,7 +99,7 @@ extension NowPlayingLyricsPlate {
     /// （`canShow` 直接 false，还会打出误导人的"这首歌没有可用的歌词"）。独立复核抓到的。
     static func ensureToggleZone(in page: UIView) {
         guard #available(iOS 26.0, *) else { return }
-        // 总开关关着就**一枚键都不许摆** —— 用户报的"歌词按钮点不动"
+        // 总开关关着就**一枚键都不许摆** —— "歌词按钮点不动"
         // 就是"键摆出来了、点下去 `canShow` 直接 false"造成的。调用点（`apply` / `reconcile`）
         // 本来都判过了，这里再判一次是**兜底**：将来多一条调用路径，也不会再造出那枚死键。
         guard isEnabled else {
@@ -228,7 +228,7 @@ extension NowPlayingLyricsPlate {
 
     /// 真的转发了一次触摸 ⇒ 记一行（**有上限**：这是每点一次都会走的路，不许刷屏）。
     ///
-    /// 一条痕迹都没有**（我们根本没参与那次触摸）。有了它，下一份日志能直接回答
+    /// **一条痕迹都没有**（我们根本没参与那次触摸）。有了它，下一份日志能直接回答
     /// "替身接到触摸了吗、转进去了吗"。
     static func noteTitleRelayForward() {
         guard titleRelayForwards < 5 else { return }

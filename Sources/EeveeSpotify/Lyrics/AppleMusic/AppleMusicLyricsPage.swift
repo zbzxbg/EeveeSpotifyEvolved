@@ -213,7 +213,7 @@ struct AppleMusicLyricsPage: View {
     //
     // 自绘标题栏的实际高度。默认是全屏那套（曲名 + 歌手 ≈ 62）。
     //
-    // 内嵌预览传"卡片标题栏高度"（卡片高度 − 歌词视图高度，实测 39pt）——
+    // 内嵌预览传"卡片标题栏高度"（卡片高度 − 歌词视图高度，39pt）——
     // 预览的标题栏只有一行「歌词」+ 两个按钮，跟全屏那两行文字不是一个高度，
     // 写死 62 会把预览的歌词往下推一截。
     let headerHeight: CGFloat
@@ -282,7 +282,7 @@ struct AppleMusicLyricsPage: View {
     /// ⚠️ 先写死、暂时不做开关：`.automatic(4)` 的含义是"连**推断**出来的 LRC 间隙
     /// 也算，阈值 4 秒"，这是口味 —— 得先在真机上把 `.preciseTiming`（只认作者时间轴）
     /// 与它各听一遍，才知道该给用户哪一个。在那之前露一个开关，只是多一个
-    /// 排查型开关的处置，见 `EeveeDebugSettingsViewModel`）。
+    /// 排查型开关的处置（见 `EeveeDebugSettingsViewModel`）。
     private static let interludeDetectionPolicy: LyricInterludeDetectionPolicy =
         .automatic(minimumInferredGapDuration: 4)
 
@@ -335,7 +335,7 @@ struct AppleMusicLyricsPage: View {
         // 诊断行：真机上要能一眼看出"这一首判出来几段间奏"。
         // ⚠️ 只在**重推**时打（换歌那一次），不是每帧 —— 不然日志会被刷爆。
         //
-        // 多长也带上** —— 那 17 条各占 40pt 的驻留行（`AppleMusicInterludeRow`）就是用户报的
+        // **每段多长也带上** —— 那 17 条各占 40pt 的驻留行（`AppleMusicInterludeRow`）会造成
         // 「歌词有额外换行」。下一份日志直接看这串数就能定阈值（现在逐字来源也用 4s）。
         let gaps = detected.map { String(format: "%.1f", $0.gapDuration) }.joined(separator: ",")
         writeDebugLog(
@@ -861,7 +861,7 @@ struct AppleMusicLyricsPage: View {
         //
         // `.leading` / `TextAlignment.leading` / `anchor: .leading` 解析用的都是
         // **环境 layoutDirection** —— 而环境方向来自系统语言。于是"中文界面 + 阿拉伯语歌词"
-        // 必然被排到左边（用户报的原话："时间轴没问题，就是贴左不贴右"）。
+        // 必然被排到左边。
         // 把这一行的环境方向按**歌词自己**的书写方向覆盖掉（见 `String+ScriptDirection.swift`），
         // `.leading` 就变成"这一行自己的开头那一边"：阿拉伯语 → 贴右、中英文 → 贴左，
         // 对唱翻转（`.trailing` ＝ 推到另一端）也跟着一起翻对。
@@ -890,8 +890,8 @@ struct AppleMusicLyricsPage: View {
             showsBackgroundVocals: showsBackgroundVocals,
             showsTranslation: showsTranslation
         )
-        // 注：这里曾经有一个 `.frame(width: availableWidth, alignment: .leading)`。
-        // 它是我为了"让 SwiftUI 与折行构建器用同一个宽度"加的，**MeloX 没有这个**。
+        // 注：不要加 `.frame(width: availableWidth, alignment: .leading)`。
+        // 它是为了"让 SwiftUI 与折行构建器用同一个宽度"加的，**MeloX 没有这个**。
         // 宽度已经通过 `constrainedWidth` 传给构建器与渲染器，再由
         // `SynchronizedLyricText` 内部的 `.frame(maxWidth: .infinity)` 约束 ——
         // 多出来的这一层硬宽度反而让 SwiftUI 与构建器各算一次折行。

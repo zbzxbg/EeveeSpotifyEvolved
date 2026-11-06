@@ -23,7 +23,7 @@ class MiniPlayerBarHideHook: ClassHook<UIView> {
         DeclutterChrome.note(self.target, as: .miniBar)
 
         // 迷你播放条的**液态玻璃胶囊**（`MiniBarGlass.swift`）蹭的就是这个布局回调 ——
-        // 同一个类上再挂一个 ClassHook 是没验证过的行为，所以那边只画、不钩。
+        // 同一个类上挂两个 ClassHook 的行为不可预期，所以那边只画、不钩。
         // 顺序无所谓：藏掉时它照样画（看不见而已），开关关掉它会自己撤掉并把底色还原。
         // ⚠️ hook 方法体是**非隔离**的（Orion 的代码生成器会把 `@MainActor` 拼坏，见
         // `LyricsChromeVisibility.swift` 顶上那段），所以这里必须套 `onMainThreadSync`。
@@ -42,7 +42,7 @@ class MiniPlayerBarHideHook: ClassHook<UIView> {
 /// 封面下那行跟唱歌词。
 /// ⚠️ 它是**通用类**（`Lyrics_TextComponentImpl.LyricsView`），别的地方也可能用同一类，
 /// 所以判据只认那个 id：`accessibilityIdentifier == "singalong-lyrics-view"`
-/// （真机树实测值）。命中不了就什么都不做 —— 宁可漏，不可误伤别处的歌词视图。
+/// （真机树里的值）。命中不了就什么都不做 —— 宁可漏，不可误伤别处的歌词视图。
 ///
 /// 已知局限：只藏视图本身，**120pt 的槽位可能还在**（容器 `LyricsContainerView` 是
 /// Spotify 的布局，动它有把歌词卡一起弄坏的风险）。真机如果看出空档，再单独处理。

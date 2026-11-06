@@ -47,21 +47,16 @@ final class ArtistBioSheet: UIView {
         sheet.build(name: name, text: text, colour: colour)
         current = sheet
 
-        // （翻译这东西**之前还是能用的**——说得对，这是我们的回归）：
+        // 卡片必须放进真正的 `UIViewController` 里 present（`.overFullScreen`，铺满整屏、
+        // 背后的页面照常可见）。
         //
-        // 原来是 `window.addSubview(sheet)`：卡片**裸挂在 window 上**，从正文往上的
+        // 不能 `window.addSubview(sheet)`：卡片**裸挂在 window 上**，从正文往上的
         // responder chain 是 `UITextView → card → sheet → UIWindow → UIApplication`，
         // **一个 VC 都没有**。系统的编辑菜单里那项「翻译」要找一个 VC 来呈现它自己那张卡，
-        // 找不到就让 UIKit 在 `-[UITextInputController _translate:]` 里 NSAssert ⇒ SIGABRT
-        // （`Spotify--094701.ips`）。
+        // 找不到就让 UIKit 在 `-[UITextInputController _translate:]` 里 NSAssert ⇒ SIGABRT。
         //
-        // 什么时候坏的：`fd693c8`「our own artist bio sheet」把 Spotify 原生的
-        // 「关于艺人」换成了这张卡 —— 原生那一页**在 VC 里**，所以翻译一直是好的；
-        // 换成我们这张之后才崩。不是系统 bug，是宿主方式不对。
-        //
-        // ⇒ 现在把它放进一个真正的 `UIViewController` 里再 present（`.overFullScreen`，
-        // 铺满整屏、背后的页面照常可见）。翻译因此恢复；万一拿不到 VC，
-        // 退回老办法 —— 卡片至少能出来（那种情况下翻译仍然拦着，见 `_translate:` 那条 hook）。
+        // 万一拿不到 VC，退回老办法 —— 卡片至少能出来（那种情况下翻译仍然拦着，
+        // 见 `_translate:` 那条 hook）。
         if let presenter = hostController(for: window) {
             let host = ArtistBioSheetHost()
             host.view.backgroundColor = .clear
@@ -210,7 +205,7 @@ final class ArtistBioSheet: UIView {
         // 卡片底改成**真玻璃**（`GlassCapsule.makeGlassView`：iOS 26 的 `UIGlassEffect`
         // 带折射与边缘高光；拿不到就退 `.systemUltraThinMaterialDark`，见那个工厂的说明），
         // 底下再垫一层**很淡的取色** —— 纯玻璃压在浅色照片上时白字会看不清，
-        // 这一层就是给对比度兜底的（原来是**不透明**色块，所以「换成玻璃」才看得出来）。
+        // 这一层就是给对比度兜底的（换成玻璃之后才需要它）。
         card.backgroundColor = Self.cardColour(from: colour).withAlphaComponent(0.28)
         card.layer.cornerRadius = 24
         card.layer.cornerCurve = .continuous
@@ -305,7 +300,7 @@ final class ArtistBioSheet: UIView {
         // 页脚：左边一颗**维基百科链接**（只给入口、**不抄文本** ⇒ 不欠 CC BY-SA 的署名 ——
         // Spotify 自己的 About 页也是这么干的：`SPTArtistAbout:sArtistWikipediaButtonTitle`，dump:21079），
         // 右边一句**永远显示**的来源署名/状态（以前只有成功时才显示 —— 于是四档
-        // 在失败时长得一模一样，用户以为设置没生效）。
+        // 在失败时长得一模一样，看不出设置有没有生效）。
         let wiki = UIButton(type: .system)
         // 它一直是个**入口按钮**，
         // 但文案与"来源"混在一起，用户就把它当成了来源标签 ⇒ 换成明确的链接说法。
@@ -519,7 +514,7 @@ final class ArtistBioSheet: UIView {
         dismiss()
     }
 
-    /// **下滑关闭**用户点名要的）。
+    /// **下滑关闭**。
     ///
     /// 判据照系统 sheet：滑过卡片高度的 30% **或者**放手时向下速度 > 800pt/s 就关，
     /// 否则弹回原位（用弹簧，手感与 `GlassCapsule` 那套一致）。

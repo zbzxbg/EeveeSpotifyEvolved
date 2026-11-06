@@ -117,17 +117,17 @@ class NgzhwmSettingsViewModel: ObservableObject {
         )
     }
 
-    /// 「AMLL 优先」：开启后先向 AMLL 要逐词歌词，没正常返回再回退到用户在
-    /// 来源选择器里设置的那个源（连同它的相关设置）。
+    /// 「AMLL 优先」：开启后先向 AMLL 要逐词歌词，没正常返回再回退到用户在来源选择器里
+    /// 设置的那个源（连同它的相关设置）。
     ///
-    /// 之所以回退到「用户自己选的源」而不是硬编码一条回退链：哪个源适合兜底完全
-    /// 取决于地区与语言 —— 日本用户设 PetitLyrics、大陆用户设网易云、其它地区设
-    /// SpicyLyrics，各自回退到最合适的地方，不需要我们再维护地区判断。
+    /// 回退到「用户自己选的源」而不是硬编码一条回退链：哪个源适合兜底完全取决于地区与
+    /// 语言 —— 日本用户设 PetitLyrics、大陆用户设网易云、其它地区设 SpicyLyrics，各自
+    /// 回退到最合适的地方，不需要我们再维护地区判断。
     ///
-    /// **默认开**AMLL优先 此功能改成默认开启）。
+    /// **默认开**。
     ///
-    /// ⚠️ `bool(forKey:defaultValue:)` 只对**从没写过这个键**的设备用默认值 ⇒
-    /// 已经手动关过它的设备保持他关的那一档（不覆盖）。
+    /// ⚠️ `bool(forKey:defaultValue:)` 只对**从没写过这个键**的设备用默认值 ⇒ 已经手动
+    /// 关过它的设备保持他关的那一档（不覆盖）。
     static var isAmllPreferred: Bool {
         bool(forKey: amllPreferredKey, defaultValue: true)
     }
@@ -191,7 +191,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
 
     /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）。
     ///
-    /// 背景：真机取证发现 `scrollsita/v1/scroll/spotify:track:<id>`（正在播放页的**元素列表**）
+    /// 背景：`scrollsita/v1/scroll/spotify:track:<id>`（正在播放页的**元素列表**）
     /// 只在"Spotify 自己有官方歌词"的曲目上多下发一个元素（内层字段号 5，只引用曲目 URI）。
     /// 补上之后，缺这一项的响应会被写入这一项（byte 级，只在能完整解析时动手，
     /// 任何异常都原样放行）。见 `ScrollsitaLyricsElementInjector`。
@@ -200,7 +200,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 保持"404 曲目也有歌词卡片"的既有行为不变。
     ///
     /// 在 404 曲目上我们补的这一个元素
-    /// 是那份响应里**唯一**多出来的东西，而用户报告这些曲目上会间歇出现一张
+    /// 是那份响应里**唯一**多出来的东西，而这些曲目上会间歇出现一张
     /// 「即将发布 / 已预收藏」卡（日期早已过期，甚至有 2021 年的）。
     /// 关掉它即可判定：那张卡到底是这个元素渲出来的，还是另一条路来的。
     static var isLyricsCardElementInjectionEnabled: Bool {

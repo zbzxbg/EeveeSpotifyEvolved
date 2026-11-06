@@ -1,6 +1,6 @@
 import Foundation
 
-/// 日志脱敏新增）。
+/// 日志脱敏。
 ///
 /// ── 两层，职责不同
 ///
@@ -10,22 +10,23 @@ import Foundation
 ///
 /// ② `redactForSharing(_:)` —— **只在导出时**应用，给"要发到 issue / 给别人看"的那一份。
 /// 管的是"日志主体本身就是用户数据"的那一类：曲目/艺人/专辑 URI、曲名、曲目 id。
-/// 本地那份文件不受影响 —— 排查时你仍然需要真实曲目才能复现。
+/// 本地那份文件不受影响 —— 排查时仍然需要真实曲目才能复现。
 ///
 /// ── 为什么脱敏必须放在写入口
-/// `writeDebugLog` 同时写文件和 `os_log(privacy: .public)`；而系统统一日志**清不掉**
-/// （设置里的「清除调试日志」只清 App 容器里那份）。只在导出时脱敏的话，
+/// `writeDebugLog` 同时写文件和 `os_log(privacy: .public)`，而系统统一日志**清不掉**
+/// （设置里的「清除调试日志」只清 App 容器里那份）。只在导出时脱敏的话，os_log 那条通道
+/// 仍是明文。
 ///
 /// ── 判据
 /// · **必隐**：Bearer/Authorization/Cookie 类凭证、设备唯一标识、账号标识；
 /// · **默认隐**：播放上下文/歌单、曲目与艺人、曲名、时区与地区（含 `country=`）；
 /// · **必须保留**：时间戳、接口 path、元素清单 —— 这些是排查判据本身。
-/// 注意区分两层：**hex dump**（`hex512B=` / `[NPVModule] hex` / `[CASITA][HEX]`）
-/// 在**本地**文件里原样保留，只在**导出那一份**被打成 `<hex-redacted>`
-/// （那些字节可解码还原成 `spotify:track:`，模式匹配看不见 —— 见规则 10）。
-/// 所以本文件里**没有**任何"把 query 里所有参数一锅端"的规则 —— 只处理已知的
-/// 内容参数，且 `[TokenCapture]` 那类整条 URL 由调用方改用 `logSafeURL(_:)`
-/// （只留 scheme+host+path）在源头掐掉。
+///
+/// 注意区分两层：**hex dump**（`hex512B=` / `[NPVModule] hex` / `[CASITA][HEX]`）在**本地**
+/// 文件里原样保留，只在**导出那一份**被打成 `<hex-redacted>`（那些字节可解码还原成
+/// `spotify:track:`，模式匹配看不见）。所以本文件里**没有**任何"把 query 里所有参数一锅端"
+/// 的规则 —— 只处理已知的内容参数，且 `[TokenCapture]` 那类整条 URL 由调用方改用
+/// `logSafeURL(_:)`（只留 scheme+host+path）在源头掐掉。
 enum DebugLogSanitizer {
 
     // MARK: - ① 写入口：硬脱敏
@@ -205,7 +206,7 @@ enum DebugLogSanitizer {
         }
 
         // 2c. ⚠️ 另外两条**每首歌都会打**的日志，引号前的引导词和第 2 步那批不一样，
-        // 必须单独列 —— 它们曾经**整条漏过**（审查抓出来的，见 §57.7）：
+        // 必须单独列 —— 它们**整条漏过**（见 §57.7）：
         // · `[Lyrics] Track "<标题>" - <艺人> (id <22 位 base62>)`（`CustomLyrics.x.swift`）
         // · `[Shell] legacy metadata "<标题>" — "<艺人>"`（`LyricsWordByWord.x.swift`，
         // 分隔符是 **em dash**，所以第 3 步那条 `-` 的规则救不了它）
@@ -417,7 +418,7 @@ enum DebugLogSanitizer {
 /// 把 Bearer token 映射成**轮换序号**（`token#1` / `token#2` …）。
 ///
 /// 一次会话中就出现过两枚。但 token 的任何片段都没有调试价值，
-/// 所以原先的 `prefix=<前6字符>` 换成只记"第几枚"。
+/// 所以只记"第几枚"，不记 `prefix=<前6字符>`。
 enum SpotifyTokenOrdinal {
     private static let lock = NSLock()
     private static var order: [String] = []

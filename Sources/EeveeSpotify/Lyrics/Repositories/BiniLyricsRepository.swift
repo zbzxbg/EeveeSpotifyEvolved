@@ -2,25 +2,20 @@ import Foundation
 
 /// BiniLyrics（`lyrics-api.binimum.org`）—— 按名字搜 Apple Music 逐字 TTML 的社区库。
 ///
-/// ── 接口
 /// GET /?track=<曲名>&artist=<艺人>[&duration=<秒>][&album=<专辑>]
 /// → {"results": [{"track_name", "artist_name", "duration"(秒), "isrc",
-/// "lyricsUrl", "timing_type": "word" | "line" | "none"}], "total": N}
+///   "lyricsUrl", "timing_type": "word" | "line" | "none"}], "total": N}
 /// → 再 GET `lyricsUrl` 拿 TTML 正文（实际就是 `https://lrc.red/s/<isrc>.ttml`）
 ///
-/// 不带参数打根路径时，服务自己会回 `{"detail":"provide one of: q / isrc / track(+artist)"}`
-/// —— 这就是它的接口说明。它也接受 `isrc=`，但 `LyricsSearchQuery` 里没有 ISRC
+/// 不带参数打根路径时服务回 `{"detail":"provide one of: q / isrc / track(+artist)"}`，
+/// 这就是它的接口说明。它接受 `isrc=`，但 `LyricsSearchQuery` 里没有 ISRC
 /// （Spotify 的播放器元数据不保证带），所以这里只走名字搜索。
 ///
 /// ── 为什么必须自己比标题和歌手
-/// 这个库是**模糊搜索**，一次回 20 条，里面混着大量同曲异人的翻唱。实测
-/// `Blinding Lights / The Weeknd` 的前 20 条里有 17 条是别人的版本
-/// （The Naked and Famous 187s、The Howl & The Hum 221s…），原曲 200s。
-/// 只按时长挑的话，4 秒容差足够让某首翻唱混进来 —— 用户会拿到**另一首歌的词**。
-///
-/// 所以判据是三道闸，缺一不可：
+/// 这个库是**模糊搜索**，一次回 20 条，里面混着大量同曲异人的翻唱；只按时长挑的话，
+/// 4 秒容差足够让某首翻唱混进来，用户会拿到**另一首歌的词**。判据是三道闸，缺一不可：
 /// ① 曲名：去标点后**全等**（`LyricsMatch.key`；`晴天` 与 `晴天 (Live)` 因此不同）。
-/// 唯一放宽的是合作署名：`Song (feat. X)` 与 `Song` 视为同一首（见 `titlesMatch`）；
+///    唯一放宽的是合作署名：`Song (feat. X)` 与 `Song` 视为同一首（见 `titlesMatch`）；
 /// ② 歌手：互相包含（`LyricsMatch.sameArtist`，认 `feat.` 之后的主艺人）；
 /// ③ 时长：±4 秒（`LyricsMatch.lengthMatches`，任一方缺数据就不否决）。
 ///
@@ -29,9 +24,9 @@ import Foundation
 /// 配错了用户是看不出来的。
 ///
 /// ── 挑哪一条
-/// 过闸的候选按 `(逐字优先, 时长差更小)` 排序，取第一条。`timing_type` 只参与**排序**，
-/// 不改写 dto：最终是逐字还是逐行，由 `hasUsableWordLevelData` 按解析出来的行判 ——
-/// 那是自动优选与渲染层共用的唯一口径（声明 "word" 而 TTML 里只有 `<p begin>` 的情况确实存在）。
+/// 过闸的候选按 `(逐字优先, 时长差更小)` 排序取第一条。`timing_type` 只参与**排序**，
+/// 不改写 dto：最终逐字还是逐行由 `hasUsableWordLevelData` 按解析出来的行判 ——
+/// 那是自动优选与渲染层共用的唯一口径（声明 "word" 而 TTML 里只有 `<p begin>` 确实存在）。
 final class BiniLyricsRepository: LyricsRepository {
 
     static let shared = BiniLyricsRepository()

@@ -83,7 +83,7 @@ enum LyricsOffsetMenuRow {
     /// 两条都不成立就当作"别处的上下文菜单"，不碰。
     private static func isPlayerMenu(_ menu: UIViewController) -> Bool {
         // ⚠️ `nowPlayingScrollViewController` 的类型是 **`@objc protocol`**，不是 `UIViewController`
-        // —— 它上面没有 `viewIfLoaded`编译现场：`has no member 'viewIfLoaded'`）。
+        // —— 它上面没有 `viewIfLoaded`（编译现场：`has no member 'viewIfLoaded'`）。
         // 运行期它就是一个 VC，所以先转成 `UIViewController` 再用 `isViewLoaded`；
         // `isViewLoaded` 与 `viewIfLoaded != nil` 等价，**都不会顺手把视图加载出来**。
         if let page = nowPlayingScrollViewController as? UIViewController,
@@ -219,7 +219,7 @@ enum LyricsOffsetMenuRow {
 /// 对没被 present 的 VC 调 `dismiss` 在 UIKit 里是**空操作**（taurus 的 `presentedSheet` 也是先走到顶）。
 ///
 /// ⚠️ 属性名是 `parent`：`parentViewController` 是它的**旧名**（ObjC 时代），
-/// Swift 里这么写会报 `has been renamed to 'parent'`编译现场）。
+/// Swift 里这么写会报 `has been renamed to 'parent'`（编译现场）。
 private extension UIViewController {
     func topmostPresented() -> UIViewController {
         var top = self

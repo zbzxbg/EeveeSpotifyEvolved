@@ -31,7 +31,7 @@ struct AppleMusicLyricsOverlayView: View {
     var showsProviderFooter: Bool
     /// 左右内边距。同样是 `var`，理由见上。
     var sideInset: CGFloat
-    /// 预览卡片顶部标题栏的高度（卡片高度 − 歌词视图高度，实测 39pt）。
+    /// 预览卡片顶部标题栏的高度（卡片高度 − 歌词视图高度，39pt）。
     ///
     /// 只有预览用：这段高度本来是 Spotify 的标题栏（`歌词` + 分享 + 展开），
     /// 现在由我们自己画（`previewHeader`），所以歌词内容要让出同样多的高度，
@@ -45,7 +45,7 @@ struct AppleMusicLyricsOverlayView: View {
     ///
     /// **"歌词进播放器"这一档要 `false`。**
     /// 歌词 · 分享 · 打开全屏歌词这几个按钮还在"，而那一行**是我们自己画的**：
-    /// 实测几何对得上 —— 容器 20,210,374,378、内边距 14、两个 40×32 的按钮 ⇒ 分享键中心
+    /// 几何对得上 —— 容器 20,210,374,378、内边距 14、两个 40×32 的按钮 ⇒ 分享键中心
     /// 319pt、全屏键中心 364pt，照片里量的正是 319 / 364。原生那一行（`lyrics-share-button`
     /// 那三颗）在**列表里那张被折成 0 高的卡**上，
     /// 根本不在屏上 —— 所以藏原生入口永远是白费力气（见 `NowPlayingLyricsPlate` 里那段）。
@@ -177,7 +177,7 @@ struct AppleMusicLyricsOverlayView: View {
                         // 这里留 24pt（加上 `scrollInsets` 里那次同样的加法 ⇒ 实际 48pt）保持同样的"干净起点"。
                         top: showsProviderFooter ? 8 : (showsPreviewHeader ? 6 : 24),
                         leading: sideInset,
-                        // **底边距也要分档** —— 三档共用 120 就是用户报的那条。
+                        // **底边距也要分档** —— 三档共用 120 是错的。
                         //
                         // 「当歌词已经划到最后一行时，此歌词行不会停留在歌词视图的底部，
                         // 而是可以划动到歌词视图的中间行」。
@@ -248,7 +248,7 @@ struct AppleMusicLyricsOverlayView: View {
                     footerContent: showsShell ? AnyView(shellFooter) : nil,
                     closeContent: showsShell ? AnyView(shellClose) : nil,
                     // 全屏：曲名 + 歌手两行（62）；预览：一行「歌词」+ 两个按钮（39，
-                    // 由宿主按"卡片高度 − 歌词视图高度"实测传入）。
+                    // 由宿主按"卡片高度 − 歌词视图高度"传入）。
                     //
                     // 预览的兜底值刻意是 39 而不是 62：量不到卡片容器时（退化挂到歌词
                     // 视图上）用全屏那两行的高度会让标题栏占掉卡片 1/5 的高度，
@@ -260,7 +260,7 @@ struct AppleMusicLyricsOverlayView: View {
                     // 会把整条标题栏推到卡片外面 —— 表现就是"预览一个按钮都没有"。
                     //
                     // 但预览也不能死贴卡片顶：卡片那块标题栏高度（`previewHeaderInset`，
-                    // 实测 64）比我们这一行（≈32）高，Spotify 原来那一行是**竖直居中**的
+                    // 64）比我们这一行（≈32）高，Spotify 原来那一行是**竖直居中**的
                     // （卡片上留 16pt，行本身 48）。这里补上同样的居中偏移，
                     // 自绘的「歌词」才会落在原生那一行的位置上。
                     headerTopInset: showsProviderFooter

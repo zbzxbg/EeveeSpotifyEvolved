@@ -12,7 +12,7 @@ struct NowPlayingTapGroup: HookGroup {}
 
 /// 播放键那个类上的 `uiButtonTapped` 钩子（**探测到才挂**，见 `installTapTargetIfNeeded`）。
 ///
-/// ⚠️ 实测在 9.1.88 上**从不触发**：真正生效的是挂在播放键内部 `UIControl` 上的
+/// ⚠️ 在 9.1.88 上**从不触发**：真正生效的是挂在播放键内部 `UIControl` 上的
 /// `NowPlayingPlayTapTarget` 那条。留着它只是多一次 `class_getInstanceMethod` 探测的代价。
 class PlayButtonTapHook: ClassHook<UIView> {
     typealias Group = NowPlayingTapGroup
@@ -28,7 +28,7 @@ class PlayButtonTapHook: ClassHook<UIView> {
             // **这一行在身份判断之前**。
             // 而那一条只能证明
             // "门面没收到"。这一行把"看到了但没认下"与"根本没看到"分开。
-            // ⚠️ 实测：这条路（`uiButtonTapped`）在 9.1.88 上**从不触发** ——
+            // ⚠️ 这条路（`uiButtonTapped`）在 9.1.88 上**从不触发** ——
             // 真正生效的是 `installTapTargetIfNeeded` 挂在内部 `UIControl` 上的那条。
             NowPlayingControlsPlate.noteTapSeen(from: hooked)
             NowPlayingControlsPlate.notePlayTapped(from: hooked)
@@ -82,13 +82,13 @@ final class NowPlayingPlayTapTarget: NSObject {
 //
 // 装这一组 hook。
 //
-// `layoutSubviews` 是 UIView **一定会被调用**的方法（不是可选方法），所以这里不存在
+// `layoutSubviews` 是 UIView **一定会被调用**的方法（不是可选方法），所以不存在
 // "类没覆写就 `Failed to hook method`"那条风险；但**类本身在不在**仍要先问一句
 // （`NSClassFromString`），不在就只打一行日志、不留给 Orion 报非致命错误 —— 仓库惯例。
 //
 // **第二条钩子走"探测再挂"**（`uiButtonTapped`）：那个选择器只出现在 pw 自己的
-// `objc-methods.txt` 里（pw 基线 9.1.78），而**我们的 证明不了它在不在**
-// —— 它的 `[selectors]` 桶连 `layoutSubviews` / `viewDidAppear:` 都没有，不是完整清单。
+// `objc-methods.txt` 里（pw 基线 9.1.78），我们的二进制证明不了它在不在 —— 它的
+// `[selectors]` 桶连 `layoutSubviews` / `viewDidAppear:` 都没有，不是完整清单。
 // 所以先用 `class_getInstanceMethod` 探一次：探到才激活；探不到只打一行，
 // **功能不消失**，只是字形退回"跟布局回合 + 0.3s 节拍"（慢一拍）。
-// 这正是仓库里 SponsorBlock 探测 `addPlayerObserver:` 的同一套写法。
+// 这与仓库里 SponsorBlock 探测 `addPlayerObserver:` 是同一套写法。

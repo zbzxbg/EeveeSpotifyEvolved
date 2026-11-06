@@ -20,11 +20,8 @@ class MusixmatchLyricsRepository: LyricsRepository {
     // ⚠️「删除间奏符号 ♪」那颗开关**整体退役** —— 键 / Toggle / 绑定日志
     // / l10n 一起摘掉（完整清单见 `NgzhwmSettingsViewModel` 顶部）。
     //
-    // 这里原先有两个成员：
-    // · `shouldRemoveMxmInterludeSymbol`（读 `ngzhwm_removeMxmInterludeSymbol`）；
-    // · `cleanedMxmLyricsText`（开关开着时把**含** ♪ 的行清成空白）。
-    // 它们只服务纯文本档，而"清成空白"恰恰是用户这次否掉的那条路：空行在渲染层里
-    // 照样占一行高度，看着就是"漏了一句词"。纯文本档现在也走**整行丢弃**。
+    // 纯文本档也走**整行丢弃**：空行在渲染层里照样占一行高度，看着就是"漏了一句词"，
+    // 所以不需要"把含 ♪ 的行清成空白"那一套。
 
     private func isNgzhwmRomanizationEnabled(for romanizationLanguage: String) -> Bool {
         switch romanizationLanguage.lowercased() {
@@ -70,7 +67,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
     private let lyricsCache = NSCache<NSString, CachedLyrics>()
 
     private func getCacheKey(for query: LyricsSearchQuery) -> String {
-        // 这里原先还带一位「删除间奏符号 ♪」开关 —— 那颗开关已退役
+        // 指纹不含「删除间奏符号 ♪」那一位（开关已退役，间奏行无条件丢弃），所以比旧版少一位。
         // （间奏行无条件丢弃），所以指纹少一位。缓存键变了没有副作用：它只让**升级之后**
         // 的第一首重新取一遍词，本来就不该跨版本复用旧结果。
         let romanizationSettings = [
@@ -607,7 +604,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
             //
             // ⚠️ 三份数组是**按下标一一对应**的（`lyricsLines` / `officialRomanizedLines` /
             // `translation.lines`）⇒ 剔行必须**一起剔**，否则罗马字与翻译会整体错位一行
-            // （那正是用户报过的"某行翻译跑到上一行"这一类现象的同族）。
+            // （否则罗马字与翻译会整体错位一行，就是"某行翻译跑到上一行"那一类现象）。
             let keep = lyricsLines.indices.filter { !isMxmInterludeRow(lyricsLines[$0].content) }
             let droppedRows = lyricsLines.count - keep.count
             if droppedRows > 0 {

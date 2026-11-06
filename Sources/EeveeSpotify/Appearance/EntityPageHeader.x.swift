@@ -45,7 +45,7 @@ enum EntityPageHeaderManager {
     private static var cachedPlay: UIView?
     private static var cachedTrailing: UIView?
     private static var cachedCreatorLink: UIView?
-    /// 封面元素与"那一块文字"也缓存 —— 这两次原来是**每帧**各一次整棵子树搜索
+    /// 封面元素与"那一块文字"也缓存 —— 不缓存的话**每帧**各要一次整棵子树搜索
     /// （`eeveeFindView(layout, "Components.Header.UI.ArtworkImage")` / `blockIn(layout,…)`）。
     private static var cachedCover: UIView?
     private static var cachedBlock: UIView?
@@ -459,7 +459,7 @@ enum EntityPageHeaderManager {
             return view.isKind(of: fullbleedClass)
         }
 
-        // 这两个原来是每帧各一次整棵子树搜索，走缓存（同上面那五个挂点）。
+        // 这两个不缓存就要每帧各一次整棵子树搜索（同上面那五个挂点）。
         let cover = find("Components.Header.UI.ArtworkImage", in: layout, cache: &cachedCover) ?? fullbleed
         var block: UIView
         if let cached = cachedBlock, cached.window != nil, cached.isDescendant(of: layout) {
@@ -569,7 +569,7 @@ enum EntityPageHeaderManager {
         // **底边锚到"列表第一行上沿"**（歌单页两种都开：普通歌单与生成歌单）。
         // 我们这一块是**贴底排**的，底边就是"内容最低能到哪里"：
         // · 普通歌单：`block` 底边 = `PL.Header` 底边 = 列表起点 ⇒ 用 `block` 底边；
-        //   原来是 `y = 0` + 高度里加 `coverDrop`，那一截会把内容**推到 block 下面的列表里**；
+        //   用 `y = 0` + 高度里加 `coverDrop` 的话，那一截会把内容**推到 block 下面的列表里**；
         // · 生成歌单：`block` 所在的布局层比页头真正占的高度高 ⇒ 拿 `visibleCells` 量到的
         //   第一行上沿当底边。
         // 两者取**更小的那个**（内容既不能进列表、也不能掉出块底），`y` 由底边反推 ⇒
@@ -829,7 +829,7 @@ enum EntityPageHeaderManager {
     /// 这一页是不是**歌单页**（普通 / This Is / 电台都算）。
     ///
     /// taurus 的判据：responder chain 上**第一个 VC** 的类名含 `FreeTierPlaylist`。这里多认一条
-    /// `PL.Header` 祖先 —— 普通歌单页那条路已经验证过，不让它因为 VC 换名而失效。
+    /// `PL.Header` 祖先 —— 普通歌单页那条路走的就是这个祖先，不让它因为 VC 换名而失效。
     ///
     /// ⚠️ 只看类名、不看 id：`ThisIsArtistHeaderPluginImpl` 那类插件页头**没有** id 可看。
     /// ⚠️ 判据**故意只收 `FreeTierPlaylist`**：这一条同时管着"要不要藏 Spotify 自己那颗 Play"
@@ -1176,45 +1176,22 @@ enum EntityPageHeaderManager {
         )
     }
 
-    // MARK: - 艺人页（**第三条路**）
+    // MARK: - 艺人页
     //
-    // 艺人页页头：照片满幅铺到页面顶部并向页面底色渐隐，名字与月听众居中落在渐隐底部，
-    // 下面一行 shuffle / 白色 Play 胶囊 / Follow（照 Apple Music）。
+    // 照片满幅铺到页面顶部并向底色渐隐，名字与月听众居中落在渐隐底部，
+    // 下面一行 shuffle / Play 胶囊 / Follow（照 Apple Music）。
     //
-    // 页面判据是 **`creator-page`**；页头容器是 `TemplateKit` 的 **`HeaderContainer`** ——
-    // 那个容器**身上没有 accessibility id**，只能按类名认。
+    // 页面判据是 `creator-page`；页头容器是 TemplateKit 的 `HeaderContainer`，
+    // 它身上没有 accessibility id，只能按类名认。节点形状：
     //
-    // ⚠️ 两个**绝不能动**的地方：
-    // · 这里**只用空 mask 藏东西、绝不设 hidden** —— 页头在 `OverflowStackView` 里，
-    // 一行里最"高"的视图被 hidden 时它会 force-unwrap nil 并 trap（见 `eeveeBlank`）；
-    // · **不要强制** `…context_menu_in_navigation_bar_enabled_artist` 那个 flag（同一个 trap）。
+    // HeaderContainer(0,0,414,520) > ImageHeaderView
+    //   > ShadowContainer `Components.Header.UI.ArtworkImage`（照片，414 全宽）+ GradientView
+    //   → AdaptiveTitle（名字）→ Metadata（月听众）→ OverflowStackView（Follow 那一行）
+    //   → play（`header-play-button`）
     //
-    // 真机树（`creator-page` dump）：
-    //
-    // ```
-    // 14.TemplateView@0,0,414,896,id=creator-page
-    // 15.UIView@0,0,414,896,id=CreativeWorkPlatform.Tab      ← 和专辑页同一个容器（要清底）
-    // 16.UIScrollView…id=PCFFTabLayoutViewController.containerScrollView
-    // 17.UIStackView@0,0,414,1416
-    // 18.HeaderContainer@0,0,414,520                        ← hero 宿主（420 与 584 两档都出现过）
-    // 19.ElementView<URL,Any,Any>@0,420,414,100
-    // 20.ImageHeaderView@0,0,414,100
-    // 22.ShadowContainer@0,0,414,414,alpha=-0.15,id=Components.Header.UI.ArtworkImage  ← 照片，全宽 414
-    // 22.GradientView@0,-100,414,200                        ← 照片上那层渐变（同样要藏）
-    // 22.AdaptiveTitle@0,-154,382,212,id=Encore.AdaptiveTitle   ← 名字
-    // 21.UIStackView@16,-16,107,24,id=ImageHeaderView.VerifiedBadge
-    // 23.OBJC_ONLY_Label@0,0,326,18,id=Components.Header.UI.Metadata  ← "xx 月听众"
-    // 22.OverflowStackView@0,0,290,48                       ← ⚠️ 就是它（在里面 hidden 会 trap）
-    // 23.ElementView<URL,Any,Any>@0,4,58,40                 ← Follow（`Encore.Button.Secondary`，"关注"）
-    // 24.EncoreButton@0,0,48,48,id=Components.UI.ContextMenuButton-…
-    // 22.ElementView<URL,Any,Any>@338,0,68,48               ← play（`header-play-button`）
-    // 22.HeaderNavigationBar@0,0,414,100 > 23.GradientView@0,0,414,100
-    // 18.UIView@0,520,414,896,id=PCFFTabLayoutViewController.tabsViewAccessibilityID
-    // 19.UIView@0,0,414,44,id=Components.UI.TabsSectionHeading  ← Music / Video / Merch
-    // ```
-    //
-    // 注意 `HeaderContainer` 是 **520 / 584pt**、照片是 **414×414 全宽**；Follow 那一行在
-    // `OverflowStackView` 里 —— 也就是"藏 header 里的东西不能碰 hidden"这条在本机同样成立。
+    // ⚠️ 两处绝不能动：这里**只用空 mask 藏、绝不设 hidden** —— 页头在 `OverflowStackView`
+    // 里，一行里最"高"的视图被 hidden 时它会 force-unwrap nil 并 trap（见 `eeveeBlank`）；
+    // 同理不强制 `…context_menu_in_navigation_bar_enabled_artist` 那个 flag。
     static func applyToArtistPage(_ page: UIView) {
         guard isEnabled, !applying else { return }
         guard page.accessibilityIdentifier == "creator-page" else {
@@ -1373,7 +1350,7 @@ enum EntityPageHeaderManager {
         }
         if bioStale, artistBioSearchPasses < 2 {
             artistBioSearchPasses += 1
-            // 判据用**真机证实过的那三个名字**（见 `eeveeArtistBioCard`）。不要把这个类排在
+            // 判据用**真机树里那三个名字**（见 `eeveeArtistBioCard`）。不要把这个类排在
             // 第一判据 —— 它在这一版艺人页上一次都没出现过，排前面会让后面那条 id 前缀永远轮不到。
             cachedArtistBio = eeveeArtistBioCard(in: page)
                 ?? eeveeFindView(page, classNameContains: "SPTArtistAboutBiographyView")
@@ -2039,7 +2016,7 @@ enum EntityPageHeaderManager {
     /// （标题在 **y≈1020pt**，窗口只有 896pt），Spotify 用的是**懒加载**：没滚到就一直是
     /// `RetrievalRowLoadingElementUI … 正在加载`。
     ///
-    /// 而唯一的读取时机原来是**布局拍**（`applyToArtistPage` → `captureLatestRelease`）——
+    /// 而只靠**布局拍**（`applyToArtistPage` → `captureLatestRelease`）读不行 ——
     /// 页头一旦稳定、列表不再重排，**布局拍就不来了** ⇒ 真正滚到那一块的时候没人去读。
     /// 同一个原因也会让它落到兜底，于是选错专辑（同名艺人）、而且不可点。
     ///

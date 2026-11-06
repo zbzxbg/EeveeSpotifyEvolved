@@ -6,32 +6,23 @@ import ObjectiveC.runtime
 /// 听歌页「卡片类」清爽开关 —— 把 Spotify 塞在听歌页滚动区里的**推荐卡**折起来。
 ///
 /// ## 为什么是"折起来"而不是 `isHidden`
-///
-/// 这些卡片不是普通子视图，是 `NowPlaying_ScrollAPI` 那套 collection view 的 **cell**。
-/// 给 cell 设 `isHidden` 只会把内容藏掉、**高度还在**，页面上留下一片空白；本文件
-/// （机制移植自上游 `Player/PlayerDeclutter.x.swift`）拦截
-/// `preferredLayoutAttributesFittingAttributes(_:)`，把返回尺寸的**高度改成 0** ——
-/// 卡片真的被折掉，后面的内容顶上来。
+/// 这些卡片是 `NowPlaying_ScrollAPI` 那套 collection view 的 **cell**。给 cell 设
+/// `isHidden` 只会把内容藏掉、**高度还在**，页面上留下一片空白；本文件拦截
+/// `preferredLayoutAttributesFittingAttributes(_:)`，把返回尺寸的**高度改成 0**。
 ///
 /// ## 判定方式：marker 表 + 每格缓存
-///
 /// 一个 hook 挂在 `_TtC12Element_List18CollectionViewCell` 上；判定是"把这一格子树里
 /// 所有类名 + 无障碍 id 拼成一个字符串，看它包含哪个 marker"：
-///
 /// · 先要求串里出现 `NowPlaying_ScrollAPI` —— 只认听歌页那个滚动列表，别处同款 cell 不碰；
 /// · 再按 `PlayerCard.markers` 逐条匹配，命中且**这张卡被关掉**才折；
 /// · 总开关（`hidePlayerCards`）只对"不属于 `NowPlaying_ModesImpl`"的格子生效 ——
-/// 那三个 unit 是播放控件/信息区，不属于"卡片"。
-///
-/// marker 全部在 里逐条查过。
+///   那三个 unit 是播放控件/信息区，不属于"卡片"。
 ///
 /// ⚠️ **故意不做按钮类**（shuffle / repeat / addTo / queue / share / connect / 歌词预览）：
-/// 藏掉按钮等于功能没了，而其中有几颗你还在用。这一批只折卡片。
+/// 藏掉按钮等于功能没了。这一批只折卡片。
 ///
-/// ## 开关是运行期读的
-///
-/// `isHidden(_:)` 每次都读 UserDefaults ⇒ 开关一改，下一次 layout 就生效；
-/// `refresh` 再补一次"当场生效"（作废缓存 + 让那个 collection view 重新问尺寸）。
+/// `isHidden(_:)` 每次都读 UserDefaults ⇒ 开关一改，下一次 layout 就生效；`refresh`
+/// 再补一次"当场生效"（作废缓存 + 让那个 collection view 重新问尺寸）。
 struct PlayerCardsDeclutterGroup: HookGroup {}
 
 enum PlayerCard: String, CaseIterable {
@@ -42,7 +33,7 @@ enum PlayerCard: String, CaseIterable {
     /// 判定用 marker：命中元素子树里任意类名 / 无障碍 id 的**子串**。
     ///
     /// 为什么不写全名：这些是 Swift mangled 名（`_TtC22Lyrics_CardElementImpl19LyricsCardElementUI`
-    /// 之类），模块名那一段才是稳定的、也是上游实测过的判据。
+    /// 之类），模块名那一段才是稳定的、也是上游用的判据。
     var markers: [String] {
         switch self {
         case .lyricsCard: return ["Lyrics_CardElementImpl"]
@@ -116,7 +107,7 @@ enum PlayerCardsDeclutter {
     // 一次判定结果。
     //
     // 为什么要缓存：`preferredLayoutAttributesFittingAttributes(_:)` 在滚动时会被**每一格
-    // 每一拍**问到，而判定要遍历整格子树（几十到几百个视图）。上游实测这层缓存是必需的。
+    // 每一拍**问到，而判定要遍历整格子树（几十到几百个视图）。这层缓存是必需的。
     //
     // 为什么要 `generation`：开关一改，**旧判定立刻作废** —— 否则"刚被折过的格子"会一直
     // 复用 `collapse=true`，用户关掉开关卡片也不回来。`refresh` 里自增。

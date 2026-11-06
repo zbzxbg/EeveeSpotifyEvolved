@@ -20,7 +20,7 @@ enum SpotifyResponsePatcher {
             // 上游 `SpotifyResponsePatcher.swift:26` 就是这么写的，而它每处读取都
             // `?? UserDefaults.cachedCustomizeData` —— 为的是**新进程刚起、随包快照没拿到、
             // 服务器又回 304** 那一次仍然有 body 可交（交不出 = App 拿到空配置 =
-            // premium/可播放性降级 = 歌单发灰/歌曲消失/放不动，正是用户报的那三个症状）。
+            // premium/可播放性降级 = 歌单发灰/歌曲消失/放不动）。
             guard !isSeeding else { return }
             UserDefaults.cachedCustomizeData = newValue
             UserDefaults.cachedCustomizeVersion = newValue == nil ? nil : currentSpotifyVersion
@@ -71,42 +71,18 @@ enum SpotifyResponsePatcher {
 
     // MARK: - customize 种子
     //
-    // 启动时用随包快照喂一份 `cachedCustomizeData`。
+    // 启动时用随包 `.bnk` 快照喂一份 `cachedCustomizeData`。
     //
-    // ── 不这么做会怎样（真机实证）
-    // 冷启动第一个 `customize` 往往是 **304、没有 body**：Spotify 自己的 HTTP 缓存里
-    // 已经有那份配置，服务器只回"没变"。于是：
+    // 冷启动第一个 `customize` 往往是 **304、没有 body**（Spotify 自己的 HTTP 缓存里
+    // 已有配置）。没有 body 就进不了 `patch`，而 `cachedCustomizeData` **唯一**的写入点
+    // 就在 `patch` 的 customize 分支 —— 路径自我死锁：304 兜底没有可回放的东西，
+    // `modifyRemoteConfiguration` 一次都不跑，所有 flag 替换静默失效。
     //
-    // 没有 body → 进不了 `patch` → `cachedCustomizeData` 永远是 nil
-    // → 304 兜底（`DataLoaderServiceHooks.x.swift` 的 304 分支）没有可回放的东西
-    // → `modifyRemoteConfiguration` 一次都不跑
-    // → `[Flags]` 一条都不打、所有 flag 替换（含Flag 覆盖）全部静默失效
-    //
-    // 关键是：`cachedCustomizeData` **唯一**的写入点在 `patch` 的 customize 分支里，
-    // 而 `patch` 只有在**已经拿到 body** 之后才会被调用 —— 这条路径自我死锁，
-    // 一旦第一个响应是 304，就再也回不来了。
-    //
-    // ── 同设备对照（同一台 iPhone12,1 / iOS 27 / Spotify 9.1.86）
-    // · 09-30（14 号前后的日志）：首次 customize 有数据 → `[Flags]` **61 行**；
-    // · 10-01（`eeveespotify_debug_shared 12.log:351`）：`[HCUS] Missing buffered body
-    // … /v1/customize` → `[Flags]` **0 行**。
-    // 差别只在"这次有没有拿到 body"，不是"Spotify 不下发"。
-    //
-    // ── 为什么种子用 `.bnk` 是安全的
     // `.bnk` 是 `ResolveConfiguration` 的序列化（`BundleHelper.resolveConfiguration`
-    // 本来就这么读它），而 `UcsResponse+Extension` 已给出桥接：`assignedValues`
-    // 就是 `resolve.configuration.assignedValues`。于是：
+    // 本来就这么读），经 `UcsResponse+Extension` 桥接后包成 `CustomizeMessage(response:)`。
     //
-    // .bnk → ResolveConfiguration → ResolveResponse.configuration
-    // → UcsResponse.resolve.configuration → 包成 CustomizeMessage(response:)
-    //
-    // 刻意**只放这一个字段**：`CustomizeMessage` 是个 oneof（`response` / `error`），
-    // 我们只填 `response`；种子里**不带 `attributes`** —— 那是账号态（Premium / 国家），
-    // 必须由线上响应说了算，绝不能用旧快照去顶（`modifyRemoteConfiguration` 里的
-    // 「覆盖配置」分支同样只动 `resolve.configuration`，理由一致）。
-    //
-    // 幂等：只填空位（`_cachedCustomizeData == nil`），真 body 一到就被 `patch` 覆盖
-    // 成线上版本，种子自然退场。
+    // 只填 `response`，种子里**不带 `attributes`** —— 那是账号态（Premium / 国家），
+    // 必须由线上响应说了算。幂等：只填空位，真 body 一到就被 `patch` 覆盖。
     static func seedCustomizeDataIfNeeded() {
         lock.lock()
         let alreadySeeded = _cachedCustomizeData != nil
@@ -231,7 +207,7 @@ enum SpotifyResponsePatcher {
     //
     // 为什么要去线上找它：
     // · **面 B**（与「关于艺人」并列的「歌词」预览卡片）的门控**够不着** ——
-    // `SPTPlayerTrackHook.metadata` 那个覆写实测**每次都被调用**、也**确实返回了**
+    // `SPTPlayerTrackHook.metadata` 那个覆写**每次都被调用**、也**确实返回了**
     // `has_lyrics = "true"`，可面 B 依然只有 SECRET 出现。说明门控读的是 Swift 内部
     // 字段、走静态派发，ObjC 侧 getter 的改写到不了它那里（与取证报告证据 6 一致）。
     // · 而 `has_lyrics` 出现在一个 `[String: String]` 字典里，同字典里还有
@@ -275,7 +251,7 @@ enum SpotifyResponsePatcher {
     /// hex 报告。**用来修正上面那条推论的证据等级**：`no needle`（扫不到 "yric"）
     /// **不能**当成"服务器没下发歌词元素"——
     /// · scrollsita 是 protobuf，元素类型极可能是**枚举整数**，字符串永远不会出现；
-    /// · 实测 3 条 scrollsita（含 Spotify 有词的 SECRET 与没词的 最後の希望）都是
+    /// · 3 条 scrollsita（含 Spotify 有词的 SECRET 与没词的 最後の希望）都是
     /// `no needle`，body 里只有 artist/track/section/concert URI。
     /// 所以额外把响应体前 512 字节按 hex 打出来（每 path 最多 3 次、只在体积变大时），
     /// 让"两条响应到底差在哪个字段"可以离线比对，而不是只能比可打印字符串。
@@ -697,7 +673,7 @@ enum SpotifyResponsePatcher {
                 || url.isTrialsFacade || url.isPremiumMarketing || url.isPendragonFetchMessageList
                 || url.isPushkaTokens
                 || url.path.contains("signup/public")
-                // ⚠️**`apresolve` 从这里删掉了** —— 见
+                // ⚠️ **`apresolve` 不在这里拦** —— 见
                 // `blockedResponseData` 里那段说明（它不是登出端点，是"音频接入点在哪"）。
                 || url.path.contains("pses/screenconfig")
                 || url.path.contains("v1/customize")
@@ -744,16 +720,14 @@ enum SpotifyResponsePatcher {
             // actual logout codepath.
             return #"{"status":"OK"}"#.data(using: .utf8)!
         }
-        // 「退出重进 Spotify **大概率无法播放全部歌曲**（位置冻在 9.5s、时长却是 238s）」
-        // 「歌单里的歌**全部消失**，重进全是灰色；有时只显示一部分」
+        // 症状：「退出重进 Spotify **大概率无法播放全部歌曲**（位置冻在 9.5s、时长却是
+        // 238s）」「歌单里的歌**全部消失**，重进全是灰色；有时只显示一部分」。
         //
-        // **`apresolve` 以前也在上面那一串里** —— 那是**上游带过来的**一行（`git log -S` 追到
-        // 的导入提交，没有任何说明）。但 `apresolve.spotify.com` **不是登出端点**：
-        // 它回答的是「**音频/内容的接入点在哪**」（真响应形如 `{"accesspoint":[…]}`）。
-        // 我们却给它回 `{"status":"OK"}` + 30 秒后整条拦掉（`shouldBlock` 里那一行，同时删了）
-        // ⇒ App 拿不到接入点 ⇒ 三件事一起出现：
-        // `⚠️ position stalled at 9.5s for ~3s (dur=238.0s)`）；
-        // · 内容请求打不到接入点 ⇒ **歌单列表空/只加载一部分**；
+        // **`apresolve` 不该被拦**：`apresolve.spotify.com` **不是登出端点**，它回答的是
+        // 「**音频/内容的接入点在哪**」（真响应形如 `{"accesspoint":[…]}`）。
+        // 给它回 `{"status":"OK"}` + 30 秒后整条拦掉 ⇒ App 拿不到接入点 ⇒ 三件事一起出现：
+        // · 播放位置冻住（`⚠️ position stalled at 9.5s for ~3s (dur=238.0s)`）；
+        // · 内容请求打不到接入点 ⇒ **歌单列表空 / 只加载一部分**；
         // · 可播放性判不出来 ⇒ **整列表变灰**。
         // 这也解释了"换代理没用"（这是本地行为）与"退出重进后大概率"（30 秒后才开始拦）。
         // ⇒ 现在**原样放行**：让它自己去解析接入点。登出保护一个都没少
@@ -823,7 +797,7 @@ enum SpotifyResponsePatcher {
                 didReportBodyArrival = true
                 // ⚠️ `launchAt` 是**非可选**的 `Date`（`private static let launchAt = Date`）
                 // ⇒ 直接算差值，**不能写 `launchAt.map { … } ?? 0`**编译错：
-                // `value of type 'Date' has no member 'map'`）。
+                // `value of type 'Date' has no member 'map'`。
                 let seconds = Date().timeIntervalSince(launchAt)
                 writeDebugLog(
                     String(

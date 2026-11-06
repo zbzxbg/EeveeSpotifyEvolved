@@ -1,14 +1,11 @@
 import SwiftUI
 
-/// 「调试」页：排查/验证型开关 + 只读转储工具（见 `EeveeDebugSettingsViewModel` 的说明）。
+/// 「调试」页：排查/验证型开关 + 只读转储工具（见 `EeveeDebugSettingsViewModel`）。
 ///
 /// 现在的几行分三类：
 /// · **A/B 开关**（补充模块5 / 歌词入口开关）—— 会改行为、待定性，验完就写死 + 删 key + 删 l10n；
-/// · **只读转储**（更详细的日志记录 = 视图树 + customize 响应体；不改任何行为；
-/// · **长期住户**：导出前脱敏从主设置页的「Debug」区搬来，默认开）。
-///
-/// 「转储视图树，转储响应体两个融合，换成 更详细的日志记录」；
-/// 并删掉了「替换寻找歌词时的占位符」那颗彩蛋（连同 UserDefaults 键与 l10n）。
+/// · **只读转储**（更详细的日志记录 = 视图树 + customize 响应体）—— 不改任何行为；
+/// · **长期住户**：导出前脱敏，默认开。
 ///
 /// 所有 UserDefaults 键**都沿用旧的**（`ngzhwm_inject_lyrics_card_element` /
 /// `redact_shared_log` / `dumpViewTree` / `dumpCustomizeBody` 等）⇒ 设备上已设的值原样保留；
@@ -101,18 +98,17 @@ struct EeveeDebugSettingsView: View {
         }
     }
 
-    /// 「分享日志前脱敏」——**Debug区搬进「调试」页**。
+    /// 「分享日志前脱敏」。
     ///
     /// 默认**开**（`UserDefaults.redactSharedLog` 的 getter：键不存在 ⇒ true）：
     /// 导出这个动作 99% 是为了把日志发给别人，而日志主体就是"你听了哪些歌"。
     ///
     /// 只影响**导出**的那一份（`DebugLogSanitizer.sharedLogFile(from:redact:)`，出口在
-    /// `EeveeSettingsView` 的导出按钮那一节）：写入口的凭证/设备标识脱敏没有开关、也不受它控制。
+    /// `EeveeSettingsView` 的导出按钮那一节）；写入口的凭证/设备标识脱敏没有开关、也不受它控制。
     /// 脱敏版生成失败时导出会**直接报错**，绝不回退明文（fail-closed）。
     ///
-    /// ⚠️ 这一节与上面几节不同：不是"验证完就删"的临时件，而是**导出的隐私默认值**。
-    /// 它不在 `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，
-    /// 用 `Binding` 直接读写）—— 没有新状态要记，l10n 键与 UserDefaults 键都没变。
+    /// ⚠️ 这一节不是"验证完就删"的临时件，而是**导出的隐私默认值**。它不在
+    /// `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，用 `Binding` 直接读写）。
     @ViewBuilder private func redactSharedLogSection() -> some View {
         Section(footer: Text("redact_shared_log_description".localized)) {
             Toggle(

@@ -18,7 +18,7 @@ import Foundation
 /// `URLSession` 的 delegate 回调里直接拿得到，所以记下它、用 `configuration.urlCache` 删除，
 /// 两种配置都能覆盖。
 ///
-/// 删除时打一行：命中 → 删掉了多少字节（说明这一层确实在缓存歌词）；没命中 → 说明歌词不在
+/// 删除时打一行：命中 → 删了多少字节（说明这一层确实在缓存歌词）；没命中 → 说明歌词不在
 /// 这个 URL 缓存里（客户端自己攥着解析后的歌词），那种情况只有重启能换过来。
 enum LyricsURLCachePurge {
 

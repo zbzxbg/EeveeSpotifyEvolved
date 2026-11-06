@@ -84,7 +84,7 @@ struct LyricsTypographyScale {
     /// 全屏歌词页。
     ///
     /// ⚠️ 字号是**被容器宽度约束的**，不能凭观感调大。
-    /// 实测（`[LyricWrap] text=` 字段，26pt / 366pt 容器）：
+    /// 例（`[LyricWrap] text=` 字段，26pt / 366pt 容器）：
     /// "I'm tryna put you in the worst mood ah" → 479.4pt
     /// "Twenty racks a table cut from ebony" → 455.6pt
     /// 也就是 **26pt 下每字符约 12.6pt**，38 字符的行要 479pt —— 远超 366pt 容器，
@@ -130,7 +130,7 @@ struct LyricsTypographyScale {
 
     /// 内嵌「预览歌词」卡片：容器约 200pt 高、且更窄，比全屏再小一档。
     ///
-    /// 20pt 时实测 "Twenty racks a table cut from ebony" ≈ 339pt，
+    /// 20pt 时 "Twenty racks a table cut from ebony" ≈ 339pt，
     /// 能塞进预览的 342pt 容器（不折行）。再大就开始折。
     static let preview = Self(
         primaryFontSize: 20,

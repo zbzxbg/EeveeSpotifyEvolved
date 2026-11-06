@@ -30,7 +30,7 @@ enum AmllLyricsMapper {
 
     /// - Parameter authorUsername: `AmllSongItem.primaryAuthorUsername`（歌词主要贡献者的 GitHub
     /// 名）。**AMLL 仓库 README 明确希望下游展示歌词作者**，而这一路
-    /// 以前**只把它打进日志**、从来没进过署名 —— 的署名永远是裸的源名。
+    /// 以前**只把它打进日志**、没进署名 ⇒ 署名永远是裸的源名。
     /// - Parameter logTag: 日志前缀。默认 `AMLL`；Apple Music 官方 TTML 那条线传 `AMTTML`
     static func makeDto(
         _ parsed: AmllTtmlResult,
@@ -203,7 +203,7 @@ enum AmllLyricsMapper {
     // 主词序列（**不含**背景人声）。
     // 返回 nil 表示该行没有可用逐词数据（退回行级）。
     //
-    // 背景人声（`ttm:role="x-bg"`）曾经被合并成 `主词 (背景人声)` 一行，理由是
+    // 背景人声（`ttm:role="x-bg"`）单独成行，不能合并成 `主词 (背景人声)` —— 理由是
     // 「渲染层是单列单行模型，表达不了行内子行」。现在渲染层用的 `SynchronizedLyricText`
     // 已经支持把副唱画成主歌下方的一小行，所以这里改为**分离**输出
     // （见 `backgroundVocalDto(for:)`）：

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ⚠️ 为什么单开这个类型：
 /// 旧 `perform` **完全不看 HTTP 状态码**，把响应体直接丢给 `JSONDecoder`。
-/// 403 响应体；同一天同一台机器连续请求，出口 IP 是运营商 NAT、额度是很多人共用的），
+/// （403 响应体；同一天同一台机器连续请求，出口 IP 是运营商 NAT、额度是很多人共用的），
 /// 于是错误 JSON 被当成 release 解 → `DecodingError.keyNotFound("tagName")` →
 /// 界面上就变成"格式不正确"这句**误导人**的话。
 /// 现在：状态码先过闸，界面按**真实原因**说话（`EeveeUpdatesSettingsView`），
@@ -14,13 +14,13 @@ enum GitHubAPIError: Error {
     case rateLimited(reset: Date?)
     /// 404：仓库或路径不存在。
     ///
-    /// 更正（查"这条文案还用得到吗"时发现的）：
+    /// 两个接口对"仓库不存在"的处理不同：
     /// · `/releases/latest` 在"本仓库还没有 tag 化 release"时**确实**回 404 ——
     /// `getLatestRelease` 那条注释说的是对的，别改；
     /// · 但**列表**接口（`getReleases` → `/repos/<slug>/releases?per_page=30`）在同样情况下
     /// 回的是 **200 + `[]`**，只有仓库**不存在 / 改名 / 转私有**时才 404。
     /// ⇒ 这一支现在的含义就是"**仓库找不到了**"，界面文案（`updates_error_not_found`）
-    /// 已按这个真相改写（原来是"还没有 release，预期内无害"，对不上唯一能走到这里的场景）。
+    /// 已按这个真相改写（"还没有 release，预期内无害"对不上唯一能走到这里的场景）。
     case notFound
     /// 其它非 2xx（会把状态码原样带出来，方便日志与界面区分）。
     case httpStatus(Int)
@@ -32,14 +32,11 @@ enum GitHubAPIError: Error {
 
 /// GitHub 只读接口。
 ///
-/// ──两处修正（都与「更新日志」那次故障有关）
-/// ① **仓库 slug 不再写死**：用构建期生成的 `EeveeSpotify.repoSlug`
-/// （`Makefile` 从 `git remote get-url origin` 生成）。以前这里写死
-/// `zbzxbg/EeveeSpotify-ng-latest`，而那个名字已经改成 `zbzxbg/EeveeSpotifyEvolved`
-/// —— GitHub 对改名仓库会 302，于是"看起来还能用"，可一旦重定向没了（或换 owner）
-/// 两个接口会一起静默失效；而且**改名后的名字才是的那个**。
+/// ① **仓库 slug 不写死**：用构建期生成的 `EeveeSpotify.repoSlug`
+/// （`Makefile` 从 `git remote get-url origin` 生成）。写死旧名字时 GitHub 会 302，
+/// "看起来还能用"，但一旦重定向没了（或换 owner）两个接口会一起静默失效。
 /// ② **条件请求 + 短缓存**：`ETag` / `If-None-Match`，GitHub 对 **304 不计算额度**
-/// （官方规则），再加上 5 分钟新鲜窗口 —— 反复进出「更新日志」不再白烧那 60 次。
+/// （官方规则），再加 5 分钟新鲜窗口 —— 反复进出「更新日志」不再白烧那 60 次。
 final class GitHubHelper {
     private let apiUrl = "https://api.github.com"
     private let decoder = JSONDecoder()

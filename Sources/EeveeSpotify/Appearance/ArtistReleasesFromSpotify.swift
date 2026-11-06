@@ -2,23 +2,20 @@ import Foundation
 
 // MARK: - 「最新发布」：Spotify 自己的 Web API 那条数据线
 //
-// 艺人页那张卡片一直不出现 —— 页面里「热门新歌 / 最新发行」那一行
-// 是 `RetrievalRowLoadingElementUI` 的**骨架**，Spotify 懒加载，不滚到就永远不建 ⇒
-// 只读页面的那条路（`EntityPageHeaderManager.captureLatestRelease`）**进页必然读不到**，
-// 卡片就一直空着（刚进艺人页没有，重进之后可能就有了）。
+// 艺人页那张卡片一直不出现 —— 页面里「热门新歌 / 最新发行」那一行是
+// `RetrievalRowLoadingElementUI` 的**骨架**，Spotify 懒加载，不滚到就永远不建 ⇒
+// 只读页面的那条路（`EntityPageHeaderManager.captureLatestRelease`）**进页必然读不到**。
 //
-// ⇒ 这里补一条**不依赖页面**的数据线：用 `DataLoaderServiceHooks` 抓下来的 Bearer token 直接问
-// `api.spotify.com`。三条纪律：
+// ⇒ 这里补一条**不依赖页面**的数据线：用 `DataLoaderServiceHooks` 抓下来的 Bearer token
+// 直接问 `api.spotify.com`。三条纪律：
 //
-// · **只认名字对得上的艺人**（归一化后逐字相等）。同名不同人是这张卡最容易犯的错
-// （旧苹果目录那条就选错过：`Connect the World`）⇒ 对不上就返回 nil 并留一行日志，**绝不猜**；
+// · **只认名字对得上的艺人**（归一化后逐字相等）—— 同名不同人是这张卡最容易犯的错
+//   ⇒ 对不上就返回 nil 并留一行日志，**绝不猜**；
 // · 解析全部走 `Any` 转换 + 状态码判断，**不信任何字段一定存在、没有 force unwrap**；
 // · 回调**永远在主队列**（布局 / 视图那一侧都在主线程）。
 //
 // ⚠️ 令牌**绝不进日志**：`writeDebugLog` 会落盘、还会进系统统一日志（清不掉），
 // 所以这里连"令牌有多长"都不打。
-//
-// 一张「最新发布」卡片要的全部东西（Web API 版）。
 struct SpotifyArtistRelease {
     let title: String
     /// 已经排好版的日期文字（`2026年8月22日` / `2026年8月` / `2026`）—— 直接交给卡片画。
@@ -27,7 +24,7 @@ struct SpotifyArtistRelease {
     let artworkURL: URL?
     /// `spotify:album:…` —— 卡片的点击目标（交给 `SpotifyURIOpener.open`）。
     let albumURI: String
-    /// 接口回的**主艺人**名（已经核对过等于页面上那一位）。
+    /// 接口回的**主艺人**名（与页面上那一位相等）。
     let artistName: String
 }
 

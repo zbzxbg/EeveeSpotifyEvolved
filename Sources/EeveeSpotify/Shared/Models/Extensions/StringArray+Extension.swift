@@ -8,7 +8,7 @@ extension Array where Element == String {
         // 而 .original 会让**罗马化那三个开关**一起失效。
         //
         // ⚠️这里原来写的是"`.original` 会让 `toSpotifyLyricsData` 的总闸
-        // `canRomanize = false`" —— 那个总闸已经删掉了（原生 payload 不再罗马化，
+        // `canRomanize = false`" —— 那个总闸不存在了（原生 payload 不再罗马化，
         // 见 `LyricsDto.toSpotifyLyricsData`）。这个属性现在只服务**我们自己的渲染层**。
         if contains(where: { $0.containsJapaneseKanaForRomanization }) {
             return true

@@ -65,7 +65,7 @@ extension NowPlayingLyricsPlate {
         // so the cover stays and the lyrics wait."*
         guard let coverHostView = ensureCover(in: page, geometry: geometry),
               let coverImageView = coverImage else {
-            // ⚠️ 这行原来是中文 + **ASCII 双引号**做强调（`与"藏起原生封面"都做不了`），
+            // ⚠️ 这行不能中文 + **ASCII 双引号**做强调（`与"藏起原生封面"都做不了`），
             // 字面量被那两个引号提前截断 ⇒ CI 报 `expected ',' separator` /
             // `cannot find '藏起原生封面' in scope` / `extra argument in call`。
             // **日志文案一律用英文**（定下的规矩），中文强调改用「」也不会再踩这个坑。
@@ -139,7 +139,7 @@ extension NowPlayingLyricsPlate {
             didLogInstall = true
             // ⚠️ 不要用嵌套的双引号字面量（`\(a ? "x" : "y")` 那种）—— 本仓库第 6 条自检
             // `swift_string_check.py` 是按"闭合引号后面跟了什么字符"扫的，嵌套字面量会被它
-            // 当成"字符串被提前关掉"那次 CI 红就是这么来的）。先算成变量再插。
+            // 当成"字符串被提前关掉"（那次 CI 红就是这么来的）。先算成变量再插。
             let titleNote: String
             if geometry.titleRow == nil {
                 titleNote = "not found (no lift, expanding anyway)"
@@ -165,7 +165,7 @@ extension NowPlayingLyricsPlate {
                     + "title row \(titleNote)"
                     + staticNote
                     + supplementalNote
-                    // 三个锚点的**实测值**（`measure` 里算的，这里只管打印）——
+                    // 三个锚点的**量值**（`measure` 里算的，这里只管打印）——
                     // →68 那两片几何全靠它对齐，下一份日志一眼就能看出量到没有。
                     + " " + lastAnchorText
             )

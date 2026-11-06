@@ -268,24 +268,10 @@ func eeveeEnvFlag(_ name: String) -> Bool {
     return s == "1" || s == "true" || s == "yes" || s == "y"
 }
 
-// ── 这里曾经有一个"运行时类名探针"（`logPlayerTrackCandidates`）
-//
-// 它的目的：离线找出 9.1.x 上到底是哪个类提供 `metadata`（`has_lyrics` 就在那个
-// 字典里），好把 `SPTPlayerTrackHook.targetName` 改成真名。
-//
-// **已经删掉了**，原因是它连续两次造成启动崩溃，而且一次都没能给出可用结果：
-// · 第一次：挂在「启用日志记录」下面 → 开日志 + 杀后台 + 重开 = 启动后约 291ms
-// 崩（EXC_BREAKPOINT/SIGTRAP，栈在 `_CF_forwarding_prep_0` → `swift_getObjectType`，
-// 寄存器 `__NSGenericDeallocHandler` = 给已释放对象发消息）；
-// · 第二次：改成独立开关 + 启动后 3 秒 + 只扫白名单前缀，仍然崩（同一崩溃地址
-// 0x19dbe54b4、同一份指令流），而且**崩溃时日志文件里什么都没有** ——
-// 说明崩在写日志之前，或者日志所在的 tmp 目录随重装被清掉了。
-// 结论：在这台设备上"运行时诊断"这条路不可观测也不可控，不值得再试第三次。
-//
-// 真正需要"哪个类持有 has_lyrics"这个答案时，走离线路线：
-// Tools/eevee-hookfinder/extract_player_track_class.py
-// 它直接读解密 IPA 的 `__objc_classname` / `__objc_methname`，不碰运行时，
-// 已经据此确认 9.1.86 里 `SPTPlayerTrack` 是存在的。
+// 需要"哪个类持有 has_lyrics"这类运行时答案时，走离线路线：
+// Tools/eevee-hookfinder/extract_player_track_class.py —— 直接读解密 IPA 的
+// `__objc_classname` / `__objc_methname`，不碰运行时。据此已确认 9.1.86 里
+// `SPTPlayerTrack` 存在。运行时探针在本机不可观测也不可控，别再走那条路。
 
 struct EeveeSpotify: Tweak {
     static let version = "2.0.0-beta"
@@ -412,7 +398,7 @@ struct EeveeSpotify: Tweak {
 
         // 标签栏内部结构探针：**只读、只打一次日志**，用来量出那条栏的真实层级
         // （谁是底、谁是选中滑块、图标在哪、安全区多少）。
-        // 第一版玻璃我是按"每颗 103×49"猜的，结果又难看又挡了选中胶囊 —— 不再猜。
+        // 玻璃的尺寸不能按"每颗 103×49"猜：会又难看又挡住选中胶囊 —— 用量出来的值。
         activateTabBarGlassProbe()
 
         // 音乐库：改**原生**视图的第一批（大标题左对齐 + 收掉顶部滚边渐隐）。
@@ -443,7 +429,7 @@ struct EeveeSpotify: Tweak {
 
         // 队列卡片（Spotify 自己的「队列」弹窗）的**只读**探针 ——
         // 把它的 view 登记给 `ViewTreeDumper`，于是「转储视图树」打开时、弹开队列卡片
-        // 那一排要靠它）。只登记指针，不改任何视图。
+        // 那一排要靠它。只登记指针，不改任何视图。
         activateQueueSheetProbe()
 
         // 艺人页「最新发布」卡片的数据改由 Spotify 自己的 Web API 提供时，
@@ -455,7 +441,7 @@ struct EeveeSpotify: Tweak {
         // （我们的观感不好，我想让这些页面看起来像 Apple Music）：
         // 歌单页**页头**换成 AM 形态（标题/创建者/长度居中 + shuffle + 白色 Play 胶囊）。
         // 借鉴 spoti.pw **v0.21.1**（GPL-3.0）的 `SGRHeaderInfo` 与 `PlaylistHeader.x`，
-        // 实现是本仓库自己的 Swift；目标类与 id 全部用我们自己的真机日志 + dump-9.1.88 核对过。
+        // 实现是本仓库自己的 Swift；目标类与 id 以 `dump-9.1.88` 为准。
         // v1 **只作用于歌单页**，认不出页头就什么都不做（见 `EntityPageHeader.x.swift`）。
         activateEntityPageHeader()
 
@@ -471,7 +457,7 @@ struct EeveeSpotify: Tweak {
         // 认不出「这是播放器的菜单」就什么都不做，只留一行日志。
         activatePlayerMenuOffsetRow()
 
-        // （Home 那几个小方框的底色会跟着封面的样子跑——
+        // Home 那几个小方框的底色会跟着封面的样子跑 ——
         // 借鉴 spoti.pw **v0.21.1** 的 `Redesigned/Home/HomeTiles.m`（GPL-3.0），实现见
         // `Appearance/HomeShortcutTiles.x.swift`。认不出卡片就什么都不做，
         // 第一次命中会把卡片结构打进 `[HomeTiles]` 日志（转储器到不了那一层）。
@@ -484,24 +470,22 @@ struct EeveeSpotify: Tweak {
         // （见 `Appearance/EntityPageRepaint.x.swift` 文件头）。
         activateEntityPageRepaint()
 
-        // 日志证明"渐变 / 往下滚保持 / 随艺人变"这三条我们**早就有**（`[PageField] field colour is
+        // "渐变 / 往下滚保持 / 随艺人变"这三条我们**早就有**（`[PageField] field colour is
         // now #F2F7FB … bottom #A1A5A8` 就是 Nanatsukaze 那页的淡灰底）。真正缺的是 **AM 解决
         // "照片铺到顶"的办法：翻状态栏**（118 黑字 / 119 白字）—— 我们原来一处都没碰过它
-        // ⇒ 亮封面上白字直接消失。挂点与实测依据见
+        // ⇒ 亮封面上白字直接消失。挂点与依据见
         // `Appearance/EntityPageStatusBar.x.swift` 文件头（Info.plist 没有关掉 VC 控制、
         // 二进制里 `statusBarStyle` 0 命中）。
         activateEntityPageStatusBar()
 
-        // （歌单封面是歌单里前四首歌的专辑封面拼成的一张，
-        // 有没有办法让它变成一张？—— 能，而且不用动视图层：
+        // 歌单封面是歌单里前四首歌的专辑封面拼成的一张，但**不用动视图层**就能换成单张：
         // 那个四宫格**不是视图拼的**，地址里就串着四张图的 id
         // （`https://mosaic.scdn.co/<size>/<id1><id2><id3><id4>`，IPA 的 `__cstring` 里逐字有
-        // 模板串 `https://mosaic.scdn.co/%lu/%@`）；把路径截到**第一个 40 位 id**，
-        // 服务端回的是一张正常的单张封面（本机实测 640/300 都是 200 + image/jpeg）。
+        // 模板串 `https://mosaic.scdn.co/%lu/%@`）。把路径截到**第一个 40 位 id**，服务端回的
+        // 就是一张正常的单张封面。
         // 钩子挂在 `SPTMosaicImageLoaderRequest` 拆路径之前（`load` / `loadMosaic` / `URL`），
         // 而**不是**去藏/替换视图 —— 视图那边拿到的本来就是一张成品图。
-        // 证据、为什么不能写 `setURL:`、以及关掉开关的效果都在
-        // `Appearance/PlaylistSingleCover.x.swift` 文件头。**默认开**（就是他要的结果）。
+        // 细节与关掉开关的效果都在 `Appearance/PlaylistSingleCover.x.swift` 文件头。**默认开**。
         activatePlaylistSingleCover()
 
         // ⛔「播放器双击手势」已于删除（先删掉，之后再搞）。
@@ -537,7 +521,7 @@ struct EeveeSpotify: Tweak {
         // CMP（ClientMessagingPlatform）营销面的**呈现侧**兜底 ——
         // 全屏「welcome back / 2 个月 Premium」接管、「Final call」首页横幅。
         // 请求侧已经在 `URL+Extension.isPendragonFetchMessageList` 拦了，但**已落盘**的
-        // 消息还会弹 ⇒ 这一层管它们。7 个目标类已用 dump-9.1.88 逐条核对过，
+        // 消息还会弹 ⇒ 这一层管它们。7 个目标类都在 `dump-9.1.88` 里，
         // 每个都带"类/方法存在性"检查，缺了只记日志、不影响其余 hook。
         activateClientMessagingPlatformBlocker()
 
@@ -647,12 +631,12 @@ struct EeveeSpotify: Tweak {
         // `[selectors]` 桶只给选择器名、不给所属类 ⇒ 只能上设备问一次（不 hook、不调用）。
         ImagePipelineProbe.probeOnce()
 
-        // 夜：**只读**探针 —— 专辑页 / 歌单页**头部封面到底是哪一个视图**。
-        // 且它的 Header
-        // **跟着滚动淡入淡出**；歌单页是 `Components.Header.UI.ArtworkImage`），
+        // **只读**探针 —— 专辑页 / 歌单页**头部封面到底是哪一个视图**。
+        // 专辑页那张是 `…Header` 的封面元素、**跟着滚动淡入淡出**；歌单页是
+        // `Components.Header.UI.ArtworkImage`，
         // 但**封面那一格没有 id、`ViewTreeDumper` 又在深度 24 截断** ⇒ 树里看不到它。
         // 这个探针只在两个头部里往下走走、把"像封面的"打出来（不 hook、不改任何东西，
-        // **每页每种头部最多 2 次、最多 6 页**就自己停；起按**页**计数，见那个文件）。
+        // **每页每种头部最多 2 次、最多 6 页**就自己停；按**页**计数，见那个文件）。
         HeaderArtworkProbe.start()
 
         // （我就一个要求：看起来像 Apple Music）：
@@ -738,9 +722,9 @@ struct EeveeSpotify: Tweak {
         //
         // 这条覆写若没绑上，客户端就只能听 Spotify 服务端的判定 —— 结果是"Spotify 没词的歌"
         // 连**面 B**（与「关于艺人」并列的「歌词」预览卡片）都不建，而**面 A**（封面与歌名
-        // 之间的单行歌词）却能正常显示我们注入的歌词（实测：纯音乐 / 未找到歌词都会出现）。
+        // 之间的单行歌词）却能正常显示我们注入的歌词（纯音乐 / 未找到歌词都会出现）。
         //
-        // 上面那个 6 项的 hookTargets 列表里没有它，所以它历史上从未被验证过。这里补一条，
+        // 上面那个 6 项的 hookTargets 列表里没有它，所以它一直没被 hook 过。这里补一条，
         // **纯日志、不改行为**：metadata=false 就说明覆写必然无效，不用再去猜。
         if let trackCls = NSClassFromString("SPTPlayerTrack") {
             let hasMetadata = class_getInstanceMethod(trackCls, Selector(("metadata"))) != nil

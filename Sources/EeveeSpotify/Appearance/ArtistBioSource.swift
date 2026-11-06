@@ -196,15 +196,13 @@ enum ArtistBioSource {
 
     /// 一次 GET → JSON。**日志与回调都在主线程**（底色/界面那边只认主线程；日志文件也不从后台线程写）。
     ///
-    /// ⚠️ 名字**不能叫 `get`** —— `swift_member_check.py` 会把这种通用名当成"不该私有的短名"
-    /// （实测一次白跑：25 条 `get` 报错，连别的文件的都一起翻出来）。
+    /// ⚠️ 名字**不能叫 `get`** —— `swift_member_check.py` 会把这种通用名当成"不该私有的短名"，
+    /// 一次能翻出 25 条报错，连别的文件的都一起。
     /// - Parameter tag: 这一跳**是谁**（`genius search` / `genius artist 123` / `wikipedia search` …）。
     ///
-    /// 这一行以前把前缀**写死成 "genius"**，于是维基百科那条失败
-    /// 打出来是 `[ArtistBio] genius /w/api.php → HTTP 0` —— **指错了来源**（`/w/api.php` 是 MediaWiki）；
-    /// 而且只在 `status != 200` 时才打、还把 URLSession 的 `error` **丢掉**（`{ data, response, _ in`）
-    /// ⇒ `HTTP 0`（一个响应都没拿到）到底是 DNS、超时还是 TLS 失败，
-    /// 现在：**每一次都打**（200 也打，带字节数），失败时带上 `error.localizedDescription`。
+    /// 日志用 `tag` 而不是写死 "genius"：否则维基百科那条失败会打成
+    /// `genius /w/api.php → HTTP 0`，指错来源。**每一次都打**（200 也打，带字节数），
+    /// 失败时带上 `error.localizedDescription` —— 否则 `HTTP 0` 分不清是 DNS、超时还是 TLS。
     private static func fetchJSON(
         _ url: URL,
         using client: URLSession = session,

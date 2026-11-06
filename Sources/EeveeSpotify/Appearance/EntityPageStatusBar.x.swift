@@ -3,38 +3,24 @@ import ObjectiveC.runtime
 import Orion
 import UIKit
 
-/// **状态栏明暗跟着"页面取色"翻** —— 也就是 Apple Music 解决"照片铺到屏幕最顶"的办法。
+/// **状态栏明暗跟着"页面取色"翻** —— Apple Music 解决"照片铺到屏幕最顶"的办法：
+/// 浅色封面黑字、深色封面白字。我们原来一处都没碰过状态栏，亮封面上白字直接消失。
 ///
-/// ## 为什么需要它
+/// 挂 `UIViewController.preferredStatusBarStyle` 的原因：IPA 的 `Info.plist` 里
+/// `UIStatusBarStyle = LightContent` 且 **`UIViewControllerBasedStatusBarAppearance`
+/// 不存在**（默认 YES）；主二进制里 `statusBarStyle` / `setStatusBarStyle:` 零命中，而
+/// `preferredStatusBarStyle` / `childViewControllerForStatusBarStyle` 有命中
+/// ⇒ 状态栏走 VC 那条链，app 侧没有自己的机制。
 ///
-/// AM 在浅色封面上状态栏是**黑字**，深色封面上是**白字** —— 同一个 app、同一台机器，差别只有一个：页面取色的明暗。AM 不是靠"给照片留一条白"
-/// 解决刘海/灵动岛压在照片上的，**是靠翻状态栏**。
+/// 没被我们强制时原样调 `orig`，对 app 自己那套（歌词页、视频流的
+/// `ColorBasedStatusBarSettingsManager`）透明。明暗判据与底色反色共用
+/// `EntityPageAppearance.isLight`，不另立阈值。
 ///
-/// 我们这边原来**一处都没碰过状态栏** ⇒ 亮封面上白字直接消失。
+/// ⚠️ 若 Spotify 某层基类自己实现了 `preferredStatusBarStyle`，挂在 `UIViewController`
+/// 上的 swizzle 对子类会被遮住。所以第一次真要用时打一行诊断：把 root → 决策 VC 那条链、
+/// 以及链上谁自己实现了它（带 `*`）报出来。
 ///
-/// ## 挂点为什么是 `preferredStatusBarStyle`（实测，不是猜的）
-///
-/// * IPA 解出来的 `Info.plist` 里
-/// `UIStatusBarStyle = UIStatusBarStyleLightContent`，而
-/// **`UIViewControllerBasedStatusBarAppearance` 这个键不存在** ⇒ 取默认值 `YES`
-/// ⇒ 状态栏由 **view controller 那条链**决定，不是 app 级开关。
-/// * 主二进制里 `statusBarStyle` / `setStatusBarStyle:` **0 次命中**（`UIApplication` 那条老路它没用），
-/// 而 `preferredStatusBarStyle` / `childViewControllerForStatusBarStyle` 各有命中
-/// ⇒ 走的就是 VC 这条路，而且 app 侧几乎没有自己的状态栏机制。
-///
-/// ⇒ hook `UIViewController.preferredStatusBarStyle`：**没被我们强制时原样 `orig`**，
-/// 对 app 自己那套（歌词页、视频流里的 `ColorBasedStatusBarSettingsManager`…）完全透明。
-/// 判据只有一条，**与底色/文字反色共用 `EntityPageAppearance.isLight`**，不另立阈值。
-///
-/// ## ⚠️ 唯一的不确定，以及它为什么不会静默失败
-///
-/// 如果 Spotify 某一层基类**自己实现了** `preferredStatusBarStyle`，那么对它那些子类来说，
-/// 挂在 `UIViewController` 上的这个 swizzle 是**被遮住**的（子类实现优先于父类）。
-/// 所以这里在第一次真的要用它时打一行诊断：把 `root → 决策 VC` 那条链、以及链上**谁自己实现了
-/// 这个方法**（带 `*`）一起报出来。下一份真机日志就能判定要不要改挂到那个具体类上。
-///
-/// ⚠️ 只在「封面下缘溶解」那颗开关开着时才有意义（它和取色底是同一套外观）——
-/// 与 `EntityPageRepaint` 同一条纪律：开关关掉，这里连 hook 都不装。
+/// ⚠️ 只在「封面下缘溶解」开关开着时才有意义；开关关掉，这里连 hook 都不装。
 enum EntityPageStatusBar {
 
     static let logTag = "PageStatusBar"
@@ -43,7 +29,7 @@ enum EntityPageStatusBar {
     ///
     /// ⚠️ 写成"私有存储 + 只读计算属性"而不是 `private(set) static var`：本仓库的
     /// `swift_member_check.py` 那正则认不出 `private(set)` 这种修饰符写法，会把
-    /// `EntityPageStatusBar.forced` 误判成"类型里没有这个成员"实测踩到）。
+    /// `EntityPageStatusBar.forced` 误判成"类型里没有这个成员"。
     private static var forcedStyle: UIStatusBarStyle?
     static var forced: UIStatusBarStyle? { forcedStyle }
 

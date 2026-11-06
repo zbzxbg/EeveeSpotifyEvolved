@@ -3,17 +3,17 @@ import Orion
 import UIKit
 import ObjectiveC.runtime
 
-/// 音乐库（Your Library）的**行与网格卡片** —— 照 pw 的 `Redesigned/Library/LibraryRows.x`
-/// （同一个信号、同一套 id；9.1.88 那份解密 IPA 里
-/// `YourLibrary_CommonKit.YourLibrarySwipeableCollectionViewCellContainer` 逐字都在）。
+/// 音乐库（Your Library）的**行与网格卡片** —— 与 pw 的 `Redesigned/Library/LibraryRows.x`
+/// 是同一信号、同一套 id（9.1.88 解密 IPA 里 `…YourLibrarySwipeableCollectionViewCellContainer`
+/// 逐字都在）。
 ///
-/// ── 目标：Apple Music 那两笔（点名"要 AM 的优雅感"）
-/// · **封面是连续圆角的小圆角**（AM 的唱片封面 6pt、大图 8pt，都是 `kCACornerCurveContinuous`）；
-/// Spotify 自己给的是直角味的 4pt；
-/// · **行与行之间一条发丝线，从「文字左沿」开始**（AM 的列表分隔线就是这么缩进的），
-/// 而不是横贯整行。厚度是**物理发丝**（1/scale），颜色 white @ 12%（pw 的 `SGRHairline`）。
+/// ── 目标：Apple Music 那两笔
+/// · 封面用**连续圆角**的小圆角（AM 唱片封面 6pt、大图 8pt，都是 `kCACornerCurveContinuous`）；
+///   Spotify 自己给的是直角味的 4pt；
+/// · 行间一条发丝线，从「文字左沿」开始而不是横贯整行。厚度是**物理发丝**（1/scale），
+///   颜色 white @ 12%。
 ///
-/// ── 真机结构（pw 的树；我们的 dump 里同一个 id 也在）
+/// ── 真机结构
 /// ```
 /// YourLibrarySwipeableCollectionViewCellContainer          ← hook 目标（复用单元）
 /// └ 402x80 的一行（id=Playlist.Row.Library / Album.Row.Library / Podcast.Row.Library）
@@ -23,15 +23,15 @@ import ObjectiveC.runtime
 ///   或者 112.67x161.33 的卡片（id=Components.UI.CardLibrary.Artwork r=4）  ← 换连续圆角 8
 /// ```
 ///
-/// ── 两条实现细节（都照 pw，理由也是他的，别再自己发明）
+/// ── 两条实现细节
 /// 1. **艺人的画像是圆的**：它的 `cornerRadius` 已经是"半边长"，**一个字节都不许改** ——
-/// 判据是 `cornerRadius >= side/2 - 0.5` 就放过（真机树里 r=32 的就是这一类）；
+///    判据是 `cornerRadius >= side/2 - 0.5` 就放过；
 /// 2. **发丝线用 `CALayer`，不用 view**：单元复用极快，加 view 会看到线"滑"进来 ⇒
-/// 用 layer + `CATransaction.setDisableActions(true)`；形状不对（卡片）时**只是藏起来**，
-/// 不删层（同一个单元一会儿还会变回行）。
+///    用 layer + `CATransaction.setDisableActions(true)`；形状不对（卡片）时**只是藏起来**，
+///    不删层（同一个单元一会儿还会变回行）。
 ///
 /// ⚠️ 还原：封面原半径/原圆角曲线记在**那颗封面自己身上**（关联对象）⇒ 单元复用也不会串；
-/// 开关关掉时（本文件的 hook 每拍都会跑）**逐颗写回**。
+/// 开关关掉时**逐颗写回**。
 enum LibraryRowsMetrics {
     /// pw 的 `SGRRadiusThumb` = 6：**行**里的 64pt 缩略图。
     static let thumbRadius: CGFloat = 6

@@ -17,7 +17,7 @@ import CoreImage
 // 从 SPTPlayerTrack 拿专辑封面。
 //
 // `metadata` 的键名在各 Spotify 版本/平台间不统一，所以按候选键逐个试，
-// 并且把成功过的 URL 记下来 —— 只要这首歌曾经取到过，同一首歌的后续调用就有兜底，
+// 并且把成功过的 URL 记下来 —— 只要这首歌取到过一次，后续调用就有兜底，
 // 不会因为某次 metadata 尚未就绪而闪回纯色背景。
 enum LyricsArtworkResolver {
     /// 候选顺序：越可能直接是 URL 的键越靠前。
@@ -49,7 +49,7 @@ enum LyricsArtworkResolver {
             //
             // ⚠️ 这里读到的 `has_lyrics` 是**被 `SPTPlayerTrackHook` 改写之后**的值
             // （覆写生效的话永远是 "true"），**不能**用来判断 Spotify 的原始判定。
-            // 而且实测已经证明：**面 B 的门控根本不是这个键** —— 覆写每次都返回 true，
+            // 而且**面 B 的门控根本不是这个键** —— 覆写每次都返回 true，
             // 面 B 依然只有 SECRET 出现。详见 `CustomLyrics+AllTracksLyrics.x.swift` 里
             // `SPTPlayerTrackHook.metadata` 上方的说明。
             writeDebugLog("[Artwork] metadata keys: \(metadata.keys.sorted())")
@@ -75,7 +75,7 @@ enum LyricsArtworkResolver {
         for key in urlKeys {
             guard let raw = metadata[key], !raw.isEmpty else { continue }
 
-            // 实测：`image_url` 的值是 `spotify:image:<hex>`，不是 http(s) URL。
+            // `image_url` 的值是 `spotify:image:<hex>`，不是 http(s) URL。
             // 所以先走「当 image 标识解析」，再退回「当普通 URL 解析」——
             // 顺序不能反：scheme 是 `spotify`，用 http 校验会把它直接拒掉。
             if let url = urlFromImageID(raw) { return url }
@@ -100,7 +100,7 @@ enum LyricsArtworkResolver {
 
     /// 把 Spotify 的 image 标识转成 CDN 地址。
     ///
-    /// 实测 `metadata["image_url"]` 拿到的是 **`spotify:image:<hex>` URI**，不是 http(s) URL，
+    /// `metadata["image_url"]` 拿到的是 **`spotify:image:<hex>` URI**，不是 http(s) URL，
     /// 所以不能拿 `URL(string:)` 的 scheme 去判断（scheme 是 `spotify`，会被 http 校验拒掉）。
     /// 这里统一剥掉各种可能的前缀，只留 hex，再拼 `i.scdn.co`。
     private static func urlFromImageID(_ rawID: String) -> URL? {
@@ -174,8 +174,8 @@ final class LyricsBackdropView: UIView {
     private let stageScrimAlpha: CGFloat = 0.30
     /// 舞台式的**全屏暗化度**：压在最上面的那层渐变的 alpha。
     ///
-    /// ⚠️ 这个值曾经是 `1.0`，理由是"全屏必须盖住底下的 Spotify 页面"——
-    /// **那个理由是错的，而且它正好把封面涂死了**：
+    /// ⚠️ 不要用 `1.0`（"全屏必须盖住底下的 Spotify 页面"）：**那个理由是错的**，
+    /// **而且它正好把封面涂死了**：
     ///
     /// 本视图的图层顺序是
     /// 1. `backgroundColor`（不透明，图片路径下是 `.black`）
@@ -386,17 +386,15 @@ final class LyricsBackdropView: UIView {
 
     /// 按当前 `style` 重算渐变。
     ///
-    /// ⚠️ 这里曾经试图用「负 margin 的 autoresizingMask」让背景溢出到父视图之外，
-    /// 铺满整屏。**那是错的**：autoresizing 只在父视图 bounds 内重新分配空间，
-    /// 子视图永远不可能超出父视图的 bounds。所以那样写的效果是"什么都没变"。
+    /// ⚠️ 别想用「负 margin 的 autoresizingMask」让背景溢出到父视图之外：autoresizing 只在
+    /// 父视图 bounds 内重新分配空间，子视图永远不可能超出父视图的 bounds。
     ///
     /// 正确的做法在挂载点：全屏时把整层挂到全屏页的**根视图**上（见
     /// `LyricsWordByWordFullscreenModernHostHook`），那时本视图自然就是整屏大小。
     ///
-    /// ⚠️ 曾经还有后半句"并隐藏原生的歌词内容容器" —— **那句是错的，已删除**。
-    /// 全屏页的根视图里一个子视图都没有（dump 实测），藏任何一个"看起来像歌词容器"
-    /// 的视图都会把整页内容一起藏掉。原生视图一个都不能碰：
-    /// 要盖住壳，只能靠 `solidStageScrimAlpha` 把背景做够暗。
+    /// ⚠️ 全屏页的根视图里一个子视图都没有，藏任何一个"看起来像歌词容器"的视图都会把整页
+    /// 内容一起藏掉。原生视图一个都不能碰：要盖住壳，只能靠 `solidStageScrimAlpha` 把背景
+    /// 做够暗。
     private func applyStyle() {
         // 两种样式都只需跟随宿主尺寸。
         autoresizingMask = [.flexibleWidth, .flexibleHeight]

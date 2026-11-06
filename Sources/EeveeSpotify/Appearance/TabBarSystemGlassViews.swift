@@ -33,7 +33,7 @@ final class TabBarSystemGlassHost: UIView {
 final class TabBarSystemGlassRelay: NSObject, UITabBarDelegate {
     /// ⚠️ Swift 里这个名字是 **`tabBar(_:didSelect:)`**（ObjC 的 `tabBar:didSelectItem:`
     /// 从 Swift 3 起就被导入成这个短名）。写成 `didSelectItem` 编译器直接报
-    /// "'tabBar(_:didSelectItem:)' has been renamed to 'tabBar(_:didSelect:)'"踩过）。
+    /// "'tabBar(_:didSelectItem:)' has been renamed to 'tabBar(_:didSelect:)'"（踩过）。
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         onMainThreadSync {
             TabBarSystemGlass.forwardSelection(from: tabBar, item: item)
@@ -46,7 +46,7 @@ final class TabBarSystemGlassRelay: NSObject, UITabBarDelegate {
 /// 与点击中继同一套写法：这个类**故意不标 `@MainActor`**（`@objc` 的手势 action 从
 /// UIKit 那侧调进来），真正的活全部在 `onMainThreadSync` 的闭包里干。
 ///
-/// ⚠️ 第四片删掉了它的第二只手势（`UIPanGestureRecognizer` "按住划"）—— 见文件头；
+/// ⚠️ 第四片**没有**第二只手势（`UIPanGestureRecognizer` "按住划"）—— 见文件头；
 /// 系统栏接管触摸时这一只根本收不到触摸（手指落在我们的宿主上），只在
 /// "把触摸交还 Spotify" 那一档里起作用。
 final class TabBarSystemGlassGestureRelay: NSObject {

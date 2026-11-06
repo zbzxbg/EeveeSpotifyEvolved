@@ -3,34 +3,30 @@ import UIKit
 
 /// 「减少打扰」独立页：把 Spotify 自己的**提示 / 推广 / 新功能气泡**逐条关掉。
 ///
-/// ## 它是什么、为什么这么做
-///
-/// Spotify 内部有一个模块 `ios-messaging-reduceinterventions-impl`，**一条提示一个 flag**
+/// Spotify 内部有 `ios-messaging-reduceinterventions-impl`，**一条提示一个 flag**
 /// （账号切换 / AI 歌单创建 / 演唱会通知 / 现场活动 / Puffin / 智能随机 / 探索提示 …）。
-/// 关掉哪条 flag，就少哪一条打扰 —— 这是"在 Spotify 自己的开关上做减法"，
-/// 属于本仓库更稳的那一路（不隐藏视图、不碰布局、可撤销）。
+/// 关掉哪条 flag 就少哪一条打扰 —— 在 Spotify 自己的开关上做减法，属于本仓库更稳的那一路
+/// （不隐藏视图、不碰布局、可撤销）。
 ///
-/// 原料**不是**这一页带来的：`KnownFlagCatalog` 的 `flag_group_interventions` 那两组
-/// 早在 `KnownFlagCatalog` 里就收录了，并逐条在 IPA 的 flag 表里核对过
-/// （25 条 `Hide …` 清单）。这一页只做一件事：
-/// **把"要读 flag 名 + 选 on/off + 再点一次取消"三步，变成一个人话开关**。
+/// 这一页只做一件事：把「读 flag 名 + 选 on/off + 再点一次取消」三步变成一个人话开关。
+/// 条目来自 `KnownFlagCatalog` 的 `flag_group_interventions`（25 条 `Hide …`）。
 ///
 /// ## 三条实现纪律
 ///
 /// 1. **不另开改配置的路径**：开关写的仍是 `FlagOverrideStore`（`scope` 一定带上 ——
-/// `.forceBool` 只有在给了 scope 时才**追加**服务端没下发过的条目，见
-/// `DynamicModifyingFunctions.modifyAssignedValues` 那段"没有就追加"）。
+///    `.forceBool` 只有在给了 scope 时才**追加**服务端没下发过的条目，见
+///    `DynamicModifyingFunctions.modifyAssignedValues`）。
 /// 2. **`UserDefaults` 不参与语义**：点过就写覆盖、取消就删覆盖；页面重进时用
-/// `existingOverride(for:)` 反查真实状态 —— 所以在「Flag 覆盖」页手写/手删过的条目
-/// 这一页也显示得对（开关的唯一含义就是"**有没有一条把它关掉的覆盖**"）。
+///    `existingOverride(for:)` 反查真实状态 —— 在「Flag 覆盖」页手写/手删过的条目，
+///    这一页也显示得对。
 /// 3. **只认 `.off` 那一种覆盖**：`on` / `set` / `number` 在这条路径上是空操作，
-/// 所以要按"有没有**关掉**"来显示，而不是"有没有覆盖"。
+///    所以要按"有没有**关掉**"来显示，而不是"有没有覆盖"。
 ///
-/// ## 依赖与代价（照实写）
+/// ## 代价
 ///
 /// * flag 覆盖要**重启 Spotify** 才生效（远端配置按会话下发一次），页头写明。
 /// * 少数 flag（`observedValue` 为空 = 只在 IPA 字面量表里见过）是否被服务端采纳，
-/// 只能从下一份日志的 `[Flags] replacement … N match(es)` 判断，**这一页不许诺 100% 生效**。
+///   只能从 `[Flags] replacement … N match(es)` 判断。
 struct EeveeReduceInterventionsView: View {
 
     /// 当前**已生效**的覆盖表（页面重进时用它反查，而不是自己记状态）。
@@ -147,7 +143,7 @@ struct EeveeReduceInterventionsView: View {
     /// Flag 覆盖页写的其它模式被这一页误读成"已关闭"。
     ///
     /// ⚠️ 写法刻意为"**逐句、显式类型**"，不要合并回一个长表达式：
-    /// 第一版写的是 `overrides.first { $0.id == flag.id && $0.mode == .off }`，CI 直接报
+    /// 不能写 `overrides.first { $0.id == flag.id && $0.mode == .off }`：CI 直接报
     /// `the compiler is unable to type-check this expression in reasonable time`
     /// （真实原因之一是里面那个不存在的 `flag.id` 让求解器发散；但即使修掉它，
     /// `first(where:)` + 两个成员比较 + 隐私字段访问仍容易踩同一条线）。

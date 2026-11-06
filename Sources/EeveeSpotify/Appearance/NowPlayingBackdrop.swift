@@ -11,23 +11,21 @@ import ObjectiveC.runtime
 /// ③ `LinearGradient(clear → black 0.35, .top → .bottom)`
 /// 交叉淡入时长 = `NowPlayingMetrics.backdropCrossfadeDuration`（kumone 的 0.8s）。
 ///
-/// ⚠️ 关键区别：这是**取色渐变**，不是模糊封面。那次"自绘壳"把整页糊掉，
-/// 根因是**加了一层模糊盖在内容上**；渐变铺在底层，机理相反，所以不会糊内容。
+/// ⚠️ 这是**取色渐变**，不是模糊封面：渐变铺在底层，不会糊内容。
 ///
 /// ## 做法（零破坏性写入）
-/// 自己一块**整页 `UIView`**（三层 `CAGradientLayer` 作它的子层），`insertSubview(at: 0)` 插进
-/// 那层的**子视图**栈：不碰人家的 `backgroundColor`，也不跟人家的 layer 栈抢位置。
+/// 自己一块**整页 `UIView`**（三层 `CAGradientLayer` 作它的子层），`insertSubview(at: 0)`
+/// 插进那层的**子视图**栈：不碰人家的 `backgroundColor`，也不跟人家的 layer 栈抢位置。
 /// · 那层自己的底色在我们下面（我们铺的是不透明底 ⇒ 观感上就是"换掉了底色"）；
 /// · 那层自己的子视图（真有内容的话）仍在上面 ⇒ **最坏只是"没效果"，不会是"盖掉内容"**；
 /// · 全程只加自己的视图 ⇒ 关开关 `remove` 就是完全还原。
 ///
 /// · **可见性闸门**：`isHidden` / 祖先链 `alpha` / `window != nil` 三关都过才算候选；
-/// 被闸门挡掉的计数上报；
 /// · **自愈**：`reconcile` 蹭 `DeclutterChrome` 既有的复查节拍（**不新开定时器**），先读那一层
-/// 自己的 `backgroundColor`（Spotify 每首歌写一次，一次属性读），变了才去问
-/// `metadata["extracted_color"]` 要权威值；尺寸每拍同步；
-/// · **纪律**：幂等、走查有 `maxNodes` 上限、重找 1s 节流、
-/// 垫了谁 / 被谁挡掉 / 换了色各打一行 `[NPVStyle]`。
+///   自己的 `backgroundColor`（Spotify 每首歌写一次，一次属性读），变了才去问
+///   `metadata["extracted_color"]` 要权威值；尺寸每拍同步；
+/// · **纪律**：幂等、走查有 `maxNodes` 上限、重找 1s 节流、垫了谁 / 被谁挡掉 / 换了色各打
+///   一行 `[NPVStyle]`。
 enum NowPlayingBackdrop {
 
     static let logTag = "NPVStyle"
@@ -427,7 +425,7 @@ enum NowPlayingBackdrop {
 
             // 纯色才垫：动态色 / 图案色读不出分量，硬写会变成一块黑。
             // ⚠️ 条件拆开写 —— 合成一个长表达式会喂给类型检查器一个难题
-            // 已经在 `EeveeReduceInterventionsView` 上栽过一次
+            // （已经在 `EeveeReduceInterventionsView` 上栽过一次
             // `unable to type-check this expression in reasonable time`）。
             let isPlainColour: Bool = color.cgColor.numberOfComponents >= 3
             var white: CGFloat = 0

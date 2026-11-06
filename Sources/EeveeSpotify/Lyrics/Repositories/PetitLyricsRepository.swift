@@ -189,7 +189,7 @@ class PetitLyricsRepository: LyricsRepository {
             
         case .plain:
             let stringLyrics = String(data: lyricsData, encoding: .utf8)!
-            // 同上 —— 纯文本也先丢掉空白行（原先靠 DTO 那层，但这里顺手
+            // 同上 —— 纯文本也先丢掉空白行（DTO 那层也会做，这里顺手
             // 一起做，保证"空白行不进 payload"这条在源头就成立）。
             let lines = stringLyrics.components(separatedBy: .newlines)
                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

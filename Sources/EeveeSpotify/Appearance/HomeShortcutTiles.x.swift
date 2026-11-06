@@ -401,7 +401,7 @@ enum HomeTileTint {
     /// 把网格子树打进日志（有界：24 层 / 40 个节点）。这就是"转储到不了那一格"时的替代品。
     ///
     /// **每一片网格各报一次**（用对象地址做 key）—— 上一版全局只报第一片，
-    /// 于是"首页一共有几片网格、另外几片长什么样"永远看不到（用户报"小方框没变"时无从下手）。
+    /// 于是"首页一共有几片网格、另外几片长什么样"永远看不到（"小方框没变"时无从下手）。
     private static func logStructureOnce(_ grid: UIView) {
         guard logged.count < 40 else { return }
         guard logged.insert("structure-\(ObjectIdentifier(grid))").inserted else { return }
@@ -463,7 +463,7 @@ class HomeShortcutGridHook: ClassHook<UIView> {
 /// Home 那排小卡片在真机上是**这个类** ——
 /// `[ShellDump] LegacyUI_ECMCoreKit.InteractableLayoutBackingButton`，
 /// pw 的树里同一个类带着 `id=Shortcut.Card.Home`。它是**真视图**，所以 `layoutSubviews` 挂得上；
-/// 我第一版挂的 `…ShortcutsCardElementUI` 在 9.1.88 上**不存在**。
+/// `…ShortcutsCardElementUI` 在 9.1.88 上**不存在**，别挂它。
 ///
 /// ⚠️ 这个类**别处也在用**（曲库的 116×171 卡片、演出页的 374×346 卡、每行的「…」）——
 /// 所以这里只按 **id + 尺寸** 挑，认不出就一个字节都不碰。

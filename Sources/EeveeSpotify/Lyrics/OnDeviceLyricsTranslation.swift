@@ -4,27 +4,24 @@ import Translation
 
 /// 歌词的**系统翻译** —— Apple 的 `Translation` 框架，整首歌在手机上翻完，一个字都不出设备。
 ///
-/// ## 为什么只做系统翻译
+/// ## 范围
 ///
-/// 只做系统翻译，其他的先不要做。也就是：
-/// · 不要 Gemini（要用户自己的 key、歌词要上传）；
-/// · 不新增歌词源。
-/// 两个前提都是设置 → App → 翻译 → 语言里满足的（下好两种语言），
-/// 我们只负责把行文本递过去、把译文按行收回来。
+/// 只做系统翻译：不要 Gemini（要用户自己的 key、歌词要上传），也不新增歌词源。
+/// 两个前提都由用户在设置 → App → 翻译 → 语言里满足（下好两种语言），我们只负责把行文本
+/// 递过去、把译文按行收回来。
 ///
 /// ## 门槛是 iOS 26
 ///
 /// `TranslationSession(installedSource:target:)` 这个**公开初始化器**从 26.0 才有
-/// 编译现场：`only available in iOS 26.0 or newer`）。
-/// iOS 18~25 上框架的会话只能由 SwiftUI 的 `.translationTask` 给，那是另一套写法；
-/// 在把它做出来之前，这里就是"不可用"。
+/// （编译期就会报 `only available in iOS 26.0 or newer`）。iOS 18~25 上框架的会话只能由
+/// SwiftUI 的 `.translationTask` 给，那是另一套写法；在它做出来之前，这里就是"不可用"。
 ///
 /// ## 几条自我约束
 ///
 /// · **只翻有字的行**：空行 / 纯音乐记号 `♪` / 本来就已经是目标语言的行，一律不递过去
-/// （递过去只会得到一句废话，还多占一次往返）；
-/// · **源语言靠猜**：`NLLanguageRecognizer` 逐行判、置信度 ≥ 0.8 才算数，
-/// 取"与目标语言不同的那些行"里占比最大的那门语言；猜不出就不翻（宁可没有，不要乱翻）；
+///   （递过去只会得到一句废话，还多占一次往返）；
+/// · **源语言靠猜**：`NLLanguageRecognizer` 逐行判、置信度 ≥ 0.8 才算数，取"与目标语言
+///   不同的那些行"里占比最大的那门语言；猜不出就不翻（宁可没有，不要乱翻）；
 /// · **失败要能说人话**：语言没装 / 不支持这一对 / 模型没就绪，各给一句能照着做的提示；
 /// · **不碰主线程**：整段在后台跑，结果回主线程再写进 `currentLyricsDto`。
 enum OnDeviceLyricsTranslation {
@@ -99,7 +96,7 @@ enum OnDeviceLyricsTranslation {
                 lastFailure = error.localizedDescription
                 writeDebugLog("[Lyrics] system translation attempt failed — \(lastFailure)")
                 if attemptsLeft > 0 {
-                    // 1 秒是原来真机上调过的值：更短会撞上语言包还没加载完。
+                    // 1 秒：更短会撞上语言包还没加载完。
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             }

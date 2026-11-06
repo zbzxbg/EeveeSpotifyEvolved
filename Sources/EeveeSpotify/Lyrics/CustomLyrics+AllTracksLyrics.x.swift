@@ -53,32 +53,27 @@ class LyricsScrollProviderHook: ClassHook<NSObject> {
 
 /// 内嵌（预览）歌词的逐词宿主查找器。
 ///
-/// 背景：ng 原来靠 `LyricsWordByWordModernHostHook` 直接 hook
-/// `Lyrics_NPVCommunicatorImpl.LyricsOnlyViewController` 拿内嵌歌词 VC；
-/// 该类在 9.1.x 上已被移除。
-///
-/// 为什么不再「换个 targetName 重新 hook」：Orion 在**注册期**解析不到目标类/方法时
-/// 会走错误路径 —— 在 App 里只是一条日志，但在注入工具进程里加载同一个 dylib 时
-/// 会直接 SIGTRAP 把工具崩掉（已实测：官方 dylib 能注入、我们的一注入就闪退）。
-/// 因此这里**不新增任何 hook**，改为在已经绑定成功的 NPV 宿主里用纯 UIKit 遍历查找；
+/// 背景：`Lyrics_NPVCommunicatorImpl.LyricsOnlyViewController`（原内嵌歌词 VC）在 9.1.x 上
+/// 已被移除，所以这里**不新增任何 hook**，改为在已经绑定成功的 NPV 宿主里用纯 UIKit 遍历
+/// 查找。理由：Orion 在**注册期**解析不到目标类/方法时会走错误路径 —— 在 App 里只是一条
+/// 日志，但在注入工具进程里加载同一个 dylib 时会直接 SIGTRAP 把工具崩掉。不新增 hook，
 /// 最坏情况只是「没找到、没效果」，不会引入新的注册期崩溃。
 ///
-/// 候选类名来自 9.1.76 主二进制扫描（`Lyrics_TextElementImpl` /
-/// `Lyrics_TextComponentImpl` / `Lyrics_NPVElementsKitImpl` 三个模块）；
-/// 与「内嵌歌词由这套组件渲染」一致。
+/// 候选类名来自 9.1.76 主二进制扫描（`Lyrics_TextElementImpl` / `Lyrics_TextComponentImpl` /
+/// `Lyrics_NPVElementsKitImpl` 三个模块）。
 ///
 /// ⚠️ 查找**不是一次性的**：宿主在 `viewWillAppear` 那一刻往往还不存在（卡片要等歌词），
-/// 而且它是自适应表格 cell、会被复用重建。所以这里配了一个 1.5s 的看门狗
-/// （见 `startWatchdog`），只要"内嵌层没挂上/挂了但不在窗口里"就再查一次 ——
-/// 这是让预览里的逐词歌词"总能挂上、掉了还能自己回来"的关键。
+/// 而且它是自适应表格 cell、会被复用重建。所以配了 1.5s 看门狗（见 `startWatchdog`），
+/// 只要"内嵌层没挂上 / 挂了但不在窗口里"就再查一次。
+///
 /// 内嵌（预览）歌词**内容视图**的已知类名。
 ///
 /// **唯一来源**，两个消费者：
 /// · `InlineLyricsHostLocator` 用它找宿主（预览卡片的歌词文本视图）；
 /// · `WordByWordHost.attach` 用它判断"没有卡片容器时，退化成挂在内容视图上"是否安全。
 ///
-/// ⚠️ 日志实证（9.1.76）：`Lyrics_TextComponentImpl.LyricsView`（366x120、挂在
-/// **歌曲封面容器**里）不在这个名单里 —— 它一旦被当成歌词内容使用，整层就跑到封面上去了。
+/// ⚠️ `Lyrics_TextComponentImpl.LyricsView`（366x120、挂在**歌曲封面容器**里）不在这个
+/// 名单里 —— 它一旦被当成歌词内容使用，整层就跑到封面上去了。
 let inlineLyricsContentClassNames: Set<String> = [
     "Lyrics_TextElementImpl.LyricsTextElementUI",
     "Lyrics_TextElementImpl.LyricsTextView",
@@ -314,17 +309,16 @@ enum InlineLyricsHostLocator {
             let vc = queue.removeFirst()
             visited += 1
 
-            // ⚠️ 顺序很重要依"AM 怎么经常挂在单行歌词上"改）：
-            // **先在子树里找白名单里的卡片歌词视图**，再考虑"VC 自己的 root view"。
+            // ⚠️ 顺序很重要：**先在子树里找白名单里的卡片歌词视图**，再考虑"VC 自己的 root view"。
             //
-            // 以前是反的：VC 候选一命中就 early return，而 9.1.86 上
+            // 反过来的话：VC 候选一命中就 early return，而 9.1.86 上
             // `Lyrics_TextComponentImpl.LyricsViewControllerImplementation` 的 root view
             // 正好是**封面下那一行单行歌词**（`Lyrics_TextComponentImpl.LyricsView` 366x120，
             // 白名单里**刻意没有**它 —— 见 `inlineLyricsContentClassNames` 的说明）。
-            // 于是只要它在屏幕上，我们就再也看不到同一棵树里的卡片歌词视图
-            // （`Lyrics_TextElementImpl.LyricsTextView` 342x256）→ 层挂到单行歌词那一行上；
-            // 而挂上之后"已挂载"短路又会挡住随后才出现的真卡片 ——
-            // 这正是的"第一次进页面正常、切个歌回来就不行"。
+            // 于是只要它在屏幕上，同一棵树里的卡片歌词视图
+            // （`Lyrics_TextElementImpl.LyricsTextView` 342x256）就再也找不到 → 层挂到单行歌词
+            // 那一行上；而挂上之后"已挂载"短路又会挡住随后才出现的真卡片 —— 表现就是
+            // "第一次进页面正常、切个歌回来就不行"。
             if let match = viewHost(in: vc.view) { return match }
 
             if controllerFallback == nil,

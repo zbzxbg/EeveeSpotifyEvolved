@@ -99,15 +99,13 @@ final class AmllTtmlNode {
     /// 递归拼接全部文本；`excludingRoles` 里的 role 子树整棵跳过。
     ///
     /// `<rt>` / `<rp>` 与 `tts:ruby="text"/"textContainer"` 一并跳过
-    /// （`rubyAnnotationNames` / `rubyAnnotationStyles`）。
-    /// 不跳它们，正文会被拼成 `漢かん`（或 `所しょ`）—— 真机上就是那一行多出读音；
-    /// 逐词 span 里的读音也会一起进词条（高亮的字范围跟着偏）。
+    /// （`rubyAnnotationNames` / `rubyAnnotationStyles`）。不跳它们，正文会被拼成 `漢かん`
+    /// —— 那一行就会多出读音，逐词 span 里的读音也会一起进词条（高亮的字范围跟着偏）。
     ///
-    /// ⚠️ 更正复核）：`Lyrics-Audit` 那份笔记里还写着"随后 mapper 的对齐
-    /// 不变量会把那一行的逐词丢掉" —— **不成立**。`AmllLyricsMapper.wordTokens` 拿
-    /// `line.primaryText` 当期望值，而 `primaryText` 本身就是 `syllables` 的拼接
+    /// ⚠️ ruby 的后果只是**正文多出读音**，不是"降级为逐行"：`AmllLyricsMapper.wordTokens`
+    /// 拿 `line.primaryText` 当期望值，而 `primaryText` 本身就是 `syllables` 的拼接
     /// （`syllables.isEmpty ? plainText : joined`）⇒ 两者恒等，那条 guard 在 AMLL 这条路上
-    /// 根本不会触发。所以 ruby 的后果只是**正文多出读音**，不是"降级为逐行"。
+    /// 根本不会触发。
     /// 测试：`Tests/AmllTtmlRuby`（CI）。
     func text(excludingRoles excludedRoles: Set<String> = []) -> String {
         if excludedRoles.contains(where: hasRole) { return "" }

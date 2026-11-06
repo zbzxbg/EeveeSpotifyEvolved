@@ -202,7 +202,7 @@ extension NowPlayingLyricsPlate {
         }
 
         // 顺手把那两颗胶囊认下来。**从这一页的子树里找**（按 id）——
-        // 而页面自己这棵树只有几百个节点，一定够用）。认下来之后 `DeclutterChrome` 会一直盯着。
+        // 而页面自己这棵树只有几百个节点，一定够用。认下来之后 `DeclutterChrome` 会一直盯着。
         DeclutterChrome.adoptNowPlayingPills(from: page)
         // 「**点开了但没铺上**」的重试（见 `pendingOpenUntil` 的说明）。
         // 没有这一段，
@@ -217,7 +217,7 @@ extension NowPlayingLyricsPlate {
                 openAndMount(in: page)
                 // 按住原生封面这件事**跟着意图的寿命**走（见 `wantsOpenNow`）——
                 // 意图过期 ⇒ 这一程本来就铺不上，那就别再把封面按着
-                // （否则正是"我们自己制造一片空白"，用户报的漏封面就是这个味道）。
+                // （否则就是"我们自己制造一片空白"）。
                 // ⚠️ 铺成功那一拍 `coverHost` 已经在 ⇒ `wantsOpenNow` 仍为真，不受影响。
                 if wantsOpenNow() { keepNativeCoverHidden(in: page) }
             } else {
@@ -469,7 +469,7 @@ extension NowPlayingLyricsPlate {
 
     /// 只查**一个**类（不是运行时类枚举，本仓库纪律 1）。
     ///
-    /// **一次都没有**）：Swift 类在 ObjC 运行时里的名字是 **mangled** 的
+    /// **一次都没有**。Swift 类在 ObjC 运行时里的名字是 **mangled** 的
     /// （`_TtC28NowPlaying_ContentLayersImpl16CoverArtCellImpl`），`NSClassFromString` 用
     /// `Module.Class` 那种写法取不到 ⇒ `coverCellClass` 为 nil ⇒ `isInsideCoverCell` 恒假
     /// ⇒ 事件驱动那条路**每次都拒绝**，只剩 0.3s 节拍兜底 = 换歌时"原生封面闪一下"。
@@ -519,7 +519,7 @@ extension NowPlayingLyricsPlate {
 
         // ⚠️ **只武装一次**，不往后推（`armRetryWindowIfNeeded` 自己就是这条纪律）。
         //
-        // 第一版这里是无条件 `retryUntil = now + window`，而 `reconcile` 每 ~0.5s 就会再进来一次
+        // 不能无条件 `retryUntil = now + window`：`reconcile` 每 ~0.5s 就会再进来一次
         // ⇒ 每次失败都把 deadline 推远 ⇒ 这个"2.5s 窗口"**永远不会到期**，等于在听歌页上无限轮询。
         // 真正想要的是"**从第一次失败起** 2.5s ≈ 5 拍"。
         door.armRetryWindowIfNeeded(at: CFAbsoluteTimeGetCurrent())

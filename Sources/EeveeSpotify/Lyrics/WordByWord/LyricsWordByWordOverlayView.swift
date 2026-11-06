@@ -8,8 +8,8 @@ private final class LineLabel: UILabel {
     var lineIndex = -1
 }
 
-// 这里曾经有一个自绘的 UIKit 进度条 `WordByWordProgressBar`。
-// 已删除：进度条现在与「更好的逐词歌词」共用**同一份** SwiftUI 实现
+// 不要自绘 UIKit 进度条（`WordByWordProgressBar` 已不存在）：进度条现在与
+// 「更好的逐词歌词」共用**同一份** SwiftUI 实现
 // （`AppleMusicLyricsProgressBar`，见 `AppleMusicLyricsPlaybackControl.swift`）——
 // 两份实现必然会在尺寸、圆点大小、拖动手感上慢慢跑偏。
 

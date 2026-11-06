@@ -16,16 +16,16 @@ import ObjectiveC.runtime
 // （快照是后插的，`bringSubviewToFront` 只在跑到的那一拍有效）。
 // 还原 = `removeAnimation` 撤钉 + 拿走字形 —— 原生一个字节都没改过。
 //
-// 9.1.88 的树里圆盘与 `CondensedButton` 是**兄弟**，pw 那套"按几何认圆盘"不能照抄；按钮按 id 认。
-// hook 落点 `PlaybackControlsElementsUnit` 只是"快一点的落点"：`NPVScrollViewControllerHook` 进页面时也调 apply。
-// 开关跟随 `nowPlayingAnyLayout`，日志 tag `[NPVControls]`。
+// 9.1.88 的树里圆盘与 `CondensedButton` 是**兄弟**，pw 那套"按几何认圆盘"不能照抄；
+// 按钮按 id 认。hook 落点 `PlaybackControlsElementsUnit` 只是"快一点的落点"：
+// `NPVScrollViewControllerHook` 进页面时也调 apply。开关跟随 `nowPlayingAnyLayout`，
+// 日志 tag `[NPVControls]`。
 //
 // MARK: - Hook（可选的加速落点）
 //
 // 播放键**被点的那一下**用的选择器 —— 靠它把字形"在触摸那一刻就翻过去"。
 //
-// ⚠️ 来源是 pw 的 `%hook _TtC28EncoreConsumerMobile_BaseKit14PlayButtonView` +
-// `- (void)uiButtonTapped`，**没有在 9.1.88 上验证过**（实测从不触发），所以：
+// ⚠️ 来源是 pw 的 `%hook …PlayButtonView` + `- (void)uiButtonTapped`，在 9.1.88 上**从不触发**，所以：
 // · 激活前用 `class_getInstanceMethod` 探测（见 `installTapTargetIfNeeded`）；
 // · 探测不到就走"给内部 `UIControl` 加 target"那条路，绝不因为探测失败而丢功能。
 let playButtonTapSelector = NSSelectorFromString("uiButtonTapped")
@@ -721,7 +721,7 @@ enum NowPlayingControlsPlate {
     /// 播放键那一下**被我们看到了**（在"认不认这颗按钮"之前就报）。
     ///
     /// 两条来源都会走到这里：
-    /// ① `uiButtonTapped` 钩子 —— **9.1.88 上实测从不触发**；
+    /// ① `uiButtonTapped` 钩子 —— **9.1.88 上从不触发**；
     /// ② 我们挂在内部那颗 `UIControl` 上的 target/action —— **真正生效的那条**。
     ///
     /// 就说明"看到了但没认下这颗按钮"（比如 id 挂的位置和我们记的不是一条链）。
@@ -787,7 +787,7 @@ enum NowPlayingControlsPlate {
 // 播放键**内部那颗 `UIControl`** 的 target（`UIControl` 的 target 必须是 ObjC 对象）。
 //
 // 见 `installTapTargetIfNeeded`：这是"点击那一刻就翻字形"在 9.1.88 上唯一真正生效的路
-// —— `PlayButtonView.uiButtonTapped` 那个钩子实测从不触发。
+// —— `PlayButtonView.uiButtonTapped` 那个钩子从不触发。
 func activateNowPlayingControls() {
     if NSClassFromString(PlaybackControlsUnitHook.targetName) != nil {
         NowPlayingControlsGroup().activate()

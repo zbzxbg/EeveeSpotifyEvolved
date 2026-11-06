@@ -306,7 +306,7 @@ struct EeveeSettingsView: View {
                     // （那颗开关**已搬进「调试」页** —— 默认"开"，见 `EeveeDebugSettingsView`。）
                     // 凭证/设备标识那一层不在这里 —— 它在写入口就生效了，见 `DebugLogSanitizer`。
                     //
-                    // ⚠️ 脱敏版生成失败时**绝不回退到原文件**：那正好是"用户以为已经脱敏、
+                    // ⚠️ 脱敏版生成失败时**绝不回退到原文件**：那正好是"以为已经脱敏、
                     // 实际分享了明文"的场景。宁可导出失败并告诉他，也不能静默 fail-open。
                     let logURL: URL
                     if UserDefaults.redactSharedLog {
@@ -360,17 +360,9 @@ struct EeveeSettingsView: View {
                 }
             }
 
-            // 「把转储 customize 响应体**搬到「调试」里面去**」
-            // ⇒ 那一节已整体搬到 `EeveeDebugSettingsView`。
-            // 它和「转储视图树」已合并成一颗「更详细的日志记录」；
-            // 底下仍写 `UserDefaults.dumpCustomizeBody` ⇒ 设备上已设的值原样保留。
-            //
-            // 「分享日志前脱敏」：**调试页**（与三个"转储"放到一条线上：
-            // 前面几个是"写进日志"，它是"发出去之前先假名化"）。它只影响**导出**的那一份
-            // （见上面导出按钮里 `DebugLogSanitizer.sharedLogFile(from:redact:)`）。
-            // ⚠️ l10n 键（`redact_shared_log` / `redact_shared_log_description`）与
-            // `UserDefaults.redactSharedLog` **都没变**、默认仍是"开" ⇒ 设备上的值原样保留。
-            // ⇒ 这里不再有那一节，别搬回来。
+            // 「转储 customize 响应体」与「转储视图树」已合并成一颗「更详细的日志记录」，
+            // 「分享日志前脱敏」也一并搬到 `EeveeDebugSettingsView` —— 这里不再有那几节，别搬回来。
+            // 底下仍写 `dumpCustomizeBody` / `redactSharedLog` ⇒ 设备上已设的值原样保留。
 
             Section(footer: Text("reset_data_description".localized)) {
                 Button {
@@ -403,10 +395,10 @@ struct EeveeSettingsView: View {
                 Button {
                     confirmDestructive(
                         title: "resetButtonTitle".localized,
-                        // 修：这里原来是 `resetSubtitle` —— 那个键是
+                        // 修：这里不能用 `resetSubtitle` —— 那个键是
                         // **SponsorBlock「重置」ActionSheet 的 message**（en：「Each is independent.」
                         // / 中文「各项互不影响。」），于是**每一种语言的"完全重置"确认框都在说
-                        // "各项互不影响。"**（真机反馈 + 审计发现，`it` 里甚至因此出现了同一个键的
+                        // "各项互不影响。"**（审计发现，`it` 里甚至因此出现了同一个键的
                         // 两条不同意译）。
                         // 改用 `resetFooter`：它就是这条 Section 下面那段**擦除说明**
                         // （"会强制重新登录…清除钥匙串/沙盒/应用组容器…"），各语言都已翻，语义正确。

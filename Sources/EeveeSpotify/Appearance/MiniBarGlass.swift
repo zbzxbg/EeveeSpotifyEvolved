@@ -29,7 +29,7 @@ enum MiniBarGlassPlate {
     /// 内容缩到胶囊里时左右各留多少（与标签栏那条的 `sideInset` 同一个数）。
     private static let sideInset: CGFloat = 8
 
-    /// 拿不到标签栏那条的宽度比例时的兜底（真机实测 360 / 414）。
+    /// 拿不到标签栏那条的宽度比例时的兜底（360 / 414）。
     private static let fallbackWidthRatio: CGFloat = 360.0 / 414.0
 
     private static var plateKey: UInt8 = 0

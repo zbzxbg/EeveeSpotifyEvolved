@@ -3,23 +3,19 @@ import UIKit
 
 // 全屏壳的**共用件**：曲名/歌手、右上角收起键、底部进度条 + 时间 + 三键。
 //
-// 为什么要有这个文件：旧渲染层（「开启逐词歌词」但不开启「更好的逐词歌词」）
-// 原来是**自己用 UIKit 重写了一套壳** —— 结果位置、间距、淡出都和新的对不上
-// （真机对比：标题偏高、三键太散、上下淡出难看）。用户的要求是"直接照抄"，
-// 那就别抄：两条渲染路径用**同一份代码**。
+// 两条渲染路径（「开启逐词歌词」与「更好的逐词歌词」）必须用**同一份代码**：
+// 旧层原来自己用 UIKit 重写了一套壳，位置、间距、淡出都和新层对不上。
 //
 // 分工：
 // · `LyricsShellChrome` —— 三块**内容**（不含外边距），新层把它交给
-// `AppleMusicLyricsPage` 排版，旧层用下面的 Host 视图按同样的边距排版；
-// · `LyricsShellLayout` —— 边距/高度这些**常数**的唯一来源，
-// 两条路径都必须读这里，改一处两边同时变；
+//   `AppleMusicLyricsPage` 排版，旧层用下面的 Host 视图按同样的边距排版；
+// · `LyricsShellLayout` —— 边距/高度这些**常数**的唯一来源，两条路径都必须读这里，
+//   改一处两边同时变；
 // · `LyricsShellHeaderHost` / `LyricsShellFooterHost` —— 旧层用的宿主视图，
-// 复刻 `AppleMusicLyricsPage` 里那两段的排版（同样的 padding、同样的安全区用法）。
+//   复刻 `AppleMusicLyricsPage` 里那两段的排版（同样的 padding、同样的安全区用法）。
 //
-// 全屏壳的排版常数（唯一来源）。
-//
-// 数值来自 `AppleMusicLyricsPage` 的实测：顶部标题两行 62、底部控件栏 116、
-// 标题栏再往上抬 30、上下内容各留 8 / 46 的呼吸。
+// 全屏壳的排版常数（唯一来源）：顶部标题两行 62、底部控件栏 116、标题栏再往上抬 30、
+// 上下内容各留 8 / 46 的呼吸。
 enum LyricsShellLayout {
     static let headerHeight: CGFloat = 62
     static let footerHeight: CGFloat = 116

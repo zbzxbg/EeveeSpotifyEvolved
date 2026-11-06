@@ -13,7 +13,7 @@ enum BrowsitaSectionStripper {
         //
         // 为什么需要它：滚动页（scrollsita）的广告段里，"Advertisement" 那个标签是
         // **客户端画**的，wire 上不会出现 `sponsored`/`advertisement` 这类字样 ⇒ 上面
-        // 那串标记一条都命中不了，整段原样放行。上游在 9.1.84 上实测过一条真广告段：
+        // 那串标记一条都命中不了，整段原样放行。一条真广告段长这样：
         // 每个事件带约 20 条 `aet.spotify.com` 追踪 URL（viewability / clicked /
         // quartiles）；而正常内容的段**从不**带广告追踪 URL，所以这个 host 是那类
         // 载荷唯一可靠的 wire 标记。

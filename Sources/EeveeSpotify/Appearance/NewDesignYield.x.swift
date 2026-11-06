@@ -4,28 +4,21 @@ import UIKit
 
 /// 新设计语言（iOS 26 / Spotify "Reprise"）下，**我们给旧设计打的补丁要主动让位**。
 ///
-/// 为什么：新设计里 Spotify 已经自带玻璃 —— 导航栏是 SwiftUI 托管的 Platter
+/// 新设计里 Spotify 已经自带玻璃 —— 导航栏是 SwiftUI 托管的 Platter
 /// （`NavigationBarPlatterContainer_v2` / `PlatterContainerHostingView<NavigationBarPlatterContent>`），
 /// 内容滚到其下时由系统的 `ScrollEdgeEffectView` 负责边缘模糊。我们那些补丁是为**旧设计**
 /// （没有任何底色/材质）打的，叠上去只会把玻璃压成一块不透的深色。
 ///
-/// ⚠️ **更正**：这里原来说"**标签栏**自带 `UIVisualEffectView` +
-/// `_UIVisualEffectBackdropView`" —— 那是**错的**。
-/// `UIVisualEffectView` **只有我们自己铺的那一块**（`(8,6 398x71)`），标签栏本身没有任何材质；
-/// 系统玻璃只在**上面**那条（Platter / `ScrollEdgeEffectView`）。
+/// 现状（别再按旧结论改）：
+/// · 旧那两层（灰 scrim `UIImageView` + 同级 `UIVisualEffectView`）**已经不存在**；
+/// · 标签栏本身没有任何材质，系统玻璃只在**上面**那条（Platter / `ScrollEdgeEffectView`）；
+/// · 标签栏的玻璃由**叠一条系统 `UITabBar`** 提供（`TabBarSystemGlass.x.swift`，照 spoti.pw
+///   的做法），由 iOS 26 自己画；自绘那块已删除（`TabBarGlass.x.swift` 只剩几何与标签
+///   内容取舍）；
+/// · 「标签栏看起来正常不透，不是毛玻璃也不是液态玻璃」是 `TabBarGradientView`（黑→透明、
+///   正好盖住整条）与 AMOLED 插的那层 `systemThinMaterialDark` 叠在系统玻璃上的结果。
 ///
-/// ⚠️ **再更正**：那句话的后半（"标签栏那条玻璃得我们自己做"）也**过期**了 ——
-/// 我们现在是**叠一条系统 `UITabBar`**（`TabBarSystemGlass.x.swift`，照 spoti.pw 的做法），
-/// 玻璃由 iOS 26 自己画；**自绘那块已经删除**（`TabBarGlass.x.swift` 只剩几何与标签内容取舍）。
-///
-/// 真机证据：
-/// · `[AMOLED] SPNavigationBar first layout — scrim=0 blur=0 bar=0 barBg=0 gradient=0`
-/// —— 旧那两层（灰 scrim `UIImageView` + 同级 `UIVisualEffectView`）**已经不存在**；
-/// · "标签栏看起来正常不透，不是毛玻璃也不是液态玻璃"
-/// —— 正是 `TabBarGradientView`（黑→透明、正好盖住整条）与 AMOLED 插的那层
-/// `systemThinMaterialDark` 叠在系统玻璃上的结果。
-///
-/// 判据见 `NewDesignLanguage`：只在**删掉了 `UIDesignRequiresCompatibility` 的构建**里生效；
+/// 判据见 `NewDesignLanguage`：只在**移除了 `UIDesignRequiresCompatibility` 的构建**里生效；
 /// 跑兼容模式的老构建一切照旧。
 struct NewDesignYieldGroup: HookGroup {}
 
@@ -34,7 +27,7 @@ struct NewDesignYieldGroup: HookGroup {}
 ///
 /// 新设计里这个角色由系统的 `ScrollEdgeEffectView` 承担，所以这层要藏掉 ——
 /// 否则它会把玻璃压暗成一块实心条。**默认就藏**，不再做成开关
-/// （原来那个「隐藏标签栏渐隐」开关在深色主题下看不出差别，已经删了）。
+/// （不再提供「隐藏标签栏渐隐」开关：深色主题下看不出差别）。
 ///
 /// ⚠️ 只藏**我们判定为新设计**时的那一层；兼容模式的构建里这个 hook 根本不装。
 class TabBarGradientYieldHook: ClassHook<UIView> {

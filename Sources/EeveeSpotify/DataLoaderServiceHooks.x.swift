@@ -130,7 +130,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
                 // ── 分档预算 + 结果备忘（v4.11）
                 //
-                // 真机四档实测：
+                // 四档对照：
                 // 不回退 ≤1s → 卡片在；＋Genius 回退 4s → 开始丢；＋AMLL 优先 6s → 更差；
                 // 多级回退（4 源串行）13s → 最差。
                 // ⇒ NPV 的模块列表是"组件加载完之后"才建的（`…WithDidLoadComponents…`），

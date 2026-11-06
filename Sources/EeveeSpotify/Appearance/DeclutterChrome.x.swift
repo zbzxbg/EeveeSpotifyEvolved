@@ -18,7 +18,7 @@ import ObjectiveC.runtime
 /// 所以：
 /// · 开关打开 → 藏，并**用关联对象记住"这一层是我藏的"**；
 /// · 开关关掉 → 只撤回**我们**藏的那一次，Spotify 自己藏的一律不碰。
-/// 第一版没有这条，结果是"关掉开关它也不回来"（用户以为坏了）—— 现在关掉即恢复。
+/// 少了这条，结果是"关掉开关它也不回来"—— 现在关掉即恢复。
 ///
 /// ⚠️⚠️ 但"关掉即恢复"只在**下一次 layout 真的到来**时才成立。
 /// 它并不可靠，见下面 `reconcile` 那一段的说明（迷你播放条没上报、加号按钮没生效，
@@ -70,7 +70,7 @@ enum DeclutterChrome {
         UserDefaults.nowPlayingAnyLayout && UserDefaults.hideSingalongLine
     }
 
-    // MARK: - 首页 / 播放器那一批真机树实证）
+    // MARK: - 首页 / 播放器那一批（真机树实证）
     //
     // 首页顶部那条（问候语 + 筛选胶囊）。
     //
@@ -142,7 +142,7 @@ enum DeclutterChrome {
         }
     }
 
-    // MARK: -听歌页那排胶囊—— **按 id 找，不再猜**
+    // MARK: - 听歌页那排胶囊 —— 按 id 找
     //
     // 两颗胶囊的**无障碍 id**：
     //
@@ -151,26 +151,14 @@ enum DeclutterChrome {
     // 13.Primary@0,0,104,32,id=lyrics-npv-switch-button                  ← 「显示 / 隐藏歌词」
     // ```
     //
-    // ## 为什么这次一定能找到（前两轮为什么白绕）
-    //
-    // 上一轮为了"找到那颗显示/隐藏歌词的胶囊"，先按类名子串 `ShowLyricsButton`，
-    // 又按无障碍**标签**「显示歌词 / 隐藏歌词」搜整窗 8000 个节点。
-    // 而它其实**一直带着 id**：`lyrics-npv-switch-button`。
-    // ⇒ 仓库规矩第 4 条（判据落在 `accessibilityIdentifier` 上）不是教条，是**省掉两轮**的那句话。
-    //
     // ## 为什么是"藏"而不是"按"
-    //
-    // 上一轮还想"替用户按下它"（为了让 Spotify 自己的单行歌词功能整体关掉）。
-    // `singalong-lyrics-view` **一个都没有** ⇒ `lyrics_under_cover_art_enabled=false`
-    // 那条 flag（第三次层次）已经把功能从根上拿掉了。于是"按"只剩坏处：
-    // 它是**切换**（按两次 = 又开回来，独立复核抓过这个 blocker），而且会**落盘用户偏好**。
-    // ⇒ 现在只做两件不产生副作用的事：**藏**（`alpha = 0`）与**写回**。
+    // `singalong-lyrics-view` 一个都没有 ⇒ `lyrics_under_cover_art_enabled=false` 那条
+    // flag 已经把功能从根上拿掉了。于是"按"只剩坏处：它是**切换**（按两次又开回来），
+    // 而且会**落盘用户偏好**。所以只做两件不产生副作用的事：**藏**（`alpha = 0`）与**写回**。
     //
     // ## 为什么用 `alpha` 不用 `hidden`
-    //
-    // 这两颗是 `Encore.Button.Primary`，挂在 Encore 的栈里；pw 的文档写得最直白
-    // （pw 的结论）：*"Setting `hidden` on views inside
-    // Spotify's `OverflowStackView` or its Encore stacks crashes, so use alpha."*
+    // 这两颗是 `Encore.Button.Primary`，挂在 Encore 的栈里；对 `OverflowStackView` 或
+    // Encore stack 里的视图设 `hidden` 会崩，只能用 alpha。
     private static let lyricsPillIdentifier = "lyrics-npv-switch-button"
     private static let videoPillIdentifier = "nowplaying-npv-musicvideos-switch"
     private static let nowPlayingPillIdentifiers = [lyricsPillIdentifier, videoPillIdentifier]
@@ -182,7 +170,7 @@ enum DeclutterChrome {
     ///
     /// ⚠️ **必须是 `weak`**：这是 Spotify 的视图，页面走了它们就该能释放
     /// （写死强引用会把它连同整棵子树留在内存里，而且我们还会继续往一个不在屏上的视图写 `alpha`）。
-    /// ⚠️ **不能用"字典 + 边遍历边删"**（第一版就是这么写的，那是 Swift 的独占性违规）——
+    /// ⚠️ **不能用"字典 + 边遍历边删"**（那是 Swift 的独占性违规）——
     /// 两个 id 就两个槽位，最省事也最安全。
     private static weak var lyricsPill: UIView?
     private static weak var videoPill: UIView?
@@ -216,10 +204,8 @@ enum DeclutterChrome {
         }
     }
 
-    /// **从听歌页自己的子树里**把这两颗胶囊认下来。
-    ///
     /// 为什么单开这一条：整窗那条（`resolvePillsIfNeeded`）会在**启动瞬间**就打掉唯一那次
-    /// 6 node(s)` —— 那时 App 刚起来，窗口里只有 6 个节点），而之后**再也没有一行**
+    /// 预算（日志 `… only 6 node(s)` —— 那时 App 刚起来，窗口里只有 6 个节点），而之后**再也没有一行**
     /// 说明它到底找没找到 ⇒ 下一次日志仍然读不出结论。
     /// 页面子树只有几百个节点、一定够用，而且调用点在"我们正在这一页上"的时刻。
     ///
@@ -330,34 +316,18 @@ enum DeclutterChrome {
         writeDebugLog("[Declutter] the Now Playing pills are visible again")
     }
 
-    // **"找那颗胶囊"这一整套已经删掉。**
-    //
-    // 删掉的是：类名子串 `ShowLyricsButton` 判据、无障碍标签表（「显示歌词 / 隐藏歌词」）、
-    // 8000 节点的整窗走查、2s 节流 + 3 次上限、`PillLookup` 三态、以及"替用户按下它"。
-    //
-    // 为什么整块删：
-    // ① **那颗胶囊一直有 id**：`lyrics-npv-switch-button`（`[NPVTree]` 逐字，104×32）。
-    // 按类名/标签猜了两轮，一头都没中 —— 判据落在 `accessibilityIdentifier` 上就不必猜；
-    // **一个都没有** ⇒ 第三层（`lyrics_under_cover_art_enabled=false`）已经把
-    // "封面下单行歌词"整个功能拿掉了；
-    // ③ 而"按"本身有害：它是**切换**（按两次 = 又开回来，独立复核抓过这条 blocker），
-    // 还会落盘用户偏好。
-    // ⇒ 现在只剩**不产生副作用**的两件事：把那一行藏起来（内容层）、把两颗胶囊 `alpha = 0`（chrome 层）。
+    // 只剩**不产生副作用**的两件事：把那一行藏起来（内容层）、把两颗胶囊 `alpha = 0`（chrome 层）。
     //
     // 藏 / 撤销，两个方向都幂等。
     //
     // 关键区别在"谁藏的"：`isHidden == true` 可能是 Spotify 自己写的（没在播放时
     // 迷你条本来就不显示）。所以撤销只针对被我们打过标的那些视图。
     //
-    // ## ⚠️**这里曾经试过 `soft: true`（用 `alpha` 代替 `hidden`），已撤回**
+    // ## ⚠️ 这一块必须用 `hidden`，不能用 `alpha`
     //
-    // > 那个功能确实会隐藏单行歌词，但是**不会阻止封面上抬**。所以在用户的视角来看是：
-    // > 这个单行歌词里面没有单行歌词滚过，但**把封面往上抬的功能没有阻止**。
-    //
-    // ⇒ 真正的问题是"**只藏了文字、没有撤销布局后果**"，而 `alpha` 恰好**把那一格留着**，
-    // 等于把那个后果**保下来** —— 方向反了。所以回到 `hidden`（它至少让 Encore 重排一次），
-    // 并且**默认值保持「关」**、不改这一块的行为。
-    // **下一步必须先问清"开着的时候你到底想让封面去哪"，再动这里**（见交接文档 §13）。
+    // 用 `alpha` 只藏了文字、**没有撤销布局后果**：单行歌词不再滚过，但**封面照样上抬**。
+    // 而 `alpha` 恰好把那一格留着，等于把那个后果保下来 —— 方向反了。
+    // 所以回到 `hidden`（它至少让 Encore 重排一次），并且**默认值保持「关」**。
     static func apply(
         wantHidden: Bool,
         to view: UIView,
@@ -382,27 +352,22 @@ enum DeclutterChrome {
 
     // MARK: - 复查（reconcile）：把"藏 / 还原"接到一个一定会跑的节拍上
     //
-    // ⚠️ 为什么必须有它
-    //
-    // 原来只有"目标类自己的 `layoutSubviews`"一个时机，两个后果：
+    // ⚠️ 为什么必须有它：只靠"目标类自己的 `layoutSubviews`"有两个洞 ——
     //
     // · **迷你播放条**：启动时没在播放，Spotify 把 `TouchPassthroughView` 设成 `hidden`，
-    // 我们的 `apply` 走 `guard !view.isHidden` 直接返回（不标记、不上报）。等 Spotify
-    // 而整份日志**一行 `[Declutter]` 都没有**。
-    // 那边的表现就是"迷你条消失且无法恢复"。
-    //
+    //   我们的 `apply` 走 `guard !view.isHidden` 直接返回（不标记、不上报），表现就是
+    //   "迷你条消失且无法恢复"；
     // · **加号按钮**：它只能从 `ConnectButtonView` 的兄弟里找，而那颗按钮**已经被我们藏了**，
-    // 被藏的视图不再收 layout 回合 → 那次扫描实际只跑过启动一次。
+    //   被藏的视图不再收 layout 回合 → 那次扫描实际只跑过启动一次。
     //
-    // 所以换成**常驻可见的宿主**（`MainWindow`，`_TtC30ContainerUI_RootUIInternalImpl10MainWindow`，
-    // 每份真机转储里都在、每次布局都跑）做节流复查，另外两个时机也强制跑：
-    // · 开关被手动切换（设置页 → `reconcileNow`，关掉要**当场**还回来）；
-    // · App 回到前台（`didBecomeActive`，正是"划出 Spotify 再回来"那一步）。
+    // 所以换成**常驻可见的宿主**（`MainWindow`，
+    // `_TtC30ContainerUI_RootUIInternalImpl10MainWindow`，每次布局都跑）做节流复查，
+    // 另外两个时机也强制跑：开关被手动切换（设置页 → `reconcileNow`，关掉要**当场**还
+    // 回来）、App 回到前台（`didBecomeActive`）。
     //
     // 复查是幂等的：开关开着就确保藏起来，关着就只撤回**我们**藏过的那一次。
     //
-    // 解析结果的缓存。全窗口扫描不便宜，所以结果留着；视图被换掉时 `weak` 自动失效，
-    // 下一轮重扫即可。
+    // 解析结果的缓存。全窗口扫描不便宜，所以结果留着；视图被换掉时 `weak` 自动失效。
     private struct ResolvedTargets {
         weak var miniBar: UIView?
         weak var singalong: UIView?

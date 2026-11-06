@@ -87,8 +87,8 @@ extension NowPlayingLyricsPlate {
         let lift = top - (rowFrame?.minY ?? top)
         // （当歌曲名字过长时…右侧的晃动区超过屏幕的右侧了）：
         // 右移给缩略图让位的量**不许把那一行的右边缘推出屏幕**。
-        // 算术（真机：页面 414pt、那一行 308pt、原来 72+16）：28+72+16+308 = **424 > 414**
-        // ⇒ 长标题的 marquee 有 10pt 在屏幕右边之外（这就是用户报的那一条）。
+        // 算术（真机：页面 414pt、那一行 308pt，常量 72+16）：28+72+16+308 = **424 > 414**
+        // ⇒ 长标题的 marquee 有 10pt 在屏幕右边之外。
         // 常量已经收到 64+12（= 412，正好进得去），这里再夹一道**上限**兜别的机型/更宽的行：
         // 右边缘最多到页面右沿 − 4pt —— 宁可挤掉几 pt 的 gap，也不许晃动区出屏。
         let wantedShift = thumbSide + thumbGap
@@ -109,7 +109,7 @@ extension NowPlayingLyricsPlate {
         } else {
             stageBottom = (stackTop ?? (page.bounds.height - 240)) - lyricsBottom
         }
-        // 三个锚点的实测值（只给 `[NPVLyrics] expanded — …` 那一行用；**不编造**：量不到就打 not found）。
+        // 三个锚点的量值（只给 `[NPVLyrics] expanded — …` 那一行用；**不编造**：量不到就打 not found）。
         lastAnchorText = "(anchors: navBottom=\(anchorText(navBottom)),"
             + " progressTop=\(anchorText(progressTop)),"
             + " bottomStackTop=\(anchorText(stackTop)))"

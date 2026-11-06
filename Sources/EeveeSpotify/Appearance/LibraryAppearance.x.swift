@@ -61,7 +61,7 @@ enum LibraryAppearance {
     /// 登记当前这一页。weak —— 页面销毁后自动失效，不用手动摘。
     ///
     /// ⚠️ 页面换了（切走再回来会新建视图）就重记：只认"还在窗口里"的那一个，
-    /// 否则复查会一直对着一个已经离屏的旧视图做无用功（第一版的隐患）。
+    /// 否则复查会一直对着一个已经离屏的旧视图做无用功。
     @MainActor
     static func note(_ root: UIView) {
         if let existing = currentRoot, existing !== root, existing.window == nil {
@@ -114,17 +114,14 @@ enum LibraryAppearance {
 
     /// AM 的"大标题"比 Spotify 的**更大、更重**。
     ///
-    /// ── ⚠️ 这里为什么必须靠复查，而不能只改一次
-    /// 标题是 Encore 的 element（dump 里是 `OBJC_ONLY_Label@48,7,72,34,id=YourLibraryHeader.title`），
-    /// 由 binder 驱动。binder 在数据更新时**可能把字体写回** —— 那一瞬间会闪一下我们
-    /// 的字号再弹回去。所以这里做两件事：
-    /// 1. 每次复查都检查一遍（值不对就再写一次）；
-    /// 2. **数一下被写回的次数**并打日志 —— 如果一直在被写回，说明这条路走不通，
-    /// 下一版要改成"我们自己画标题"，这是判据不是装饰。
+    /// ── ⚠️ 为什么必须靠复查，而不能只改一次
+    /// 标题是 Encore 的 element（`OBJC_ONLY_Label@48,7,72,34,id=YourLibraryHeader.title`），
+    /// 由 binder 驱动；binder 在数据更新时**可能把字体写回**，那一瞬间会闪一下我们的
+    /// 字号再弹回去。所以每次复查都检查一遍（值不对就再写一次），并**数一下被写回的
+    /// 次数**打日志 —— 一直在被写回说明这条路走不通，下一版要改成"我们自己画标题"。
     ///
-    /// 顺带说明：**不再改 `textAlignment`**（第一版改过，等于没改）——
-    /// 真机 dump 里那个 label 是 `@48,7,72,34`，宽度就是内容宽度，
-    /// 对齐哪边都一样，肉眼永远看不出差别。这是"改了个寂寞"的典型。
+    /// 不改 `textAlignment`：那个 label 的宽度就是内容宽度（`@48,7,72,34`），
+    /// 对齐哪边都一样，肉眼永远看不出差别。
     private static func applyLargeTitle(in root: UIView) {
         guard let label = titleLabel ?? findTitleLabel(in: root) else { return }
         titleLabel = label
@@ -194,12 +191,8 @@ enum LibraryAppearance {
 
     // MARK: ③ 头部重排：标题靠左、头像与按钮靠右
     //
-    // 这一条照 pw 的 `Redesigned/Library/LibraryHeader.x` —— **同一个信号、同一套 id**：
-    // 9.1.88 那份解密 IPA 里逐字都有 `YourLibrary_YourLibraryXImpl.YourLibraryHeaderView`、
-    // `YourLibrary_CommonKit.YourLibraryHeaderContentFiltersView`、
-    // `ListeningActivity_ElementsKit.AdaptiveFaceContainer`。
-    //
-    // 真机结构（pw 的树 + 我们自己的 dump 对得上）：
+    // 目标 id 与 pw 的 `Redesigned/Library/LibraryHeader.x` 是同一套（9.1.88 解密 IPA
+    // 里逐字都在）。真机结构：
     // ```
     // YourLibraryHeaderView
     // ├ LiquidGlass.GradientView                       ← 顶部那层灰纱（§④ 收掉）
@@ -210,18 +203,18 @@ enum LibraryAppearance {
     // │  ├ YourLibraryHeader.recents （这个账号上隐藏）
     // │  ├ YourLibraryHeader.search
     // │  └ YourLibraryHeader.plus
-    // └ YourLibraryHeaderContentFiltersView            ← 筛选 chips：**原样保留，一个字不动**
+    // └ YourLibraryHeaderContentFiltersView            ← 筛选 chips：原样保留，一个字不动
     // ```
     //
     // ── 为什么用 transform，而不是 frame
-    // 那一行是 Spotify 自己的 stack，每拍按约束摆一遍；而 **Auto Layout 只写 center 与 bounds、
-    // 不碰 transform** ⇒ 位移能活过它那一拍（pw 的原话就是这个）。位移一律从"布局摆出来的位置"
-    // 算（`center` 不受 transform 影响，`frame` 会）⇒ **幂等**：值没变一个字节都不写。
+    // 那一行是 Spotify 自己的 stack，每拍按约束摆一遍；而 Auto Layout 只写 center 与
+    // bounds、不碰 transform ⇒ 位移能活过它那一拍。位移一律从"布局摆出来的位置"算
+    // （`center` 不受 transform 影响，`frame` 会）⇒ **幂等**：值没变一个字节都不写。
     //
-    // ⚠️ 这一行全是 **arranged subview**：**绝不能把谁从 stack 里摘掉**
-    // （pw 的注释：摘一颗会让那个 stack 卡在 `updateConstraints` 里）—— 所以这里只有位移，没有移除。
+    // ⚠️ 这一行全是 **arranged subview**：绝不能把谁从 stack 里摘掉（摘一颗会让那个
+    // stack 卡在 `updateConstraints` 里）—— 所以这里只有位移，没有移除。
     //
-    // 右侧留边（pw 的 `kRowInset` = 8）：48pt 的按钮贴到右沿时，它 24pt 的字形离屏 20pt。
+    // 右侧留边 8pt：48pt 的按钮贴到右沿时，它 24pt 的字形离屏 20pt。
     private static let headerRowInset: CGFloat = 8
     /// 左侧留边（pw 的 `SGRSideMargin` = 16）。
     private static let headerSideMargin: CGFloat = 16
@@ -408,27 +401,25 @@ enum LibraryAppearance {
         didReportQuickScroll = false
     }
 
-    // MARK: ② 顶部那层滚边渐隐 —— 的历史（**现在在 §④**，别把这段当"不许做"）
+    // MARK: ② 顶部那层滚边渐隐 —— 现在在 §④
     //
-    // v1 按类名收掉 `Reprise_LiquidGlassKit.LiquidGlass.GradientView` 的 alpha，真机生效过
-    // 但那一版**被删掉了**，两条理由：
+    // v1 是按类名把 `Reprise_LiquidGlassKit.LiquidGlass.GradientView` 的 alpha 归零，
+    // 有两条问题，§④ 已经改掉：
+    // 1. **肉眼看不出来** —— 那层本来就极淡，所以 §③ 把标题也挪到左沿，不再是"只收一层
+    //    看不见的纱"；
+    // 2. **它属于"动别人视图"那一类** —— 那层是**滚动边缘效果**，Spotify 会随滚动改它的
+    //    alpha，每 0.5 秒归零等于在和滚动动画对着干。
     //
-    // 1. **肉眼看不出来**：那层本来就极淡，静帧下几乎无差别（用户当时反馈"没任何改动"）——
-    // 所以这一版**把标题也挪到左沿**（§③），不再是"只收一层看不见的纱"；
-    // 2. **它属于"动别人视图"那一类**：那层是**滚动边缘效果**，Spotify 会随滚动改它的 alpha，
-    // 而 v1 是**每 0.5 秒**去把它归零 ⇒ 在和滚动动画对着干，轻则闪烁重则影响滚动。
+    // ⇒ §④ 把频率钉死：**只在页面/头部自己的布局回合写一次**（`apply` 那条快路径），
+    // **绝不进 0.5s 节拍**，且值已是 0 就一个字节都不写。
     //
-    // ⇒的复刻（§④）把频率这一条钉死了：**只在页面/头部自己的布局回合写一次**
-    // （`apply` 那条快路径），**绝不进 0.5s 节拍**，且值已是 0 就一个字节都不写 —— 与 pw 等价。
-    //
-    // ⚠️ 这一次也只碰"alpha 与 transform"这两样能精确还原的东西；**布局与滚动机制一个字不动**
+    // ⚠️ 只碰"alpha 与 transform"这两样能精确还原的东西；**布局与滚动机制一个字不动**
     // （标题/头像/按钮全都是**位移**，不是改约束）。
     //
-    // MARK: ③ 改了约束就要让 layout 重跑（第一版漏了这步）
+    // MARK: ③ 改了约束就要让 layout 重跑
     //
-    // 改动**约束常数**之后必须告诉 Auto Layout 重新求解，否则那一处不会生效。
-    //
-    // 第一版只改了值、没调用 `setNeedsLayout` —— 这是"看起来没任何改动"的一个可能来源。
+    // 改动**约束常数**之后必须告诉 Auto Layout 重新求解，否则那一处不会生效（只改值、
+    // 不调 `setNeedsLayout` 就是"看起来没任何改动"的来源之一）。
     // 这里攒起来，在复查末尾统一触发一次（避免同一帧里反复触发）。
     private static var needsLayoutFlush = false
 

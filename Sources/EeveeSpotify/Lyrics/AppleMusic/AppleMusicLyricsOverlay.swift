@@ -1,29 +1,22 @@
 import SwiftUI
 import UIKit
 
-// 本项目新增（非 MeloX 移植件）：把 Apple Music 风格歌词页接进 Spotify 的歌词容器。
+// 把 Apple Music 风格歌词页接进 Spotify 的歌词容器。
 //
-// 门禁：整层 iOS 26+（唯一硬性原因见 `LyricAttributedText.swift` 的说明 ——
-// 注册自定义 TextAttribute 需要 iOS 26 的 `attributedTextFormattingDefinition`）。
-// 老系统上 `WordByWordHost` 会走原来的 UIKit overlay，行为与改动前完全一致。
+// 门禁：整层 iOS 26+（唯一硬性原因见 `LyricAttributedText.swift` 的说明 —— 注册自定义
+// TextAttribute 需要 iOS 26 的 `attributedTextFormattingDefinition`）。老系统上
+// `WordByWordHost` 会走原来的 UIKit overlay，行为与改动前完全一致。
 //
 // MARK: - 点行跳转（**只有这一份**，两个调用点共用）
 //
-// 点某一行歌词 ⇒ 跳到**那一行的内部**（不是它的边界上）。
-//
-// ⚠️把它提成一份，是因为**同一个 bug 犯了两次**。
-//
-// 两个细节都有来历，别再各抄一份：
+// 点某一行歌词 ⇒ 跳到**那一行的内部**（不是它的边界上）。两个细节都有来历：
 // · `rounded` 而不是 `Int` 截断 —— `line.time` 是 `TimeInterval(offsetMs) / 1000`，
-// 双精度存不下 26.622 这种值，会落在略小的一侧（26.621999999999999…），
-// `Int` 截断成 26621，比这一行的起点**少 1 毫秒**；
+//   双精度存不下 26.622 这种值，会落在略小的一侧（26.621999…），`Int` 截断成 26621，
+//   比这一行的起点**少 1 毫秒**；
 // · **+5ms** —— 播放器 seek 之后回报的位置可能略早，而时间轴的判定是
-// `time <= playbackTime`：落在边界上就会被判成**上一行**。
-// 全屏页那条路就踩过并修了（当时只写在 `makeRootView` 的闭包里）；
-// 而"歌词进播放器"那一档是**另写的一份**、只 `rounded` 没 `+5` ⇒
-// 我选中某一行歌词，定位到上一行歌词去了**。
-// ⇒ 现在两处都调这一个函数，不可能再各走各的。
+//   `time <= playbackTime`：落在边界上就会被判成**上一行**。
 //
+// ⇒ 两处都调这一个函数，不可能再各走各的。
 // （`+5ms` 若哪天仍不够，只**改这一个数**：它是"往这一行里面多走一点"的安全余量。）
 func seekToTappedLyricLine(_ time: TimeInterval) {
     WordByWordSeeker.seek(toMs: Int((time * 1000).rounded()) + 5)
@@ -92,7 +85,7 @@ final class AppleMusicLyricsOverlayHost {
     ///
     /// 最初的目标是"让背景盖住 Spotify 的壳（品红）"。我试过三条路，全错：
     /// 1. 让背景溢出容器 → 不可能，子视图出不了父视图 bounds；
-    /// 2. 隐藏原生歌词容器 → 全屏页根视图里**一个子视图都没有**（dump 实测），
+    /// 2. 隐藏原生歌词容器 → 全屏页根视图里**一个子视图都没有**（dump 如此），
     /// header / 歌词 / 控件栏都不在这一层，藏一个等于藏整页 → 整页空白；
     /// 3. 清宿主底色 + 把整层插到最底 → 摘掉的是这一页**唯一**的背景层
     /// （dump: `stripped 1 background layer(s): CALayer`）→ 连底都没了。
@@ -260,7 +253,7 @@ final class AppleMusicLyricsOverlayHost {
         )
 
         // 全屏自绘壳挂上后，把"这一刻窗口里所有可点控件 + 每个动作会选中谁"
-        // 打进日志。三键的目标是靠标签选的，真机上出现过选错/选空，
+        // 打进日志。三键的目标是靠标签选的，会选错/选空，
         // 这份 dump 是唯一能看清原因的东西。只在开了日志记录时输出。
         if showsProviderFooter {
             WordByWordPlaybackControl.dumpControlCandidates()
@@ -348,19 +341,14 @@ final class AppleMusicLyricsOverlayHost {
 
     // MARK: 为什么不"接管"原生视图
     //
-    // 这里曾经有一整套代码：`stripHostBackground` / `restoreHostBackground`
-    // （清宿主 backgroundColor 与 layer 上的底色层）、`strippedLayers` /
-    // `clearedBaseColors` 两张还原表、`dumpFullscreenHierarchy` /
-    // `scheduleFullscreenSecondPass` 诊断、以及把整层 `sendSubviewToBack` 的逻辑。
-    //
-    // 全部删掉了。真机 + dump 的证据是：全屏页的根视图里**一个子视图都没有**，
-    // header / 歌词 / 控件栏都不在这一层，所以
-    // · 隐藏任何一个"看起来像歌词容器"的视图 → 整页内容一起消失（整页空白）；
-    // · 清根视图的底色/层 → 摘掉这一页唯一的背景层，页面连底都没了。
-    //
-    // 一句话：这一页不是"我们的层 + 它的壳"两层结构，而是一整块我们看不透的视图，
-    // 任何"刮掉一层让位"的做法都会把它刮坏。要盖住它，只能靠自己的背景够暗 ——
-    // 见 `LyricsBackdropView.solidStageScrimAlpha`。
+        // 这里不要"接管"原生视图：全屏页的根视图里**一个子视图都没有**，
+        // header / 歌词 / 控件栏都不在这一层，所以
+        // · 隐藏任何一个"看起来像歌词容器"的视图 → 整页内容一起消失（整页空白）；
+        // · 清根视图的底色/层 → 摘掉这一页唯一的背景层，页面连底都没了。
+        //
+        // 一句话：这一页不是"我们的层 + 它的壳"两层结构，而是一整块我们看不透的视图，
+        // 任何"刮掉一层让位"的做法都会把它刮坏。要盖住它，只能靠自己的背景够暗 ——
+        // 见 `LyricsBackdropView.solidStageScrimAlpha`。
     //
     // CADisplayLink 每帧回调入口。由 `WordByWordPlaybackClock.tickHandler` 驱动，
     // 避免新层自带时钟与主时钟错拍。

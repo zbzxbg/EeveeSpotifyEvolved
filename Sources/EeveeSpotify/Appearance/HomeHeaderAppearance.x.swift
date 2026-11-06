@@ -110,7 +110,7 @@ enum HomeHeaderAppearance {
         clearScrim(around: header)
 
         // ⚠️ 必须**强转成 `UIStackView`**：`findView` 的返回类型是 `UIView`，而 `arrangedSubviews`
-        // 只有 stack 才有编译错第 1 条就是漏了这个 `as?`）。
+        // 只有 stack 才有（编译错第 1 条就是漏了这个 `as?`）。
         guard let stack = findView(in: header, where: { $0 is UIStackView }) as? UIStackView else { return }
 
         // ① 那一行翻成 RTL ⇒ 头像自动落到右沿（每拍都成立，宽度变了也不用管）。
@@ -295,7 +295,7 @@ enum HomeHeaderAppearance {
 // 主页：`Home_FunkisPageImpl.FunkisViewController`（pw 挂的也是它）。
 //
 // ⚠️ **为什么挂页面而不是挂 header**：首页滚动时 Spotify 会把那一行**往上滑并淡出**
-// （pw 的注释 + 我们的真机树都证实）⇒ 只在 header 自己的布局回合里算，会在滑动过程中"卡住不动"。
+// （pw 的注释与真机树一致）⇒ 只在 header 自己的布局回合里算，会在滑动过程中"卡住不动"。
 // 页面的 `viewDidLayoutSubviews` 在**滑动每一步**都会来，天然就是"每拍重算"。
 class HomeHeaderAppearanceHook: ClassHook<UIViewController> {
     typealias Group = HomeHeaderAppearanceGroup

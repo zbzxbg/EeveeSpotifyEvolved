@@ -3,7 +3,7 @@
 // · 首页横幅："Final call: Get 2 months for $6.99"。
 //
 // 移植自上游 `EeveeSpotifyReincarnated/Sources/EeveeSpotify/ClientMessagingPlatformBlocker.x.swift`
-// （195 行）。目标类名已用本仓库的解压产物**逐条核对过**，7 个全在，
+// （195 行）。目标类名全部在解压产物的符号里，7 个全在，
 // 连 `P33_…` 那个哈希都一致。
 //
 // ## 为什么请求侧已经挡了，还要这一层

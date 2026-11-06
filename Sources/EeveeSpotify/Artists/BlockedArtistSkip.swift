@@ -10,7 +10,7 @@ import UIKit
 /// `CustomLyrics+AllTracksLyrics.x.swift` 顶部那段）。轮询只用已经验证可用的原语：
 ///
 /// · 曲目：`statefulPlayer.currentTrack`（`AppleMusicLyricsPlaybackControl` 已经在用
-/// 同一个调用读时长、`CustomLyrics` 用它读 `trackIdentifier`，两条都在真机跑过）；
+/// 同一处调用读时长、`CustomLyrics` 用它读 `trackIdentifier`）；
 /// · 艺人 / 标题：**每个都先 `responds(to:)` 探一下再调** —— `SPTPlayerTrack` 是我们手写的
 /// `@objc protocol`，声明了不等于这版对象实现了（`artistTitle` 就不是；
 /// 的崩溃正是它）。探测写在共用扩展里：`SPTPlayerTrack.string(ifResponding:)`；
@@ -68,7 +68,7 @@ enum BlockedArtistSkip {
         // · `SPTPlayerTrack.URI` 返回的是**非可选**的 `any SPTURL`；
         // · 而 `SPTURL` 是我们手写的 `@objc protocol`（真身是 NSURL，见那个头文件），
         // 声明里只有 `spt_trackIdentifier` / `isPlaylistURL`，**没有** `absoluteString`
-        // —— 编译期直接报 "has no member 'absoluteString'"CI 就这么挂的）。
+        // —— 编译期直接报 "has no member 'absoluteString'"（CI 就这么挂的）。
         // 仓库里既有的读法是扩展 `trackIdentifier`
         // （`SPTPlayerTrack+Extension.swift`，内部就是 `URI.spt_trackIdentifier`），
         // 拿到 `spotify:track:<id>` 里的 id —— 用它判断"换歌了没有"正好，比整条 URI 还稳。

@@ -21,7 +21,7 @@ import ObjectiveC.runtime
 /// 工具行字形整体下移多少（**nonisolated**：`NowPlayingPageOverlay` 不是 `@MainActor`，
 /// 读不了 `NowPlayingIOS27` 里的静态常量，所以真值放在这里）。
 ///
-/// 34 → **64**下面还空了很大一块（即呼吸感））：原生行中线 811，
+/// 34 → **64**（下面还空了很大一块，即呼吸感）：原生行中线 811，
 /// 被底部那一坨一起上移 55 后是 756；+34 = 790，离屏幕底还有 ~90pt，而音量行在 730…758。
 /// +64 ⇒ 字形中线 820、框 807…833 —— 音量行与它之间约 26pt，底部只留安全区。
 let nowPlayingIOS27FooterRowYOffset: CGFloat = 64
@@ -385,7 +385,7 @@ extension NowPlayingIOS27 {
         }
         // **一律走 `sendActions`**（`tapAction`），不再把触摸 hitTest 到
         // 原生键上 —— 那颗键不在手指底下，UIKit 算出来的点落在它 bounds 之外，
-        // 控件发的是 `.touchUpOutside`（用户报的"iOS 27 下歌词点不了"就是它）。
+        // 控件发的是 `.touchUpOutside`（"iOS 27 下歌词点不了"就是它）。
         // 只有实在找不到 `UIControl` 时才退回 `zones`（至少不把触摸吞掉）。
         func addZone(_ frame: CGRect, target: UIView?, label: String) {
             guard let target else { return }

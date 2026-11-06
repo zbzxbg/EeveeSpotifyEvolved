@@ -19,7 +19,7 @@ import Foundation
 /// [("We're", false), ("no", false), ("strangers", false)]            → "We're no strangers"
 /// ```
 /// 按「看它自己那一位」的读法（本仓库之前的实现）会拼出
-/// `"longe nough"` / `"I'mfeel in'"` / `"Ooh- ooh,"` —— 实测 7 首曲目、423 条有音节的
+/// `"longe nough"` / `"I'mfeel in'"` / `"Ooh- ooh,"` —— 7 首曲目、423 条有音节的
 /// 歌词行里，**153 行**（36%）与官方规则不一致。同一个坑上游也踩过并修好了
 /// （`KaraokeLyricsDto.plainText` 的注释写着 "since the flag is forward-looking"）。
 enum SpicySyllableText {

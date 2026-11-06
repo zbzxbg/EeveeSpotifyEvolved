@@ -3,19 +3,25 @@ import UIKit
 
 /// 专辑页 / 歌单页的 **AM 化**：① 取色底 field　② 封面下缘溶解。
 ///
-/// AM 的专辑/歌单页 = 封面取色的渐变场 + 封面"溶"进那片颜色（不是全屏播放器那套 Metal 流体渐变，那是播放器的）。Spotify 本来就有头部色晕（`LegacyUI` 的 `HeaderView` 里那张 `GradientView`），所以 AM 的差别是"**整页**那片颜色 + 封面溶进去"，不是"有没有色底"。
+/// AM 的专辑/歌单页 = 封面取色的渐变场 + 封面"溶"进那片颜色（不是全屏播放器那套 Metal
+/// 流体渐变，那是播放器的）。Spotify 本来就有头部色晕（`LegacyUI` 的 `HeaderView` 里一层
+/// 随封面取色的渐变），我们只是把它换成整页的 field。
 ///
-/// **必须清底色**：list 与**每个 cell** 都会自己画一层 base surface（`#121212`），不清掉，铺在页面最底层的 field 根本看不见。所以这里清得**非常死**：只清"颜色恰好等于 `#121212`"的视图，而且只在这个页面子树里（深度 ≤ 7、节点 ≤ 600），关掉开关逐个写回原色。
+/// **必须清底色**：list 与**每个 cell** 都会自己画一层 base surface（`#121212`），不清掉，
+/// 铺在页面最底层的 field 根本看不见。所以这里清得**非常死**：只清认得出是 base surface
+/// 的那几层，别的一律不碰。
 ///
-/// **不碰 header 的 alpha**：专辑页那次淡入淡出在**父**元素 `CreativeWorkPlatform.Header` 上，`CreativeWorkHeader` 自己是 1.00 ⇒ 谁去动 alpha 谁就跟它打架。
+/// **不碰 header 的 alpha**：专辑页那次淡入淡出在**父**元素 `CreativeWorkPlatform.Header`
+/// 上，`CreativeWorkHeader` 自己是 1.00 ⇒ 动错一层会把整块 header 一起淡掉。
 ///
 /// 找谁：
 ///
 /// | 页面 | 页面 root | 封面 |
-/// | 专辑 | `CreativeWorkPlatform.CreativeWorkTemplateView` | `CreativeWorkPlatform.Components.UI.ArtWorkElement.WithCoverArt`（248×248 @ 83,62） |
-/// | 歌单 | 往上找到"占满屏"的那一层 | `Components.Header.UI.ArtworkImage`（262×262 @ 76,62），里面有 `EditableHeaderArtworkElement.ImageView` |
+/// | 专辑 | `CreativeWorkPlatform.CreativeWorkTemplateView` | `CreativeWorkPlatform.Components.UI.ArtWorkElement` |
+/// | 歌单 | 往上找到"占满屏"的那一层 | `Components.Header.UI.ArtworkImage`（262×262 @ 76,62） |
 ///
-/// 开关：扩展功能 →「**Melox 风页面**」**一颗**（`UserDefaults.entityPageDissolve`，默认**关**）—— 它内部同时管"取色底"与"满幅照片 / 下缘溶解"两条路径（`tick` 里的 `wantsField` / `wantsDissolve`）。关掉 = **一个字节都不改**（清过的底色逐个写回、两层视图撤掉）。顶部那条"纱"（`ensureScrim`）跟着这颗开关走，不单独设键，也不新增 `UserDefaults` 键。日志 tag：`[PageField]`。
+/// 开关：扩展功能 →「**Melox 风页面**」**一颗**（`UserDefaults.entityPageDissolve`，
+/// 默认**关**）—— 它内部同时管"取色底"与"满幅照片 / 下缘溶解"两条路径。
 enum EntityPageAppearance {
 
     static let logTag = "PageField"
@@ -84,7 +90,7 @@ enum EntityPageAppearance {
     /// 它**每一档掉得比上一档多**（相邻差 0.028 → 0.083 → 0.139 → 0.194 → 0.25 → 0.306），
     /// 最后一段在 **17pt** 里从 0.306 掉到 0 ⇒ 照片底沿留下一条**肉眼可见的横边**，
     /// 读起来就是"贴了一条渐变"，而不是照片化进底色。
-    /// 实测量化：那道边在 ~399pt 处 20px 内掉 53 级灰度。
+    /// 量化：那道边在 ~399pt 处 20px 内掉 53 级灰度。
     ///
     /// 现在换成 **1 − smoothstep**（对称 S 形）：首尾两段的落差从 **0.306 降到 0.043**（≈1/7），
     /// 同一段距离内那道边从 **53 级灰度降到 ~8 级** —— 肉眼不再能看出"这里贴了一条渐变"。
@@ -113,14 +119,14 @@ enum EntityPageAppearance {
     /// （现在的艺人淡出那部分太刻意了，和图片不像）：
     /// **艺人页单独一条**更长的"灰 → 更深灰"渐变，不再和专辑/歌单页一样从 55% 一路压到纯黑。
     ///
-    /// 参考图 136 的实测像素：y=47% 处 `#949494`、y=62%~78% 处 `#595959` —— 也就是
+    /// 参考像素：y=47% 处 `#949494`、y=62%~78% 处 `#595959` —— 也就是
     /// **整页一直是灰的，只是往下变深**，没有"到某一行突然开始黑"的那条带。
     /// 我们把艺人页的终点改成 `#4A4A4A`（比参考图略深一点，保证白字），起点从 55% 推到 62%。
     private static let artistFadeFrom: CGFloat = 0.62
     private static let artistFadeTo = UIColor(white: 0.29, alpha: 1)
     /// pw 的 `SGRPalette.m:8-9`：底板颜色的**饱和度上限 0.55**、**线性亮度上限 0.07**。
     /// 后一条是最要紧的：**任何封面（哪怕一片白）都被压成一块很深的颜色** ⇒ 白字在上面读得清。
-    /// 实测：`#F2F7FB`（Nanatsukaze 那张白猫）⇒ `#494B4C` 那一档；杰克逊那张 ⇒ 一块暗棕。
+    /// 例：`#F2F7FB`（一张白猫封面）⇒ `#494B4C` 那一档；深色封面 ⇒ 一块暗棕。
     private static let maxFieldSaturation: CGFloat = 0.55
     /// | | AM | 我们（0.07） | 我们（0.20） |
     /// | 艺人页 | 淡灰 `#96999B` | `#494B4C` | ≈ `#7B7D7F` |
@@ -234,18 +240,17 @@ enum EntityPageAppearance {
     ///
     /// `Components.UI.AddToButton` / `DownloadButton.Granular.None` /
     /// `Components.UI.ContextMenuButton-2iyK0BOpYVMJUpDkAwVhph`（**带一段随机后缀**）/
-    /// `Components.UI.WatchFeedEntityExplorerButton` —— 整串比对会漏掉带后缀的那种 ✗。
+    /// `Components.UI.WatchFeedEntityExplorerButton` —— 整串比对会漏掉带后缀的那种。
     ///
-    /// ⛔ **`ContextMenuButton` 故意不在这张名单里**自查发现）：
-    /// 它就是**右上那颗「…」**，而 pw 的整套做法**恰恰骑在它上面** ——
-    /// `PlaylistMenu.x` 逐字写着 Spotify 的那七颗 pill 里有五颗
-    /// （`Add / Notes / Video / Edit / Name & details`）**⋯ 菜单本来就有**，
-    /// pw 只把缺的 `Sort` / `Mix` 补进这张 sheet 的 header，点的还是 Spotify 自己那颗 pill。
-    /// ⇒ 把「…」藏掉 = 把我们要往里加东西的那个面板弄没了 ✗（早期的名单里就有它，这里撤回）。
+    /// ⛔ **`ContextMenuButton` 故意不在这张名单里**：它就是**右上那颗「…」**，而 pw 的整套
+    /// 做法**恰恰骑在它上面** —— Spotify 那七颗 pill 里有五颗（`Add / Notes / Video / Edit /
+    /// Name & details`）⋯ 菜单本来就有，pw 只把缺的 `Sort` / `Mix` 补进这张 sheet 的
+    /// header，点的还是 Spotify 自己那颗 pill。⇒ 把「…」藏掉 = 把我们要往里加东西的那个
+    /// 面板弄没了。
     ///
-    /// ⚠️ 剩下的三项（AddTo / Download / WatchFeed）**藏之前要确认 ⋯ 里确实有对应的行** ——
-    /// 这正是 pw 反复强调的"只做加法"；行内那两颗（每行的「+」「…」）**id 还没读到过**，
-    /// 命不中也不会有副作用，而且**藏了哪些 id 会打进日志**，下一份日志就能看到它们叫什么。
+    /// ⚠️ 剩下三项（AddTo / Download / WatchFeed）**藏之前要确认 ⋯ 里确实有对应的行** ——
+    /// 这是 pw 反复强调的"只做加法"。行内那两颗（每行的「+」「…」）id 还没读到过，命不中
+    /// 也不会有副作用，而且**藏了哪些 id 会打进日志**。
     private static let chromeIdentifierFragments = [
         "AddToButton",
         "DownloadButton",
@@ -269,7 +274,7 @@ enum EntityPageAppearance {
     /// "清掉了一个页面容器"只报一次（见 `clearPageContainers`）。
     private static var didReportContainerClear = false
     /// "藏掉了页头那层 wash"按**页**各报一次（见 `concealAlbumWash`）。
-    /// 原来是一个布尔（整场只报一次）⇒ 第二页以后藏了也不报，
+    /// 用页对象而不是布尔：布尔整场只报一次，第二页以后藏了也不报，
     /// "这一页没藏掉"在日志上就看不出来了。
     private static weak var concealedWashPage: UIView?
     /// "这一页有哪些色层"也只报一次 —— 按**页**记（换页要重新出清单）。
@@ -318,15 +323,13 @@ enum EntityPageAppearance {
 
         // **我们那张满幅照片还没有图的时候，什么都别藏**。
         //
-        // 这一句以前是每帧无条件跑的为了治"歌单页刚进会闪现小封面"，
-        // 见上面那段）。可艺人页那 1~2 秒里：Spotify 自己那张封面**已经被我们藏了**，
-        // 而我们的满幅照片要等 `coverImage(in:)` 拿到图才建得出来（`ensureHero` 的
-        // `guard let source = coverImage(in: cover)`）⇒ 那一小段整页只剩 `#121212`
-        // 底 + 白字标题，就是用户报的"进去先黑一下"。
+    // 不能无条件跑（"歌单页刚进会闪现小封面"那条见上面那段）：艺人页那 1~2 秒里，
+    // Spotify 自己那张封面**已经被我们藏了**，而我们的满幅照片要等
+        // `coverImage(in:)` 拿到图才建得出来 ⇒ 那一小段整页只剩 `#121212` 底 + 白字标题，
+        // 就是"进去先黑一下"。
         //
         // ⇒ 判据改成"**我们那张图真的有 image、而且就挂在这一页里**"才藏。图没到的那几帧
-        // 让 Spotify 自己那张照常显示（比黑屏自然得多），图一到、`ensureSharpHero` 会把
-        // 藏 + 铺在同一拍里做完。
+        // 让 Spotify 自己那张照常显示，图一到 `ensureSharpHero` 会把藏 + 铺在同一拍里做完。
         guard let hero = sharpHero, hero.image != nil, hero.isDescendant(of: layout) else { return }
         concealNativeCover(cover)
     }
@@ -473,7 +476,7 @@ enum EntityPageAppearance {
     }
 
     private static func tick() {
-        // （有些选项可以改改或者删掉了）：**「封面取色底」并进这一颗了** ——
+        // **「封面取色底」并进这一颗了** ——
         // 在用户眼里"模糊封面底"与"整页取色底"就是同一件事的两半（都是拿封面的颜色铺底），
         // 设置页因此从**三颗减到两颗**；代码里两条路径**留着**（要单独排查时能只关一半）。
         // 实话：下面这两行**同源** —— 读的都是 `entityPageDissolve`；老键
@@ -618,7 +621,7 @@ enum EntityPageAppearance {
         // the end of it"）。歌单页的列表会回弹、页头会平移（静止 −134 → 滚动 −529），
         // 场正好等于页面时会在那些时刻露出底 ✗。
         // ⚠️ 现在这一层是**纯色**，所以渗多少都不会改观感（旧的三段渐变是按高度算 locations 的，
-        // 那时候外扩会把渐变拉稀 —— 这也是为什么现在才敢做）。
+        // 外扩会把渐变拉稀）。
         let painted = page.bounds.insetBy(dx: 0, dy: -fieldBleed)
         if !view.frame.equalTo(painted) { view.frame = painted }
         // ⚠️ `paintField` 靠"上下各渗出去的那 600pt"反推页面高度与渐变落点 ⇒ **必须在这两行之后**调。
@@ -966,7 +969,7 @@ enum EntityPageAppearance {
         // （你已点赞、艺人之选什么的**都还是黑的**）：**阈值 0.12 → 0.20**。
         //
         // 0.12 只够 `#121212`（列表底，0.071）那一档。而 Spotify 的**卡片**用的是"抬起一层"的
-        // 深灰 `#282828`（**0.157**）—— 我们自己的真机树里逐字写着（艺人页）：
+        // 深灰 `#282828`（**0.157**）—— 艺人页的真机树里逐字是：
         //
         //   ```
         //   10.CreatorBiographyCardLayout@0,0,374,416,bg=#282828      ← 艺人简介卡
@@ -1016,8 +1019,7 @@ enum EntityPageAppearance {
         guard let cover = target.cover else { return }
 
         if sharpCover {
-            // ⚠️ 原来这里有一句"图还没到也要先把 Spotify 那张小封面藏掉"的
-            // `concealNativeCover(cover)`加的）。**删掉**：
+            // ⚠️ 不要在这里调 `concealNativeCover(cover)`（"图还没到也要先把 Spotify 那张小封面藏掉"）。**删掉**：
             // 它正是那一下黑屏的另一半 —— 藏了却还没建出我们的图，页头就是空的。
             // 现在藏的动作只留在两处，两处都要求"**我们真有图**"：
             // · `ensureSharpHero`（宿主认出来之后，藏 + 铺同一拍）；
@@ -1041,7 +1043,7 @@ enum EntityPageAppearance {
     /// **第二版**（刚进去没封面，往下滑才有，而且封面一直在底部）——
     /// **照 pw 的定位方式重写**（`PlaylistHeader.x` 的 `applyBackground` + `applyHero`，v0.21.1 / GPL-3.0）。
     ///
-    /// 我第一版按"封面在**页面根**坐标里的 y"来摆，三条都错，而且都源自同一个错：
+    /// 按"封面在**页面根**坐标里的 y"来摆会全错，而且都源自同一个错：
     /// · 进场时封面的帧还没定、图也还没来 ⇒ 什么都不画（"刚进去没封面"）；
     /// · 位置不跟着 Spotify 自己那块裁剪面走 ⇒ 滑一下才读到一个帧，而且停在错的地方（"一直在底部"）。
     ///
@@ -1081,7 +1083,7 @@ enum EntityPageAppearance {
         /// 高度按**宿主**算、且**不要求封面已经量好**（专辑页与艺人页：封面可能这一拍还没布局）。
         let fillsHost: Bool
         /// 顶部留出状态栏那一条（= 把图**往下挪**，上面露出取色底）。**恒 false** ——
-        /// 看真机后确认"缓冲没和封面接上、而且太大"，而 AM 与歌单页都是铺到顶的。
+        /// 缓冲没和封面接上、而且太大；AM 与歌单页都是铺到顶的。
         /// （用户再问"怎么搞好"）：他二选一里选了**方案 A（照片照旧铺到顶 + 顶上叠一层纱）**
         /// ⇒ 这一条**仍然是 false**，顶上那件事由 `ensureScrim` 做。变量留着只作记录。
         let wantsTopInset: Bool
@@ -1463,7 +1465,7 @@ enum EntityPageAppearance {
         }
     }
 
-    /// 省得一行日志几百个字符）。
+    /// 一行的紧凑描述（省得一行占几百个字符）。
     private static func frameDescription(_ frame: CGRect) -> String {
         "\(Int(frame.minX.rounded())),\(Int(frame.minY.rounded())),"
             + "\(Int(frame.width.rounded())),\(Int(frame.height.rounded()))"
@@ -1511,8 +1513,8 @@ enum EntityPageAppearance {
 
     /// 把 wash 的 `GradientView` 藏掉。
     ///
-    /// **第二版**：第一版只看了
-    /// **直接子视图**（`container.subviews`），而 Spotify 那层洗色在更深的地方 ⇒ 它照旧画在我们的图
+    /// 只看**直接子视图**（`container.subviews`）不够：Spotify 那层洗色在更深的地方 ⇒ 它照旧
+    /// 画在我们的图之上，把整张封面盖掉。pw 的 `applyBackground` 用的是 **`SGForEachView(container, …)`（递归）** ——
     /// 之上，把整张封面盖掉。pw 的 `applyBackground` 用的是 **`SGForEachView(container, …)`（递归）** ——
     /// 这里照它改成递归，并且**跳过我们自己的 hero 及其子树**（pw 同样跳：
     /// `if (hero && (v == hero || [v isDescendantOfView:hero])) return;`）——
@@ -1602,7 +1604,7 @@ enum EntityPageAppearance {
     }
 
     // ⚠️ 「底面色」的判据**只留一份**：`isBaseSurface(_:)`（参数是 `UIColor`，在 `clearBaseSurfaces`
-    // 那一节里）。我第一版在这里又写了一份一模一样的 —— Swift 只看签名（`isBaseSurface(_:)`），
+    // 那一节里）。别在这里再写一份：Swift 只看签名（`isBaseSurface(_:)`），
     // 参数名一个 color 一个 colour 也算重复声明，编译器直接报 `invalid redeclaration`。
 
 
@@ -1656,7 +1658,7 @@ enum EntityPageAppearance {
     /// ⇒ 这个位置是我们说了算的。AM 靠"把那一行做得更靠下"避开渐变，我们靠这一行避开
     /// （页头多高、那一行摆在哪都不影响）。
     ///
-    /// 两道闸门：**整块已经渐隐（收起中）时不算** —— 那时候它本来就让位了，
+    /// 两道闸门：**整块已经渐隐（收起中）时不算** —— 它本来就让位了，
     /// 用它的 y 会把收口推到屏幕上方；**y ≤ 0 不算** —— 那是"还没布局"的现场。
     private static func ourHeaderTextTop(in host: UIView) -> CGFloat? {
         var queue: [UIView] = [host]
@@ -2453,8 +2455,8 @@ enum EntityPageAppearance {
 
     /// 从封面元素往上走，找到**真正该垫底的那一层**。
     ///
-    /// ⚠️ **的教训**：那片横在列表中间的灰带，就是"底跟着内容一起滚"的现场 ✗。
-    /// 歌单页的 root 我没有 id（专辑页有），原先按"占满屏"猜 ⇒ 猜中的那一层**在 scroll view 里**
+    /// ⚠️ **这就是教训**：那片横在列表中间的灰带，就是"底跟着内容一起滚"的现场 ✗。
+    /// 歌单页的 root 没有 id（专辑页有），按"占满屏"猜会挑到**在 scroll view 里**那一层
     /// ⇒ 垫上去的渐变随内容滚，滚到哪就脏到哪。
     /// 所以改成：先沿着祖先链找到**最外层那个 scroll view**，垫在**它的父视图**上（那一层不滚 ✓）；
     /// 封面上方本来就不滚的页面（专辑页）才走"占满屏"那条几何。

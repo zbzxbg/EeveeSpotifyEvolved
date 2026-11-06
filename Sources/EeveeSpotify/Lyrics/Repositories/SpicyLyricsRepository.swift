@@ -5,28 +5,28 @@ import Foundation
 // 走 **SpicyLyrics 官方开发者 API**：`GET https://api.spicylyrics.org/v1/lyrics/<trackId>`
 // + `Authorization: Bearer <key>`（key 见 `SpicyLyricsKey+UserDefaults.swift`）。
 //
-// ── 为什么从 `/query` 搬过来实测）
+// ── 为什么不走 `/query`
 // 旧路是**内部客户端 API** `POST /query`：body 里带 `queries[].variables.auth =
-// "SpicyLyrics-WebAuth"`，并且必须把从 Spotify 请求里抓到的 access token 塞进
-// `SpicyLyrics-WebAuth: Bearer <token>` 头，还要伪装一整套 Spicetify 的
-// Origin / UA / sec-ch-ua 头。实测结论：
+// "SpicyLyrics-WebAuth"`，还要把从 Spotify 请求里抓到的 access token 塞进
+// `SpicyLyrics-WebAuth: Bearer <token>` 头，并伪装一整套 Spicetify 的
+// Origin / UA / sec-ch-ua 头。结果是：
 // · body 形状不对 → HTTP 418「This is the internal client API… use the developer API」；
 // · 形状对但不带 token → 200 外壳 + `result.data.error = "Missing authorization"`，
-// 且外壳带一条 `_notice`：**只授权官方客户端及其公开 fork 的个人使用，禁止第三方
-// 应用抓取/再分发**。
+// 且外壳带一条 `_notice`：**只授权官方客户端及其公开 fork 的个人使用，禁止第三方应用
+// 抓取/再分发**。
 // ⇒ 技术上要抓 Spotify 凭据（脆弱）、条款上不被允许。官方 v1 只认我们自己的 key，
-// 不依赖任何 Spotify 凭据，并且是文档明确给出的接入方式。
+// 不依赖任何 Spotify 凭证，并且是文档明确给出的接入方式。
 //
 // ── 返回格式
-// v1 返回**普通 JSON**（`{"Body": {...}, "Status": 200, "Type": "object"}`），
-// 而旧 `/query` 的内层是 SLObjPack 打包格式。三条解析路径（Syllable / Line / Static）
-// 吃的都是 `SLObjPackValue`，所以在 `SLObjPackValue.fromJSON` 那一层做一次转换，
-// 不维护第二套解析器。`Body.Type` 决定精度：Syllable（逐词）/ Line（逐行）/ Static（无时间轴）。
+// v1 返回**普通 JSON**（`{"Body": {...}, "Status": 200, "Type": "object"}`），而旧
+// `/query` 的内层是 SLObjPack 打包格式。三条解析路径（Syllable / Line / Static）吃的都是
+// `SLObjPackValue`，所以在 `SLObjPackValue.fromJSON` 那一层做一次转换，不维护第二套解析器。
+// `Body.Type` 决定精度：Syllable（逐词）/ Line（逐行）/ Static（无时间轴）。
 //
 // ── iOS 27 crash
-// The EXC_BREAKPOINT / _swift_task_checkIsolatedSwift crash is fixed in
-// DataLoaderServiceHooks.x.swift by dispatching orig.URLSession callbacks
-// onto the main queue. No changes needed here for that.
+// EXC_BREAKPOINT / `_swift_task_checkIsolatedSwift` 那一崩已经在
+// `DataLoaderServiceHooks.x.swift` 里修掉（把 `orig.URLSession` 的回调派发到主队列），
+// 这里不需要任何改动。
 
 class SpicyLyricsRepository: LyricsRepository {
 
@@ -295,7 +295,7 @@ class SpicyLyricsRepository: LyricsRepository {
             var words: [LyricsWordDto]? = nil
             if let syllables = lead["Syllables"]?.arrayValue, !syllables.isEmpty {
                 // 拼接规则整体住在 `SpicySyllableText` 里（含「IsPartOfWord 是前瞻的」
-                // 那条坑；文件头有实测数据）。这里只负责取数据，不重复一份规则 ——
+                // 那条坑；文件头有数据）。这里只负责取数据，不重复一份规则 ——
                 // 两份实现分叉过一次，代价是 36% 的歌词行拼错。
                 lineText = SpicySyllableText.joined(syllables)
                 words = preserveWords ? SpicySyllableText.words(syllables) : nil

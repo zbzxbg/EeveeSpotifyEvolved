@@ -72,7 +72,7 @@ struct EeveeBackupSettingsView: View {
                 Label("backup_copy".localized, systemImage: "doc.on.doc")
             }
 
-            // 只读展示：能选中复制，但别让用户以为改这里能生效（生效靠导入）。
+            // 只读展示：能选中复制，但改这里不会生效（生效靠导入）。
             // ⚠️ 不用 `.textSelection` —— 那是 iOS 15 的 API，这一页不值得抬高最低版本。
             Text(exportText)
                 .font(.system(.caption2, design: .monospaced))

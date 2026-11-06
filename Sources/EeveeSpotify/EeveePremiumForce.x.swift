@@ -136,7 +136,7 @@ private func passiveLogProductState(_ tag: String, _ dict: NSDictionary) {
         // ⚠️追加：**同一行也进导出文件**。
         // 排查"整库变黑 / 听不了歌"时，产品状态（ads / on-demand / unrestricted /
         // player-license / catalogue …）有没有被服务端改回去，是**唯一**的本地判据；
-        // 而它原先只走 NSLog，导出来的 `eeveespotify_debug_shared*.log` 里根本看不到。
+        // 它必须走 `writeDebugLog`：只走 NSLog 的话，导出的 `eeveespotify_debug_shared*.log` 里根本看不到。
         // `writeDebugLog` 内部自己会过 `DebugLogSanitizer`，所以脱敏不漏。
         writeDebugLog(line)
     } else if dict.count > 0 {

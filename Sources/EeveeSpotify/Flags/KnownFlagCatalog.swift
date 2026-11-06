@@ -10,16 +10,14 @@ enum FlagValueType: String {
 /// 一条**已知**的 Spotify 远端配置。
 ///
 /// 「已知」有**两种证据来源**（`observedValue` 与分组脚注会写清是哪一种）：
-/// 名字与 scope 都对得上，`observedValue` 就是那次观察到的取值；
-/// 2. **IPA 字面量表**起收录）：它出现在 IPA 的 flag 表
-/// （从 9.1.86 主二进制抽出的 2485 条 `scope.name`）里，
-/// 这种条目 `observedValue` 留空 —— 点一下会写一条覆盖，
-/// `[Flags] override … N match(es)`**：0 命中说明服务端没下发（`.forceBool` / `.forceEnum`
-/// / `.forceInt` 会自己追加一条，所以仍然可能生效）。
+/// 1. **实际观察**：名字与 scope 都对得上，`observedValue` 就是那次观察到的取值；
+/// 2. **IPA 字面量表**：它出现在 IPA 的 flag 表（从 9.1.86 主二进制抽出的 2485 条
+///    `scope.name`）里，这种条目 `observedValue` 留空 —— 点一下会写一条覆盖，看
+///    `[Flags] override … N match(es)`：0 命中说明服务端没下发（`.forceBool` / `.forceEnum`
+///    / `.forceInt` 会自己追加一条，所以仍然可能生效）。
 ///
 /// 为什么需要它：让用户手打 `ios-feature-socialrecommendationsassistedcurationplugins`
-/// 这样的 scope 不现实，而写错 scope 的后果是"覆盖静默不命中"（仓库里
-/// `reportLyricsReplacementOutcome` 就是为区分这两种情况才存在的）。
+/// 这样的 scope 不现实，而写错 scope 的后果是"覆盖静默不命中"。
 struct KnownFlag: Hashable {
     let name: String
     let scope: String
@@ -148,7 +146,7 @@ enum KnownFlagCatalog {
         // 这一组是"pw 那 25 条清理开关"里**能用 flag 直接关掉**的那部分：
         // Spotify 自己有一个"减少打扰"模块 `ios-messaging-reduceinterventions-impl`，
         // 里面**一条提示一个 flag**（账号切换 / 演唱会通知 / 现场活动 / Puffin /
-        // 智能随机 / 探索提示 / AI 歌单创建）。逐条都在 IPA 的 flag 表 里核对过，
+        // 智能随机 / 探索提示 / AI 歌单创建）。逐条都在 IPA 的 flag 表里，
         // 没有一条是照着名字猜的。
         KnownFlagGroup(
             titleKey: "flag_group_interventions",
@@ -220,7 +218,7 @@ enum KnownFlagCatalog {
 
         // ──第二批"能关的打扰"，跨 scope
         //
-        // 起因：用户问"实际能关的是不是比这多很多" —— 是。上面那组只覆盖
+        // 实际能关的比上面那组多很多。上面那组只覆盖
         // `ios-messaging-reduceinterventions-impl`（Spotify 自己那个"减少打扰"模块，
         // 11 条已全覆盖）；而 IPA flag 表（IPA 的 flag 表（2485 条））里
         // 还有一批**同性质的提示/推销**散在别的 scope。

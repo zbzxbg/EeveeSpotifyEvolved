@@ -83,8 +83,8 @@ extension NowPlayingLyricsPlate {
         // mask 挂在这个元素的 layer 上 ⇒ x=0 对的是元素**当前（位移后）**的左边，用它算会多出一个 `shift`
         // ⇒ `width == bounds.width` ⇒ mask 被删掉。要用 `convert`（**含 transform**）。
         let titleLeft = title.convert(title.bounds, to: page).minX
-        // 右沿的余量也用 `titleGap`（原来是写死的 8pt）；与"离控件"那条
-        // 同一个数 ⇒ 用户报的"滚动的右边界太靠右"只需调 `titleGap` 一处。
+        // 右沿的余量也用 `titleGap`（不写死 8pt）；与"离控件"那条
+        // 同一个数 ⇒ "滚动的右边界太靠右"只需调 `titleGap` 一处。
         let pageLimit = (page.bounds.maxX - titleGap) - titleLeft
         let limitRoom = trailingControlX(in: title, page: page)
             .map { $0 - titleLeft - titleGap }
@@ -414,7 +414,7 @@ extension NowPlayingLyricsPlate {
         lastArtistFullBase = base
 
         // 这条日志原来**一个进程只打一次**，于是"换歌之后有没有重新贴上"
-        // 而我们手里没有一行能判它的证据）。
+        // 而我们手里没有一行能判它的证据。
         // 改成"每换一首歌允许再报一次"。
         if !didLogArtistProvider || loggedArtistProviderTrack != trackId {
             didLogArtistProvider = true

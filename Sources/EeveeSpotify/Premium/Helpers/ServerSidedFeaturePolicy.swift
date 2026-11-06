@@ -35,7 +35,7 @@ struct ServerSidedFeaturePolicy {
     }
 }
 
-// ⚠️⚠️ **这个文件是一条 CI 契约**为红叉付过学费）：
+// ⚠️⚠️ **这个文件是一条 CI 契约**：
 //
 // `.github/workflows/tests.yml` 里这一步把它**单独**丢给编译器：
 //
@@ -43,9 +43,8 @@ struct ServerSidedFeaturePolicy {
 // Tests/ServerSidedFeaturePolicy/main.swift
 //
 // ⇒ 它**只许依赖 Foundation**，不许引用本仓库别的类型或函数（`AccountAttribute`、
-// `writeDebugLog`、`UserDefaults.…` 这些在这里都**不存在**）。
-// 我往里加了一个"账号档位取证"的 static 方法（引用了那两个符号）⇒
-// 这一步每次 push 都编不过 ⇒ GitHub 上**一串红叉**。那条取证现在在
+// `writeDebugLog`、`UserDefaults.…` 这些在这里都**不存在**）。往这里加一个引用它们的
+// static 方法，这一步每次 push 都编不过。账号档位取证因此放在
 // `DynamicPremium+ModifyingFunctions.swift`（CI 不单独编译它）。
 //
 // 同一个契约对 tests.yml 里另外五个被单独编译的文件同样成立：

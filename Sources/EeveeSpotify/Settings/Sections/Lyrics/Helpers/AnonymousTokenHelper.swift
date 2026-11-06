@@ -15,7 +15,7 @@ import Combine
 /// · **app_id 三个候选**（上游后来的做法）：设备推断的那个 → 另一平台的 → `web-desktop-app-v1.0`；
 /// · **同步入口**（`fetchTokenBlocking`）：取词路径是同步的，不能只留 Combine 那个 async 版本。
 ///
-/// ## 请求形态的两条实测结论（别改）
+/// ## 请求形态的两条结论（别改）
 ///
 /// 1. **必须带 Safari 形态的 UA**（`UIDevice.safariUserAgent`）：Musixmatch 的 nginx 会对
 /// App 内 `URLSession` 的默认 UA 回 403 + 一页 nginx HTML。这一条与
@@ -145,7 +145,7 @@ struct AnonymousTokenHelper {
     ///
     /// ⚠️ 名字**不叫** `token`：设置页那个 `receiveValue { token in … }` 的闭包参数同名，
     /// 而本仓库的 `swift_member_check.py` 会把它当成"跨文件引用了别处的 private `token`"
-    /// 报出来实测）。名字错开，检查器与读代码的人都不用猜。
+    /// （报出来）。名字错开，检查器与读代码的人都不用猜。
     private static func parseToken(from data: Data, appId: String, status: Int) -> String? {
         let raw = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
         let preview = String(raw.prefix(200))

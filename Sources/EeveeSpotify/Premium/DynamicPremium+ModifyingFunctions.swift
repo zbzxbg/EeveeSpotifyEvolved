@@ -6,33 +6,27 @@ private let liveMessagingAssignmentKeys = Set([
     "ios-feature-sidedrawer-platform.is_list_page_enabled"
 ])
 
-// MARK: - 账号档位取证**只记不改**）
+// MARK: - 账号档位取证（**只记不改**）
 //
 // 把**改写之前**那份账号态里的档位打一行（`type` / `catalogue` / `player-license`）。
 //
 // ── 为什么需要它
-// 那轮 A/B 说"和不启用 Premium 补丁有关"，但他随后说明
-// **自己没有真会员** ⇒ 那句只能读成"**灰 = 伪装没生效的那一档**"
-// （免费号不打补丁本来就会灰、会放不动），而在此之前我们**没有一行日志**能回答
-// "这次启动到底有没有看到账号态、看到的是什么档"。
+// 之前没有任何一行日志能回答"这次启动到底有没有看到账号态、看到的是什么档"。
 //
 // ── 判读下一份日志
-// · `type=free` **且**后面 `[Flags] …` 有行 ⇒ 伪装链路是通的，症状要往别处查
-// （看内容请求到底拿到了多少）；
+// · `type=free` **且**后面 `[Flags] …` 有行 ⇒ 伪装链路是通的，症状要往别处查；
 // · `type=premium` ⇒ 服务端本来就给 premium（只有一个真订阅账号才会这样）；
-// · 这一行**一次都不出现** ⇒ 这次启动我们**根本没拿到 customize 响应体** ——
-// 那正是 §9.2 那条"304 没有 body ⇒ 交不出配置 ⇒ 整库发灰 / 歌曲消失 / 放不动"的现场
-// （`[DL] customize 304 -> replaying the seed` / `[HCUS] …` 那两行是同一件事的另一半）。
+// · 这一行**一次都不出现** ⇒ 这次启动我们**根本没拿到 customize 响应体** —— 那正是
+//   "304 没有 body ⇒ 交不出配置 ⇒ 整库发灰 / 歌曲消失 / 放不动"的现场
+//   （`[DL] customize 304 -> replaying the seed` 是同一件事的另一半）。
 //
-// ⚠️ **只记不改**：`modifyAttributes` 照旧无条件跑。
-// 曾短暂加过一道"服务端说 premium 就不下伪装"的闸门，**已撤**：
-// 前提（用户可能是真订阅）被用户否掉，而那道闸门唯一可能的副作用恰好是
-// "把伪装关掉 ⇒ 又变成免费档 ⇒ 正是用户报的那个症状"。
+// ⚠️ **只记不改**：`modifyAttributes` 照旧无条件跑。不要加"服务端说 premium 就不下
+// 伪装"那道闸门 —— 它唯一可能的副作用是"把伪装关掉 ⇒ 又变成免费档 ⇒ 正是那个症状"。
 //
 // ⚠️ **为什么住在这个文件、而不是 `ServerSidedFeaturePolicy.swift`**：那个文件被
-// `.github/workflows/tests.yml` **单独**丢给 `swiftc`（只许依赖 Foundation），
-// 而这里要用的 `AccountAttribute` / `writeDebugLog` 在那里都不存在 —— 放错地方就是
-// 一串 GitHub 红叉真发生过）。**同一个契约对 tests.yml 里另外五个文件也成立。**
+// `.github/workflows/tests.yml` **单独**丢给 `swiftc`（只许依赖 Foundation），而这里要
+// 用的 `AccountAttribute` / `writeDebugLog` 在那里都不存在。**同一个契约对 tests.yml 里
+// 另外五个文件也成立。**
 private func reportAccountTierOnTheWire(_ attributes: [String: AccountAttribute]) {
     guard !attributes.isEmpty else { return }
     let type = attributes["type"]?.stringValue.lowercased() ?? "(absent)"
@@ -453,7 +447,7 @@ private let propertyReplacements = [
     //
     // （退出重进 Spotify **大概率突然无法播放任何歌词**…换代理也不行，
     // **开启覆盖配置也只能好一小会**）：
-    // 这里原来是 `.setBool`（**只钉已下发的值、绝不新增**），而它的"空枪"是**静默**的 ——
+    // `.setBool` 只钉已下发的值、绝不新增，而它的"空枪"是**静默**的 ——
     // 只要某一份 customize payload **没有**携带这条 flag（unauth 配置、增量/部分 payload
     // 都可能没有），我们这一枪就落空，而服务端那份的取值是 **false**
     // ⇒ **歌词入口整个消失**，的就是"没有任何歌词"。
@@ -463,19 +457,18 @@ private let propertyReplacements = [
     // ⚠️ 开关仍然有效：`modifyAssignedValues` 里那条门禁照旧整条跳过（`SKIPPED: switch off`）。
     EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
 
-    // 「封面下单行歌词」（跟唱那一行）—— **用户那个开关的第三层**。
+    // 「封面下单行歌词」（跟唱那一行）—— **开关的第三层**。
     //
-    // 它由远端配置控制，
+    // 它由远端配置控制：
     //
     // scope=ios-nowplaying-contentlayers-impl name=lyrics_under_cover_art_enabled bool=true
     //
-    // **这个名字就是隐藏封面下单行歌词）：
     // 关掉它 ⇒ 那一行、以及"把封面抬起来"的布局后果、底部那颗「显示/隐藏歌词」胶囊
-    // 一起消失。为什么必须做到这一层：前两层（`DeclutterChrome` 藏那一行 / 按那颗胶囊）
-    // 都只解决"看得见的那部分"——与 60 两次现场都是这么来的。
+    // 一起消失。必须做到这一层：前两层（`DeclutterChrome` 藏那一行 / 按那颗胶囊）都只
+    // 解决"看得见的那部分"。
     //
-    // ⚠️ 只用 `setBool`（**只改服务端已下发的值，绝不新增**）：scope 与 name 都来自真机日志，
-    // 不存在"凭空插一条 AssignedValue"的风险；服务端真没下发这条时这一枪是空的，
+    // ⚠️ 只用 `setBool`（**只改服务端已下发的值，绝不新增**）：scope 与 name 都来自真机
+    // 日志，不存在"凭空插一条 AssignedValue"的风险；服务端真没下发这条时这一枪是空的。
     // ⚠️ **开关关着时整条跳过**（门禁在 `modifyAssignedValues`）：用户要回 Spotify 的原样。
     EeveePropertyReplacement(
         name: "lyrics_under_cover_art_enabled",
@@ -834,7 +827,7 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
 
 /// **档位核心**：服务器就算一颗都没发，这几颗也必须写 —— 它们决定"App 认为自己是会员"。
 ///
-/// （用户问"Reincarnated 他们的解锁配置不能用吗"）：
+/// 与 Reincarnated 的解锁配置对比：
 /// 对照他们的 `EeveePremiumForce.x.swift`，我们把"**什么时候**写"改成了两档 ——
 /// · **核心集合（下面这些）**：无条件写（他们叫 `seedAlways`，理由一致）；
 /// · **其余每一颗**：**只在服务端确实下发了它的时候**才覆盖 ⇒ **绝不凭空造键**。

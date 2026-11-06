@@ -1,31 +1,21 @@
 import Foundation
 
-/// 给**占位文案**合成行级时间轴起只服务这一条路）。
+/// 给**占位文案**合成行级时间轴（只服务这一条路）。
 ///
-/// ── 为什么还需要它（真机取证结论）
-/// Spotify 9.1.x 把 NPV 歌词模块重写成了响应驱动的组件（`Lyrics_CardElementImpl.*` /
-/// `Lyrics_NPVElementsKitImpl.*`）。
+/// ── 为什么还需要它
+/// Spotify 9.1.x 把 NPV 歌词模块重写成响应驱动的组件（`Lyrics_CardElementImpl.*` /
+/// `Lyrics_NPVElementsKitImpl.*`）。**无时间轴的 payload 在这个版本上有可能整个不显示**，
+/// 而占位恰恰是"取不到词"那条路上唯一交出去的东西。所以 `makeUnavailableLyrics` 给它补
+/// 一层按曲目时长铺开的行级时间轴（那里**写死**调用，没有开关）。
 ///
-/// · 正常显示的歌：`line timing 54/54 -> line-level=Y | timeSynced=true`；
-/// · 显示不出歌词的歌：payload 是**无时间轴**的占位
-/// （`[NetEase] No usable lyrics` → `serving our placeholder` →
-/// `attach declined — not even line-level timing is available`）。
-///
-/// 也就是说：**无时间轴的占位在这个版本上有可能整个不显示**，而占位恰恰是"取不到词"
-/// 那条路上唯一交出去的东西。所以 `makeUnavailableLyrics` 给它补一层按曲目时长铺开的
-/// 行级时间轴（那里**写死**调用，不再有任何开关）。
-///
-/// ⚠️**真实歌词源那条合成已删除**。这里原本还负责给 Genius / PetitLyrics
-/// 这类纯文本源伪造时间轴，并挂着一个「补全歌词时间轴」调试开关 —— 开关、key、l10n 与
-/// `LyricsDto.toSpotifyLyricsData` 里那段代码一起删了。理由：真机 A/B 显示关掉之后
-/// 观感"差不多或略好"，而且给本来没有时间轴的源编一层假 offset 只会让整首都不准；
-/// 歌词模块出现与否由元素列表决定（§7.4），不需要靠伪造时间轴去骗渲染层。
+/// ⚠️ **真实歌词源不合成**：给本来没有时间轴的源（Genius / PetitLyrics 这类纯文本）编一层
+/// 假 offset 只会让整首都不准；歌词模块出现与否由元素列表决定，不需要靠伪造时间轴去骗
+/// 渲染层。
 ///
 /// ── 边界（重要）
-/// · 只作用于**占位 payload**，不碰任何真实歌词源的数据（"源给了零星真实时间轴就别覆盖"
-/// 那个判据也随真实源那条路一起删掉了）。
+/// · 只作用于**占位 payload**，不碰任何真实歌词源的数据。
 /// · 合成是**近似**的：行会按字符权重被铺在曲目时长上，位置不保证准确。
-/// 对一个只写着"未找到歌词"的占位来说，这个精度足够。
+///   对一个只写着"未找到歌词"的占位来说，这个精度足够。
 enum SyntheticLyricTiming {
 
     /// 每行至少占用的时长，避免超短行被压成 0ms 导致相邻行 offset 相同。
@@ -41,8 +31,8 @@ enum SyntheticLyricTiming {
     ///
     /// 口径与 `hasUsableLineLevelData` 一致（同样 50% 阈值），
     /// 这样"我们认为可用"与"渲染层认为可用"不会打架。
-    /// 起只剩占位这一条路会用；占位行永远没有真实 offset，
-    /// 这个判据的作用是"别把已经铺过时间轴的那份再铺一遍"。）
+    /// 现在只剩占位这一条路会用；占位行永远没有真实 offset，
+    /// 这个判据的作用是"别把已经铺过时间轴的那份再铺一遍"。
     static func alreadyHasLineTiming(_ lines: [LyricsLineDto]) -> Bool {
         guard !lines.isEmpty else { return false }
         let timed = lines.filter { ($0.offsetMs ?? 0) > 0 }.count

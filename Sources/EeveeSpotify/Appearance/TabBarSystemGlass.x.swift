@@ -152,7 +152,7 @@ enum TabBarSystemGlass {
         makeRoom(for: bar, systemBar: systemBar)
 
         // 把"我们给的框"与"UIKit 真画出来的玻璃"放进同一行 ——
-        // 只有实测数字能收敛（UIKit 按自己的内边距画，我们给的框 ≠ 玻璃框）。
+        // 只有真实数字能收敛（UIKit 按自己的内边距画，我们给的框 ≠ 玻璃框）。
         reportGlassGeometry(systemBar, in: bar)
 
         logLayoutOnce(bar: bar, items: items, systemBar: systemBar, mirrored: mirrored)
@@ -462,7 +462,7 @@ enum TabBarSystemGlass {
     ///
     /// **UIKit 画的玻璃比我们给的框小一圈**：`host 27,-3,360,60` → 它画出来的
     /// `_UITabBarItemPlatterView` 是 `48,-3,318,39` ⇒ 它自己留了 **左右各 21、底 21**（顶 0）。
-    /// 所以修法**不写死 21**，而是按**实测差**把宿主往外扩 —— 关系是"玻璃 = 宿主 − 常量"
+    /// 所以修法**不写死 21**，而是按**量出来的差**把宿主往外扩 —— 关系是"玻璃 = 宿主 − 常量"
     /// ⇒ 一次收敛、幂等。拿不到可信几何（首次布局 / 栏还没进窗口 / 玻璃还没排完）时
     /// 退回"整条栏"，下一拍再对齐 —— 绝不因为量不到就把玻璃藏起来。
     ///
@@ -543,27 +543,25 @@ enum TabBarSystemGlass {
 
     // MARK: - 拖动胶囊：**系统自带，我们不碰**
     //
-    // **原生 iOS 26 的液态玻璃标签栏本来就能"按住就滑"**：手指一贴上那条栏就能横向滑，
-    // 选中镜片**立刻跟手**、松手选中手指下那一颗 —— 不用先长按。苹果 WWDC25
-    // 「Build a UIKit app with the new design」里，标签栏（`UITabBarController`）整个是
-    // 系统那一套（浮动玻璃 + 选中镜片 + minimize on scroll），**没有"自己画胶囊"这条题**。
+    // 原生 iOS 26 的液态玻璃标签栏本来就能"按住就滑"：手指一贴上那条栏就能横向滑，
+    // 选中镜片**立刻跟手**、松手选中手指下那一颗 —— 不用先长按。WWDC25「Build a UIKit app
+    // with the new design」里，标签栏整个是系统那一套（浮动玻璃 + 选中镜片 + minimize on
+    // scroll），**没有"自己画胶囊"这条题**。
     //
-    // ⇒ 结论：**这一层一行代码都不该写**。我们唯一要做的是"别把触摸从系统栏手里拿走"
+    // ⇒ 这一层一行代码都不该写。唯一要做的是"别把触摸从系统栏手里拿走"
     // （见 `probeForwardRoute`：玻璃接管触摸 ⇒ 苹果那套交互才有机会发生）。
     //
     // ⚠️ 两条走不通的路，别再走回去：
     // ① 在 **Spotify 那条栏**上装 pan"滑过哪格切哪格"，每次 `.changed` 都提交
     // ⇒ 不跟手 / 胶囊回弹 / 替用户按按键；
     // ② 在**我们宿主**上装 pan、逐格切 + 独立开关 ⇒ **与系统自己那套重复**，
-    // 而系统那套（连续跟手）比我们写得好。SwiftUI 自绘的标签栏才需要自己实现这件事，
-    // 我们用的是**真系统栏**，所以归 UIKit。
+    // 而系统那套（连续跟手）比我们写得好。
     //
     // UIKit 自己画的那块玻璃 —— **只认 `UITabBarPlatterView` 那条线**（栏自己的 platter）。
     //
     // ⚠️ 不能按"面积最大"挑：同一族里还有 `_UITabBarItemPlatterView`（**选中那颗的气泡**）
     // 与 `_UILiquidLensView`（选中透镜）—— 它们的尺寸**随选中态变**，按面积挑会在点标签时
-    // 挑到它们 ⇒ 宿主跟着变 ⇒ 玻璃忽大忽小。
-    // 另外要求宽度至少是栏宽的四成（排到一半的 0×0 一律不要）。
+    // 挑到它们 ⇒ 宿主跟着变 ⇒ 玻璃忽大忽小。另外要求宽度至少是栏宽的四成。
     private static func drawnGlassFrame(in systemBar: UITabBar, in bar: UIView) -> CGRect? {
         let widest = max(bar.bounds.width, 1)
         return platterViews(in: systemBar)
@@ -1464,7 +1462,7 @@ enum TabBarSystemGlass {
 
     /// **把"我们给的框"和"UIKit 真画出来的玻璃"放进同一行**。
     ///
-    /// UIKit 的浮岛玻璃**按自己的内边距画**（我们给的宿主框 ≠ 玻璃框）⇒ 只有实测数字能收敛：
+    /// UIKit 的浮岛玻璃**按自己的内边距画**（我们给的宿主框 ≠ 玻璃框）⇒ 只有量出来的数字能收敛：
     /// 这一行里 `host` 是我们摆的、`system bar` 是系统栏自己的、`drawn` 里那几块（platter /
     /// liquid lens / selection）**才是屏幕上真正的那条胶囊**。
     private static func reportGlassGeometry(_ systemBar: UITabBar, in bar: UIView) {

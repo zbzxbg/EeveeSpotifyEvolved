@@ -15,7 +15,7 @@ import UIKit
 /// 一律以 `[Tree]` 为准，写在本文件的注释里；
 /// * 凡是**借来的比例/曲线**（下拉阈值、spring 参数、间距 13pt…），标注来源并允许被真机覆盖。
 ///
-/// 所以：**要改这里的数，先看真机日志或截图**，别凭感觉调。
+/// 所以：**要改这里的数，先对着真机日志核对**，别凭感觉调。
 enum NowPlayingMetrics {
 
     // MARK: - 借自 kumone 的交互阈值（跨技术栈可搬：纯数字）
@@ -64,7 +64,7 @@ enum NowPlayingMetrics {
     static let lyricScrollFollowDuration: TimeInterval = 0.8
     static let lyricScrollFollowDamping: CGFloat = 0.85
 
-    // MARK: - 我们自己的真机数字（来自 `[Tree]`，不是借的）
+    // MARK: - 真机数字（来自 `[Tree]`）
     //
     // 歌词卡：`CardView@0,0,374,320,id=lyrics-card-view`，内容区 `342×256`。
     static let lyricsCardSize = CGSize(width: 374, height: 320)

@@ -9,7 +9,7 @@ struct EntityPageHeaderGroup: HookGroup {}
 /// 主挂点：那一块的布局视图每一拍都会走这里。
 ///
 /// ⚠️ hook 类**不能加 `final`/`private`/`fileprivate`** —— Orion 会生成自己的胶水子类，
-/// 实测报错：`A class hook cannot be private, fileprivate, or final`。
+/// 报错是：`A class hook cannot be private, fileprivate, or final`。
 /// 本机 `orion_hook_guard.py` 已加这条规则（规则 5）。
 class EntityPageHeaderLayoutHook: ClassHook<UIView> {
     typealias Group = EntityPageHeaderGroup
@@ -208,21 +208,12 @@ class ArtistBiographyCardLayoutHook: ClassHook<UIView> {
 
 // MARK: - 简介卡里的「翻译」（崩溃修复）
 //
-// （`Spotify--094701.ips`，iOS 27.0.1 / 9.1.88）：
-// 在艺人简介卡里选中一段字、点编辑菜单里的**「翻译」**，App 直接 SIGABRT。栈逐字：
+// 在艺人简介卡里选中一段字、点编辑菜单里的**「翻译」**，App 直接 SIGABRT。栈落在
+// `-[UITextInputController _translate:]` 的 `NSAssertionHandler` 上。
 //
-// ```
-// 12 Foundation  -[NSAssertionHandler handleFailureInMethod:object:file:lineNumber:description:]
-// 13 UIKitCore   -[UITextInputController _translate:] +340
-// 14 UIKitCore   -[UITextView _translate:] +64
-// 15 UIKitCore   -[UIApplication sendAction:to:from:forEvent:]
-// 16 UIKitCore   -[UICommand _performAction:withSender:target:notifyingStateObservers:]
-// 21 UIKitCore   -[_UIEditMenuListView _selectItemAtIndexPath:]
-// ```
-//
-// **和歌词解析没有关系**（那一栈里一个我们的帧都没有）：崩在系统 `_translate:` 的断言上。
-// 我们全仓库只建了一个 `UITextView`（`ArtistBioSheet` 的正文），而它**直接挂在 window 上、
-// 没有 VC 祖先** —— 系统的翻译要找 VC 来呈现那张卡片，找不到就断言。
+// **和歌词解析没有关系**（那一栈里一个我们的帧都没有）。我们全仓库只建了一个 `UITextView`
+// （`ArtistBioSheet` 的正文），而它**直接挂在 window 上、没有 VC 祖先** —— 系统的翻译要找
+// VC 来呈现那张卡片，找不到就断言。
 //
 // 闸门只收"**没有 VC 祖先**"这一种（`ArtistBioSheet.hasViewControllerAncestor`）：
 // Spotify 自己的文本框都在 VC 里，照常放行。

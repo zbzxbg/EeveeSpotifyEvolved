@@ -16,12 +16,12 @@ import UIKit
 /// 标题与创建者正好压在封面的"溶解"边上，封面要伸到内容顶部往下 56pt（`titleRise`，给 hero 用）。
 ///
 /// 三条关键取舍：
-/// 1. **不摆 Spotify 的控件，整列藏掉自己画**：摆它的列就要回应它每一拍的 stack 重排与 Auto Layout 写回，实测会被改回去；
+/// 1. **不摆 Spotify 的控件，整列藏掉自己画**：摆它的列就要回应它每一拍的 stack 重排与 Auto Layout 写回，会被改回去；
 /// 2. **按钮"镜像 + 转发"**：字形取自被藏起来的 Spotify 控件（取不到用 SF Symbol 兜底），点击 `sendActions` 转发给那个控件 ⇒ 动作 / 状态 / 语言都留在 Spotify 那边；
 /// 3. **只有文字真正画到的地方吃触摸**：这块和页面一样宽，其余部分必须让下拉与点击穿过去。
 ///
 /// 安全阀：**认不出标题就整块不动**（`apply` 早退，一个视图都不藏）。任何一环失配的结果是"这个功能没生效"，而不是"歌单页坏了"。
-/// 判据照 pw v0.21.1 `SGRHeaderInfo` / `PlaylistHeader.x` 重写，目标类与标识符用真机日志重新核对过。
+/// 判据照 pw v0.21.1 `SGRHeaderInfo` / `PlaylistHeader.x`，目标类与标识符以真机日志为准。
 enum EntityPageHeaderMetrics {
     static let side: CGFloat = 20           // 文字左右内缩
     static let playMinWidth: CGFloat = 148  // Play 胶囊最小宽度（Music app 的）
@@ -32,7 +32,7 @@ enum EntityPageHeaderMetrics {
     static let titleRise: CGFloat = 56      // 封面要伸到内容顶部往下这么多（hero 用）
     /// （用户给了 8 张 AM 艺人页，photo_1/3/5/7）：三颗的**尺寸关系**照 Apple Music 来
     /// —— 两侧是**小圆**（`ⓘ` 与 `☆`，≈56pt），中间是**大一档的圆**（纯白 `▶`，≈80pt）。
-    /// 原来是 pw 的"两颗 44 圆 + 一颗 148×48 的白胶囊"；现在中间那颗**从胶囊变成圆**（去掉"播放"二字）。
+    /// 中间那颗是**圆**而不是 pw 的"148×48 白胶囊"（去掉"播放"二字），两侧是 44 圆。
     static let rowHeight: CGFloat = 56      // = 两侧小圆的直径
     static let playSide: CGFloat = 84       // = 中间那颗粒子的直径
     /// 页头**右上角那颗 `⋯`** 的直径 —— AM 在同一位置放一颗"分享 + ⋯"的
@@ -41,7 +41,7 @@ enum EntityPageHeaderMetrics {
     /// 两侧按钮那圈**玻璃圆**的直径（= pw 的 `SGRGlassCircleSize`）。
     static let glassCircle: CGFloat = 44
     /// 两侧按钮的字形边长。（旁边的按键小了点）：
-    /// 原来是"按 48pt 的 27% 内缩"≈26pt，看着比中间那颗胶囊轻 —— pw 是 44pt 玻璃圆里放字形，
+    /// 不按"48pt 的 27% 内缩"（≈26pt）——那比中间那颗轻；pw 是 44pt 玻璃圆里放字形，
     /// 所以这里改成**固定字形 + 44pt 玻璃圆**，与 Music app 的分量对齐。
     /// 同日再调（这播放旁边的播放图标太小了吧）：22 → **24**。
     static let glyphSide: CGFloat = 24
@@ -108,7 +108,7 @@ func eeveeConceal(_ view: UIView?) {
 /// **只加空 mask** 的藏法：视图什么都不画，但 `layer.isHidden` / `view.isHidden` 一个都不碰。
 ///
 /// 什么时候必须用它 —— 视图在 **`OverflowStackView`** 里的时候。
-/// pw 在艺人页踩过这个真机崩溃，注释逐字：
+/// 这个崩溃 pw 在艺人页也遇到过，注释逐字：
 ///
 /// > `ios-creator-impl.context_menu_in_navigation_bar_enabled_artist` moves more out of the header's
 /// > row, and with it gone Spotify's OverflowStackView force-unwraps the tallest view of a line that
@@ -202,18 +202,15 @@ func eeveeScrollPageDown(from view: UIView) -> Bool {
 // MARK: - 「关于艺人」在这一版艺人页上的真实名字
 //
 // 卡片：id 前缀 `Components.UI.CreatorBiographyCard.*`、Swift 类名里含 `CreatorBiography`。
-// 正文：`Components.UI.CreatorBiographyCard.BiographyLabel`（真机树里那一格就是它）。
+// 正文：`Components.UI.CreatorBiographyCard.BiographyLabel`。
 //
-// ⚠️ 为什么不能只认 `SPTArtistAboutBiographyView`：
-// · 那个类**在二进制里还在** ⇒ 启动那行 `about-artist hook on` 照样打得出来，
-// 但它在**这一版艺人页上从头到尾没出现过**：`applyToArtistPage` 那条 BFS 只试两拍、
-// `eeveeMaterialiseBio` 滚到列表底也只报 `nothing built` —— 而**同一份日志**的
-// `[HeaderProbe]` 明明列出了 `id=Components.UI.CreatorBiographyCard.HeaderLabel` /
-// `.FreshFindsForwardBadge`：卡片在页面上，**只是不叫那个名字**。
-// · 这件事本仓库自己早写下来了（`EntityPageRepaint` 的 `aboutArtistClassFragment`：
-// 「`aboutArtistFragment` 那条判据在这一版艺人页上永远不可能命中」）—— 那一轮只把
-// **折叠**改对了，**读取侧没跟上** ⇒ 折叠照做（那一段被折成 0 高）、我们的卡片又读不到正文，
-// 于是点击 i 之后，观感还是之前的那个）。
+// ⚠️ 为什么不能只认 `SPTArtistAboutBiographyView`：那个类**在二进制里还在** ⇒ 启动那行
+// `about-artist hook on` 照样打得出来，但它在**这一版艺人页上从头到尾没出现过** ——
+// `applyToArtistPage` 那条 BFS 只试两拍、`eeveeMaterialiseBio` 滚到列表底也只报
+// `nothing built`，而同一份日志的 `[HeaderProbe]` 明明列出了
+// `id=Components.UI.CreatorBiographyCard.HeaderLabel`：卡片在页面上，**只是不叫那个名字**。
+// `EntityPageRepaint` 的 `aboutArtistClassFragment` 早就写过这一点（「那条判据在这一版
+// 艺人页上永远不可能命中」）—— 折叠侧改对了、**读取侧没跟上**，于是点击 i 读不到正文。
 let eeveeArtistBioCardIdPrefix = "Components.UI.CreatorBiographyCard"
 let eeveeArtistBioTextId = "Components.UI.CreatorBiographyCard.BiographyLabel"
 let eeveeArtistBioClassFragment = "CreatorBiography"
@@ -240,7 +237,7 @@ func eeveeArtistBioSearchRoot(from view: UIView) -> UIView {
     return view.window ?? view
 }
 
-/// 「关于艺人」那一块 —— **零滚动**，按真机证实过的名字找。
+/// 「关于艺人」那一块 —— **零滚动**，按真机树里的名字找。
 ///
 /// 顺序：正文 label（id 精确）→ 它上面第一个 `CreatorBiography` 类祖先 → id 前缀 → 类名片段。
 /// ⚠️ 只认**落在 `creator-page` 里**的卡：听歌页那张"了解艺人"卡是同一族（`CreatorBiography`），
@@ -952,7 +949,7 @@ func eeveeFireSubControlAction(in root: UIView) -> String? {
 /// ③ ②没发出去 ⇒ `accessibilityActivate`（Encore 那一族很多就把"点一下"实现成它）。
 ///
 /// 与 `eeveeFire` 的分工：`eeveeFire` 那串档位保留作**兜底**（手势 / 祖先 / cell 选中），
-/// 而**先**走这一个 —— 它才是 pw 在真机上验证过的那条。
+/// 而**先**走这一个 —— 它才是 pw 用的那条。
 ///
 /// - Returns: 走了哪一档（只进日志）。
 @discardableResult
