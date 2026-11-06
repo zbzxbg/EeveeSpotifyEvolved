@@ -32,7 +32,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     case bini
     /// Unison：人工打轴的 TTML，曲库小、质量高。
     case unison
-    /// QQ 音乐：中文曲库，**行级**（逐字是加密的 QRC，这一轮不做）。
+    /// QQ 音乐：中文曲库，**逐字**（QRC）；解不开、或该条目只有明文 LRC 时退回行级。
     case qqMusic
     /// 酷狗：中文曲库，**逐字**（KRC）。
     case kugou

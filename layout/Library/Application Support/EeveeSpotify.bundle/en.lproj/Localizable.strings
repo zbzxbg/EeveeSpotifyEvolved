@@ -28,7 +28,7 @@ If you have an active Premium subscription, you can turn on Do Not Patch Premium
 A restart is required after changing.";
 
 overwrite_configuration = "Overwrite Configuration";
-overwrite_configuration_description = "Replace the remote configuration with the dumped Premium one. It isn't guaranteed to work, but it can solve problems such as ads appearing.";
+overwrite_configuration_description = "Replace the remote configuration with the dumped Premium one. It isn't guaranteed to work, but it can solve problems such as ads appearing. With this option on, a stale configuration can also cause unexpected problems - for example some features stop working, or Spotify crashes.";
 
 // Lyrics
 
