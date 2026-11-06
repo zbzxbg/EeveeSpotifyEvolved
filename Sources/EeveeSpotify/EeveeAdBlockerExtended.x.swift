@@ -2,6 +2,8 @@
 // (Evo home brand-ads, NPV under-player ad, in-stream audio, native ads).
 // Hooks SPTService -load on each ad service and skips orig so the service
 // stays inert. Per-surface bool flips below if one needs disabling.
+// In-stream audio additionally goes through the player core's own URLSession,
+// which never reaches those services — see `CoreURLSessionAdsKill`.
 
 import Orion
 import Foundation
@@ -21,6 +23,8 @@ struct SponsoredPlaylistHeaderServiceGroup: HookGroup {}
 struct SponsoredPlaylistHeaderViewGroup: HookGroup {}
 struct NativeAdsLoggerServiceGroup: HookGroup {}
 struct SponsoredCtxAttachmentGroup: HookGroup {}
+/// 播放器 core 自己的 URLSession（`SPTCoreURLSessionDataDelegate`）—— 语音广告走这条。
+struct CoreURLSessionAdsGroup: HookGroup {}
 
 private let killAdsServiceImpl         = true
 private let killInStreamAdsService     = true
@@ -162,6 +166,52 @@ class SponsoredCtxAttachmentProbe: ClassHook<NSObject> {
     }
 }
 
+// In-stream audio ads. The player core does its HTTP through its own
+// `SPTCoreURLSessionDataDelegate`, not through SPTDataLoaderService or
+// HttpClientURLSession, so the `/ads/` and `/ad-logic/` rules in
+// `URL+Extension.isAdRelated` never see the core's ad-break requests
+// (`ads/v3/ads`, `ad-logic/prefetch`, `ad-logic/v3/config`, ...). Cancelling the
+// response makes the core treat the ad fetch as failed and skip the break.
+//
+// Deliberately narrower than `isAdRelated`: this delegate carries everything the
+// core fetches, so only the two ad path families are cancelled and every other
+// request is forwarded untouched.
+private func isCoreAdRequest(_ url: URL) -> Bool {
+    let host = (url.host ?? "").lowercased()
+    guard host.contains("spotify") || host.contains("spclient") else { return false }
+    let path = url.path.lowercased()
+    return path.contains("/ads/") || path.hasSuffix("/ads") || path.contains("/ad-logic/")
+}
+
+/// 取消次数：日志只留前几条，避免长播客里刷屏。
+private var coreAdRequestCancelled = 0
+
+class CoreURLSessionAdsKill: ClassHook<NSObject> {
+    typealias Group = CoreURLSessionAdsGroup
+    static let targetName: String = "SPTCoreURLSessionDataDelegate"
+
+    func URLSession(
+        _ session: URLSession,
+        dataTask task: URLSessionDataTask,
+        didReceiveResponse response: URLResponse,
+        completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        if let url = task.currentRequest?.url ?? task.originalRequest?.url, isCoreAdRequest(url) {
+            coreAdRequestCancelled += 1
+            if coreAdRequestCancelled <= 5 || coreAdRequestCancelled % 20 == 0 {
+                writeDebugLog(
+                    "[AdBlock] cancelled core ad request #\(coreAdRequestCancelled): "
+                        + "\(url.host ?? "?")\(url.path)"
+                )
+            }
+            adlog("core request \(url.host ?? "?")\(url.path)")
+            handler(.cancel)
+            return
+        }
+        orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
+    }
+}
+
 func activateEeveeAdBlockerExtended() {
     let loadSelector = Selector(("load"))
     let initSelector = Selector(("init"))
@@ -209,6 +259,23 @@ func activateEeveeAdBlockerExtended() {
         NSLog("[EeveeSpotify][AdBlock] SponsoredPlaylistHeader view unavailable; skipping")
     }
 
+    // 播放器 core 的语音广告：类在、且真的实现了那个 delegate 方法才装。
+    // 只给类名不够 —— 9.1.x 上 delegate 的签名改过名的先例有过，这里用 runtime 探一次。
+    let responseSelector = Selector(("URLSession:dataTask:didReceiveResponse:completionHandler:"))
+    if let cls = NSClassFromString(CoreURLSessionAdsKill.targetName),
+       class_getInstanceMethod(cls, responseSelector) != nil {
+        CoreURLSessionAdsGroup().activate()
+        activated += 1
+        NSLog("[EeveeSpotify][AdBlock] core URLSession ad requests hook activated")
+        writeDebugLog("[AdBlock] core URLSession ad requests hook activated")
+    } else {
+        NSLog("[EeveeSpotify][AdBlock] core URLSession ad requests unavailable; skipping")
+        writeDebugLog(
+            "[AdBlock] core URLSession ad requests unavailable"
+                + " — SPTCoreURLSessionDataDelegate or its response delegate method is missing"
+        )
+    }
+
     NSLog("[EeveeSpotify][AdBlock] activated %d/%d compatible extended hooks",
-          activated, loadTargets.count + 2)
+          activated, loadTargets.count + 3)
 }
