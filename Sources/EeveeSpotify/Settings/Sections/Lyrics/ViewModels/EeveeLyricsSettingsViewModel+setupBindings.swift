@@ -76,7 +76,22 @@ extension EeveeLyricsSettingsViewModel {
                     self.lyricsOptions.lrclibUrl = LrclibLyricsRepository.originalApiUrl
                 }
                 
+                // 判据是「签名变没变」，不是「sink 来没来」：`@Published` 不判等，
+                // 重新选中同一项也会走一趟这里，而那份备忘仍然是可用的
+                // （签名里就带来源，见 `LyricsResponseCache.currentSignature`）。
+                let previousSignature = LyricsResponseCache.currentSignature
+
                 UserDefaults.lyricsSource = newSource
+
+                // 换来源＝换 payload：把「刚产出过的那份」作废。
+                //
+                // 签名一变备忘本来也命中不了，这里清掉是为了别让「这一首第几次请求」的
+                // 计数把下一次请求算成"后续请求"。顺带留下一条判读用的时间线：下一次
+                // `color-lyrics` 请求到达时会多一行日志；没有那一行就说明这一首没有再被
+                // 请求过，只有重启才会重取。
+                if LyricsResponseCache.currentSignature != previousSignature {
+                    LyricsResponseCache.shared.noteSettingsChanged()
+                }
             }
             .store(in: &cancellables)
 

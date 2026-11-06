@@ -10,7 +10,11 @@ import Foundation
 ///
 /// 为什么是「单条备忘」而不是「按曲目做缓存」：只记住最近一次产出的 payload，并且要求「曲目 id + 设置签名」都对得上才复用。这样覆盖住了真正要救的那条路（同一首歌的立刻重请求），而 A→B→A 来回切不会命中（备忘里是 B）⇒ 照旧走完整条链，`resetWordByWordLyrics` / `currentLyricsDto` / 逐词层那套状态都会照常更新，不会出现「卡片换成了新歌、我们自己的层还挂着旧歌」；键里有 track id，也不会把别的歌的词串过来。
 ///
-/// ⚠️ Spotify **自己**也按曲目缓存歌词（服务端响应头 `Cache-Control: public, max-age=3600`，而我们是伪装成那次响应交回去的）。那一份我们清不掉 —— 所以「改了歌词来源，已经听过的歌不会立刻重取」，只能重启 App。这里的设置签名只保证**我们自己这一层**不会拿旧设置的结果去糊弄。
+/// ⚠️ 换来源之后「当前这一首」不跟着变，原因不在这一层：我们只**替换响应**，从不发起请求
+/// （`color-lyrics/v2` 的请求由 Spotify 自己建、自己决定什么时候发）。客户端取过一次歌词就
+/// 攥在自己手里 —— 连切歌都未必再发一次请求（见 `AppleMusicLyricsOverlay.tick` 那段）。
+/// 所以能让新来源生效的时机只有"下一次请求"；已经加载过歌词的那一首要重启 App。
+/// 这里的设置签名只保证**我们自己这一层**不会拿旧设置的结果去糊弄。
 final class LyricsResponseCache {
 
     static let shared = LyricsResponseCache()
@@ -76,6 +80,12 @@ final class LyricsResponseCache {
     private var currentPath: String?
     private var currentPathCount = 0
 
+    /// 「设置变过、下一次歌词请求还没来」—— 只服务 `noteSettingsChanged()` 那条诊断。
+    ///
+    /// 它的含义很窄：置位之后到达的**第一条** `color-lyrics` 请求会被记一行。判读方式见
+    /// `noteSettingsChanged()` 的说明；它不参与调度、不影响预算。
+    private var settingsChangedSinceLastRequest = false
+
     /// 当前设置签名 —— 只包含**会改变 payload** 的项：来源 / Genius 兜底 / AMLL 优先 /
     /// 「实验 → Apple Music 官方 TTML」。
     ///
@@ -96,27 +106,70 @@ final class LyricsResponseCache {
     /// **命中备忘时不计数** —— 备忘命中是"结论"，不是"又试了一次"。
     func budgetPlan(forPath path: String, signature: String) -> BudgetPlan {
         lock.lock()
-        defer { lock.unlock() }
+
+        let settingsChangeSeen = settingsChangedSinceLastRequest
+        settingsChangedSinceLastRequest = false
 
         if currentPath != path {
             currentPath = path
             currentPathCount = 0
         }
 
+        let result: BudgetPlan
         if let memo,
            memo.path == path,
            memo.signature == signature,
            Date().timeIntervalSince(memo.storedAt) < ttl {
-            return BudgetPlan(plan: .cached(memo.payload), attempt: 0, budget: 0)
+            result = BudgetPlan(plan: .cached(memo.payload), attempt: 0, budget: 0)
+        } else {
+            let count = currentPathCount
+            currentPathCount += 1
+            let plan: Plan = count == 0 ? .firstAttempt : .followUp
+            result = BudgetPlan(
+                plan: plan,
+                attempt: count + 1,
+                budget: count == 0 ? Self.firstAttemptBudget : Self.followUpBudget
+            )
         }
 
-        let count = currentPathCount
-        currentPathCount += 1
-        let plan: Plan = count == 0 ? .firstAttempt : .followUp
-        return BudgetPlan(
-            plan: plan,
-            attempt: count + 1,
-            budget: count == 0 ? Self.firstAttemptBudget : Self.followUpBudget
+        lock.unlock()
+
+        // 诊断行：换过设置之后的**第一条**歌词请求。
+        //
+        // 它回答的正是"换了来源要不要重启"这个问题：出现这一行 ⇒ Spotify 又发了一次请求，
+        // 新来源当场生效（备忘已清、签名也不同，绝不会拿旧 payload 顶）；重新打开正在播放页
+        // 却始终等不到这一行 ⇒ 这一首压根没有再被请求过，那才需要重启 App。
+        // 只记一行，不参与任何判断。
+        if settingsChangeSeen {
+            writeDebugLog(
+                "[Lyrics] color-lyrics request after the settings change — path \(path),"
+                    + " signature \(signature) (memo was dropped, nothing reused)"
+            )
+        }
+
+        return result
+    }
+
+    /// 会改变 payload 的设置变了（来源 / Genius 兜底 / AMLL 优先 / 官方 TTML）。
+    ///
+    /// 备忘与「这一首第几次请求」的计数都属于**旧设置**：签名一变备忘本来就命中不了
+    /// （见 `currentSignature`），这里清掉它们是为了别让旧计数把下一次请求算成"后续请求"。
+    ///
+    /// ⚠️ **既不动任何 HTTP 缓存，也不发请求**：`color-lyrics/v2` 的请求不是我们建的，
+    /// 清它的 URL 缓存只对"下一次请求"有意义，而客户端是否重发那是它自己的决定（见文件头）。
+    /// 这里顺带置位诊断标记：下一次请求到达时由 `budgetPlan` 记一行。有那一行 = 客户端
+    /// 确实重发了请求；没有 = 这一首不会再取词，只有重启才会重取。
+    func noteSettingsChanged() {
+        lock.lock()
+        memo = nil
+        currentPath = nil
+        currentPathCount = 0
+        settingsChangedSinceLastRequest = true
+        lock.unlock()
+
+        writeDebugLog(
+            "[Lyrics] settings changed — lyrics memo dropped;"
+                + " the next color-lyrics request will be logged"
         )
     }
 
