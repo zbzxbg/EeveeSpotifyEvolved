@@ -15,6 +15,13 @@ import SwiftUI
 /// `EditButton` 依赖 SwiftUI 自己的导航栏环境，拿不到时它**不报错、只是不出现** ——
 /// 会以为"这个页面拖不动"，而且没有任何日志能看出来。
 /// 所以直接用 `.environment(\.editMode, .constant(.active))`：拖拽手柄常显，没有隐藏状态。
+///
+/// ── 为什么还要在 `onAppear` 重新读一遍
+/// `@State` 的初始值是在**视图被构造**那一刻算出来的。这一页是
+/// `NavigationLink(destination: LyricsSourceOrderView())` 的目标，那个目标值在**父视图求值**
+/// 时就构造好了；用户拖完顺序之后父视图并不会重算 ⇒ 退出再进来，`@State` 又用**同一个旧快照**
+/// 初始化，屏上就是默认顺序（盘上其实已经是用户排过的那份）。
+/// 所以每次出现都从盘上重读；拖拽那条路（`onMove`）仍然每拖一次就落盘。
 struct LyricsSourceOrderView: View {
 
     @State private var order: [LyricsSource] = LyricsSourceOrder.current
@@ -58,6 +65,16 @@ struct LyricsSourceOrderView: View {
         }
         .listStyle(InsetGroupedListStyle())
         .environment(\.editMode, .constant(.active))
+        .onAppear {
+            order = LyricsSourceOrder.current
+            // 每次进入一行现场：盘上到底存的是哪一份。下一份日志能直接回答
+            // "拖完没落盘" 还是 "落盘了但页面用旧快照初始化"。
+            writeDebugLog(
+                "[Lyrics] source order page — stored: "
+                    + (UserDefaults.standard.stringArray(forKey: LyricsSourceOrder.userDefaultsKey)?
+                        .joined(separator: " → ") ?? "(none, default in use)")
+            )
+        }
         .navigationTitle("lyrics_source_order".localized)
     }
 

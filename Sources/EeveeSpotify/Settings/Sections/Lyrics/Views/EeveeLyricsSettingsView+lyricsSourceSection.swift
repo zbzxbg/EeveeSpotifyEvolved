@@ -41,13 +41,15 @@ extension EeveeLyricsSettingsView {
 
     /// 「歌词来源」页脚：一句总说明 + 每个源的介绍。
     ///
-    /// 介绍**按「自动选择」的默认询问顺序**排（`LyricsSourceOrder.defaultOrder`），
-    /// 读起来就是自动优选实际会走的先后。以后改默认顺序，这里跟着变，不必再手抄一份。
+    /// 介绍**按当前的询问顺序**排（`LyricsSourceOrder.current`）：用户在排序页拖过之后，
+    /// 这里读起来就是链路真正会走的先后。用 `current` 而不是 `defaultOrder` ——
+    /// 后者只在"从没排过 / 点了重置"时才是实际顺序，排过之后两者会不一致
+    /// （页脚写着默认序，链路却是用户那份）。
     private func lyricsSourceFooter() -> some View {
         var text = "lyrics_source_restart_note".localized
 
         var isFirst = true
-        for source in LyricsSourceOrder.defaultOrder {
+        for source in LyricsSourceOrder.current {
             guard let description = Self.sourceDescription(for: source) else { continue }
             // 总说明与逐源介绍之间空一行；介绍之间保持原来的紧凑排法。
             text.append(isFirst ? "\n\n" : "\n")

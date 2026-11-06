@@ -22,23 +22,26 @@ enum LyricsSourceOrder {
     /// （那个前缀是早期键的历史包袱，见那次 l10n 清理）。
     static let userDefaultsKey = "lyricsSourceOrder"
 
-    /// 默认顺序（指定）。
+    /// 默认顺序。
     ///
-    /// 是 `amll - sl - pl - 网易云 - qq - 酷狗 - un - mxm - bini - gen`，
-    /// 里面**没有 LRCLIB**。这里把它补在 `genius` 前面而不是末尾：
-    /// LRCLIB 是行级、Genius 是纯文本，把行级排在纯文本之后没有道理
-    /// （纯文本虽然不会终止链路，但会白花一次请求）。
+    /// 基础是 `amll - sl - pl - 网易云 - qq - 酷狗 - un - mxm - bini - gen`，里面**没有 LRCLIB**。
+    /// 这里把它补在 `genius` 前面而不是末尾：LRCLIB 是行级、Genius 是纯文本，
+    /// 把行级排在纯文本之后没有道理（纯文本虽然不会终止链路，但会白花一次请求）。
+    ///
+    /// 国内三家（网易云 / QQ / 酷狗）内部按 **酷狗 → 网易云 → QQ** 排：酷狗与网易云都给
+    /// 逐字时间轴（KRC / yrc）和官方罗马字，QQ 目前只有行级 QRC ⇒ 把 QQ 放最后，
+    /// 前两家都没词时才会走到它。
     static let defaultOrder: [LyricsSource] = [
         .amllTtml,     // amll
         .spicy,        // sl
         .petit,        // pl
+        .kugou,        // 酷狗
         .netease,      // 网易云
         .qqMusic,      // qq
-        .kugou,        // 酷狗
         .unison,       // un
         .musixmatch,   // mxm
         .bini,         // bini
-        .lrclib,       // （用户列表里没写，见上）
+        .lrclib,       // （不在原始列表里，见上）
         .genius        // gen
     ]
 
