@@ -356,7 +356,7 @@ extension NowPlayingLyricsPlate {
         let current = effectiveLabelText(label)
         guard !current.isEmpty else { return }
 
-        // （用户：图片里 `（NetEase）` 被截断）：现在显示的可能**是我们裁过的**
+        // 现在显示的可能**是我们裁过的**
         // `歌手…（提供商）` —— 真名在 `lastArtistFullBase`，不能从显示文本反推（会把省略号当名字）。
         var base = current
         if let previous = lastArtistSuffix, current.hasSuffix(previous), !lastArtistFullBase.isEmpty {

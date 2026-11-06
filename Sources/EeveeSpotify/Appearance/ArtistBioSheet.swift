@@ -121,7 +121,6 @@ final class ArtistBioSheet: UIView {
 
     // 这个视图往上有没有 `UIViewController`。
     //
-    // （用户：`Spotify--094701.ips`）：
     // 崩溃栈是 `-[UIEditMenuListView _selectItemAtIndexPath:]` → `UICommand perform…`
     // → `-[UITextView _translate:]` → `-[UITextInputController _translate:]` → **NSAssert** → SIGABRT。
     // 也就是：在正文里选中一段字 → 编辑菜单点「翻译」→ 系统那条路自己断言失败。

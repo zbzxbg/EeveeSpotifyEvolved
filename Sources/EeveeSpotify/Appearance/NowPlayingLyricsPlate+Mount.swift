@@ -77,7 +77,7 @@ extension NowPlayingLyricsPlate {
         // ② 标题行上移 + 右移（transform —— 改约束会被 stack view 布局写回）。
         applyTitleTransform(geometry: geometry, page: page)
 
-        // ②b（用户）：**歌手右边写上歌词提供商**——`歌手（提供商）`。
+        // ②b **歌手右边写上歌词提供商**——`歌手（提供商）`。
         // 只在这条"展开"的路上贴；收起时由 `settleAfterClosing` 还原。
         applyProviderToArtistLine(in: page)
 
@@ -343,7 +343,7 @@ extension NowPlayingLyricsPlate {
         }
 
         // 标题行的位移**不在这里撤** —— 见 `settleAfterClosing`：
-        // 页面还在时要让那一行**从缩略图右边滑回左上角**（用户要的动画），
+        // 页面还在时要让那一行**从缩略图右边滑回左上角**（要的动画），
         // 先在这儿撤成 identity 就会先跳一下。
         clearTitleMask()
         lastTitleElement = nil

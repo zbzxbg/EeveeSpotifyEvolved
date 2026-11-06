@@ -14,7 +14,7 @@ extension NowPlayingLyricsPlate {
 
     /// 把歌手那一行还原成纯歌手名（**离开页面 / 关开关** —— 不再跟着"收起歌词"走）。
     ///
-    /// （用户：图片里 `（NetEase）` 被截断）：现在贴上去的可能是**裁过的**
+    /// 现在贴上去的可能是**裁过的**
     /// `歌手…（提供商）`，所以还原不能只摘括号（那样会把截断后的省略号留在 Spotify 的标签上）。
     /// 贴的时候把**完整歌手名**记在 `lastArtistFullBase`，这里优先用它写回。
     static func restoreArtistLine(in page: UIView) {
@@ -201,7 +201,7 @@ extension NowPlayingLyricsPlate {
         let frame = label.convert(label.bounds, to: page)
         var widths: [CGFloat] = []
 
-        // （用户：长名字"感觉没滚动完"）：歌手那一行是 Spotify 的
+        // 长名字会"感觉没滚动完"：歌手那一行是 Spotify 的
         // **`MarqueeLabel`**（dump 里 `MarqueeLabel@0,24,308,22,id=now-playing-subtitle-label`），
         // 我们拼上「（提供商）」后一旦比它的**视口宽**（308pt），它就开始 marquee 滚动 ——
         // 长名字看起来就是"滚到一半停住 / 被切掉"。所以对 MarqueeLabel **必须**用
