@@ -206,19 +206,46 @@ enum NowPlayingPageOverlay {
         layoutVolumeRow(in: overlay, frame: target)
         // 把"唯一吃触摸的范围"告诉覆盖层（见 `NowPlayingOverlayView`）——
         // 不更新它，音量条就还是没有触摸（这一层只在那一行里放行）。
-        if let interactive = overlay as? NowPlayingOverlayView, interactive.interactiveFrame != target {
-            interactive.interactiveFrame = target
-            changed = true
+        if let interactive = overlay as? NowPlayingOverlayView {
+            if interactive.interactiveFrame != target {
+                interactive.interactiveFrame = target
+                changed = true
+            }
+            // 沉浸式样式：音量行以下一直到屏幕底没有我们的控件 ⇒ 那条带接住、不做动作，
+            // 免得触摸漏给 Spotify 的 NPV 视图（表现为点底边时整页上抬）。
+            // AM 样式不设：那一段由工具行替身负责，这里再抢会把三颗字形吃掉。
+            let strip: CGRect
+            if UserDefaults.nowPlayingStyle == .immersive,
+               target.maxY > 1,
+               target.maxY < page.bounds.height - 1 {
+                let top = target.maxY + 8
+                strip = CGRect(
+                    x: 0,
+                    y: top,
+                    width: page.bounds.width,
+                    height: page.bounds.height - top
+                )
+            } else {
+                strip = .null
+            }
+            if interactive.inertFrame != strip {
+                interactive.inertFrame = strip
+                changed = true
+            }
         }
 
         if !didLogInstall {
             didLogInstall = true
             let anchor = findBottomAnchor(in: page)
             let anchorText = anchor.map { frameText($0.convert($0.bounds, to: page)) } ?? "not found (falling back to the safe-area bottom)"
+            let stripText = (overlay as? NowPlayingOverlayView).map {
+                $0.inertFrame.isNull ? "none" : frameText($0.inertFrame)
+            } ?? "none"
             writeDebugLog(
                 "[\(logTag)] overlay installed \(frameText(overlay.frame))"
                     + "; bottom anchor \(bottomAnchorIdentifier) = \(anchorText)"
                     + "; volume slider \(frameText(target))"
+                    + "; inert strip \(stripText)"
                     // 这一行的**实测**内部几何（系统那条 slider + 两个字形 + 抬了多少）——
                     // 报的"喇叭和轨不一样高"就是靠这一行 + 下一张照片对出来的。
                     + volumeRowInternals(in: overlay)
@@ -520,11 +547,22 @@ enum NowPlayingPageOverlay {
         /// `.null` ⇒ 整层穿透（音量条还没摆好时不抢任何触摸）。
         var interactiveFrame: CGRect = .null
 
+        /// 底部那条**接住但不做事**的空带（页面坐标）。`.null` ⇒ 不接。
+        ///
+        /// 只在沉浸式样式里用它：那套布局没有 iOS 27 的工具行替身，底排往下一直到屏幕底
+        /// 没有任何属于我们的控件，触摸会漏到 Spotify 的 NPV 视图上、触发"整页上抬"。
+        /// AM 样式不用它 —— 那条带由工具行替身负责，两层叠在一起会抢掉三颗字形。
+        var inertFrame: CGRect = .null
+
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
             guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return false }
-            guard !interactiveFrame.isNull else { return false }
             // 上下各放宽 8pt：手指落在轨/钮边上一点也该算这一行（行高只有 28pt）。
-            return interactiveFrame.insetBy(dx: -2, dy: -8).contains(point)
+            if !interactiveFrame.isNull,
+               interactiveFrame.insetBy(dx: -2, dy: -8).contains(point) {
+                return true
+            }
+            // 底部空带：接住、什么都不做（本层没有手势、hitTest 返回自身 ⇒ 这一下被吞掉）。
+            return !inertFrame.isNull && inertFrame.contains(point)
         }
     }
 

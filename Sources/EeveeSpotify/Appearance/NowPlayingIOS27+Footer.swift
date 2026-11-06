@@ -255,6 +255,21 @@ extension NowPlayingIOS27 {
         return values[values.count / 2]
     }
 
+    /// 底排那三颗原生键的**下沿**（页面坐标）。用来定"接住但不做事"的空带起点。
+    ///
+    /// 三颗都在同一个 `UIStackView` 里、尺寸一致 ⇒ 取最大值即可；某颗量不到就跳过。
+    private static func footerRowBottom(
+        connect: UIView?, share: UIView?, queue: UIView?, in page: UIView
+    ) -> CGFloat? {
+        var bottoms: [CGFloat] = []
+        for view in [share, queue, connect].compactMap({ $0 }) {
+            let rect = view.convert(view.bounds, to: page)
+            guard rect.height > 1, rect.maxY > 0, rect.maxY <= page.bounds.height + 1 else { continue }
+            bottoms.append(rect.maxY)
+        }
+        return bottoms.max()
+    }
+
     // MARK: - 三颗字形 + 替身
 
     @discardableResult
@@ -443,13 +458,15 @@ extension NowPlayingIOS27 {
         addZone(frames[2], target: queue, label: "queue")
         relay.zones = zones
         relay.actionZones = actionZones
-        // 字形下面那条空带（可点区下沿 → 屏幕底）：**接住、不做任何动作**。
-        // 从字形自己的下沿起算 —— 三块 44pt 可点区在 `hitTest` 里先判，所以那 9pt
-        // 重叠不会吃掉三颗键的动作；两颗字形之间、以及字形以下那一片则被这条带盖住。
-        // 见 `NowPlayingIOS27RemoteRelayView.inertTopY`：那里原本什么都没有，触摸会漏到
-        // 下面的 Spotify 视图上，触发它自己的点击行为。
-        let glyphBottom = (midY + box / 2).rounded()
-        relay.inertTopY = glyphBottom
+        // 字形下面那条空带（**原生命令行下沿** → 屏幕底）：**接住、不做任何动作**。
+        //
+        // 起点不是字形下沿，而是**原生那三颗键的下沿**：字形下沿到原生行之间还隔着
+        // 一段空白（底排与工具行之间），以及三颗字形**之间**的横向空隙 —— 这两处以前都
+        // 漏到下面的 Spotify 视图上，触发它自己的点击行为（整页被顶起来 / 内容上抬）。
+        // 三块 44pt 可点区在 `hitTest` 里先判，所以这一段重叠不会吃掉三颗键的动作。
+        let rowBottom = footerRowBottom(connect: connect, share: share, queue: queue, in: page)
+        let fallbackTop = (midY - box / 2).rounded()
+        relay.inertTopY = max((rowBottom ?? fallbackTop) + 2, 0)
         // （点右下角那颗，还是 Spotify 原生弹窗）：循环那颗是**另一块替身**，
         // 它的框和这里的"队列"可点区（44pt，必须盖住藏在下面的原生分享键）必然重叠。
         // 谁先收到触摸取决于 subviews 顺序（这一层每拍 bringToFront 一次）⇒ 同一处时而开队列、
@@ -472,7 +489,7 @@ extension NowPlayingIOS27 {
                 "[\(logTag)] footer — connect \(name(connect)), share \(name(share)),"
                     + " queue \(name(queue)); three glyphs at"
                     + " \(Int(frames[0].midX))/\(Int(frames[1].midX))/\(Int(frames[2].midX))"
-                    + " (y \(Int(midY))); the band below y \(Int(glyphBottom)) is inert;"
+                    + " (y \(Int(midY))); the band below y \(Int(relay.inertTopY ?? 0)) is inert;"
                     + " lyrics entry"
                     + (canOpenOwnLyricsPage
                         ? " = our lyrics page (reusing AppleMusicLyricsPage)"
