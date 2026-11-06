@@ -2,7 +2,7 @@ import Foundation
 
 /// 「这一次歌词请求要等多久」+「刚产出的 payload 直接复用」。
 ///
-/// NPV 的模块列表是「组件加载完之后」才建的，而预览歌词卡片就是这次响应喂出来的。同一首「全网都没词」的歌实测：不回退 ≤1 秒（卡片在）、＋Genius 回退 4 秒（开始丢）、＋AMLL 优先 6 秒、多级回退（4 源串行）13 秒 ⇒ 响应晚于约 1~4 秒就赶不上建列表那一刻；「退出重进就好」是因为重进等于让列表重建一次。
+/// NPV 的模块列表是「组件加载完之后」才建的，而预览歌词卡片就是这次响应喂出来的。同一首「全网都没词」的歌：不回退 ≤1 秒（卡片在）、＋Genius 回退 4 秒（开始丢）、＋AMLL 优先 6 秒、多级回退（4 源串行）13 秒 ⇒ 响应晚于约 1~4 秒就赶不上建列表那一刻；「退出重进就好」是因为重进等于让列表重建一次。
 ///
 /// 于是这里做两件事：
 /// 1. **分档预算**：同一首歌的第一次请求只等 `firstAttemptBudget`，把占位早点交出去让卡片先建出来；后续请求才用长预算 —— 依据是 Spotify 在我们交完占位之后会立刻再请求一次，那一次正好把真词带上去。
@@ -23,7 +23,7 @@ final class LyricsResponseCache {
     ///
     /// ## 为什么把 1.5s 撤掉
     ///
-    /// 所以这里回到"**只交**真结果"，代价是**响应时间 = 取词链的耗时**（本机实测 5~15s），
+    /// 所以这里回到"**只交**真结果"，代价是**响应时间 = 取词链的耗时**（本机 5~15s），
     /// 换来的是**卡片里不可能再锁死假状态**。备忘复用、计数、`[DL]/[HCUS]` 结果行全部保留。
     static let firstAttemptBudget: TimeInterval = 18
 
@@ -46,9 +46,9 @@ final class LyricsResponseCache {
     ///
     /// ⚠️追加（`HttpClientURLSessionHooks` 对齐用）：
     ///
-    /// 这套调度**原先只长在 `DataLoaderServiceHooks`（`SPTDataLoaderService`）那一条路上**。
+    /// 这套调度只挂在 `DataLoaderServiceHooks`（`SPTDataLoaderService`）一条路上是不够的：
     /// 歌词响应走的是 `Connectivity_HttpClientKit.HttpClientURLSession`，
-    /// 于是「分档预算 + 结果备忘」**一次都没有真正生效**。
+    /// 那样「分档预算 + 结果备忘」**一次都不会真正生效**。
     ///
     /// 现在两条路共用本类型（同一个共享实例、同一套计数），并且**两条路都打结果行**；
     struct BudgetPlan {
@@ -97,7 +97,11 @@ final class LyricsResponseCache {
         let genius = UserDefaults.lyricsOptions.geniusFallback ? "1" : "0"
         let amll = NgzhwmSettingsViewModel.isAmllPreferred ? "1" : "0"
         let officialTtml = UserDefaults.experimentsOptions.appleMusicOfficialTtml ? "1" : "0"
-        return "\(source)|\(genius)|\(amll)|\(officialTtml)"
+        // AMLL 译文语言：改语言等于换了一份歌词内容，备忘必须跟着失效
+        // （仓库层自己的 NSCache 也把语言放进了键，见 `AmllTtmlLyricsRepository.getLyrics`）。
+        // 用**生效值**（留空时是设备语言），这样"改系统语言"也算换了设置。
+        let amllTranslationLanguage = UserDefaults.amllEffectiveTranslationLanguage
+        return "\(source)|\(genius)|\(amll)|\(officialTtml)|\(amllTranslationLanguage)"
     }
 
     /// 这一次请求该怎么等：直接交备忘 / 短预算 / 长预算 + 第几次 + 预算秒数。

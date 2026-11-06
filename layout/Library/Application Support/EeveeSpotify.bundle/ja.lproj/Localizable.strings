@@ -52,6 +52,9 @@ hide_lyrics_on_error_description = "歌詞を読み込めなかったときは�
 musixmatch_language = "Musixmatchの歌詞の言語";
 musixmatch_language_description = "2文字のMusixmatchの言語コードを入力すると、利用可能な場合に翻訳された歌詞を表示できます。";
 
+amll_translation_language = "AMLL の翻訳言語";
+amll_translation_language_description = "空欄なら端末の言語に従い、無ければ簡体中文 → 中文 → 英語 → その他の順になります。言語コード（zh、zh-Hans、en、ja など）を入れると、その言語に固定できます。AMLL は歌詞ファイルに含まれる翻訳からしか選べません（Musixmatch のようにサーバーへ要求することはできません）。ファイルにその言語が無い場合は上記の順序で代替します。";
+
 // UI
 
 lyrics_background_color_section = "歌詞のバックグラウンドカラー";
@@ -72,6 +75,9 @@ dark_popups = "ポップアップをダークモードで表示";
 
 livecontainer_sharing = "LiveContainerに共有";
 livecontainer_sharing_description = "選択した共有先が対応していない場合は、LiveContainerに共有してURLをコピーします。";
+
+aggressive_marker_removal = "歌詞の注釈をより積極的に削除";
+aggressive_marker_removal_description = "オンにすると、[ ] で囲まれた歌詞行をすべて削除します（中身が既知のセクション名かどうかは問いません）。現在は Genius のみに適用されます。行全体が角括弧で囲まれた実際の歌詞（例: [I love you]）も削除される場合があります。";
 
 /* MARK: Premium PopUps */
 

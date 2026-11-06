@@ -36,7 +36,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
     
-    /// 「AMLL 优先」开关。恢复删过一次）。
+    /// 「AMLL 优先」开关。
     @Published var amllPreferred = NgzhwmSettingsViewModel.isAmllPreferred {
         didSet {
             UserDefaults.standard.set(
@@ -44,6 +44,14 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
                 forKey: NgzhwmSettingsViewModel.amllPreferredKey
             )
         }
+    }
+
+    /// 「AMLL 译文语言」（空 = 自动：沿用解析层的 zh-Hans → 中文 → 英文 → 其他）。
+    ///
+    /// 与 mxm 那条的区别见 `UserDefaults.amllTranslationLanguage` 上面那段：
+    /// mxm 是向服务端**要**某种语言，AMLL 只能**在文件自带的那几轨里挑**。
+    @Published var amllTranslationLanguage = UserDefaults.amllTranslationLanguage {
+        didSet { UserDefaults.amllTranslationLanguage = amllTranslationLanguage }
     }
 
     // 已**搬走**两个开关：`injectLyricsCardElement` / `lyricsEntryPointFlag`
@@ -158,8 +166,8 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             betterWordByWordLyrics,
             wordByWordLyrics,
             amllPreferred,
-            // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`已整体删除）、
-            // `removeMxmInterludeSymbol`已整体删除 —— 间奏行改为无条件丢弃），
+            // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`（已整体删除）、
+            // `removeMxmInterludeSymbol`（已整体删除，间奏行改为无条件丢弃），
             // 以及搬去「调试」页的 `injectLyricsCardElement` / `lyricsEntryPointFlag`
             // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,

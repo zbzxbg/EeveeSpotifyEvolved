@@ -10,17 +10,15 @@ struct ExperimentsOptions: Codable, Equatable {
     /// 「AMLL 模糊搜索」—— AMLL 的精确（spotifyId）查不到时，按歌名再搜一次
     /// （见 `AmllTtmlLyricsRepository.fuzzySearchItem`）。逐词质量闸门不受影响。
     var amllFuzzySearch: Bool
-    /// 「SpicyLyrics 交叉验证」——（用户）：SpicyLyrics 的上游会把部分词和谐成
+    /// 「SpicyLyrics 交叉验证」—— SpicyLyrics 的上游会把部分词和谐成
     /// 星号（`my **** line`）。打开后拿**同一首歌**在另一个源里的文本找回同一句，
     /// 只把星号那几段换掉（见 `LyricsCensorFill` / `LyricsUncensorFill`）。
     ///
-    /// **默认关**（用户明确要求）：它会为每首"确实有星号"的歌多发 1~5 次请求。
-    /// ⚠️ 历史：这个功能在之前是**无条件开着**的，但那时它的检测正则是
-    /// `\b\*{3,}\b`，实测只命中 `f***k` 这种写法、`my **** line` 一个都不命中
-    /// ⇒ 实际上等于没接线。所以"改成默认关"对绝大多数用户**不是行为倒退**，
-    /// 而是把一个本来就没生效的东西改成显式可选。
+    /// **默认关**：它会为每首"确实有星号"的歌多发 1~5 次请求。
+    /// 旧检测正则 `\b\*{3,}\b` 只命中 `f***k` 那种写法，`my **** line` 一个都不命中 ——
+    /// 所以"默认关"对绝大多数用户**不是行为倒退**。
     var spicyLyricsCrossValidation: Bool
-    /// 「启用Apple Music官方TTML歌词」——（用户）：直接接 **Apple Music 官方**的
+    /// 「启用Apple Music官方TTML歌词」—— 直接接 **Apple Music 官方**的
     /// TTML（不是 AMLL 那份社区库）。
     ///
     /// 语义是**总覆盖**：打开后这一首只问 Apple Music，忽略「歌词来源」「AMLL 优先」
@@ -40,6 +38,19 @@ struct ExperimentsOptions: Codable, Equatable {
     /// ⚠️ 它**不改变** `timingKind`（仍是 `.lineSynchronized`）—— 改了会让间奏判定
     /// 把估算值当作者时间轴。
     var pseudoWordByWordLyrics: Bool
+    /// 「更激进的删除歌词标注术语」—— 打开后**凡是整行被 `[]` 包住**的行都删掉，
+    /// 不再要求括号里是已知的章节名（`[Verse 1]` / `[Chorus]` / `[Produced by …]`）。
+    ///
+    /// 为什么需要它：`LyricsMarkerFilter` 的清单是**白名单**，Genius 上还有一堆白名单外的
+    /// 标注（`[Refrain]`、`[Verse 3: X & Y]`、各种语言的自造段落名）会被当正文画到屏幕上。
+    /// 白名单永远追不完，所以给一条"整行方括号就删"的粗规则，由用户自己决定要不要。
+    ///
+    /// ⚠️ **只对 Genius 生效**：Genius 的正文是纯文本、`[]` 在它那儿
+    /// 基本只作段落标注；而 QQ / 酷狗 / 网易的 `[]` 里是时间轴或转写标记，一刀切会删掉真歌词。
+    ///
+    /// ⚠️ 它会误删"整行被方括号包住的真歌词"（`[I love you]` 这种写法确实存在，但极少）；
+    /// 默认关，就是这个原因。
+    var aggressiveMarkerRemoval: Bool
 
     init(
         liveContainerSharing: Bool,
@@ -47,7 +58,8 @@ struct ExperimentsOptions: Codable, Equatable {
         amllFuzzySearch: Bool = false,
         spicyLyricsCrossValidation: Bool = false,
         appleMusicOfficialTtml: Bool = false,
-        pseudoWordByWordLyrics: Bool = false
+        pseudoWordByWordLyrics: Bool = false,
+        aggressiveMarkerRemoval: Bool = false
     ) {
         self.liveContainerSharing = liveContainerSharing
         self.showInstagramDestination = showInstagramDestination
@@ -55,6 +67,7 @@ struct ExperimentsOptions: Codable, Equatable {
         self.spicyLyricsCrossValidation = spicyLyricsCrossValidation
         self.appleMusicOfficialTtml = appleMusicOfficialTtml
         self.pseudoWordByWordLyrics = pseudoWordByWordLyrics
+        self.aggressiveMarkerRemoval = aggressiveMarkerRemoval
     }
 
     /// 手写解码：`liveContainerSharing` 之外那些都是**后加的**字段，早期盘上根本没有它们。
@@ -71,6 +84,8 @@ struct ExperimentsOptions: Codable, Equatable {
         appleMusicOfficialTtml = try container.decodeIfPresent(Bool.self, forKey: .appleMusicOfficialTtml)
             ?? false
         pseudoWordByWordLyrics = try container.decodeIfPresent(Bool.self, forKey: .pseudoWordByWordLyrics)
+            ?? false
+        aggressiveMarkerRemoval = try container.decodeIfPresent(Bool.self, forKey: .aggressiveMarkerRemoval)
             ?? false
     }
 }

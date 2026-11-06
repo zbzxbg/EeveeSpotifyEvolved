@@ -3,17 +3,16 @@ import UIKit
 
 /// 「实验」页：只放**尚未真机定性**的功能（默认关，用户主动开）。
 ///
-/// 准入三条与用户对齐）：
+/// 准入三条：
 /// ① 还没在真机上验证过效果；
 /// ② 依赖会变的外部契约（服务端 flag / 私有类 / 第三方 App）；
 /// ③ 改完要重启或清缓存才生效。
 /// 三条里占一条才进来。**行为早已定性、只是"依赖外部"的开关不属于这里** ——
-/// 「分享到 LiveContainer」因此于搬到「杂项设定」（见 `EeveeMiscellaneousSettingsView`）。
+/// 「分享到 LiveContainer」因此搬到「杂项设定」（见 `EeveeMiscellaneousSettingsView`）。
 ///
-/// ⚠️「NetEase 交叉验证」与「PetitLyrics 回退 NetEase」两个实验**已整体撤掉**
-/// （这周关于网易云的改动全部回退，NE 目前只在来源说明里标注"不推荐非中国用户使用"）。
+/// ⚠️ 「NetEase 交叉验证」与「PetitLyrics 回退 NetEase」两个实验**已整体撤掉**
+/// （NE 目前只在来源说明里标注"不推荐非中国用户使用"）。
 /// 这一页现在只留 Instagram 分享位、AMLL 模糊搜索、SpicyLyrics 交叉验证、Apple 官方 TTML。
-/// ⛔「更炫酷的逐词歌词」（`Lyrics/LyricsStage/`）已按整体删除。
 struct EeveeExperimentsSettingsView: View {
     @State var experimentsOptions = UserDefaults.experimentsOptions
 
@@ -75,6 +74,18 @@ struct EeveeExperimentsSettingsView: View {
                 Toggle(
                     "pseudo_word_by_word_lyrics".localized,
                     isOn: $experimentsOptions.pseudoWordByWordLyrics
+                )
+            }
+
+            // 更激进的删除歌词标注术语（**默认关**）。
+            // 白名单（`LyricsMarkerFilter` 的章节名清单）永远追不完：Genius 上还有
+            // `[Refrain]`、`[Verse 3: A & B]`、各种自造段落名会被当正文画出来。
+            // 打开后凡是整行被 `[]` 包住的都删，代价是可能误删 `[I love you]` 这种
+            // 整行带括号的真歌词 —— 所以默认关，且**只对 Genius 生效**。
+            Section(footer: Text("aggressive_marker_removal_description".localized)) {
+                Toggle(
+                    "aggressive_marker_removal".localized,
+                    isOn: $experimentsOptions.aggressiveMarkerRemoval
                 )
             }
 
@@ -141,7 +152,7 @@ struct EeveeExperimentsSettingsView: View {
 
     /// 开关下方那段说明：开关关闭时只讲"这是什么"，打开后再追加"怎么拿令牌"。
     ///
-    /// ⚠️ 历史：这里曾经因为"按 doc 注释前缀切区间"的脚本认错起点，
+    /// ⚠️ 别用"按 doc 注释前缀切区间"的脚本改这一带：它认错过起点，
     /// 把本属性连带删掉过，CI 报 `cannot find 'appleMusicOfficialTtmlFooter' in scope`。
     /// 以后删别的 section 时别再按前缀切区间。
     private var appleMusicOfficialTtmlFooter: String {

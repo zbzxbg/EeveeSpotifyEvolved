@@ -224,7 +224,7 @@ class GeniusLyricsRepository: LyricsRepository {
         // 选中的是哪一条 —— **成功与否都打**。
         //
         // 以前只有成功路径的 `[Genius] Using "…" — N line(s)` 留下标题，失败路径什么都不留：
-        // `No usable lyrics`），看不出那条命中**是不是这首歌**、也看不出它的词页是不是空的。
+        // （`No usable lyrics`），看不出那条命中**是不是这首歌**、也看不出它的词页是不是空的。
         writeDebugLog(
             "[Genius] Chosen hit: id=\(song.id)"
                 + " title=\"\(song.title)\" artist=\"\(song.artistNames)\""
@@ -233,7 +233,13 @@ class GeniusLyricsRepository: LyricsRepository {
         let songInfo = try getSongInfo(song.id)
 
         let plainLines = songInfo.lyrics.plain.components(separatedBy: .newlines)
-        let mappedLines = LyricsMarkerFilter.mapLyricsLines(plainLines)
+        // 「更激进的删除歌词标注术语」（实验页开关，默认关）：
+        // 打开后凡是整行被 `[]` 包住的都删，不再要求括号里落在白名单上。
+        // **只有这一处**传 true —— 别的源的 `[]` 是时间轴 / 转写标记。
+        let mappedLines = LyricsMarkerFilter.mapLyricsLines(
+            plainLines,
+            aggressive: UserDefaults.experimentsOptions.aggressiveMarkerRemoval
+        )
 
         // 不把上游「空歌词 → 纯音乐占位」的 bug 带过来：无有效歌词就抛查无此歌。
         guard !mappedLines.isEmpty else {

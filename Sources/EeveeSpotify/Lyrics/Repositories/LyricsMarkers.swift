@@ -108,6 +108,13 @@ enum LyricsMarkerFilter {
     private static let angleBracketPlaceholderPattern =
         "^<\\s*[^<>]{1,24}\\s*>$"
 
+    /// 整行被一对 `[]` 包住（`[Refrain]` / `[Verse 3: A & B]` / `[本段由 … 提供]` …）。
+    ///
+    /// 「更激进的删除歌词标注术语」那条实验开关用它（见 `mapLyricsLines`）。
+    /// 只认**一整对**方括号：`[a] [b]` 这种多个括号拼成的行不在这里删 ——
+    /// 那形状更像真歌词（`[Oh] [yeah]`），而且白名单那几条本来就盖不住它。
+    private static let fullyBracketedLinePattern = "^\\[[^\\[\\]]*\\]$"
+
     /// 归一化：trim + 去音调 + 大写，用于大小写/重音不敏感匹配。
     static func normalizedForMarkerMatch(_ line: String) -> String {
         return line
@@ -181,11 +188,20 @@ enum LyricsMarkerFilter {
     }
 
     /// 去除结构标注行并清理首尾空行。
-    static func mapLyricsLines(_ rawLines: [String]) -> [String] {
+    ///
+    /// `aggressive` 是「更激进的删除歌词标注术语」那条实验开关（默认关）：
+    /// 打开后**凡是整行被 `[]` 包住**的都删，不再要求括号里落在白名单上。
+    /// 只有 Genius 的调用点传 true —— 别的源里 `[]` 是时间轴 / 转写标记，
+    /// 一刀切会删掉真歌词（见 `ExperimentsOptions.aggressiveMarkerRemoval`）。
+    static func mapLyricsLines(_ rawLines: [String], aggressive: Bool = false) -> [String] {
         var lines = rawLines
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-        lines.removeAll { isNonLyricLine($0) }
+        if aggressive {
+            lines.removeAll { isNonLyricLine($0) || isFullyBracketedLine($0) }
+        } else {
+            lines.removeAll { isNonLyricLine($0) }
+        }
 
         lines = Array(lines.drop(while: { $0.isEmpty }))
         while lines.last?.isEmpty == true {
@@ -193,6 +209,15 @@ enum LyricsMarkerFilter {
         }
 
         return lines
+    }
+
+    /// 整行就是一对 `[]` 包着的文本（激进模式专用）。
+    ///
+    /// 空括号 `[]` 也算 —— 它本来就不是歌词。
+    static func isFullyBracketedLine(_ line: String) -> Bool {
+        let normalized = normalizedForMarkerMatch(line)
+        guard !normalized.isEmpty else { return false }
+        return normalized ~= fullyBracketedLinePattern
     }
 }
 
@@ -216,7 +241,7 @@ enum LyricsCreditLine {
     /// 角色关键字（英文一律大写比较；中文不受大小写影响）。
     ///
     /// 匹配是**前缀**式的：`录音助理` / `混音工程` / `合声编写` 这类带后缀的行靠词根就能
-    /// 认出来，不必把 QQ / 网易云真实出现过的后缀全枚举一遍（实测一份《晴天》里就有
+    /// 认出来，不必把 QQ / 网易云真实出现过的后缀全枚举一遍（一份《晴天》里就有
     /// `录音助理：` `录音工程：` `混音工程：` `合声编写：` 四种）。
     /// 单字词根（词 / 詞 / 曲 / 鼓）例外 —— 它们只认**整段相等**，否则
     /// 「词不达意：…」这种真歌词会被误删。
@@ -296,7 +321,7 @@ enum LyricsCreditLine {
     /// · `by` 是**众包歌词的贡献者**（上传者），不是曲目元信息里的作词者。
     ///
     /// ⚠️ **不能要求整行就是标签**：QQ 的 QRC 把正文塞进 `LyricContent="…"` 属性，
-    /// 第一个标签前面带着 `Lyric_1 LyricType="1" LyricContent="`（实测 `ti` 因此一直读不到，
+    /// 第一个标签前面带着 `Lyric_1 LyricType="1" LyricContent="`（`ti` 因此一直读不到，
     /// 连带「歌名 - 歌手」那条页眉行也没被删）。这里按行找 `[key:value]`，不要求行首。
     ///
     /// 只扫前 80 行：真歌词里偶尔会有 `[xxx]` 形式的行，不该把整份文件当标签表读。

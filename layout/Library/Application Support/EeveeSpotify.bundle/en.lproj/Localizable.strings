@@ -83,6 +83,9 @@ hide_lyrics_on_error_description = "Hide the lyrics module if lyrics fail to loa
 musixmatch_language = "Musixmatch Lyrics Language";
 musixmatch_language_description = "You can enter a 2-letter Musixmatch language code and view the lyrics translation, if there is one.";
 
+amll_translation_language = "AMLL translation language";
+amll_translation_language_description = "Leave empty to follow the device language, then fall back to Simplified Chinese → Chinese → English → others. Enter a language code (e.g. zh, zh-Hans, en, ja) to pin one. AMLL can only pick among the translations bundled in the lyrics file — unlike Musixmatch it cannot ask a server for one; if the file has no such language, the fallback order applies.";
+
 // UI
 
 lyrics_background_color_section = "Lyrics Background Color";
@@ -114,6 +117,9 @@ amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or t
 
 pseudo_word_by_word_lyrics = "Enable pseudo word-by-word";
 pseudo_word_by_word_lyrics_description = "When on, line-level lyrics timing is estimated and expanded into word-by-word lyrics. Character-level precision may be imperfect, and depends on how precise the original line-level lyrics are.";
+
+aggressive_marker_removal = "Remove lyrics annotations more aggressively";
+aggressive_marker_removal_description = "When on, every lyric line wrapped in [ ] is removed, without checking whether the text inside is a known section name. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed (e.g. [I love you]).";
 
 spicy_cross_validation = "Spicy Lyrics cross-validation";
 spicy_cross_validation_description = "Fixes the case where the lyrics Spicy Lyrics returns have words censored out.";

@@ -176,6 +176,70 @@ do {
     print("  FAIL apple line TTML parsing threw \(error)")
 }
 
+// MARK: - 译文语言：同一行挂多轨译文时按设置挑
+//
+// AMLL 的译文只能从**文件自带的那几轨**里挑（mxm 那条是向服务端要 `selected_language`）：
+// mxm 那条是**向服务端要**（`selected_language`），AMLL 只能在**文件自带的那几轨**里挑。
+// 所以这一组钉三件事：
+// ① 不指定语言时行为不变（还是 zh-Hans → 中文 → 英文 → 其他）；
+// ② 指定 `en` 就取英文那一轨；
+// ③ 指定文件里**没有**的语言（`ja`）时退回 ①，不能变成空译文。
+
+let multiLanguageTtml = """
+<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://itunes.apple.com/lyric-sync" xml:lang="ja">
+  <head>
+    <metadata>
+      <iTunesMetadata>
+        <translations type="subtitle">
+          <translation xml:lang="zh-Hans"><text for="L1">你好</text></translation>
+          <translation xml:lang="en"><text for="L1">Hello</text></translation>
+          <translation xml:lang="ko"><text for="L1">안녕</text></translation>
+        </translations>
+      </iTunesMetadata>
+    </metadata>
+  </head>
+  <body>
+    <div>
+      <p itunes:key="L1" begin="0:00.000" end="0:02.000">こんにちは</p>
+    </div>
+  </body>
+</tt>
+"""
+
+do {
+    let auto = try AmllTtmlParser.parse(multiLanguageTtml)
+    requireEqual(
+        auto.lines.first?.translation ?? "",
+        "你好",
+        "no language preference — Simplified Chinese still wins"
+    )
+    requireEqual(auto.lines.first?.translationLanguage ?? "", "zh-Hans", "auto pick keeps its language")
+
+    let english = try AmllTtmlParser.parse(multiLanguageTtml, translationLanguage: "en")
+    requireEqual(english.lines.first?.translation ?? "", "Hello", "preferring `en` picks the English track")
+    requireEqual(english.lines.first?.translationLanguage ?? "", "en", "picked track reports `en`")
+
+    // 短码 `zh` 要能命中 `zh-Hans`（前缀匹配，见 `AmllTtmlParser.languageCodeMatches`）。
+    let chinese = try AmllTtmlParser.parse(multiLanguageTtml, translationLanguage: "zh")
+    requireEqual(chinese.lines.first?.translation ?? "", "你好", "a short code `zh` matches `zh-Hans`")
+
+    // 文件里没有的语言 ⇒ 退回自动优先级，不能变成空。
+    let missing = try AmllTtmlParser.parse(multiLanguageTtml, translationLanguage: "ja")
+    requireEqual(
+        missing.lines.first?.translation ?? "",
+        "你好",
+        "a language the file does not carry falls back to the automatic order"
+    )
+
+    // 空串 / 空白 = 自动（设置里清空输入框就是这条）。
+    let blank = try AmllTtmlParser.parse(multiLanguageTtml, translationLanguage: "   ")
+    requireEqual(blank.lines.first?.translation ?? "", "你好", "a blank preference means automatic")
+} catch {
+    failures += 1
+    print("  FAIL multi-language translation parsing threw \(error)")
+}
+
 // MARK: - 没有时间轴的 `<p>` 依旧被丢掉（不伪造时间）
 
 let untimedTtml = """

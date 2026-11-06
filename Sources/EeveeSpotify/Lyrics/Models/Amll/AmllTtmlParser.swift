@@ -85,13 +85,22 @@ struct AmllTtmlResult {
 enum AmllTtmlParser {
 
     /// 解析 TTML 正文。输入为空、XML 非法、或没有任何有效歌词行时抛错。
-    static func parse(_ source: String) throws -> AmllTtmlResult {
+    ///
+    /// - Parameter translationLanguage: 用户想看的译文语言（`zh` / `en` / `ja`…，空 = 自动）。
+    ///   TTML 允许同一行挂**多种语言**的翻译（`<translation xml:lang="zh-Hans">` +
+    ///   `<translation xml:lang="en">`，或同一 `<p>` 里多个 `x-translation` span），
+    ///   以前这里**写死**按「简中 → 其他中文 → 英文 → 其他」挑一个，其余语言直接丢掉。
+    ///   现在指定语言时先在候选里找它；**找不到就退回原来那套优先级** ——
+    ///   文件里没有这门语言时，显示"别的语言"比显示空白好（与 Musixmatch 那条
+    ///   "服务端要不到就退默认"的口径一致）。
+    static func parse(_ source: String, translationLanguage: String? = nil) throws -> AmllTtmlResult {
         guard !source.isEmpty else { throw LyricsError.decodingError }
         guard let root = AmllTtmlDocument.parse(source) else {
             writeDebugLog("[AMLL] XMLParser failed — malformed TTML")
             throw LyricsError.decodingError
         }
 
+        let preferredTranslationLanguage = normalizedLanguagePreference(translationLanguage)
         let metadata = parseMetadata(in: root)
         let sidecarTranslations = parseSidecar(named: "translation", in: root)
         let sidecarTransliterations = parseSidecar(named: "transliteration", in: root)
@@ -119,7 +128,8 @@ enum AmllTtmlParser {
             guard let line = parseLine(
                 node,
                 translations: sidecarTranslations,
-                transliterations: sidecarTransliterations
+                transliterations: sidecarTransliterations,
+                translationLanguage: preferredTranslationLanguage
             ) else { continue }
             // 空行（含只有背景人声/翻译的行）与结构标注行不要。
             guard !line.primaryText.isEmpty else { continue }
@@ -200,7 +210,7 @@ enum AmllTtmlParser {
     /// （AMLL 与大多数文件用的是这种，`for` 在 `<text>` 上）；
     /// ② `<translation xml:lang="zh-Hans" for="L1">你好</translation>`
     /// （`for` 在**容器自己**身上，没有 `<text>` 子节点）。
-    /// 以前只认 ① ⇒ ② 那种文件里译文整首丢失（"官方 TTML 有译文却看不到"）。
+    /// 只认 ① 的话，② 那种文件里译文会整首丢失（"官方 TTML 有译文却看不到"）。
     /// 现在：一个容器里**没收到任何 `<text for>`** 时，才退回读容器自己的 `for` + 正文。
     private static func parseSidecar(
         named containerName: String,
@@ -242,7 +252,8 @@ enum AmllTtmlParser {
     private static func parseLine(
         _ node: AmllTtmlNode,
         translations: [String: [(language: String?, text: String)]],
-        transliterations: [String: [(language: String?, text: String)]]
+        transliterations: [String: [(language: String?, text: String)]],
+        translationLanguage: String?
     ) -> AmllTtmlLine? {
         let syllables = parseTimedSpans(in: node)
 
@@ -277,13 +288,18 @@ enum AmllTtmlParser {
         let key = node.attribute("key")
 
         // 行内翻译优先于侧挂；行内的只认 <p> 直接子级，避免误取背景人声内部的翻译。
+        // 两者都按用户指定的语言挑（没指定时是原来那套优先级）。
         let inlineTranslation = preferredAuxiliary(
             role: "x-translation",
             in: node,
-            includeNested: false
+            includeNested: false,
+            translationLanguage: translationLanguage
         )
-        let sidecarTranslation = key.flatMap { preferredTrack(in: translations[$0] ?? []) }
+        let sidecarTranslation = key.flatMap {
+            preferredTrack(in: translations[$0] ?? [], preferring: translationLanguage)
+        }
 
+        // 罗马音/音译**不**跟着语言偏好走：那是读音，不是译文，多语言的情况也不存在。
         let inlineRomanization = preferredAuxiliary(
             role: "x-roman",
             in: node,
@@ -291,7 +307,7 @@ enum AmllTtmlParser {
         )
         let sidecarRomanization = key.flatMap { preferredTrack(in: transliterations[$0] ?? []) }
 
-        let backgroundVocal = parseBackgroundVocal(in: node)
+        let backgroundVocal = parseBackgroundVocal(in: node, translationLanguage: translationLanguage)
 
         let translationLanguage = inlineTranslation?.language ?? sidecarTranslation?.language
 
@@ -397,7 +413,10 @@ enum AmllTtmlParser {
     }
 
     /// 解析背景人声子树。v1 只负责把内容取出来，拼到行尾的决策在 mapper 里。
-    private static func parseBackgroundVocal(in node: AmllTtmlNode) -> AmllTtmlBackgroundVocal? {
+    private static func parseBackgroundVocal(
+        in node: AmllTtmlNode,
+        translationLanguage: String?
+    ) -> AmllTtmlBackgroundVocal? {
         let entries = node.contents.enumerated().compactMap {
             index, content -> (index: Int, node: AmllTtmlNode)? in
             guard case .child(let child) = content,
@@ -415,7 +434,14 @@ enum AmllTtmlParser {
 
         // 背景人声内部的翻译（只在 <p> 直接子级没有翻译时才会被用到，这里先存下）。
         let translation = entries
-            .compactMap { preferredAuxiliary(role: "x-translation", in: $0.node, includeNested: true)?.text }
+            .compactMap {
+                preferredAuxiliary(
+                    role: "x-translation",
+                    in: $0.node,
+                    includeNested: true,
+                    translationLanguage: translationLanguage
+                )?.text
+            }
             .first
 
         // 位置：背景人声出现在第一个「主词 span」之前还是之后。
@@ -440,7 +466,8 @@ enum AmllTtmlParser {
     private static func preferredAuxiliary(
         role: String,
         in node: AmllTtmlNode,
-        includeNested: Bool
+        includeNested: Bool,
+        translationLanguage: String? = nil
     ) -> (language: String?, text: String)? {
         let candidates: [AmllTtmlNode]
         if includeNested {
@@ -458,14 +485,46 @@ enum AmllTtmlParser {
             guard !text.isEmpty else { return nil }
             return (candidate.attribute("lang"), text)
         }
-        return preferredTrack(in: tracks)
+        return preferredTrack(in: tracks, preferring: translationLanguage)
     }
 
-    /// 同一行/同一 key 可能挂多语言翻译，按「简体中文 → 其他中文 → 英文 → 其他」挑一个。
+    /// 同一行/同一 key 可能挂多语言翻译：**指定了语言就挑那门语言**，否则按
+    /// 「简体中文 → 其他中文 → 英文 → 其他」挑一个。
+    ///
+    /// 语言比较是**前缀式**的（`zh` 命中 `zh-Hans` / `zh-Hans-CN`，反之亦然），
+    /// 因为用户填的短码与文件里的 `xml:lang` 很少逐字相同（`zh` vs `zh-Hans`）。
     private static func preferredTrack<T>(
-        in tracks: [(language: String?, text: T)]
+        in tracks: [(language: String?, text: T)],
+        preferring preferredLanguage: String? = nil
     ) -> (language: String?, text: T)? {
-        tracks.min { languagePriority($0.language) < languagePriority($1.language) }
+        guard !tracks.isEmpty else { return nil }
+
+        if let preferredLanguage {
+            let matching = tracks.filter { languageCodeMatches($0.language, preferredLanguage) }
+            if let best = matching.min(by: { languagePriority($0.language) < languagePriority($1.language) }) {
+                return best
+            }
+            // 文件里没有这门语言 ⇒ 退回原来的优先级（显示别的语言好过显示空白）。
+        }
+
+        return tracks.min { languagePriority($0.language) < languagePriority($1.language) }
+    }
+
+    /// `zh` / `zh-Hans` / `zh-Hans-CN` 视为同一门语言（下划线也归一成连字符）。
+    private static func languageCodeMatches(_ candidate: String?, _ wanted: String) -> Bool {
+        guard let candidate else { return false }
+        let lhs = candidate.lowercased().replacingOccurrences(of: "_", with: "-")
+        let rhs = wanted.lowercased().replacingOccurrences(of: "_", with: "-")
+        guard !lhs.isEmpty, !rhs.isEmpty else { return false }
+        if lhs == rhs { return true }
+        return lhs.hasPrefix(rhs + "-") || rhs.hasPrefix(lhs + "-")
+    }
+
+    /// 设置里填的语言码（空 / 全空白 = 自动）。
+    private static func normalizedLanguagePreference(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func languagePriority(_ language: String?) -> Int {

@@ -65,7 +65,11 @@ class AmllTtmlLyricsRepository: LyricsRepository {
             throw LyricsError.noSuchSong
         }
 
-        let cacheKey = trackId as NSString
+        // 译文语言：设置里填了就用它，留空则**跟设备语言**（见
+        // `UserDefaults.amllEffectiveTranslationLanguage`）。
+        // ⚠️ 必须进缓存键：同一首歌换语言时，命中旧缓存就会一直显示旧语言那一轨。
+        let preferredTranslationLanguage = UserDefaults.amllEffectiveTranslationLanguage
+        let cacheKey = "\(trackId)|\(preferredTranslationLanguage)" as NSString
         if let cached = lyricsCache.object(forKey: cacheKey) {
             writeDebugLog("[AMLL] cache hit for \(trackId)")
             return cached.dto
@@ -76,7 +80,12 @@ class AmllTtmlLyricsRepository: LyricsRepository {
         // ① **精确**：Spotify Track ID 是官方 API 的入口，这一段与以前逐字一致。
         do {
             let item = try fetchLyricsItem(trackId: trackId)
-            let dto = try makeDto(item: item, trackId: trackId, enforceIdentity: true)
+            let dto = try makeDto(
+                item: item,
+                trackId: trackId,
+                enforceIdentity: true,
+                translationLanguage: preferredTranslationLanguage
+            )
             lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey)
             return dto
         } catch let exactError {
@@ -97,7 +106,12 @@ class AmllTtmlLyricsRepository: LyricsRepository {
             let item = try fetchLyricsItem(id: hit.id)
             // ⚠️ 模糊命中是**按名字**认的 ⇒ 身份复核要关掉（那个文件当然不带本曲的 spotifyId）。
             // 换来的是 `fuzzySearchItem` 的打分闸门：歌名对不上就根本不会被选中。
-            let dto = try makeDto(item: item, trackId: trackId, enforceIdentity: false)
+            let dto = try makeDto(
+                item: item,
+                trackId: trackId,
+                enforceIdentity: false,
+                translationLanguage: preferredTranslationLanguage
+            )
             lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey)
             return dto
         }
@@ -107,13 +121,19 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     ///
     /// - Parameter enforceIdentity: 精确那一跳传 true —— TTML 里若明确登记了 spotifyIds
     /// 却不含本曲，说明后端匹配错了，宁可不要；模糊那一跳传 false（见调用点）。
-    private func makeDto(item: AmllSongItem, trackId: String, enforceIdentity: Bool) throws -> LyricsDto {
+    /// - Parameter translationLanguage: 用户指定的译文语言（空 = 解析层原来那套优先级）。
+    private func makeDto(
+        item: AmllSongItem,
+        trackId: String,
+        enforceIdentity: Bool,
+        translationLanguage: String
+    ) throws -> LyricsDto {
         guard let ttml = item.lyrics, !ttml.isEmpty else {
             writeDebugLog("[AMLL] response carried no lyrics payload — noSuchSong")
             throw LyricsError.noSuchSong
         }
 
-        let parsed = try AmllTtmlParser.parse(ttml)
+        let parsed = try AmllTtmlParser.parse(ttml, translationLanguage: translationLanguage)
 
         // 身份复核：官方 API 已按 spotifyId 匹配，理论上必然命中；但后端存在
         // 「数据源不稳定 / 索引更新失败」的已知问题，若返回的条目明确登记了
@@ -158,7 +178,7 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     }
 
     /// 模糊搜索命中的那一条。官方 API 也接受按 `id` 取（`GET /v1/lyrics/get?id=…`，
-    /// 实测与 `spotifyId` 那条返回同一个 `data` 结构）—— 不新增第二套取词/解析路径。
+    /// 与 `spotifyId` 那条返回同一个 `data` 结构）—— 不新增第二套取词/解析路径。
     private func fetchLyricsItem(id: Int) throws -> AmllSongItem {
         try fetchItem(
             queryItems: [URLQueryItem(name: "id", value: String(id))],
@@ -393,7 +413,7 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     ///
     /// ⇒ 只有"歌名完全对上"或"部分重合 **且** 歌手也对上"才过闸；光歌手对得上（10）
     /// 或光歌名部分重合（12）**不够** —— 模糊搜索可以找得宽，但不能拿别的歌冒充本曲。
-    /// （`q` 那边不支持"歌名 + 歌手"一次给两样：实测 `q=あのね ナナツカゼ` 返回 0 条，
+    /// （`q` 那边不支持"歌名 + 歌手"一次给两样：`q=あのね ナナツカゼ` 返回 0 条，
     /// 所以只能取歌名、在本地按歌手打分。）
     private func fuzzySearchItem(for query: LyricsSearchQuery) throws -> AmllSearchItem? {
         let title = query.title.trimmingCharacters(in: .whitespacesAndNewlines)

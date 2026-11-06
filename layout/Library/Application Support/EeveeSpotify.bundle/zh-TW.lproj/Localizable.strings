@@ -57,6 +57,9 @@ hide_lyrics_on_error_description = "出現錯誤時（不包含回退）隱藏�
 musixmatch_language = "Musixmatch 翻譯語言";
 musixmatch_language_description = "輸入二字 Musixmatch 語言代碼（繁中為 z1），可用時便會顯示翻譯按鈕。";
 
+amll_translation_language = "AMLL 譯文語言";
+amll_translation_language_description = "留空則跟隨裝置語言，再退回簡體中文 → 中文 → 英文 → 其他。填入語言代碼（如 zh、zh-Hans、en、ja）可指定某一種。AMLL 只能從歌詞檔自帶的譯文中挑 —— 不像 Musixmatch 能向伺服器索取；檔案沒有該語言時按上述順序遞補。";
+
 // UI
 
 lyrics_background_color_section = "歌詞框背景顏色";
@@ -344,3 +347,6 @@ licenses_bundled = "內建的第三方原始碼";
 licenses_bundled_detail = "倉庫內建了第三方原始碼（SwiftProtobuf、XMLCoder、fishhook 等）；倉庫裡**沒有**隨附它們各自的授權檔，需要時請看它們自己的專案。";
 licenses_inspiration = "spoti.pw";
 licenses_inspiration_detail = "本倉庫重用了 spoti.pw v0.21.1（GPL-3.0，版權歸 Vojtěch Škopek）的程式碼與設計，並加以修改。只使用 v0.21.1 及更早的版本；v0.22.0 起為 PolyForm Strict 1.0.0，未取其任何原始碼。";
+
+aggressive_marker_removal = "更積極的刪除歌詞標註術語";
+aggressive_marker_removal_description = "選項開啟後會刪除歌詞所有被 [] 包裹的歌詞行，目前僅對 Genius 生效。它也可能誤刪整行帶方括號的真歌詞（例如 [I love you]）。";

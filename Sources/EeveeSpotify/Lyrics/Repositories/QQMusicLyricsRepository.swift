@@ -156,12 +156,12 @@ final class QQMusicLyricsRepository: LyricsRepository {
 
     // MARK: - 官方罗马字
 
-    /// 音节归主词用的容差。两份 QRC 出自同一次转码：行起点实测只差 0~1ms，
+    /// 音节归主词用的容差。两份 QRC 出自同一次转码：行起点只差 0~1ms，
     /// 词起点的抖动也在 2ms 内。30ms 既够吸收取整，又小于最短的一个字
-    /// （实测约 50ms），不会把下一个字的音节抢过来。
+    /// （约 50ms），不会把下一个字的音节抢过来。
     private static let wordRomajiSlackMs = 30
 
-    /// 逐词组要求"拿到罗马音的主词占比"不低于此值。同一版词实测是 90.6%~100%
+    /// 逐词组要求"拿到罗马音的主词占比"不低于此值。同一版词是 90.6%~100%
     /// （10 首日语歌合计 4694/4819 ≈ 97.4%），80% 留出余量；低于它按
     /// "两份不是同一版词"处理 —— 逐词贴错位比整行缺字更难发现。
     private static let wordRomajiCoverageFloor = 0.8
@@ -173,10 +173,13 @@ final class QQMusicLyricsRepository: LyricsRepository {
     /// 制作信息行。所以按**行起始时间**配，不按下标 —— 与 Musixmatch 把 richsync
     /// 按行起点贴回行级是同一套做法。
     ///
-    /// 逐词组见 `wordGroups(for:romaji:)`：罗马音那份按**音节**切、主歌词按**字**切，
-    /// 词数常常不等（实测 10 首日语歌 505 个时间行里只有 123 行相等）⇒ 只能按时间分区，
-    /// 不能按下标。整行就是拉丁字母的行（副歌里的英文句）罗马音那份常常整行不给，
-    /// 所以行配对率在不同歌上从 70% 到 100% 都见过 —— 这类行没有罗马音是对的。
+    /// 逐词组见 `wordGroups(for:romaji:syllableTexts:romanizedLine:)`：罗马音那份按**音节**切、
+    /// 主歌词按**字**切，词数常常不等（10 首日语歌 505 个时间行里只有 123 行相等）⇒
+    /// 只能按时间分区，不能按下标。整行就是拉丁字母的行（副歌里的英文句）罗马音那份常常
+    /// 整行不给，所以行配对率在不同歌上从 70% 到 100% 都见过 —— 这类行没有罗马音是对的。
+    ///
+    /// 逐行贴之前先过 `JapaneseRomajiRepair`（促音 / 长音 / 假名残留）；带汉字的行整行
+    /// 退回本地转换 —— 理由见循环里那段。
     ///
     /// 只在这一首**有罗马音、且解得开**时才动这两个字段；行配对率低于 60% 视为
     /// “两份不是同一版词”，整份不用（宁可退回本地转换）。
@@ -219,10 +222,42 @@ final class QQMusicLyricsRepository: LyricsRepository {
                 groups.append([])
                 continue
             }
-            romaji.append(romaLine.content.trimmingCharacters(in: .whitespaces))
             matched += 1
 
-            let lineGroups = wordGroups(for: line, romaji: romaLine)
+            // 先修音节组，再谈对齐。
+            //
+            // QQ 的罗马音和酷狗那份是同一类半成品：促音 っ 与长音 ー 各自占一个音节，
+            // 汉字转不出来的地方就原样留着（例 `スピカ`：`届ka nu su pi ka`、
+            // `ai no kalada 温to 酩酊`、`zu っto`、`li ーpu xi te`）。
+            // 修复规则见 `JapaneseRomajiRepair` —— 它修的是"组"这一层，所以
+            // 行级（各组 joined）与逐词（同一份组）两条粒度同时变干净。
+            //
+            // ⚠️ 汉字那一档**不在**这里修：本文件在取词解析这一层，读不出汉字读音
+            // （`届` 是 todoka 还是 todoku？`温` 在 `体温` 里是 on），丢掉汉字只会得到
+            // `ka nu su pi ka` 这种缺字的罗马字。所以带汉字的行**整行退回本地转换**
+            // （`toJapaneseRomaji` 有分词与读音）：牺牲这一行的逐词高亮，换一行正确的读音。
+            let syllables = romaLine.words?.map(\.text) ?? []
+            let repaired: [String]?
+            if syllables.contains(where: needsLocalRomaji) {
+                repaired = nil
+            } else {
+                repaired = JapaneseRomajiRepair.repairedWordGroups([syllables])?.first
+            }
+            guard let repaired else {
+                romaji.append("")
+                groups.append([])
+                continue
+            }
+
+            let lineText = repaired.joined().trimmingCharacters(in: .whitespaces)
+            romaji.append(lineText)
+
+            let lineGroups = wordGroups(
+                for: line,
+                romaji: romaLine,
+                syllableTexts: repaired,
+                romanizedLine: lineText
+            )
             groups.append(lineGroups)
             // 只统计"确实有词级时间轴、且组数对得上"的行 —— 覆盖率闸只看这些行。
             if let words = line.words, !words.isEmpty, lineGroups.count == words.count {
@@ -262,6 +297,18 @@ final class QQMusicLyricsRepository: LyricsRepository {
         return result
     }
 
+    /// 这一组音节**必须**交给本地转换（`toJapaneseRomaji`）而不能就地修。
+    ///
+    /// 两种字符：汉字（读音要分词，本层做不到）与叠字符 々 / 〆（"重复前一个字"，
+    /// 而前一个**汉**字在这里已经被转成读音了 —— `日々` 的罗马音那侧是 `hi 々`，
+    /// 丢掉 々 得到 `hi`、重复 `hi` 得到 `hihi`，两个都不是 `hibi`）。
+    /// `JapaneseRomajiRepair` 对这两类都是"丢掉"，那是酷狗那条路唯一的选择；
+    /// 这里还有本地转换可用，所以整行让给它。
+    private static func needsLocalRomaji(_ syllable: String) -> Bool {
+        if JapaneseRomajiRepair.containsHan(syllable) { return true }
+        return syllable.unicodeScalars.contains { $0.value == 0x3005 || $0.value == 0x3006 }
+    }
+
     /// 把一行罗马音**音节**按"相对行首的起点"分到主词的每一格。
     ///
     /// 规则：一个音节归到**起点不晚于它（含容差）的最后一个主词**。等价于"按主词起点
@@ -276,10 +323,19 @@ final class QQMusicLyricsRepository: LyricsRepository {
     /// · 词数相等时它自然退化成一一对应（`スピカ` 34 行全是这样），词数不等时
     ///   也不会把某个音节的文本挪到时间上不对的那个词上。
     ///
+    /// ⚠️ 文本取 `syllableTexts`（**已修过**的那一份），时间取 `romaji.words`：
+    /// 修复只改文本、不改组数也不改时间，所以两份数组同长同序。
+    ///
     /// 没有词级时间轴的行（LRC 来的）返回 `[]`。
-    private static func wordGroups(for line: LyricsLineDto, romaji: LyricsLineDto) -> [String] {
+    private static func wordGroups(
+        for line: LyricsLineDto,
+        romaji: LyricsLineDto,
+        syllableTexts: [String],
+        romanizedLine: String
+    ) -> [String] {
         guard let words = line.words, !words.isEmpty,
               let syllables = romaji.words, !syllables.isEmpty,
+              syllableTexts.count == syllables.count,
               let lineStart = line.offsetMs,
               let romajiStart = romaji.offsetMs else { return [] }
 
@@ -287,19 +343,19 @@ final class QQMusicLyricsRepository: LyricsRepository {
         // 多画一行只重复原文的"罗马字"。静态那条路有同一道判据
         // （`LyricLinesAdapter.romanization(original:romanized:)`）。
         let original = line.content.trimmingCharacters(in: .whitespaces)
-        let romanized = romaji.content.trimmingCharacters(in: .whitespaces)
+        let romanized = romanizedLine.trimmingCharacters(in: .whitespaces)
         guard romanized.compare(original, options: .caseInsensitive) != .orderedSame else { return [] }
 
         let offsets = words.map { max($0.startMs - lineStart, 0) }
         var buckets = [[String]](repeating: [], count: words.count)
         var word = 0
-        for syllable in syllables {
+        for (index, syllable) in syllables.enumerated() {
             let offset = syllable.startMs - romajiStart
             while word + 1 < offsets.count,
                   offsets[word + 1] <= offset + wordRomajiSlackMs {
                 word += 1
             }
-            buckets[word].append(syllable.text)
+            buckets[word].append(syllableTexts[index])
         }
 
         var groups = buckets.map { $0.joined() }
@@ -316,7 +372,7 @@ final class QQMusicLyricsRepository: LyricsRepository {
         return groups
     }
 
-    /// 两份 QRC 的行起点常差 1~2ms（同一次转码的取整不同；实测 `947` 对 `946`）⇒
+    /// 两份 QRC 的行起点常差 1~2ms（同一次转码的取整不同，`947` 对 `946`）⇒
     /// 按最近的起点匹配。逐毫秒扫是因为差值是 1 这种，不能用固定步长。
     ///
     /// 默认 100ms 给罗马字；译文是另一份 LRC，和正文分行不完全一致，用 250ms 更稳。

@@ -80,6 +80,9 @@ hide_lyrics_on_error_description = "如果歌词加载失败，则隐藏歌词�
 musixmatch_language = "Musixmatch 歌词语言";
 musixmatch_language_description = "可以输入两个字母的 Musixmatch 语言代码，并查看歌词翻译（如果有歌词翻译的话）。";
 
+amll_translation_language = "AMLL 译文语言";
+amll_translation_language_description = "留空则跟随设备语言，再退回简体中文 → 中文 → 英文 → 其他。填写语言码（如 zh、zh-Hans、en、ja）可指定某一种。AMLL 只能在歌词文件自带的译文里挑 —— 不像 Musixmatch 那样能向服务端索取；文件里没有这门语言时按上面的顺序兜底。";
+
 // UI
 
 lyrics_background_color_section = "歌词背景颜色";
@@ -110,6 +113,9 @@ amll_fuzzy_search_description = "选项生效需要开启「AMLL 优先」或歌
 
 pseudo_word_by_word_lyrics = "启用伪逐字";
 pseudo_word_by_word_lyrics_description = "选项开启后会估算行级歌词时间轴，并补充成逐词歌词，但字级精度可能欠佳。字级精度取决于原本的行级歌词精度。";
+
+aggressive_marker_removal = "更激进的删除歌词标注术语";
+aggressive_marker_removal_description = "选项开启后会删除歌词所有被 [] 包裹的歌词行，目前仅对 Genius 生效。它也可能误删整行带方括号的真歌词（例如 [I love you]）。";
 
 spicy_cross_validation = "SpicyLyrics交叉验证";
 spicy_cross_validation_description = "选项开启后会解决SpicyLyrics返回的歌词可能被打码和谐的问题。";

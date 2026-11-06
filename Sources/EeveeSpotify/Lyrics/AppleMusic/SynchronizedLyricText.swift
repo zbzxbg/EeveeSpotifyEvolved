@@ -324,7 +324,7 @@ struct SynchronizedLyricText: View {
     }
 
     /// 罗马字那一行（**有词级时间轴时**）：与主歌词同一个渲染器，只是字号更小、
-    /// 不发光、不抬升 —— 它仍然只是"读音提示"，不该和正文抢注意力。
+    /// 不发光；抬升（"唱到的字往上顶"）按字号比例保留 —— 见 `romanizationRendererStyle`。
     ///
     /// 文本由 `romanizationSyllables` 拼出来，与静态那条路（`romanizationText`）用的是
     /// 同一份数据（`LyricLinesAdapter` 保证两条路的文字一致），所以开关上不会"换一种写法"。
@@ -366,9 +366,20 @@ struct SynchronizedLyricText: View {
         )
     }
 
-    /// 罗马字行用的渲染器档位：把主歌词那份的**发光与抬升关掉**，其余不动。
+    /// 罗马字行用的渲染器档位：把主歌词那份的**发光关掉**，抬升按字号比例跟着走。
+    ///
+    /// 「让逐词罗马字也有卡拉 OK 的上抬效果」：以前这里是 `playedRise: 0` ——
+    /// 罗马字那一行只跟着逐字填亮、不抬升，和下面正文的"唱到的字往上顶一下"不是同一种动效，
+    /// 两行并排看会觉得罗马字是贴上去的。
+    ///
+    /// 抬升量按**字号比例**折算（罗马字 = 主字号的 0.85）：同一个 `syllableLift` 直接搬过来，
+    /// 在小字号上会显得比正文顶得更高。发光仍然关着 —— 它是读音提示，不该抢正文的注意力。
     private var romanizationRendererStyle: LyricGlowTextRenderer.Style {
         let profile = Self.profile
+        let romanizationFontSize = typography.supplementalFontSize * 0.85
+        let liftRatio = typography.primaryFontSize > 0
+            ? min(romanizationFontSize / typography.primaryFontSize, 1)
+            : 0.85
         return LyricGlowTextRenderer.Style(
             glowRadius: CGFloat(profile.glowRadius),
             glowOpacity: 0,
@@ -382,7 +393,7 @@ struct SynchronizedLyricText: View {
                 selectedUpcoming: profile.selectedUpcomingTextOpacity
             ),
             maximumUnplayedBlurRadius: 0,
-            playedRise: 0,
+            playedRise: CGFloat(profile.syllableLift) * liftRatio,
             maximumLongSyllableScale: CGFloat(profile.emphasisScaleRange.upperBound),
             longSyllableExpansionPadding: 0,
             highlightGradientWidth: 1,

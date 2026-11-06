@@ -18,8 +18,8 @@ import Foundation
 /// ⚠️ 第 2 步是**踩过的坑**：这里原本用 CommonCrypto 的 `kCCAlgorithm3DES` 直接解，
 /// 看着"密钥对、ECB、无填充"样样都对，可解出来的首块永远不是 `78 9c` —— 因为
 /// QQ 加密时用的不是标准 DES。表现是**解密恒失败**：QRC 逐字档永远拿不到，
-/// 一路退化成行级 LRC 或直接没有歌词。换成 `QrcDES` 之后实测能解开
-/// （`晴天` / `夜に駆ける` 都验证过）。
+/// 一路退化成行级 LRC 或直接没有歌词。换成 `QrcDES` 之后能解开
+/// （`晴天` / `夜に駆ける` 都可以）。
 ///
 /// ── 与 yrc / KRC 的两处格式差异（都踩过）
 /// · **时间戳写在文字后面**：`词(起始,时长)`，不是 `(起始,时长)词`；
@@ -30,10 +30,6 @@ enum QrcText {
     /// DES 块长（8 字节）。密文长度必须是它的整数倍。
     private static let blockSize = 8
 
-    /// 解密后的正文有时裹在 `<Lyric_1 LyricType="1" LyricContent="…"/>` 里。
-    private static let wrapperRegex = try? NSRegularExpression(
-        pattern: "<Lyric_1[^>]*LyricContent=\"([^\"]*)\""
-    )
     private static let headerRegex = try? NSRegularExpression(pattern: "^\\[(\\d+),(\\d+)\\]")
     /// `(起始,时长)`。第三个字段（标志位）是 yrc 的写法，QRC 一般没有，
     /// 但见过混进来的样本，所以允许它存在 —— 有也不影响取值。
@@ -178,24 +174,11 @@ enum QrcText {
     }
 
     /// 剥掉 `<Lyric_1 … LyricContent="…"/>` 外壳（没有外壳就原样返回）。
+    ///
+    /// ⚠️ 这一步**不能**用正则 `LyricContent="([^"]*)"`：正文里会出现裸引号
+    /// （`Xだけの"人マニア"`），正则会在第一个引号处收尾，把后半首歌整个切掉 ——
+    /// `人マニア` 36 行只解析出 20 行。判据与理由见 `QrcPayloadWrapper`。
     private static func lyricBody(_ qrc: String) -> String {
-        guard let wrapperRegex else { return qrc }
-        let ns = qrc as NSString
-        guard let match = wrapperRegex.firstMatch(
-            in: qrc, range: NSRange(location: 0, length: ns.length)
-        ), match.numberOfRanges >= 2 else { return qrc }
-        return unescapeXML(ns.substring(with: match.range(at: 1)))
-    }
-
-    /// 属性值里的 `&quot;` 之类要还原 —— 正文裹在 XML 属性里时，`"` 只能写成实体。
-    /// `&amp;` 放最后：先还原它会把 `&amp;lt;` 变成 `&lt;` 再被下一轮吃掉。
-    private static func unescapeXML(_ text: String) -> String {
-        guard text.contains("&") else { return text }
-        return text
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&apos;", with: "'")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&amp;", with: "&")
+        QrcPayloadWrapper.body(from: qrc)
     }
 }

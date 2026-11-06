@@ -269,6 +269,19 @@ jobs:
                  -o qrc-des-tests
           ./qrc-des-tests
 
+      # QRC 回包的 XML 外壳（`<Lyric_1 … LyricContent="…"/>`）。
+      # 正文里会出现**裸引号**（`Xだけの"人マニア"`），而旧的正则
+      # `LyricContent="([^"]*)"` 会在第一个裸引号处收尾 ⇒ 后半首歌整个消失
+      # （`人マニア` 36 行只解析出 20 行，罗马字与译文跟着缺）。
+      # 判据只有一条"从 `LyricContent="` 取到最后那个 `"`、且它后面只剩 `/>`"，
+      # 纯 Foundation，所以能在这里钉死。
+      - name: QQ QRC payload wrapper (bare quotes in the attribute)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/QrcPayloadWrapper.swift \
+                 Tests/QrcPayloadWrapper/main.swift \
+                 -o qrc-payload-wrapper-tests
+          ./qrc-payload-wrapper-tests
+
       # 酷狗 KRC `[language:]` type 0 是**逐词罗马字**，但酷狗自己没转全：促音 っ/ッ
       # 与长音符 ー 各自占一个词片，于是 `ずっと` 的组是 `["zu ", "っ", "to  "]`，
       # 拼出来就是 `zu っto` —— 罗马字那一行里夹着假名。
@@ -351,7 +364,7 @@ jobs:
                  -o amll-ttml-apple-tests
           ./amll-ttml-apple-tests
 
-      # 2026-10-16：打开后"没词可画时写哪一句"的判定（`LyricsNoticePolicy`）。四种"没词"必须
+      # "没词可画时写哪一句"的判定（`LyricsNoticePolicy`）。四种"没词"必须
       # 分开说 —— 混档就是用户能看见的误报（"歌词明明有、我们却说未找到"）。纯 Foundation。
       - name: Lyrics notice policy (what we say when there is nothing to draw)
         run: |

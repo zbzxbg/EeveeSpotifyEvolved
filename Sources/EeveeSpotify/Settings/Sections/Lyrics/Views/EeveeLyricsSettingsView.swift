@@ -38,7 +38,7 @@ struct EeveeLyricsSettingsView: View {
             if viewModel.lyricsSource != .notReplaced {
                 // 「AMLL 优先」需要有一个「用户自己选的源」作为回退目标，
                 // 所以来源为 Genius / 自动优选 / LRCLIB / AMLL 时不展示。
-                // 恢复曾整段删除）。
+                // （曾整段删除，已恢复）。
                 if viewModel.lyricsSource != .genius
                     && viewModel.lyricsSource != .autoSelect
                     && viewModel.lyricsSource != .lrclib
@@ -69,6 +69,14 @@ struct EeveeLyricsSettingsView: View {
                 if viewModel.lyricsSource == .musixmatch || viewModel.lyricsSource == .autoSelect {
                     musixmatchLanguageSection()
                 }
+
+                // AMLL 的译文语言。TTML 允许同一行挂**多轨**译文
+                // （`<translation xml:lang="zh-Hans">` + `xml:lang="en"`），
+                // 以前写死按「简中 → 中文 → 英文 → 其他」挑；这一项让用户自己指定。
+                // 与 mxm 那条的区别：mxm 是**向服务端要**语言，AMLL 只能**在文件自带的那几轨里挑**。
+                if viewModel.lyricsSource == .amllTtml || viewModel.lyricsSource == .autoSelect {
+                    amllTranslationLanguageSection()
+                }
             }
             
             // 已移除一节：「删除间奏符号 ♪」那颗 Toggle。
@@ -77,7 +85,7 @@ struct EeveeLyricsSettingsView: View {
             
             NonIPadSpacerView()
         }
-        // ⚠️ 这里曾经有一个 `.onReceive(viewModel.musixmatchTokenInputAlertPublisher)`，
+        // ⚠️ 不要加 `.onReceive(viewModel.musixmatchTokenInputAlertPublisher)`，
         // 用 `showAnonymousTokenOption` 决定弹窗里要不要显示「请求匿名令牌」。
         // 那个 publisher 全工程没有任何一处 `send`（死订阅），而匿名令牌选项本身
         // 也已整体移除 —— 两个一起去掉。
@@ -109,7 +117,7 @@ struct EeveeLyricsSettingsView: View {
     ///
     /// ⚠️ 文案 key 是 `_description` 而不是 `_footer`：本文件里所有页脚都用
     /// `<开关名>_description`（逐词歌词、更好的逐词歌词、禁用歌词、多级回退……一致）。
-    /// 这里曾经多出一个 `ngzhwm_better_word_by_word_lyrics_footer`，是**同一个开关
+    /// 不要再加 `ngzhwm_better_word_by_word_lyrics_footer`：那是**同一个开关
     /// 两份文案** —— 改文案时只改一处、另一处悄悄过期，正是那种"看起来改过了、
     /// 界面上还是旧话"的坑。现在合并成一条。
     @ViewBuilder private func betterWordByWordLyricsSection() -> some View {
@@ -150,7 +158,7 @@ struct EeveeLyricsSettingsView: View {
     /// 「AMLL 优先」：勾选后先向 AMLL 要逐词歌词，没正常返回再回退到
     /// 在来源选择器里设置的那个源。选项依赖逐词歌词，未开启时整体禁用。
     ///
-    /// 恢复曾整段删除，连带两个 l10n 键）。
+    /// （曾整段删除、连带两个 l10n 键，已恢复）。
     @ViewBuilder private func amllPreferredSection() -> some View {
         Section {
             Toggle(
@@ -253,6 +261,30 @@ struct EeveeLyricsSettingsView: View {
             )
         } footer: {
             Text("musixmatch_language_description".localized)
+        }
+    }
+
+    /// 「AMLL 译文语言」：空 = 自动。
+    ///
+    /// 用输入框而不是选择器：语言码是自由文本（`zh` / `zh-Hans` / `en` / `ja` / `ko`…），
+    /// 而文件里写的是 `xml:lang`，两者按**前缀**匹配（见 `AmllTtmlParser.language(_:matches:)`）。
+    /// 做成下拉就得先枚举所有可能的 `xml:lang`，那枚举必然不全。
+    @ViewBuilder private func amllTranslationLanguageSection() -> some View {
+        Section {
+            HStack {
+                Text("amll_translation_language".localized)
+
+                Spacer()
+
+                TextField("zh-Hans", text: $viewModel.amllTranslationLanguage)
+                    .frame(maxWidth: 70)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+            }
+        } footer: {
+            Text("amll_translation_language_description".localized)
         }
     }
 
