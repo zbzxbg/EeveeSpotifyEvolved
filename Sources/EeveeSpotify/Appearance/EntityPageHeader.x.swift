@@ -603,10 +603,11 @@ enum EntityPageHeaderManager {
         if header.frame != frame { header.frame = frame }
         // 满幅页头的图**下缘化开**：Spotify 那层渐变不保证存在（不存在时页头就是一块硬边纯色），
         // 我们自己补一条。只在"留下的是 Spotify 那张图"这一支开。
-        updateArtworkFade(
-            in: header,
-            enabled: fullbleedPicture != nil && !fullbleedHandedOver && !fullbleedArtIsAvatarRow
-        )
+        // 落点与开关留在这里，**颜色却被取色定时器晚一步送来** ⇒ 页面停住后这一拍可能是最后一拍
+        // 布局，纱就再也没人建（见 `refreshArtworkFade`）。
+        artworkFadeHost = header
+        artworkFadeEnabled = fullbleedPicture != nil && !fullbleedHandedOver && !fullbleedArtIsAvatarRow
+        updateArtworkFade(in: header, enabled: artworkFadeEnabled, source: "layout")
 
         // z 序与几何两道保险。
         raiseToTop(header, in: headerRoot, role: "playlist")
@@ -3199,12 +3200,24 @@ enum EntityPageHeaderManager {
     //
     // 只对"留下的是 Spotify 那张满幅图"这一支生效：hero 接手（`fullbleedHandedOver`）时
     // 图是我们自己画的、自带化开；电台那一族是一行大圆头像，糊下半截反而难看。
+    //
+    // ⚠️ **建纱要颜色，颜色比布局晚到**：纱的颜色是 `EntityPageAppearance.currentFieldColour`，
+    // 它由 0.6s 的取色定时器算（封面取色是 CoreGraphics，不能进每帧的布局回合），而建纱只在
+    // `applyOnce`（`HeaderContentLayout.layoutSubviews`）里跑。进入这一页时页头的最后几拍布局
+    // 往往**早于**第一次取色 ⇒ 那一拍 `colour` 还是 nil、纱没建；页面静止后不再有布局回合，
+    // 下沿就一直停在硬边上，直到下一次滚动带来新的布局拍。
+    // ⇒ 落点与开关存在这里，`EntityPageAppearance.tick` 每拍调一次 `refreshArtworkFade` 补建。
 
     private static var artworkFade: GradientView?
     /// 上一次写进那层纱的底色 —— 底色每拍都可能是同一个值，不必每拍重设（会触发重绘）。
     private static var artworkFadeColour: UIColor?
+    /// 布局回合留下的落点与开关（`refreshArtworkFade` 用它们补建）。
+    private static weak var artworkFadeHost: EntityPageHeaderView?
+    private static var artworkFadeEnabled = false
+    /// 已就成纱的那一份页头 —— 建成的第一行只记一次。
+    private static weak var artworkFadeLogged: EntityPageHeaderView?
 
-    private static func updateArtworkFade(in header: EntityPageHeaderView, enabled: Bool) {
+    private static func updateArtworkFade(in header: EntityPageHeaderView, enabled: Bool, source: String) {
         guard enabled, let colour = EntityPageAppearance.currentFieldColour else {
             removeArtworkFade()
             return
@@ -3239,6 +3252,38 @@ enum EntityPageHeaderManager {
             fade.gradient.colors = [colour.withAlphaComponent(0).cgColor, colour.cgColor]
             artworkFadeColour = colour
         }
+
+        if artworkFadeLogged !== header {
+            artworkFadeLogged = header
+            let inWindow = fade.convert(fade.bounds, to: nil)
+            writeDebugLog(
+                "[EntityPageHeader] full-bleed art fade — built on the \(source) pass:"
+                    + " \(Int(fade.frame.width))x\(Int(fade.frame.height))pt at"
+                    + " \(Int(inWindow.minY))..\(Int(inWindow.maxY))pt"
+            )
+        }
+    }
+
+    /// 取色定时器那一拍：颜色到了就把纱补建出来（见上面"建纱要颜色"那段）。
+    ///
+    /// 与 `refreshPinnedMore` 同一条理由 —— 停在页面上不动时没有布局回合。幂等：颜色没变时
+    /// `updateArtworkFade` 只更新帧，不重设 layer（`artworkFadeColour` 挡着）。
+    static func refreshArtworkFade() {
+        guard let header = artworkFadeHost, let live = currentHeader, header === live,
+              header.window != nil, header.superview != nil
+        else {
+            clearArtworkFade()
+            return
+        }
+        updateArtworkFade(in: header, enabled: artworkFadeEnabled, source: "tick")
+    }
+
+    /// 离页 / 页头换掉时收掉纱，并把落点清掉（`EntityPageAppearance.tick` 找不到目标时调）。
+    static func clearArtworkFade() {
+        artworkFadeHost = nil
+        artworkFadeEnabled = false
+        artworkFadeLogged = nil
+        removeArtworkFade()
     }
 
     private static func removeArtworkFade() {

@@ -504,6 +504,7 @@ enum EntityPageAppearance {
             // （`⋯` 已经由上面那一句 `refreshPinnedMore` 收尾，见它的说明。）
             // 底色拦截器也一起松手。
             EntityPageRepaint.root = nil
+            EntityPageHeaderManager.clearArtworkFade()
             return
         }
 
@@ -530,6 +531,9 @@ enum EntityPageAppearance {
         // **这一页的底色用哪个颜色**只算一次（底 / 照片的化开共用它）。
         let colour = pageColour(for: target)
         currentFieldColour = colour
+        // 满幅页头那层"底沿化开"的纱要的就是这个颜色，而建纱的布局回合往往**早于**这里
+        // （见 `EntityPageHeaderManager.refreshArtworkFade`）⇒ 颜色一到就让页头那边补建一次。
+        EntityPageHeaderManager.refreshArtworkFade()
         // **顶上那条纱与状态栏字色**改用照片**自己的顶边**那一小条，不再用这个压暗过的
         // 底色 —— 压暗过的底色恒为暗 ⇒ 白照片上贴一条灰带、状态栏永远白字。
         let topEdge = target.kind == .artist ? topEdgeColour(for: target) : nil
