@@ -39,8 +39,15 @@ true_shuffle_dec = "阻止 Spotify 的智慧型隨機播放將歌曲加入隨機
 
 do_not_replace_lyrics = "使用原生歌詞";
 lyrics_source = "歌詞來源";
-lyrics_additional_info = "若 EeveeSpotify 無法提供歌詞，則您會看到「無法加載歌詞」提示（可隱藏）。以 Genius 為來源時可能會由於 EeveeSpotify 查找歌詞方式的問題而出現曲詞對應錯誤的問題，不過在大部分情況下可以正常運作。";
-petitlyrics_description = "PetitLyrics: 日本區 Spotify 預設歌詞來源，提供大量的已同步日文歌歌詞和部分外文歌歌詞。";
+lyrics_source_restart_note = "切換歌詞來源後需要重新啟動 Spotify。";
+lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ Music 和 KuGou 都是按歌名與歌手搜尋（不是按曲目 ID 精確比對），所以部分歌曲可能會出現歌詞顯示錯誤或搜尋不到歌詞的情況。";
+petitlyrics_description = "PetitLyrics：Spotify 在日本地區的主要歌詞提供商。但少數歌曲的逐詞時間軸不規範。";
+netease_description = "NetEase：華語歌曲主力，提供逐詞歌詞。";
+unison_description = "Unison：開源群眾外包歌詞資料庫。提供 TTML 歌詞。詳細介紹請前往 unison.boidu.dev 查看。";
+qqmusic_description = "QQ Music：華語歌曲主力，提供逐詞歌詞和逐詞日語羅馬字。";
+kugou_description = "KuGou：華語歌曲主力，提供逐詞歌詞和逐詞日語羅馬字。";
+lrclib_description = "LRCLIB：最開放的服務，提供逐行歌詞。但它缺少很多歌曲的歌詞。";
+musixmatch_description = "Musixmatch：Spotify 官方歌詞提供商之一。為很多歌曲提供帶時間軸的歌詞，但需要使用者權杖才能使用。";
 
 musixmatch_user_token = "Musixmatch 使用者權杖";
 user_token_placeholder = "在此輸入 Musixmatch 使用者權杖或貼上除錯資訊";
