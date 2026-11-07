@@ -439,7 +439,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                 timeout = min(timeout, LyricsAutoSelect.upgradeBudget - elapsed)
             } else if let best,
                       best.tier >= LyricsAutoSelect.wantedTier,
-                      !LyricsAutoSelect.missingFacets(of: best.dto).isEmpty {
+                      !LyricsAutoSelect.missingFacets(of: best.dto, source: best.source).isEmpty {
                 timeout = min(timeout, LyricsAutoSelect.upgradeBudget - elapsed)
             }
             guard timeout > 0 else {

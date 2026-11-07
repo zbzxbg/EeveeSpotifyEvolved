@@ -70,7 +70,14 @@ extension EeveeLyricsSettingsView {
         text.append("\n\n")
         text.append("lyrics_additional_info".localized)
 
-        return Text(text)
+        // 三个源的介绍里带官网地址（amll.dev / spicylyrics.org / unison.boidu.dev），
+        // 文案写成 markdown 链接，这里按行内语法解析成可点文本。
+        // 解析失败退回纯文本 —— 一个链接不值得让整块页脚消失。
+        let markdown = try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )
+        return Text(markdown ?? AttributedString(text))
     }
 
     /// 每个源对应的介绍文案。取不了词的项（不替换 / 自动选择本身 / 实验源）返回 nil。
@@ -102,9 +109,11 @@ extension EeveeLyricsSettingsView {
                 isOn: Binding<Bool>(
                     get: { viewModel.lyricsSource == .notReplaced },
                     set: {
+                        // 关掉"不替换"时要回到默认源，同样要过样式判据 ——
+                        // 默认是自动优选，原生样式下写进盘里会让 Picker 选中态变空白。
                         viewModel.lyricsSource = $0
                             ? .notReplaced
-                            : LyricsSource.defaultSource
+                            : LyricsSource.defaultSource.effectiveForCurrentStyle
                     }
                 )
             )

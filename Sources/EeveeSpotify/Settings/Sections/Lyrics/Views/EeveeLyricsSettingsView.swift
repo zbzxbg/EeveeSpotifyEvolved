@@ -24,11 +24,10 @@ struct EeveeLyricsSettingsView: View {
                 disableLyricsSection()
             }
             
-            // 自动优选链路里也包含 NetEase，所以这两项对它同样要能改 ——
-            // 否则选了「自动优选」的用户永远调不到网易云的罗马字 / 译文行为。
+            // 自动优选链路里也包含 NetEase，所以这一项对它同样要能改 ——
+            // 否则选了「自动优选」的用户永远调不到网易云的罗马字行为。
             if viewModel.lyricsSource == .netease || viewModel.lyricsSource == .autoSelect {
                 neteaseRomajiLocalSection()
-                neteaseHideTranslationSection()
                 // （设置页里面放个可点击进去的页面吧）：歌词偏移
                 // 从本页拆出去成了独立页（`EeveeLyricsOffsetSettingsView`，起
                 // 对所有源生效），入口在根设置页「播放与歌词」组里，与「歌词 / 听歌页 /
@@ -36,6 +35,10 @@ struct EeveeLyricsSettingsView: View {
             }
             
             if viewModel.lyricsSource != .notReplaced {
+                // 译文行的开关放在通用区最前面：它对**所有源**生效
+                // （`showsTranslationNow` 不看 source），不是网易云专属。
+                lyricsHideTranslationSection()
+
                 // 「AMLL 优先」需要有一个「用户自己选的源」作为回退目标，
                 // 所以来源为 Genius / 自动优选 / LRCLIB / AMLL 时不展示。
                 // （曾整段删除，已恢复）。
@@ -70,13 +73,6 @@ struct EeveeLyricsSettingsView: View {
                     musixmatchLanguageSection()
                 }
 
-                // AMLL 的译文语言。TTML 允许同一行挂**多轨**译文
-                // （`<translation xml:lang="zh-Hans">` + `xml:lang="en"`），
-                // 以前写死按「简中 → 中文 → 英文 → 其他」挑；这一项让用户自己指定。
-                // 与 mxm 那条的区别：mxm 是**向服务端要**语言，AMLL 只能**在文件自带的那几轨里挑**。
-                if viewModel.lyricsSource == .amllTtml || viewModel.lyricsSource == .autoSelect {
-                    amllTranslationLanguageSection()
-                }
             }
             
             // 已移除一节：「删除间奏符号 ♪」那颗 Toggle。
@@ -106,6 +102,13 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
+    /// iOS 26 起才有 `AppleMusicLyricsOverlay`
+    /// （`AppleMusicLyricsOverlay.isAvailable` 里那道 `#available` 是同一判据）。
+    private static var supportsBetterWordByWordLyrics: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
     /// 「更好的逐词歌词」：**跟着主开关显示/隐藏的子项**，不单独占一个平级位置。
     ///
     /// 与文件里其它条件项同一套写法（例如
@@ -122,13 +125,24 @@ struct EeveeLyricsSettingsView: View {
     /// 界面上还是旧话"的坑。现在合并成一条。
     @ViewBuilder private func betterWordByWordLyricsSection() -> some View {
         Section(
-            footer: Text("better_word_by_word_lyrics_description".localized)
+            footer: betterWordByWordLyricsFooter()
         ) {
             Toggle(
                 "better_word_by_word_lyrics".localized,
                 isOn: $viewModel.betterWordByWordLyrics
             )
+            // 低版本上这一项**不生效**（渲染层直接 `#available` 返回 false）。
+            // 置灰而不是隐藏：开关的状态仍然要看得见，否则用户会以为"我明明开过"。
+            .disabled(!Self.supportsBetterWordByWordLyrics)
         }
+    }
+
+    private func betterWordByWordLyricsFooter() -> Text {
+        var text = "better_word_by_word_lyrics_description".localized
+        if !Self.supportsBetterWordByWordLyrics {
+            text += "\n\n" + "better_word_by_word_lyrics_needs_ios26".localized
+        }
+        return Text(text)
     }
     
     @ViewBuilder private func disableLyricsSection() -> some View {
@@ -232,13 +246,19 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
-    @ViewBuilder private func neteaseHideTranslationSection() -> some View {
+    /// 「隐藏歌词译文」——**对所有源生效**，不是网易云专属。
+    ///
+    /// 判据落在两个自绘层里（`AppleMusicLyricsOverlayView.showsTranslationNow` /
+    /// `LyricsWordByWordOverlayView`），它们都不看来源。
+    /// 交给 Spotify 原生页的那一份不受影响：只有逐行歌词才会把译文递出去，
+    /// 那边由它自己的翻译按钮管。
+    @ViewBuilder private func lyricsHideTranslationSection() -> some View {
         Section(
-            footer: Text("netease_hide_translation_description".localized)
+            footer: Text("lyrics_hide_translation_description".localized)
         ) {
             Toggle(
-                "netease_hide_translation".localized,
-                isOn: $viewModel.neteaseHideTranslation
+                "lyrics_hide_translation".localized,
+                isOn: $viewModel.hideLyricsTranslation
             )
         }
     }
@@ -261,30 +281,6 @@ struct EeveeLyricsSettingsView: View {
             )
         } footer: {
             Text("musixmatch_language_description".localized)
-        }
-    }
-
-    /// 「AMLL 译文语言」：空 = 自动。
-    ///
-    /// 用输入框而不是选择器：语言码是自由文本（`zh` / `zh-Hans` / `en` / `ja` / `ko`…），
-    /// 而文件里写的是 `xml:lang`，两者按**前缀**匹配（见 `AmllTtmlParser.language(_:matches:)`）。
-    /// 做成下拉就得先枚举所有可能的 `xml:lang`，那枚举必然不全。
-    @ViewBuilder private func amllTranslationLanguageSection() -> some View {
-        Section {
-            HStack {
-                Text("amll_translation_language".localized)
-
-                Spacer()
-
-                TextField("zh-Hans", text: $viewModel.amllTranslationLanguage)
-                    .frame(maxWidth: 70)
-                    .foregroundColor(.gray)
-                    .lineLimit(1)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-            }
-        } footer: {
-            Text("amll_translation_language_description".localized)
         }
     }
 

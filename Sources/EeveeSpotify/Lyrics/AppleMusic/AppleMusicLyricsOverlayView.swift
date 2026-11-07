@@ -108,10 +108,9 @@ struct AppleMusicLyricsOverlayView: View {
     ///
     /// 两个条件：
     /// · 这一首**有译文行**（`lines` 里至少一行带非空 `translation`）；
-    /// · 隐藏译文（`NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled`，
-    /// 默认随设备语言：中文设备默认**显示**、其它默认隐藏 —— 那是仓库既有口径，
-    /// 旧 overlay 也是照它判的：`LyricsWordByWord.x.swift` 里
-    /// `showsTranslation && !isNeteaseHideTranslationEnabled`）。
+    /// · 「隐藏歌词译文」（`NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled`）关着。
+    ///   这一项**不分来源**，默认随设备语言：中文设备显示、其它隐藏 ——
+    ///   那几家给的译文基本都是中文，英文用户看到只是噪声。
     ///
     /// ⚠️ 算在这里、而不是当参数从外面传：`body` 每一帧都会被时间轴重新求值，
     /// 于是"在设置里一改、回到播放器立刻生效"，不用等下一次取词。
@@ -120,12 +119,15 @@ struct AppleMusicLyricsOverlayView: View {
             guard let translation = line.translation else { return false }
             return !translation.isEmpty
         }
-        // **我们自己翻出来的译文**不受下面那条历史口径约束 ——
-        // 那条「隐藏译文」是当年给 NetEase 的按钮写的，默认值还跟设备语言走
-        // （非中文设备默认隐藏）。在本机翻译歌词，
-        // 就该看见结果，否则开关开了却什么都没有。
+        // **我们自己翻出来的译文**不受上面那条约束 ——
+        // 用户主动开了"用系统翻译"，就该看见结果，否则开关开了却什么都没有。
         if UserDefaults.lyricsAutoTranslate { return hasTranslation }
-        guard !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled else { return false }
+        // 「不展示部分歌词源的翻译」只对名单里的源生效（见 `hidesTranslationWhenToggled`）：
+        // MxM 那种"译文往往是用户自己的语言"的源不在名单里，它的译文照常显示。
+        if NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled,
+           currentLyricsSource?.hidesTranslationWhenToggled == true {
+            return false
+        }
         return hasTranslation
     }
 

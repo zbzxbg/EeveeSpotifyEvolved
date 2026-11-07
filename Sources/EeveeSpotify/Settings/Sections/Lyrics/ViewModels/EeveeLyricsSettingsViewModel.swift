@@ -46,14 +46,6 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
 
-    /// 「AMLL 译文语言」（空 = 自动：沿用解析层的 zh-Hans → 中文 → 英文 → 其他）。
-    ///
-    /// 与 mxm 那条的区别见 `UserDefaults.amllTranslationLanguage` 上面那段：
-    /// mxm 是向服务端**要**某种语言，AMLL 只能**在文件自带的那几轨里挑**。
-    @Published var amllTranslationLanguage = UserDefaults.amllTranslationLanguage {
-        didSet { UserDefaults.amllTranslationLanguage = amllTranslationLanguage }
-    }
-
     // 已**搬走**两个开关：`injectLyricsCardElement` / `lyricsEntryPointFlag`
     // —— 它们是排查/验证型开关，属性与绑定整体挪到 `EeveeDebugSettingsViewModel`（「调试」页）。
     // UserDefaults key 一字未改，设备上已设的值照旧生效；`[Settings] ... -> ON/OFF`
@@ -96,11 +88,11 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
     
-    @Published var neteaseHideTranslation = NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled {
+    @Published var hideLyricsTranslation = NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled {
         didSet {
             UserDefaults.standard.set(
-                neteaseHideTranslation,
-                forKey: NgzhwmSettingsViewModel.neteaseHideTranslationKey
+                hideLyricsTranslation,
+                forKey: NgzhwmSettingsViewModel.hideLyricsTranslationKey
             )
         }
     }
@@ -172,7 +164,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
             neteaseRomajiLocal,
-            neteaseHideTranslation,
+            hideLyricsTranslation,
             lyricsAutoTranslate,
             isMusixmatchTokenValid,
             isRequestingMusixmatchToken,

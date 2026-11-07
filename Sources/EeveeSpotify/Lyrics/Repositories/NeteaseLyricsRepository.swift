@@ -1493,11 +1493,13 @@ class NeteaseLyricsRepository: LyricsRepository {
         // （A：间奏一律删掉），所以这一句不再看它。
         lines = Array(lines.drop(while: { $0.content.isEmpty }))
 
-        // 网易云翻译只有简体中文。开启「不展示网易云歌词翻译」开关时，
-        // 跳过翻译层构建，不把简体中文翻译交给上游（不影响中日韩罗马化）。
+        // 网易云翻译只有简体中文。开启「隐藏歌词译文」开关时，跳过翻译层构建，
+        // 不把简体中文翻译交给上游（不影响中日韩罗马化）。
+        // 那一项是**全局**开关，别处（AMLL / QQ / 酷狗 / TTML 系）由显示层自己挡；
+        // 这里提前跳过只是省掉一次解析。
         var translation: LyricsTranslationDto? = nil
-        let hideNetEaseTranslation = NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled
-        if hideNetEaseTranslation {
+        let hideTranslation = NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled
+        if hideTranslation {
             writeDebugLog("[NetEase] Hide translation enabled — skipping translation layer")
         } else if !yrcParsed.isEmpty {
             // 「当返回逐词歌词的时候，不展示歌词翻译」。

@@ -146,7 +146,7 @@ extension EeveeLyricsSettingsViewModel {
         // 已删除：`$removeMxmInterludeSymbol` ——「删除间奏符号 ♪」连同它的
         // 键与 UI 行一起摘掉了（间奏行无条件丢弃），没有可记录的绑定。
         logBooleanSetting($neteaseRomajiLocal, "NetEase romaji display mode")
-        logBooleanSetting($neteaseHideTranslation, "hide NetEase translation")
+        logBooleanSetting($hideLyricsTranslation, "hide lyrics translation")
         logBooleanSetting($lyricsAutoTranslate, "auto-translate lyrics (system)")
         logBooleanSetting($chineseRomanization, "Chinese romanization")
         logBooleanSetting($japaneseRomanization, "Japanese romanization")

@@ -23,50 +23,19 @@ extension UserDefaults {
 
 // MARK: - AMLL 译文语言
 //
-// 「AMLL 的译文能不能像 Musixmatch 一样指定语言」—— mxm 那条是**向服务端要**
-// （`selected_language` + `part=subtitle_translated`，服务端有各语言译本）；
-// AMLL 是**社区 TTML 文件里带什么就有什么**，一份文件可能同时挂 zh-Hans / en / ja
-// 几轨 `<translation xml:lang="…">`，也可能只有一轨。
-// 所以这个设置只能做到「**在文件提供的那几门语言里挑**」：
-// · 填了语言码 → 优先取它；
-// · 文件里没有这门语言 → 退回解析层原来那套优先级（zh-Hans → 中文 → 英文 → 其他），
-//   显示别的语言好过显示空白。
+// AMLL 是**社区 TTML 文件里带什么就有什么**：一份文件可能同时挂 zh-Hans / en / ja
+// 几轨 `<translation xml:lang="…">`，也可能只有一轨。挑哪一轨由**设备语言**决定，
+// 文件里没有那门语言时退回解析层的优先级（zh-Hans → 中文 → 英文 → 其他）。
 //
-// ⚠️ 键单独存（不进 `lyricsOptions` 那个整块 JSON）：那个 key 加字段会让旧数据解码失败
-// （见 `AmllTtmlLyricsRepository` 文件头对 `apiUrl` 的同一段说明）。
+// 以前这里还有一个"手动指定语言码"的设置，已删除：74 份抽样里只有 1 份带多语言轨，
+// 而设备语言那条自动路径已经覆盖了它（英文设备在 `zh-Hans` + `en` 那份上会自动选 en）。
 extension UserDefaults {
-    private static let amllTranslationLanguageKey = "ngzhwm_amllTranslationLanguage"
-
-    /// 空串 = 自动（沿用解析层的语言优先级）。
-    static var amllTranslationLanguage: String {
-        get {
-            (container.string(forKey: amllTranslationLanguageKey) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        set {
-            container.set(
-                newValue.trimmingCharacters(in: .whitespacesAndNewlines),
-                forKey: amllTranslationLanguageKey
-            )
-        }
-    }
-
-    /// **实际**拿去挑译文的那门语言：设置里填了就用它，留空则用**设备语言**。
+    /// 拿去挑 AMLL 译文的那门语言 —— 就是**设备语言**。
     ///
-    /// 为什么自动档跟设备语言（与 Musixmatch 一致：它那个默认值就是 `Locale.current.languageCode`）：
-    /// 中文设备用户本来就命中中文轨；非中文设备用户至少不比"永远中文"更差。
-    ///
-    /// ⚠️ **不再单独加"英文"这一步**。解析层的兜底顺序本来就是
-    /// `zh-Hans → zh → en → 其他`，英文已经在链里（第 3 位）。28 个 AMLL 文件里
-    /// 17 个带译文：16 个只有 `zh-CN`、1 个是 `zh-Hans` + `en`、**0 个只有 `en`** ⇒
-    /// 把英文提到中文前面，唯一的效果是在那 1 个文件上把"英文系统的中文用户"
-    /// 从中文改成英文 —— 那是一次**退化**，不是改进。
+    /// 只要语言码（`zh` / `en` / `ja`），不要 region：挑选是**前缀式**的，
+    /// `zh` 已经能命中 `zh-CN` / `zh-Hans` / `zh-Hant`，具体哪一轨交给解析层的优先级。
     static var amllEffectiveTranslationLanguage: String {
-        let configured = amllTranslationLanguage
-        guard configured.isEmpty else { return configured }
-        // 只要语言码（`zh` / `en` / `ja`），不要 region：挑选是**前缀式**的，
-        // `zh` 已经能命中 `zh-CN` / `zh-Hans` / `zh-Hant`，具体哪一轨交给解析层的优先级。
-        return Locale.current.language.languageCode?.identifier ?? ""
+        Locale.current.language.languageCode?.identifier ?? ""
     }
 }
 

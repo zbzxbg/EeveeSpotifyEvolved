@@ -20,7 +20,7 @@ extension LyricsSource {
     var effectiveForCurrentStyle: LyricsSource {
         guard !isAvailableInCurrentNowPlayingStyle else { return self }
         logStyleOverrideOnce()
-        return LyricsSource.defaultSource
+        return LyricsSource.stockStyleFallback
     }
 
     /// 这条日志每个（源 + 样式）组合只打一次：`UserDefaults.lyricsSource` 读得很频繁
@@ -30,7 +30,7 @@ extension LyricsSource {
         lastStyleOverrideLogged = rawValue
         writeDebugLog(
             "[Lyrics] source \"\(description)\" needs the immersive / Apple Music now-playing style"
-                + " — using \(LyricsSource.defaultSource.description) instead"
+                + " — using \(LyricsSource.stockStyleFallback.description) instead"
         )
     }
 }
@@ -65,7 +65,9 @@ extension UserDefaults {
                 return stored.effectiveForCurrentStyle
             }
 
-            return LyricsSource.defaultSource
+            // 默认值也要过一遍样式判据：默认是"自动优选"，而它在原生样式下不可选 ——
+            // 不降级的话 Picker 里那一项被滤掉，选中态会变成空白。
+            return LyricsSource.defaultSource.effectiveForCurrentStyle
         }
         set (newSource) {
             container.set(newSource.rawValue, forKey: lyricsSourceKey)

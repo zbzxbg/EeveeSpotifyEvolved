@@ -80,7 +80,7 @@ struct LyricsAutoSelectPick {
     ///
     /// 用计算属性、不做存储字段：它就是 dto + 设置开关的函数，没有"到达时才知道"的信息；
     /// 这样 `CustomLyrics` 里那几个构造点一个都不用改。
-    var facets: LyricsAutoSelectFacets { LyricsAutoSelect.facets(of: dto) }
+    var facets: LyricsAutoSelectFacets { LyricsAutoSelect.facets(of: dto, source: source) }
 }
 
 enum LyricsAutoSelect {
@@ -134,9 +134,9 @@ enum LyricsAutoSelect {
     //
     // 判据全部来自**显示层实际读的那批开关**，不是新发明的一套：
     //
-    // · 译文：`AppleMusicLyricsOverlayView.showsTranslationNow` 与
-    //   `LyricsWordByWordOverlayView` 用的是 `!NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled`
-    //   （原文里那句 `showsTranslation && !isNeteaseHideTranslationEnabled`）。
+    // · 译文：与 `AppleMusicLyricsOverlayView.showsTranslationNow` /
+    //   `LyricsWordByWordOverlayView` 同一判据 —— 开关开着**且这一家在名单里**
+    //   才算"用户不想要这份译文"（`hidesTranslationWhenToggled`）。
     //   机翻（`UserDefaults.lyricsAutoTranslate`）**不在这里判**：它在选定之后才跑，
     //   对"这一份源自己的译文值不值得选"没有影响。
     //
@@ -150,8 +150,14 @@ enum LyricsAutoSelect {
     //   ② 同档同面 ⇒ 先到先用：`score` 必须**严格更大**才算更好；
     //   ③ 预算不变：facets 不新增长度，只复用 `upgradeBudget` / `totalBudget`。
 
-    static var wantsTranslation: Bool {
-        !NgzhwmSettingsViewModel.isNeteaseHideTranslationEnabled
+    /// 这一家给的译文要不要参与比较。
+    ///
+    /// 「不展示部分歌词源的翻译」只隐藏名单里的那几家（`hidesTranslationWhenToggled`），
+    /// 所以同一场比较里，被隐藏的那份译文**不该**再算成一个质量面 ——
+    /// 否则自动优选会为了一个根本不会显示的东西多给分。
+    static func wantsTranslation(for source: LyricsSource?) -> Bool {
+        guard !NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled else { return true }
+        return !(source?.hidesTranslationWhenToggled ?? false)
     }
 
     /// 这门语言的官方罗马字开关开着吗（与 `LyricLinesAdapter` 同一条判据）。
@@ -183,9 +189,12 @@ enum LyricsAutoSelect {
     /// （`officialRomanizedWordGroups` 是按 `words` 挂的），行级 / 纯文本的候选
     /// **不可能**满足它。不封顶的话，行级候选永远会缺一项，同档比较就永远停不下来 ——
     /// 那一档明明已经拿满了它**能**拿到的面。
-    static func wantedFacets(for dto: LyricsDto) -> LyricsAutoSelectFacets {
+    static func wantedFacets(
+        for dto: LyricsDto,
+        source: LyricsSource? = nil
+    ) -> LyricsAutoSelectFacets {
         var wanted = LyricsAutoSelectFacets()
-        wanted.translation = wantsTranslation
+        wanted.translation = wantsTranslation(for: source)
         let romanizationWanted = isOfficialRomanizationEnabled(for: dto.languageCode)
             && romanizationIsRelevant(dto)
         wanted.officialRomanization = romanizationWanted
@@ -196,8 +205,8 @@ enum LyricsAutoSelect {
     /// 这一份 dto **实际**满足的质量面（只算用户要的那几项）。
     ///
     /// 只算"要的"很重要：用户把译文关掉之后，一份带译文的歌词不该在同档比较里多得分。
-    static func facets(of dto: LyricsDto) -> LyricsAutoSelectFacets {
-        let wanted = wantedFacets(for: dto)
+    static func facets(of dto: LyricsDto, source: LyricsSource? = nil) -> LyricsAutoSelectFacets {
+        let wanted = wantedFacets(for: dto, source: source)
         var present = LyricsAutoSelectFacets()
         present.translation = hasUsableTranslation(dto)
         present.officialRomanization = hasOfficialRomanization(dto)
@@ -211,9 +220,9 @@ enum LyricsAutoSelect {
     }
 
     /// 用户想要、而这一份没给的面。
-    static func missingFacets(of dto: LyricsDto) -> LyricsAutoSelectFacets {
-        let wanted = wantedFacets(for: dto)
-        let present = facets(of: dto)
+    static func missingFacets(of dto: LyricsDto, source: LyricsSource? = nil) -> LyricsAutoSelectFacets {
+        let wanted = wantedFacets(for: dto, source: source)
+        let present = facets(of: dto, source: source)
         var missing = LyricsAutoSelectFacets()
         missing.translation = wanted.translation && !present.translation
         missing.officialRomanization = wanted.officialRomanization && !present.officialRomanization
@@ -251,7 +260,7 @@ enum LyricsAutoSelect {
     /// 同档才比质量面，而且**必须严格更多** —— 一样多时保持"先到先用"，
     /// 链路顺序就是同档的优先级。
     static func isBetter(_ candidate: LyricsAutoSelectPick, than current: LyricsAutoSelectPick?) -> Bool {
-        logFacetsOnce(for: candidate.dto)
+        logFacetsOnce(for: candidate.dto, source: candidate.source)
         guard let current else { return true }
         if candidate.tier != current.tier { return candidate.tier > current.tier }
         return candidate.facets.score > current.facets.score
@@ -318,12 +327,12 @@ enum LyricsAutoSelect {
     // 那次调用就是"一次请求"。
     private static var facetVerdictLogged = false
 
-    static func logFacetsOnce(for dto: LyricsDto) {
+    static func logFacetsOnce(for dto: LyricsDto, source: LyricsSource? = nil) {
         guard !facetVerdictLogged else { return }
         facetVerdictLogged = true
 
-        let wanted = wantedFacets(for: dto)
-        let present = facets(of: dto)
+        let wanted = wantedFacets(for: dto, source: source)
+        let present = facets(of: dto, source: source)
         let mark: (Bool) -> String = { $0 ? "Y" : "N" }
         writeDebugLog(
             "[AutoSelect] facets wanted: translation=\(mark(wanted.translation))"

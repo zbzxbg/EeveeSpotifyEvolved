@@ -152,10 +152,42 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     }
 
     var isReplacingLyrics: Bool { self != .notReplaced }
+
+    /// 「不展示部分歌词源的翻译」开着时，**这一家**的译文要不要隐藏。
+    ///
+    /// 名单只收译文基本都是中文的那几家 —— 这个开关存在的理由就是"非中文用户看到中文译文只是噪声"。
+    /// MxM 的译文往往是用户自己的语言；Bini 不下发译文轨；Unison 视文件而定。
+    /// 三家都不在名单里。
+    var hidesTranslationWhenToggled: Bool {
+        switch self {
+        case .amllTtml, .netease, .qqMusic, .kugou:
+            return true
+        case .genius, .lrclib, .musixmatch, .petit, .notReplaced, .spicy,
+             .autoSelect, .appleMusicOfficialTtml, .bini, .unison:
+            return false
+        }
+    }
     
+    /// 没有存过来源时的默认值。
+    ///
+    /// 日本用 PetitLyrics（Musixmatch 的日文覆盖差，那边它才是主力）；其他地区用**自动优选**：
+    /// 链路自己会跳过没填密钥的 Spicy Lyrics（见 `CustomLyrics` 里那条 `continue`），
+    /// 并按"逐字优先、覆盖兜底"排好序，比钉死某一个单源更接近"点开就有最好的那份"。
+    ///
+    /// ⚠️ 自动优选只在沉浸式 / Apple Music 样式下可选，原生样式由 `stockStyleFallback` 接手。
     static var defaultSource: LyricsSource {
+        isJapaneseRegion ? .petit : .autoSelect
+    }
+
+    /// 默认来源在**当前听歌页样式**下不可用时的兜底。
+    ///
+    /// 目前只有一种情况：自动优选 + 原生样式。兜底选 Musixmatch —— 覆盖最广、
+    /// 有 richsync 逐字，且没填令牌时会自己换一个匿名令牌，开箱就能用。
+    static var stockStyleFallback: LyricsSource {
+        isJapaneseRegion ? .petit : .musixmatch
+    }
+
+    private static var isJapaneseRegion: Bool {
         Locale.isInRegion("JP", orHasLanguage: "ja")
-            ? .petit
-            : .spicy
     }
 }

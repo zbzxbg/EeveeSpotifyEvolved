@@ -12,7 +12,9 @@ class NgzhwmSettingsViewModel: ObservableObject {
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     static let disableLyricsFeatureKey = "ngzhwm_disableLyricsFeature"
     static let neteaseRomajiLocalKey = "ngzhwm_neteaseRomajiLocal"
-    static let neteaseHideTranslationKey = "ngzhwm_neteaseHideTranslation"
+    /// 键名里的 `netease` 是历史：这一项早先只管网易云的翻译按钮，现在对**所有源**生效。
+    /// 字符串值不能跟着改名 —— 它已经在用户盘上，改了等于把所有人的选择重置。
+    static let hideLyricsTranslationKey = "ngzhwm_neteaseHideTranslation"
     static let wordByWordLyricsKey = "ngzhwm_wordByWordLyrics"
     static let betterWordByWordLyricsKey = "ngzhwm_betterWordByWordLyrics"
     /// 「AMLL 优先」的 UserDefaults 键。
@@ -79,8 +81,12 @@ class NgzhwmSettingsViewModel: ObservableObject {
     static let chineseRomanizationKey = "ngzhwm_chineseRomanization"
     static let koreanRomanizationKey = "ngzhwm_koreanRomanization"
 
-    static var isNeteaseHideTranslationEnabled: Bool {
-        bool(forKey: neteaseHideTranslationKey, defaultValue: !isChineseDevice)
+    /// 我们自己绘制的歌词层要不要画译文行（**不分来源**）。
+    ///
+    /// 默认跟随设备语言：中文（简/繁都算）设备默认**显示**，其余默认**隐藏** ——
+    /// 这些源给的译文基本都是中文，英文用户看到只会是噪声。
+    static var isHideLyricsTranslationEnabled: Bool {
+        bool(forKey: hideLyricsTranslationKey, defaultValue: !isChineseDevice)
     }
 
     /// （**展示罗马化翻译 / 歌词翻译默认开启**）——
@@ -105,10 +111,13 @@ class NgzhwmSettingsViewModel: ObservableObject {
             UserDefaults.standard.set(true, forKey: key)
         }
 
-        // 「展示歌词翻译」与「隐藏译文」是**同一个键的反相**
-        // ⇒ 要"默认显示译文"，就是把它写成 false（同样只对没写过的键）。
-        if UserDefaults.standard.object(forKey: neteaseHideTranslationKey) == nil {
-            UserDefaults.standard.set(false, forKey: neteaseHideTranslationKey)
+        // 「展示歌词翻译」与「隐藏译文」是**同一个键的反相**。
+        // 写的是**设备相关**的默认值（与 getter 里的 `!isChineseDevice` 同口径）：
+        // 中文设备写 false（显示），其余写 true（隐藏）—— 这些源给的译文基本都是中文。
+        // ⚠️ 旧版本这里写死 false，等于把"英文设备默认隐藏"那条 getter 默认值架空了。
+        // 已经跑过旧迁移的设备（键已被写成 false）保持原样：分不清那是迁移写的还是用户关的。
+        if UserDefaults.standard.object(forKey: hideLyricsTranslationKey) == nil {
+            UserDefaults.standard.set(!isChineseDevice, forKey: hideLyricsTranslationKey)
         }
 
         writeDebugLog(

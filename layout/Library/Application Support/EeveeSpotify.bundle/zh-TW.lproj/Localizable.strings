@@ -43,7 +43,7 @@ lyrics_source_restart_note = "切換歌詞來源後需要重新啟動 Spotify。
 lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ Music 和 KuGou 都是按歌名與歌手搜尋（不是按曲目 ID 精確比對），所以部分歌曲可能會出現歌詞顯示錯誤或搜尋不到歌詞的情況。";
 petitlyrics_description = "PetitLyrics：Spotify 在日本地區的主要歌詞提供商。但少數歌曲的逐詞時間軸不規範。";
 netease_description = "NetEase：華語歌曲主力，提供逐詞歌詞。";
-unison_description = "Unison：開源群眾外包歌詞資料庫。提供 TTML 歌詞。詳細介紹請前往 unison.boidu.dev 查看。";
+unison_description = "Unison：開源群眾外包歌詞資料庫。提供 TTML 歌詞。詳細介紹請前往 [unison.boidu.dev](https://unison.boidu.dev) 查看。";
 qqmusic_description = "QQ Music：華語歌曲主力，提供逐詞歌詞和逐詞日語羅馬字。";
 kugou_description = "KuGou：華語歌曲主力，提供逐詞歌詞和逐詞日語羅馬字。";
 lrclib_description = "LRCLIB：最開放的服務，提供逐行歌詞。但它缺少很多歌曲的歌詞。";
@@ -64,8 +64,6 @@ hide_lyrics_on_error_description = "出現錯誤時（不包含回退）隱藏�
 musixmatch_language = "Musixmatch 翻譯語言";
 musixmatch_language_description = "輸入二字 Musixmatch 語言代碼（繁中為 z1），可用時便會顯示翻譯按鈕。";
 
-amll_translation_language = "AMLL 譯文語言";
-amll_translation_language_description = "留空則跟隨裝置語言，再退回簡體中文 → 中文 → 英文 → 其他。填入語言代碼（如 zh、zh-Hans、en、ja）可指定某一種。AMLL 只能從歌詞檔自帶的譯文中挑 —— 不像 Musixmatch 能向伺服器索取；檔案沒有該語言時按上述順序遞補。";
 
 // UI
 
