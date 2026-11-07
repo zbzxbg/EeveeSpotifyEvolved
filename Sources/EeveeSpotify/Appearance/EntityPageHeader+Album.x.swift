@@ -20,7 +20,7 @@ extension EntityPageHeaderManager {
     ///
     /// 这里把"整支藏掉"的原值记下来；一旦未来某一拍 `cover` 落在某个记录过的分支里，就原样还回去，
     /// 再走正常的递归。
-    private final class AlbumConcealedBranch {
+    final class AlbumConcealedBranch {
         weak var view: UIView?
         private let layerHidden: Bool
         private let mask: CALayer?

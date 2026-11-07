@@ -18,7 +18,7 @@ extension EntityPageHeaderManager {
 
     /// 艺人页标签栏的**原值**记录（关开关时逐个写回）。
     /// 视图一律弱引用 —— 离开艺人页之后不该把整页/滚动视图留住。
-    private final class ArtistStripPageState {
+    final class ArtistStripPageState {
         weak var scroll: UIScrollView?
         let enabled: Bool
         let transform: CGAffineTransform
@@ -30,7 +30,7 @@ extension EntityPageHeaderManager {
         }
     }
 
-    private final class ArtistStripState {
+    final class ArtistStripState {
         weak var strip: UIView?
         let alpha: CGFloat
         let interactive: Bool
