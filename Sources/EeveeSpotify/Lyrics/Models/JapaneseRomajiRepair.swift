@@ -20,8 +20,10 @@ import Foundation
 /// Foundation、跑在取词解析层，没有分词上下文，硬读会把多音字读错（`温` 在 `体温` 里是
 /// `on`）。加上"组数必须等于词数"不能删组，清空是唯一选择。
 ///
-/// ⚠️ 假名表与 `LyricsDto.swift` 的 `japaneseKanaMap` 同源（平假名码点，片假名减 0x60
-/// 归一）。没有复用那份：`Tests/KuGouRomaji` 只编本文件 + Foundation。两处改动必须同步。
+/// ⚠️ 假名表**不再有第二份**：2026-11-08 起统一在 `JapaneseKanaRomanization.swift`
+/// （`japaneseKanaMap` / `japaneseKanaCombos` / `japaneseKanaRomaji`）。本文件只传一个
+/// `unmapped: .drop` 的策略 —— 以前这里抄了一份表、注释写着"两处必须同步"，
+/// 那正是"官方那行对、本地那行错"的来源。`Tests/KuGouRomaji` 现在连同那个文件一起编。
 enum JapaneseRomajiRepair {
 
     // MARK: - 对外
@@ -205,70 +207,28 @@ enum JapaneseRomajiRepair {
         return (result, pending)
     }
 
-    /// 纯假名段的逐字转写。促音状态可以带进带出（与 `japaneseKanaRomaji` 同一套语义）。
+    /// 纯假名段的逐字转写 —— **实现只有一份**（`JapaneseKanaRomanization.swift`）。
+    ///
+    /// 这里只负责两件本文件特有的事：
+    /// · 表里没有的假名**丢掉**（`unmapped: .drop`）—— 本文件的契约是"结果里不许留假名"；
+    /// · 把 `prior`（上一组已经产出的罗马字）带进去，让段首的长音 ー 能接上那个元音。
+    ///
+    /// ⚠️ 外来音（`ティ` `ファ`）在这条路上**修不了**：酷狗的逐字档会把它们拆成两个组
+    /// （`テ` / `ィ`），而组数必须等于词数、不能合并 ⇒ 每组各转各的。这是格式限制，
+    /// 不是表的限制；显示层那条路（整 token 转）没有这个问题。
     private static func romanizeKanaRun(
         _ text: String,
         prior: String,
         pendingGeminate: Bool
     ) -> (romanized: String, pendingGeminate: Bool) {
-        let scalars = Array(text.unicodeScalars)
-        var result = ""
         var pending = pendingGeminate
-        var index = 0
-
-        while index < scalars.count {
-            let value = scalars[index].value
-
-            // 长音：重复前一个元音（只写 ASCII，避免 macron 之类的怪字符）。
-            if value == 0x30FC {
-                let source = result.isEmpty ? prior : result
-                if let last = source.last, "aeiou".contains(last) {
-                    result.append(last)
-                }
-                index += 1
-                continue
-            }
-
-            // 促音：先记下，等下一个音节双写辅音。
-            if value == 0x3063 || value == 0x30C3 {
-                pending = true
-                index += 1
-                continue
-            }
-
-            guard let hiragana = hiraganaScalar(value),
-                  let base = kanaRomaji[hiragana] else {
-                // 表里没有的假名（半角假名 / ゐ ゑ 等）：丢掉，保住"无假名"契约。
-                index += 1
-                continue
-            }
-
-            var romaji = base
-
-            // 拗音：i 段假名 + 小 ゃ/ゅ/ょ。
-            if base.count >= 2, base.hasSuffix("i"),
-               index + 1 < scalars.count,
-               let nextHiragana = hiraganaScalar(scalars[index + 1].value),
-               let vowel = smallYouonVowel(nextHiragana) {
-                let stem = String(base.dropLast())
-                if stem.hasSuffix("sh") || stem.hasSuffix("ch") || stem.hasSuffix("j") {
-                    romaji = stem + vowel
-                } else {
-                    romaji = stem + "y" + vowel
-                }
-                index += 2
-            } else {
-                index += 1
-            }
-
-            if pending {
-                romaji = geminated(romaji)
-                pending = false
-            }
-            result += romaji
-        }
-
-        return (result, pending)
+        let romaji = japaneseKanaRomaji(
+            text,
+            pendingGeminate: &pending,
+            prior: prior,
+            unmapped: .drop
+        )
+        return (romaji, pending)
     }
 
     // MARK: - 假名判定与表
@@ -326,31 +286,6 @@ enum JapaneseRomajiRepair {
         return String(first)
     }
 
-    /// 促音让下一音节双写辅音（`to` → `tto`）。与 `LyricsDto.swift` 的 `japaneseGeminated` 一致。
-    private static func geminated(_ romaji: String) -> String {
-        guard let first = romaji.first else { return romaji }
-        if romaji.hasPrefix("ch") { return "t" + romaji }
-        if romaji.hasPrefix("sh") { return "s" + romaji }
-        if romaji.hasPrefix("ts") { return "t" + romaji }
-        if first.isLetter, !"aeiou".contains(first) { return String(first) + romaji }
-        return romaji
-    }
-
-    private static func hiraganaScalar(_ value: UInt32) -> UInt32? {
-        if (0x3041...0x3096).contains(value) { return value }
-        if (0x30A1...0x30F6).contains(value) { return value - 0x60 }
-        return nil
-    }
-
-    private static func smallYouonVowel(_ hiragana: UInt32) -> String? {
-        switch hiragana {
-        case 0x3083: return "a"
-        case 0x3085: return "u"
-        case 0x3087: return "o"
-        default: return nil
-        }
-    }
-
     // MARK: - 空白与相邻组
 
     private static func splitEdgeWhitespace(
@@ -378,27 +313,4 @@ enum JapaneseRomajiRepair {
         }
         return nil
     }
-
-    // MARK: - 假名表
-    //
-    // 键为平假名码点；片假名由 `hiraganaScalar` 减 0x60 归一后查同一张表。
-    private static let kanaRomaji: [UInt32: String] = [
-        0x3042: "a", 0x3044: "i", 0x3046: "u", 0x3048: "e", 0x304A: "o",
-        0x304B: "ka", 0x304D: "ki", 0x304F: "ku", 0x3051: "ke", 0x3053: "ko",
-        0x304C: "ga", 0x304E: "gi", 0x3050: "gu", 0x3052: "ge", 0x3054: "go",
-        0x3055: "sa", 0x3057: "shi", 0x3059: "su", 0x305B: "se", 0x305D: "so",
-        0x3056: "za", 0x3058: "ji", 0x305A: "zu", 0x305C: "ze", 0x305E: "zo",
-        0x305F: "ta", 0x3061: "chi", 0x3064: "tsu", 0x3066: "te", 0x3068: "to",
-        0x3060: "da", 0x3062: "ji", 0x3065: "zu", 0x3067: "de", 0x3069: "do",
-        0x306A: "na", 0x306B: "ni", 0x306C: "nu", 0x306D: "ne", 0x306E: "no",
-        0x306F: "ha", 0x3072: "hi", 0x3075: "fu", 0x3078: "he", 0x307B: "ho",
-        0x3070: "ba", 0x3073: "bi", 0x3076: "bu", 0x3079: "be", 0x307C: "bo",
-        0x3071: "pa", 0x3074: "pi", 0x3077: "pu", 0x307A: "pe", 0x307D: "po",
-        0x307E: "ma", 0x307F: "mi", 0x3080: "mu", 0x3081: "me", 0x3082: "mo",
-        0x3084: "ya", 0x3086: "yu", 0x3088: "yo",
-        0x3089: "ra", 0x308A: "ri", 0x308B: "ru", 0x308C: "re", 0x308D: "ro",
-        0x308F: "wa", 0x3092: "wo", 0x3093: "n",
-        0x3041: "a", 0x3043: "i", 0x3045: "u", 0x3047: "e", 0x3049: "o",
-        0x3083: "ya", 0x3085: "yu", 0x3087: "yo", 0x308E: "wa", 0x3094: "vu"
-    ]
 }

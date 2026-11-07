@@ -42,11 +42,12 @@ extension String {
 
 // MARK: - Japanese Romanization
 //
-// 假名（平/片）→ 罗马字映射表。键为平假名码点；
-// 片假名在转换前归一为平假名（减 0x60），只有 ー/ヴ 等例外单独处理。
+// 假名那一段的实现在 `JapaneseKanaRomanization.swift`（全仓唯一一份）：
+// 平/片假名归一、促音、拗音、外来音（`ティ` `ファ` `ヴァ` …）、`ん` 的隔音符都在那里。
+// 本文件只管**分词**：什么时候查假名表、什么时候问 CFStringTokenizer 要汉字读音、空格加在哪。
 extension String {
     /// 把日语（假名+汉字）转为罗马字：
-    /// - 假名部分用映射表逐字转换（正确处理促音/拗音/长音/拨音，无怪符号）；
+    /// - 假名部分走 `japaneseKanaRomaji`（促音/拗音/外来音/长音/拨音，无怪符号）；
     /// - 汉字部分用 CFStringTokenizer 取读音，遇到拼音回退时保留原文；
     /// - 分写按语法：助词前加空格，活用后缀黏连。
     func toJapaneseRomaji() -> String {

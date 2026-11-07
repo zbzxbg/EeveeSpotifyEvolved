@@ -290,7 +290,8 @@ jobs:
       # 断言钉三件事：组数不变（逐词罗马字的挂载闸）、结果里无假名、促音合成整词。
       - name: KuGou KRC romaji repair (kana leftovers)
         run: |
-          swiftc Sources/EeveeSpotify/Lyrics/Models/JapaneseRomajiRepair.swift \
+          swiftc Sources/EeveeSpotify/Lyrics/Models/JapaneseKanaRomanization.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/JapaneseRomajiRepair.swift \
                  Tests/KuGouRomaji/main.swift \
                  -o kugou-romaji-repair-tests
           ./kugou-romaji-repair-tests

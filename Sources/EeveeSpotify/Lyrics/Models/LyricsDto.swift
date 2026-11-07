@@ -231,33 +231,6 @@ func romanizeLine(_ line: String, as language: NLLanguage) -> String {
     }
 }
 
-/// 假名 → 罗马字。
-///
-/// ⚠️ **不要指望用系统 ICU 替掉这张表**：2026-11-08 的 CI 实测（`Tests/JapaneseRomanizationProbe`）
-/// 表明 `ja_Hrkt_ja_Latn_BGN` / `Hiragana-Latin` 在系统 ICU 数据里**能解析、但不做任何转换**
-/// （精简构建，规则数据没编进去，执行时退化成恒等变换）。`StringTransform.toLatin` 倒是真的
-/// 在工作，但它对汉字给的是**拼音**（见 `japaneseContainsPinyinMarker`），只能用于纯假名段 ——
-/// 那也是本表唯一可能的替代，且仍需自己补外来音（`ぁぃぅぇぉ`）与助词读音。
-let japaneseKanaMap: [UInt32: String] = [
-    0x3042: "a", 0x3044: "i", 0x3046: "u", 0x3048: "e", 0x304A: "o",
-    0x304B: "ka", 0x304D: "ki", 0x304F: "ku", 0x3051: "ke", 0x3053: "ko",
-    0x304C: "ga", 0x304E: "gi", 0x3050: "gu", 0x3052: "ge", 0x3054: "go",
-    0x3055: "sa", 0x3057: "shi", 0x3059: "su", 0x305B: "se", 0x305D: "so",
-    0x3056: "za", 0x3058: "ji", 0x305A: "zu", 0x305C: "ze", 0x305E: "zo",
-    0x305F: "ta", 0x3061: "chi", 0x3064: "tsu", 0x3066: "te", 0x3068: "to",
-    0x3060: "da", 0x3062: "ji", 0x3065: "zu", 0x3067: "de", 0x3069: "do",
-    0x306A: "na", 0x306B: "ni", 0x306C: "nu", 0x306D: "ne", 0x306E: "no",
-    0x306F: "ha", 0x3072: "hi", 0x3075: "fu", 0x3078: "he", 0x307B: "ho",
-    0x3070: "ba", 0x3073: "bi", 0x3076: "bu", 0x3079: "be", 0x307C: "bo",
-    0x3071: "pa", 0x3074: "pi", 0x3077: "pu", 0x307A: "pe", 0x307D: "po",
-    0x307E: "ma", 0x307F: "mi", 0x3080: "mu", 0x3081: "me", 0x3082: "mo",
-    0x3084: "ya", 0x3086: "yu", 0x3088: "yo",
-    0x3089: "ra", 0x308A: "ri", 0x308B: "ru", 0x308C: "re", 0x308D: "ro",
-    0x308F: "wa", 0x3092: "wo", 0x3093: "n",
-    0x3041: "a", 0x3043: "i", 0x3045: "u", 0x3047: "e", 0x3049: "o",
-    0x3083: "ya", 0x3085: "yu", 0x3087: "yo", 0x308E: "wa", 0x3094: "vu"
-]
-
 /// 分写：这些 token（助词等）前面加空格。
 let japaneseParticles: Set<String> = [
     "は", "が", "を", "に", "へ", "と", "で", "も", "の", "や", "か",
@@ -301,104 +274,6 @@ let japaneseSpaceSeparators: Set<Character> = [
     "「", "『", "（", "(", "【", "[", "」", "』", "）", ")", "】", "]",
     "・", "：", ":", "；", ";", "ー", "♪"
 ]
-
-/// 片假名码点 → 平假名码点；非假名返回 nil。
-func japaneseHiraganaScalar(_ value: UInt32) -> UInt32? {
-    if (0x3041...0x3096).contains(value) { return value }
-    if (0x30A1...0x30F6).contains(value) { return value - 0x60 }
-    return nil
-}
-
-/// 小假名 ゃゅょ 对应的元音（拗音用）。
-func japaneseSmallYouonVowel(_ hira: UInt32) -> String? {
-    switch hira {
-    case 0x3083: return "a"
-    case 0x3085: return "u"
-    case 0x3087: return "o"
-    default: return nil
-    }
-}
-
-/// 促音：把下一音节的辅音双写。
-func japaneseGeminated(_ romaji: String) -> String {
-    guard let first = romaji.first else { return romaji }
-    if romaji.hasPrefix("ch") { return "t" + romaji }
-    if romaji.hasPrefix("sh") { return "s" + romaji }
-    if romaji.hasPrefix("ts") { return "t" + romaji }
-    if first.isLetter, !"aeiou".contains(first) {
-        return String(first) + romaji
-    }
-    return romaji
-}
-
-/// 纯假名 token 的逐字罗马化。跨 token 的促音状态通过 pendingGeminate 传递。
-func japaneseKanaRomaji(_ text: String, pendingGeminate: inout Bool) -> String {
-    let scalars = Array(text.unicodeScalars)
-    var result = ""
-    var i = 0
-
-    while i < scalars.count {
-        let value = scalars[i].value
-
-        // 长音 ー：重复前一个元音（保持 ASCII，避免 macron 等怪字符）
-        if value == 0x30FC {
-            if let last = result.last, "aeiou".contains(last) {
-                result.append(last)
-            }
-            i += 1
-            continue
-        }
-
-        // 促音 っ/ッ：先记录，等下一个音节双写辅音
-        if value == 0x3063 || value == 0x30C3 {
-            pendingGeminate = true
-            i += 1
-            continue
-        }
-
-        guard let hira = japaneseHiraganaScalar(value),
-              let base = japaneseKanaMap[hira] else {
-            // 无法转写的字符（ゝ 等）原样保留
-            result += String(UnicodeScalar(value)!)
-            i += 1
-            continue
-        }
-
-        var romaji = base
-
-        // 拗音：i 段假名 + 小 ゃ/ゅ/ょ
-        if base.count >= 2, base.hasSuffix("i"),
-           i + 1 < scalars.count,
-           let nextHira = japaneseHiraganaScalar(scalars[i + 1].value),
-           let vowel = japaneseSmallYouonVowel(nextHira) {
-            let stem = String(base.dropLast())
-            if stem.hasSuffix("sh") || stem.hasSuffix("ch") || stem.hasSuffix("j") {
-                romaji = stem + vowel
-            } else {
-                romaji = stem + "y" + vowel
-            }
-            i += 2
-        } else {
-            i += 1
-        }
-
-        if pendingGeminate {
-            romaji = japaneseGeminated(romaji)
-            pendingGeminate = false
-        }
-
-        result += romaji
-    }
-
-    return result
-}
-
-func japaneseIsPureKana(_ text: String) -> Bool {
-    guard !text.isEmpty else { return false }
-    return text.unicodeScalars.allSatisfy {
-        (0x3040...0x309F).contains($0.value) || (0x30A0...0x30FF).contains($0.value)
-    }
-}
 
 func japaneseContainsPinyinMarker(_ text: String) -> Bool {
     for ch in text {

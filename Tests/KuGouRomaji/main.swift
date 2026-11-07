@@ -173,6 +173,49 @@ require(JapaneseRomajiRepair.repairedWordGroups([zuttoInput, ekoInput, cleanRow]
 require(JapaneseRomajiRepair.repairedWordGroups([]) != nil,
         "an empty batch is not an error")
 
+// MARK: - 假名层（共享实现）：外来音 / ん / 促音 / 長音
+//
+// 这一组钉的是 `JapaneseKanaRomanization.swift`（2026-11-08 起全仓唯一的一份假名表）。
+// 参考值不是编的：一半来自 ICU `toLatin` 的实测输出（`pātī` / `shea` / `shin'you` 证明
+// 这些是标准读法），一半是同一套读音的 ASCII 写法（长音写双元音，与官方轨观感一致）。
+//
+// ⚠️ 这些用例**只能走整 token 那条路**：酷狗逐字档会把 `ティ` 拆成两个组，
+// 组数不能变 ⇒ 修不了。见 `JapaneseRomajiRepair.romanizeKanaRun` 的说明。
+let kanaCases: [(input: String, expected: String)] = [
+    ("パーティー", "paatii"),   // ティ 是一个音节，不是 te + i
+    ("シェア", "shea"),
+    ("チェリー", "cherii"),
+    ("ジェット", "jetto"),
+    ("ヴァイオリン", "vaiorin"),
+    ("ウィスパー", "wisupaa"),
+    ("フィルム", "firumu"),
+    ("ティーン", "tiin"),
+    ("ディスク", "disuku"),
+    ("クァルテット", "kwarutetto"),
+    ("しんよう", "shin'you"),   // ん 后接元音 → 隔音符
+    ("きんえん", "kin'en"),
+    ("しんぶん", "shinbun"),    // 后接辅音不加
+    ("ずっと", "zutto"),
+    ("がっこう", "gakkou"),
+    ("まっちゃ", "matcha"),
+    ("コーヒー", "koohii"),     // 长音写双元音，不用 macron
+    ("こんにちは", "konnichiha"),
+    ("を", "wo")
+]
+for kana in kanaCases {
+    var pending = false
+    let got = japaneseKanaRomaji(kana.input, pendingGeminate: &pending)
+    require(got == kana.expected, "kana: \(kana.input) → \(got) (expected \(kana.expected))")
+}
+
+// 未映射假名的两种策略：显示层保留、修复路径丢掉（契约不同，别混）。
+var pendingKeep = false
+require(japaneseKanaRomaji("ゐ", pendingGeminate: &pendingKeep) == "ゐ",
+        "unmapped kana is kept by default")
+var pendingDrop = false
+require(japaneseKanaRomaji("ゐ", pendingGeminate: &pendingDrop, unmapped: .drop) == "",
+        "unmapped kana is dropped on request")
+
 // MARK: - 结果
 
 if failures == 0 {

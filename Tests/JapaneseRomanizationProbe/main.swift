@@ -8,13 +8,18 @@ import Foundation
 /// `aー` → `ā`，还先做 `Halfwidth-Fullwidth` 与 NFC 归一。
 ///
 /// ── 2026-11-08 的实测结论（第一次跑 CI 得到的）
-/// **这条路不可用。** 三个 id 都能创建出 transform 对象（`applyingTransform` 不返回 nil），
-/// 但对假名样本**原样返回输入** —— 典型的 ICU 精简构建：标识符能解析、规则数据没编进去，
-/// 执行时退化成恒等变换。
+/// **BGN 这条路不可用。** `ja_Hrkt_ja_Latn_BGN` 能创建出 transform 对象（`applyingTransform`
+/// 不返回 nil），但对假名样本**原样返回输入** —— 典型的 ICU 精简构建：标识符能解析、
+/// 规则数据没编进去，执行时退化成恒等变换。
 ///
-/// 对比之下 `toLatin` 是**真的在工作**（`こんにちは` → `kon'nichiha`）：它走的是
-/// Any-Latin 那条通用链，不依赖日文专用规则。所以本探针现在把 `toLatin` 也一起打出来 ——
-/// 它是"假名层要不要换引擎"唯一还值得看的候选。
+/// 但**不是整个 ICU 都废**：`Hiragana-Latin`（`かな` → `kana`）和 `toLatin`
+/// （`こんにちは` → `kon'nichiha`）都真的在转。问题在于：
+/// · `toLatin` 对汉字给的是**拼音**（所以 `LyricsDto` 里才有 `japaneseContainsPinyinMarker`）；
+/// · 两者输出都是 macron 风格（`kōhī`），与本仓库的 ASCII 双写（`koohii`）不是一套；
+/// · ICU 数据在 macOS 与 iOS 上**不一定一致** —— 一个注入 tweak 不能把显示效果押在
+///   "这台设备的 ICU 恰好有规则"上。
+/// 所以结论是"可以拿它当参照，但不能当引擎"；假名层仍然由 `JapaneseKanaRomanization.swift`
+/// 那张表负责。
 ///
 /// ── 为什么它不该红
 /// 探针的产物是**信息**。第一次写的时候把三条规则写成了断言，结果 ICU 缺数据时 CI 直接红，
@@ -22,8 +27,7 @@ import Foundation
 /// 现在只有一件事会失败：连 `toLatin` 都不工作（那说明测试环境坏了，继续读日志没意义）。
 ///
 /// ⚠️ 即使哪天 BGN 可用了，它也不能直接替换现有假名表：规则字符集里没有小写元音
-/// `ぁぃぅぇぉ/ァィゥェォ`（`パーティー` 会漏出 `ィ`），而且输出是 macron 风格
-/// （`kōhī`），与仓库现在的 ASCII 双写（`koohii`）不是一套。
+/// `ぁぃぅぇぉ/ァィゥェォ`（`パーティー` 会漏出 `ィ`），而且输出是 macron 风格。
 
 var failures = 0
 
@@ -126,16 +130,19 @@ if case .transformed = bgn {
 // MARK: - 结论
 
 print("== verdict")
+for identifier in identifiers {
+    print("     \(identifier): \((outcomes[identifier] ?? .missing).label)")
+}
 switch bgn {
 case .missing:
-    print("     ICU Japanese transliteration: MISSING — do not route kana through ICU.")
+    print("     BGN is missing entirely — ICU cannot romanize kana here.")
 case .identity:
-    print("     ICU Japanese transliteration: UNAVAILABLE (identity transform, stub ICU data).")
-    print("     ⇒ the hand-written kana table stays the only path.")
+    print("     BGN resolves but is an identity transform (stub ICU data): unusable.")
 case .transformed:
-    print("     ICU Japanese transliteration: AVAILABLE — usable as a reference/fallback,")
-    print("     but it lacks ぁぃぅぇぉ and emits macrons, so it cannot replace the table as-is.")
+    print("     BGN works — usable as a reference, but it lacks ぁぃぅぇぉ and emits macrons.")
 }
+print("     Hiragana-Latin / toLatin do transform, but toLatin gives pinyin for kanji and")
+print("     ICU data differs between macOS and iOS ⇒ nothing here replaces the table.")
 
 print("")
 if failures == 0 {
