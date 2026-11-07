@@ -494,9 +494,8 @@ enum EntityPageHeaderManager {
             fullbleedArtIsAvatarRow = !picture.isEmpty && picture.allSatisfy {
                 NSStringFromClass(type(of: $0)).contains("AvatarView")
             }
-            // 认出了图才把**渐变**也加进"不许藏"的名单：那层渐变是页头自己的下缘化开，
-            // 藏掉之后页头就成了一块硬边纯色（"生成歌单没有渐变"就是这么来的）。
-            // ⚠️ 名单为空的"整支放过"安全阀不能被它破坏，所以只在非空时合并。
+            // 认出了图才有"留谁"这件事。⚠️ 名单为空的"整支放过"安全阀不能被破坏，
+            // 所以只在非空时往里合并。
             if !picture.isEmpty {
                 // 我们自己那张满幅照片已经在画这张图时，Spotify 这份是**压在我们上面**的
                 // （它是页头内容那支，晚于 `_backgroundViewContainer` 挂上）⇒ 化开蒙版与顶上那条纱
@@ -506,10 +505,14 @@ enum EntityPageHeaderManager {
                 // ⚠️ 电台那一族认出来的是**一行大圆头像**（`AvatarView`），不是一张图 —— 留着：
                 // hero 画的是方封面，替换不出那一排的排版。
                 let avatarsOnly = picture.allSatisfy { NSStringFromClass(type(of: $0)).contains("AvatarView") }
+                // 图这一支的下缘由我们自己的纱化开（`updateArtworkFade`）：Spotify 那层
+                // 渐变/模糊的锚点和长度是按它原来的页头定的，跟着留就是第二条淡化曲线，
+                // 与图的下沿、与我们的纱各错开一段，中间露出一条横贯的磨砂带 ⇒ 不留。
+                // 电台（一行头像）那一支仍要它 —— 那片由它自己收，`artworkFadeEnabled` 也是关的。
                 if EntityPageAppearance.isHeroDrawing, !avatarsOnly {
                     fullbleedHandedOver = true
                     fullbleedKept = []
-                } else {
+                } else if avatarsOnly {
                     fullbleedKept += fullbleedGradients(in: fullbleed)
                 }
             }
@@ -606,6 +609,7 @@ enum EntityPageHeaderManager {
         // 落点与开关留在这里，**颜色却被取色定时器晚一步送来** ⇒ 页面停住后这一拍可能是最后一拍
         // 布局，纱就再也没人建（见 `refreshArtworkFade`）。
         artworkFadeHost = header
+        artworkFadePicture = fullbleedPicture
         artworkFadeEnabled = fullbleedPicture != nil && !fullbleedHandedOver && !fullbleedArtIsAvatarRow
         updateArtworkFade(in: header, enabled: artworkFadeEnabled, source: "layout")
 
@@ -3213,11 +3217,21 @@ enum EntityPageHeaderManager {
     private static var artworkFadeColour: UIColor?
     /// 布局回合留下的落点与开关（`refreshArtworkFade` 用它们补建）。
     private static weak var artworkFadeHost: EntityPageHeaderView?
+    /// 满幅页头里那张图 —— 纱的**下沿**跟着它，不跟着页头。
+    private static weak var artworkFadePicture: UIView?
     private static var artworkFadeEnabled = false
     /// 已就成纱的那一份页头 —— 建成的第一行只记一次。
     private static weak var artworkFadeLogged: EntityPageHeaderView?
 
     private static func updateArtworkFade(in header: EntityPageHeaderView, enabled: Bool, source: String) {
+        // 蒙版不依赖底色，先挂：它是"图的下沿不硬"的唯一保证 —— 纱画在页头里，而满幅页头那张图
+        // 在我们这一层之上，所以纱只能兜底，真正起作用的是改图自己的蒙版。
+        if enabled, let picture = artworkFadePicture, picture.window != nil {
+            applyArtworkMask(to: picture, depth: EntityPageHeaderMetrics.artworkFadeHeight)
+        } else if !enabled {
+            clearArtworkMask()
+        }
+
         guard enabled, let colour = EntityPageAppearance.currentFieldColour else {
             removeArtworkFade()
             return
@@ -3243,9 +3257,12 @@ enum EntityPageHeaderManager {
             fade = fresh
         }
 
-        // 图的下沿就在本视图顶边附近：96pt 足够把那条硬边化开，又不会糊到图的中段。
+        // 图的下沿**不在**本视图顶边：满幅图常常比页头的内容块矮一截（生成歌单里图和标题之间
+        // 还隔着一道渐变），对着页头顶边画，纱最透明的那一段正好压在图的下沿上，硬边就露出来。
+        // ⇒ 下落点改成"图的下沿"，量不到时才退回页头顶边。
         let height = EntityPageHeaderMetrics.artworkFadeHeight
-        let frame = CGRect(x: 0, y: -height, width: header.bounds.width, height: height)
+        let bottom = artworkFadeBottom(in: header)
+        let frame = CGRect(x: 0, y: bottom - height, width: header.bounds.width, height: height)
         if fade.frame != frame { fade.frame = frame }
 
         if artworkFadeColour != colour {
@@ -3262,6 +3279,58 @@ enum EntityPageHeaderManager {
                     + " \(Int(inWindow.minY))..\(Int(inWindow.maxY))pt"
             )
         }
+    }
+
+    /// 满幅图在页头坐标系里的下沿。量不到就返回 0（= 页头顶边，旧的落点）。
+    ///
+    /// 换算而不是记绝对值：这一页的页头高度会随滚动变化，图相对页头的位置反而稳定。
+    private static func artworkFadeBottom(in header: EntityPageHeaderView) -> CGFloat {
+        guard let picture = artworkFadePicture, picture.window != nil, header.window != nil,
+              picture.bounds.height > 1, header.bounds.height > 1
+        else { return 0 }
+        let rect = picture.convert(picture.bounds, to: header)
+        guard rect.maxY.isFinite, abs(rect.maxY) < header.bounds.height else { return 0 }
+        return rect.maxY
+    }
+
+    /// 图自身的下缘化开：给满幅页头那张图挂一层竖直 alpha 蒙版。
+    ///
+    /// 为什么不只盖一层纱：那张图在页头之上（它是页头内容那一支，晚于我们挂上），插在页头里的纱
+    /// 画在它下面 —— 屏上还是硬边。蒙版改的是**图自己**，与 z 序无关。Spotify 的布局会写回图层
+    /// 属性，所以每一拍重挂一次；挂的是同一个对象，属性没变时不重设（避免每拍触发重绘）。
+    private static weak var artworkMaskPicture: UIView?
+
+    private static func applyArtworkMask(to picture: UIView, depth: CGFloat) {
+        let size = picture.bounds.size
+        guard size.width > 1, size.height > depth + 1 else { return }
+
+        let mask: CAGradientLayer
+        let isNew = !(picture.layer.mask is CAGradientLayer)
+        if let existing = picture.layer.mask as? CAGradientLayer {
+            mask = existing
+        } else {
+            mask = CAGradientLayer()
+            mask.startPoint = CGPoint(x: 0.5, y: 0)
+            mask.endPoint = CGPoint(x: 0.5, y: 1)
+            picture.layer.mask = mask
+        }
+        artworkMaskPicture = picture
+
+        if mask.frame != picture.bounds { mask.frame = picture.bounds }
+        let start = 1 - depth / size.height
+        let locations: [NSNumber] = [0, NSNumber(value: Double(start)), 1]
+        let same = (mask.locations as? [NSNumber])?
+            .elementsEqual(locations, by: { $0.doubleValue == $1.doubleValue }) ?? false
+        if !isNew, same, mask.colors != nil { return }
+        mask.colors = [UIColor.white.cgColor, UIColor.white.cgColor, UIColor.clear.cgColor]
+        mask.locations = locations
+    }
+
+    /// 收掉我们挂的蒙版（换页时）。只撤自己那一种，别人的蒙版不动。
+    private static func clearArtworkMask() {
+        guard let picture = artworkMaskPicture else { return }
+        if picture.layer.mask is CAGradientLayer { picture.layer.mask = nil }
+        artworkMaskPicture = nil
     }
 
     /// 取色定时器那一拍：颜色到了就把纱补建出来（见上面"建纱要颜色"那段）。
@@ -3281,8 +3350,10 @@ enum EntityPageHeaderManager {
     /// 离页 / 页头换掉时收掉纱，并把落点清掉（`EntityPageAppearance.tick` 找不到目标时调）。
     static func clearArtworkFade() {
         artworkFadeHost = nil
+        artworkFadePicture = nil
         artworkFadeEnabled = false
         artworkFadeLogged = nil
+        clearArtworkMask()
         removeArtworkFade()
     }
 
