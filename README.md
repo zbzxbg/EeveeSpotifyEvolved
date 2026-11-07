@@ -14,7 +14,7 @@ Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass l
 
 <p align="center">
   <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
-  <img src="docs/screenshots/lyrics.webp" width="15%" alt="Word-by-word lyrics with translation, credit line showing AMLL">
+  <img src="docs/screenshots/lyrics.webp" width="15%" alt="Word-by-word lyrics with romanization and translation, credit line showing QQ Music">
   <img src="docs/screenshots/album.webp" width="15%" alt="Apple Music–style album page with a blurred backdrop">
   <img src="docs/screenshots/playlist.webp" width="15%" alt="Playlist page with a single cover instead of the four-up mosaic">
   <img src="docs/screenshots/artist.webp" width="15%" alt="Apple Music–style artist page">
@@ -30,7 +30,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 ### Lyrics
 
-- **12 sources** — Spicy Lyrics, AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
+- **12 sources** — Spicy Lyrics (needs your own client key), AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
 - **Auto Select** — asks the sources in an order you choose and keeps the best answer: word-by-word beats line-by-line, which beats plain text; within the same tier it prefers the answer that also has the translation, official romanization or word-level romanization your settings ask for. A plain-text answer never ends the search.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling.
 
@@ -44,8 +44,10 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 <summary>Lyrics source details</summary>
 
 - The default order is `AMLL → Spicy Lyrics → PetitLyrics → KuGou → NetEase → QQ Music → Unison → Musixmatch → BiniLyrics → LRCLIB → Genius`. Drag to reorder it under Settings → Lyrics → Lyrics Source Order.
+- Spicy Lyrics is **skipped without being asked** when no client key is set (Settings → Lyrics), so a fresh install starts the chain at AMLL instead of waiting on a source that cannot answer.
+- An answer that reports the track as **instrumental** ends the chain on the spot: no later source can carry lyrics for that track.
 - The order only decides **who is asked first**; it never decides who wins. A word-by-word answer always beats a line-by-line one, which always beats plain text. Among answers with the same timing tier, the one that also carries a translation, official romanization, or word-level romanization (whichever switch asks for it) wins; a tie keeps the first arrival.
-- With word-by-word lyrics on, Auto Select may keep asking until 4 seconds after the chain started — to upgrade a line-timed answer to a word-timed one, or to find one that also has the translation / romanization the current settings ask for. That cap exists so the lyrics card is not delayed past the point where it can still be built.
+- With word-by-word lyrics on, Auto Select may keep asking until 4 seconds after the chain started — to upgrade a line-timed answer to a word-timed one, or to find one that also has the translation / romanization the current settings ask for. That cap exists so the lyrics card is not delayed past the point where it can still be built. It stops earlier when the best answer so far is line-timed and no source left in the chain can produce word timing.
 - Auto Select is only offered when the now-playing style is **Immersive** or **Apple Music**. With Spotify's own layout the lyrics go straight into Spotify's card, so a single source is used instead.
 - Word-timed sources: Spicy Lyrics, AMLL, PetitLyrics, NetEase (yrc), QQ Music (QRC), KuGou (KRC), Unison, Musixmatch (richsync), BiniLyrics, Apple Music TTML. LRCLIB is line-timed, Genius is plain text.
 - The Apple Music official TTML source is under Settings → Experiments. It needs your own `media-user-token`, because Apple has no public lyrics API.
