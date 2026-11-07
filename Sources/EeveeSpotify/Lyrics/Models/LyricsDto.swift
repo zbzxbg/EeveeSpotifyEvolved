@@ -231,6 +231,13 @@ func romanizeLine(_ line: String, as language: NLLanguage) -> String {
     }
 }
 
+/// 假名 → 罗马字。
+///
+/// ⚠️ **不要指望用系统 ICU 替掉这张表**：2026-11-08 的 CI 实测（`Tests/JapaneseRomanizationProbe`）
+/// 表明 `ja_Hrkt_ja_Latn_BGN` / `Hiragana-Latin` 在系统 ICU 数据里**能解析、但不做任何转换**
+/// （精简构建，规则数据没编进去，执行时退化成恒等变换）。`StringTransform.toLatin` 倒是真的
+/// 在工作，但它对汉字给的是**拼音**（见 `japaneseContainsPinyinMarker`），只能用于纯假名段 ——
+/// 那也是本表唯一可能的替代，且仍需自己补外来音（`ぁぃぅぇぉ`）与助词读音。
 let japaneseKanaMap: [UInt32: String] = [
     0x3042: "a", 0x3044: "i", 0x3046: "u", 0x3048: "e", 0x304A: "o",
     0x304B: "ka", 0x304D: "ki", 0x304F: "ku", 0x3051: "ke", 0x3053: "ko",
