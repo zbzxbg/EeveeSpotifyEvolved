@@ -1,6 +1,6 @@
 <div align="center">
 
-# Make EeveeSpotify Great Again
+# EeveeSpotify Evolved
 
 Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass look for Spotify on iOS.
 
@@ -21,10 +21,12 @@ Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass l
   <img src="docs/screenshots/home.webp" width="15%" alt="Home, with the liquid-glass tab bar">
 </p>
 
+> *Make EeveeSpotify Great Again* — said in jest, because everything below is a rebuild, not a reskin.
+
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
 > [!NOTE]
-> Tested on Spotify version 9.1.88,the baseline version is iOS 26+.
+> Tested on Spotify 9.1.88 on iOS 27.0.1; the liquid-glass look needs iOS 26+.
 
 ## Features
 
