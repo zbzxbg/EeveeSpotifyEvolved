@@ -128,6 +128,9 @@ extension String {
             }
 
             // 助词 は/へ 的特殊读音
+            // 汉字词的读音修正（`私` → `watashi`，见 `japaneseWordOverrides`）
+            if let override = japaneseWordOverrides[original] { romaji = override }
+
             if japaneseParticles.contains(original) {
                 romaji = japaneseParticleOverrides[original] ?? romaji
             }
@@ -237,6 +240,9 @@ extension String {
                     romaji = original
                 }
             }
+            // 汉字词的读音修正（`私` → `watashi`，见 `japaneseWordOverrides`）
+            if let override = japaneseWordOverrides[original] { romaji = override }
+
             if japaneseParticles.contains(original) {
                 romaji = japaneseParticleOverrides[original] ?? romaji
             }

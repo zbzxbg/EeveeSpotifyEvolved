@@ -263,6 +263,22 @@ let japaneseParticleOverrides: [String: String] = [
     "は": "wa", "へ": "e"
 ]
 
+/// 汉字词的读音修正 —— `CFStringTokenizer` 的 Latin transcription 有几处给的是**书面语读音**，
+/// 歌词里几乎不会那么念。
+///
+/// 目前只收 `私`：tokenizer 给 `watakushi`（正式场合的自称），而歌词里一律是 `watashi`。
+///
+/// **刻意不收「君」**：它有两个读音（`kimi` = 你、`kun` = 称呼后缀），
+/// 而 tokenizer 是按 token 给的、看不到"前面是不是人名" —— 硬写成 `kimi` 会把
+/// 「田中君」读成 `tanaka kimi`，比默认更差。多音词一律不进来。
+/// `僕` / `俺` / `貴方` 也是同理：没有证据说 tokenizer 读错，就不动它。
+///
+/// 判据是**整 token 精确匹配**：`私立` 那种合成词 tokenizer 给的是一个 token，打不中；
+/// `私たち` 会被切成 `私` + `たち`，于是 `watashi` + `tachi` —— 正是要的结果。
+let japaneseWordOverrides: [String: String] = [
+    "私": "watashi"
+]
+
 /// 连写：这些活用后缀前面不加空格（黏到前一个词上）。
 let japaneseInflectionSuffixes: Set<String> = [
     "た", "て", "ない", "なく", "なかっ", "なけれ",
