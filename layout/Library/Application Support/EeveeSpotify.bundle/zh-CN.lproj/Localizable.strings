@@ -31,8 +31,8 @@ overwrite_configuration_description = "用转存的 Premium 配置替换远程�
 do_not_replace_lyrics = "禁用歌词替换功能";
 do_not_replace_lyrics_description = "选项开启后会禁用自定义歌词功能，但不会阻止Spotify返回其自带的歌词。";
 lyrics_source = "歌词来源";
-lyrics_source_restart_note = "切换歌词来源后，新来源从下一次取词起生效；本次运行里已经加载过歌词的曲目仍显示原来的来源，需重启Spotify才会换过来。";
-lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ音乐与酷狗都是按歌名与歌手搜索(不是按曲目ID精确匹配)，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
+lyrics_source_restart_note = "切换歌词来源后需要重启Spotify。";
+lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ Music和Kugou都是按歌名与歌手搜索(不是按曲目ID精确匹配)，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
 petitlyrics_description = "PetitLyrics：Spotify在日本地区的主要歌词提供商。但一小部分歌曲存在逐词时间轴不规范的情况。";
 spicylyrics_description = "Spicy Lyrics：提供逐词歌词及部分其他歌词来源没有的歌词。具体介绍可前往spicylyrics.org查看。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
@@ -115,7 +115,7 @@ pseudo_word_by_word_lyrics = "启用伪逐字";
 pseudo_word_by_word_lyrics_description = "选项开启后会估算行级歌词时间轴，并补充成逐词歌词，但字级精度可能欠佳。字级精度取决于原本的行级歌词精度。";
 
 petitlyrics_line_fallback = "PetitLyrics回退逐行";
-petitlyrics_line_fallback_description = "选项开启后，如果PetitLyrics返回的歌词不是正常的逐词时间轴，整首歌会回退为行级歌词。";
+petitlyrics_line_fallback_description = "选项开启后如果PetitLyrics返回的歌词不是正常的逐词时间轴，整首歌会回退为行级歌词。";
 
 aggressive_marker_removal = "更激进的删除歌词标注术语";
 aggressive_marker_removal_description = "选项开启后会删除歌词所有被 [] 包裹的歌词行，目前仅对 Genius 生效。它也可能误删整行带方括号的真歌词（例如 [I love you]）。";
