@@ -30,6 +30,10 @@ enum EntityPageHeaderMetrics {
     static let aboutAbove: CGFloat = 14     // 按钮行与描述之间
     static let bottom: CGFloat = 14         // 内容底边距视图底
     static let titleRise: CGFloat = 56      // 封面要伸到内容顶部往下这么多（hero 用）
+    /// 满幅图**下缘化开**那层纱的高度（见 `updateArtworkFade`）。
+    ///
+    /// 图的下沿正好落在页头这块的上沿，96pt 足够把那条硬边化开、又不会糊到图的中段。
+    static let artworkFadeHeight: CGFloat = 96
     /// （用户给了 8 张 AM 艺人页，photo_1/3/5/7）：三颗的**尺寸关系**照 Apple Music 来
     /// —— 两侧是**小圆**（`ⓘ` 与 `☆`，≈56pt），中间是**大一档的圆**（纯白 `▶`，≈80pt）。
     /// 中间那颗是**圆**而不是 pw 的"148×48 白胶囊"（去掉"播放"二字），两侧是 44 圆。

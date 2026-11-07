@@ -485,10 +485,15 @@ enum EntityPageHeaderManager {
         var fullbleedPicture: UIView?
         // 这张图**已经交给 hero 画**了 ⇒ Spotify 那份（连它上面那层渐变）要一起让位。
         var fullbleedHandedOver = false
+        // 满幅头里留下的是**一行大圆头像**（电台）⇒ 不做底沿化开（会糊掉头像下半截）。
+        var fullbleedArtIsAvatarRow = false
         if let fullbleed {
             let picture = fullbleedArtwork(in: fullbleed)
             fullbleedPicture = picture.first
             fullbleedKept = picture
+            fullbleedArtIsAvatarRow = !picture.isEmpty && picture.allSatisfy {
+                NSStringFromClass(type(of: $0)).contains("AvatarView")
+            }
             // 认出了图才把**渐变**也加进"不许藏"的名单：那层渐变是页头自己的下缘化开，
             // 藏掉之后页头就成了一块硬边纯色（"生成歌单没有渐变"就是这么来的）。
             // ⚠️ 名单为空的"整支放过"安全阀不能被它破坏，所以只在非空时合并。
@@ -596,6 +601,12 @@ enum EntityPageHeaderManager {
             height: height
         )
         if header.frame != frame { header.frame = frame }
+        // 满幅页头的图**下缘化开**：Spotify 那层渐变不保证存在（不存在时页头就是一块硬边纯色），
+        // 我们自己补一条。只在"留下的是 Spotify 那张图"这一支开。
+        updateArtworkFade(
+            in: header,
+            enabled: fullbleedPicture != nil && !fullbleedHandedOver && !fullbleedArtIsAvatarRow
+        )
 
         // z 序与几何两道保险。
         raiseToTop(header, in: headerRoot, role: "playlist")
@@ -3177,6 +3188,63 @@ enum EntityPageHeaderManager {
             }
         }
         return kept
+    }
+
+    // MARK: - 满幅图的底沿化开
+    //
+    // 生成歌单（音乐全纪录 / This Is / 电台）的满幅图**直接收在一条水平线上**：图下面是
+    // 页面底色，两者之间没有任何过渡（Spotify 那层 `GradientView` 不保证存在 ——
+    // `fullbleedGradients` 可能返回空，而我们的底色又不能去盖它）。
+    // ⇒ 我们自己补一条 `clear → 页面底色` 的纱，压在图的下沿、贴着这一块的上沿。
+    //
+    // 只对"留下的是 Spotify 那张满幅图"这一支生效：hero 接手（`fullbleedHandedOver`）时
+    // 图是我们自己画的、自带化开；电台那一族是一行大圆头像，糊下半截反而难看。
+
+    private static var artworkFade: GradientView?
+    /// 上一次写进那层纱的底色 —— 底色每拍都可能是同一个值，不必每拍重设（会触发重绘）。
+    private static var artworkFadeColour: UIColor?
+
+    private static func updateArtworkFade(in header: EntityPageHeaderView, enabled: Bool) {
+        guard enabled, let colour = EntityPageAppearance.currentFieldColour else {
+            removeArtworkFade()
+            return
+        }
+
+        let fade: GradientView
+        if let existing = artworkFade, existing.superview === header {
+            fade = existing
+        } else {
+            removeArtworkFade()
+            let fresh = GradientView(frame: .zero)
+            fresh.isUserInteractionEnabled = false
+            fresh.isAccessibilityElement = false
+            fresh.accessibilityIdentifier = "eevee-header-art-fade"
+            fresh.gradient.startPoint = CGPoint(x: 0.5, y: 0)
+            fresh.gradient.endPoint = CGPoint(x: 0.5, y: 1)
+            fresh.gradient.locations = [0, 1]
+            // 插在最底层：它画在本视图 bounds 之外（上方），但万一某页的排版把它挤进
+            // bounds 里，也不该压住标题。
+            header.insertSubview(fresh, at: 0)
+            artworkFade = fresh
+            artworkFadeColour = nil
+            fade = fresh
+        }
+
+        // 图的下沿就在本视图顶边附近：96pt 足够把那条硬边化开，又不会糊到图的中段。
+        let height = EntityPageHeaderMetrics.artworkFadeHeight
+        let frame = CGRect(x: 0, y: -height, width: header.bounds.width, height: height)
+        if fade.frame != frame { fade.frame = frame }
+
+        if artworkFadeColour != colour {
+            fade.gradient.colors = [colour.withAlphaComponent(0).cgColor, colour.cgColor]
+            artworkFadeColour = colour
+        }
+    }
+
+    private static func removeArtworkFade() {
+        artworkFade?.removeFromSuperview()
+        artworkFade = nil
+        artworkFadeColour = nil
     }
 
     /// 页头里那几个**大圆头像**（电台）。

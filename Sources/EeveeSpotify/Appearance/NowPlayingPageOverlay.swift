@@ -164,6 +164,7 @@ enum NowPlayingPageOverlay {
             // 那条真机教训），所以每次进来都确保一次。
             page.addSubview(overlay)
         }
+        ensureTapProbe(on: page)
         lastOverlay = overlay
         return overlay
     }
@@ -546,6 +547,73 @@ enum NowPlayingPageOverlay {
             // 底部空带：接住、什么都不做（本层没有手势、hitTest 返回自身 ⇒ 这一下被吞掉）。
             return !inertFrame.isNull && inertFrame.contains(point)
         }
+    }
+
+    // MARK: - 诊断：没落到我们身上的那一下，原本是谁接走的
+    //
+    // 现象：点听歌页下半部分，Spotify 自己那一排按键会被顶上去（那些控件我们没碰过）。
+    // 那一带不在我们的命中范围里 ⇒ 既看不见、也留不下证据（`[NPVPage]` 只会报安装那一拍）。
+    //
+    // 这里在**页面**上挂一个只观察的 `UITapGestureRecognizer`（`cancelsTouchesInView = false`，
+    // 不挡任何触摸、不改任何行为）：抬手时把"原本会接住这一下的视图"重放一遍，连同祖先链
+    // 与各层手势一起打一行。按 y 每 24pt 一段，一段只报一次（一份日志足够定位，不刷屏）。
+    private final class TapProbe: NSObject {
+        private var seenBands: Set<Int> = []
+        private var reported = 0
+
+        @objc func handle(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, let page = recognizer.view else { return }
+            let point = recognizer.location(in: page)
+            let band = Int(point.y / 24)
+            guard reported < 12, !seenBands.contains(band) else { return }
+            seenBands.insert(band)
+            reported += 1
+
+            var hit: UIView?
+            for sub in page.subviews.reversed() {
+                if let found = sub.hitTest(sub.convert(point, from: page), with: nil) {
+                    hit = found
+                    break
+                }
+            }
+
+            var chain: [String] = []
+            var gestures: [String] = []
+            var node = hit
+            var hops = 0
+            while let current = node, hops < 6 {
+                let identifier = current.accessibilityIdentifier.map { "#\($0)" } ?? ""
+                chain.append(NSStringFromClass(type(of: current)) + identifier)
+                gestures.append(contentsOf: (current.gestureRecognizers ?? []).map {
+                    NSStringFromClass(type(of: $0))
+                })
+                node = current.superview
+                hops += 1
+            }
+            let pageGestures = (page.gestureRecognizers ?? []).map {
+                NSStringFromClass(type(of: $0))
+            }
+            writeDebugLog(
+                "[NPVPage] tap probe \(Int(point.x)),\(Int(point.y)) — underneath:"
+                    + " \(hit.map { NSStringFromClass(type(of: $0)) } ?? "nil")"
+                    + " id=\(hit?.accessibilityIdentifier ?? "nil")"
+                    + "; chain \(chain.isEmpty ? "nil" : chain.joined(separator: " < "))"
+                    + "; gestures \(gestures.isEmpty ? "none" : gestures.joined(separator: ", "))"
+                    + "; page gestures \(pageGestures.isEmpty ? "none" : pageGestures.joined(separator: ", "))"
+            )
+        }
+    }
+
+    private static var tapProbeKey: UInt8 = 0
+
+    /// 每页只装一次：探针挂在**页面**上（不是我们这层 —— 我们那层在命中范围外根本收不到触摸）。
+    private static func ensureTapProbe(on page: UIView) {
+        guard objc_getAssociatedObject(page, &tapProbeKey) == nil else { return }
+        let probe = TapProbe()
+        let tap = UITapGestureRecognizer(target: probe, action: #selector(TapProbe.handle(_:)))
+        tap.cancelsTouchesInView = false
+        page.addGestureRecognizer(tap)
+        objc_setAssociatedObject(page, &tapProbeKey, probe, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
     // MARK: - 日志
