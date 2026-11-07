@@ -145,7 +145,9 @@ extension EeveeLyricsSettingsViewModel {
         logBooleanSetting($disableLyricsFeature, "disable lyrics feature")
         // 已删除：`$removeMxmInterludeSymbol` ——「删除间奏符号 ♪」连同它的
         // 键与 UI 行一起摘掉了（间奏行无条件丢弃），没有可记录的绑定。
-        logBooleanSetting($neteaseRomajiLocal, "NetEase romaji display mode")
+        // 已删除：`$neteaseRomajiLocal` ——「修改 NetEase 日语罗马字的展示方式」。
+        // 官方 romalrc 是人工整理的行级罗马字，比本地 CFS 管线准；开关只是把它换成
+        // 更差的那份 ⇒ 连同键、UI 行与 l10n 一起摘掉，没有可记录的绑定。
         logBooleanSetting($hideLyricsTranslation, "hide lyrics translation")
         logBooleanSetting($lyricsAutoTranslate, "auto-translate lyrics (system)")
         logBooleanSetting($chineseRomanization, "Chinese romanization")

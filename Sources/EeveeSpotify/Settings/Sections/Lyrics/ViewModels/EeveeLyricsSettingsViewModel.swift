@@ -77,16 +77,11 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
     // 它读的那个键（`ngzhwm_removeMxmInterludeSymbol`）与 UI 行一起删了，拆除的完整清单
     // 见 `NgzhwmSettingsViewModel` 顶部；这里只剩这条墓碑，免得下一个人再去找。
     
-    @Published var neteaseRomajiLocal = UserDefaults.standard.bool(
-        forKey: NgzhwmSettingsViewModel.neteaseRomajiLocalKey
-    ) {
-        didSet {
-            UserDefaults.standard.set(
-                neteaseRomajiLocal,
-                forKey: NgzhwmSettingsViewModel.neteaseRomajiLocalKey
-            )
-        }
-    }
+    // 已移除一个开关：`neteaseRomajiLocal` ——「修改 NetEase 日语罗马字的展示方式」。
+    // 键（`ngzhwm_neteaseRomajiLocal`）、Toggle、绑定日志与 l10n 一起删。
+    // 为什么删：默认值本来就是"用官方 romalrc"，而那一条是人工整理的行级罗马字，
+    // 比本地 CFS 管线准；开关唯一的作用是把它换成更差的那份 ⇒ 空壳。
+    // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     
     @Published var hideLyricsTranslation = NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled {
         didSet {
@@ -163,7 +158,6 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             // 以及搬去「调试」页的 `injectLyricsCardElement` / `lyricsEntryPointFlag`
             // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
-            neteaseRomajiLocal,
             hideLyricsTranslation,
             lyricsAutoTranslate,
             isMusixmatchTokenValid,

@@ -1525,18 +1525,14 @@ class NeteaseLyricsRepository: LyricsRepository {
         let languageCode = contents.romanizationLanguageCode
 
         // 官方罗马音：日语歌、用户开启日语罗马化、且网易下发了 romalrc 时，
-        // 直接用官方罗马音替换主歌词行（标记 .romanized 跳过本地转换）。
-        // 若开启「修改 NetEase 日语罗马字展示方式」开关，则跳过官方罗马音，
-        // 保持原文 + .canBeRomanized，把所有日语行统一交给显示层本地罗马化。
-        // 未命中上述条件时同样保持原文 + .canBeRomanized，交给显示层本地转换。
-        let preferLocalRomaji = UserDefaults.standard.bool(
-            forKey: NgzhwmSettingsViewModel.neteaseRomajiLocalKey
-        )
-        if preferLocalRomaji,
-           languageCode == "ja",
-           UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization") {
-            writeDebugLog("[NetEase] Local romaji display enabled — skipping official romaji")
-        }
+        // 存进 `officialRomanizedLines` 当"原文上方那一行"。
+        // 未命中上述条件时保持原文 + .canBeRomanized，交给显示层本地转换。
+        //
+        // ⚠️ 这里曾经有一个「修改 NetEase 日语罗马字展示方式」的开关（`preferLocalRomaji`），
+        // 打开时不存官方那份、全交给本地转换。2026-11-08 整体删除：官方 `romalrc` 是
+        // **人工整理的行级罗马字**，本地那条 CFS 管线在汉字读音上比它差，开关的默认值
+        // 本来就是"用官方" ⇒ 它只是个能被误按成降级的空壳。键与 l10n 一起摘掉。
+        // 旧设备上残留的 `ngzhwm_neteaseRomajiLocal` 不再被读、也不会被清（留着无害）。
 
         // 逐字歌词（preferWordByWord 且拿到 yrc）时跳过官方罗马音 + 本地兜底：
         // 这两步会把 yrc 的 words 词级时间轴丢掉、且产出小写罗马字；
@@ -1559,14 +1555,10 @@ class NeteaseLyricsRepository: LyricsRepository {
         // 现在：官方那份**留着**（它质量比本地转换好），但存进 `officialRomanizedLines`
         // —— 显示层把它当"原文**上方**那一行"（`LyricLinesAdapter.romanizedContentsForDisplay`
         // 首选它，缺的行再退回本地转换）。正文一个字都不动。
-        //
-        // ⚠️ 「修改 NetEase 日语罗马字展示方式」那个开关（`preferLocalRomaji`）**语义不变**：
-        // 它仍然是"宁可要本地那份、也不用官方那份"—— 打开时这里就不存官方罗马字。
         var officialRomanizedLines: [String] = []
         if let romalrc = rawLyrics.romalrc, !romalrc.isEmpty,
            languageCode == "ja",
            UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization"),
-           !preferLocalRomaji,
            !usingWordByWord {
             let romanized = applyRomanization(romalrc, originalLines: lines)
             if romanized.matched > 0 {

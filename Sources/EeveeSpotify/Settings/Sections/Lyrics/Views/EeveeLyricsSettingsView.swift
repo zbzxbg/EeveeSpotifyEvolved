@@ -19,20 +19,20 @@ struct EeveeLyricsSettingsView: View {
             
             // 「禁用歌词功能」作为「禁用歌词替换功能」的二级菜单：
             // 仅当「禁用歌词替换功能」开启（lyricsSource == .notReplaced）时显示，
-            // 写法与下方两个 NetEase 设置的条件显示一致。
+            // 写法与文件里其它条件项一致（见 `betterWordByWordLyricsSection` 的入口）。
             if viewModel.lyricsSource == .notReplaced {
                 disableLyricsSection()
             }
             
-            // 自动优选链路里也包含 NetEase，所以这一项对它同样要能改 ——
-            // 否则选了「自动优选」的用户永远调不到网易云的罗马字行为。
-            if viewModel.lyricsSource == .netease || viewModel.lyricsSource == .autoSelect {
-                neteaseRomajiLocalSection()
-                // （设置页里面放个可点击进去的页面吧）：歌词偏移
-                // 从本页拆出去成了独立页（`EeveeLyricsOffsetSettingsView`，起
-                // 对所有源生效），入口在根设置页「播放与歌词」组里，与「歌词 / 听歌页 /
-                // 补丁」那些并排。
-            }
+            // （设置页里面放个可点击进去的页面吧）：歌词偏移
+            // 从本页拆出去成了独立页（`EeveeLyricsOffsetSettingsView`，起
+            // 对所有源生效），入口在根设置页「播放与歌词」组里，与「歌词 / 听歌页 /
+            // 补丁」那些并排。
+            //
+            // 这里原来还有一个「修改 NetEase 日语罗马字展示方式」的开关
+            // （`neteaseRomajiLocalSection`），只对 NetEase / 自动优选显示。
+            // 2026-11-08 整体删除：默认值本来就是"用官方 romalrc"，开关只会把
+            // 更好的官方罗马字换成更差的本地转换 ⇒ 空壳。键与 l10n 一并摘掉。
             
             if viewModel.lyricsSource != .notReplaced {
                 // 译文行的开关放在通用区最前面：它对**所有源**生效
@@ -112,7 +112,7 @@ struct EeveeLyricsSettingsView: View {
     /// 「更好的逐词歌词」：**跟着主开关显示/隐藏的子项**，不单独占一个平级位置。
     ///
     /// 与文件里其它条件项同一套写法（例如
-    /// `if viewModel.lyricsSource == .netease { ... }`）：
+    /// `if viewModel.lyricsSource == .notReplaced { disableLyricsSection() }`）：
     /// 逐词歌词没开时它没有任何意义，所以整项不展示，而不是置灰。
     ///
     /// 页脚里把"开启后自动带上什么"说清楚，免得用户去找已经不存在的
@@ -235,16 +235,10 @@ struct EeveeLyricsSettingsView: View {
     // 它的开关价值只在"验证修复有没有用"那一步，验证完就写死启用了。
     // 那个 l10n 键也一并删除（见 en/zh-CN 的 Localizable.strings）。
 
-    @ViewBuilder private func neteaseRomajiLocalSection() -> some View {
-        Section(
-            footer: Text("netease_romaji_local_description".localized)
-        ) {
-            Toggle(
-                "netease_romaji_local".localized,
-                isOn: $viewModel.neteaseRomajiLocal
-            )
-        }
-    }
+    // 已删除一个 Section：`neteaseRomajiLocalSection`（「修改 NetEase 日语罗马字的展示方式」）。
+    // 删它的理由与「补全歌词时间轴」那批不同：那个是"验证完就写死"，
+    // 这个是**它的默认值本来就是对的** —— 官方 `romalrc` 是人工整理的行级罗马字，
+    // 比本地 CFS 管线准；开关唯一的作用是把好的换成差的。键与 l10n 一起摘掉。
 
     /// 「隐藏歌词译文」——**对所有源生效**，不是网易云专属。
     ///

@@ -11,7 +11,14 @@ class NgzhwmSettingsViewModel: ObservableObject {
     // ⚠️ 它从来没进过 `ownedKeys`，所以备份/重置那三处**不用**改。
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     static let disableLyricsFeatureKey = "ngzhwm_disableLyricsFeature"
-    static let neteaseRomajiLocalKey = "ngzhwm_neteaseRomajiLocal"
+    // 已删除一个 key：`ngzhwm_neteaseRomajiLocal` ——「修改 NetEase 日语罗马字的展示方式」。
+    //
+    // 为什么删：它打开时会让仓库**不存**网易云下发的 `romalrc`，改走本地 CFS 转换。
+    // 而 `romalrc` 是人工整理的行级罗马字，汉字读音明显比本地那条管线准 ⇒
+    // 开关的默认值（关 = 用官方）本来就是对的，打开只会降级，是个能被误按的空壳。
+    // 键、Toggle、绑定日志与 l10n 一起摘掉。
+    // ⚠️ 它从来没进过 `ownedKeys`，所以备份/重置那三处**不用**改。
+    // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     /// 键名里的 `netease` 是历史：这一项早先只管网易云的翻译按钮，现在对**所有源**生效。
     /// 字符串值不能跟着改名 —— 它已经在用户盘上，改了等于把所有人的选择重置。
     static let hideLyricsTranslationKey = "ngzhwm_neteaseHideTranslation"
