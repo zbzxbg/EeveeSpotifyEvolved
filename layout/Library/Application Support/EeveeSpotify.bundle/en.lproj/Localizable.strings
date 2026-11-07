@@ -536,7 +536,7 @@ artist_bio_genius_failed = "Genius has no biography for this artist";
 artist_bio_wikipedia_failed = "Wikipedia did not answer (your network may block it)";
 mini_bar_round_artwork = "Round artwork";
 home_tile_tint_section = "Home shortcut tiles";
-home_tile_tint = "Better home tiles";
+home_tile_tint = "Tile color follows its cover";
 home_tile_tint_description = "When on, the flat gray background is replaced with a color close to the tile's cover.";
 
 flag_override_mode_number = "Write a number";

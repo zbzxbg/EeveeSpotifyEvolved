@@ -534,7 +534,7 @@ artist_bio_genius_failed = "Genius 上没有这位艺人的简介";
 artist_bio_wikipedia_failed = "维基百科没有响应（本机网络可能屏蔽了它）";
 mini_bar_round_artwork = "专辑样式改圆形";
 home_tile_tint_section = "首页小卡片";
-home_tile_tint = "更好的首页小卡片";
+home_tile_tint = "卡片底色跟随封面";
 home_tile_tint_description = "选项开启后会给原灰色底替换为与封面展示相近的颜色。";
 
 flag_override_mode_number = "写入数字";
