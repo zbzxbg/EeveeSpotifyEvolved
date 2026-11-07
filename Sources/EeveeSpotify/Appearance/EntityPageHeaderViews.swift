@@ -714,6 +714,14 @@ final class EntityPageHeaderView: UIView {
         return true
     }
 
+    /// 行里那颗 Play 是否真的镜像到了源控件。
+    ///
+    /// `updateRow` 在 `play == nil` 时会把 `playButton` 藏起来 ⇒ 这里直接读它的 `isHidden`，
+    /// 不另存一份状态（两份状态迟早会分叉）。
+    /// 用途只有一个：`EntityPageHeaderManager.concealPlayButtonIfNeeded` 靠它决定**能不能藏**
+    /// Spotify 自己那颗 —— 藏了原件又没有替代品，屏幕上就是一个点不动的空胶囊。
+    var hasMirroredPlay: Bool { !playButton.isHidden }
+
     /// 三颗按钮各认一个 Spotify 控件；`nil` = 那颗不显示。
     ///
     /// - Parameter trailingPrefersFallback: 右那颗**只用兜底字形**（见 `prefersFallbackGlyph`）——

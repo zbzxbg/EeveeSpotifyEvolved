@@ -749,7 +749,7 @@ func eeveeOutermostScroll(from view: UIView) -> UIScrollView? {
 /// ① **UIControl 也要先看有没有 target**：没有 target 的 `UIControl`（`Encore.Button` 正是
 /// 如此）`sendActions` 是**空转**，而旧代码会因此 `return true`，把后面那条手势路一起挡掉。
 /// ② **包装层要往下钻**：按 id 找到的常常是 `ElementView<URL, Any, Any>` 那层包装
-/// （本文件 `firstControl` 的注释早就写了），真控件在它里面。调用方现在统一先 `findControl`
+/// （`EntityPageHeader.x.swift` 里 `firstControl` 的注释早就写了），真控件在它里面。调用方现在统一先 `findControl`
 /// 钻一次，这里再补一道"子树里找手势"。
 /// ③ **tap recogniser 可能挂在子树里的某个视图上**，不在我们拿到的那一层。
 ///
