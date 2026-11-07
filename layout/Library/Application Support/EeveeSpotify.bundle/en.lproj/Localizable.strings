@@ -21,11 +21,7 @@ restart_is_required_description = "App restart is required after changing.";
 // Patching
 
 do_not_patch_premium = "Do Not Patch Premium";
-patching_description = "EeveeSpotify intercepts requests to load user data, deserializes it, and modifies the parameters in real-time.
-
-If you have an active Premium subscription, you can turn on Do Not Patch Premium. The tweak won't patch the data or restrict the use of Premium server-sided features.
-
-A restart is required after changing.";
+patching_description = "EeveeSpotify intercepts requests to load user data, deserializes it, and modifies the parameters in real-time.\n\nIf you have an active Premium subscription, you can turn on Do Not Patch Premium. The tweak won't patch the data or restrict the use of Premium server-sided features.\n\nA restart is required after changing.";
 
 overwrite_configuration = "Overwrite Configuration";
 overwrite_configuration_description = "Replace the remote configuration with the dumped Premium one. It isn't guaranteed to work, but it can solve problems such as ads appearing. With this option on, a stale configuration can also cause unexpected problems - for example some features stop working, or Spotify crashes.";
@@ -89,9 +85,7 @@ amll_translation_language_description = "Leave empty to follow the device langua
 // UI
 
 lyrics_background_color_section = "Lyrics Background Color";
-lyrics_background_color_section_description = "If you turn on Display Original Colors, the lyrics will appear in the original Spotify colors for tracks that have them.
-
-You can set a static color or a normalization factor based on the extracted track cover's color. This factor determines how much dark colors are lightened and light colors are darkened. Generally, you will see lighter colors with a higher normalization factor.";
+lyrics_background_color_section_description = "If you turn on Display Original Colors, the lyrics will appear in Spotify's default colors.\n\nYou can set a static color or a normalization factor based on the extracted track cover's color. This factor determines how much dark colors are lightened and light colors are darkened. Generally, you will see lighter colors with a higher normalization factor.";
 
 display_original_colors = "Display Original Colors";
 
@@ -122,7 +116,7 @@ petitlyrics_line_fallback = "PetitLyrics: fall back to line level";
 petitlyrics_line_fallback_description = "When on, if the lyrics PetitLyrics returns do not have a normal word-by-word timeline, the whole song falls back to line-synced lyrics.";
 
 aggressive_marker_removal = "Remove lyrics annotations more aggressively";
-aggressive_marker_removal_description = "When on, every lyric line wrapped in [ ] is removed, without checking whether the text inside is a known section name. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed (e.g. [I love you]).";
+aggressive_marker_removal_description = "When on, every lyric line wrapped in [ ] is removed. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed (e.g. [I love you]).";
 
 spicy_cross_validation = "Spicy Lyrics cross-validation";
 spicy_cross_validation_description = "Fixes the case where the lyrics Spicy Lyrics returns have words censored out.";
@@ -171,14 +165,14 @@ payment_notice = "EeveeSpotify applies patches to unlock certain Premium feature
 // just its own name — no prefix to match against.
 
 // `ngzhwm_title` removed: it had no code references, and zh-CN never had it.
-disable_lyrics_feature = "Disable Lyrics Function";
+disable_lyrics_feature = "Disable Lyrics Feature";
 disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
 word_by_word_lyrics = "Enable Word-by-Word Lyrics";
 word_by_word_lyrics_description = "Every provider except LRCLIB and Genius offers word-by-word lyrics.";
 better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
 better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum.";
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
-inject_lyrics_card_element = "Add module 5 (the lyrics preview card)";
+inject_lyrics_card_element = "Add module 5";
 lyrics_entry_point_flag = "Lyrics entry point flag";
 lyrics_source_auto = "Auto Select";
 lyrics_source_auto_description = "Auto Select: every available provider is asked in turn, and the best lyrics for the current song are used.";
@@ -207,7 +201,7 @@ lyrics_offset_genius_excluded = "Genius does not use lyrics offset: its lyrics h
 lyrics_offset_saved = "Saved lyrics offsets";
 lyrics_offset_search = "Search title, artist, lyrics source or track id";
 lyrics_offset_no_matches = "No matching entries";
-lyrics_offset_saved_count = "%d saved entry(ies), one per song and lyrics source";
+lyrics_offset_saved_count = "%d saved entries, one per song and lyrics source";
 lyrics_offset_unknown_song = "Unknown song";
 lyrics_offset_delete_entry = "Delete this offset";
 lyrics_offset_save_song = "Save this offset";
@@ -247,7 +241,7 @@ true_shuffle = "True Shuffle";
 true_shuffle_dec = "Blocks Spotify's free-tier Smart Shuffle from mixing recommended tracks into your queue. Shuffle stays inside the playlist. ";
 miscellaneous = "Miscellaneous";
 clean_share_links = "Clean Share Links";
-clean_share_links_description = "Removes the \"si\" tracking parameter from shared Spotify links, so they don't reveal which device or account the link came from.";
+clean_share_links_description = "Removes tracking parameters from shared links.";
 block_rating_prompts = "Block Rating Prompts";
 block_rating_prompts_description = "Blocks the App Store rating dialog. A Spotify restart is required after changing.";
 restart_now = "Restart Now";
@@ -381,7 +375,7 @@ telemetry_refresh_counters = "Refresh";
 telemetry_reset_counters = "Reset counters";
 haptics_title = "Haptics";
 haptics_enabled = "Vibrate on player controls";
-haptics_description = "Taps Spotify player controls with the system feedback engine. A Spotify restart is required for it to take effect.";
+haptics_description = "Adds haptic feedback to Spotify's player controls using the system feedback engine. A Spotify restart is required for it to take effect.";
 haptics_strength = "Strength";
 haptics_test = "Test";
 haptics_surface_keywords_section = "Control name keywords";
@@ -404,8 +398,8 @@ flag_override_add_description = "Forces one of Spotify's remote-config flags.";
 flag_override_name_placeholder = "flag name, e.g. enable_video_ads";
 flag_override_scope_placeholder = "scope, empty = any";
 flag_override_mode = "Value";
-flag_override_mode_on = "On";
-flag_override_mode_off = "Off";
+flag_override_mode_on = "Force on";
+flag_override_mode_off = "Force off";
 flag_override_mode_remove = "Remove";
 flag_override_add = "Add";
 flag_override_active_section = "Active overrides";
@@ -435,7 +429,7 @@ detailed_logging = "More detailed logging";
 /* MARK: Appearance */
 theme_section = "Theme";
 amoled = "Pure black (AMOLED)";
-accent_color = "Accent colour";
+accent_color = "Accent color";
 
 
 // ── Settings root re-layout (2026-10-13): four group headers + one subtitle per row ──
@@ -446,9 +440,9 @@ settings_group_appearance = "Appearance";
 settings_group_advanced = "Advanced";
 tabs_and_mini_bar_title = "Tab bar & mini player";
 home_and_library_title = "Pages & library";
-settings_sub_lyrics = "Sources, word-by-word, romanization, translation";
-settings_sub_now_playing = "Backdrop, one-screen layout, single lyric, volume";
-settings_sub_patching = "Premium spoofing and config overrides";
+settings_sub_lyrics = "Settings related to lyrics";
+settings_sub_now_playing = "Settings related to the now playing page";
+settings_sub_patching = "Premium patching and config overrides";
 settings_sub_sponsorblock = "Skip sponsored segments";
 settings_sub_tabs = "Tab bar and mini player settings";
 settings_sub_home_library = "Home, library, album, playlist & artist pages";
@@ -482,7 +476,7 @@ player_card_exploreArtist = "Watch feed";
 player_card_releaseCountdown = "Release countdown";
 player_card_credits = "Credits";
 player_card_merch = "Merch";
-player_card_recommendations = "Related content";
+player_card_recommendations = "Recommended content";
 hide_home_header = "Hide the Home header";
 hide_connect_button = "Hide the connect button";
 hide_add_to_button = "Hide the add-to button";
@@ -490,7 +484,7 @@ hide_add_to_button = "Hide the add-to button";
 /* MARK: Blocked artists */
 blocked_artists_title = "Blocked artists";
 blocked_artists_enabled = "Skip blocked artists automatically";
-blocked_artists_description = "A track by a blocked artist is skipped automatically when it starts playing.";
+blocked_artists_description = "A track is skipped automatically when it starts playing if a blocked artist is involved in it, including collaborations.";
 blocked_artists_list_header = "Blocked";
 blocked_artists_empty = "No artists blocked yet";
 blocked_artists_add_placeholder = "artist name";
@@ -513,21 +507,21 @@ tab_bar_hide_create = "Hide the Create tab";
 mini_bar_glass_section = "Mini player";
 mini_bar_glass = "Liquid Glass mini player";
 
-playlist_cover_section = "Playlist covers (everywhere they appear)";
+playlist_cover_section = "Playlist covers";
 playlist_single_cover = "Replace Spotify's own four-cover mosaic";
 playlist_single_cover_description = "When on, Spotify's four-cover playlist mosaic is replaced with the cover of the playlist's first track.";
 
 entity_page_section = "Album, playlist & artist pages";
-entity_page_dissolve = "Replaces Spotify's own page colour";
+entity_page_dissolve = "Replace Spotify's own page color";
 entity_page_hide_chrome = "Hide some of Spotify's buttons";
 entity_page_am_header_section = "Apple Music header (album, playlist & artist pages)";
-entity_page_am_header = "Centred title, creator and Play capsule";
+entity_page_am_header = "Centered title, creator and Play capsule";
 am_header_play = "Play";
 artist_page_section = "Artist page";
 artist_page_description = "These only change the artist page.";
 artist_hide_listeners = "Hide the monthly-listeners line";
 artist_hide_tabs = "Hide the Music / Video / Merch tabs";
-artist_bio_empty = "The biography cannot be shown right away. Scroll to the bottom of this page, then come back and tap “About the artist” to read it (scrolling may stutter a little).";
+artist_bio_empty = "The biography cannot be shown right away. Scroll to the bottom of this page, then come back and tap “About the artist” to read it (scrolling may stutter a little). If it still doesn't appear, the artist hasn't provided a biography on Spotify.";
 artist_bio_from_genius = "Biography from Genius";
 artist_bio_section = "About the artist";
 artist_bio_source = "Biography source";
@@ -542,15 +536,15 @@ artist_bio_genius_failed = "Genius has no biography for this artist";
 artist_bio_wikipedia_failed = "Wikipedia did not answer (your network may block it)";
 mini_bar_round_artwork = "Round artwork";
 home_tile_tint_section = "Home shortcut tiles";
-home_tile_tint = "Tile colour follows its cover";
-home_tile_tint_description = "When on, the flat grey background is replaced with a colour close to the tile's cover.";
+home_tile_tint = "Better home tiles";
+home_tile_tint_description = "When on, the flat gray background is replaced with a color close to the tile's cover.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
 flag_group_interventions = "Tips & promos";
 flag_group_hints = "More tips";
 flag_group_hints_footer = "The same kind of tips and promos, found in other scopes. These are IPA literals too — never seen in a device log. Tap one to write an override; whether it lands is in the log: `[Flags] override … N match(es)` (on 0 matches it appends its own entry).";
-flag_group_chrome = "Chrome & extras";
+flag_group_chrome = "Chrome & easter eggs";
 flag_group_chrome_footer = "Element switches for the now-playing bar, plus cover art. These turn Spotify's own elements off (rather than hiding the view), so they can't fight the declutter switches.";
 flag_note_interventions_master = "Master switch: turn this off and Spotify drops the whole batch of nudges";
 flag_note_int_needs_number = "Integer flag: use “Write a number” on the Flag overrides page (throttle seconds, count caps)";
@@ -584,7 +578,7 @@ updates_title = "Changelog";
 updates_loading = "Loading…";
 updates_failed_footer = "Read from this repository's GitHub releases. The result is cached for 5 minutes and re-validated with an ETag, so re-opening this page does not spend API quota.";
 updates_empty = "No releases found.";
-updates_prerelease = "pre";
+updates_prerelease = "Pre-release";
 updates_open = "Open on GitHub";
 updates_retry = "Try again";
 updates_error_rate_limit = "GitHub's API quota is used up. Without a login it is 60 requests per hour per IP address, and shared carrier addresses count together. Please try again later.";
@@ -603,11 +597,11 @@ licenses_bundled_detail = "Third-party source ships in-tree (SwiftProtobuf, XMLC
 licenses_inspiration = "spoti.pw";
 licenses_inspiration_detail = "Code and design from spoti.pw v0.21.1 (GPL-3.0, © Vojtěch Škopek) are reused in this repository and modified by it. Only v0.21.1 and earlier were used — v0.22.0 and later are PolyForm Strict 1.0.0, and none of their source was taken.";
 licenses_kumone = "kumone";
-licenses_kumone_detail = "The now-playing page's full-page colour backdrop (gradient tint built from the cover colour) follows the recipe in kumone, an independent NetEase Cloud Music client — LGPL-3.0 (library) / GPL-3.0 (app), compatible with this repository's GPL-3.0. Only values, curves and the layer recipe were taken; the view code here is my own UIKit.";
+licenses_kumone_detail = "The now-playing page's full-page color backdrop follows the recipe in kumone, an independent NetEase Cloud Music client — LGPL-3.0 (library) / GPL-3.0 (app), compatible with this repository's GPL-3.0. Only values, curves and the layer recipe were taken; the view code here is our own UIKit.";
 licenses_netease_api = "NeteaseCloudMusicApi";
 licenses_netease_api_detail = "The NetEase weapi request scheme (double AES-CBC and the RSA encSecKey) follows Binaryify/NeteaseCloudMusicApi. That repository now only carries a README and no license file, so no license name is claimed here; the Swift implementation in this repository is our own.";
 licenses_lyricify = "Lyricify Lyrics Helper";
-licenses_lyricify_detail = "The NetEase search strategy (old search first, eapi cloudsearch fallback, the title/artist/album query ladder, and weighted title/artist/album/duration matching) is modelled on WXRIW/Lyricify-Lyrics-Helper, Apache-2.0. No source code was copied.";
+licenses_lyricify_detail = "The NetEase search strategy (old search first, eapi cloudsearch fallback, the title/artist/album query ladder, and weighted title/artist/album matching) is modeled on WXRIW/Lyricify-Lyrics-Helper, Apache-2.0. No source code was copied.";
 licenses_163musiclyrics = "163MusicLyrics";
 licenses_163musiclyrics_detail = "The NetEase abroad response shape and the cloudsearch endpoint were identified with reference to jitwxs/163MusicLyrics, Apache-2.0. No source code was copied.";
 licenses_lddc = "LDDC · pyqdes";
@@ -674,7 +668,7 @@ now_playing_style = "Now-playing style";
 now_playing_style_spotify = "Spotify";
 now_playing_style_immersive = "Immersive";
 now_playing_style_apple_music = "Apple Music style";
-now_playing_style_description = "Spotify = the stock player. Immersive = the player is modelled on kumone. Apple Music style = the player is modelled on Apple Music.";
+now_playing_style_description = "Spotify = the stock player. Immersive = the player is modeled on kumone. Apple Music style = the player is modeled on Apple Music.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.
@@ -686,7 +680,7 @@ now_playing_layout_footer = "Turning the master switch off restores everything; 
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
 apple_music_official_ttml = "Apple Music official TTML lyrics";
-apple_music_official_ttml_description = "Experimental. Turning this on may ignore every lyrics-related setting.";
+apple_music_official_ttml_description = "When enabled, some lyrics-related settings may be ignored.";
 apple_music_official_ttml_token = "Apple Music sign-in token (media-user-token)";
 apple_music_official_ttml_token_placeholder = "Paste your media-user-token";
 apple_music_official_ttml_token_hint = "Apple exposes no public lyrics API: the search only needs the web player token (fetched automatically), but the lyrics themselves need your own Apple Music sign-in. How to get the token: sign in at music.apple.com in a browser, open Developer Tools > Application > Cookies > https://music.apple.com, and copy the value of media-user-token. A valid Apple Music account is required; without one this source returns no lyrics at all.";
