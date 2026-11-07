@@ -38,6 +38,13 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
     var zones: [(rect: CGRect, target: UIView)] = []
     var actionZones: [(rect: CGRect, action: () -> Void)] = []
 
+    /// 长按区：与 `actionZones` 同一套矩形，但只在**按住 0.45 秒**时触发。
+    ///
+    /// 现在只有一处用它 —— 页脚那颗「歌词」键长按打开歌词偏移面板。
+    /// 短按仍然走 `actionZones`：两者用 `require(toFail:)` 绑在一起，长按成功时 tap 直接失败，
+    /// 不会"长按完又顺手开一次歌词页"。
+    var longPressZones: [(rect: CGRect, action: () -> Void)] = []
+
     /// **不接**的区域：让给叠在同一页上的**另一块替身**。
     ///
     /// （点右下角那颗，还是 Spotify 原生弹窗）：工具行的"队列"可点区
@@ -64,6 +71,7 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
         if isInert(point) { return true }
         return zones.contains { $0.rect.contains(point) }
             || actionZones.contains { $0.rect.contains(point) }
+            || longPressZones.contains { $0.rect.contains(point) }
     }
 
     /// 点是不是落在"字形下面那条空带"里。
@@ -86,12 +94,32 @@ final class NowPlayingIOS27RemoteRelayView: UIView {
         installActionTap()
     }
 
+    private var actionLongPress: UILongPressGestureRecognizer?
+
     private func installActionTap() {
         guard actionTap == nil else { return }
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleActionTap(_:)))
         tap.cancelsTouchesInView = false
         addGestureRecognizer(tap)
         actionTap = tap
+
+        let press = UILongPressGestureRecognizer(
+            target: self,
+            action: #selector(handleLongPress(_:))
+        )
+        press.minimumPressDuration = 0.45
+        press.cancelsTouchesInView = false
+        addGestureRecognizer(press)
+        // 长按认出来了，抬手就不该再当成一次点击。
+        tap.require(toFail: press)
+        actionLongPress = press
+    }
+
+    @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        let point = recognizer.location(in: self)
+        guard let zone = longPressZones.first(where: { $0.rect.contains(point) }) else { return }
+        zone.action()
     }
 
     @objc private func handleActionTap(_ recognizer: UITapGestureRecognizer) {

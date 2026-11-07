@@ -373,6 +373,7 @@ extension NowPlayingIOS27 {
             changed = true
         }
         var actionZones: [(rect: CGRect, action: () -> Void)] = []
+        var longPressZones: [(rect: CGRect, action: () -> Void)] = []
         var zones: [(rect: CGRect, target: UIView)] = []
         let tapSide = footerTapSide
         func tapRect(_ frame: CGRect) -> CGRect {
@@ -443,6 +444,22 @@ extension NowPlayingIOS27 {
             // iOS 26 以下没有我们自己的歌词页：退回 Spotify 那颗键。
             actionZones.append((tapRect(frames[0]), action))
         }
+        if canOpenOwnLyricsPage || lyricsTarget != nil {
+            // 同一颗「歌词」键**长按**开歌词偏移面板 —— 看到歌词差半拍时不用翻设置。
+            // 短按仍是开/关歌词页（两个手势用 `require(toFail:)` 绑好，不会连击）。
+            longPressZones.append((tapRect(frames[0]), {
+                guard let context = LyricsOffsetMenuRow.currentContext() else {
+                    writeDebugLog("[LyricsOffset] long press ignored — no track / source yet")
+                    return
+                }
+                writeDebugLog("[LyricsOffset] long press on the lyrics key — \(context.trackId)")
+                LyricsOffsetPanel.present(
+                    trackId: context.trackId,
+                    source: context.source,
+                    song: context.song
+                )
+            }))
+        }
         // Connect 这颗 `accessibilityActivate` / `sendActions` 都不认。把它从栈里
         // 结构性搬到 207（原槽位 placeholder），目标就真的在手指底下；再用 `zones`
         // 做真触摸转发。搬不动（不在 UIStackView 里）才退回动作级。
@@ -458,6 +475,7 @@ extension NowPlayingIOS27 {
         addZone(frames[2], target: queue, label: "queue")
         relay.zones = zones
         relay.actionZones = actionZones
+        relay.longPressZones = longPressZones
         // 字形下面那条空带（**原生命令行下沿** → 屏幕底）：**接住、不做任何动作**。
         //
         // 起点不是字形下沿，而是**原生那三颗键的下沿**：字形下沿到原生行之间还隔着

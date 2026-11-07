@@ -103,7 +103,9 @@ enum LyricsOffsetMenuRow {
     }
 
     /// 当前这份歌词的「曲目 + 源 + 歌名」。任缺一项就不挂（没有可偏的对象）。
-    private static func currentContext() -> (trackId: String, source: LyricsSource, song: String)? {
+    ///
+    /// 不是 private：页脚那颗「歌词」键的**长按**也用它（`NowPlayingIOS27+Footer`）。
+    static func currentContext() -> (trackId: String, source: LyricsSource, song: String)? {
         let trackId = currentLyricsDtoTrackId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trackId.isEmpty, let source = currentLyricsSource else { return nil }
         guard LyricsTimingOffset.supportsOffset(source: source) else { return nil }
