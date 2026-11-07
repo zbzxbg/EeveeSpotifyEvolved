@@ -295,6 +295,22 @@ jobs:
                  -o kugou-romaji-repair-tests
           ./kugou-romaji-repair-tests
 
+      # ICU 的日文音译（`ja_Hrkt_ja_Latn_BGN`）能不能用 —— 这是"要不要把假名层交给系统 ICU"
+      # 这件事唯一的前置未知项。规则文件只有 12 KB、随系统 ICU 走（零包体），但
+      # `StringTransform(rawValue:)` 是公开 API ≠ 这条 transform 一定被编进了 iOS 的 ICU 数据。
+      #
+      # 为什么放在 CI：本仓库本机没有 Swift 工具链，也**没有 iOS 设备**，这个问题在
+      # 打包之前没有任何地方能回答。macOS runner 自带完整 ICU，跑一遍就知道 ——
+      # 而且它顺带把 BGN 的行为（ん→n'、を→o、ー→ō）打印出来，供人工对照手写假名表。
+      #
+      # ⚠️ 它**不会**因为 transform 缺失而红：探针的产物是信息，不是断言。唯一会失败的是
+      #    "连 toLatin 都不工作"，那说明测试环境坏了，继续读日志没有意义。
+      - name: Japanese romanization — ICU transliteration probe
+        run: |
+          swiftc Tests/JapaneseRomanizationProbe/main.swift \
+                 -o japanese-icu-probe
+          ./japanese-icu-probe
+
       # 伪逐字填充（`PseudoWordTiming`，实验页开关、默认关）。
       # 它是**在编时间**（行内分布是估的），三条不变量必须钉死：
       # 拼回来的文本逐字等于原行（渲染层按字符下标记时）、最后一片不越过下一行

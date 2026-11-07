@@ -70,8 +70,8 @@ extension LyricsDto {
         // · 对应的语言开关开着（官方罗马字是取词时按**那门语言**的开关存下来的，
         // 后来把开关关掉时必须跟着不显示 —— 缓存键里已经含这三个开关）；
         // · 长度与 `lines` 一致（按下标配对，对不上就不用）；
-        // · 官方有的那几行用官方，缺的那几行**退回本地转换**（官方罗马音常常不全，
-        // 旧的 `preferLocalRomaji` 兜底逻辑就是为这个存在的）。
+        // · 官方有的那几行用官方，缺的那几行**退回本地转换**（官方罗马音常常不全 ——
+        // 酷狗那份甚至会把汉字整组丢掉，所以这条"逐行混排"不是兜底，是常态）。
         //
         // 这条判据以前**写死日语**（网易 `romalrc` 只有日语，当时够用）。
         // 但"官方罗马字"现在不止网易一家：Musixmatch 那份是按**歌词语言**取的
@@ -102,13 +102,51 @@ extension LyricsDto {
             }
             romanizationCacheKey = key
             romanizationCache = merged
+            dumpRomanizationIfDetailed(local: nil, official: officialRomanizedLines)
             return merged
         }
 
         let fresh = romanizedForWordByWordIfEnabled().lines.map(\.content)
         romanizationCacheKey = key
         romanizationCache = fresh
+        dumpRomanizationIfDetailed(local: fresh, official: officialRomanizedLines)
         return fresh
+    }
+
+    /// 诊断用：把「原文 / 本地转换 / 源给的官方罗马字」整份写进日志。
+    ///
+    /// 只在「设置 → 调试 → 详细日志」开着时写；调用点在**缓存未命中之后** ⇒
+    /// 一首歌一次（换歌 / 拨罗马化开关才重来），不是每 0.3s 一次。
+    ///
+    /// 为什么要这份对照：`romaji` 这一行到底是"源给的"还是"本地 CFS 转的"，
+    /// 在屏幕上长得一样；而"某个源的官方罗马字要不要让位给本地"这个决定
+    /// 只能靠逐行差异来判断。字段顺序固定成 `i | src= | local= | official=`，
+    /// `grep RomajiDump` 之后可以直接做统计。
+    ///
+    /// 日语还会额外写一份**逐 token** 的切分（`i.tok`），
+    /// 用来解释"为什么这一行的空格加在这里" —— 本地那条路的分写全靠 CFS 的 token 边界。
+    private func dumpRomanizationIfDetailed(local: [String]?, official: [String]) {
+        guard UserDefaults.detailedLogging else { return }
+        let localLines = local ?? romanizedForWordByWordIfEnabled().lines.map(\.content)
+        writeDebugLog(
+            "[RomajiDump] song lines=\(lines.count) lang=\(languageCode ?? "-")"
+                + " official=\(official.isEmpty ? "no" : "yes")"
+        )
+        for index in lines.indices {
+            let source = lines[index].content
+            let localLine = index < localLines.count ? localLines[index] : ""
+            let officialLine = index < official.count ? official[index] : ""
+            writeDebugLog(
+                "[RomajiDump] \(index) | src=\(source) | local=\(localLine) | official=\(officialLine)"
+            )
+        }
+        guard (languageCode ?? "").lowercased().hasPrefix("ja") else { return }
+        for index in lines.indices {
+            let pairs = lines[index].content.japaneseRomajiChunks()
+                .map { "\($0.original)→\($0.romaji)" }
+                .joined(separator: " ")
+            writeDebugLog("[RomajiDump] \(index).tok \(pairs)")
+        }
     }
 
     /// 官方罗马字要不要显示：**按这门语言的开关**。
