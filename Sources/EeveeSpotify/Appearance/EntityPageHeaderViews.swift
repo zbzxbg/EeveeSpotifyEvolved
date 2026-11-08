@@ -191,7 +191,12 @@ final class EntityPageHeaderButton: UIControl {
         if let target {
             if scrollsSourceIntoView { scrolled = eeveeScrollIntoView(target) }
 
-            if role == "more", let pw = eeveeActivate(target) {
+            // **随机那颗和 `⋯` 是同一族控件**（日志里是 `EncoreButton[UIControl]`）：
+            // 动作走 `UIAction` 或自绘触摸，`allTargets` 是空的 ⇒ `eeveeFire` 的 ① 档
+            // （send target/action）永远跳过、② 档又没有手势可找，结果就是"点不动"。
+            // 上游能点，是因为它走的是控件自己的交互；`eeveeActivate` 的第 ③ 档
+            // （`accessibilityActivate`）正是那条路 —— `⋯` 就是靠它修好的。
+            if role == "more" || role == "shuffle", let pw = eeveeActivate(target) {
                 path = pw
                 let sentControlEvent = pw.hasPrefix("activate.primaryActionTriggered")
                     || pw.hasPrefix("activate.touchUpInside")
