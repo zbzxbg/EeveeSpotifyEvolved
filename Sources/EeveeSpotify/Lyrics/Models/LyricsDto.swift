@@ -265,6 +265,10 @@ let japaneseInflectionSuffixes: Set<String> = [
     "ます", "ました", "ません",
     "し", "せ", "たい", "たく", "そう", "よう", "う", "ず", "ぬ", "ば",
     "だっ", "ちゃっ", "じゃっ", "つつ", "ながら", "らしい", "みたい", "ほしい",
+    // 補助動詞（`泣いちゃう` → naichau、`食べてる` → tabeteru）。
+    // tokenizer 会把它们切成独立的 token，不在这里黏住就会变成 `nai chau`。
+    "ちゃう", "ちゃった", "ちゃ", "ちゃい", "じゃう", "じゃ", "じゃい",
+    "てる", "でる", "とく", "どく",
     "る", "れる", "られる", "せる", "させる"
 ]
 
@@ -272,8 +276,53 @@ let japaneseInflectionSuffixes: Set<String> = [
 let japaneseSpaceSeparators: Set<Character> = [
     "、", "。", "！", "？", "!", "?", ",", "，", ".", "．", "…",
     "「", "『", "（", "(", "【", "[", "」", "』", "）", ")", "】", "]",
-    "・", "：", ":", "；", ";", "ー", "♪"
+    "・", "：", ":", "；", ";", "ー", "♪",
+    // 连字符与撇号是**连接符**：后面不加空格（`Nah-nah`、`ain't`）。
+    "-", "‐", "–", "—", "'", "’"
 ]
+
+/// 这些字符**前面**不加空格 —— 收尾标点、右括号、连字符、撇号。
+///
+/// 现场：`(Hey uh )`、`Nah - nah`、`ain ' ton`。旧规则只判断"前一个字符是不是分隔符"，
+/// 没判断"这一个 token 是不是收尾标点"，于是空格被塞进了标点前面。
+let japaneseNoSpaceBefore: Set<Character> = [
+    "」", "』", "）", ")", "】", "]", "〕", "〉", "》",
+    "、", "。", "，", ",", "．", ".", "！", "!", "？", "?", "…",
+    "・", "：", ":", "；", ";", "ー", "♪",
+    "-", "‐", "–", "—", "'", "’", "”"
+]
+
+/// 敬语前缀：它们**后面**不加空格（`おいで` → oide，不是 `o ide`）。
+let japanesePrefixes: Set<String> = ["お", "ご"]
+
+/// ICU 的汉字转写带 macron（`chīsana`、`ā`），而整条链路写的是 ASCII 双元音。
+///
+/// 不归一的话同一行里会两种风格并存：假名段 `koohii`、汉字段 `chīsana`。
+let japaneseMacronExpansions: [(String, String)] = [
+    ("ā", "aa"), ("ī", "ii"), ("ū", "uu"), ("ē", "ee"), ("ō", "oo"),
+    ("Ā", "Aa"), ("Ī", "Ii"), ("Ū", "Uu"), ("Ē", "Ee"), ("Ō", "Oo")
+]
+
+/// 半角 CJK 标点 → 全角。ICU 会把 `「」、。` 归一成 `｢｣､｡`（U+FF61–FF65），
+/// 罗马字那一行要跟原文同一套宽度，否则 `｢ ... ､` 看起来像乱码。
+let japaneseFullwidthPunctuation: [Character: Character] = [
+    "｡": "。", "｢": "「", "｣": "」", "､": "、", "･": "・", "ｰ": "ー"
+]
+
+/// 这个 token 是不是"上一个词的尾巴"，要黏上去而不是另起一个词。
+///
+/// 两种情况：
+/// · 以促音 / 小假名 / 长音开头（`って`、`ゃ`、`ー`）—— 本来就不成词；
+/// · **单个假名且不是助词**（`ひと` + `つ` → hitotsu、`だ` + `っ`）。
+/// 助词单独判：`は` `を` 这些必须留空格，否则 `私は` 会变成 `watashiwa`。
+func japaneseGluesToPrevious(_ token: String) -> Bool {
+    guard let first = token.first else { return false }
+    if "っッゃゅょャュョぁぃぅぇぉァィゥェォー".contains(first) { return true }
+    if token.count == 1, japaneseIsPureKana(token), !japaneseParticles.contains(token) {
+        return true
+    }
+    return false
+}
 
 func japaneseContainsPinyinMarker(_ text: String) -> Bool {
     for ch in text {
@@ -290,6 +339,15 @@ func japaneseSanitizeTranscription(_ text: String, original: String) -> String {
     var s = text
         .replacingOccurrences(of: "～", with: "~")
         .replacingOccurrences(of: "〜", with: "~")
+
+    // macron → ASCII 双元音：ICU 的汉字转写会带 `chīsana` / `ā`，与本仓库的
+    // `koohii` 风格冲突。归一之后整行只有一套写法。
+    for (macron, plain) in japaneseMacronExpansions {
+        s = s.replacingOccurrences(of: macron, with: plain)
+    }
+
+    // 半角 CJK 标点 → 全角（ICU 会把「」、。 吐成 ｢｣､｡）。
+    s = String(s.map { japaneseFullwidthPunctuation[$0] ?? $0 })
 
     s = s.replacingOccurrences(of: "~tsu\\s*(ch)", with: "tch", options: .regularExpression)
     s = s.replacingOccurrences(of: "~tsu\\s*([kstnhmrgyzwbdpfjvc])", with: "$1$1", options: .regularExpression)

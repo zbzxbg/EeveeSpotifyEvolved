@@ -75,28 +75,40 @@ extension String {
         var cursor: CFIndex = 0
         var pendingGeminate = false
         var hasToken = false
+        /// 上一颗是「お / ご」⇒ 下一个词黏住（`おいで`）。
+        var lastWasPrefix = false
 
         func appendGap(upTo location: CFIndex) {
             guard location > cursor else { return }
-            result += japaneseNormalizedGap(substring(CFRangeMake(cursor, location - cursor)))
+            let gap = japaneseNormalizedGap(substring(CFRangeMake(cursor, location - cursor)))
+            result += gap
             cursor = location
+            // 中间真有字符（空格 / 标点）时，"前缀"关系就断了。
+            if !gap.isEmpty { lastWasPrefix = false }
         }
 
-        func needsSpaceBeforeToken() -> Bool {
+        func needsSpaceBeforeToken(_ original: String) -> Bool {
             guard hasToken, let last = result.last else { return false }
             if last.isWhitespace || last.isNewline { return false }
             if japaneseSpaceSeparators.contains(last) { return false }
+            // 收尾标点 / 连字符 / 撇号前面不加空格（`(Hey uh)`、`Nah-nah`、`ain't`）。
+            if let first = original.first, japaneseNoSpaceBefore.contains(first) { return false }
+            // 敬语前缀后面黏住（`おいで` → oide）。
+            if lastWasPrefix { return false }
+            // 单假名 / 促音·小假名开头 ⇒ 是上一个词的尾巴（`ひとつ`、`だって`）。
+            if japaneseGluesToPrevious(original) { return false }
             return true
         }
 
         func appendToken(_ romaji: String, original: String) {
             guard !romaji.isEmpty else { return }
             let glue = japaneseInflectionSuffixes.contains(original)
-            if needsSpaceBeforeToken(), !glue {
+            if !glue, needsSpaceBeforeToken(original) {
                 result += " "
             }
             result += romaji
             hasToken = true
+            lastWasPrefix = japanesePrefixes.contains(original)
         }
 
         var tokenType = CFStringTokenizerAdvanceToNextToken(tokenizer)
@@ -203,6 +215,8 @@ extension String {
         var pendingGeminate = false
         var hasToken = false
         var lastOutputChar: Character?
+        /// 上一颗是「お / ご」⇒ 下一个词黏住（与 `toJapaneseRomaji` 同一套规则）。
+        var lastWasPrefix = false
 
         func addGap(_ range: CFRange) {
             guard range.length > 0 else { return }
@@ -210,6 +224,7 @@ extension String {
             let normalized = japaneseNormalizedGap(gap)
             chunks.append(JapaneseRomajiChunk(original: gap, romaji: normalized, range: range, leadingSpace: false))
             lastOutputChar = normalized.last
+            if !normalized.isEmpty { lastWasPrefix = false }
         }
 
         var tokenType = CFStringTokenizerAdvanceToNextToken(tokenizer)
@@ -252,6 +267,9 @@ extension String {
             if hasToken, let last = lastOutputChar,
                !last.isWhitespace, !last.isNewline,
                !japaneseSpaceSeparators.contains(last),
+               !(original.first.map { japaneseNoSpaceBefore.contains($0) } ?? false),
+               !lastWasPrefix,
+               !japaneseGluesToPrevious(original),
                !japaneseInflectionSuffixes.contains(original) {
                 leadingSpace = true
             }
@@ -262,6 +280,7 @@ extension String {
                 ))
                 hasToken = true
                 lastOutputChar = romaji.last
+                lastWasPrefix = japanesePrefixes.contains(original)
             }
 
             cursor = range.location + range.length
