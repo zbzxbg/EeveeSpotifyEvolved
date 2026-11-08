@@ -1,8 +1,8 @@
 <div align="center">
 
-# EeveeSpotify Evolved
+# EeveeSpotifyEvolved
 
-Word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass look for Spotify on iOS.
+word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass look for Spotify on iOS.
 
 [![iOS](https://img.shields.io/badge/iOS-17.4%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
 [![Spotify](https://img.shields.io/badge/Spotify-9.1.88-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
