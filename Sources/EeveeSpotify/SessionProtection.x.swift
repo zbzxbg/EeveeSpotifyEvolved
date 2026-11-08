@@ -326,6 +326,16 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
             let elapsedInt = Int(elapsed)
             let path = url.path
 
+            // Ad delivery is driven by NSURLSession tasks that never reach the
+            // HTTP response hooks. Cancel them on resume, before the auth and
+            // bootstrap passthrough, so an ad task cannot take a login request
+            // with it.
+            if url.isAdRelated {
+                writeDebugLog("[ORACLE][NET_BLOCK] Cancelled ad task at \(elapsedInt)s: \(host)\(path)")
+                task.cancel()
+                return
+            }
+
             // bootstraps pass through: modifyRemoteConfiguration is idempotent, and
             // cancelling the second one broke fresh login on 9.1.34.
             let isAuthRelated = host.contains("login5") ||
