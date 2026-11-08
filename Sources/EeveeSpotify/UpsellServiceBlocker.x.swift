@@ -17,6 +17,8 @@ struct DownloadUpsellServiceGroup: HookGroup {}
 struct FreeHostedJamsUpsellServiceGroup: HookGroup {}
 struct FreeUserSkipUpsellPageServiceGroup: HookGroup {}
 struct FreeUserShuffleUpsellPageServiceGroup: HookGroup {}
+struct ShuffleToggleUpsellServiceGroup: HookGroup {}
+struct PlayFullSongUpsellServiceGroup: HookGroup {}
 struct SelfLoadingUpsellBannerViewGroup: HookGroup {}
 
 class GeneralUpsellsServiceKill: ClassHook<NSObject> {
@@ -107,6 +109,31 @@ class FreeUserShuffleUpsellPageServiceKill: ClassHook<NSObject> {
     }
 }
 
+// 切 shuffle / 播放整首这两颗按钮在免费账号上会拉起各自的 upsell 服务（不是弹窗，
+// 是「点下去先弹一张卖 Premium 的页」）。它们和上面那批 `*UpsellPageService` 不是同一个类，
+// 单独挂。
+class ShuffleToggleUpsellServiceKill: ClassHook<NSObject> {
+    typealias Group = ShuffleToggleUpsellServiceGroup
+    static let targetName =
+        "_TtC28ContextualShuffle_UpsellImpl40ShuffleToggleUpsellServiceImplementation"
+
+    func load() {
+        upsellServiceLog("suppressed ShuffleToggleUpsellServiceImplementation.load")
+        return
+    }
+}
+
+class PlayFullSongUpsellServiceKill: ClassHook<NSObject> {
+    typealias Group = PlayFullSongUpsellServiceGroup
+    static let targetName =
+        "_TtC35ReinventFree_PlayFullSongUpsellImpl29PlayFullSongUpsellServiceImpl"
+
+    func load() {
+        upsellServiceLog("suppressed PlayFullSongUpsellServiceImpl.load")
+        return
+    }
+}
+
 // Language-independent fallback for the reusable Premium banner UIView.
 // DSA notices, library status and ordinary download progress use other classes.
 class SelfLoadingUpsellBannerViewKill: ClassHook<UIView> {
@@ -135,6 +162,8 @@ func activateUpsellServiceBlocker() {
         (FreeHostedJamsUpsellServiceKill.targetName, "FreeHostedJamsUpsellService", { FreeHostedJamsUpsellServiceGroup().activate() }),
         (FreeUserSkipUpsellPageServiceKill.targetName, "FreeUserSkipUpsellPageService", { FreeUserSkipUpsellPageServiceGroup().activate() }),
         (FreeUserShuffleUpsellPageServiceKill.targetName, "FreeUserShuffleUpsellSheetPageService", { FreeUserShuffleUpsellPageServiceGroup().activate() }),
+        (ShuffleToggleUpsellServiceKill.targetName, "ShuffleToggleUpsellServiceImplementation", { ShuffleToggleUpsellServiceGroup().activate() }),
+        (PlayFullSongUpsellServiceKill.targetName, "PlayFullSongUpsellServiceImpl", { PlayFullSongUpsellServiceGroup().activate() }),
     ]
 
     var activated = 0

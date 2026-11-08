@@ -56,7 +56,11 @@ extension URL {
     }
 
     var isPendragonFetchMessageList: Bool {
-        self.path.contains("pendragon") && self.path.contains("FetchMessageList")
+        // 9.1.84 起 ClientMessagingPlatform 把 RPC 从 `FetchMessageList` 改成了
+        // `FetchMessage` / `FetchMessageForPreview`（`com.spotify.pendragon.v1.ClientMessageService`）。
+        // `FetchMessage` 是这三个名字的公共前缀 ⇒ 一条判断覆盖全部已知变体。
+        // 只写 `FetchMessageList` 的话，新版本上一条都匹配不到，win-back 全屏广告会漏。
+        self.path.contains("pendragon") && self.path.contains("FetchMessage")
     }
 
     var isPushkaTokens: Bool {
@@ -72,8 +76,8 @@ extension URL {
             return true
         }
         
-        // Block all other spclient /ads/* endpoints
-        if path.contains("/ads/") {
+        // Block all other spclient /ads/* endpoints（含只有 `/ads` 结尾的那种）。
+        if path.contains("/ads/") || path.hasSuffix("/ads") {
             return true
         }
         
