@@ -243,21 +243,8 @@ let japaneseParticleOverrides: [String: String] = [
     "は": "wa", "へ": "e"
 ]
 
-/// 汉字词的读音修正 —— `CFStringTokenizer` 的 Latin transcription 有几处给的是**书面语读音**，
-/// 歌词里几乎不会那么念。
-///
-/// 目前只收 `私`：tokenizer 给 `watakushi`（正式场合的自称），而歌词里一律是 `watashi`。
-///
-/// **刻意不收「君」**：它有两个读音（`kimi` = 你、`kun` = 称呼后缀），
-/// 而 tokenizer 是按 token 给的、看不到"前面是不是人名" —— 硬写成 `kimi` 会把
-/// 「田中君」读成 `tanaka kimi`，比默认更差。多音词一律不进来。
-/// `僕` / `俺` / `貴方` 也是同理：没有证据说 tokenizer 读错，就不动它。
-///
-/// 判据是**整 token 精确匹配**：`私立` 那种合成词 tokenizer 给的是一个 token，打不中；
-/// `私たち` 会被切成 `私` + `たち`，于是 `watashi` + `tachi` —— 正是要的结果。
-let japaneseWordOverrides: [String: String] = [
-    "私": "watashi"
-]
+/// 汉字词的读音修正表搬去了 `JapaneseTokenRomaji.swift`（`japaneseWordOverrides`）——
+/// 它现在由 `japaneseTokenRomaji` 统一套用，两个循环不再各写一遍。
 
 /// 连写：这些活用后缀前面不加空格（黏到前一个词上）。
 let japaneseInflectionSuffixes: Set<String> = [
@@ -295,19 +282,9 @@ let japaneseNoSpaceBefore: Set<Character> = [
 /// 敬语前缀：它们**后面**不加空格（`おいで` → oide，不是 `o ide`）。
 let japanesePrefixes: Set<String> = ["お", "ご"]
 
-/// ICU 的汉字转写带 macron（`chīsana`、`ā`），而整条链路写的是 ASCII 双元音。
-///
-/// 不归一的话同一行里会两种风格并存：假名段 `koohii`、汉字段 `chīsana`。
-let japaneseMacronExpansions: [(String, String)] = [
-    ("ā", "aa"), ("ī", "ii"), ("ū", "uu"), ("ē", "ee"), ("ō", "oo"),
-    ("Ā", "Aa"), ("Ī", "Ii"), ("Ū", "Uu"), ("Ē", "Ee"), ("Ō", "Oo")
-]
-
-/// 半角 CJK 标点 → 全角。ICU 会把 `「」、。` 归一成 `｢｣､｡`（U+FF61–FF65），
-/// 罗马字那一行要跟原文同一套宽度，否则 `｢ ... ､` 看起来像乱码。
-let japaneseFullwidthPunctuation: [Character: Character] = [
-    "｡": "。", "｢": "「", "｣": "」", "､": "、", "･": "・", "ｰ": "ー"
-]
+// ⚠️ macron 归一表 / 半角 CJK 标点表 / 拼音标记 / 转写清洗都搬去了
+// `JapaneseTokenRomaji.swift`（纯函数，进得了 CI 的 `swiftc` 单文件组合）。
+// 这里只留"分词 + 分写"这一层，它依赖 `CFStringTokenizer`，CI 里跑不了。
 
 /// 这个 token 是不是"上一个词的尾巴"，要黏上去而不是另起一个词。
 ///
@@ -325,55 +302,6 @@ func japaneseGluesToPrevious(_ token: String) -> Bool {
         return true
     }
     return false
-}
-
-func japaneseContainsPinyinMarker(_ text: String) -> Bool {
-    for ch in text {
-        if "áéíóúàèìòùǎěǐǒǔǖǘǚǜüńňǹḿ\u{0301}\u{0300}\u{030C}".contains(ch) {
-            return true
-        }
-    }
-    return false
-}
-
-/// 清洗 CFStringTokenizer 对含汉字 token 的转写：去掉促音产生的 "~"、
-/// 把 "~tsu + 辅音" 修正为辅音双写、折叠内部空格。
-func japaneseSanitizeTranscription(_ text: String, original: String) -> String {
-    var s = text
-        .replacingOccurrences(of: "～", with: "~")
-        .replacingOccurrences(of: "〜", with: "~")
-
-    // macron → ASCII 双元音：ICU 的汉字转写会带 `chīsana` / `ā`，与本仓库的
-    // `koohii` 风格冲突。归一之后整行只有一套写法。
-    for (macron, plain) in japaneseMacronExpansions {
-        s = s.replacingOccurrences(of: macron, with: plain)
-    }
-
-    // 半角 CJK 标点 → 全角（ICU 会把「」、。 吐成 ｢｣､｡）。
-    s = String(s.map { japaneseFullwidthPunctuation[$0] ?? $0 })
-
-    s = s.replacingOccurrences(of: "~tsu\\s*(ch)", with: "tch", options: .regularExpression)
-    s = s.replacingOccurrences(of: "~tsu\\s*([kstnhmrgyzwbdpfjvc])", with: "$1$1", options: .regularExpression)
-    s = s.replacingOccurrences(of: "~", with: "")
-
-    // 附着在名词 token 末尾的助词：「私は」这类 tokenizer 没拆出来的 は/へ，
-    // 转写以 ha/he 结尾时改读 wa/e，并保留助词前的空格。
-    var particleSuffix: String? = nil
-    if original.hasSuffix("は"), s.hasSuffix("ha") {
-        s = String(s.dropLast(2)) + "wa"
-        particleSuffix = "wa"
-    } else if original.hasSuffix("へ"), s.hasSuffix("he") {
-        s = String(s.dropLast(2)) + "e"
-        particleSuffix = "e"
-    }
-
-    s = s.replacingOccurrences(of: " ", with: "")
-
-    if let suffix = particleSuffix, s.hasSuffix(suffix) {
-        s = String(s.dropLast(suffix.count)) + " " + suffix
-    }
-
-    return s
 }
 
 /// 归一化 token 之间的间隙：把全角空格（U+3000）等 Unicode 空白折叠成

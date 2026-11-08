@@ -126,24 +126,21 @@ extension String {
                 continue
             }
 
-            var romaji: String
-            if japaneseIsPureKana(original) {
-                romaji = japaneseKanaRomaji(original, pendingGeminate: &pendingGeminate)
-            } else {
-                pendingGeminate = false
-                if let transcription = CFStringTokenizerCopyCurrentTokenAttribute(
+            // 取转写只在"含日文字符"时才做：纯拉丁 token（`around`、`'t`）ICU 也会给一个
+            // 片假名读音（`araundo`、`ton`），那条路现在由 `japaneseTokenRomaji` 原样透传。
+            var transcription: String?
+            if japaneseTokenKind(original) == .japanese {
+                transcription = CFStringTokenizerCopyCurrentTokenAttribute(
                     tokenizer, kCFStringTokenizerAttributeLatinTranscription
-                ) as? String, !japaneseContainsPinyinMarker(transcription) {
-                    romaji = japaneseSanitizeTranscription(transcription, original: original)
-                } else {
-                    romaji = original
-                }
+                ) as? String
             }
 
-            // 助词 は/へ 的特殊读音
-            // 汉字词的读音修正（`私` → `watashi`，见 `japaneseWordOverrides`）
-            if let override = japaneseWordOverrides[original] { romaji = override }
+            // 假名 / 汉字 / 拉丁三条路 + 汉字读音修正 + 跨 token 促音，全在 `japaneseTokenRomaji` 里。
+            var romaji = japaneseTokenRomaji(
+                original, transcription: transcription, pendingGeminate: &pendingGeminate
+            )
 
+            // 助词 は/へ 的特殊读音
             if japaneseParticles.contains(original) {
                 romaji = japaneseParticleOverrides[original] ?? romaji
             }
@@ -243,21 +240,18 @@ extension String {
                 continue
             }
 
-            var romaji: String
-            if japaneseIsPureKana(original) {
-                romaji = japaneseKanaRomaji(original, pendingGeminate: &pendingGeminate)
-            } else {
-                pendingGeminate = false
-                if let transcription = CFStringTokenizerCopyCurrentTokenAttribute(
+            // 与 `toJapaneseRomaji` 同一条路：纯拉丁 token 不取转写，汉字读音修正与
+            // 跨 token 促音都由 `japaneseTokenRomaji` 统一处理。
+            var transcription: String?
+            if japaneseTokenKind(original) == .japanese {
+                transcription = CFStringTokenizerCopyCurrentTokenAttribute(
                     tokenizer, kCFStringTokenizerAttributeLatinTranscription
-                ) as? String, !japaneseContainsPinyinMarker(transcription) {
-                    romaji = japaneseSanitizeTranscription(transcription, original: original)
-                } else {
-                    romaji = original
-                }
+                ) as? String
             }
-            // 汉字词的读音修正（`私` → `watashi`，见 `japaneseWordOverrides`）
-            if let override = japaneseWordOverrides[original] { romaji = override }
+
+            var romaji = japaneseTokenRomaji(
+                original, transcription: transcription, pendingGeminate: &pendingGeminate
+            )
 
             if japaneseParticles.contains(original) {
                 romaji = japaneseParticleOverrides[original] ?? romaji

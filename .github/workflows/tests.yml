@@ -296,6 +296,25 @@ jobs:
                  -o kugou-romaji-repair-tests
           ./kugou-romaji-repair-tests
 
+      # 显示层那条罗马字路（`toJapaneseRomaji` / `japaneseRomajiChunks`）依赖
+      # `CFStringTokenizer`，在 CI 里跑不了 —— 本仓库没有 Mac，也就没有第二个地方能在
+      # 打包之前看"罗马字那一行到底长什么样"。所以 2026-11-08 把**拿到转写之后**那一段
+      # 抠成了纯函数 `JapaneseTokenRomaji.swift`（假名/汉字/拉丁分流 + 转写清洗 + 跨 token
+      # 促音 + 读音覆盖表），两个循环都调它，这里钉它的契约。
+      #
+      # 断言里的输入全是真机日志 168 的 `i.tok` 行逐字抄下来的，不是合成用例：
+      #   · `around` / `'t` —— ICU 会把纯拉丁 token 按片假名读成 `araundo` / `ton`（真错）；
+      #   · `続く` —— ICU 的 `づ` 写成 `dz`（`tsudzuku`）；
+      #   · `食らっ` —— 汉字 token 末尾的 `っ` 被读成 `tsu`，促音要传给下一个 token；
+      #   · `騙る` —— 官方轨给 `damaru`、本地给 `kataru`，**本地才对**，钉住别照官方改。
+      - name: Japanese token romanization (display path, pure part)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/JapaneseKanaRomanization.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/JapaneseTokenRomaji.swift \
+                 Tests/JapaneseTokenRomaji/main.swift \
+                 -o japanese-token-romaji-tests
+          ./japanese-token-romaji-tests
+
       # ICU 的日文音译（`ja_Hrkt_ja_Latn_BGN`）能不能用 —— 这是"要不要把假名层交给系统 ICU"
       # 这件事唯一的前置未知项。规则文件只有 12 KB、随系统 ICU 走（零包体），但
       # `StringTransform(rawValue:)` 是公开 API ≠ 这条 transform 一定被编进了 iOS 的 ICU 数据。
