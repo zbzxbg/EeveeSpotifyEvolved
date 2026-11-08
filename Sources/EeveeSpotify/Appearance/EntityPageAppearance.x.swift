@@ -1020,7 +1020,11 @@ enum EntityPageAppearance {
     // · **艺人页**：让 Spotify 那张小封面让位，铺我们自己的满幅照片（`ensureSharpHero`）；
     // · **专辑 / 歌单页**：**保留 Spotify 自己那张封面卡片**（只把圆角改成 AM 的连续圆角）。
     private static func ensureHero(on target: Target, sharpCover: Bool) {
-        guard let cover = target.cover else { return }
+        // **满幅家族（官方编辑歌单）没有方形封面 id** ⇒ `target.cover` 是 nil，直接 return 的话
+        // 这一页就永远没有 hero（只剩页头那条 96pt 的 fade strip —— 中间那条平暗带）。
+        // 页头那边每拍会把那张满幅图写在 `fullbleedPictureView` 上，用它兜底。
+        let cover = target.cover ?? fullbleedCover(in: target.page)
+        guard let cover else { return }
 
         if sharpCover {
             // ⚠️ 不要在这里调 `concealNativeCover(cover)`（"图还没到也要先把 Spotify 那张小封面藏掉"）。**删掉**：
@@ -1107,6 +1111,16 @@ enum EntityPageAppearance {
         } else if let artistContainer, artistContainer.bounds.height > 40 {
             host = artistContainer
             layout = artistContainer
+            fillsHost = true
+            wantsTopInset = false
+        } else if let fullbleed = fullbleedContainer(for: cover, in: page) {
+            // **第四个宿主：满幅家族**（官方编辑歌单 / This Is 那种）。
+            //
+            // 这一族三样都没有：没有 `PL.Header`（所以 `washPlane` 找不到）、
+            // 没有 `CreativeWorkHeader`、没有 `HeaderContainer`。图就挂在一个普通容器里，
+            // 我们的页头也插在同一个容器里 ⇒ hero 放到 index 0 就自然在图下面、字上面。
+            host = fullbleed
+            layout = headerLayout(of: cover) ?? fullbleed
             fillsHost = true
             wantsTopInset = false
         } else {
@@ -1760,6 +1774,28 @@ enum EntityPageAppearance {
         guard let host = EntityPageHeaderManager.headerHost,
               picture.isDescendant(of: host) || host.isDescendant(of: picture) else { return nil }
         return firstImageView(in: picture)?.image
+    }
+
+    /// 满幅家族的那张图（**只认这一页里的**）。
+    ///
+    /// `fullbleedPictureView` 是弱引用，换页时可能还指着上一页 ⇒ 除了 `window != nil`，
+    /// 还要判它和 `page` 的祖先关系。
+    private static func fullbleedCover(in page: UIView) -> UIView? {
+        guard let picture = fullbleedPictureView, picture.window != nil else { return nil }
+        guard picture.isDescendant(of: page) || page.isDescendant(of: picture) else { return nil }
+        return picture
+    }
+
+    /// 满幅家族里 hero 的宿主：那张图的**直接父视图**。
+    ///
+    /// 排除两种：整页（高度接近 `page`，hero 会盖到列表下面）与 `UIScrollView`
+    /// （那是列表本身，插进去会被滚走）。
+    private static func fullbleedContainer(for cover: UIView, in page: UIView) -> UIView? {
+        guard let container = cover.superview, container.bounds.height > 40 else { return nil }
+        if container is UIScrollView { return nil }
+        if container === page { return nil }
+        if container.bounds.height > page.bounds.height * 0.9 { return nil }
+        return container
     }
 
     // MARK: - ③ 藏掉 Spotify 自己那些按键
