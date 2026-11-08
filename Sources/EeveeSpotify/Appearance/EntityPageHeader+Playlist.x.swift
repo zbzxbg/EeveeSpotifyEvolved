@@ -319,13 +319,14 @@ extension EntityPageHeaderManager {
         // 这三颗都走 `findControl` —— 按 id 拿到的是包装层时，点了没反应。
         let shuffle = findControl("Components.UI.ShuffleButton", in: block, cache: &cachedShuffle)
         // Play 的挂点比另外两颗多一层不确定性：普通歌单页它在 `PL.Header` 里，而**满幅页头**
-        // （官方编辑歌单那一族）把它挂在 block / 布局层，`headerRoot` 里一个都没有。
-        // 只认 headerRoot 的后果就是 `play missing` —— 界面上剩一个空胶囊（现场见 2026-11-08 的日志）。
-        // 依次退：headerRoot → block → 整个布局层；三档都找不到才留空（那时 `updateRow` 会把
-        // 我们那颗也藏起来，宁可没有，也不要一个点不动的空壳）。
+        // （官方编辑歌单那一族）把它挂在**页面根**上，`headerRoot` 退到的是最近那个 cell，
+        // Play 在 cell 外面 ⇒ 只认 headerRoot 就是 `play missing`（空胶囊的现场）。
+        //
+        // 所以先在窄根找（便宜），找不到再退到页面根 —— 判据只看"这颗控件到底在哪一层"，
+        // 不依赖任何特定版本的类名。
+        let playRoot = playlistPageRoot(of: layout) ?? headerRoot
         let play = findControl("header-play-button", in: headerRoot, cache: &cachedPlay)
-            ?? findControl("header-play-button", in: block, cache: &cachedPlay)
-            ?? findControl("header-play-button", in: layout, cache: &cachedPlay)
+            ?? findControl("header-play-button", in: playRoot, cache: &cachedPlay)
         let save = findControl("Components.UI.AddToButton", in: block, cache: &cachedTrailing)
         // download 也必须钻到真正的 `UIControl`（同上面三颗）—— "已点赞的歌曲"那一页走的正是它。
         let download = save == nil
@@ -479,6 +480,25 @@ extension EntityPageHeaderManager {
 
     /// 这一页是不是**歌单页**（普通 / This Is / 电台都算）。
     ///
+    /// 页面根：沿 responder chain 找到的**第一个 VC 的 view**。
+    ///
+    /// 为什么需要它：Play 在满幅歌单页上挂在**页面根**，不在 `headerRoot` 里
+    /// （`headerRoot` 那一档退到的是最近那个 `UICollectionViewCell`，Play 在 cell 外面）。
+    /// 这是从真机日志推出来的结构事实：`play missing` 只出现在 `headerRoot` 是 cell 的那几页，
+    /// 而同一页上 Play 的 `layoutSubviews` 钩子照样会来 —— 说明它在页面的另一层。
+    ///
+    /// 我们只在**找 Play** 时用它，页头布局仍然用窄根 —— 页面根太大，当布局锚点会抖。
+    static func playlistPageRoot(of view: UIView) -> UIView? {
+        var responder: UIResponder? = view
+        var hops = 0
+        while let current = responder, hops < 60 {
+            if let controller = current as? UIViewController { return controller.viewIfLoaded }
+            responder = current.next
+            hops += 1
+        }
+        return nil
+    }
+
     /// taurus 的判据：responder chain 上**第一个 VC** 的类名含 `FreeTierPlaylist`。这里多认一条
     /// `PL.Header` 祖先 —— 普通歌单页那条路走的就是这个祖先，不让它因为 VC 换名而失效。
     ///
