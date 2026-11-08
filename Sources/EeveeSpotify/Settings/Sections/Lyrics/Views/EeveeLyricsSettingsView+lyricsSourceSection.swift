@@ -70,8 +70,9 @@ extension EeveeLyricsSettingsView {
         text.append("\n\n")
         text.append("lyrics_additional_info".localized)
 
-        // 三个源的介绍里带官网地址（amll.dev / spicylyrics.org / unison.boidu.dev），
-        // 文案写成 markdown 链接，这里按行内语法解析成可点文本。
+        // 每个源的介绍都是 **源名本身** 带 markdown 链接（`[AMLL](https://amll.dev)：…`），
+        // 不是"正文末尾再补一句 Visit …"。两种写法的信息量一样，但前者点的是它自己那个词，
+        // 后者要在同一段里再扫一眼才知道链接指谁 —— 十一个源堆在一个 footer 里时尤其明显。
         // 解析失败退回纯文本 —— 一个链接不值得让整块页脚消失。
         let markdown = try? AttributedString(
             markdown: text,
