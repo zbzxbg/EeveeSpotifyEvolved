@@ -317,6 +317,9 @@ let japaneseFullwidthPunctuation: [Character: Character] = [
 /// 助词单独判：`は` `を` 这些必须留空格，否则 `私は` 会变成 `watashiwa`。
 func japaneseGluesToPrevious(_ token: String) -> Bool {
     guard let first = token.first else { return false }
+    // 「お / ご」是**前缀**：它自己另起一个词、后面的才黏（`ほら おいで` → hora oide）。
+    // 不排掉的话单假名规则会把它粘到前一个词上（`horaoide`）。
+    if japanesePrefixes.contains(token) { return false }
     if "っッゃゅょャュョぁぃぅぇぉァィゥェォー".contains(first) { return true }
     if token.count == 1, japaneseIsPureKana(token), !japaneseParticles.contains(token) {
         return true
