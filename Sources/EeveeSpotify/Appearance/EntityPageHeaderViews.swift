@@ -72,6 +72,14 @@ final class EntityPageHeaderButton: UIControl {
     /// ⇒ 这一颗**跳过第 ① 档**（送 target/action），直接走手势那一档（见 `eeveeFire` 的三档）。
     var skipsControlAction = false
 
+    /// 这一颗的状态**读不出来**，点一下之后自己记住开 / 关。
+    ///
+    /// shuffle 就是这种：日志里点完仍是 `isSelected=false selectedTrait=false`，
+    /// 但播放时确实按随机走了 —— 它靠**字形变绿**表示开启，而那个信号拿不到。
+    /// 不自己记的话，按钮永远不变色，用户会以为"点了没反应"。
+    var optimisticallyToggles = false
+    private var optimisticOn = false
+
     /// （点击后**跳转到关于艺人模块**）：这一颗点下去要**先把源滚进视野**
     /// 再转发 —— 艺人页的"关于"（`SPTArtistAboutBiographyView`）在列表很下面，只转发不滚动的话
     /// 什么都看不见。由调用方按需打开。
@@ -122,7 +130,7 @@ final class EntityPageHeaderButton: UIControl {
     }
 
     private func refreshTint() {
-        let isOn = eeveeIsOn(source)
+        let isOn = optimisticallyToggles ? optimisticOn : eeveeIsOn(source)
         glyphView.tintColor = isOn ? onGlyphColor : glyphColor
         // （如果艺人已经关注了，它应该是有**绿色描边**的，但现在没有）：
         // Spotify 自己的"已关注"就是**绿字 + 绿描边**，AM 那颗收藏键也是描边态
@@ -225,6 +233,13 @@ final class EntityPageHeaderButton: UIControl {
         if role == "more", path.hasPrefix("NOTHING"), let target {
             let activated = target.accessibilityActivate()
             path += activated ? " | accessibilityActivate=true" : " | accessibilityActivate=false"
+        }
+
+        // shuffle 的状态读不出来（见 `optimisticallyToggles`）：只要这一拍**真的发出了控制事件**，
+        // 就自己翻一次，给用户一个"按下去了"的反馈。发不出去时不翻 —— 按钮不能说谎。
+        if optimisticallyToggles, path.hasPrefix("activate.") || path.hasPrefix("UIControl.") {
+            optimisticOn.toggle()
+            refreshTint()
         }
 
         // ⚠️ 不要在这些字符串**插值里写引号**：`swift_member_check.py` 的去字符串扫描器会提前
@@ -741,6 +756,8 @@ final class EntityPageHeaderView: UIView {
         // 分不出用户点的是左边那颗还是右边那颗（他报告"右边那颗和原生按钮重合"时，
         // 这一条恰恰是最该看清的）。下一份日志会写成 `tapped (role trailing, source …)`。
         shuffleButton.role = "shuffle"
+        // shuffle 的开关状态只能靠"点一下自己记"（见 `optimisticallyToggles`）。
+        shuffleButton.optimisticallyToggles = true
         trailingButton.role = "trailing"
         trailingButton.fallbackGlyph = trailingFallback
         trailingButton.prefersFallbackGlyph = trailingPrefersFallback
