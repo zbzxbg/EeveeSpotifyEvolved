@@ -818,11 +818,45 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
         }
     }
 
+    // Ad and upsell cohort flags arrive as boolean assigned values, independent
+    // of the ad services: the app is told to show a surface even when the
+    // service itself is dead. Flip the enabled booleans whose scope or name
+    // carries an ad or upsell token.
+    for index in values.indices {
+        let scope = values[index].propertyID.scope.lowercased()
+        let name = values[index].propertyID.name.lowercased()
+        guard let structured = values[index].structuredValue,
+              case .boolValue(let b) = structured,
+              b.value else { continue }
+        if isCohortAdOrUpsellFlag(scope: scope, name: name) {
+            values[index].boolValue = BoolValue.with { $0.value = false }
+            writeDebugLog("[ORACLE][COHORT_FLAG_KILLED] \(scope).\(name)")
+        }
+    }
+
     if FlagOverrideStore.count > 0 {
         writeDebugLog("[Flags] user overrides in effect: \(FlagOverrideStore.count)")
     }
 
     reportLyricsReplacementOutcome(values)
+}
+
+/// Whether a boolean assigned value names an ad or upsell surface. Scope and
+/// name are split on non-alphanumerics and compared as whole words, so a longer
+/// identifier that merely contains "ad" as a substring cannot match. Flags that
+/// start with `disable_` already mean off, and `dismissible` / `skip_button`
+/// describe how a surface behaves rather than whether it is enabled.
+private func isCohortAdOrUpsellFlag(scope: String, name: String) -> Bool {
+    if name.hasPrefix("disable_") || name.contains("dismissible") || name.contains("skip_button") {
+        return false
+    }
+    let tokens = "\(scope).\(name)".split { !$0.isLetter && !$0.isNumber }.map(String.init)
+    let adTokens: Set<String> = [
+        "ad", "ads", "adsbase", "adsswift", "adonappopen", "instreamads",
+        "leavebehind", "leavebehinds", "leavebehindadsbase", "marquee",
+        "upsell", "upsells", "sponsored", "adssponsoredcontext", "realtimead"
+    ]
+    return tokens.contains { adTokens.contains($0) }
 }
 
 /// **档位核心**：服务器就算一颗都没发，这几颗也必须写 —— 它们决定"App 认为自己是会员"。
