@@ -7,9 +7,9 @@ import Foundation
 /// 打包之前验证"罗马字那一行到底长什么样"。这个文件把**拿到转写之后**那一段纯函数
 /// 抠出来钉住：ICU 给什么字符串是系统的自由，我们把它改成什么，是自己的契约。
 ///
-/// 下面每一条的 `original` / `transcription` 都不是编的：它们逐字抄自 2026-11-08 的
-/// 真机日志 168（`[RomajiDump]` 的 `i.tok` 行，`原文→转写`），括号里注明第几行。
-/// 用真实样本的理由和 `Tests/KuGouRomaji` 一样：合成用例只能证明"我以为的形状"。
+/// 下面每一条的 `original` / `transcription` 都不是编的：它们逐字抄自真机 `[RomajiDump]`
+/// 的 `i.tok` 行（`原文→转写`），也就是 `CFStringTokenizer` 在这台设备上的真实输出。
+/// 合成用例只能验证设想中的形状，真实 dump 才能暴露它实际吐什么。
 
 var failures = 0
 
@@ -27,7 +27,7 @@ func romaji(_ original: String, _ transcription: String?, pending: inout Bool) -
     japaneseTokenRomaji(original, transcription: transcription, pendingGeminate: &pending)
 }
 
-// MARK: - 纯拉丁 token 必须原样透传（日志 168 第 30 / 10 行）
+// MARK: - 纯拉丁 token 必须原样透传
 
 // `jump around` 里的 `around`：ICU 的 ja 分词器按片假名给了 `araundo`。
 // 曾经整行变成 `jump araundo`。
@@ -50,7 +50,7 @@ require(japaneseTokenKind("東京") == .japanese, "kind: 東京 is japanese")
 require(japaneseTokenKind("しんよう") == .kana, "kind: しんよう is kana")
 require(japaneseTokenKind("々") == .japanese, "kind: the iteration mark is japanese")
 
-// MARK: - づ 的 ICU 写法是 dz（日志 168 第二首第 0 行）
+// MARK: - づ 的 ICU 写法是 dz
 
 // 続く → 曾经 `tsudzuku`。本仓库与官方轨都写 `zu`。
 var p4 = false
@@ -58,7 +58,7 @@ require(romaji("続く", "tsudzuku", pending: &p4) == "tsuzuku", "dz: 続く →
 var p5 = false
 require(romaji("続けて", "sudzukete", pending: &p5) == "suzukete", "dz: 続けて → suzukete")
 
-// MARK: - 汉字 token 末尾的 っ（日志 168 第一首第 27 行）
+// MARK: - 汉字 token 末尾的 っ
 
 // `食らっちゃいな`：tokenizer 切 `食らっ` + `ちゃい` + `な`，`食らっ` 的转写是 `kuratsu`。
 // 曾经整行 `kuratsuchai na`，官方轨是 `kura'tcha i na`。

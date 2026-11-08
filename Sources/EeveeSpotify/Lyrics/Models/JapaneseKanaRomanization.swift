@@ -8,7 +8,7 @@ import Foundation
 /// "官方那行对、本地那行错"。现在只有这里一份，两个调用方只差一个策略参数。
 ///
 /// ── 为什么不交给系统 ICU
-/// 2026-11-08 的 CI 实测（`Tests/JapaneseRomanizationProbe`）：
+/// CI 实测（`Tests/JapaneseRomanizationProbe`，可随时重跑）：
 /// · `ja_Hrkt_ja_Latn_BGN` 能解析、但**恒等变换**（精简构建，规则数据没编进去）；
 /// · `Hiragana-Latin` / `toLatin` 确实在转，但 `toLatin` 对汉字给的是**拼音**、输出是
 ///   macron 风格（`kōhī`），而且 ICU 数据在 macOS 与 iOS 上不一定一致 ——

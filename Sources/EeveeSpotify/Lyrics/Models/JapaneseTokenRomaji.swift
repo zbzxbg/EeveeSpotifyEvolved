@@ -11,14 +11,13 @@ import Foundation
 /// `japaneseRomajiChunks`），和当初假名表被抄两份是同一类隐患：改一处忘另一处，
 /// 屏幕上那行与逐字对齐那行就对不上。现在两个循环都调这里。
 ///
-/// ── 为什么汉字读音不继续加表（2026-11-08 日志 168 的结论）
-/// 拿 168 里 67 行有官方 `romalrc` 对照的歌词逐行比，17 行有差异，其中**真错只有
-/// 4 行**（`刃`→`jin`、`二枚`→`futa mai`、`十色`→`juu shoku`、`食らっ`→`kuratsu`），
-/// 其余是官方自己更差（`絆され`→`kizuna sarete`、`揺蕩う`→`youtouu`、`低音狂`→`kuru`）
-/// 或长音惯例不同（官方丢 `ー`）。**那 4 行里有 3 行是多音词/分词歧义**
-/// （`刃` は/やいば/じん、`行` こう/ぎょう、`十色` といろ）—— 整 token 精确匹配的表
-/// 救不了它们，硬写一个读音会把别的歌读坏（`君` 那条注释就是这个道理）。
-/// 所以这里只做**系统性**的三件事，剩下的留给官方轨。
+/// ── 为什么汉字读音只做三件事，不继续加词表
+/// 汉字读音的错分两类。一类是**可枚举的系统性错误**：纯拉丁 token 被按片假名读
+/// （`around` → `araundo`）、`づ` 被写成 `dz`（`続く` → `tsudzuku`）、汉字词末尾的 `っ`
+/// 被读成 `tsu`（`食らっ` → `kuratsu`）—— 这三条都在本文件里修掉，与具体哪首歌无关。
+/// 另一类是**多音词与分词歧义**：`刃` は/やいば/じん、`行` こう/ぎょう、`十色` といろ，
+/// 同一个 token 在不同歌里读音不同。整 token 精确匹配的表救不了它们，硬写一个读音
+/// 会把别的歌读坏（见 `japaneseWordOverrides` 里 `君` 那段）。剩下的交给官方 `romalrc`。
 enum JapaneseTokenKind {
     /// 纯假名 ⇒ 走 `japaneseKanaRomaji`。
     case kana
@@ -55,9 +54,9 @@ let japaneseFullwidthPunctuation: [Character: Character] = [
 /// 判据是**整 token 精确匹配**：`私立` 那种合成词 tokenizer 给的是一个 token，打不中；
 /// `私たち` 会被切成 `私` + `たち`，于是 `watashi` + `tachi` —— 正是要的结果。
 ///
-/// ⚠️ 加一条之前先看 `[RomajiDump]` 日志：**同一个词在不同歌里读音不同**的，一律不加。
-/// 2026-11-08 日志 168 里 `騙る` 被官方轨写成 `damaru`、本地是 `kataru` —— 本地才是对的
-/// （`騙る`＝かたる，`騙す`＝だます），差一点就照官方把它写进这张表。
+/// ⚠️ 加一条之前先看真实 dump（`[RomajiDump]`）：**同一个词在不同歌里读音不同**的，一律不加。
+/// 也别照着官方 `romalrc` 抄 —— 它自己会错：`騙る` 被写成 `damaru`，而 `騙る` 是かたる
+/// （`騙す` 才是だます），本地给 `kataru` 才是对的。
 let japaneseWordOverrides: [String: String] = [
     "私": "watashi"
 ]
@@ -65,7 +64,7 @@ let japaneseWordOverrides: [String: String] = [
 /// 这个 token 里有没有日文字符（汉字 / 假名 / 々 之类）。
 ///
 /// 用来挡一类**真错**：ICU 的 ja 分词器把纯拉丁 token 也按片假名读出来，
-/// 于是 `around` → `araundo`、`'t` → `ton`（日志 168 第 30 / 10 行）。
+/// 于是 `around` → `araundo`、`'t` → `ton`。
 /// 这类 token 根本没有"读音"可转，原样透传才对。
 func japaneseContainsJapaneseScript(_ text: String) -> Bool {
     text.unicodeScalars.contains { scalar in
@@ -108,7 +107,7 @@ func japaneseSanitizeTranscription(_ text: String, original: String) -> String {
     }
 
     // `づ` / `ず` 的 ICU 写法是 `dz`（`続く` → `tsudzuku`、`続けて` → `sudzukete`），
-    // 而本仓库与官方轨都写 `zu`。日志 168 里两处 `dz` 全是 `続く`。
+    // 而本仓库与官方轨都写 `zu`。
     // 这条放在拉丁透传之后 ⇒ 不会误伤英文 token。
     s = s.replacingOccurrences(of: "dz", with: "z")
     s = s.replacingOccurrences(of: "Dz", with: "Z")

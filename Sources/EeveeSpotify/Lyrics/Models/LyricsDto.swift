@@ -155,7 +155,7 @@ struct LyricsDto {
             // 由**我们自己的渲染层**画在原文**上方**（`LyricLinesAdapter` 的
             // `LyricLine.romanization` → `SynchronizedLyricText` 上方那一行）。
             //
-            // 现在的口径（用户定的）：原生那页回到原文，罗马字只由我们这层画。
+            // 口径：原生那页回到原文，罗马字只由我们这层画。
             // 数据来源没有变少：`LyricsDto` 里仍是无损原文，显示层照旧自己算罗马字
             // （`romanizedForWordByWordIfEnabled` / `romanizedContentsForDisplay`）。
             //

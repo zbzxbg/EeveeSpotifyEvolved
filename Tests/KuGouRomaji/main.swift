@@ -175,9 +175,9 @@ require(JapaneseRomajiRepair.repairedWordGroups([]) != nil,
 
 // MARK: - 假名层（共享实现）：外来音 / ん / 促音 / 長音
 //
-// 这一组钉的是 `JapaneseKanaRomanization.swift`（2026-11-08 起全仓唯一的一份假名表）。
-// 参考值不是编的：一半来自 ICU `toLatin` 的实测输出（`pātī` / `shea` / `shin'you` 证明
-// 这些是标准读法），一半是同一套读音的 ASCII 写法（长音写双元音，与官方轨观感一致）。
+// 这一组钉的是 `JapaneseKanaRomanization.swift`（全仓唯一的一份假名表）。
+// 参考值取自 ICU `toLatin` 的输出（`pātī` / `shea` / `shin'you` 都是标准读法），
+// 再换成同一套读音的 ASCII 写法（长音写双元音，与官方轨观感一致）。
 //
 // ⚠️ 这些用例**只能走整 token 那条路**：酷狗逐字档会把 `ティ` 拆成两个组，
 // 组数不能变 ⇒ 修不了。见 `JapaneseRomajiRepair.romanizeKanaRun` 的说明。

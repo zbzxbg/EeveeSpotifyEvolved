@@ -491,7 +491,7 @@ extension EntityPageHeaderManager {
                 + ", followSignals \(eeveeOnSignals(follow))"
         )
 
-        // 找「最新发行 / 艺人之选」用（用户不想开转储视图树）。
+        // 日志里带上「最新发行 / 艺人之选」的区块 id。
         probeArtistPageSections(in: page)
     }
 
