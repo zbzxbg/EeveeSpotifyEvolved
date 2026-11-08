@@ -187,13 +187,14 @@ lyrics_auto_translate = "本机歌词翻译";
 lyrics_auto_translate_description = "歌词源没有给出译文时，用iOS自带翻译框架翻译当前歌词行，翻译质量可能欠佳。系统版本最低需要iOS26，并先在「设置 → App → 翻译 → 语言」里下好语言。歌词源自带的译文不会被替换。";
 lyrics_offset_current_song = "当前歌曲";
 lyrics_offset_clear_all = "清除全部歌词偏移";
-lyrics_offset_description = "对所有歌词源生效（Genius 除外）。正数表示歌词延后显示；每一条都按「歌曲 + 歌词来源」单独保存，换歌、换源、重开 App 都还在。";
+lyrics_offset_description = "对所有歌词源生效（Genius 除外）。正数表示歌词延后显示。";
 lyrics_offset_title = "歌词偏移";
 lyrics_offset_reset = "重置这一首";
 lyrics_offset_done = "完成";
 settings_sub_lyrics_offset = "按歌曲与来源微调时间轴";
-lyrics_offset_no_track = "当前这首歌还没有可调的偏移：还没拿到我们自己的歌词。播放一首能取到歌词的歌再进来。";
-lyrics_offset_genius_excluded = "Genius 不参与歌词偏移：它的歌词没有可信的时间轴，挪了也对不齐。换一个歌词来源再调。";
+lyrics_offset_no_track = "当前歌曲似乎正在取词或无歌词。";
+lyrics_offset_genius_excluded = "Genius歌词无时间轴，所以不参与时间偏移。";
+lyrics_offset_player_hint = "歌词偏移可在听歌页样式选择Apple Music式时长按歌词按钮快速调节。";
 lyrics_offset_saved = "已保存的歌词偏移";
 lyrics_offset_search = "搜索歌名、歌手、歌词来源或曲目 id";
 lyrics_offset_no_matches = "没有匹配的条目";
@@ -654,7 +655,6 @@ now_playing_style_spotify = "Spotify原生";
 now_playing_style_immersive = "沉浸式";
 now_playing_style_apple_music = "Apple Music 式";
 now_playing_style_description = "若选择Spotify原生、则不更改听歌页。若选择沉浸式，则听歌页仿照kumone。若选择Apple Music式，则听歌页仿照Apple Music。";
-now_playing_layout_footer = "关掉总开关即逐项还原；隐藏官方单行歌词要重启Spotify。";
 // ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见

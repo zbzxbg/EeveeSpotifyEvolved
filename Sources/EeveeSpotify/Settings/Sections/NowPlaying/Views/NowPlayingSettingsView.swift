@@ -46,16 +46,11 @@ struct NowPlayingSettingsView: View {
         List {
             Section(
                 header: Text("now_playing_section".localized),
-                // 「关掉即还原」和"官方单行歌词要重启"这两句放在节脚：它们说的是整页的行为，
-                // 挂在标题下面会把第一行撑得过高。
-                //
-                // 三档各自的语义写在这里（与「首页顶部样式」那条 footer 同一做法）。
+                // 三档各自的语义放在节脚：它说的是整页的行为，挂在标题下面会把
+                // 第一行撑得过高（与「首页顶部样式」那条 footer 同一做法）。
                 // 选项名只是三个短词，不放长句 —— `Picker` 行尾会显示当前选中值，
                 // 414pt 上长名字会被截断（`home_header_style` 那次踩过，见那个文件头）。
-                footer: VStack(alignment: .leading, spacing: 6) {
-                    Text(styleDescriptionText)
-                    Text("now_playing_layout_footer".localized)
-                }
+                footer: Text(styleDescriptionText)
             ) {
                 // （给那两个修改的做成这样（类似艺人简介展示）的选择方式，
                 // 三个选项：Spotify 原生 + 另外两个）：**两颗互斥的 Toggle → 一个三态 Picker**。

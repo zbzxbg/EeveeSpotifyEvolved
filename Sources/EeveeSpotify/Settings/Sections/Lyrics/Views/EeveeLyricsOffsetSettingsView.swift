@@ -109,7 +109,10 @@ struct EeveeLyricsOffsetSettingsView: View {
                 .buttonStyle(.borderless)
             }
         } footer: {
-            Text("lyrics_offset_description".localized)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("lyrics_offset_description".localized)
+                Text("lyrics_offset_player_hint".localized)
+            }
         }
     }
 

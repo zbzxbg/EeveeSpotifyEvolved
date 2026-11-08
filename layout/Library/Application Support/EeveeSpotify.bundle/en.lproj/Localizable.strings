@@ -195,6 +195,7 @@ lyrics_offset_done = "Done";
 settings_sub_lyrics_offset = "Per-song, per-source lyric timing";
 lyrics_offset_no_track = "Nothing to adjust yet — the current track has no lyrics from our sources. Open this page while playing a track whose lyrics load.";
 lyrics_offset_genius_excluded = "Genius does not use lyrics offset: its lyrics have no trustworthy timeline, so shifting them would not line anything up. Switch to another lyrics source to adjust.";
+lyrics_offset_player_hint = "With the now-playing style set to Apple Music, long-press the lyrics button to adjust the offset there.";
 lyrics_offset_saved = "Saved lyrics offsets";
 lyrics_offset_search = "Search title, artist, lyrics source or track id";
 lyrics_offset_no_matches = "No matching entries";
@@ -671,8 +672,6 @@ now_playing_style_description = "Spotify = the stock player. Immersive = the pla
 // five names below, so those translations stay the single source of truth.
 // 2026-10-30: the old toggle labels (now_playing_layout / now_playing_ios27 /
 // now_playing_ios27_description) are gone; the picker uses now_playing_style_* instead.
-// These two "layout" keys are still live: the picker's second line and footer reuse them.
-now_playing_layout_footer = "Turning the master switch off restores everything; the hidden official one-line lyrics return after a restart.";
 // One screen: every card under the player is folded away and the list is pinned to its top,
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
