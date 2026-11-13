@@ -10,6 +10,12 @@ import UIKit
 /// 为什么挂在这里而不是"每 0.3 秒自己设一遍"：Now Playing 是**系统**的状态，
 /// Spotify 才是它的主人。我们只在它写的时候搭一段，不抢所有权 —— 也就不会和
 /// 播放进度、锁屏控制那些字段打架。
+///
+/// ⚠️ **getter 也要挂**：Spotify 会读回 `MPNowPlayingInfoCenter.nowPlayingInfo`
+/// （widget / now-playing 观察者链）。读回的那份如果带着我们加的键，它就会把
+/// `MPMediaItemAnimatedArtwork` 当成自己的状态去做后续处理，最后卡在内部队列上
+/// （真机上是主线程 `scene-update` watchdog）。所以 getter 只交出 Spotify 自己
+/// 最后写的那份字典 —— 与 spoti.pw 那边的做法一致。
 struct LockScreenArtworkGroup: HookGroup {}
 struct LockScreenArtworkPrivateGroup: HookGroup {}
 
@@ -19,6 +25,10 @@ class NowPlayingInfoCenterHook: ClassHook<NSObject> {
 
     func setNowPlayingInfo(_ info: NSDictionary?) {
         orig.setNowPlayingInfo(LockScreenArtworkInjector.inject(info))
+    }
+
+    func nowPlayingInfo() -> NSDictionary? {
+        LockScreenArtworkInjector.spotifyNowPlayingInfo() ?? orig.nowPlayingInfo()
     }
 }
 
@@ -32,6 +42,9 @@ class NowPlayingInfoCenterPrivateHook: ClassHook<NSObject> {
     func setNowPlayingInfo(_ info: NSDictionary?) {
         orig.setNowPlayingInfo(LockScreenArtworkInjector.inject(info))
     }
+
+    // 私有子类只在**确实覆写了 getter** 时才需要单独挂；不认识的类簇上多挂一个
+    // 方法会在注册期出问题。这里只补 setter，getter 由基类那份负责。
 }
 
 enum LockScreenArtworkInjector {
@@ -50,13 +63,14 @@ enum LockScreenArtworkInjector {
     private static var waitingForStill = Set<String>()
     private static var supportedKeys: [String]?
     private static var activated = false
-    /// Spotify 最近一次自己写进来的字典与时间。静帧准备好后我们要主动重写一次
+    /// Spotify 最近一次自己写进来的字典与时间。静帧/换行之后我们要主动重写一次
     /// now-playing，重写时按速率把播放位置往前推，避免进度条倒跳。
+    ///
+    /// 它同时是 **getter 的唯一来源**：Spotify 读回 `nowPlayingInfo` 时只拿到这份
+    /// （不带我们加的键），见文件头。我们自己重写时是从这份字典出发的（不强加键），
+    /// 所以它一直是"Spotify 的写法"。
     private static var reportedInfo: [String: Any]?
     private static var reportedAt: CFAbsoluteTime = 0
-    /// 正在**我们自己**写 now-playing。写的那一下会从 hook 绕回来，
-    /// 不能把"我们推进过时间的那份字典"当成 Spotify 的基准。
-    private static var republishing = false
 
     /// 我们自己重写 now-playing 用的队列。
     ///
@@ -70,6 +84,14 @@ enum LockScreenArtworkInjector {
         qos: .userInitiated
     )
 
+    /// getter hook 用：Spotify 自己那份字典（不带我们加的键）。
+    static func spotifyNowPlayingInfo() -> NSDictionary? {
+        lock.lock()
+        let info = reportedInfo
+        lock.unlock()
+        return info as NSDictionary?
+    }
+
     /// 两个 hook 共用的入口：`nil` 原样传回，非字典也原样传回。
     static func inject(_ info: NSDictionary?) -> NSDictionary? {
         guard let info else { return nil }
@@ -80,24 +102,16 @@ enum LockScreenArtworkInjector {
     static func inject(into info: [String: Any]) -> [String: Any] {
         guard #available(iOS 26.0, *) else { return info }
 
-        // 记"Spotify 最后写成什么样"的报时点。
+        // 记"Spotify 最后写成什么样"的报时点。走到 setter 的字典只可能是两种：
+        // Spotify 自己写的，或者我们从这份快照出发重写的（我们不再往 setter 里递带
+        // 自己键的字典）—— 两种都是 Spotify 的写法，直接记。
         //
-        // 判据是"这一次不是我们自己写的"，而**不是**"字典里没有我们的键"：
-        // Spotify 可能读回 `nowPlayingInfo` 再整体写一遍（参考实现也给 getter 打了同样的
-        // 补丁），那种字典是带着我们的键回来的，它才是新的基准；把它们排除掉会让基准
-        // 冻结在第一次注入之前，之后每次重写都会算错播放位置。
-        //
-        // 这一段必须在开关判断**之前**：两个开关都关着时也要记 —— 歌词是用户中途打开的，
+        // 必须在开关判断**之前**：两个开关都关着时也要记，歌词是用户中途打开的，
         // 那一刻手上得有一份快照，才能立刻重写一次。
         lock.lock()
-        let isRepublishing = republishing
+        reportedInfo = info
+        reportedAt = CFAbsoluteTimeGetCurrent()
         lock.unlock()
-        if !isRepublishing {
-            lock.lock()
-            reportedInfo = info
-            reportedAt = CFAbsoluteTimeGetCurrent()
-            lock.unlock()
-        }
 
         // 歌词与动态封面共用同一对动画键。歌词开着时它优先：一行一段短片，
         // ID 跟着行走（见 `LockScreenLyricsController`）；没准备好就退回动态封面。
@@ -444,11 +458,7 @@ enum LockScreenArtworkInjector {
               LockScreenArtwork.isEnabled || LockScreenLyrics.isEnabled else {
             return
         }
-        // 前台不写（理由见 `publishQueue` 的注释）；这里只是读一下 App 状态，写完就回。
-        DispatchQueue.main.async {
-            guard UIApplication.shared.applicationState == .background else { return }
-            refreshNowPlayingInfoOnPublishQueue(title: title)
-        }
+        refreshNowPlayingInfoOnPublishQueue(title: title)
     }
 
     /// 真正的重写放在 `publishQueue` 上（见那个队列的注释）。
@@ -497,15 +507,10 @@ enum LockScreenArtworkInjector {
             )
         }
 
-        // 我们自己写的这一下会从 setter hook 绕回来；标上记号，别让它覆盖基准。
-        lock.lock()
-        republishing = true
-        lock.unlock()
-        MPNowPlayingInfoCenter.default().nowPlayingInfo =
-            LockScreenArtworkInjector.inject(into: info)
-        lock.lock()
-        republishing = false
-        lock.unlock()
+        // 递进去的是**Spotify 自己那份字典**（只把时钟推进到现在），再由 setter hook
+        // 把我们当前的键合并进去。不能在这里先 `inject` 一次：那样 getter 之后交出的
+        // 就是带我们键的字典，Spotify 读回去会把动画封面当成自己的状态（见文件头）。
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
 

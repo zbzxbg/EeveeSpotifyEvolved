@@ -82,29 +82,6 @@ final class LockScreenLyricsController {
         ) { [weak self] _ in
             self?.settingsMayHaveChanged()
         }
-        // 只在 App 不在前台时跑：锁屏歌词要的本来就是锁屏，而前台的 Spotify 有自己的
-        // now-playing / 界面链路，我们这时去重写那份字典只会和它抢同一套观察者。
-        _ = NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.refreshTimer()
-        }
-        _ = NotificationCenter.default.addObserver(
-            forName: UIApplication.willResignActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.refreshTimer()
-        }
-        _ = NotificationCenter.default.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.refreshTimer()
-        }
         writeDebugLog(
             "[\(LockScreenLyrics.logTag)] ready —"
                 + " lock screen lyrics \(lastEnabled ? "on" : "off")"
@@ -119,8 +96,9 @@ final class LockScreenLyricsController {
         if enabled {
             writeDebugLog("[\(LockScreenLyrics.logTag)] switched on")
             refreshTimer()
-            // 前台不补写：见 `refreshTimer` 的说明。锁屏后的第一拍会自己接管。
-            if #available(iOS 26.0, *), UIApplication.shared.applicationState == .background {
+            // 刚打开时可能已经播了一会儿：让注入器按 Spotify 最近一次写的字典补一次，
+            // 时钟才会从现在开始走（否则要等它下一次自己写 now-playing）。
+            if #available(iOS 26.0, *) {
                 LockScreenArtworkInjector.republishForLockScreen()
             }
         } else {
@@ -184,30 +162,11 @@ final class LockScreenLyricsController {
             stopTimer()
             return
         }
-        // 只在后台（= 锁屏 / 用户在别的 App）跑：前台那一段用不到，而且此刻 Spotify
-        // 自己的界面链路正在用同一份 now-playing，重写它只会把两边的观察者搅在一起。
-        guard UIApplication.shared.applicationState == .background else {
-            suspendForForeground()
-            return
-        }
         if currentRate() > 0 {
             startTimer()
         } else {
             stopTimer()
         }
-    }
-
-    /// 回到前台：停表，并把已经装出去的歌词 artwork 撤掉。
-    ///
-    /// 不撤的话，Spotify 在前台每次自己写 now-playing，我们的 hook 都会把这一行的
-    /// artwork 再塞回去 —— 那仍然是一次前台写入。行数据与缓存都留着，下次锁屏直接重装。
-    private func suspendForForeground() {
-        stopTimer()
-        lock.lock()
-        prepared = [:]
-        preparedLineKey = ""
-        preparedTrackKey = ""
-        lock.unlock()
     }
 
     private func currentRate() -> Double {
@@ -224,9 +183,7 @@ final class LockScreenLyricsController {
         // 250ms：换行感知的上限。leeway 压小 —— 锁屏时系统会合并定时器，
         // 合并得太狠会让两句之间明显慢半拍。
         source.schedule(
-            // 第一拍晚 600ms：刚进后台时系统还在收尾 scene 更新，别在这个窗口里
-            // 去动 now-playing（那是 scene-update watchdog 盯的时刻）。
-            deadline: .now() + .milliseconds(600),
+            deadline: .now() + .milliseconds(250),
             repeating: .milliseconds(250),
             leeway: .milliseconds(50)
         )
@@ -247,11 +204,6 @@ final class LockScreenLyricsController {
         guard #available(iOS 26.0, *) else { return }
         guard LockScreenLyrics.isEnabled else {
             stopTimer()
-            return
-        }
-        // 回到前台就停（观察者已经处理；这个判断兜住竞态）。
-        guard UIApplication.shared.applicationState == .background else {
-            suspendForForeground()
             return
         }
 
