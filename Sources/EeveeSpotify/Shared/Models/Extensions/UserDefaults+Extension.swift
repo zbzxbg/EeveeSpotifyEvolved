@@ -25,6 +25,8 @@ extension UserDefaults {
     private static let lockScreenArtworkEnabledKey = "lockScreenAnimatedArtwork"
     private static let lockScreenArtworkCanvasKey = "lockScreenAnimatedArtworkCanvas"
     private static let lockScreenArtworkFillKey = "lockScreenAnimatedArtworkFill"
+    /// 锁屏全屏封面区的逐行歌词（独立于动态封面：它自己就是一对动画键的使用者）。
+    private static let lockScreenLyricsKey = "lockScreenLyrics"
     private static let hapticsEnabledKey = "hapticsEnabled"
     private static let hapticsStrengthKey = "hapticsStrength"
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
@@ -98,6 +100,7 @@ extension UserDefaults {
         lockScreenArtworkEnabledKey,
         lockScreenArtworkCanvasKey,
         lockScreenArtworkFillKey,
+        lockScreenLyricsKey,
         hapticsEnabledKey,
         hapticsStrengthKey,
         hapticsSurfaceKeywordsKey,
@@ -367,6 +370,20 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: lockScreenArtworkFillKey)
+        }
+    }
+
+    // MARK: - 锁屏歌词（Lock screen lyrics）
+    //
+    // 锁屏全屏封面区显示当前这一句歌词（一行一段短片，见 `LockScreenLyrics`）。
+    // 默认关。与「锁屏动态封面」相互独立：开着它时歌词优先，动态封面退到它没准备好
+    // 或这一首没词的时候；两页各自有开关。
+    static var lockScreenLyrics: Bool {
+        get {
+            container.object(forKey: lockScreenLyricsKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: lockScreenLyricsKey)
         }
     }
 

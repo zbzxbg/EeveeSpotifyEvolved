@@ -64,7 +64,24 @@ enum LockScreenArtworkInjector {
 
     static func inject(into info: [String: Any]) -> [String: Any] {
         guard #available(iOS 26.0, *) else { return info }
-        guard LockScreenArtwork.isEnabled else {
+
+        // 只有 Spotify 自己的写法（字典里还没有我们的动画键）才记"报时点"：
+        // 我们刷新时写回去的字典带键，不能拿来当播放位置的基准。
+        //
+        // 这一段必须在开关判断**之前**：两个开关都关着时也要记 —— 歌词是用户中途打开的，
+        // 那一刻手上得有一份"Spotify 最后写成什么样"的快照，才能立刻重写一次。
+        if info[MPNowPlayingInfoProperty1x1AnimatedArtwork] == nil,
+           info[MPNowPlayingInfoProperty3x4AnimatedArtwork] == nil {
+            lock.lock()
+            reportedInfo = info
+            reportedAt = CFAbsoluteTimeGetCurrent()
+            lock.unlock()
+        }
+
+        // 歌词与动态封面共用同一对动画键。歌词开着时它优先：一行一段短片，
+        // ID 跟着行走（见 `LockScreenLyricsController`）；没准备好就退回动态封面。
+        let lyricsOn = LockScreenLyrics.isEnabled
+        guard LockScreenArtwork.isEnabled || lyricsOn else {
             // 关掉之后不再有任何新素材，旧 artwork 的 handler 也要失效（空标识 ≠ 上一首）。
             LockScreenArtworkResolver.shared.noteNowPlaying(identifier: "")
             return info
@@ -91,16 +108,6 @@ enum LockScreenArtworkInjector {
         )
         LockScreenArtworkResolver.shared.noteNowPlaying(identifier: identifier)
 
-        // 只有 Spotify 自己的写法（字典里还没有我们的动画键）才记"报时点"；
-        // 我们刷新时写回去的字典带键，不能拿来当播放位置的基准。
-        if info[MPNowPlayingInfoProperty1x1AnimatedArtwork] == nil,
-           info[MPNowPlayingInfoProperty3x4AnimatedArtwork] == nil {
-            lock.lock()
-            reportedInfo = info
-            reportedAt = CFAbsoluteTimeGetCurrent()
-            lock.unlock()
-        }
-
         let cover = info[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork
         let resolver = LockScreenArtworkResolver.shared
         var still = resolver.cachedStill(title: title, artist: artist)
@@ -109,6 +116,57 @@ enum LockScreenArtworkInjector {
             resolver.keepStill(image, title: title, artist: artist)
             still = image
         }
+
+        let lyrics = LockScreenLyrics.isEnabled ? LockScreenLyricsController.shared : nil
+        let lyricsTrackKey = LockScreenLyrics.trackKey(
+            title: title,
+            artist: artist,
+            duration: duration
+        )
+        if let still, let lyrics {
+            // 这一首的封面只留一张：预览与短片都拿它做模糊底。
+            lyrics.noteCover(still, trackKey: lyricsTrackKey)
+        } else if let lyrics {
+            // 歌词也用封面做底。字典里没有 artwork 时照旧去元数据补一张，
+            // 补到之后 resolver 会再触发一次注入，这一首后面的行就用上了。
+            resolver.prepareStill(title: title, artist: artist)
+        }
+
+        if let lyrics {
+            lyrics.noteNowPlaying(info)
+            let prepared = lyrics.preparedArtwork(trackKey: lyricsTrackKey)
+            if !prepared.isEmpty {
+                var output = info
+                var changed = false
+                for (key, value) in prepared {
+                    guard supported.contains(key),
+                          let artwork = value as? MPMediaItemAnimatedArtwork else {
+                        continue
+                    }
+                    // 同一个对象再写一遍不算变化；换行时它是新对象、新 ID。
+                    if let existing = output[key] as? MPMediaItemAnimatedArtwork,
+                       existing === artwork {
+                        continue
+                    }
+                    output[key] = artwork
+                    changed = true
+                }
+                if changed {
+                    noteInjectedOnce(
+                        identifier: "\(identifier)-lyrics",
+                        title: title,
+                        supported: supported
+                    )
+                    return output
+                }
+                return info
+            }
+        }
+
+        guard LockScreenArtwork.isEnabled else {
+            return info
+        }
+
         guard let still else {
             // 动画键没有预览图时系统会画成灰色占位图，比静态封面还糟。没有静帧就先
             // 别注入：让 metadata 的封面地址去补一张，补到了再重写一次 now-playing。
@@ -362,10 +420,13 @@ enum LockScreenArtworkInjector {
     /// 静帧/素材准备好之后由 resolver 调一次：Spotify 不会为了我们重写 now-playing，
     /// 不补这一下，动画键要等下一次播放状态变化才会被注入。
     static func refreshNowPlayingInfo(title: String, artist: String) {
-        guard #available(iOS 26.0, *), LockScreenArtwork.isEnabled else { return }
+        guard #available(iOS 26.0, *),
+              LockScreenArtwork.isEnabled || LockScreenLyrics.isEnabled else {
+            return
+        }
         DispatchQueue.main.async {
             lock.lock()
-            guard var info = reportedInfo else {
+            guard let info = reportedInfo else {
                 lock.unlock()
                 return
             }
@@ -375,20 +436,39 @@ enum LockScreenArtworkInjector {
             // 静帧是异步抓的：抓完时可能已经切歌了，别拿上一首的封面去重写当前这首。
             let reportedTitle = info[MPMediaItemPropertyTitle] as? String ?? ""
             guard LockScreenArtwork.looksLikeSameSong(reportedTitle, title) else { return }
-
-            // 重设 now-playing 会把系统的播放位置基准重置到这份字典里的旧值；
-            // 按速率补上"从 Spotify 上次写到现在的距离"，进度条就不会倒跳。
-            if let elapsed = info[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber {
-                let rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 1
-                let distance = max(0, CFAbsoluteTimeGetCurrent() - reported)
-                info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = NSNumber(
-                    value: elapsed.doubleValue + rate * distance
-                )
-            }
-
-            MPNowPlayingInfoCenter.default().nowPlayingInfo =
-                LockScreenArtworkInjector.inject(into: info)
+            republish(info, reportedAt: reported)
         }
+    }
+
+    /// 锁屏歌词换行时用：把 Spotify 最近一次写的那份字典推进到现在，再走一遍注入。
+    /// 不经过这一步，换行只能等 Spotify 下一次自己写 now-playing —— 那是十几秒一次的级别。
+    static func republishForLockScreen() {
+        guard #available(iOS 26.0, *) else { return }
+        DispatchQueue.main.async {
+            lock.lock()
+            guard let info = reportedInfo else {
+                lock.unlock()
+                return
+            }
+            let reported = reportedAt
+            lock.unlock()
+            republish(info, reportedAt: reported)
+        }
+    }
+
+    /// 重设 now-playing 会把系统的播放位置基准重置到这份字典里的旧值；
+    /// 按速率补上"从 Spotify 上次写到现在的距离"，进度条就不会倒跳。
+    private static func republish(_ info: [String: Any], reportedAt reported: CFAbsoluteTime) {
+        var info = info
+        if let elapsed = info[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber {
+            let rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 1
+            let distance = max(0, CFAbsoluteTimeGetCurrent() - reported)
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = NSNumber(
+                value: elapsed.doubleValue + rate * distance
+            )
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo =
+            LockScreenArtworkInjector.inject(into: info)
     }
 }
 
@@ -428,4 +508,7 @@ func activateLockScreenArtwork() {
         LockScreenArtworkPrivateGroup().activate()
         writeDebugLog("[\(LockScreenArtwork.logTag)] also hooked \(privateName)")
     }
+
+    // 锁屏歌词：同一对动画键，按行走。开关实时读，这里只是把调度器接上。
+    LockScreenLyricsController.shared.activate()
 }

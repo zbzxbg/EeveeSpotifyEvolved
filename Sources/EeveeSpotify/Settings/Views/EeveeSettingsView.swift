@@ -180,6 +180,13 @@ struct EeveeSettingsView: View {
                     subtitle: "settings_sub_lock_screen_artwork",
                     imageSystemName: "rectangle.on.rectangle.angled"
                 ) { AnyView(EeveeLockScreenArtworkSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#1ED760"),
+                    title: "lock_screen_lyrics_title",
+                    subtitle: "settings_sub_lock_screen_lyrics",
+                    imageSystemName: "text.quote"
+                ) { AnyView(EeveeLockScreenLyricsSettingsView()) }
             }
 
             // ── ③ 进阶

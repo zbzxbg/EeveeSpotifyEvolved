@@ -42,6 +42,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - A single cover for playlists instead of the four-up mosaic.
 - Liquid-glass tab bar and mini player.
 - **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise, and a loop rendered from the cover when neither has one. Settings → Animated lock screen.
+- **Lock screen lyrics** (iOS 26+) — the line being sung takes over the lock screen's full-screen artwork, with the next line dimmed under it. Every line is drawn once as a short clip and cached per track, so changes cost no network. Uses the same lyrics source as the in-app views. Settings → Lock screen lyrics.
 
 <details>
 <summary>Lyrics source details</summary>
