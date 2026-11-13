@@ -2,7 +2,7 @@
 
 # EeveeSpotifyEvolved
 
-Spotify, arranged like Apple Music: the player, the album, playlist and artist pages, and the lyrics. Plus what Spotify doesn't ship — twelve lyric sources, word-by-word timing, and the line being sung on your lock screen.
+Spotify, arranged like Apple Music.
 
 [![iOS](https://img.shields.io/badge/iOS-17.4%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
 [![Spotify](https://img.shields.io/badge/Spotify-9.1.88-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
