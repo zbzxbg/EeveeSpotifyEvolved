@@ -293,8 +293,13 @@ enum LockScreenArtworkInjector {
                 )
                 completion(image)
             },
-            videoAssetFileURLRequestHandler: { _, completion in
-                noteClipAskedOnce(identifier: identifier, aspect: aspect, title: title)
+            videoAssetFileURLRequestHandler: { requested, completion in
+                noteClipAskedOnce(
+                    identifier: identifier,
+                    aspect: aspect,
+                    title: title,
+                    requested: requested
+                )
                 let started = Date()
                 Task {
                     let file = await resolver.videoFileURL(
@@ -438,10 +443,13 @@ enum LockScreenArtworkInjector {
         )
     }
 
+    /// 系统来要素材时也会给一个 size —— 那是它打算播放的槽位尺寸。我们目前按画幅
+    /// （3:4 / 1:1）出片，把系统要的尺寸打出来，才能判断它是不是想要别的比例。
     private static func noteClipAskedOnce(
         identifier: String,
         aspect: LockScreenArtwork.Aspect,
-        title: String
+        title: String,
+        requested: CGSize
     ) {
         let key = "\(identifier)|\(aspect.rawValue)"
         lock.lock()
@@ -452,8 +460,11 @@ enum LockScreenArtworkInjector {
         lock.unlock()
 
         guard first else { return }
+        let render = aspect.renderSize
         writeDebugLog(
-            "[\(LockScreenArtwork.logTag)] clip asked — \(aspect.rawValue), \"\(title)\""
+            "[\(LockScreenArtwork.logTag)] clip asked — \(aspect.rawValue),"
+                + " system asked \(Int(requested.width))x\(Int(requested.height))"
+                + " / we render \(Int(render.width))x\(Int(render.height)), \"\(title)\""
         )
     }
 
