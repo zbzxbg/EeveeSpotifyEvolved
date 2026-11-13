@@ -24,7 +24,7 @@ enum LockScreenLyrics {
 
     /// 片段**画法**的版本。画布朝向、字号这类"同一行文字但像素不同"的改动必须进哈希：
     /// 文件名与 `artworkID` 只由它和文案决定，不换版本就会继续复用按老画法渲好的文件。
-    private static let clipFormat = "v2"
+    private static let clipFormat = "v3"
 
     static var isEnabled: Bool { UserDefaults.lockScreenLyrics }
 

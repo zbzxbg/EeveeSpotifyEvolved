@@ -384,16 +384,32 @@ enum LyricClipRenderer {
         context.restoreGState()
     }
 
+    /// CoreText 要的是 `CTFont`，而 `UIFont.systemFont(...).fontName` 给出来的是**私有名**
+    /// （`.SFUI-Semibold` 这种）—— `CTFontCreateWithName` 解析不了这种名字，会**静默**退到
+    /// Times New Roman（拉丁）和明朝体（CJK），于是锁屏上的字既不是系统字体、也不是应用里
+    /// 看到的那一套。只能从 UI 字体类型枚举要，那条路一定拿得到真正的 SF。
+    private static func coreTextFont(_ size: CGFloat) -> CTFont {
+        let font = CTFontCreateUIFontForLanguage(.emphasizedSystem, size, nil)
+            ?? CTFontCreateWithName("HelveticaNeue-Medium" as CFString, size, nil)
+        logFontOnce(font)
+        return font
+    }
+
+    private static var loggedFont = false
+
+    private static func logFontOnce(_ font: CTFont) {
+        guard !loggedFont else { return }
+        loggedFont = true
+        let name = CTFontCopyPostScriptName(font) as String
+        writeDebugLog("[\(LockScreenLyrics.logTag)] clip font — \(name)")
+    }
+
     private static func framesetter(
         for text: String,
         fontSize: CGFloat,
         alpha: CGFloat
     ) -> CTFramesetter {
-        let font = CTFontCreateWithName(
-            UIFont.systemFont(ofSize: fontSize, weight: .semibold).fontName as CFString,
-            fontSize,
-            nil
-        )
+        let font = coreTextFont(fontSize)
         // 只有对齐方式需要非默认值：换行用默认的按词换行，行距交给系统。
         var alignment: CTTextAlignment = .center
         let paragraph: CTParagraphStyle = withUnsafePointer(to: &alignment) { pointer in
