@@ -238,7 +238,7 @@ final class LockScreenLyricsController {
 
         let elapsed = reported.doubleValue + rate * (CFAbsoluteTimeGetCurrent() - at)
         let artist = info[MPMediaItemPropertyArtist] as? String ?? ""
-        let duration = (info[MPNowPlayingInfoPropertyPlaybackDuration] as? NSNumber)?.doubleValue ?? 0
+        let duration = (info[MPMediaItemPropertyPlaybackDuration] as? NSNumber)?.doubleValue ?? 0
         let key = LockScreenLyrics.trackKey(title: title, artist: artist, duration: duration)
 
         lock.lock()
@@ -260,7 +260,6 @@ final class LockScreenLyricsController {
         lock.lock()
         ready = linesFetched
         currentLines = lines
-        let now = CFAbsoluteTimeGetCurrent()
         if !ready, !fetchInFlight, trackKey == key {
             // 冷启动：第一次写入可能比 `statefulPlayer` 早到。等一秒再试，15 秒后放弃。
             shouldRetry = now >= nextPlayerRetryAt
