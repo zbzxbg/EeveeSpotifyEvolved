@@ -346,21 +346,10 @@ enum TimedLyricTextBuilder {
             )
         )
 
-        // **折行那把尺子与渲染是不是同一把**。
-        //
-        // 现场：`text=394.4 layout=331.8 breaks=[]` —— 按 331.8pt 的预算，394.4pt 的行
-        // 本该折，可 CoreText **一个断点都没给**；而已折的那 5 行 text 都在 405~557pt。
-        // ⇒ 两处量出来的宽度对不上（`measuredTextWidth` 用的是 `UIFont.systemFont`，
-        // 折行用的是 `CTFontCreateWithName(uiFont.fontName)` —— 后者可能落到别的字面）。
-        // 这一行把**折行字体的 PostScript 名 + 它量出来的宽度**一起打出来：
-        // 下一份日志一眼就能定"该换字体构造方式"还是"该换折行算法"。
-        let uiFont = UIFont.systemFont(ofSize: fontSize, weight: fontWeight.uiKitWeight)
-        let layoutFont = CTFontCreateWithName(uiFont.fontName as CFString, fontSize, nil)
-        let layoutFontName = CTFontCopyPostScriptName(layoutFont) as String
-        let layoutWidthMeasured = String(
-            format: "%.1f",
-            measuredTextWidth(source: source, font: layoutFont)
-        )
+        // 折行与渲染**只用一把尺子**：`UIFont.systemFont`（`measuredTextWidth` 走的就是它）。
+        // 这里原来还会打一行 `ct=`：拿 `CTFontCreateWithName(uiFont.fontName)` 量同一段文字，
+        // 用来对比两把尺子。那个用途已经没了（折行侧不再碰 CTFont，见
+        // `lineBreakCharacterOffsets`），留着只会误导下一个看日志的人。
 
         // **复核之后最宽那一段**（= 渲染时真的会占多宽）。
         // 它 ≤ layout ⇒ 折行与渲染终于用同一把尺子；> layout ⇒ 复核器没修掉（贴日志来）。
@@ -386,25 +375,9 @@ enum TimedLyricTextBuilder {
                 + " layout=\(layoutWidth)"
                 + " text=\(textWidth)"
                 + " fit=\(widestSegment)"
-                + " ct=\(layoutWidthMeasured) (\(layoutFontName) / \(uiFont.fontName))"
                 + " breaks=[\(breaks)]"
                 + " \"\(marked(source, at: lineBreakOffsets))\""
         )
-    }
-
-    /// 一段文本在**指定字体**下的排版宽度（诊断用；`measuredTextWidth` 那个重载走
-    /// `UIFont.systemFont` —— 渲染那一侧的字体，见 `logWrapDecisionIfUseful` 的说明）。
-    private static func measuredTextWidth(
-        source: String,
-        font: CTFont
-    ) -> CGFloat {
-        guard !source.isEmpty else { return 0 }
-        let attributed = NSAttributedString(
-            string: source,
-            attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font]
-        )
-        let line = CTLineCreateWithAttributedString(attributed)
-        return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
     /// 整段文本（不折行）的排版宽度，用于诊断。
@@ -579,8 +552,15 @@ enum TimedLyricTextBuilder {
         }
     }
 
-    // MARK: - 用 Core Text 求折行点
+    // MARK: - 求折行点
 
+    /// 折行点**只按渲染那把尺子算**：整行放得下就不折，放不下就贪心重排。
+    ///
+    /// 这里原来还有一遍 `CTTypesetterSuggestLineBreak` 的 CoreText 折行，字体是
+    /// `CTFontCreateWithName(uiFont.fontName)` —— 那个名字是私有的（`.SFUI-Heavy`），
+    /// CTFont 解析不了会静默退成 Times New Roman。它的断点**从来没被用过**：下面要么
+    /// 整行不折、要么整行重排把它们全丢掉。留着它只多一遍排版，还留下一处会被误读成
+    /// "两把尺子"的对比数字。
     private static func lineBreakCharacterOffsets(
         in source: String,
         constrainedWidth: CGFloat?,
@@ -597,33 +577,6 @@ enum TimedLyricTextBuilder {
             return []
         }
 
-        let uiFont = UIFont.systemFont(
-            ofSize: fontSize,
-            weight: fontWeight.uiKitWeight
-        )
-        let layoutFont = CTFontCreateWithName(
-            uiFont.fontName as CFString,
-            fontSize,
-            nil
-        )
-        var attributes: [NSAttributedString.Key: Any] = [
-            NSAttributedString.Key(kCTFontAttributeName as String): layoutFont,
-        ]
-        if usesTimedRunBoundaries {
-            // 逐字属性化会把字形切成独立 run，连字会让测量与渲染不一致。
-            attributes[NSAttributedString.Key(kCTLigatureAttributeName as String)] = 0
-        }
-        let attributedText = NSMutableAttributedString(
-            string: source,
-            attributes: attributes
-        )
-        if usesTimedRunBoundaries {
-            addTimedRunBoundaries(to: attributedText, source: source)
-        }
-        let typesetter = CTTypesetterCreateWithAttributedString(attributedText)
-        let utf16Length = attributedText.length
-        var utf16Offset = 0
-        var result: Set<Int> = []
         let layoutWidth = effectiveLayoutWidth(
             source: source,
             constrainedWidth: constrainedWidth,
@@ -631,37 +584,6 @@ enum TimedLyricTextBuilder {
             usesTimedRunBoundaries: usesTimedRunBoundaries
         )
 
-        while utf16Offset < utf16Length {
-            let suggestedLength = CTTypesetterSuggestLineBreak(
-                typesetter,
-                utf16Offset,
-                Double(layoutWidth)
-            )
-            let consumedLength = max(
-                suggestedLength,
-                nextCharacterLength(in: source, atUTF16Offset: utf16Offset)
-            )
-            let nextOffset = min(utf16Offset + consumedLength, utf16Length)
-            guard nextOffset > utf16Offset else { break }
-            utf16Offset = nextOffset
-
-            if utf16Offset < utf16Length,
-               let characterOffset = characterOffset(in: source, utf16Offset: utf16Offset),
-               characterOffset > 0 {
-                result.insert(characterOffset)
-            }
-        }
-
-        // **按渲染那把尺子复核 CoreText 的断点**。
-        //
-        // 现场：`text=394.4 layout=331.8 breaks=[]` —— 按 331.8pt 的预算本该折的行，
-        // CoreText 一个断点都没给；而给了断点的 5 行 text 都在 405~557pt ⇒ 折行那一侧
-        // 与渲染/诊断那一侧不是同一把尺子（`CTFontCreateWithName(uiFont.fontName)` vs
-        // `UIFont.systemFont`）。断点太靠右 ⇒ 第一段仍超宽 ⇒ 渲染器再折一次 ⇒ 屏幕上多一行。
-        //
-        // 复核器只**加**断点、不删（见 `LyricLineBreakFitting`）：CoreText 说对了的行逐字不动，
-        // 说漏了的行会被切开。下一份日志的 `fit=` 就是复核后**最宽那一段**的宽度 —— 它应当
-        // 小于等于 layout。
         let characters = Array(source)
         let measure: (Range<Int>) -> CGFloat = { range in
             guard range.lowerBound >= 0, range.upperBound <= characters.count else { return 0 }
@@ -671,11 +593,6 @@ enum TimedLyricTextBuilder {
                 fontWeight: fontWeight
             )
         }
-        // 第二版：
-        // `verifiedBreaks` 只加不删，CoreText 自己那个多余断点会留成**多一行**
-        // （现场：breaks=[31,36] ⇒ `…worst` / `mood` / `ah` 三行）。
-        // ⇒ **整行确实超宽时改用整行重排**（丢掉 CT 断点，按渲染字体贪心折）；
-        // 整行放得下就一个断点都不需要。
         let wholeWidth = measure(0..<characters.count)
         guard wholeWidth > layoutWidth else { return [] }
         return LyricLineBreakFitting.reflowBreaks(
@@ -719,50 +636,6 @@ enum TimedLyricTextBuilder {
             safetyMargin = max(fontSize * 0.02, 0.5)
         }
         return max(constrainedWidth - safetyMargin, 1)
-    }
-
-    private static func addTimedRunBoundaries(
-        to attributedText: NSMutableAttributedString,
-        source: String
-    ) {
-        let runBoundaryAttribute = NSAttributedString.Key(
-            "EeveeSpotifyTimedLyricRunBoundary"
-        )
-        var utf16Offset = 0
-        for (characterOffset, character) in source.enumerated() {
-            let utf16Length = String(character).utf16.count
-            attributedText.addAttribute(
-                runBoundaryAttribute,
-                value: characterOffset,
-                range: NSRange(location: utf16Offset, length: utf16Length)
-            )
-            utf16Offset += utf16Length
-        }
-    }
-
-    private static func nextCharacterLength(
-        in source: String,
-        atUTF16Offset offset: Int
-    ) -> Int {
-        guard offset < source.utf16.count else { return 0 }
-        let range = (source as NSString).rangeOfComposedCharacterSequence(at: offset)
-        return max(range.location + range.length - offset, 1)
-    }
-
-    private static func characterOffset(
-        in source: String,
-        utf16Offset: Int
-    ) -> Int? {
-        let utf16 = source.utf16
-        guard let utf16Index = utf16.index(
-            utf16.startIndex,
-            offsetBy: utf16Offset,
-            limitedBy: utf16.endIndex
-        ),
-        let stringIndex = String.Index(utf16Index, within: source) else {
-            return nil
-        }
-        return source.distance(from: source.startIndex, to: stringIndex)
     }
 }
 

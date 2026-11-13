@@ -1,21 +1,19 @@
 import Foundation
 
-/// 「这一行该在哪里折」的**复核器** —— 纯逻辑：只依赖一个"给我量这段宽度"的闭包，不碰 UIKit。
+/// 「这一行该在哪里折」的规则 —— 纯逻辑：只依赖一个"给我量这段宽度"的闭包，不碰 UIKit。
+///
+/// **为什么不直接用 CoreText 的断点**：`CTTypesetterSuggestLineBreak` 给的位置经常太靠右 ——
+/// 按它切完第一段仍然超宽，渲染器又折一次，屏幕上就多出一行：
 ///
 /// ```
-/// [LyricWrap] fs=22.0 w=334.0 layout=331.8 text=405.4 breaks=[36] "I'm tryna put you in the worst mood ↵ah"
-/// [LyricWrap] fs=22.0 w=334.0 layout=331.8 text=394.4 breaks=[]   "P1 cleaner than your church shoes ah"
-/// [LyricWrap] fs=22.0 w=334.0 layout=331.8 text=337.0 breaks=[]   "I switch up my cup I kill any pain"
+/// [LyricWrap] ... text=405.4 layout=331.8 breaks=[31,36] "…worst ↵mood ↵ah"
 /// ```
-/// 按 331.8pt 的预算，337~394pt 的行**本该折**，CoreText 却一个断点都没给；而给了断点的 5 行
-/// `text` 都在 405~557pt ⇒ **折行那一侧与渲染那一侧不是同一把尺子**
-/// （折行用 `CTFontCreateWithName(uiFont.fontName)`，渲染与诊断用 `UIFont.systemFont`）。
 ///
-/// 后果正是的那件事：断点被插在**太靠右**的位置 ⇒ 第一段仍然超宽 ⇒ 渲染器再折一次
-/// ⇒ 屏幕上多出一行。
+/// 正确的两行是 `…worst` / `mood ah`。所以折行只走一条路：**整行放得下 ⇒ 不折；
+/// 放不下 ⇒ 从行首贪心吃词**（见 `reflowBreaks`）。
 ///
-/// 这个类型只做一件事：**拿渲染那把尺子复核 CoreText 的断点**，把仍然超宽的那一段再切开。
-/// 它**只加、不删**（CoreText 原有的断点全部保留）⇒ 最坏情况与改动前逐字相同，不会更糟。
+/// `measure` 必须是**渲染那一侧的字重与字号** —— 折行与渲染一旦不是同一把尺子，
+/// 断点一定偏。
 enum LyricLineBreakFitting {
 
     /// 把 `[0, count)` 按断点切成若干**视觉行**区间（升序、不重叠、无空段）。
@@ -40,7 +38,7 @@ enum LyricLineBreakFitting {
     /// Starboy L2 就是现场：
     ///
     /// ```
-    /// text=405.4 layout=331.8 ct=342.5 breaks=[31,36] "I'm tryna put you in the worst ↵mood ↵ah"
+    /// text=405.4 layout=331.8 breaks=[31,36] "I'm tryna put you in the worst ↵mood ↵ah"
     /// ```
     ///
     /// CoreText 断在 36（"ah" 前），它的第一段 `…worst mood` 量出来 342.5 > 331.8 ⇒ 我们又在 31 补一刀
