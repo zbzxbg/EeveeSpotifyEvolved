@@ -140,6 +140,15 @@ struct EeveeSettingsView: View {
                     subtitle: "settings_sub_sponsorblock",
                     imageSystemName: "forward.end.fill"
                 ) { AnyView(SponsorBlockSettingsView()) }
+
+                // 睡眠定时器：到点暂停播放（见 `SleepTimerController`）。Spotify 自己那份
+                // 在播客菜单里，那条不受影响，两者可以同时开。
+                settingsRow(
+                    color: .indigo,
+                    title: "sleep_timer_title",
+                    subtitle: "settings_sub_sleep_timer",
+                    imageSystemName: "moon.zzz.fill"
+                ) { AnyView(EeveeSleepTimerSettingsView()) }
             }
 
             // ── ② 外观

@@ -27,6 +27,8 @@ extension UserDefaults {
     private static let lockScreenArtworkFillKey = "lockScreenAnimatedArtworkFill"
     /// 锁屏全屏封面区的逐行歌词（独立于动态封面：它自己就是一对动画键的使用者）。
     private static let lockScreenLyricsKey = "lockScreenLyrics"
+    /// 睡眠定时器上次选的时长（分钟）。定时器本身是运行态，不落盘。
+    private static let sleepTimerMinutesKey = "sleepTimerMinutes"
     private static let hapticsEnabledKey = "hapticsEnabled"
     private static let hapticsStrengthKey = "hapticsStrength"
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
@@ -101,6 +103,7 @@ extension UserDefaults {
         lockScreenArtworkCanvasKey,
         lockScreenArtworkFillKey,
         lockScreenLyricsKey,
+        sleepTimerMinutesKey,
         hapticsEnabledKey,
         hapticsStrengthKey,
         hapticsSurfaceKeywordsKey,
@@ -384,6 +387,19 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: lockScreenLyricsKey)
+        }
+    }
+
+    // MARK: - 睡眠定时器（Sleep timer）
+    //
+    // 只存"上次选的时长"。定时器本身是运行态：Spotify 被杀掉之后不该继续倒计时。
+    static var sleepTimerMinutes: Int {
+        get {
+            let stored = container.object(forKey: sleepTimerMinutesKey) as? Int ?? 0
+            return stored > 0 ? stored : 30
+        }
+        set {
+            container.set(newValue, forKey: sleepTimerMinutesKey)
         }
     }
 

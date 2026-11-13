@@ -501,6 +501,25 @@ private let propertyReplacements = [
         name: "canvas_enabled",
         scope: "ios-feature-canvas",
         modification: .forceBool(true)
+    ),
+
+    // 睡眠定时器：Spotify 自己那份（`ios-feature-sleeptimer`）在播客菜单里就能用，但
+    // "选项表 / 1 分钟档 / 到点淡出"都由这几条 flag 决定。打开之后它自己那份更好用；
+    // 我们自己的定时器（`SleepTimerController`）不依赖它们，两条互不干扰。
+    EeveePropertyReplacement(
+        name: "use_options_sheet",
+        scope: "ios-feature-sleeptimer",
+        modification: .forceBool(true)
+    ),
+    EeveePropertyReplacement(
+        name: "enable_one_minute_option",
+        scope: "ios-feature-sleeptimer",
+        modification: .forceBool(true)
+    ),
+    EeveePropertyReplacement(
+        name: "enable_fade_out",
+        scope: "ios-feature-sleeptimer",
+        modification: .forceBool(true)
     )
 ]
 
