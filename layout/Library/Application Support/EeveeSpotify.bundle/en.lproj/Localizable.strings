@@ -24,12 +24,12 @@ do_not_patch_premium = "Do Not Patch Premium";
 patching_description = "EeveeSpotify intercepts requests to load user data, deserializes it, and modifies the parameters in real-time.\n\nIf you have an active Premium subscription, you can turn on Do Not Patch Premium. The tweak won't patch the data or restrict the use of Premium server-sided features.\n\nA restart is required after changing.";
 
 overwrite_configuration = "Overwrite Configuration";
-overwrite_configuration_description = "Replace the remote configuration with the dumped Premium one. It isn't guaranteed to work, but it can solve problems such as ads appearing. With this option on, a stale configuration can also cause unexpected problems - for example some features stop working, or Spotify crashes.";
+overwrite_configuration_description = "Replace the remote configuration with the dumped Premium one. It isn't guaranteed to work, but it can solve problems such as ads appearing. A stale configuration can also cause unexpected problems - for example some features stop working, or Spotify crashes.";
 
 // Lyrics
 
 do_not_replace_lyrics = "Disable Lyrics Replacement";
-do_not_replace_lyrics_description = "When this option is enabled, the custom lyrics feature is disabled, but Spotify is not prevented from returning its own lyrics.";
+do_not_replace_lyrics_description = "Disables the custom lyrics feature, but does not stop Spotify from returning its own lyrics.";
 lyrics_source = "Lyrics Source";
 lyrics_source_restart_note = "Switching the lyrics source requires restarting Spotify.";
 lyrics_additional_info = "Genius, NetEase, PetitLyrics, BiniLyrics, Unison, QQ Music and KuGou match by title and artist rather than by track ID, so some songs may have display errors or fail to find lyrics.";
@@ -67,7 +67,7 @@ request_anonymous_token_description = "Tap “Request Anonymous Token” to requ
 anonymous_token_request_failed = "Failed to request an anonymous token.";
 
 amll_preferred = "Prefer AMLL";
-amll_preferred_description = "For this option to take effect, word-by-word lyrics must be enabled. When enabled, word-by-word lyrics are requested from AMLL first. If AMLL does not return word-by-word lyrics, it falls back to the lyrics source you selected yourself and that source's related settings.";
+amll_preferred_description = "Requires word-by-word lyrics. Word-by-word lyrics are requested from AMLL first; if AMLL does not return them, the request falls back to the lyrics source you selected and that source's related settings.";
 
 genius_fallback = "Genius Fallback";
 genius_fallback_description = "If %@ fails to load, lyrics are loaded from Genius.";
@@ -105,16 +105,16 @@ show_instagram_destination = "Show Instagram Destination";
 show_instagram_destination_description = "Always show the Instagram share destination. %@";
 
 amll_fuzzy_search = "AMLL fuzzy search";
-amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or the lyrics source is AMLL. When on, AMLL's lyrics search changes from an exact search to a fuzzy search.";
+amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or the lyrics source is AMLL. Changes AMLL's lyrics search from an exact search to a fuzzy one.";
 
 pseudo_word_by_word_lyrics = "Enable pseudo word-by-word";
-pseudo_word_by_word_lyrics_description = "When on, line-level lyrics timing is estimated and expanded into word-by-word lyrics. Character-level precision may be imperfect, and depends on how precise the original line-level lyrics are.";
+pseudo_word_by_word_lyrics_description = "Estimates line-level lyrics timing and expands it into word-by-word lyrics. Character-level precision may be imperfect, and depends on how precise the original line-level lyrics are.";
 
 petitlyrics_line_fallback = "PetitLyrics: fall back to line level";
-petitlyrics_line_fallback_description = "When on, if the lyrics PetitLyrics returns do not have a normal word-by-word timeline, the whole song falls back to line-synced lyrics.";
+petitlyrics_line_fallback_description = "If the lyrics PetitLyrics returns do not have a normal word-by-word timeline, the whole song falls back to line-synced lyrics.";
 
 aggressive_marker_removal = "Remove lyrics annotations more aggressively";
-aggressive_marker_removal_description = "When on, every lyric line wrapped in [ ] is removed. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed (e.g. [I love you]).";
+aggressive_marker_removal_description = "Removes every lyric line wrapped in [ ]. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed (e.g. [I love you]).";
 
 spicy_cross_validation = "Spicy Lyrics cross-validation";
 spicy_cross_validation_description = "Fixes the case where the lyrics Spicy Lyrics returns have words censored out.";
@@ -164,7 +164,7 @@ payment_notice = "EeveeSpotify applies patches to unlock certain Premium feature
 
 // `ngzhwm_title` removed: it had no code references, and zh-CN never had it.
 disable_lyrics_feature = "Disable Lyrics Feature";
-disable_lyrics_feature_description = "When this option is enabled, all features related to custom lyrics are disabled. It also prevents Spotify from returning its built-in lyrics.";
+disable_lyrics_feature_description = "Disables every feature related to custom lyrics, and prevents Spotify from returning its built-in lyrics.";
 word_by_word_lyrics = "Enable Word-by-Word Lyrics";
 word_by_word_lyrics_description = "Every provider except LRCLIB and Genius offers word-by-word lyrics.";
 better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
@@ -206,7 +206,7 @@ lyrics_offset_save_song = "Save this offset";
 lyrics_offset_autosave_hint = "saved automatically";
 lyrics_offset_saved_empty = "No saved lyrics offsets yet.";
 lyrics_offset_saved_only_current = "The current entry's offset is saved in the section above; other saved entries will be listed here.";
-romanization_description = "Configure romanization separately for each language. If romanization is not enabled for a language, its lyrics are displayed as-is without romanization.";
+romanization_description = "Configure romanization separately for each language.";
 chinese_romanization = "Romanize Chinese Lyrics";
 japanese_romanization = "Romanize Japanese Lyrics";
 korean_romanization = "Romanize Korean Lyrics";
@@ -507,7 +507,7 @@ mini_bar_glass = "Liquid Glass mini player";
 
 playlist_cover_section = "Playlist covers";
 playlist_single_cover = "Replace Spotify's own four-cover mosaic";
-playlist_single_cover_description = "When on, Spotify's four-cover playlist mosaic is replaced with the cover of the playlist's first track.";
+playlist_single_cover_description = "Replaces Spotify's four-cover playlist mosaic with the cover of the playlist's first track.";
 
 entity_page_section = "Album, playlist & artist pages";
 entity_page_dissolve = "Replace Spotify's own page color";
@@ -535,7 +535,7 @@ artist_bio_wikipedia_failed = "Wikipedia did not answer (your network may block 
 mini_bar_round_artwork = "Round artwork";
 home_tile_tint_section = "Home shortcut tiles";
 home_tile_tint = "Tile color follows its cover";
-home_tile_tint_description = "When on, the flat gray background is replaced with a color close to the tile's cover.";
+home_tile_tint_description = "Replaces the flat gray background with a color close to the tile's cover.";
 
 flag_override_mode_number = "Write a number";
 flag_override_number_placeholder = "Number (e.g. 30)";
@@ -676,7 +676,7 @@ now_playing_style_description = "Spotify = the stock player. Immersive = the pla
 // so the player cannot be scrolled. Borrowed from spoti.pw v0.21.1 (GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift.
 apple_music_official_ttml = "Apple Music official TTML lyrics";
-apple_music_official_ttml_description = "When enabled, some lyrics-related settings may be ignored.";
+apple_music_official_ttml_description = "Some lyrics-related settings may be ignored.";
 apple_music_official_ttml_token = "Apple Music sign-in token (media-user-token)";
 apple_music_official_ttml_token_placeholder = "Paste your media-user-token";
 apple_music_official_ttml_token_hint = "Apple exposes no public lyrics API: the search only needs the web player token (fetched automatically), but the lyrics themselves need your own Apple Music sign-in. How to get the token: sign in at music.apple.com in a browser, open Developer Tools > Application > Cookies > https://music.apple.com, and copy the value of media-user-token. A valid Apple Music account is required; without one this source returns no lyrics at all.";
