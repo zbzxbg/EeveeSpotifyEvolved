@@ -84,6 +84,8 @@ class NgzhwmSettingsViewModel: ObservableObject {
     // `NeteaseLyricsRepository` / `MusixmatchLyricsRepository` 里读的**是同一批键**。
     //
     // ⚠️ 那几处目前仍是**字面量**（本轮没一起改，避免把一次"加开关"扩成一次全仓重构）。
+    // 这里的三颗都只为写默认值/迁移用：日/韩的默认值是开，中文是关（见下面两个
+    // `apply…IfNeeded`）。
     static let japaneseRomanizationKey = "ngzhwm_japaneseRomanization"
     static let chineseRomanizationKey = "ngzhwm_chineseRomanization"
     static let koreanRomanizationKey = "ngzhwm_koreanRomanization"
@@ -96,13 +98,16 @@ class NgzhwmSettingsViewModel: ObservableObject {
         bool(forKey: hideLyricsTranslationKey, defaultValue: !isChineseDevice)
     }
 
-    /// （**展示罗马化翻译 / 歌词翻译默认开启**）——
+    /// （**日/韩罗马化与歌词翻译默认开启，中文罗马化默认关闭**）——
     /// 一次性把这两类默认值**写进键里**，且**只对从没写过的键**动手。
     ///
-    /// ⚠️ 为什么不是"把读取处的默认值改成 true"就完事：三颗罗马化开关在别处是**按字面量键**
-    /// 读的（`LyricLinesAdapter` / `LyricsDto` / 两个歌词源，见上面第 70 行那段说明），
-    /// 只改扩展页那个合成 getter 会做出一个**骗人的开关**（显示开着、歌词里却没有罗马音）✗。
-    /// 写键才是"真开"。
+    /// 中文不写：华语歌词本来就是汉字，多出来的拼音行会把当前行挤下一格，观感代价大于收益；
+    /// 日/韩的罗马字则是多数人真需要的。
+    ///
+    /// ⚠️ 为什么不是"把读取处的默认值改成 true"就完事：这几颗开关在别处是**按字面量键**
+    /// 读的（`LyricLinesAdapter` / `LyricsDto` / 两个歌词源，见上面「逐语言罗马化 / 译文的键」
+    /// 那段说明），只改扩展页那个合成 getter 会做出一个**骗人的开关**（显示开着、歌词里却没有
+    /// 罗马音）✗。写键才是"真开"。
     ///
     /// 做法与 `LyricsOptions.applyGeniusFallbackDefaultIfNeeded` /
     /// `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded` **完全一致**：
@@ -112,8 +117,8 @@ class NgzhwmSettingsViewModel: ObservableObject {
         guard !UserDefaults.standard.bool(forKey: marker) else { return }
         UserDefaults.standard.set(true, forKey: marker)
 
-        // 「展示罗马化歌词」：三颗逐语言开关，只有**从没写过**的才写成开。
-        for key in [japaneseRomanizationKey, chineseRomanizationKey, koreanRomanizationKey]
+        // 「展示罗马化歌词」：日/韩两颗，只有**从没写过**的才写成开。
+        for key in [japaneseRomanizationKey, koreanRomanizationKey]
         where UserDefaults.standard.object(forKey: key) == nil {
             UserDefaults.standard.set(true, forKey: key)
         }
@@ -130,6 +135,26 @@ class NgzhwmSettingsViewModel: ObservableObject {
         writeDebugLog(
             "[INIT] romanization / translation defaults applied once"
                 + " — only keys that had never been written; a device that chose otherwise keeps its choice"
+        )
+    }
+
+    /// **一次性**把盘上的「中文罗马化」关掉 —— 为「默认值由开改成关」补一刀。
+    ///
+    /// 为什么要单独一条：上面那个迁移在旧版本里已经把 `true` 写进了这颗键，盘上是一个具体的
+    /// 值，只改默认值追不到它（读处拿到的是 `true`，`?? false` 不会被用上）。
+    ///
+    /// 只发生一次（标记键），之后设置页那颗开关是唯一真相。做法与
+    /// `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded` 一致。
+    static func applyChineseRomanizationOffDefaultIfNeeded() {
+        let marker = "ngzhwm_chineseRomanizationDefaultOffApplied"
+        guard !UserDefaults.standard.bool(forKey: marker) else { return }
+        UserDefaults.standard.set(true, forKey: marker)
+
+        guard UserDefaults.standard.bool(forKey: chineseRomanizationKey) else { return }
+        UserDefaults.standard.set(false, forKey: chineseRomanizationKey)
+        writeDebugLog(
+            "[INIT] Chinese romanization switched off once (the stored switch said on)"
+                + " — from here on the switch in Settings → Lyrics decides"
         )
     }
 

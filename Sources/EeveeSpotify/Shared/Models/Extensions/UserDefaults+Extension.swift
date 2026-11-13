@@ -352,7 +352,7 @@ extension UserDefaults {
 
     /// 让 Spotify 把 `canvas.url` 填进 track metadata。
     ///
-    /// 默认开（只在总开关打开时才起作用）。关掉之后锁屏只剩 Apple Music 那条源 ——
+    /// 默认开。关掉之后锁屏只剩 Apple Music 那条源 ——
     /// 不碰 Spotify 的 flag，也就不影响播放页里 Canvas 的表现。
     static var lockScreenAnimatedArtworkCanvas: Bool {
         get {
@@ -365,11 +365,12 @@ extension UserDefaults {
 
     /// 前两条源都拿不到时，用专辑封面本地渲一段循环短片。
     ///
-    /// 默认开（只在总开关打开时才起作用）。渲染只在第一次遇到这首时跑，之后走缓存，
-    /// 所以关掉它只是让"没有 Canvas / Apple Music 动态封面的歌"退回静态封面。
+    /// **默认关**。它与上面两条不是一类东西：那两条是这首歌
+    /// 本来就有的短片，这一条只是把静态封面慢慢推近、再拉回来，为"动起来"而生。锁屏出现
+    /// 时才现编一段（后台限频，一首要跑几秒），所以默认不打扰；要的人自己打开。
     static var lockScreenAnimatedArtworkFill: Bool {
         get {
-            container.object(forKey: lockScreenArtworkFillKey) as? Bool ?? true
+            container.object(forKey: lockScreenArtworkFillKey) as? Bool ?? false
         }
         set {
             container.set(newValue, forKey: lockScreenArtworkFillKey)

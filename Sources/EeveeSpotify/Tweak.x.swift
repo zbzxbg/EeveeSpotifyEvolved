@@ -571,11 +571,13 @@ struct EeveeSpotify: Tweak {
         // **按总开关归一**一次 —— 旧版本被单独关过的那几项、以及导入旧备份带进来的
         // 单键值，都会在这一次收正；之后总开关就是唯一真相（详见该方法的注释）。
         UserDefaults.normalizeNowPlayingLayoutKeys()
-        // （**展示罗马化翻译 / 歌词翻译默认开启**）：把
-        // 「三颗逐语言罗马化开关 = 开」+「不隐藏译文」一次性写进键里 —— **只对没写过的键**，
+        // （**日/韩罗马化与歌词翻译默认开启，中文罗马化默认关闭**）：把
+        // 「日/韩两颗逐语言罗马化开关 = 开」+「不隐藏译文」一次性写进键里 —— **只对没写过的键**，
         // 已经手动选过的设备保持他自己的选择（与上面那条、以及 Genius 回退那条同一条纪律）。
-        // ⚠️ 必须写键、不能只改 getter：那三颗键在别处是按**字面量**读的（见该方法上的注释）。
+        // ⚠️ 必须写键、不能只改 getter：那几颗键在别处是按**字面量**读的（见该方法上的注释）。
         NgzhwmSettingsViewModel.applyRomanizationAndTranslationDefaultsIfNeeded()
+        // 中文那颗反过来：旧版本把它默认写成了开，这里一次性关掉（同样只做一次，之后看设置）。
+        NgzhwmSettingsViewModel.applyChineseRomanizationOffDefaultIfNeeded()
         // 这一行是"那一轮跑的是哪一档"的标记：玻璃没出现时，先看它是 ON 还是 OFF。
         writeDebugLog("[INIT] tab bar glass: \(UserDefaults.tabBarSystemGlass ? "ON" : "OFF")")
         writeDebugLog("[INIT] Spotify: \(spotifyVersion) (build \(spotifyBuild))")
