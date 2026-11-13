@@ -492,10 +492,22 @@ private let propertyReplacements = [
         name: "is_lyrics_cover_art_refactor_enabled",
         scope: "ios-nowplaying-contentlayers-impl",
         modification: .setBool(false)
+    ),
+
+    // 锁屏动态封面：Spotify 的播放核心只有在 `ios-feature-canvas.canvas_enabled` 为真时
+    // 才把 `canvas.url` 填进 track metadata。我们只读那条地址、不自己去找 Canvas，
+    // 所以这条 flag 是 Canvas 那半条链的前置。开关关着时下面那圈会整条跳过。
+    EeveePropertyReplacement(
+        name: "canvas_enabled",
+        scope: "ios-feature-canvas",
+        modification: .forceBool(true)
     )
 ]
 
 /// 上面那条 flag 的名字（开关判定用，避免再抄一遍字面量）。
+private let canvasFlagName = "canvas_enabled"
+
+/// 歌词入口 flag 的名字（同上）。
 private let lyricsEntryPointFlagName = "lyrics_entry_point_enabled"
 
 /// 「封面下单行歌词」那条 flag 的名字（同上）。
@@ -752,6 +764,14 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
         if index < builtInReplacementCount,
            (replacement.name == lyricsMigrationFlagName || replacement.name == lyricsRefactorFlagName),
            !DeclutterChrome.hideSingalongLine {
+            continue
+        }
+
+        // Canvas：锁屏动态封面关着（或它自己的 Canvas 开关关着）时整条跳过 ——
+        // 不去动 Spotify 的远端配置，播放页里 Canvas 的表现保持原样。
+        if index < builtInReplacementCount,
+           replacement.name == canvasFlagName,
+           !LockScreenArtwork.wantsCanvas {
             continue
         }
 

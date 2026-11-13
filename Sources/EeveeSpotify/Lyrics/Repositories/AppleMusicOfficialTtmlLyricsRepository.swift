@@ -257,6 +257,12 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
         return token
     }
 
+    /// 给仓库外的调用方（锁屏动态封面的 Apple Music 目录搜索）用的同一份 token。
+    /// 缓存里那份没到期就直接返回，不会每次重新抓 music.apple.com。
+    static func webDeveloperToken() throws -> String {
+        try shared.developerToken(forceRefresh: false)
+    }
+
     private static func cachedDeveloperToken() -> String? {
         let defaults = UserDefaults.container
         guard let token = defaults.string(forKey: developerTokenKey), !token.isEmpty,

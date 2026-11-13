@@ -669,3 +669,15 @@ apple_music_token_missing = "未填写 Apple Music 登录令牌";
 apple_music_token_invalid = "Apple Music 登录令牌无效或已过期";
 apple_music_token_popup = "Apple Music 官方歌词需要你自己的登录令牌：请在「设置 → 实验 → 启用Apple Music官方TTML歌词」里填入 media-user-token（浏览器：music.apple.com → 开发者工具 → 应用 → Cookie）。";
 artist_latest_release_tracks = "%d 首歌曲";
+
+lock_screen_artwork_title = "锁屏动态封面";
+settings_sub_lock_screen_artwork = "播放时显示视频封面";
+lock_screen_artwork_enabled = "动态封面";
+lock_screen_artwork_description = "这首歌有动态素材时，锁屏会用一段循环短片代替静态封面。Spotify 没给 Canvas 时用 Apple Music 的官方动态封面，两者都没有时用封面本地生成一段。需要 iOS 26 或更高版本。";
+lock_screen_artwork_canvas = "让 Spotify 提供 Canvas";
+lock_screen_artwork_canvas_description = "Canvas 是 Spotify 自己的循环短片。只有它那条远端开关打开，播放核心才会把地址写进曲目信息；那条开关也会让播放页里出现 Canvas。重启后生效。";
+lock_screen_artwork_fill = "用封面本地生成";
+lock_screen_artwork_fill_description = "既没有 Canvas 也没有 Apple Music 动态封面时，用专辑封面渲染一段 4 秒的循环短片。每首歌只生成一次，之后和下载来的短片一样走缓存。";
+lock_screen_artwork_cache = "已下载的封面";
+lock_screen_artwork_clear = "清除";
+lock_screen_artwork_cleared = "已清除";

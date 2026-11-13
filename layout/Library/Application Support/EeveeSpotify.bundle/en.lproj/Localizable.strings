@@ -685,3 +685,15 @@ apple_music_token_missing = "Apple Music sign-in token is missing";
 apple_music_token_invalid = "Apple Music sign-in token is invalid or expired";
 apple_music_token_popup = "Apple Music official lyrics need your own sign-in token. Go to Settings > Experiments > \"Apple Music official TTML lyrics\" and paste a media-user-token (browser: music.apple.com > Developer Tools > Application > Cookies).";
 artist_latest_release_tracks = "%d songs";
+
+lock_screen_artwork_title = "Animated lock screen";
+settings_sub_lock_screen_artwork = "Video artwork while a song plays";
+lock_screen_artwork_enabled = "Animated artwork";
+lock_screen_artwork_description = "Gives the lock screen a short looping video instead of the still cover, when the track has one. Apple Music's editorial video is used when Spotify has no Canvas for it, and a short loop is rendered from the cover when neither has one. Needs iOS 26 or later.";
+lock_screen_artwork_canvas = "Let Spotify provide Canvas";
+lock_screen_artwork_canvas_description = "Canvas is Spotify's own looping clip. Spotify only exposes its address while its canvas flag is on, and that flag also lets Canvas appear in the player. Takes effect after a restart.";
+lock_screen_artwork_fill = "Render a loop from the cover";
+lock_screen_artwork_fill_description = "When a track has neither Canvas nor an Apple Music video, a four-second loop is rendered from its cover. It is generated once per track and cached like the downloaded clips.";
+lock_screen_artwork_cache = "Downloaded artwork";
+lock_screen_artwork_clear = "Clear";
+lock_screen_artwork_cleared = "Cleared";

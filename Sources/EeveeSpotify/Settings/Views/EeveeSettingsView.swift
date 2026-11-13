@@ -173,6 +173,13 @@ struct EeveeSettingsView: View {
                     subtitle: "settings_sub_app_icon",
                     imageSystemName: "app.badge.fill"
                 ) { AnyView(EeveeAppIconPickerView()) }
+
+                settingsRow(
+                    color: Color(hex: "#1ED760"),
+                    title: "lock_screen_artwork_title",
+                    subtitle: "settings_sub_lock_screen_artwork",
+                    imageSystemName: "rectangle.on.rectangle.angled"
+                ) { AnyView(EeveeLockScreenArtworkSettingsView()) }
             }
 
             // ── ③ 进阶

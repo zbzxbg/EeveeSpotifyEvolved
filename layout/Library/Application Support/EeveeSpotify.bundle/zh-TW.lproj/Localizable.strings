@@ -355,3 +355,15 @@ licenses_inspiration_detail = "本倉庫重用了 spoti.pw v0.21.1（GPL-3.0，�
 
 aggressive_marker_removal = "更積極的刪除歌詞標註術語";
 aggressive_marker_removal_description = "選項開啟後會刪除歌詞所有被 [] 包裹的歌詞行，目前僅對 Genius 生效。它也可能誤刪整行帶方括號的真歌詞（例如 [I love you]）。";
+
+lock_screen_artwork_title = "鎖定畫面動態封面";
+settings_sub_lock_screen_artwork = "播放時顯示動態封面";
+lock_screen_artwork_enabled = "動態封面";
+lock_screen_artwork_description = "這首歌有動態素材時，鎖定畫面會用一段循環短片取代靜態封面。Spotify 沒有提供 Canvas 時改用 Apple Music 的官方動態封面，兩者都沒有時用封面在本機產生一段。需要 iOS 26 或以上版本。";
+lock_screen_artwork_canvas = "讓 Spotify 提供 Canvas";
+lock_screen_artwork_canvas_description = "Canvas 是 Spotify 自己的循環短片。只有它那條遠端開關打開，播放核心才會把位址寫進曲目資訊；那條開關也會讓播放頁面出現 Canvas。重新啟動後生效。";
+lock_screen_artwork_fill = "用封面在本機產生";
+lock_screen_artwork_fill_description = "既沒有 Canvas 也沒有 Apple Music 動態封面時，用專輯封面渲染一段 4 秒的循環短片。每首歌只產生一次，之後和下載來的短片一樣走快取。";
+lock_screen_artwork_cache = "已下載的封面";
+lock_screen_artwork_clear = "清除";
+lock_screen_artwork_cleared = "已清除";

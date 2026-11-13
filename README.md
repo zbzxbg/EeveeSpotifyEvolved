@@ -41,6 +41,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - Apple Music–style album, playlist and artist pages.
 - A single cover for playlists instead of the four-up mosaic.
 - Liquid-glass tab bar and mini player.
+- **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise, and a loop rendered from the cover when neither has one. Settings → Animated lock screen.
 
 <details>
 <summary>Lyrics source details</summary>

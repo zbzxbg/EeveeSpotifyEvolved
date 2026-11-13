@@ -811,6 +811,11 @@ struct EeveeSpotify: Tweak {
             // ② 这里按 9.1.88 的真实形态 hook 那个 init（类/方法对不上就只打一行日志）。
             InstagramShareDestination.activateIfNeeded()
 
+            // 锁屏动态封面：在系统 Now Playing 的字典里补 `MPMediaItemAnimatedArtwork`。
+            // 只挂 `MPNowPlayingInfoCenter`，不需要 appex、也不需要动 bundle id；
+            // 开关实时读，Canvas 那条 flag 才需要重启。
+            activateLockScreenArtwork()
+
             // ⚠️⚠️ 这个 `return` 把 `init` 切成了两段 —— 它后面那句 "For other versions"
             // 底下整段在 **9.1.x（本仓唯一的目标版本）上永远不会执行**。
             // 已经栽过两次：的 karaoke / SponsorBlock / 调试探针，以及
@@ -863,5 +868,6 @@ struct EeveeSpotify: Tweak {
         // activateSponsorBlock's `opts.enabled` check, for example), so
         // it's safe to call them unconditionally here too.
         activateSponsorBlock()
+        activateLockScreenArtwork()
     }
 }

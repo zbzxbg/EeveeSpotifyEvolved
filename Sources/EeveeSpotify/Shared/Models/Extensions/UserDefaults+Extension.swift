@@ -22,6 +22,9 @@ extension UserDefaults {
     private static let telemetryObserveOnlyKey = "telemetryObserveOnly"
     private static let telemetryExtraKeywordsKey = "telemetryExtraKeywords"
     private static let blockRatingPromptsKey = "blockRatingPrompts"
+    private static let lockScreenArtworkEnabledKey = "lockScreenAnimatedArtwork"
+    private static let lockScreenArtworkCanvasKey = "lockScreenAnimatedArtworkCanvas"
+    private static let lockScreenArtworkFillKey = "lockScreenAnimatedArtworkFill"
     private static let hapticsEnabledKey = "hapticsEnabled"
     private static let hapticsStrengthKey = "hapticsStrength"
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
@@ -321,6 +324,46 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: telemetryExtraKeywordsKey)
+        }
+    }
+
+    // MARK: - 锁屏动态封面（Lock screen artwork）
+    //
+    // 总开关**默认关**。这条 hook 在 `EeveeSpotify.init` 里总是装上、每次系统写
+    // `nowPlayingInfo` 时实时读它，所以开关**不需要重启**；只有下面那颗 Canvas 开关
+    // 要重启（它改的是 Spotify 的远端配置，只在启动时的 customize 响应里生效）。
+    static var lockScreenAnimatedArtwork: Bool {
+        get {
+            container.object(forKey: lockScreenArtworkEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: lockScreenArtworkEnabledKey)
+        }
+    }
+
+    /// 让 Spotify 把 `canvas.url` 填进 track metadata。
+    ///
+    /// 默认开（只在总开关打开时才起作用）。关掉之后锁屏只剩 Apple Music 那条源 ——
+    /// 不碰 Spotify 的 flag，也就不影响播放页里 Canvas 的表现。
+    static var lockScreenAnimatedArtworkCanvas: Bool {
+        get {
+            container.object(forKey: lockScreenArtworkCanvasKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: lockScreenArtworkCanvasKey)
+        }
+    }
+
+    /// 前两条源都拿不到时，用专辑封面本地渲一段循环短片。
+    ///
+    /// 默认开（只在总开关打开时才起作用）。渲染只在第一次遇到这首时跑，之后走缓存，
+    /// 所以关掉它只是让"没有 Canvas / Apple Music 动态封面的歌"退回静态封面。
+    static var lockScreenAnimatedArtworkFill: Bool {
+        get {
+            container.object(forKey: lockScreenArtworkFillKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: lockScreenArtworkFillKey)
         }
     }
 
