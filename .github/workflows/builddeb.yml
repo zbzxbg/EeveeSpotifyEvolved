@@ -40,6 +40,16 @@ jobs:
       THEOS_PACKAGE_SCHEME: ${{ matrix.scheme }}
 
     steps:
+      # Releases are cut from main only. The draft release tag is created at the
+      # commit the workflow runs on, so dispatching this from ng-dev would tag a
+      # development commit that has not been through a version bump.
+      - name: Refuse to release from a non-main ref
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Release workflows run on main only; got ${{ github.ref }}."
+          echo "Bump the version on ng-dev, fast-forward main, then dispatch from main."
+          exit 1
+
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
