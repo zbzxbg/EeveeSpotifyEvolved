@@ -99,7 +99,7 @@ Free profiles usually have no wildcard, so both builds ship without the Watch ap
 ## Requirements
 
 - iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
-- Spotify 9.1.x — current public release: [`v2.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
+- Spotify 9.1.x — current public release: [`v3.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
 
 | Spotify | How far it has been checked |
 |---|---|
