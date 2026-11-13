@@ -2,7 +2,7 @@
 
 # EeveeSpotifyEvolved
 
-word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass look for Spotify on iOS.
+word-by-word karaoke lyrics, an Apple Music–style layout, a liquid-glass look, and the line being sung on your lock screen — for Spotify on iOS.
 
 [![iOS](https://img.shields.io/badge/iOS-17.4%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
 [![Spotify](https://img.shields.io/badge/Spotify-9.1.88-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
@@ -16,12 +16,12 @@ word-by-word karaoke lyrics, an Apple Music–style layout, and a liquid-glass l
   <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
   <img src="docs/screenshots/lyrics.webp" width="15%" alt="Word-by-word lyrics with romanization and translation, credit line showing QQ Music">
   <img src="docs/screenshots/album.webp" width="15%" alt="Apple Music–style album page with a blurred backdrop">
-  <img src="docs/screenshots/playlist.webp" width="15%" alt="Playlist page with a single cover instead of the four-up mosaic">
   <img src="docs/screenshots/artist.webp" width="15%" alt="Apple Music–style artist page">
   <img src="docs/screenshots/home.webp" width="15%" alt="Home, with the liquid-glass tab bar">
+  <img src="docs/screenshots/lock.webp" width="15%" alt="Lock screen, where the animated artwork and the sung line are drawn">
 </p>
 
-> *Make EeveeSpotify Great Again* — said in jest, because everything below is a rebuild, not a reskin.
+> *Make EeveeSpotify Great Again* — the slogan is a jest; the pages, the player and the lock screen below are not.
 
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
@@ -41,7 +41,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - Apple Music–style album, playlist and artist pages.
 - A single cover for playlists instead of the four-up mosaic.
 - Liquid-glass tab bar and mini player.
-- **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise, and a loop rendered from the cover when neither has one. Settings → Animated lock screen.
+- **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise. A third source, rendering a loop from the cover itself, is a separate switch and off by default. Settings → Animated lock screen.
 - **Lock screen lyrics** (iOS 26+) — the line being sung takes over the lock screen's full-screen artwork, with the next line dimmed under it. Every line is drawn once as a short clip and cached per track, so changes cost no network. Uses the same lyrics source as the in-app views. Settings → Lock screen lyrics.
 
 <details>
@@ -57,6 +57,10 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - The Apple Music official TTML source is under Settings → Experiments. It needs your own `media-user-token`, because Apple has no public lyrics API.
 
 </details>
+
+### Playback
+
+- **Sleep timer** — pauses playback when the time is up, 1 to 90 minutes, and keeps counting with the screen off. Settings → Playback → Sleep timer.
 
 ## Install
 
