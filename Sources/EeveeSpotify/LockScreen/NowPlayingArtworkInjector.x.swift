@@ -58,6 +58,18 @@ enum LockScreenArtworkInjector {
     /// 不能把"我们推进过时间的那份字典"当成 Spotify 的基准。
     private static var republishing = false
 
+    /// 我们自己重写 now-playing 用的队列。
+    ///
+    /// 为什么不能在主线程写：Spotify 对 now-playing 的变化是同步观察的，那些观察者链
+    /// （Combine / 内部队列）会跟着在**写的那条线程**上跑；它们当中有按"自己不在主线程"
+    /// 写的代码，会再 `main.sync` 一次 —— 主线程写就变成自己等自己，10 秒后是 watchdog
+    /// 的 `scene-update` 超时（不是崩溃，是被系统杀掉）。Spotify 自己也是从后台线程写
+    /// 这份字典的，所以我们照做。
+    private static let publishQueue = DispatchQueue(
+        label: "com.eevee.lockscreen.lyrics.publish",
+        qos: .userInitiated
+    )
+
     /// 两个 hook 共用的入口：`nil` 原样传回，非字典也原样传回。
     static func inject(_ info: NSDictionary?) -> NSDictionary? {
         guard let info else { return nil }
@@ -119,12 +131,11 @@ enum LockScreenArtworkInjector {
 
         let cover = info[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork
         let resolver = LockScreenArtworkResolver.shared
-        var still = resolver.cachedStill(title: title, artist: artist)
-        if still == nil, let cover,
-           let image = cover.image(at: CGSize(width: 720, height: 720)) {
-            resolver.keepStill(image, title: title, artist: artist)
-            still = image
-        }
+        // 只用 resolver 缓存里已经有的静帧。**不在这里调 `cover.image(at:)`**：
+        // 那是一次同步回调 Spotify 的封面 provider，发生在它自己写 now-playing 的路径上，
+        // 很容易和它内部的队列/锁缠在一起。静帧统一走 `prepareStill`（异步、从曲目元数据
+        // 抓一张），拿到之后 resolver 会再触发一次注入。
+        let still = resolver.cachedStill(title: title, artist: artist)
 
         let lyrics = LockScreenLyrics.isEnabled ? LockScreenLyricsController.shared : nil
         let lyricsTrackKey = LockScreenLyrics.trackKey(
@@ -433,7 +444,16 @@ enum LockScreenArtworkInjector {
               LockScreenArtwork.isEnabled || LockScreenLyrics.isEnabled else {
             return
         }
+        // 前台不写（理由见 `publishQueue` 的注释）；这里只是读一下 App 状态，写完就回。
         DispatchQueue.main.async {
+            guard UIApplication.shared.applicationState == .background else { return }
+            refreshNowPlayingInfoOnPublishQueue(title: title)
+        }
+    }
+
+    /// 真正的重写放在 `publishQueue` 上（见那个队列的注释）。
+    private static func refreshNowPlayingInfoOnPublishQueue(title: String) {
+        publishQueue.async {
             lock.lock()
             guard let info = reportedInfo else {
                 lock.unlock()
@@ -453,7 +473,7 @@ enum LockScreenArtworkInjector {
     /// 不经过这一步，换行只能等 Spotify 下一次自己写 now-playing —— 那是十几秒一次的级别。
     static func republishForLockScreen() {
         guard #available(iOS 26.0, *) else { return }
-        DispatchQueue.main.async {
+        publishQueue.async {
             lock.lock()
             guard let info = reportedInfo else {
                 lock.unlock()
