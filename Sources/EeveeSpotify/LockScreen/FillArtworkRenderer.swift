@@ -11,6 +11,9 @@ import UIKit
 /// 画面是"模糊封面铺底 + 封面居中"（方版铺满、竖版居中）再叠一个来回缩放。缩放用余弦，
 /// 首帧和末帧都回到 1.0，循环时不会跳。
 ///
+/// 幅度是 7%：锁屏上这条片子被放大到整屏，3–4% 的缩放看上去就是"画面在呼吸"、读不出是
+/// 在动；再大就开始像镜头推拉过头。
+///
 /// 为什么不用 `AVAssetExportSession` 拼：这里没有源视频，要自己出帧，所以走
 /// `AVAssetWriter` + `AVAssetWriterInputPixelBufferAdaptor`。整段只写一次、落在缓存里，
 /// 不参与播放路径，也不会在锁屏刷新时重渲染。
@@ -23,7 +26,7 @@ enum FillArtworkRenderer {
 
     private static let seconds = 4
     private static let framesPerSecond: Int32 = 24
-    private static let zoom: CGFloat = 0.04
+    private static let zoom: CGFloat = 0.07
 
     static func render(
         cover: UIImage,

@@ -43,6 +43,9 @@ final class LockScreenArtworkResolver {
     private var running: [String: Task<URL?, Never>] = [:]
     private var runningTokens: [String: UUID] = [:]
     private var reportedMisses = Set<String>()
+    /// 已经排过预热的 key。`videoFileURL` 自己做单飞，这里只是为了别每写一次 now-playing
+    /// 就 spawn 一个 Task。
+    private var warmed = Set<String>()
     private var reportedNoMetadata = false
     private var lastNowPlaying = ""
     private var generation: UInt64 = 0
@@ -186,6 +189,53 @@ final class LockScreenArtworkResolver {
         return result
     }
 
+    // MARK: - 预热
+
+    /// 系统来要素材之前，先把这一首的短片做出来。
+    ///
+    /// 系统给视频 handler 的预算是 30 秒，而第一次解析是"查目录（网络）+ 下载/渲染"，
+    /// 真机上十几秒起 —— 等它来要才开始，锁屏那一屏基本只等得到静帧。所以注入完
+    /// now-playing 就先把活排上：这时 App 通常还在前台、CPU 没被限，系统来要时直接命中缓存。
+    func warm(
+        identifier: String,
+        title: String,
+        artist: String,
+        album: String,
+        duration: Double,
+        aspect: LockScreenArtwork.Aspect,
+        still: UIImage?
+    ) {
+        guard LockScreenArtwork.isEnabled, still != nil else { return }
+
+        let key = AnimatedArtworkCache.key(
+            title: title,
+            artist: artist,
+            duration: duration,
+            aspect: aspect
+        )
+        lock.lock()
+        let first = warmed.insert(key).inserted
+        if warmed.count > 64 { warmed.removeAll() }
+        lock.unlock()
+        guard first else { return }
+
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] warming — \(aspect.rawValue), \"\(title)\""
+        )
+        Task { [weak self] in
+            _ = await self?.videoFileURL(
+                identifier: identifier,
+                title: title,
+                artist: artist,
+                album: album,
+                duration: duration,
+                aspect: aspect,
+                size: aspect.renderSize,
+                still: still
+            )
+        }
+    }
+
     // MARK: - 生产
 
     private func produce(
@@ -205,11 +255,13 @@ final class LockScreenArtworkResolver {
         let deadline = Date().addingTimeInterval(22)
         guard isCurrent(stamp) else { return nil }
 
+        // 目录查询（Apple Music 两次搜索 + 一次专辑详情）单独压一个更短的预算：
+        // 它一道超时就把后面本地 Fill 的时间也吃掉，用户看到的就是"什么都没有"。
         let resolved = await resolveSources(
             title: title,
             artist: artist,
             album: album,
-            deadline: deadline
+            deadline: min(deadline, Date().addingTimeInterval(8))
         )
         guard isCurrent(stamp), !Task.isCancelled else { return nil }
 
@@ -380,10 +432,16 @@ final class LockScreenArtworkResolver {
                 return
             }
             var image: UIImage?
-            if let (data, response) = try? await self.session.data(from: url),
-               let http = response as? HTTPURLResponse,
-               (200..<300).contains(http.statusCode) {
-                image = UIImage(data: data)
+            // 先试 640 档、失败再回 metadata 给的那档：300 的图铺满锁屏要放大三倍。
+            for candidate in Self.coverCandidates(url) {
+                guard let (data, response) = try? await self.session.data(from: candidate),
+                      let http = response as? HTTPURLResponse,
+                      (200..<300).contains(http.statusCode),
+                      let loaded = UIImage(data: data) else {
+                    continue
+                }
+                image = loaded
+                break
             }
             guard let image else {
                 self.finishStillAttempt(key: key, title: title)
@@ -400,6 +458,12 @@ final class LockScreenArtworkResolver {
                 LockScreenArtworkInjector.refreshNowPlayingInfo(title: title, artist: artist)
             }
         }
+    }
+
+    /// 封面候选：大图档优先，原件兜底。两张都是同一个哈希，只有前缀不同。
+    private static func coverCandidates(_ url: URL) -> [URL] {
+        guard let large = LockScreenArtwork.largeCoverURL(url) else { return [url] }
+        return [large, url]
     }
 
     private func finishStillAttempt(key: String, title: String) {
@@ -519,6 +583,12 @@ final class LockScreenArtworkResolver {
             deadline: deadline
         )
 
+        // 这一首三条源各找到了什么，一行看完 —— 落在 Fill 上时就是"为什么看起来只有封面"。
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] sources — canvas \(canvas == nil ? "none" : "yes"),"
+                + " apple square \(apple.square == nil ? "none" : "yes")"
+                + " / tall \(apple.tall == nil ? "none" : "yes"), \"\(title)\""
+        )
         return Sources(canvas: canvas, apple: apple)
     }
 

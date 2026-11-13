@@ -81,6 +81,36 @@ enum LockScreenArtwork {
         )
         return String(folded.filter { $0.isLetter || $0.isNumber })
     }
+
+    // MARK: - 封面档位
+
+    /// 同一张封面的大图档，地址认不出来时返回 nil。
+    ///
+    /// Spotify 的 CDN 把**尺寸档编在哈希前缀里**：`ab67616d00004851` 是 64、
+    /// `ab67616d00001e02` 是 300、`ab67616d0000b273` 是 640，后面 24 位是同一张图。
+    /// track metadata 给的是 300 那档 —— 铺满锁屏（828 宽）要放大三倍，模糊底和封面都糊成
+    /// 一片，动起来也看不出来。能换档就换，换不到就继续用原件（调用方有兜底）。
+    static func largeCoverURL(_ url: URL) -> URL? {
+        guard url.query == nil,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        let segments = components.path.split(separator: "/", omittingEmptySubsequences: false)
+        guard let hash = segments.last, hash.count == 40 else { return nil }
+        guard smallCoverPrefixes.contains(String(hash.prefix(16))) else { return nil }
+
+        let large = largeCoverPrefix + String(hash.dropFirst(16))
+        components.path = segments.dropLast().map(String.init).joined(separator: "/")
+            + "/" + large
+        return components.url
+    }
+
+    private static let largeCoverPrefix = "ab67616d0000b273"
+
+    /// 认得出的**小档**前缀。不在表里的一律不动 —— 猜错就是 404，宁可继续用原件。
+    private static let smallCoverPrefixes: Set<String> = [
+        "ab67616d00004851", "ab67616d00001e02", "ab67616d00001e00",
+    ]
 }
 
 /// 只用来给文件名/artworkID 生成短哈希，不做任何安全用途。

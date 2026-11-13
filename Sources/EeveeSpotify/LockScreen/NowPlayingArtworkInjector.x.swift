@@ -50,6 +50,7 @@ enum LockScreenArtworkInjector {
     private static var reportedNoMatchingKey = false
     private static var loggedPreviews = Set<String>()
     private static var loggedClips = Set<String>()
+    private static var loggedClipServed = Set<String>()
     private static var waitingForStill = Set<String>()
     private static var supportedKeys: [String]?
     private static var activated = false
@@ -227,6 +228,16 @@ enum LockScreenArtworkInjector {
             }
             output[key] = expected
             changed = true
+            // 系统来要素材之前先把这一首的短片做出来，见 `LockScreenArtworkResolver.warm`。
+            resolver.warm(
+                identifier: identifier,
+                title: title,
+                artist: artist,
+                album: album,
+                duration: duration,
+                aspect: aspect,
+                still: still
+            )
         }
 
         guard changed else {
@@ -284,6 +295,7 @@ enum LockScreenArtworkInjector {
             },
             videoAssetFileURLRequestHandler: { _, completion in
                 noteClipAskedOnce(identifier: identifier, aspect: aspect, title: title)
+                let started = Date()
                 Task {
                     let file = await resolver.videoFileURL(
                         identifier: identifier,
@@ -294,6 +306,13 @@ enum LockScreenArtworkInjector {
                         aspect: aspect,
                         size: aspect.renderSize,
                         still: still
+                    )
+                    noteClipServedOnce(
+                        identifier: identifier,
+                        aspect: aspect,
+                        title: title,
+                        file: file,
+                        seconds: Date().timeIntervalSince(started)
                     )
                     completion(file)
                 }
@@ -435,6 +454,31 @@ enum LockScreenArtworkInjector {
         guard first else { return }
         writeDebugLog(
             "[\(LockScreenArtwork.logTag)] clip asked — \(aspect.rawValue), \"\(title)\""
+        )
+    }
+
+    /// 交回给系统的那一刻花了多久。接近 30 秒说明预热没命中（或没能及时跑完），
+    /// 那一屏基本只剩静帧。
+    private static func noteClipServedOnce(
+        identifier: String,
+        aspect: LockScreenArtwork.Aspect,
+        title: String,
+        file: URL?,
+        seconds: TimeInterval
+    ) {
+        let key = "\(identifier)|\(aspect.rawValue)"
+        lock.lock()
+        let first = loggedClipServed.insert(key).inserted
+        if loggedClipServed.count > 64 {
+            loggedClipServed.removeAll()
+        }
+        lock.unlock()
+
+        guard first else { return }
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] clip served — \(aspect.rawValue),"
+                + " \(file == nil ? "nil" : "file"), \(String(format: "%.1f", seconds))s,"
+                + " \"\(title)\""
         )
     }
 
