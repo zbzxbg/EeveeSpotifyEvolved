@@ -81,7 +81,8 @@ enum AppleMusicArtworkSource {
         title: String,
         artist: String,
         album: String,
-        session: URLSession
+        session: URLSession,
+        deadline: Date
     ) async -> AppleMusicEditorialAssets {
         guard let token = try? AppleMusicOfficialTtmlLyricsRepository.webDeveloperToken(),
               !token.isEmpty else {
@@ -101,6 +102,7 @@ enum AppleMusicArtworkSource {
         ) {
             return direct
         }
+        guard Date() < deadline else { return .empty }
 
         guard let songID = await songID(
             storefront: storefront,
@@ -111,6 +113,7 @@ enum AppleMusicArtworkSource {
         ) else {
             return .empty
         }
+        guard Date() < deadline else { return .empty }
 
         for albumID in await albumIDs(
             storefront: storefront,
@@ -118,6 +121,7 @@ enum AppleMusicArtworkSource {
             token: token,
             session: session
         ) {
+            guard Date() < deadline else { return .empty }
             if let editorial = await editorialVideo(
                 storefront: storefront,
                 albumID: albumID,
@@ -300,7 +304,7 @@ enum AppleMusicArtworkSource {
         session: URLSession
     ) async -> [String: Any]? {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 15
+        request.timeoutInterval = 8
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("https://music.apple.com", forHTTPHeaderField: "Origin")

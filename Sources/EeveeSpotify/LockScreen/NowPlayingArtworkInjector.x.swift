@@ -44,6 +44,7 @@ enum LockScreenArtworkInjector {
     private static var artworks: [String: Any] = [:]
     private static var lastLogged = ""
     private static var reportedUnsupported = false
+    private static var reportedNoMatchingKey = false
     private static var supportedKeys: [String]?
     private static var activated = false
 
@@ -59,10 +60,6 @@ enum LockScreenArtworkInjector {
         guard LockScreenArtwork.isEnabled else {
             // 关掉之后不再有任何新素材，旧 artwork 的 handler 也要失效（空标识 ≠ 上一首）。
             LockScreenArtworkResolver.shared.noteNowPlaying(identifier: "")
-            return info
-        }
-        guard info[MPNowPlayingInfoProperty1x1AnimatedArtwork] == nil,
-              info[MPNowPlayingInfoProperty3x4AnimatedArtwork] == nil else {
             return info
         }
         guard let title = info[MPMediaItemPropertyTitle] as? String, !title.isEmpty else {
@@ -89,6 +86,7 @@ enum LockScreenArtworkInjector {
 
         let cover = info[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork
         var output = info
+        var changed = false
 
         for aspect in LockScreenArtwork.Aspect.allCases {
             let key: String
@@ -98,7 +96,7 @@ enum LockScreenArtworkInjector {
             }
             guard supported.contains(key) else { continue }
 
-            output[key] = artwork(
+            let expected = artwork(
                 identifier: identifier,
                 aspect: aspect,
                 title: title,
@@ -107,9 +105,22 @@ enum LockScreenArtworkInjector {
                 duration: duration,
                 cover: cover
             )
+            // 同一个对象再写一遍不算变化；但 Spotify（或别的组件）把上一首的 artwork
+            // 原样带回来时，这里要换成当前这一首的 —— 不能只看"键在不在"。
+            if let existing = output[key] as? MPMediaItemAnimatedArtwork, existing === expected {
+                continue
+            }
+            output[key] = expected
+            changed = true
         }
 
-        guard output.count > info.count else { return info }
+        guard changed else {
+            if !supported.contains(MPNowPlayingInfoProperty1x1AnimatedArtwork),
+               !supported.contains(MPNowPlayingInfoProperty3x4AnimatedArtwork) {
+                noteNoMatchingKeyOnce(supported: supported)
+            }
+            return info
+        }
         noteInjectedOnce(identifier: identifier, title: title, supported: supported)
         return output
     }
@@ -216,6 +227,19 @@ enum LockScreenArtworkInjector {
         writeDebugLog(
             "[\(LockScreenArtwork.logTag)] this platform supports no animated artwork key —"
                 + " nothing is injected"
+        )
+    }
+
+    private static func noteNoMatchingKeyOnce(supported: [String]) {
+        lock.lock()
+        let first = !reportedNoMatchingKey
+        reportedNoMatchingKey = true
+        lock.unlock()
+
+        guard first else { return }
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] platform keys [\(supported.joined(separator: ","))]"
+                + " contain none of the two animated artwork keys — nothing is injected"
         )
     }
 

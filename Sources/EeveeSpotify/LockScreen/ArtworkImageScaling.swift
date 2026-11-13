@@ -13,7 +13,10 @@ enum ArtworkImageScaling {
 
     static func fill(_ image: UIImage, to size: CGSize) -> UIImage {
         let target = capped(size)
-        guard target.width >= 1, target.height >= 1 else { return image }
+        guard target.width >= 1, target.height >= 1,
+              image.size.width >= 1, image.size.height >= 1 else {
+            return image
+        }
         guard abs(image.size.width - target.width) >= 0.5
             || abs(image.size.height - target.height) >= 0.5 else {
             return image

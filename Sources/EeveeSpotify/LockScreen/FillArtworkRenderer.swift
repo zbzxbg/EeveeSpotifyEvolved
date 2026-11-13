@@ -30,6 +30,30 @@ enum FillArtworkRenderer {
         aspect: LockScreenArtwork.Aspect,
         to destination: URL
     ) async throws {
+        // 编码是同步阻塞的（等 `isReadyForMoreMediaData`、等 `finishWriting`）。放到自己的
+        // 串行队列，别占着 Swift 并发的协作线程。
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            encodeQueue.async {
+                do {
+                    try renderSync(cover: cover, aspect: aspect, to: destination)
+                    continuation.resume()
+                } catch let error {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private static let encodeQueue = DispatchQueue(
+        label: "com.eevee.lockscreen.fill",
+        qos: .utility
+    )
+
+    private static func renderSync(
+        cover: UIImage,
+        aspect: LockScreenArtwork.Aspect,
+        to destination: URL
+    ) throws {
         guard let source = bitmap(cover) else {
             throw Failure(reason: "the cover has no bitmap")
         }
@@ -273,10 +297,11 @@ enum FillArtworkRenderer {
         )
     }
 
-    /// 余弦从 1.0 出发、到 1.04 再回 1.0，首末帧一致，循环无缝。
+    /// 余弦从 1.0 出发、到 1.04 再回 1.0，首末帧一致，循环无缝。末帧取 `total` 的
+    /// 位置（不是 `total - 1`），否则第 0 帧和第 95 帧会一样，循环时多停一拍。
     private static func zoomScale(frame: Int, total: Int) -> CGFloat {
         guard total > 1 else { return 1 }
-        let phase = Double(frame) / Double(total - 1) * 2 * Double.pi
+        let phase = Double(frame) / Double(total) * 2 * Double.pi
         return 1 + zoom * CGFloat(0.5 - 0.5 * cos(phase))
     }
 }

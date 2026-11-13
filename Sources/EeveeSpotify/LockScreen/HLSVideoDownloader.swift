@@ -17,21 +17,30 @@ enum HLSVideoDownloader {
         playlist: URL,
         to destination: URL,
         session: URLSession,
-        targetWidth: CGFloat
+        targetWidth: CGFloat,
+        deadline: Date
     ) async throws {
         let master = try await text(playlist, session: session)
+        try checkDeadline(deadline)
 
         let mediaURL: URL
         let mediaText: String
         if master.contains("#EXT-X-STREAM-INF") {
             mediaURL = try variant(in: master, base: playlist, targetWidth: targetWidth)
             mediaText = try await text(mediaURL, session: session)
+            try checkDeadline(deadline)
         } else {
             mediaURL = playlist
             mediaText = master
         }
 
-        try await assemble(mediaText, base: mediaURL, to: destination, session: session)
+        try await assemble(
+            mediaText,
+            base: mediaURL,
+            to: destination,
+            session: session,
+            deadline: deadline
+        )
     }
 
     // MARK: - 主播放列表
@@ -79,7 +88,8 @@ enum HLSVideoDownloader {
         _ playlist: String,
         base: URL,
         to destination: URL,
-        session: URLSession
+        session: URLSession,
+        deadline: Date
     ) async throws {
         var initSegment: (url: URL, range: Range<Int>?)?
         var segments: [(url: URL, range: Range<Int>?)] = []
@@ -142,6 +152,7 @@ enum HLSVideoDownloader {
             if Task.isCancelled {
                 throw Failure(reason: "cancelled")
             }
+            try checkDeadline(deadline)
             try await append(segment.url, range: segment.range, to: handle, session: session)
         }
     }
@@ -162,7 +173,7 @@ enum HLSVideoDownloader {
         session: URLSession
     ) async throws {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 20
+        request.timeoutInterval = 10
         if let range {
             request.setValue(
                 "bytes=\(range.lowerBound)-\(range.upperBound - 1)",
@@ -182,9 +193,18 @@ enum HLSVideoDownloader {
 
     // MARK: - 工具
 
+    private static func checkDeadline(_ deadline: Date) throws {
+        if Task.isCancelled {
+            throw Failure(reason: "cancelled")
+        }
+        if Date() >= deadline {
+            throw Failure(reason: "timed out")
+        }
+    }
+
     private static func text(_ url: URL, session: URLSession) async throws -> String {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 20
+        request.timeoutInterval = 10
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw Failure(reason: "playlist \(url.lastPathComponent) failed")

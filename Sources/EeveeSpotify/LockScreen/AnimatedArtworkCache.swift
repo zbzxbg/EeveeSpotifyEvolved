@@ -40,6 +40,7 @@ enum AnimatedArtworkCache {
               size.int64Value > 0 else {
             return nil
         }
+        markInUse(key: key)
         touch(url)
         return url
     }
@@ -52,6 +53,7 @@ enum AnimatedArtworkCache {
             try? FileManager.default.removeItem(at: destination)
         }
         try FileManager.default.moveItem(at: temporaryURL, to: destination)
+        markInUse(key: key)
         return destination
     }
 
@@ -74,6 +76,9 @@ enum AnimatedArtworkCache {
     }
 
     /// 超上限时按"最久没被系统要过"删。每次命中都会刷新修改时间，所以它近似于 LRU。
+    ///
+    /// 最近交给系统的几条**不删**：系统手里的本地 URL 没有失效通知，删掉正在播放的那条
+    /// 只会让锁屏忽然黑一下。
     static func trimIfNeeded() {
         let files = entries()
         var total = files.reduce(into: Int64(0)) { $0 += $1.size }
@@ -81,6 +86,7 @@ enum AnimatedArtworkCache {
 
         for entry in files.sorted(by: { $0.date < $1.date }) {
             guard total > LockScreenArtwork.cacheByteLimit else { break }
+            if isInUse(entry.url) { continue }
             try? FileManager.default.removeItem(at: entry.url)
             total -= entry.size
         }
@@ -92,6 +98,31 @@ enum AnimatedArtworkCache {
 
     static func clear() {
         try? FileManager.default.removeItem(at: directory)
+    }
+
+    // MARK: - 正在使用的条目
+
+    private static let protectionLock = NSLock()
+    private static var protectedKeys: [String] = []
+
+    /// 记住"系统刚拿到的这几条"。只留最近 4 个 key（两个画幅 × 两首），足够覆盖
+    /// 一次切歌窗口，又不会让缓存永远清不掉。
+    static func markInUse(key: String) {
+        protectionLock.lock()
+        if !protectedKeys.contains(key) {
+            protectedKeys.append(key)
+            if protectedKeys.count > 4 {
+                protectedKeys.removeFirst()
+            }
+        }
+        protectionLock.unlock()
+    }
+
+    private static func isInUse(_ url: URL) -> Bool {
+        let key = url.deletingPathExtension().lastPathComponent
+        protectionLock.lock()
+        defer { protectionLock.unlock() }
+        return protectedKeys.contains(key)
     }
 
     // MARK: - 工具

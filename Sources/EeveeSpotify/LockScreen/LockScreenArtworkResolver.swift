@@ -200,9 +200,18 @@ final class LockScreenArtworkResolver {
         size: CGSize,
         cover: MPMediaItemArtwork?
     ) async -> URL? {
+        // 系统给视频 handler 的预算约 30 秒；整条"目录查询 + 下载 + 转码"压在 22 秒内，
+        // 剩下的时间给本地 Fill 和转码。每个 await 之后都再看一眼，别把预算耗在一条
+        // 走不通的源上。
+        let deadline = Date().addingTimeInterval(22)
         guard isCurrent(stamp) else { return nil }
 
-        let resolved = await resolveSources(title: title, artist: artist, album: album)
+        let resolved = await resolveSources(
+            title: title,
+            artist: artist,
+            album: album,
+            deadline: deadline
+        )
         guard isCurrent(stamp), !Task.isCancelled else { return nil }
 
         let attempts = candidates(
@@ -212,7 +221,7 @@ final class LockScreenArtworkResolver {
         )
 
         for candidate in attempts {
-            guard isCurrent(stamp), !Task.isCancelled else { return nil }
+            guard isCurrent(stamp), !Task.isCancelled, Date() < deadline else { return nil }
 
             let temporary = FileManager.default.temporaryDirectory
                 .appendingPathComponent("eevee-lockart-\(UUID().uuidString).mp4")
@@ -220,12 +229,13 @@ final class LockScreenArtworkResolver {
             do {
                 switch candidate {
                 case .remote(let asset):
-                    try await download(asset, to: temporary)
+                    try await download(asset, to: temporary, deadline: deadline)
                 case .fill:
                     guard let cover,
                           let still = cover.image(at: CGSize(width: 900, height: 900)) else {
                         continue
                     }
+                    guard Date() < deadline else { return nil }
                     try await FillArtworkRenderer.render(
                         cover: still,
                         aspect: aspect,
@@ -276,13 +286,21 @@ final class LockScreenArtworkResolver {
         return nil
     }
 
-    private func download(_ asset: AnimatedArtworkAsset, to destination: URL) async throws {
+    private func download(
+        _ asset: AnimatedArtworkAsset,
+        to destination: URL,
+        deadline: Date
+    ) async throws {
+        guard Date() < deadline else {
+            throw HLSVideoDownloader.Failure(reason: "timed out")
+        }
         if asset.isHLS {
             try await HLSVideoDownloader.download(
                 playlist: asset.videoURL,
                 to: destination,
                 session: session,
-                targetWidth: 960
+                targetWidth: 960,
+                deadline: deadline
             )
             return
         }
@@ -327,7 +345,12 @@ final class LockScreenArtworkResolver {
         return result
     }
 
-    private func resolveSources(title: String, artist: String, album: String) async -> Sources {
+    private func resolveSources(
+        title: String,
+        artist: String,
+        album: String,
+        deadline: Date
+    ) async -> Sources {
         let key = "\(title)|\(artist)|\(album)"
 
         lock.lock()
@@ -341,7 +364,12 @@ final class LockScreenArtworkResolver {
         }
         let task = Task<Sources, Never> { [weak self] in
             guard let self else { return .empty }
-            return await self.performResolve(title: title, artist: artist, album: album)
+            return await self.performResolve(
+                title: title,
+                artist: artist,
+                album: album,
+                deadline: deadline
+            )
         }
         resolving[key] = task
         lock.unlock()
@@ -359,7 +387,12 @@ final class LockScreenArtworkResolver {
         return value
     }
 
-    private func performResolve(title: String, artist: String, album: String) async -> Sources {
+    private func performResolve(
+        title: String,
+        artist: String,
+        album: String,
+        deadline: Date
+    ) async -> Sources {
         var canvas: AnimatedArtworkAsset?
 
         if LockScreenArtwork.wantsCanvas {
@@ -376,14 +409,15 @@ final class LockScreenArtworkResolver {
             title: title,
             artist: artist,
             album: album,
-            session: session
+            session: session,
+            deadline: deadline
         )
 
         return Sources(canvas: canvas, apple: apple)
     }
 
     private func currentMetadata() async -> [String: String]? {
-        await MainActor.run {
+        await MainActor.run { () -> [String: String]? in
             guard let track = statefulPlayer?.currentTrack()
                 ?? nowPlayingScrollViewController?.loadedTrack else {
                 return nil
