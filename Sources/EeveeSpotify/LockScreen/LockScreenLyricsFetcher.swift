@@ -23,12 +23,18 @@ enum LockScreenLyricsFetcher {
         trackId: String,
         deadline: Date
     ) -> Result? {
+        // 「实验 → 启用 Apple Music 官方 TTML 歌词」是**忽略其它所有歌词设置**的总覆盖
+        // （见 `CustomLyrics.loadCustomLyricsForCurrentTrack` 顶部）：它连"禁用歌词替换"
+        // 也压过去。锁屏这一层必须同样处理，否则开关打开后两边可能拿到不同的词。
+        let officialOverride = UserDefaults.experimentsOptions.appleMusicOfficialTtml
         let setting = UserDefaults.lyricsSource
-        guard setting.isReplacingLyrics else { return nil }
+        if !officialOverride {
+            guard setting.isReplacingLyrics else { return nil }
+        }
 
-        let candidates: [LyricsSource] = setting == .autoSelect
-            ? LyricsAutoSelect.chain()
-            : [setting]
+        let candidates: [LyricsSource] = officialOverride
+            ? [.appleMusicOfficialTtml]
+            : (setting == .autoSelect ? LyricsAutoSelect.chain() : [setting])
         let options = UserDefaults.lyricsOptions
 
         for candidate in candidates {

@@ -391,7 +391,10 @@ enum LyricClipRenderer {
     ) throws {
         let width = Int(size.width)
         let height = Int(size.height)
-        let partial = destination.appendingPathExtension("partial")
+        // 先写同目录下的临时 `.mp4` 再改名：`.mp4.partial` 这种后缀有可能被
+        // AVFoundation 按扩展名校验挡下来（那样每段都静默失败，只剩预览图）。
+        let folder = destination.deletingLastPathComponent()
+        let partial = folder.appendingPathComponent("writing-\(UUID().uuidString).mp4")
         try? FileManager.default.removeItem(at: partial)
         try? FileManager.default.removeItem(at: destination)
 

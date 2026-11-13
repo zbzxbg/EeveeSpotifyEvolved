@@ -71,19 +71,33 @@ enum LockScreenLyrics {
         "eevee.lyrics.\(trackKey).\(lineIndex)\(resting ? "r" : "")-\(frameHash).\(aspect.rawValue)"
     }
 
-    /// 只留当前这一首的目录。一行一段、一轨几十上百段，不清理的话会一直堆在 Caches 里。
+    /// 只留**当前这首 + 最近用过的两首**的目录。
+    ///
+    /// 为什么不"除当前这首全删"：① 系统手里的视频 URL 在 artwork 还挂在 now-playing 上时
+    /// 必须有效，刚被替换掉的那一版可能还在用；② 正在写的片段会被删；③ A→B→A 会整首重渲。
     static func trimCache(keeping trackKey: String) {
         DispatchQueue.global(qos: .utility).async {
             let root = cacheDirectory
             guard let entries = try? FileManager.default.contentsOfDirectory(
                 at: root,
-                includingPropertiesForKeys: nil,
+                includingPropertiesForKeys: [.contentModificationDateKey],
                 options: []
             ) else {
                 return
             }
-            for entry in entries where entry.lastPathComponent != trackKey {
-                try? FileManager.default.removeItem(at: entry)
+            let sorted = entries.sorted { left, right in
+                let leftDate = (try? left.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate) ?? Date.distantPast
+                let rightDate = (try? right.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate) ?? Date.distantPast
+                return leftDate > rightDate
+            }
+            var keptOthers = 0
+            for entry in sorted where entry.lastPathComponent != trackKey {
+                keptOthers += 1
+                if keptOthers > 2 {
+                    try? FileManager.default.removeItem(at: entry)
+                }
             }
         }
     }

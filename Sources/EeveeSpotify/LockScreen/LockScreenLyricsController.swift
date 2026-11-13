@@ -423,14 +423,72 @@ final class LockScreenLyricsController {
     ) {
         let supported = MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys
         guard !supported.isEmpty else { return }
+        let aspects = LockScreenArtwork.Aspect.allCases.filter {
+            supported.contains(Self.nowPlayingKey(for: $0))
+        }
+        guard !aspects.isEmpty else { return }
+
+        // 先把这一行占住，定时器就不会重复发起。预览在后台画：锁屏正在画那一屏，
+        // 一次模糊 + 两次文字排版堵在主线程上会有肉眼可见的卡顿。
+        lock.lock()
+        preparedLineKey = lineKey
+        lock.unlock()
 
         let cover = currentCover()
         let texts = Self.texts(for: location, in: lines)
         let frameHash = LockScreenLyrics.frameHash(line: texts.line, next: texts.next)
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var rendered: [LockScreenArtwork.Aspect: UIImage] = [:]
+            for aspect in aspects {
+                let size = LyricClipRenderer.clipSize(for: aspect)
+                if let image = try? LyricClipRenderer.stillImage(
+                    cover: cover,
+                    line: texts.line,
+                    next: texts.next,
+                    size: size
+                ) {
+                    rendered[aspect] = UIImage(cgImage: image)
+                }
+            }
+            DispatchQueue.main.async {
+                self?.finishInstall(
+                    lineKey: lineKey,
+                    location: location,
+                    texts: texts,
+                    frameHash: frameHash,
+                    aspects: aspects,
+                    rendered: rendered,
+                    lines: lines,
+                    trackKey: trackKey,
+                    cover: cover
+                )
+            }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func finishInstall(
+        lineKey: String,
+        location: LocatedLine,
+        texts: (line: String?, next: String?),
+        frameHash: String,
+        aspects: [LockScreenArtwork.Aspect],
+        rendered: [LockScreenArtwork.Aspect: UIImage],
+        lines: [LockScreenLyricLine],
+        trackKey: String,
+        cover: CGImage?
+    ) {
+        // 画预览这段时间里可能已经切歌/换行：不是当前这一行就丢掉。
+        guard LockScreenLyrics.isEnabled else { return }
+        lock.lock()
+        let stillCurrent = trackKey == self.trackKey && preparedLineKey == lineKey
+        lock.unlock()
+        guard stillCurrent else { return }
+
         var prepared: [String: Any] = [:]
-        for aspect in LockScreenArtwork.Aspect.allCases {
+        for aspect in aspects {
             let key = Self.nowPlayingKey(for: aspect)
-            guard supported.contains(key) else { continue }
             let artworkID = LockScreenLyrics.artworkID(
                 trackKey: trackKey,
                 lineIndex: location.index,
@@ -438,19 +496,9 @@ final class LockScreenLyricsController {
                 aspect: aspect,
                 frameHash: frameHash
             )
-
-            // 预览必须赶在系统来要之前画好：系统一拿到新 ID 就同时要预览与视频，
-            // 预览慢一拍会先闪静态封面，再慢就画成灰色占位图。
-            let size = LyricClipRenderer.clipSize(for: aspect)
-            if let image = try? LyricClipRenderer.stillImage(
-                cover: cover,
-                line: texts.line,
-                next: texts.next,
-                size: size
-            ) {
-                previews.setObject(UIImage(cgImage: image), forKey: artworkID as NSString)
+            if let preview = rendered[aspect] {
+                previews.setObject(preview, forKey: artworkID as NSString)
             }
-
             prepared[key] = artwork(
                 artworkID: artworkID,
                 aspect: aspect,
@@ -467,7 +515,6 @@ final class LockScreenLyricsController {
 
         lock.lock()
         self.prepared = prepared
-        preparedLineKey = lineKey
         preparedTrackKey = trackKey
         lock.unlock()
 
@@ -647,7 +694,7 @@ final class LockScreenLyricsController {
 
     private func currentTrack(matching title: String) -> SPTPlayerTrack? {
         guard let track = statefulPlayer?.currentTrack() else { return nil }
-        let trackTitle = track.trackTitle()
+        let trackTitle = Self.title(of: track)
         guard LockScreenArtwork.looksLikeSameSong(trackTitle, title) else { return nil }
         return track
     }
@@ -659,7 +706,7 @@ final class LockScreenLyricsController {
 
     private func makeQuery(track: SPTPlayerTrack) -> LyricsSearchQuery {
         let metadata = track.metadata()
-        let title = track.trackTitle()
+        let title = Self.title(of: track)
         let metadataTitle = metadata["title"]?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var titleVariants: [String] = []
@@ -671,13 +718,26 @@ final class LockScreenLyricsController {
 
         return LyricsSearchQuery(
             title: title,
-            primaryArtist: track.artistName(),
+            primaryArtist: Self.artist(of: track),
             spotifyTrackId: track.trackIdentifier,
             durationMs: track.trackDurationMilliseconds,
             artistNames: Self.allArtistNames(in: metadata),
             titleVariants: titleVariants,
             albumTitle: (album?.isEmpty == false) ? album : nil
         )
+    }
+
+    /// `SPTPlayerTrack` 是手写的 `@objc protocol` —— **声明了不等于实现了**：8.9.8 上
+    /// `artistName` 就不存在，直接调会 `unrecognized selector` 崩掉（见
+    /// `SPTPlayerTrack+Extension.swift` 文件头）。这两个 getter 一律走探测式调用。
+    private static func title(of track: SPTPlayerTrack) -> String {
+        track.string(ifResponding: "trackTitle") ?? ""
+    }
+
+    private static func artist(of track: SPTPlayerTrack) -> String {
+        track.string(ifResponding: "artistName")
+            ?? track.string(ifResponding: "artistTitle")
+            ?? ""
     }
 
     private static func allArtistNames(in metadata: [String: String]) -> [String] {
