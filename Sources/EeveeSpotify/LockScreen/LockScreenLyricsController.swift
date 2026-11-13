@@ -30,6 +30,8 @@ final class LockScreenLyricsController {
     private var trackKey = ""
     private var trackId = ""
     private var lines: [LockScreenLyricLine] = []
+    /// 这一份词是谁给的（画到底沿的小字）。空字符串 = 不画。
+    private var credit = ""
     private var linesFetched = false
     /// 正在取词（或正在等播放器对象出现）。避免同一首每拍都重来一遍。
     private var fetchInFlight = false
@@ -37,6 +39,8 @@ final class LockScreenLyricsController {
     /// 这段时间里"没有曲目对象"不等于"这首没词"，要给到一次重试的机会。
     private var playerRetryDeadline: CFAbsoluteTime = 0
     private var nextPlayerRetryAt: CFAbsoluteTime = 0
+    /// 已经在"等播放器"上放弃过一次：此后按慢节奏继续试（不占定时器预算）。
+    private var waitingForPlayer = false
     private var generation: UInt64 = 0
     private var loggedNoLyricsFor = ""
 
@@ -252,16 +256,23 @@ final class LockScreenLyricsController {
         var ready = false
         var currentLines: [LockScreenLyricLine] = []
         var shouldRetry = false
+        var waitingForPlayerRetry = false
         lock.lock()
         ready = linesFetched
         currentLines = lines
+        let now = CFAbsoluteTimeGetCurrent()
         if !ready, !fetchInFlight, trackKey == key {
-            shouldRetry = CFAbsoluteTimeGetCurrent() >= nextPlayerRetryAt
+            // 冷启动：第一次写入可能比 `statefulPlayer` 早到。等一秒再试，15 秒后放弃。
+            shouldRetry = now >= nextPlayerRetryAt
+        } else if ready, currentLines.isEmpty, waitingForPlayer, now >= nextPlayerRetryAt {
+            // 放弃之后按 5 秒的慢节奏继续看播放器对象出现没有 —— 那一首不该永久没词。
+            waitingForPlayerRetry = true
+            nextPlayerRetryAt = now + 5
+            playerRetryDeadline = now + 15
         }
         lock.unlock()
 
-        // 冷启动：第一次写入可能比 `statefulPlayer` 早到。等一秒再试，15 秒后放弃。
-        if shouldRetry {
+        if shouldRetry || waitingForPlayerRetry {
             beginTrack(key: key, title: title)
             lock.lock()
             ready = linesFetched
@@ -299,8 +310,10 @@ final class LockScreenLyricsController {
         trackKey = key
         trackId = ""
         lines = []
+        credit = ""
         linesFetched = false
         fetchInFlight = true
+        waitingForPlayer = false
         prepared = [:]
         preparedLineKey = ""
         preparedTrackKey = ""
@@ -329,6 +342,8 @@ final class LockScreenLyricsController {
                 fetchInFlight = false
                 if gaveUp {
                     linesFetched = true
+                    waitingForPlayer = true
+                    nextPlayerRetryAt = now + 5
                 } else {
                     nextPlayerRetryAt = now + 1
                 }
@@ -349,9 +364,13 @@ final class LockScreenLyricsController {
         // 这一首的词如果已经在内存里（歌词页加载过），直接转，不发网络请求。
         if let dto = loadedLyrics(for: identifier),
            let converted = LockScreenLyricsFetcher.convert(dto) {
+            let source = dto.providerName.isEmpty
+                ? (currentLyricsSource?.description ?? "")
+                : dto.providerName
             lock.lock()
             if stamp == generation {
                 lines = converted
+                credit = source
                 linesFetched = true
                 fetchInFlight = false
             }
@@ -388,8 +407,12 @@ final class LockScreenLyricsController {
             return
         }
         lines = result?.lines ?? []
+        if let result {
+            credit = result.source.description
+        }
         linesFetched = true
         fetchInFlight = false
+        waitingForPlayer = false
         let count = lines.count
         lock.unlock()
 
@@ -435,8 +458,14 @@ final class LockScreenLyricsController {
         lock.unlock()
 
         let cover = currentCover()
+        let credit = currentCredit()
         let texts = Self.texts(for: location, in: lines)
-        let frameHash = LockScreenLyrics.frameHash(line: texts.line, next: texts.next)
+        let frameHash = LockScreenLyrics.frameHash(
+            line: texts.line,
+            next: texts.next,
+            credit: credit,
+            hasCover: cover != nil
+        )
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var rendered: [LockScreenArtwork.Aspect: UIImage] = [:]
@@ -446,6 +475,7 @@ final class LockScreenLyricsController {
                     cover: cover,
                     line: texts.line,
                     next: texts.next,
+                    credit: credit,
                     size: size
                 ) {
                     rendered[aspect] = UIImage(cgImage: image)
@@ -456,6 +486,7 @@ final class LockScreenLyricsController {
                     lineKey: lineKey,
                     location: location,
                     texts: texts,
+                    credit: credit,
                     frameHash: frameHash,
                     aspects: aspects,
                     rendered: rendered,
@@ -472,6 +503,7 @@ final class LockScreenLyricsController {
         lineKey: String,
         location: LocatedLine,
         texts: (line: String?, next: String?),
+        credit: String,
         frameHash: String,
         aspects: [LockScreenArtwork.Aspect],
         rendered: [LockScreenArtwork.Aspect: UIImage],
@@ -504,6 +536,7 @@ final class LockScreenLyricsController {
                 aspect: aspect,
                 location: location,
                 texts: texts,
+                credit: credit,
                 frameHash: frameHash,
                 lines: lines,
                 trackKey: trackKey,
@@ -531,6 +564,7 @@ final class LockScreenLyricsController {
         aspect: LockScreenArtwork.Aspect,
         location: LocatedLine,
         texts: (line: String?, next: String?),
+        credit: String,
         frameHash: String,
         lines: [LockScreenLyricLine],
         trackKey: String,
@@ -538,6 +572,7 @@ final class LockScreenLyricsController {
     ) -> MPMediaItemAnimatedArtwork {
         let seconds = Self.clipSeconds(for: location, in: lines)
         let size = LyricClipRenderer.clipSize(for: aspect)
+        let lineKey = Self.lineKey(for: location)
 
         return MPMediaItemAnimatedArtwork(
             artworkID: artworkID,
@@ -555,6 +590,7 @@ final class LockScreenLyricsController {
                     cover: cover,
                     line: texts.line,
                     next: texts.next,
+                    credit: credit,
                     size: size
                 ) {
                     let uiImage = UIImage(cgImage: image)
@@ -576,6 +612,11 @@ final class LockScreenLyricsController {
                         completion(nil)
                         return
                     }
+                    // 这一行已经不是当前行了（用户拖了进度/切了歌）：不要再花时间编码。
+                    guard self.isLineCurrent(trackKey: trackKey, lineKey: lineKey) else {
+                        completion(nil)
+                        return
+                    }
                     let file = await self.clipURL(
                         trackKey: trackKey,
                         lineIndex: location.index,
@@ -584,6 +625,7 @@ final class LockScreenLyricsController {
                         frameHash: frameHash,
                         line: texts.line,
                         next: texts.next,
+                        credit: credit,
                         cover: cover,
                         seconds: seconds
                     )
@@ -603,6 +645,7 @@ final class LockScreenLyricsController {
         frameHash: String,
         line: String?,
         next: String?,
+        credit: String,
         cover: CGImage?,
         seconds: Double
     ) async -> URL? {
@@ -635,6 +678,7 @@ final class LockScreenLyricsController {
                     cover: cover,
                     line: line,
                     next: next,
+                    credit: credit,
                     size: size,
                     seconds: seconds,
                     to: file
@@ -665,6 +709,36 @@ final class LockScreenLyricsController {
         return cover
     }
 
+    private func currentCredit() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return credit
+    }
+
+    /// 系统可能在我们已经换行/切歌之后才来要上一行的视频：那时不要再花时间编码。
+    private func isLineCurrent(trackKey: String, lineKey: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return self.trackKey == trackKey && preparedLineKey == lineKey
+    }
+
+    /// 设置页的"清除"：连当前这首一起清，同时把这行已经装出去的 artwork 撤掉，
+    /// 免得系统手里还指着一个刚被删掉的文件。下一拍会按当前行重新装。
+    func purgeCache() {
+        lock.lock()
+        prepared = [:]
+        preparedLineKey = ""
+        preparedTrackKey = ""
+        clipTasks.removeAll()
+        lock.unlock()
+
+        previews.removeAllObjects()
+        LockScreenLyrics.clearCache()
+        if #available(iOS 26.0, *) {
+            LockScreenArtworkInjector.republishForLockScreen()
+        }
+    }
+
     private func previewImage(for artworkID: String) -> UIImage? {
         previews.object(forKey: artworkID as NSString)
     }
@@ -678,8 +752,10 @@ final class LockScreenLyricsController {
         trackKey = ""
         trackId = ""
         lines = []
+        credit = ""
         linesFetched = false
         fetchInFlight = false
+        waitingForPlayer = false
         playerRetryDeadline = 0
         nextPlayerRetryAt = 0
         prepared = [:]
@@ -777,10 +853,11 @@ final class LockScreenLyricsController {
             return LocatedLine(index: -1, resting: true)
         }
 
+        // 唱完 breakMs 之后到下一行开始之前都算"间奏态"：只留压暗的下一行。
+        // 不把"下一句还远"加进判据 —— 那样在下一句前 4 秒会翻回刚唱完的那一句，
+        // 用户会看到一句已经唱过的词又被点亮。
         let line = lines[index]
-        let nextStart = index + 1 < lines.count ? lines[index + 1].startMs : nil
-        let nextIsFar = nextStart == nil || (nextStart! - positionMs) > LockScreenLyrics.breakMs
-        let resting = positionMs > line.endMs + LockScreenLyrics.breakMs && nextIsFar
+        let resting = positionMs > line.endMs + LockScreenLyrics.breakMs
         return LocatedLine(index: index, resting: resting)
     }
 

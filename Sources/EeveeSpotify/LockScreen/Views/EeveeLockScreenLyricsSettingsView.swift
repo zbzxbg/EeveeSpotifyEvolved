@@ -39,7 +39,7 @@ struct EeveeLockScreenLyricsSettingsView: View {
                             ? "lock_screen_lyrics_cleared".localized
                             : "lock_screen_lyrics_clear".localized
                     ) {
-                        LockScreenLyrics.clearCache()
+                        LockScreenLyricsController.shared.purgeCache()
                         cacheBytes = LockScreenLyrics.totalBytes()
                         didClear = true
                     }

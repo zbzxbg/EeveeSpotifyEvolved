@@ -42,10 +42,16 @@ enum LockScreenLyrics {
         FNV1a.hex("\(title)|\(artist)|\(Int(duration.rounded()))")
     }
 
-    /// 一段片子画的其实是"这一行 + 压暗的下一行"。换歌词来源之后同一首歌同一行的文案会变，
-    /// 而 trackKey 不变 —— 所以帧的内容也要进文件名/ID，否则会把旧文案的片段再拿出来。
-    static func frameHash(line: String?, next: String?) -> String {
-        FNV1a.hex("\(line ?? "")|\(next ?? "")")
+    /// 一段片子画的其实是"这一行 + 压暗的下一行 + 底沿署名"。换歌词来源之后文案会变，
+    /// 而 trackKey 不变；封面缺失时渲出来的是深色底，补到封面之后也应该重渲一份 ——
+    /// 所以帧的内容（含有没有封面）都要进文件名/ID。
+    static func frameHash(
+        line: String?,
+        next: String?,
+        credit: String,
+        hasCover: Bool
+    ) -> String {
+        FNV1a.hex("\(line ?? "")|\(next ?? "")|\(credit)|\(hasCover ? "c" : "n")")
     }
 
     /// 一段片子的文件名。画幅与"间奏态"都要进来：同一行的两种形态是两份文件。
@@ -93,13 +99,34 @@ enum LockScreenLyrics {
                 return leftDate > rightDate
             }
             var keptOthers = 0
+            var kept: [URL] = [root.appendingPathComponent(trackKey, isDirectory: true)]
             for entry in sorted where entry.lastPathComponent != trackKey {
                 keptOthers += 1
                 if keptOthers > 2 {
                     try? FileManager.default.removeItem(at: entry)
+                } else {
+                    kept.append(entry)
+                }
+            }
+
+            // 崩溃/中断留下的临时片段（写成功会改名，没改名的一律作废）。
+            for directory in kept {
+                guard let files = try? FileManager.default.contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: nil,
+                    options: []
+                ) else { continue }
+                for file in files where file.lastPathComponent.hasPrefix("writing-") {
+                    try? FileManager.default.removeItem(at: file)
                 }
             }
         }
+    }
+
+    /// 设置页的"清除"：全删。调用方（`LockScreenLyricsController.purgeCache`）会同时撤掉
+    /// 已经装出去的 artwork，所以不存在"系统还指着一个被删掉的文件"。
+    static func clearCache() {
+        try? FileManager.default.removeItem(at: cacheDirectory)
     }
 
     static func totalBytes() -> Int64 {
@@ -119,10 +146,6 @@ enum LockScreenLyrics {
             total += Int64(values.fileSize ?? 0)
         }
         return total
-    }
-
-    static func clearCache() {
-        try? FileManager.default.removeItem(at: cacheDirectory)
     }
 }
 

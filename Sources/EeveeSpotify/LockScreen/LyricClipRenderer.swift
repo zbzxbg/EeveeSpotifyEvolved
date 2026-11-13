@@ -38,10 +38,11 @@ enum LyricClipRenderer {
         cover: CGImage?,
         line: String?,
         next: String?,
+        credit: String,
         size: CGSize
     ) throws -> CGImage {
         let backdrop = try backdrop(cover: cover, size: size)
-        return try compose(backdrop: backdrop, line: line, next: next, size: size)
+        return try compose(backdrop: backdrop, line: line, next: next, credit: credit, size: size)
     }
 
     /// 写一段单帧短片。`seconds` 是这段片子的名义时长：系统用它算循环点，
@@ -50,6 +51,7 @@ enum LyricClipRenderer {
         cover: CGImage?,
         line: String?,
         next: String?,
+        credit: String,
         size: CGSize,
         seconds: Double,
         to destination: URL
@@ -60,7 +62,13 @@ enum LyricClipRenderer {
             encodeQueue.async {
                 do {
                     let backdrop = try backdrop(cover: cover, size: size)
-                    let image = try compose(backdrop: backdrop, line: line, next: next, size: size)
+                    let image = try compose(
+                        backdrop: backdrop,
+                        line: line,
+                        next: next,
+                        credit: credit,
+                        size: size
+                    )
                     try writeSingleFrame(image, size: size, seconds: seconds, to: destination)
                     continuation.resume()
                 } catch let error {
@@ -156,6 +164,7 @@ enum LyricClipRenderer {
         backdrop: CGImage,
         line: String?,
         next: String?,
+        credit: String,
         size: CGSize
     ) throws -> CGImage {
         let width = Int(size.width)
@@ -182,7 +191,7 @@ enum LyricClipRenderer {
         context.draw(backdrop, in: CGRect(origin: .zero, size: size))
         context.restoreGState()
 
-        drawLyricText(line: line, next: next, size: size, context: context)
+        drawLyricText(line: line, next: next, credit: credit, size: size, context: context)
 
         guard let composed = context.makeImage() else {
             throw Failure(reason: "could not compose the frame")
@@ -193,6 +202,7 @@ enum LyricClipRenderer {
     private static func drawLyricText(
         line: String?,
         next: String?,
+        credit: String,
         size: CGSize,
         context: CGContext
     ) {
@@ -205,6 +215,10 @@ enum LyricClipRenderer {
         let following = (next ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !current.isEmpty || !following.isEmpty else { return }
+        // 歌词来源的署名：锁屏是唯一看不到页内署名的展示面，不能只显示别人的词。
+        defer {
+            drawCredit(credit, size: size, columnWidth: columnWidth, columnX: columnX, context: context)
+        }
 
         // 没在唱（间奏/换行间隙）时只把下一行压暗放在中间，不留下上一句的残影。
         guard !current.isEmpty else {
@@ -280,6 +294,32 @@ enum LyricClipRenderer {
                 y: top - currentHeight - gap - nextHeight,
                 width: columnWidth,
                 height: nextHeight
+            ),
+            context: context
+        )
+    }
+
+    /// 底沿一行小字：歌词来源。锁屏是唯一没有页内署名的地方，这一行保证"谁的词"始终可见。
+    private static func drawCredit(
+        _ credit: String,
+        size: CGSize,
+        columnWidth: CGFloat,
+        columnX: CGFloat,
+        context: CGContext
+    ) {
+        let text = credit.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let fontSize = max(9, size.width * 0.032)
+        let height = textHeight(for: text, fontSize: fontSize, columnWidth: columnWidth)
+        draw(
+            text,
+            fontSize: fontSize,
+            alpha: 0.38,
+            rect: CGRect(
+                x: columnX,
+                y: size.height * 0.07,
+                width: columnWidth,
+                height: height
             ),
             context: context
         )

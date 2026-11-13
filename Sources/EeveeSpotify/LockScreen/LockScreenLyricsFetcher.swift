@@ -87,7 +87,8 @@ enum LockScreenLyricsFetcher {
             guard !text.isEmpty else { continue }
             timed.append((start, line.endOffsetMs, text))
         }
-        guard timed.count >= 2 else { return nil }
+        // 一行也算：有些歌整首只有一句词（念白/采样），不该被当成"没词"。
+        guard !timed.isEmpty else { return nil }
         timed.sort { $0.start < $1.start }
 
         var lines: [LockScreenLyricLine] = []

@@ -54,6 +54,9 @@ enum LockScreenArtworkInjector {
     /// now-playing，重写时按速率把播放位置往前推，避免进度条倒跳。
     private static var reportedInfo: [String: Any]?
     private static var reportedAt: CFAbsoluteTime = 0
+    /// 正在**我们自己**写 now-playing。写的那一下会从 hook 绕回来，
+    /// 不能把"我们推进过时间的那份字典"当成 Spotify 的基准。
+    private static var republishing = false
 
     /// 两个 hook 共用的入口：`nil` 原样传回，非字典也原样传回。
     static func inject(_ info: NSDictionary?) -> NSDictionary? {
@@ -65,13 +68,19 @@ enum LockScreenArtworkInjector {
     static func inject(into info: [String: Any]) -> [String: Any] {
         guard #available(iOS 26.0, *) else { return info }
 
-        // 只有 Spotify 自己的写法（字典里还没有我们的动画键）才记"报时点"：
-        // 我们刷新时写回去的字典带键，不能拿来当播放位置的基准。
+        // 记"Spotify 最后写成什么样"的报时点。
+        //
+        // 判据是"这一次不是我们自己写的"，而**不是**"字典里没有我们的键"：
+        // Spotify 可能读回 `nowPlayingInfo` 再整体写一遍（参考实现也给 getter 打了同样的
+        // 补丁），那种字典是带着我们的键回来的，它才是新的基准；把它们排除掉会让基准
+        // 冻结在第一次注入之前，之后每次重写都会算错播放位置。
         //
         // 这一段必须在开关判断**之前**：两个开关都关着时也要记 —— 歌词是用户中途打开的，
-        // 那一刻手上得有一份"Spotify 最后写成什么样"的快照，才能立刻重写一次。
-        if info[MPNowPlayingInfoProperty1x1AnimatedArtwork] == nil,
-           info[MPNowPlayingInfoProperty3x4AnimatedArtwork] == nil {
+        // 那一刻手上得有一份快照，才能立刻重写一次。
+        lock.lock()
+        let isRepublishing = republishing
+        lock.unlock()
+        if !isRepublishing {
             lock.lock()
             reportedInfo = info
             reportedAt = CFAbsoluteTimeGetCurrent()
@@ -467,8 +476,16 @@ enum LockScreenArtworkInjector {
                 value: elapsed.doubleValue + rate * distance
             )
         }
+
+        // 我们自己写的这一下会从 setter hook 绕回来；标上记号，别让它覆盖基准。
+        lock.lock()
+        republishing = true
+        lock.unlock()
         MPNowPlayingInfoCenter.default().nowPlayingInfo =
             LockScreenArtworkInjector.inject(into: info)
+        lock.lock()
+        republishing = false
+        lock.unlock()
     }
 }
 
