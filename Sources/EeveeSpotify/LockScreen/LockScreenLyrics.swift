@@ -22,6 +22,10 @@ enum LockScreenLyrics {
     static let longestClipSeconds: Double = 30
     static let shortestClipSeconds: Double = 6
 
+    /// 片段**画法**的版本。画布朝向、字号这类"同一行文字但像素不同"的改动必须进哈希：
+    /// 文件名与 `artworkID` 只由它和文案决定，不换版本就会继续复用按老画法渲好的文件。
+    private static let clipFormat = "v2"
+
     static var isEnabled: Bool { UserDefaults.lockScreenLyrics }
 
     // MARK: - 缓存
@@ -44,14 +48,16 @@ enum LockScreenLyrics {
 
     /// 一段片子画的其实是"这一行 + 压暗的下一行 + 底沿署名"。换歌词来源之后文案会变，
     /// 而 trackKey 不变；封面缺失时渲出来的是深色底，补到封面之后也应该重渲一份 ——
-    /// 所以帧的内容（含有没有封面）都要进文件名/ID。
+    /// 所以帧的内容（含有没有封面、以及 `clipFormat`）都要进文件名/ID。
     static func frameHash(
         line: String?,
         next: String?,
         credit: String,
         hasCover: Bool
     ) -> String {
-        FNV1a.hex("\(line ?? "")|\(next ?? "")|\(credit)|\(hasCover ? "c" : "n")")
+        FNV1a.hex(
+            "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(credit)|\(hasCover ? "c" : "n")"
+        )
     }
 
     /// 一段片子的文件名。画幅与"间奏态"都要进来：同一行的两种形态是两份文件。

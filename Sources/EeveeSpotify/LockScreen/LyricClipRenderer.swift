@@ -182,14 +182,10 @@ enum LyricClipRenderer {
             throw Failure(reason: "could not open a bitmap context")
         }
 
-        // 背景图是从另一个位图上下文里出来的，画进这个上下文要自己翻一次 Y；
-        // 文字走 CoreText，在未翻转的坐标里画才是正的，所以只翻图片那一段。
-        context.saveGState()
-        context.translateBy(x: 0, y: size.height)
-        context.scaleBy(x: 1, y: -1)
+        // 这张合成图有两个去处：系统要预览时当静帧交出去，要视频时按原样编码。两处必须
+        // 同一朝向，所以背景和文字都画在同一个（未翻转的）坐标系里。
         context.interpolationQuality = .high
         context.draw(backdrop, in: CGRect(origin: .zero, size: size))
-        context.restoreGState()
 
         drawLyricText(line: line, next: next, credit: credit, size: size, context: context)
 
@@ -532,8 +528,8 @@ enum LyricClipRenderer {
             throw Failure(reason: "could not draw into the pixel buffer")
         }
 
-        context.translateBy(x: 0, y: size.height)
-        context.scaleBy(x: 1, y: -1)
+        // 不翻 Y：这桶像素的第 0 行就是画面顶行，和位图上下文一致。再翻一次会让视频
+        // 相对预览静帧上下镜像 —— 同一行歌词，预览是正的、视频是反的。
         context.interpolationQuality = .high
         context.draw(image, in: CGRect(origin: .zero, size: size))
     }
