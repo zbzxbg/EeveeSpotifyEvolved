@@ -112,7 +112,7 @@ Free profiles usually have no wildcard, so both builds ship without the Watch ap
 - [whoeevee](https://github.com/whoeevee) — the original EeveeSpotify project.
 - [SideloadLabs](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) — the Spicy Lyrics provider, logging and export.
 - [LDDC](https://github.com/chenmozhijin/LDDC) and [pyqdes](https://github.com/naiyQAQ/pyqdes) — the key bytes and step order for the KuGou (KRC) and QQ Music (QRC) lyric decryption.
-- [Taurus](https://github.com/samj-exe/taurus) — the provider list and the "ask in order, keep the finest timing" idea. Taurus is PolyForm Strict: **no code was copied**; see [docs/CREDITS.md](docs/CREDITS.md).
+- [Taurus](https://github.com/samj-exe/taurus) — the provider list and the "ask in order, keep the finest timing" idea, the lock screen's clip-per-line delivery, and the sleep timer's countdown. Taurus is PolyForm Strict: **no code was copied**; see [docs/CREDITS.md](docs/CREDITS.md).
 
 Full list of credits and licensing notes: [docs/CREDITS.md](docs/CREDITS.md).
 

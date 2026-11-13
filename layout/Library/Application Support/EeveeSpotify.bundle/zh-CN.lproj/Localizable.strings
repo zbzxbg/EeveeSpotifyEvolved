@@ -603,7 +603,7 @@ licenses_163musiclyrics_detail = "网易云 abroad 响应的形态与 cloudsearc
 licenses_lddc = "LDDC · pyqdes";
 licenses_lddc_detail = "酷狗(KRC)与QQ音乐(QRC)歌词解密的密钥字节与 DES 步骤顺序。LDDC 为 GPL-3.0-only，pyqdes 为 MIT。只取了算法，这里的 Swift 实现是自己写的。";
 licenses_taurus = "Taurus";
-licenses_taurus_detail = "「自动选择」的歌词源清单与「按顺序询问、保留最细时间轴」的规则来自 Taurus。Taurus 为 PolyForm Strict 1.0.0，不允许衍生作品：没有复制或翻译任何源码，规则是用 Swift 重写的。";
+licenses_taurus_detail = "「自动选择」的歌词源清单与「按顺序询问、保留最细时间轴」的规则，以及锁屏「一行一段短片」的交付方式与睡眠定时器的倒计时，来自 Taurus。Taurus 为 PolyForm Strict 1.0.0，不允许衍生作品：没有复制或翻译任何源码，规则是用 Swift 重写的。";
 
 // ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
 // 这些开关写的是 Spotify 的 **flag 覆盖**（`ios-messaging-reduceinterventions-impl` 那批），

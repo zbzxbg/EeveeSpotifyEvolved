@@ -8,7 +8,7 @@ The following projects shaped this one. Some of their code was modified to fit; 
   - `Pages/Theme.swift` → the AMOLED palette and accent colour (`Appearance/Theme.swift`);
   - `Player/PlayerDeclutter.x.swift` → the Now Playing card declutter (`Appearance/PlayerDeclutter.x.swift`);
   - `Shared/Helpers/PerfMeter.swift` → the layout-pass timing meter;
-  - `EncoreBridge.m` (`Sources/EeveeSpotifyC`) → our C bridge;
+  - `Sources/EeveeSpotifyC/ColorSwap.m` → the theme colour swizzles, carried over as-is (its own header still says so);
   - `Flags/RemoteFlagsHooks.x.swift` → the remote-flag page, and the curated flag keys in `.spotify-ipa/flag-table.txt`;
   - the Lrclib transport hardening, and the "persist both copies" behaviour in `SpotifyResponsePatcher`;
   - the Premium unlock configuration, the anti-logout keys, the round-artwork switch and the Instagram destination experiment.
@@ -31,14 +31,22 @@ The following projects shaped this one. Some of their code was modified to fit; 
 - PetitLyrics, Musixmatch, LRCLIB and Genius are spoken to over the services' own public endpoints.
 - The inspiration for the karaoke lyrics and interludes came from [MeloX](https://github.com/youshen2/MeloX).
 
-### Taurus (PolyForm Strict 1.0.0)
+## Lock screen
 
-`Taurus` 0.60.5 is licensed under **PolyForm Strict 1.0.0**, which does not permit distributing modified or derivative versions. **No Taurus source code was copied or translated into this repository.** What was taken is the *approach*, reimplemented from scratch in Swift:
+- The moving artwork comes from the services' own data, never from a file we ship: Spotify's **Canvas** (the `canvas.url` in track metadata, which the player only fills while Spotify's `canvas_enabled` flag is on) and Apple Music's **editorial video** (the album-level `editorialVideo` objects from `amp-api.music.apple.com`, read with the same web-player developer token credited above — Apple hangs them on albums, so a single often has none).
+- Everything that is drawn or muxed is ours: the local cover loop (`FillArtworkRenderer`), the per-line lyric clip (`LyricClipRenderer`), the crop/transcode step (`AnimatedArtworkVideo`) and the hand-rolled HLS reassembly (`HLSVideoDownloader`).
+- How a lyric clip reaches the lock screen — one clip per line, a fresh `artworkID` per line, the quarter-second GCD tick, the clock derived from elapsed time and rate, and the now-playing rewrite on each line — follows Taurus, reimplemented from scratch. See below.
+
+## Taurus (PolyForm Strict 1.0.0)
+
+`Taurus` 0.60.6 is licensed under **PolyForm Strict 1.0.0**, which does not permit distributing modified or derivative versions. **No Taurus source code was copied or translated into this repository.** What was taken is the *approach*, reimplemented from scratch in Swift:
 
 - which provider each of its lyrics sources talks to, and the "word timing first, then closest length" ordering behind the BiniLyrics pick (`BiniLyricsRepository.swift`);
 - the "ask in order, keep the finest timing, stop once something is timed" walk behind **Auto Select** (`LyricsAutoSelect.swift`);
 - how it finds a playlist page's header when the page has none of the usual landmarks — by the view controller's class name rather than by an accessibility id (`EntityPageHeader.playlistHeaderRoot`, `EntityPageHeaderHooks`);
 - the pointer that `TranslationSession` has a public initializer from iOS 26, which is what makes on-device translation usable outside SwiftUI (`OnDeviceLyricsTranslation.swift`);
+- the lock screen's delivery mechanism: the clip handed over through `MPMediaItemAnimatedArtwork`, the new `artworkID` per line (the system only re-fetches when the ID changes), the quarter-second GCD tick (a run-loop timer gets throttled once the screen locks), the clock built from `elapsedPlaybackTime` and the playback rate, and the now-playing rewrite on every line change (`LockScreenLyricsController.swift`, `LyricClipRenderer.swift`). Its `LockScreenLyrics/` files were read for the mechanism only;
+- the sleep timer: a GCD countdown against an absolute deadline, pausing only when something is actually playing, and coexisting with Spotify's own episode timer (`Playback/SleepTimer.swift`);
 - its full takeover of the player menu (`Redesigned/Player/PlayerMenu.x`) was read and deliberately **not** adopted; the lyrics-offset row is appended as a table footer instead (`PlayerMenuOffsetRow.x.swift`).
 
 All of the above was read from a locally supplied copy for reference only. If a rights holder disagrees with this use, open an issue and it will be reworked or removed.

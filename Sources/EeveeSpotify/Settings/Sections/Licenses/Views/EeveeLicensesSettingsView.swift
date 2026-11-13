@@ -82,7 +82,8 @@ struct EeveeLicensesSettingsView: View {
                 symbol: "lock.open",
                 color: Color(hex: "#5E5CE6")
             ),
-            // 歌词源清单与「自动优选」的调度规则来自 Taurus。
+            // 歌词源清单、「自动优选」的调度规则、锁屏「一行一段短片」的交付方式与睡眠定时器
+            // 的倒计时都来自 Taurus。
             // ⚠️ Taurus 是 **PolyForm Strict 1.0.0**（不允许衍生作品）——
             // 这一条必须写清楚"没有复制代码"，否则看起来像在它的许可下分发。
             Entry(

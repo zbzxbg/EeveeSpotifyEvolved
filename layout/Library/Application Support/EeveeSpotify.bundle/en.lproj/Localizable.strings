@@ -605,7 +605,7 @@ licenses_163musiclyrics_detail = "The NetEase abroad response shape and the clou
 licenses_lddc = "LDDC · pyqdes";
 licenses_lddc_detail = "The key bytes and the order of the DES steps for the KuGou (KRC) and QQ Music (QRC) lyric decryption. LDDC is GPL-3.0-only, pyqdes is MIT. Only the algorithm was taken; the Swift implementation here is our own.";
 licenses_taurus = "Taurus";
-licenses_taurus_detail = "The list of lyric providers and the ask-in-order, keep-the-finest-timing rule behind Auto Select. Taurus is PolyForm Strict 1.0.0, which does not allow derivative works: no source code was copied or translated, the rules were reimplemented from scratch in Swift.";
+licenses_taurus_detail = "The list of lyric providers and the ask-in-order, keep-the-finest-timing rule behind Auto Select, plus the lock screen's clip-per-line delivery and the sleep timer's countdown. Taurus is PolyForm Strict 1.0.0, which does not allow derivative works: no source code was copied or translated, the rules were reimplemented from scratch in Swift.";
 
 // ── Reduce interventions (2026-10-03) ─────────────────────────────────────────
 // These switches write Spotify **flag overrides** (the ios-messaging-reduceinterventions-impl
