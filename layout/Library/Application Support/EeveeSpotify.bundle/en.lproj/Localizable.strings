@@ -712,3 +712,4 @@ sleep_timer_minutes_format = "%d min";
 sleep_timer_start = "Start timer";
 sleep_timer_cancel = "Cancel timer";
 sleep_timer_remaining = "Time left";
+sleep_timer_pick_duration = "Pick a duration";

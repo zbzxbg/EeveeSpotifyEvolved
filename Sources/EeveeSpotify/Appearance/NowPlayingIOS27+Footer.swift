@@ -473,6 +473,8 @@ extension NowPlayingIOS27 {
             }))
         }
         addZone(frames[2], target: queue, label: "queue")
+        // 同一颗「队列」键**长按** = 睡眠定时器面板。短按照旧开队列。
+        if let queue { installQueueLongPress(on: queue) }
         relay.zones = zones
         relay.actionZones = actionZones
         relay.longPressZones = longPressZones
@@ -778,5 +780,43 @@ extension NowPlayingIOS27 {
         connectPlaceholder = nil
         movedConnectBase = nil
         didLogConnectMoved = false
+        queueLongPressHost = nil
+    }
+
+    // MARK: - 队列键长按：睡眠定时器
+
+    /// 已经在上面装过长按手势的那颗原生队列键（弱引用；页面走了自己掉）。
+    static weak var queueLongPressHost: UIView?
+
+    /// 给原生「队列」键装一个长按：**长按 = 打开睡眠定时器面板**，短按照旧开队列。
+    ///
+    /// 为什么挂在这颗键自己身上、而不是像歌词那颗一样走替身的 `longPressZones`：
+    /// 队列这一格在替身里登记的是 `zones`（真触摸转发给原生按钮）⇒ `hitTest` 直接返回
+    /// 原生键，替身那一层的长按手势**收不到**这一下。
+    ///
+    /// `cancelsTouchesInView = true` 是必需的：长按认出来之后要把触摸从原生键那里收走，
+    /// 否则松手时队列页照样会弹出来，变成"面板和队列一起开"。
+    static func installQueueLongPress(on queue: UIView) {
+        guard queueLongPressHost !== queue else { return }
+        queueLongPressHost = queue
+        let press = UILongPressGestureRecognizer(
+            target: NowPlayingQueueLongPressTarget.shared,
+            action: #selector(NowPlayingQueueLongPressTarget.handle(_:))
+        )
+        press.minimumPressDuration = 0.45
+        press.cancelsTouchesInView = true
+        queue.addGestureRecognizer(press)
+    }
+}
+
+/// 队列键长按的 target（`UILongPressGestureRecognizer` 的 target 只能是对象）。
+private final class NowPlayingQueueLongPressTarget: NSObject {
+
+    static let shared = NowPlayingQueueLongPressTarget()
+
+    @objc func handle(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        writeDebugLog("[SleepTimer] long press on the queue key — opening the panel")
+        SleepTimerPanel.present()
     }
 }

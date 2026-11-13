@@ -696,3 +696,4 @@ sleep_timer_minutes_format = "%d 分钟";
 sleep_timer_start = "开始计时";
 sleep_timer_cancel = "取消定时";
 sleep_timer_remaining = "剩余时间";
+sleep_timer_pick_duration = "选一个时长";
