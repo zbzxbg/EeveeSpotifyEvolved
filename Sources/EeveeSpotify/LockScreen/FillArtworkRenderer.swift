@@ -14,6 +14,10 @@ import UIKit
 /// 幅度是 7%：锁屏上这条片子被放大到整屏，3–4% 的缩放看上去就是"画面在呼吸"、读不出是
 /// 在动；再大就开始像镜头推拉过头。
 ///
+/// **帧率故意压到 8 fps、整段 3 秒 = 24 帧**：这段是在锁屏出现时才渲的，进程在后台被限，
+/// 一帧要 ~200 ms —— 原来 24 fps × 4 s = 96 帧要 20 秒，等它渲完那一屏早就过去了。
+/// 慢速余弦缩放本来就不需要高帧率：8 fps 下一帧的缩放步进不到 1%，看不出跳。
+///
 /// 为什么不用 `AVAssetExportSession` 拼：这里没有源视频，要自己出帧，所以走
 /// `AVAssetWriter` + `AVAssetWriterInputPixelBufferAdaptor`。整段只写一次、落在缓存里，
 /// 不参与播放路径，也不会在锁屏刷新时重渲染。
@@ -24,8 +28,8 @@ enum FillArtworkRenderer {
         var errorDescription: String? { reason }
     }
 
-    private static let seconds = 4
-    private static let framesPerSecond: Int32 = 24
+    private static let seconds = 3
+    private static let framesPerSecond: Int32 = 8
     private static let zoom: CGFloat = 0.07
 
     static func render(
@@ -63,7 +67,13 @@ enum FillArtworkRenderer {
 
         let size = aspect.renderSize
         let composed = try compose(source, size: size, aspect: aspect)
+        let started = CFAbsoluteTimeGetCurrent()
         try write(composed, size: size, to: destination)
+        let frames = Int(framesPerSecond) * seconds
+        let took = String(format: "%.1f", CFAbsoluteTimeGetCurrent() - started)
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] fill — \(frames) frame(s) in \(took)s"
+        )
     }
 
     /// `MPMediaItemArtwork` 给回来的图偶尔不是 CGImage 背书的，先摊成位图再画。
