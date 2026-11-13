@@ -274,7 +274,7 @@ func eeveeEnvFlag(_ name: String) -> Bool {
 // `SPTPlayerTrack` 存在。运行时探针在本机不可观测也不可控，别再走那条路。
 
 struct EeveeSpotify: Tweak {
-    static let version = "2.0.0"
+    static let version = "3.0.0"
     static let repoSlug = GeneratedConfig.repoSlug
     
     static var hookTarget: VersionHookTarget {
