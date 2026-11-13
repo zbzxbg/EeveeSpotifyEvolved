@@ -59,6 +59,9 @@ final class LockScreenLyricsController {
 
     private var timer: DispatchSourceTimer?
     private var lastEnabled = false
+    /// 有东西装着（行/artwork 或定时器）。注入器在开关关着时每写一次 now-playing 都会
+    /// 调 `noteDisabled()`；靠它把"其实已经什么都不做"的那种调用挡在外面。
+    private var active = false
     private var lastTickAt: CFAbsoluteTime = 0
     private var lateTickLogs = 0
 
@@ -75,20 +78,18 @@ final class LockScreenLyricsController {
         }
         previews.countLimit = 8
         lastEnabled = LockScreenLyrics.isEnabled
-        _ = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.settingsMayHaveChanged()
-        }
+        // 这里**不注册 `UserDefaults.didChangeNotification` 观察者**：Spotify 写默认值的
+        // 频率很高，每条通知都跑一次我们的回调（再读一次默认值）没有必要，也不会让开关
+        // 变化更及时 —— 下一次 now-playing 写入（`inject`）本来就会重读开关。设置页的
+        // 开关直接调 `settingsDidChange()`。
         writeDebugLog(
             "[\(LockScreenLyrics.logTag)] ready —"
                 + " lock screen lyrics \(lastEnabled ? "on" : "off")"
         )
     }
 
-    private func settingsMayHaveChanged() {
+    /// 设置页的开关调用。不开观察者，所以由 UI 主动通知。
+    func settingsDidChange() {
         let enabled = LockScreenLyrics.isEnabled
         guard enabled != lastEnabled else { return }
         lastEnabled = enabled
@@ -103,8 +104,27 @@ final class LockScreenLyricsController {
             }
         } else {
             writeDebugLog("[\(LockScreenLyrics.logTag)] switched off")
-            stopTimer()
-            reset()
+            noteDisabled(force: true)
+        }
+    }
+
+    /// 注入器发现开关关着时调用（每次 now-playing 写入都会走）。只在真的有东西装着时
+    /// 收尾一次：停表、清状态、重写一次 now-playing 把我们的键撤掉。
+    func noteDisabled(force: Bool = false) {
+        lock.lock()
+        let wasActive = force || active || !prepared.isEmpty
+        active = false
+        prepared = [:]
+        preparedLineKey = ""
+        preparedTrackKey = ""
+        lock.unlock()
+        guard wasActive else { return }
+
+        onMain { [weak self] in
+            guard let self else { return }
+            self.lastEnabled = false
+            self.stopTimer()
+            self.reset()
             if #available(iOS 26.0, *) {
                 LockScreenArtworkInjector.republishForLockScreen()
             }
@@ -121,6 +141,7 @@ final class LockScreenLyricsController {
         lock.lock()
         self.info = info
         self.infoAt = CFAbsoluteTimeGetCurrent()
+        active = true
         lock.unlock()
 
         onMain { [weak self] in self?.refreshTimer() }

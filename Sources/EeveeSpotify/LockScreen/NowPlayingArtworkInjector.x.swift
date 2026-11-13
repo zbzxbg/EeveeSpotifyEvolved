@@ -10,12 +10,6 @@ import UIKit
 /// 为什么挂在这里而不是"每 0.3 秒自己设一遍"：Now Playing 是**系统**的状态，
 /// Spotify 才是它的主人。我们只在它写的时候搭一段，不抢所有权 —— 也就不会和
 /// 播放进度、锁屏控制那些字段打架。
-///
-/// ⚠️ **getter 也要挂**：Spotify 会读回 `MPNowPlayingInfoCenter.nowPlayingInfo`
-/// （widget / now-playing 观察者链）。读回的那份如果带着我们加的键，它就会把
-/// `MPMediaItemAnimatedArtwork` 当成自己的状态去做后续处理，最后卡在内部队列上
-/// （真机上是主线程 `scene-update` watchdog）。所以 getter 只交出 Spotify 自己
-/// 最后写的那份字典 —— 与 spoti.pw 那边的做法一致。
 struct LockScreenArtworkGroup: HookGroup {}
 struct LockScreenArtworkPrivateGroup: HookGroup {}
 
@@ -25,10 +19,6 @@ class NowPlayingInfoCenterHook: ClassHook<NSObject> {
 
     func setNowPlayingInfo(_ info: NSDictionary?) {
         orig.setNowPlayingInfo(LockScreenArtworkInjector.inject(info))
-    }
-
-    func nowPlayingInfo() -> NSDictionary? {
-        LockScreenArtworkInjector.spotifyNowPlayingInfo() ?? orig.nowPlayingInfo()
     }
 }
 
@@ -84,14 +74,6 @@ enum LockScreenArtworkInjector {
         qos: .userInitiated
     )
 
-    /// getter hook 用：Spotify 自己那份字典（不带我们加的键）。
-    static func spotifyNowPlayingInfo() -> NSDictionary? {
-        lock.lock()
-        let info = reportedInfo
-        lock.unlock()
-        return info as NSDictionary?
-    }
-
     /// 两个 hook 共用的入口：`nil` 原样传回，非字典也原样传回。
     static func inject(_ info: NSDictionary?) -> NSDictionary? {
         guard let info else { return nil }
@@ -116,6 +98,11 @@ enum LockScreenArtworkInjector {
         // 歌词与动态封面共用同一对动画键。歌词开着时它优先：一行一段短片，
         // ID 跟着行走（见 `LockScreenLyricsController`）；没准备好就退回动态封面。
         let lyricsOn = LockScreenLyrics.isEnabled
+        if !lyricsOn {
+            // 开关关着也要让控制器收尾一次（把已经装出去的键撤掉）。没有东西装着时
+            // 它是空操作，所以这条路径在关着的时候仍然是"什么都不做"。
+            LockScreenLyricsController.shared.noteDisabled()
+        }
         guard LockScreenArtwork.isEnabled || lyricsOn else {
             // 关掉之后不再有任何新素材，旧 artwork 的 handler 也要失效（空标识 ≠ 上一首）。
             LockScreenArtworkResolver.shared.noteNowPlaying(identifier: "")

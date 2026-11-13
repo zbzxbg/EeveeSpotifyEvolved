@@ -17,7 +17,10 @@ struct EeveeLockScreenLyricsSettingsView: View {
                     "lock_screen_lyrics_enabled".localized,
                     isOn: Binding(
                         get: { UserDefaults.lockScreenLyrics },
-                        set: { UserDefaults.lockScreenLyrics = $0 }
+                        set: { value in
+                            UserDefaults.lockScreenLyrics = value
+                            LockScreenLyricsController.shared.settingsDidChange()
+                        }
                     )
                 )
             }
