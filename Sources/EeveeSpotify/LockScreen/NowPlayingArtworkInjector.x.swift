@@ -37,16 +37,23 @@ class NowPlayingInfoCenterPrivateHook: ClassHook<NSObject> {
 enum LockScreenArtworkInjector {
 
     private static let lock = NSLock()
-    /// `artworkID` → `MPMediaItemAnimatedArtwork`。
+    /// `artworkID` → 构造好的 `MPMediaItemAnimatedArtwork` + 注入时抓到的封面静帧。
     ///
     /// 必须缓存：Spotify 每写一次进度都会经过这里，而 `artworkID` 没变时系统不会
     /// 重新要素材。每次新建对象只会白扔掉系统已经拿到的请求状态。
-    private static var artworks: [String: Any] = [:]
+    private static var artworks: [String: (artwork: Any, still: UIImage)] = [:]
     private static var lastLogged = ""
     private static var reportedUnsupported = false
     private static var reportedNoMatchingKey = false
+    private static var loggedPreviews = Set<String>()
+    private static var loggedClips = Set<String>()
+    private static var waitingForStill = Set<String>()
     private static var supportedKeys: [String]?
     private static var activated = false
+    /// Spotify 最近一次自己写进来的字典与时间。静帧准备好后我们要主动重写一次
+    /// now-playing，重写时按速率把播放位置往前推，避免进度条倒跳。
+    private static var reportedInfo: [String: Any]?
+    private static var reportedAt: CFAbsoluteTime = 0
 
     /// 两个 hook 共用的入口：`nil` 原样传回，非字典也原样传回。
     static func inject(_ info: NSDictionary?) -> NSDictionary? {
@@ -84,7 +91,36 @@ enum LockScreenArtworkInjector {
         )
         LockScreenArtworkResolver.shared.noteNowPlaying(identifier: identifier)
 
+        // 只有 Spotify 自己的写法（字典里还没有我们的动画键）才记"报时点"；
+        // 我们刷新时写回去的字典带键，不能拿来当播放位置的基准。
+        if info[MPNowPlayingInfoProperty1x1AnimatedArtwork] == nil,
+           info[MPNowPlayingInfoProperty3x4AnimatedArtwork] == nil {
+            lock.lock()
+            reportedInfo = info
+            reportedAt = CFAbsoluteTimeGetCurrent()
+            lock.unlock()
+        }
+
         let cover = info[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork
+        let resolver = LockScreenArtworkResolver.shared
+        var still = resolver.cachedStill(title: title, artist: artist)
+        if still == nil, let cover,
+           let image = cover.image(at: CGSize(width: 720, height: 720)) {
+            resolver.keepStill(image, title: title, artist: artist)
+            still = image
+        }
+        guard let still else {
+            // 动画键没有预览图时系统会画成灰色占位图，比静态封面还糟。没有静帧就先
+            // 别注入：让 metadata 的封面地址去补一张，补到了再重写一次 now-playing。
+            resolver.prepareStill(title: title, artist: artist)
+            noteWaitingForStillOnce(
+                identifier: identifier,
+                title: title,
+                coverPresent: cover != nil
+            )
+            return info
+        }
+
         var output = info
         var changed = false
 
@@ -103,7 +139,7 @@ enum LockScreenArtworkInjector {
                 artist: artist,
                 album: album,
                 duration: duration,
-                cover: cover
+                still: still
             )
             // 同一个对象再写一遍不算变化；但 Spotify（或别的组件）把上一首的 artwork
             // 原样带回来时，这里要换成当前这一首的 —— 不能只看"键在不在"。
@@ -135,16 +171,15 @@ enum LockScreenArtworkInjector {
         artist: String,
         album: String,
         duration: Double,
-        cover: MPMediaItemArtwork?
+        still: UIImage
     ) -> MPMediaItemAnimatedArtwork {
-        // 封面晚到（Spotify 先写标题、后写封面）时，artworkID 跟着变一次，
-        // 系统才会重新来要预览图；一直用同一个 ID 的话它不会再看新对象。
-        let variant = "\(identifier).\(aspect.rawValue).\(cover != nil ? "c" : "n")"
+        let variant = "\(identifier).\(aspect.rawValue)"
 
         lock.lock()
-        if let cached = artworks[variant] as? MPMediaItemAnimatedArtwork {
+        if let cached = artworks[variant],
+           let artwork = cached.artwork as? MPMediaItemAnimatedArtwork {
             lock.unlock()
-            return cached
+            return artwork
         }
         lock.unlock()
 
@@ -152,18 +187,24 @@ enum LockScreenArtworkInjector {
         let artwork = MPMediaItemAnimatedArtwork(
             artworkID: variant,
             previewImageRequestHandler: { size, completion in
-                completion(
-                    resolver.previewImage(
-                        title: title,
-                        artist: artist,
-                        duration: duration,
-                        aspect: aspect,
-                        size: size,
-                        cover: cover
-                    )
+                let image = resolver.previewImage(
+                    title: title,
+                    artist: artist,
+                    duration: duration,
+                    aspect: aspect,
+                    size: size,
+                    still: still
                 )
+                notePreviewOnce(
+                    identifier: identifier,
+                    aspect: aspect,
+                    size: size,
+                    result: image
+                )
+                completion(image)
             },
             videoAssetFileURLRequestHandler: { _, completion in
+                noteClipAskedOnce(identifier: identifier, aspect: aspect, title: title)
                 Task {
                     let file = await resolver.videoFileURL(
                         identifier: identifier,
@@ -173,7 +214,7 @@ enum LockScreenArtworkInjector {
                         duration: duration,
                         aspect: aspect,
                         size: aspect.renderSize,
-                        cover: cover
+                        still: still
                     )
                     completion(file)
                 }
@@ -184,7 +225,7 @@ enum LockScreenArtworkInjector {
         if artworks.count > 16 {
             artworks.removeAll()
         }
-        artworks[variant] = artwork
+        artworks[variant] = (artwork, still)
         lock.unlock()
         return artwork
     }
@@ -254,6 +295,100 @@ enum LockScreenArtworkInjector {
             "[\(LockScreenArtwork.logTag)] now playing carries animated artwork —"
                 + " keys \(supported.joined(separator: ",")), \"\(title)\""
         )
+    }
+
+    private static func noteWaitingForStillOnce(
+        identifier: String,
+        title: String,
+        coverPresent: Bool
+    ) {
+        lock.lock()
+        let first = waitingForStill.insert(identifier).inserted
+        if waitingForStill.count > 32 {
+            waitingForStill.removeAll()
+        }
+        lock.unlock()
+
+        guard first else { return }
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] no cover still yet — deferring injection,"
+                + " \"\(title)\" (MPMediaItemPropertyArtwork: \(coverPresent ? "yes" : "no"))"
+        )
+    }
+
+    private static func notePreviewOnce(
+        identifier: String,
+        aspect: LockScreenArtwork.Aspect,
+        size: CGSize,
+        result: UIImage?
+    ) {
+        let key = "\(identifier)|\(aspect.rawValue)"
+        lock.lock()
+        let first = loggedPreviews.insert(key).inserted
+        if loggedPreviews.count > 64 {
+            loggedPreviews.removeAll()
+        }
+        lock.unlock()
+
+        guard first else { return }
+        let resultText = result.map {
+            "\(Int($0.size.width))x\(Int($0.size.height))"
+        } ?? "nil"
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] preview asked —"
+                + " \(Int(size.width))x\(Int(size.height)) -> \(resultText)"
+        )
+    }
+
+    private static func noteClipAskedOnce(
+        identifier: String,
+        aspect: LockScreenArtwork.Aspect,
+        title: String
+    ) {
+        let key = "\(identifier)|\(aspect.rawValue)"
+        lock.lock()
+        let first = loggedClips.insert(key).inserted
+        if loggedClips.count > 64 {
+            loggedClips.removeAll()
+        }
+        lock.unlock()
+
+        guard first else { return }
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] clip asked — \(aspect.rawValue), \"\(title)\""
+        )
+    }
+
+    /// 静帧/素材准备好之后由 resolver 调一次：Spotify 不会为了我们重写 now-playing，
+    /// 不补这一下，动画键要等下一次播放状态变化才会被注入。
+    static func refreshNowPlayingInfo(title: String, artist: String) {
+        guard #available(iOS 26.0, *), LockScreenArtwork.isEnabled else { return }
+        DispatchQueue.main.async {
+            lock.lock()
+            guard var info = reportedInfo else {
+                lock.unlock()
+                return
+            }
+            let reported = reportedAt
+            lock.unlock()
+
+            // 静帧是异步抓的：抓完时可能已经切歌了，别拿上一首的封面去重写当前这首。
+            let reportedTitle = info[MPMediaItemPropertyTitle] as? String ?? ""
+            guard LockScreenArtwork.looksLikeSameSong(reportedTitle, title) else { return }
+
+            // 重设 now-playing 会把系统的播放位置基准重置到这份字典里的旧值；
+            // 按速率补上"从 Spotify 上次写到现在的距离"，进度条就不会倒跳。
+            if let elapsed = info[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber {
+                let rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 1
+                let distance = max(0, CFAbsoluteTimeGetCurrent() - reported)
+                info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = NSNumber(
+                    value: elapsed.doubleValue + rate * distance
+                )
+            }
+
+            MPNowPlayingInfoCenter.default().nowPlayingInfo =
+                LockScreenArtworkInjector.inject(into: info)
+        }
     }
 }
 

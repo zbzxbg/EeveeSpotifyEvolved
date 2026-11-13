@@ -97,17 +97,19 @@ final class LockScreenArtworkResolver {
 
     // MARK: - 系统要的两样东西
 
-    /// 预览图：有首帧缓存就裁成系统要的尺寸，没有就把静态封面按画幅裁一张。
+    /// 预览图：有首帧缓存就裁成系统要的尺寸，没有就用注入时抓到的封面静帧裁一张。
     ///
-    /// 这条路径**不做网络请求**：系统在视频还没到手时显示它，慢一拍就会先闪静态封面，
-    /// 等得久了甚至直接退回静态封面、不再来要视频。所以宁可先用封面顶着。
+    /// 这条路径**不做网络请求、也不回调 Spotify 的 artwork provider**：系统在视频还没到手
+    /// 时显示它，慢一拍就会先闪静态封面，等得久了甚至直接退回静态封面、不再来要视频。
+    /// 静帧由注入器在写 now-playing 时抓一次（拿不到就退到 track metadata 的封面地址）；
+    /// 拿不到静帧时宁可不注入动画键，也不交给系统一个空预览 —— 那会显示成灰色占位图。
     func previewImage(
         title: String,
         artist: String,
         duration: Double,
         aspect: LockScreenArtwork.Aspect,
         size: CGSize,
-        cover: MPMediaItemArtwork?
+        still: UIImage?
     ) -> UIImage? {
         let key = AnimatedArtworkCache.key(
             title: title,
@@ -118,10 +120,7 @@ final class LockScreenArtworkResolver {
         if let cached = AnimatedArtworkCache.preview(key: key) {
             return ArtworkImageScaling.fill(cached, to: size)
         }
-        guard let cover,
-              let still = cover.image(at: CGSize(width: 900, height: 900)) else {
-            return nil
-        }
+        guard let still else { return nil }
         return ArtworkImageScaling.fill(still, to: size)
     }
 
@@ -135,7 +134,7 @@ final class LockScreenArtworkResolver {
         duration: Double,
         aspect: LockScreenArtwork.Aspect,
         size: CGSize,
-        cover: MPMediaItemArtwork?
+        still: UIImage?
     ) async -> URL? {
         let key = AnimatedArtworkCache.key(
             title: title,
@@ -169,7 +168,7 @@ final class LockScreenArtworkResolver {
                 duration: duration,
                 aspect: aspect,
                 size: size,
-                cover: cover
+                still: still
             )
         }
         running[key] = task
@@ -198,7 +197,7 @@ final class LockScreenArtworkResolver {
         duration: Double,
         aspect: LockScreenArtwork.Aspect,
         size: CGSize,
-        cover: MPMediaItemArtwork?
+        still: UIImage?
     ) async -> URL? {
         // 系统给视频 handler 的预算约 30 秒；整条"目录查询 + 下载 + 转码"压在 22 秒内，
         // 剩下的时间给本地 Fill 和转码。每个 await 之后都再看一眼，别把预算耗在一条
@@ -217,7 +216,7 @@ final class LockScreenArtworkResolver {
         let attempts = candidates(
             for: aspect,
             from: resolved,
-            hasCover: cover != nil
+            hasCover: still != nil
         )
 
         for candidate in attempts {
@@ -231,10 +230,7 @@ final class LockScreenArtworkResolver {
                 case .remote(let asset):
                     try await download(asset, to: temporary, deadline: deadline)
                 case .fill:
-                    guard let cover,
-                          let still = cover.image(at: CGSize(width: 900, height: 900)) else {
-                        continue
-                    }
+                    guard let still else { continue }
                     guard Date() < deadline else { return nil }
                     try await FillArtworkRenderer.render(
                         cover: still,
@@ -323,6 +319,116 @@ final class LockScreenArtworkResolver {
             return
         }
         AnimatedArtworkCache.storePreview(image, key: key)
+    }
+
+    // MARK: - 封面静帧
+
+    private var stills: [String: UIImage] = [:]
+    private var preparingStills = Set<String>()
+    private var stillAttempts: [String: Int] = [:]
+    private var reportedNoStill = Set<String>()
+
+    private func stillKey(title: String, artist: String) -> String {
+        "\(title)|\(artist)"
+    }
+
+    func cachedStill(title: String, artist: String) -> UIImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stills[stillKey(title: title, artist: artist)]
+    }
+
+    func keepStill(_ image: UIImage, title: String, artist: String) {
+        let key = stillKey(title: title, artist: artist)
+        lock.lock()
+        if stills.count >= 6, let oldest = stills.keys.first {
+            stills[oldest] = nil
+        }
+        stills[key] = image
+        preparingStills.remove(key)
+        stillAttempts[key] = nil
+        lock.unlock()
+    }
+
+    /// `MPMediaItemPropertyArtwork` 拿不到图时，从 track metadata 的封面地址补一张。
+    ///
+    /// 为什么需要：iOS 27 上 Spotify 的 now-playing 字典不一定带 `MPMediaItemPropertyArtwork`，
+    /// 而动画键没有预览图就会被系统画成灰色占位图。metadata 里有 `image_url`，封面是公开
+    /// CDN 地址，抓一张 640 的图足够裁预览。
+    func prepareStill(title: String, artist: String) {
+        let key = stillKey(title: title, artist: artist)
+
+        lock.lock()
+        if stills[key] != nil || preparingStills.contains(key) {
+            lock.unlock()
+            return
+        }
+        let attempts = (stillAttempts[key] ?? 0) + 1
+        stillAttempts[key] = attempts
+        // now-playing 的写入很密；给 metadata 十几拍时间就绪，别在第一秒就放弃。
+        if attempts > 12 {
+            lock.unlock()
+            return
+        }
+        preparingStills.insert(key)
+        lock.unlock()
+
+        Task { [weak self] in
+            guard let self else { return }
+            guard let url = await self.metadataCoverURL(title: title, artist: artist) else {
+                self.finishStillAttempt(key: key, title: title)
+                return
+            }
+            var image: UIImage?
+            if let (data, response) = try? await self.session.data(from: url),
+               let http = response as? HTTPURLResponse,
+               (200..<300).contains(http.statusCode) {
+                image = UIImage(data: data)
+            }
+            guard let image else {
+                self.finishStillAttempt(key: key, title: title)
+                return
+            }
+
+            self.keepStill(image, title: title, artist: artist)
+            writeDebugLog(
+                "[\(LockScreenArtwork.logTag)] cover still from track metadata —"
+                    + " \(Int(image.size.width))x\(Int(image.size.height)), \"\(title)\""
+            )
+            // Spotify 只按自己的节奏写 now-playing；补一次，下一次 hook 就能把动画键放进去。
+            DispatchQueue.main.async {
+                LockScreenArtworkInjector.refreshNowPlayingInfo(title: title, artist: artist)
+            }
+        }
+    }
+
+    private func finishStillAttempt(key: String, title: String) {
+        lock.lock()
+        preparingStills.remove(key)
+        let first = reportedNoStill.insert(key).inserted
+        if reportedNoStill.count > 32 {
+            reportedNoStill.removeAll()
+        }
+        lock.unlock()
+
+        guard first else { return }
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] no cover still for \"\(title)\" —"
+                + " the animated keys stay out; the lock screen keeps Spotify's own artwork"
+        )
+    }
+
+    private func metadataCoverURL(title: String, artist: String) async -> URL? {
+        await MainActor.run { () -> URL? in
+            guard let track = statefulPlayer?.currentTrack()
+                ?? nowPlayingScrollViewController?.loadedTrack else {
+                return nil
+            }
+            let metadata = track.metadata()
+            let currentTitle = metadata["title"] ?? ""
+            guard LockScreenArtwork.looksLikeSameSong(currentTitle, title) else { return nil }
+            return LyricsArtworkResolver.artworkURL(for: track)
+        }
     }
 
     // MARK: - 选源
