@@ -80,7 +80,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
     }
 
     /// 「音频输出探针」：只读诊断，确认能不能从 RemoteIO 的 PostRender 拿到 PCM。
-    /// 默认关；打开后重启 Spotify 生效（hook 在启动那一拍装）。
+    /// 默认关；打开即装 hook（装的动作在 `AudioTapProbe.installQueue` 上跑，不会卡界面）。
     @Published var audioTapProbe = AudioTapProbe.isEnabled {
         didSet { AudioTapProbe.setEnabled(audioTapProbe) }
     }

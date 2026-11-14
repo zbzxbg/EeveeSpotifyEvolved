@@ -83,7 +83,8 @@ struct EeveeDebugSettingsView: View {
     /// 「音频输出探针」—— 只读：记录 RemoteIO 的格式 + PostRender 的 RMS，
     /// 用来确认 9.2.0 上能不能拿到解码后的 PCM（见 `AudioTapProbe`）。
     ///
-    /// 默认关；hook 在启动那一拍装，所以打开后要重启 Spotify。
+    /// 默认关；打开即装 hook，不需要重启 —— 第一次拿到数据要等下一次
+    /// `AudioOutputUnitStart`（开始播放 / 换歌 / 暂停再播）。
     @ViewBuilder private func audioTapProbeSection() -> some View {
         Section(footer: Text("audio_tap_probe_description".localized)) {
             Toggle(

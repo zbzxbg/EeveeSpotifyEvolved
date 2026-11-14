@@ -17,7 +17,7 @@ import os
 ///   每 2 秒在**定时器**里写一行日志（render 线程里不写文件）。
 ///
 /// 不改音频、不注册新的音频单元；拿不到数据就什么都不做。
-/// 开关：设置 → 调试 → 音频输出探针（默认关；打开后重启 Spotify 生效）。
+/// 开关：设置 → 调试 → 音频输出探针（默认关；打开即装 hook，不必重启）。
 /// 日志 tag：`[AudioTap]`。
 enum AudioTapProbe {
 
@@ -25,6 +25,20 @@ enum AudioTapProbe {
     static let defaultsKey = "audioTapProbeEnabled"
     /// 探针装好后的 5 秒内如果进程就没了，下一次启动自动关掉探针（防 crash loop）。
     private static let launchMarkerKey = "audioTapProbeLaunchMarker"
+
+    /// 装 hook 的串行队列。
+    ///
+    /// **装 hook 绝不能压在主线程上**。Orion 激活 hook 前要先解析目标符号，这条路走
+    /// CydiaSubstrate 的 `MSFindSymbol`：它按 image 逐个解析 dyld shared cache 里的导出
+    /// 符号，整个 cache 过一遍是几十秒量级的 CPU。主线程被卡住 10 秒就是 scene-update
+    /// watchdog 的 `0x8BADF00D`（SIGKILL），崩溃栈正好停在
+    /// `stat` ← `fileExists(atPath:)` ← `sharedCachePath()` ← `findPrivateSymbol` 这条链上。
+    /// 装 hook 不需要任何 UI 资源，全部丢给这条队列；启动那一拍也一样，别在启动窗口里
+    /// 拖住 runloop。
+    private static let installQueue = DispatchQueue(
+        label: "com.eeveespotify.audiotapprobe.install",
+        qos: .userInitiated
+    )
 
     static var isEnabled: Bool {
         UserDefaults.container.bool(forKey: defaultsKey)
@@ -64,7 +78,8 @@ enum AudioTapProbe {
 
     // MARK: - 生命周期
 
-    /// 启动时调一次：开关开着才装 hook。
+    /// 启动时调一次：开关开着才装 hook。装的动作异步丢给 `installQueue`，这里立刻返回 ——
+    /// 启动窗口里不能有任何可能卡住主线程的符号解析。
     static func installIfEnabled() {
         guard isEnabled else {
             writeDebugLog("[\(logTag)] probe off — hooks not installed")
@@ -81,31 +96,54 @@ enum AudioTapProbe {
         install()
     }
 
-    /// 调试页的开关。打开时尝试当场激活 hook；音频单元已经跑起来时，
-    /// 下一次 Start（换歌 / 暂停再播）才会挂上 render notify。
+    /// 调试页的开关。打开时尝试当场激活 hook（异步，开关本身立刻返回）；音频单元已经
+    /// 跑起来时，下一次 Start（换歌 / 暂停再播）才会挂上 render notify。
     static func setEnabled(_ enabled: Bool) {
         UserDefaults.container.set(enabled, forKey: defaultsKey)
         if enabled { install() }
         setActive(enabled)
     }
 
+    /// 在 `installQueue` 上装 hook；调用方（主线程 / Tweak init）立刻返回。
     private static func install() {
-        guard !installed else { return }
-        installed = true
-        armCrashGuard()
-        activateAudioTapProbeHooks()
-        setActive(true)
-        startTimer()
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        writeDebugLog("[\(logTag)] armed on Spotify \(version) — AudioUnitSetProperty / AudioOutputUnitStart, read-only")
+        installQueue.async {
+            guard !installed else { return }
+            installed = true
+            armCrashGuard()
+            guard activateAudioTapProbeHooks() else {
+                // 符号没解析到 ⇒ 什么都没装，别记成"装过"，下次开开关还能再试。
+                installed = false
+                disarmCrashGuard()
+                setActive(false)
+                return
+            }
+            // 装 hook 这段时间里用户可能已经把开关关掉，别把 `active` 又拨回去。
+            setActive(isEnabled)
+            startTimer()
+            disarmCrashGuardAfterSurvival()
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+            writeDebugLog("[\(logTag)] armed on Spotify \(version) — AudioUnitSetProperty / AudioOutputUnitStart, read-only")
+        }
     }
 
-    /// 装完 5 秒还活着就清掉 marker；没清掉 = 上一次启动在装 hook 后崩了。
+    /// 装之前先落 marker：这次装 hook 之后 5 秒内进程如果没了，下一次启动会看到 marker、
+    /// 自动把开关关掉，不会把 App 卡在启动即崩的循环里。
     private static func armCrashGuard() {
         UserDefaults.container.set(true, forKey: launchMarkerKey)
+    }
+
+    /// 装完还活过 5 秒才算这次安全。用 main 队列是因为它只是清一个 UserDefaults 键，
+    /// 顺便避开"后台队列在 App 已经被挂起后才执行"的那种情况。
+    private static func disarmCrashGuardAfterSurvival() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             UserDefaults.container.set(false, forKey: launchMarkerKey)
         }
+    }
+
+    /// 根本没装上（符号没解析到）时立刻清掉 marker —— 这次没动过任何函数，不该让下次
+    /// 启动白关一次开关。
+    private static func disarmCrashGuard() {
+        UserDefaults.container.set(false, forKey: launchMarkerKey)
     }
 
     private static func setActive(_ value: Bool) {
