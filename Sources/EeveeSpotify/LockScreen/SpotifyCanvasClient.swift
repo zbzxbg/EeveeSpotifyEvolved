@@ -61,11 +61,18 @@ enum SpotifyCanvasClient {
         let server = http.value(forHTTPHeaderField: "Server") ?? "-"
         let magic = data.prefix(4).map { String(format: "%02x", $0) }.joined(separator: " ")
         let shape = magic.hasPrefix("47 49 46 38") ? "gif placeholder" : "protobuf-ish"
+        // 小响应（"没有 canvas" 通常就是个位数字节）连正文一起打：
+        // `EntityCanvazResponse` 只有 ttl 时是 `10 xx`，有空 canvases 时以 `0a` 开头，
+        // 两者一眼就能分开。
+        let body = data.count <= 64
+            ? data.map { String(format: "%02x", $0) }.joined(separator: " ")
+            : "\(data.count) bytes"
         writeDebugLog(
             "[\(LockScreenArtwork.logTag)] canvaz — "
                 + (canvas == nil ? "none" : "video")
                 + ", \(data.count) byte(s)"
                 + ", type=\(contentType), server=\(server), head=\(magic) (\(shape))"
+                + ", body=\(body)"
         )
         return canvas
     }
