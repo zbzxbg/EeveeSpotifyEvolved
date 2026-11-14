@@ -77,6 +77,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         do {
+            SpotifyResponsePatcher.dumpConfigurationBodyIfNeeded(url: url, buffer: buffer)
             if url.isLyrics {
                 let originalLyrics = try? Lyrics(serializedBytes: buffer)
 

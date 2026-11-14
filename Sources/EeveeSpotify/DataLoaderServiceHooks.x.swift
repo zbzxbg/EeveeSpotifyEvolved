@@ -99,6 +99,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         do {
+            SpotifyResponsePatcher.dumpConfigurationBodyIfNeeded(url: url, buffer: buffer)
             // Lyrics — async fetch with 18s budget, falls back to Spotify's own response on failure.
             //
             // iOS 27 / Spotify 9.1.60 fix: Spotify's URLSession delegate handler for

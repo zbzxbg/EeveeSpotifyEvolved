@@ -340,9 +340,14 @@ extension NowPlayingIOS27 {
             // 这一档叫不上“变暗”了，就是真的没有歌词入口。
             // Connect 那颗现在**由我们画**（原生键留在 38、字形被藏）⇒ 这一颗
             // 必须是 alpha 1，否则中间就空了（上一版是 0，因为原生字形被搬过来露着）。
+            //
+            // 队列：9.2.0 的听歌页里没有 `QueueButtonNowPlaying` 这颗键（整棵页树 400 多个
+            // 节点搜不到），留着字形就是一颗按了没反应的键 —— 找不到目标就整颗隐掉。
             let wantedAlpha: CGFloat
             if name == "lyrics" && !footerLyricsAvailable {
                 wantedAlpha = footerGlyphDisabledAlpha
+            } else if name == "queue" && queue == nil {
+                wantedAlpha = 0
             } else {
                 wantedAlpha = 1
             }

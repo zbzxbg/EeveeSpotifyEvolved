@@ -201,6 +201,52 @@ enum SpotifyResponsePatcher {
         writeDebugLog("[CustomizeBody] base64-end")
     }
 
+    // MARK: - 9.2.0 的账户配置响应（排障用）
+    //
+    // 9.2.0 起客户端不再请求 `user-customization-service/v1/customize`：账户态与 flag
+    // 改走 `remote-config-resolver/v3/configuration` 与
+    // `nebula/v1/configuration/attributes`（两条都不匹配 `isCustomize`，所以改写链在
+    // 9.2.0 上不触发）。这里把两条的原始 body 各抓一次（base64），用来确定新报文的
+    // 字段结构 —— 抓到之前不改写：把 `CustomizeMessage` 的字节喂给新传输，App 会解析
+    // 失败，配置空 = 歌单全灰。
+    private static var dumpedConfigurationBodies = Set<String>()
+
+    static func dumpConfigurationBodyIfNeeded(url: URL, buffer: Data) {
+        guard UserDefaults.detailedLogging else { return }
+
+        let path = url.path
+        let key: String
+        if path.contains("remote-config-resolver") && path.contains("configuration") {
+            key = "resolver"
+        } else if path.contains("nebula/v1/configuration") {
+            key = "nebula"
+        } else {
+            return
+        }
+
+        lock.lock()
+        let alreadyDumped = dumpedConfigurationBodies.contains(key)
+        if !alreadyDumped { dumpedConfigurationBodies.insert(key) }
+        lock.unlock()
+        guard !alreadyDumped else { return }
+
+        guard buffer.count <= self.customizeDumpLimit else {
+            writeDebugLog(
+                "[ConfigBody] \(key) — skipped: \(buffer.count) bytes exceeds the limit"
+                    + " \(self.customizeDumpLimit)"
+            )
+            return
+        }
+
+        writeDebugLog(
+            "[ConfigBody] \(key) — \(DebugLogSanitizer.logSafeURL(url)), raw \(buffer.count) bytes,"
+                + " base64 between the two lines below"
+        )
+        writeDebugLog("[ConfigBody] \(key) base64-begin")
+        writeDebugLog(buffer.base64EncodedString())
+        writeDebugLog("[ConfigBody] \(key) base64-end")
+    }
+
     // MARK: - `has_lyrics` 线上来源探针（排障用）
     //
     // 找出 track 元数据里的 `has_lyrics` 到底搭**哪个 HTTP 响应**过来。
