@@ -398,7 +398,7 @@ final class LockScreenLyricsController {
 
         // 这一首的词如果已经在内存里（歌词页加载过），直接转，不发网络请求。
         if let dto = loadedLyrics(for: identifier),
-           let converted = LockScreenLyricsFetcher.convert(dto) {
+           let converted = LockScreenLyricsFetcher.convert(dto, source: currentLyricsSource) {
             let source = dto.providerName.isEmpty
                 ? (currentLyricsSource?.description ?? "")
                 : dto.providerName
@@ -498,6 +498,7 @@ final class LockScreenLyricsController {
         let frameHash = LockScreenLyrics.frameHash(
             line: texts.line,
             next: texts.next,
+            translation: texts.translation,
             credit: credit,
             hasCover: cover != nil,
             // 两档倍率进文件名：改了「歌词 → 文字」之后旧片段不该再被命中，
@@ -514,6 +515,7 @@ final class LockScreenLyricsController {
                     cover: cover,
                     line: texts.line,
                     next: texts.next,
+                    translation: texts.translation,
                     credit: credit,
                     size: size
                 ) {
@@ -541,7 +543,7 @@ final class LockScreenLyricsController {
     private func finishInstall(
         lineKey: String,
         location: LocatedLine,
-        texts: (line: String?, next: String?),
+        texts: (line: String?, next: String?, translation: String?),
         credit: String,
         frameHash: String,
         aspects: [LockScreenArtwork.Aspect],
@@ -602,7 +604,7 @@ final class LockScreenLyricsController {
         artworkID: String,
         aspect: LockScreenArtwork.Aspect,
         location: LocatedLine,
-        texts: (line: String?, next: String?),
+        texts: (line: String?, next: String?, translation: String?),
         credit: String,
         frameHash: String,
         lines: [LockScreenLyricLine],
@@ -629,6 +631,7 @@ final class LockScreenLyricsController {
                     cover: cover,
                     line: texts.line,
                     next: texts.next,
+                    translation: texts.translation,
                     credit: credit,
                     size: size
                 ) {
@@ -664,6 +667,7 @@ final class LockScreenLyricsController {
                         frameHash: frameHash,
                         line: texts.line,
                         next: texts.next,
+                        translation: texts.translation,
                         credit: credit,
                         cover: cover,
                         seconds: seconds
@@ -684,6 +688,7 @@ final class LockScreenLyricsController {
         frameHash: String,
         line: String?,
         next: String?,
+        translation: String?,
         credit: String,
         cover: CGImage?,
         seconds: Double
@@ -717,6 +722,7 @@ final class LockScreenLyricsController {
                     cover: cover,
                     line: line,
                     next: next,
+                    translation: translation,
                     credit: credit,
                     size: size,
                     seconds: seconds,
@@ -907,14 +913,16 @@ final class LockScreenLyricsController {
     private static func texts(
         for location: LocatedLine,
         in lines: [LockScreenLyricLine]
-    ) -> (line: String?, next: String?) {
+    ) -> (line: String?, next: String?, translation: String?) {
         if location.resting {
             let next = location.index + 1 < lines.count ? lines[location.index + 1].text : nil
-            return (nil, next)
+            return (nil, next, nil)
         }
         let line = location.index >= 0 ? lines[location.index].text : nil
         let next = location.index + 1 < lines.count ? lines[location.index + 1].text : nil
-        return (line, next)
+        // 译文只在"这一行正在唱"时画：间奏态只留压暗的下一行，多一行译文会把那个提示挤掉。
+        let translation = location.index >= 0 ? lines[location.index].translation : ""
+        return (line, next, translation.isEmpty ? nil : translation)
     }
 
     /// 一段片子的名义时长。换行由定时器负责，这里只要"盖住到下一行的时间"。
