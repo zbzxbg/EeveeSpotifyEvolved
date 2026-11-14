@@ -43,8 +43,10 @@ public func eeveeAudioTapNoteSetProperty(
     _ size: UInt32
 ) {
     guard let unit else { return }
+    // `AudioUnit` 是 C 的 `ComponentInstanceRecord *`，和 `void *` 同宽；用 `unsafeBitCast`
+    // 直接取回，不走 `bitPattern:` 那组初始化器（它们在这条 SDK 上解析成可空类型）。
     AudioTapProbe.noteSetProperty(
-        unit: AudioUnit(bitPattern: UInt(bitPattern: unit)),
+        unit: unsafeBitCast(unit, to: AudioUnit.self),
         id: propertyID,
         scope: scope,
         element: element,
@@ -57,7 +59,7 @@ public func eeveeAudioTapNoteSetProperty(
 public func eeveeAudioTapNoteStarted(_ unit: UnsafeMutableRawPointer?, _ status: Int32) {
     guard let unit else { return }
     AudioTapProbe.noteStarted(
-        unit: AudioUnit(bitPattern: UInt(bitPattern: unit)),
+        unit: unsafeBitCast(unit, to: AudioUnit.self),
         status: status
     )
 }
