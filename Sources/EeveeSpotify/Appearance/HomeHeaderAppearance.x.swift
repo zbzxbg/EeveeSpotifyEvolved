@@ -113,24 +113,34 @@ enum HomeHeaderAppearance {
         // 只有 stack 才有（编译错第 1 条就是漏了这个 `as?`）。
         guard let stack = findView(in: header, where: { $0 is UIStackView }) as? UIStackView else { return }
 
-        // ① 那一行翻成 RTL ⇒ 头像自动落到右沿（每拍都成立，宽度变了也不用管）。
-        if stack.semanticContentAttribute != .forceRightToLeft {
+        // ① 先认头像。9.2.0 的头像类名里已经搜不到 `AdaptiveFaceContainer`（真机日志
+        //    `avatar not found`），所以按"类名片段 → 无障碍 id → 接近方形 20…56pt"三档认。
+        var face: UIView?
+        for part in stack.arrangedSubviews where isAvatar(part) {
+            face = part
+            break
+        }
+
+        // ② 只有认出头像才翻 RTL：这一翻的语义是"把 arranged[0] 送到右沿"，
+        //    认不出时翻过去只会把 pills 甩到右边。
+        if face != nil, stack.semanticContentAttribute != .forceRightToLeft {
             stack.semanticContentAttribute = .forceRightToLeft
             stack.setNeedsLayout()
         }
         stack.layoutIfNeeded()
 
-        // ② 除头像外，arranged subview 一律收掉（**只有 alpha**，不摘、不 hidden —— 见文件头 ②）。
-        var face: UIView?
-        for part in stack.arrangedSubviews {
-            if className(part).contains("AdaptiveFaceContainer") {
-                face = part
-                continue
+        // ③ 除头像外，arranged subview 一律收掉（**只有 alpha**，不摘、不 hidden —— 见文件头 ②）。
+        //    认不出头像时**一颗都不收**：9.2.0 可能把头像挪进了 pills 那一侧的容器，
+        //    整颗收掉就会连头像一起消失 —— 宁可留着 pills，也要让头像在。
+        if face != nil {
+            for part in stack.arrangedSubviews where part !== face {
+                if HomeHeaderMetrics.vanishPills { vanish(part) }
             }
-            if HomeHeaderMetrics.vanishPills { vanish(part) }
+        } else {
+            logAvatarCandidates(stack)
         }
 
-        // ③ 自己画的大标题（AM：32pt bold、贴左、与那一行垂直居中、右端到头像左边 8pt）。
+        // ④ 自己画的大标题（AM：32pt bold、贴左、与那一行垂直居中、右端到头像左边 8pt）。
         let title = titleLabel(in: header)
         let text = homeTabTitle(in: header)
         if title.text != text {
@@ -173,6 +183,35 @@ enum HomeHeaderAppearance {
         }
     }
 
+    /// 头像：9.1.88 是 `ListeningActivity_ElementsKit.AdaptiveFaceContainer`（32×34）。
+    /// 9.2.0 的类名片段认不出来，所以再按无障碍 id 与"接近方形 20…56pt"兜底 ——
+    /// 这一行里除头像只剩 pills 容器（宽 300+），尺寸判据不会误伤。
+    private static func isAvatar(_ view: UIView) -> Bool {
+        if className(view).contains("AdaptiveFaceContainer") { return true }
+        if let identifier = view.accessibilityIdentifier, identifier.contains("SideDrawerButton") {
+            return true
+        }
+        let size = view.bounds.size
+        guard size.width >= 20, size.width <= 56, size.height >= 20, size.height <= 56 else {
+            return false
+        }
+        return abs(size.width - size.height) <= 12
+    }
+
+    private static var didLogAvatarCandidates = false
+
+    /// 认不出头像时把那一行整个打一遍（每页一次），下次改判据不用再靠截图猜。
+    @MainActor
+    private static func logAvatarCandidates(_ stack: UIStackView) {
+        guard !didLogAvatarCandidates else { return }
+        didLogAvatarCandidates = true
+        let parts = stack.arrangedSubviews.map { part in
+            "\(className(part))[\(part.accessibilityIdentifier ?? "-")]"
+                + " \(Int(part.bounds.width))×\(Int(part.bounds.height))"
+        }
+        writeDebugLog("[Home] avatar not recognised — row: \(parts.joined(separator: " | "))")
+    }
+
     /// 我们那颗标题：不是任何 stack 的 arranged subview（`header.addSubview` 直接加）。
     @MainActor
     private static func titleLabel(in header: UIView) -> UILabel {
@@ -190,13 +229,16 @@ enum HomeHeaderAppearance {
         return title
     }
 
-    /// 首页标签的名字：**从标签栏那一颗读**（`TabBar.Item.Home` 里第一个有字的 `UILabel`）
+    /// 首页标签的名字：**从标签栏那一颗读**（`TabBar.Item.<本地化名>` 里第一个有字的 `UILabel`）
     /// ⇒ 跟随 App 语言（我们机器上是「主页」）。读不到就退回本地化文案，并只报一次。
     @MainActor
     private static func homeTabTitle(in header: UIView) -> String {
         if let tabName { return tabName }
+        // 9.2.0 把标签栏 item 的 id 换成了本地化形式（`TabBar.Item.主页`），旧名 `TabBar.Item.Home`
+        // 只在英文环境命中 ⇒ 两个都试，后一个用我们自己的本地化文案拼。
+        let identifiers = ["TabBar.Item.Home", "TabBar.Item." + "home_header_title".localized]
         if let window = header.window,
-           let item = findView(in: window, where: { $0.accessibilityIdentifier == "TabBar.Item.Home" }),
+           let item = findView(in: window, where: { identifiers.contains($0.accessibilityIdentifier ?? "") }),
            let label = findView(in: item, where: { ($0 as? UILabel)?.text?.isEmpty == false }),
            let text = (label as? UILabel)?.text {
             tabName = text
