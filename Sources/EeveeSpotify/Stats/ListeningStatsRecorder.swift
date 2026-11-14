@@ -21,7 +21,7 @@ import UIKit
 ///
 /// ── 不重复计数
 /// 会话里记着「累计多少秒」和「已经落盘多少秒」，每次只把差值交给 store，交完立刻清空；
-/// 被强杀时最多丢掉最后一段还没 flush 的尾巴（≤30 秒）。
+/// 被强杀时最多丢掉最后一段还没 flush 的尾巴（≤2 分钟）。
 final class ListeningStatsRecorder {
 
     static let shared = ListeningStatsRecorder()
@@ -29,8 +29,9 @@ final class ListeningStatsRecorder {
     /// 轮询间隔。
     private static let interval: TimeInterval = 1.0
 
-    /// 攒够这么多秒就落一次盘。
-    private static let flushThreshold: Double = 30
+    /// 攒够这么多秒就落一次盘。换歌 / 暂停 / 进后台仍会立即 flush，所以这个间隔只影响
+    /// 「一首长歌/单曲循环一直不停」时的整份 JSON 重写频率；写盘次数少一半以上。
+    private static let flushThreshold: Double = 120
 
     /// 一次会话最多为封面读几次 metadata（换歌瞬间常常还读不到）。
     private static let maxArtworkAttempts = 3
@@ -73,12 +74,17 @@ final class ListeningStatsRecorder {
 
     // MARK: - 生命周期
 
-    /// 装上定时器与后台通知。**幂等**：重复调用只有第一次生效。
+    /// 装上定时器与后台通知。**幂等**：重复调用只有第一次生效。关着统计时不装定时器 ——
+    /// 关闭状态下一拍都不跑，打开时再由 `settingsDidChange()` 调回来。
     func start() {
         // store 是 Foundation-only，够不到 `writeDebugLog`；在这里把日志出口接上。
         ListeningStatsLog.sink = { writeDebugLog($0) }
 
         guard timer == nil else { return }
+        guard UserDefaults.listeningStatsEnabled else {
+            writeDebugLog("[Stats] recorder idle — recording is off")
+            return
+        }
 
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
@@ -87,6 +93,8 @@ final class ListeningStatsRecorder {
             leeway: .milliseconds(200)
         )
         timer.setEventHandler { [weak self] in
+            // 备份导入 / 别处改键时定时器可能还在；开关关着就不要再投主队列。
+            guard UserDefaults.listeningStatsEnabled else { return }
             guard let self else { return }
             DispatchQueue.main.async { self.tick() }
         }
@@ -118,17 +126,15 @@ final class ListeningStatsRecorder {
         writeDebugLog("[Stats] recorder stopped")
     }
 
-    /// 设置页拨完开关后可以调它一下：关掉时把尾巴落盘并结束会话，
-    /// 重开时从下一拍重新记位置基准（不会把关闭前那半首和重新打开后的秒数拼成一次播放）。
+    /// 设置页拨完开关后调它：关掉时落盘、结束会话并摘掉定时器（真正零轮询），
+    /// 重开时重新装定时器、从下一拍记位置基准（不会把关闭前那半首和重开后的秒数拼成一次播放）。
     func settingsDidChange() {
         if UserDefaults.listeningStatsEnabled {
+            start()
             resetBaseline()
             writeDebugLog("[Stats] recording enabled")
         } else {
-            if var current = session {
-                flush(&current)
-            }
-            session = nil
+            stop()
             writeDebugLog("[Stats] recording disabled — existing data kept")
         }
     }
@@ -165,12 +171,25 @@ final class ListeningStatsRecorder {
     // MARK: - 每一拍
 
     private func tick() {
-        // 开关是**实时读**的；关着就一眼都不看，正在攒的那一段原样留着。
+        // 开关是**实时读**的；关着就一眼都不看。
         guard UserDefaults.listeningStatsEnabled else { return }
+
+        // 先看播放速率：暂停 / 没在播时，只把已有会话落盘并冻结位置基准，
+        // 不去读当前曲目和 metadata —— 否则暂停浏览时也会每秒摸一次曲目元数据。
+        let nowPlaying = MPNowPlayingInfoCenter.default().nowPlayingInfo
+        let rate = Self.playbackRate(from: nowPlaying)
+        if rate <= 0 {
+            if var current = session {
+                flush(&current)
+                current.lastPosition = nil
+                current.lastTickAt = nil
+                session = current
+            }
+            return
+        }
 
         let now = Date()
         let track = currentTrack()
-        let nowPlaying = MPNowPlayingInfoCenter.default().nowPlayingInfo
 
         guard let info = makeTrackInfo(track: track, nowPlaying: nowPlaying) else {
             resetBaseline()
@@ -196,19 +215,9 @@ final class ListeningStatsRecorder {
             current.artworkAttempts += 1
         }
 
-        let rate = Self.playbackRate()
         let position = Self.playbackPosition(
             elapsed: nowPlaying?[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber
         )
-
-        if rate <= 0 {
-            // 暂停：落盘并丢掉位置基准 —— 恢复播放时不会把暂停的那段时间算进来。
-            flush(&current)
-            current.lastPosition = nil
-            current.lastTickAt = nil
-            session = current
-            return
-        }
 
         if ListeningStatsPlaybackRules.isTrackRestart(position: position, lastPosition: current.lastPosition) {
             // 同一首从头又放了一遍 ⇒ 结算上一段、开新会话，循环播放才会再记一次播放。
@@ -378,15 +387,14 @@ final class ListeningStatsRecorder {
         return ""
     }
 
-    private static func playbackRate() -> Double {
-        let center = MPNowPlayingInfoCenter.default()
-        if let rate = center.nowPlayingInfo?[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber {
+    private static func playbackRate(from info: [String: Any]?) -> Double {
+        if let rate = info?[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber {
             return rate.doubleValue
         }
 
         // 读不到 rate 时才看系统状态；两样都读不到按「没在播」处理 —— 宁可少记，
         // 也不要把暂停算成在听。
-        switch center.playbackState {
+        switch MPNowPlayingInfoCenter.default().playbackState {
         case .playing: return 1
         case .paused, .stopped: return 0
         default: return 0
