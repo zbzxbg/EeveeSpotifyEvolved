@@ -927,8 +927,8 @@ struct AppleMusicLyricsPage: View {
         // 长按分享一句歌词。与上面的点击共存：SwiftUI 在按住超过阈值后才判长按，
         // 快速抬起仍然是"点行跳转"，两条路不会同时触发。
         .onLongPressGesture(minimumDuration: 0.5) {
-            guard !isStatic, let onShareLine else { return }
-            onShareLine(line)
+            guard !isStatic, let shareLine = onShareLine else { return }
+            shareLine(line)
         }
         .animation(
             .spring(duration: 0.45, bounce: 0.05, blendDuration: 0),

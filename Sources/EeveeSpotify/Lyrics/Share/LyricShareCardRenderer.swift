@@ -43,7 +43,7 @@ enum LyricShareCardRenderer {
 
     private static func drawBackdrop(cover: UIImage?, in context: CGContext) {
         let full = CGRect(origin: .zero, size: cardSize)
-        if let cover, let blurred = blurred(cover) {
+        if let cover, let blurred = blurredImage(cover) {
             drawFilling(blurred, in: full, context: context)
         } else {
             // 取不到封面时给一块中性暗底：白字仍然读得出来，也不会像加载失败。
@@ -54,7 +54,7 @@ enum LyricShareCardRenderer {
 
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-    private static func blurred(_ cover: UIImage) -> CGImage? {
+    private static func blurredImage(_ cover: UIImage) -> UIImage? {
         guard let source = cover.cgImage, source.width > 0 else { return nil }
         let smallWidth: CGFloat = 160
         let scale = smallWidth / CGFloat(source.width)
@@ -65,23 +65,29 @@ enum LyricShareCardRenderer {
             .clampedToExtent()
             .applyingGaussianBlur(sigma: smallWidth * 0.05)
             .cropped(to: input.extent)
-        return ciContext.createCGImage(blurred, from: input.extent)
+        guard let cgImage = ciContext.createCGImage(blurred, from: input.extent) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 
-    private static func drawFilling(_ image: CGImage, in rect: CGRect, context: CGContext) {
-        let imageWidth = CGFloat(image.width)
-        let imageHeight = CGFloat(image.height)
-        guard imageWidth > 0, imageHeight > 0 else { return }
-        let scale = max(rect.width / imageWidth, rect.height / imageHeight)
-        let drawn = CGSize(width: imageWidth * scale, height: imageHeight * scale)
+    /// 用 `UIImage.draw` 而不是 `CGContext.draw`：UIKit 的绘制上下文是**翻转的**
+    /// （原点在左上、y 向下），CGImage 直接交给 `CGContext` 会上下颠倒，而 UIKit 这条路
+    /// 会把方向处理掉 —— 同一张图在两种画法下是镜像的，别把两者混着用。
+    private static func drawFilling(_ image: UIImage, in rect: CGRect, context: CGContext) {
+        let size = image.size
+        guard size.width >= 1, size.height >= 1 else { return }
+        let scale = max(rect.width / size.width, rect.height / size.height)
+        let drawn = CGSize(width: size.width * scale, height: size.height * scale)
         let destination = CGRect(
             x: rect.midX - drawn.width / 2,
             y: rect.midY - drawn.height / 2,
             width: drawn.width,
             height: drawn.height
         )
-        context.interpolationQuality = .high
-        context.draw(image, in: destination)
+        UIGraphicsPushContext(context)
+        defer { UIGraphicsPopContext() }
+        image.draw(in: destination)
     }
 
     /// 上下渐变压暗。白字要压在任意亮度的封面上都读得出来，
