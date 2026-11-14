@@ -16,8 +16,8 @@ struct LyricsTypographyPreview: View {
     /// 当前两档倍率套上全屏分档之后的排版。由设置页传进来，滑一下就会重算。
     let typography: LyricsTypographyScale
 
-    /// 预览用的三句样例：一句英文长句（会折行）、一句中文短句（带译文）、
-    /// 一句英文短句。混排是为了让字号与译文那一行的大小关系一眼看得出来。
+    /// 预览用的三句样例：一句英文长句（会折行）、一句**罗马音 + 原文 + 译文**都在的日文，
+    /// 一句英文短句。中间那句就是焦点行，三种文字层的大小关系一眼看得全。
     private static let lines: [LyricLine] = [
         LyricLine(
             time: 0,
@@ -25,8 +25,9 @@ struct LyricsTypographyPreview: View {
         ),
         LyricLine(
             time: 6,
-            text: "灯火阑珊 你在哪里",
-            translation: "Where are you when the lights go dim"
+            text: "君は藍に浮かんだアルビレオ",
+            romanization: "Ki mi wa a i ni u ka n da a ru bi re o",
+            translation: "你就是浮现在蔚蓝中的天鹅座β"
         ),
         LyricLine(
             time: 12,
