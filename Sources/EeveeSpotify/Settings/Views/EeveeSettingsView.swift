@@ -108,6 +108,16 @@ struct EeveeSettingsView: View {
                     imageSystemName: "quote.bubble.fill"
                 ) { AnyView(EeveeLyricsSettingsView()) }
 
+                // 「歌词外观」：字号 / 行距 + 分享卡，从「歌词」页拆出来。
+                // 那一页是取词源与行为开关；这两项属于"长什么样"，而且字号倍率对
+                // 全屏歌词页、页内歌词层、锁屏歌词都生效，与逐词开关无关。
+                settingsRow(
+                    color: .blue,
+                    title: "lyrics_appearance_title",
+                    subtitle: "settings_sub_lyrics_appearance",
+                    imageSystemName: "textformat.size"
+                ) { AnyView(EeveeLyricsAppearanceSettingsView()) }
+
                 // （设置页里面放个可点击进去的页面吧）：歌词偏移
                 // 从歌词页拆成独立页 —— 它会随听歌不断长出条目，内嵌在歌词页里越拖越长。
                 // 从"网易云歌词偏移"扩成**所有源**（Genius 除外），

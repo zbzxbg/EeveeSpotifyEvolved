@@ -13,13 +13,6 @@ struct EeveeLyricsSettingsView: View {
             // （与下面 NetEase 那几项同一套写法）。
             if viewModel.wordByWordLyrics {
                 betterWordByWordLyricsSection()
-
-                // 「歌词文字」只作用于 App 内那套 Apple Music 渲染层（设置页的预览就是
-                // 那一页本身），所以门禁跟「更好的逐词歌词」同一套：它关着时这一块没有可调的对象。
-                if viewModel.betterWordByWordLyrics, Self.supportsBetterWordByWordLyrics {
-                    lyricsTypographySection()
-                    shareCardSection()
-                }
             }
 
             lyricsSourceSection()
@@ -149,126 +142,10 @@ struct EeveeLyricsSettingsView: View {
         if !Self.supportsBetterWordByWordLyrics {
             text += "\n\n" + "better_word_by_word_lyrics_needs_ios26".localized
         }
+        text += "\n\n" + "lyrics_appearance_hint".localized
         return Text(text)
     }
 
-    /// 「歌词 → 文字」：字号 / 行距两档倍率 + 一块实时预览。
-    ///
-    /// 为什么用**倍率**而不是几个固定档位：全屏歌词页与「歌词进播放器」那一层各有自己的
-    /// 基准字号（22pt 对 22pt，但容器一高一矮、行距 15 对 26），固定档位会让两处各自跳变；
-    /// 倍率让两处保持同一比例，见 `LyricsTypographyScale.applyingUserScale`。
-    @ViewBuilder private func lyricsTypographySection() -> some View {
-        Section {
-            // 预览直接塞生产那一页的缩小版，所以它要 iOS 26 —— 与「更好的逐词歌词」同一道门。
-            if #available(iOS 26.0, *) {
-                LyricsTypographyPreview(typography: viewModel.previewTypography)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("lyrics_text_scale".localized)
-                    Spacer()
-                    // `Text(verbatim:)`：带插值的字面量会被当成 LocalizedStringKey。
-                    Text(verbatim: "\(Int((viewModel.lyricsTextScale * 100).rounded()))%")
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                }
-
-                Slider(value: $viewModel.lyricsTextScale, in: 0.8...1.3, step: 0.05)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("lyrics_line_spacing".localized)
-                    Spacer()
-                    Text(verbatim: "\(Int((viewModel.lyricsLineSpacingScale * 100).rounded()))%")
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                }
-
-                Slider(value: $viewModel.lyricsLineSpacingScale, in: 0.7...1.5, step: 0.05)
-            }
-
-            Button("lyrics_typography_reset".localized) {
-                viewModel.lyricsTextScale = 1
-                viewModel.lyricsLineSpacingScale = 1
-            }
-            .disabled(
-                viewModel.lyricsTextScale == 1
-                    && viewModel.lyricsLineSpacingScale == 1
-            )
-        } header: {
-            Text("lyrics_typography_section".localized)
-        } footer: {
-            Text("lyrics_typography_description".localized)
-        }
-    }
-
-    /// 「分享卡」：模板 / 画幅 / 背景 / 文字颜色 + 实时预览。
-    ///
-    /// 选项都很少，所以用分段选择器而不是菜单：这里最想给的是"换一下长什么样"，
-    /// 上面那张预览会立刻跟着重画，不用分享出去才知道。
-    @ViewBuilder private func shareCardSection() -> some View {
-        Section {
-            LyricShareCardPreview(content: viewModel.shareCardPreviewContent)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-
-            Picker("share_card_template".localized, selection: $viewModel.shareCardTemplate) {
-                Text("share_card_template_native".localized)
-                    .tag(LyricShareCardTemplate.native)
-                Text("share_card_template_polaroid".localized)
-                    .tag(LyricShareCardTemplate.polaroid)
-                Text("share_card_template_minimal".localized)
-                    .tag(LyricShareCardTemplate.minimal)
-            }
-            .pickerStyle(.segmented)
-
-            Picker("share_card_size".localized, selection: $viewModel.shareCardSize) {
-                Text("9:16").tag(LyricShareCardSize.story)
-                Text("4:5").tag(LyricShareCardSize.portrait)
-                Text("1:1").tag(LyricShareCardSize.square)
-            }
-            .pickerStyle(.segmented)
-
-            Picker("share_card_background".localized, selection: $viewModel.shareCardBackground) {
-                Text("share_card_background_cover".localized)
-                    .tag(LyricShareCardBackground.cover)
-                Text("share_card_background_blur".localized)
-                    .tag(LyricShareCardBackground.blurredCover)
-                Text("share_card_background_black".localized)
-                    .tag(LyricShareCardBackground.black)
-            }
-            .pickerStyle(.segmented)
-
-            Picker("share_card_ink".localized, selection: $viewModel.shareCardInk) {
-                Text("share_card_ink_auto".localized)
-                    .tag(LyricShareCardInk.auto)
-                Text("share_card_ink_black".localized)
-                    .tag(LyricShareCardInk.black)
-                Text("share_card_ink_white".localized)
-                    .tag(LyricShareCardInk.white)
-                Text("share_card_ink_custom".localized)
-                    .tag(LyricShareCardInk.custom)
-            }
-            .pickerStyle(.segmented)
-
-            if viewModel.shareCardInk == .custom {
-                ColorPicker(
-                    "share_card_ink_custom_value".localized,
-                    selection: $viewModel.shareCardCustomInk,
-                    supportsOpacity: false
-                )
-            }
-        } header: {
-            Text("share_card_section".localized)
-        } footer: {
-            Text("share_card_footer".localized)
-        }
-    }
-    
     @ViewBuilder private func disableLyricsSection() -> some View {
         Section(
             footer: Text("disable_lyrics_feature_description".localized)
