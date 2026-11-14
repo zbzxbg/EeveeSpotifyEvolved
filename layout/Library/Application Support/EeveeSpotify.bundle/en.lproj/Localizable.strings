@@ -557,7 +557,7 @@ flag_group_chrome_footer = "Element switches for the now-playing bar, plus cover
 flag_note_interventions_master = "Master switch: turn this off and Spotify drops the whole batch of nudges";
 flag_note_int_needs_number = "Integer flag: use “Write a number” on the Flag overrides page (throttle seconds, count caps)";
 flag_note_data_saver = "Data-saver tooltip. The mode itself is ios-datasaver-automatic-impl.enabled";
-flag_note_canvas_off = "Turn off Canvas (still cover art)";
+flag_note_canvas_off = "Turn off Canvas in the player (still cover art; the lock screen keeps its animated artwork)";
 flag_note_snake_on = "Turn on = the cover-art snake easter egg Spotify ships hidden";
 maintenance_section = "Settings & about";
 backup_title = "Backup & reset";

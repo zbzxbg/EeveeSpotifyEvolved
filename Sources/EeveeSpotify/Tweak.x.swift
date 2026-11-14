@@ -346,6 +346,10 @@ struct EeveeSpotify: Tweak {
 
         activateEeveeCrossfadeForce()
 
+        // 默认 flag 覆盖（目前只有一条：听歌页关掉 Canvas 的视频，锁屏不受影响）。
+        // 必须在配置改写之前种进去；只种一次，用户删掉后不会再补。
+        FlagOverrideStore.seedDefaultsIfNeeded()
+
         // customize 种子：必须在任何网络改写之前跑。
         //
         // 冷启动第一个 customize 常是 304、没有 body，那条路径下

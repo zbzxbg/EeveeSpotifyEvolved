@@ -555,7 +555,7 @@ flag_group_chrome_footer = "播放条上的元素开关 + 封面。这些是「�
 flag_note_interventions_master = "总闸：关掉它，下面这一批提示由Spotify自己统一收手";
 flag_note_int_needs_number = "整数开关：去「Flag覆盖」页选「写入数字」再填（节流秒数 / 次数上限这类）";
 flag_note_data_saver = "省流量提示；「省流量模式」本身是ios-datasaver-automatic-impl.enabled";
-flag_note_canvas_off = "关掉 Canvas（封面变成静态）";
+flag_note_canvas_off = "关掉听歌页里的 Canvas（封面变成静态；锁屏动态封面不受影响）";
 flag_note_snake_on = "打开它 = Spotify自己藏着的「封面贪吃蛇」彩蛋";
 maintenance_section = "设置与关于";
 backup_title = "备份与重置";
