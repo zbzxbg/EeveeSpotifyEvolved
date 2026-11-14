@@ -12,6 +12,11 @@
 // 替身"（`NowPlayingIOS27RemoteRelayView`）；只对封面壳写 `alpha`（记原值、每拍补、收尾写回）；
 // 自己的视图挂在封面所在的整页 cell 里（contentlayer 在 UI 栈下面），z-order 天然正确；
 // 量位置一律用 `convert`（带 transform）；每 0.3s 蹭 `DeclutterChrome` 的节拍，不新开定时器。
+//
+// Canvas：Spotify 的 Canvas 播放页会把当前 contentlayer 换成 `CanvasNowPlayingCell`，
+// 视频上另铺一张「歌词卡」（歌词 + 小封面 + 歌名 + 分享/全屏）。这一页开着时把那张卡藏掉、
+// 视频留作背景；页内歌词的 64pt 缩略图没有整幅封面可缩，改从元数据封面单独画
+// （`canvasLyricsThumb`）。
 // 日志 tag：`[iOS27]`。
 import Foundation
 import UIKit
@@ -100,6 +105,25 @@ enum NowPlayingIOS27 {
     // MARK: - 状态
 
     static weak var lastPage: UIView?
+
+    /// 当前这一页的 Canvas 格（`nowplaying-contentlayer-cell-5xxx` / `CanvasNowPlayingCell`）。
+    ///
+    /// Canvas 打开时 contentlayer 的当前页不再是封面格：视频铺满整页，上面另铺一层
+    /// 「歌词卡 + 顶部歌名」。那层文案与 AM 版式重复 ⇒ 每拍 `alpha = 0`，只留视频当背景；
+    /// 这一页开着时也**不再铺**我们自己的整幅封面 / field（铺上去就把视频盖住了）。
+    static weak var canvasCell: UIView?
+    /// Canvas 卡片里那枚小封面图（元数据封面还没到时给 `canvasLyricsThumb` 兜底）。
+    static var canvasCardImage: UIImage?
+    /// 页内歌词模式下、Canvas 页里那张 64pt 缩略图（正常模式缩的是 `artworkView`）。
+    static weak var canvasLyricsThumb: UIImageView?
+    /// 页内歌词模式下压在 Canvas 视频上的那层黑纱（只压视频，不压标题/控件）。
+    static weak var canvasLyricsScrim: UIView?
+    /// 页内歌词时 Canvas 视频压暗多少（白字读得清；AM 开歌词时封面也会暗下去）。
+    static let canvasLyricsScrimAlpha: CGFloat = 0.32
+    /// "Canvas 页的文案藏掉了"只报一行。
+    static var didLogCanvas = false
+    /// "Canvas 页的歌词缩略图挂上了"只报一行。
+    static var didLogCanvasThumb = false
 
     /// Spotify 那张**真正画封面**的壳（`Encore.ImageView`，366×366）。
     static weak var artworkShell: UIView?
@@ -529,6 +553,14 @@ enum NowPlayingIOS27 {
         // 前提（标题行就长在这个 stack 里）。
         if placeBottomStack(in: page) { changed = true }
         if placeTitleRow(in: page) { changed = true }
+        // Canvas 页自带的歌词卡 / 顶部歌名压在我们的版式上，每拍按下去（只留视频）。
+        // 排在下面两张图之前：`updateCanvasLyricsThumb` / `updateCanvasLyricsScrim` 要用
+        // 这一步认出来的 `canvasCell`，缩略图也要在卡片藏掉之前借它的封面图。
+        if placeCanvasChrome(in: page) { changed = true }
+        // 页内歌词的缩略图：Canvas 页里没有「我们的整幅封面」可缩，用元数据封面自己画一张。
+        // 必须排在下面的「亮歌词」闸门之前 —— `lyricsSceneReady` 要数这张图。
+        if updateCanvasLyricsThumb(in: page) { changed = true }
+        if updateCanvasLyricsScrim() { changed = true }
         // `setLyricsMode` 那一拍标题可能还没量到（换歌转场/页面重建）⇒ 它把"亮歌词"挂起；
         // 这里每一拍重试，标题真到缩略图旁边了才铺歌词。
         if lyricsModeActive, !lyricsModeRevealed, lyricsRevealPending,
@@ -558,6 +590,14 @@ enum NowPlayingIOS27 {
         // 把自己的容器 `bringSubviewToFront` 一次，排在它前面的话按钮下一拍就又被压在下面；
         // 排最后才能保证这一拍结束时按钮在最上层（两者不重叠，但层序必须是我们占先）。
         if placeTitleTapTargets(in: page) { changed = true }
+
+        // Canvas 页：视频就是背景，**不铺**我们自己的整幅封面 / field —— 铺上去等于把它盖掉。
+        // 页内歌词那张缩略图由 `canvasLyricsThumb` 单独画，不依赖这里的封面壳。
+        if canvasCell != nil {
+            if artworkView != nil { teardownArtwork() }
+            if fieldHost != nil { teardownField() }
+            return changed
+        }
 
         guard let shell = resolvedShell(in: page) else {
             // **别在没图的时候硬留一个洞**。兜底找一次原生封面：
@@ -1979,6 +2019,160 @@ enum NowPlayingIOS27 {
         return true
     }
 
+    // MARK: - Canvas 播放页
+    //
+    // Canvas 打开时 Spotify 把 contentlayer 的当前页换成 `CanvasNowPlayingCell`：视频铺满整页，
+    // 视频上另铺一张「歌词卡」（歌词 + 小封面 + 歌名 + 分享/全屏）。AM 版式自己就有歌名行与
+    // 页内歌词 ⇒ 那张卡每拍按成透明，只留视频当背景。
+
+    /// 当前这一页的 Canvas 格；Canvas 没开时返回 nil。
+    private static func visibleCanvasCell(in page: UIView) -> UIView? {
+        var queue: [UIView] = [page]
+        var visited = 0
+        while !queue.isEmpty, visited < 3000 {
+            let view = queue.removeFirst()
+            visited += 1
+            if let identifier = view.accessibilityIdentifier,
+               identifier.contains("nowplaying-contentlayer-cell-5"),
+               !view.isHidden,
+               isControlOnPage(view, in: page, requireAlpha: false, horizontalMargin: 0) {
+                return view
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    /// 藏掉 Canvas 页自带的歌词卡（歌词 + 小封面 + 歌名 + 分享/全屏），视频留着当背景。
+    ///
+    /// 每拍重做：换歌时 Canvas 格与卡片都会换对象；`hideChrome` 按对象记原值，
+    /// `restore` 的 `revealChrome` 统一写回。
+    @discardableResult
+    private static func placeCanvasChrome(in page: UIView) -> Bool {
+        canvasCell = visibleCanvasCell(in: page)
+        guard let cell = canvasCell else { return false }
+        var changed = false
+        var hidden = 0
+
+        var queue: [UIView] = [cell]
+        var visited = 0
+        while !queue.isEmpty, visited < 900 {
+            let view = queue.removeFirst()
+            visited += 1
+            queue.append(contentsOf: view.subviews)
+            let className = String(describing: type(of: view))
+
+            if className.contains("CanvasNowPlayingLyricsElementView") {
+                // 卡片里那枚小封面是这首歌的专辑图：元数据封面还没到的那几拍，借它给
+                // 页内歌词的缩略图兜底。藏卡片之前取，藏完仍然读得到图。
+                if metadataArtworkImage == nil,
+                   let image = NowPlayingLyricsPlate.firstImage(in: view) {
+                    canvasCardImage = image
+                }
+                if hideChrome(view) { changed = true }
+                hidden += 1
+            }
+            // Canvas 页顶部那行「歌名 / 歌手」：`ElementView<(), Any, Any>`，居中、约 98×48。
+            // 只认「Canvas 格里 + 页顶带 + 像标题行那么宽」的那一个 —— 底部标题行在
+            // `npv.bottomStackView` 里、不在这一格，不会被抓到。
+            if className.hasPrefix("ElementView<") {
+                let rect = view.convert(view.bounds, to: page)
+                if rect.minY >= 80, rect.minY <= 170,
+                   rect.width >= 70, rect.width <= 260,
+                   rect.height >= 36, rect.height <= 60 {
+                    if hideChrome(view) { changed = true }
+                    hidden += 1
+                }
+            }
+        }
+        if !didLogCanvas, hidden > 0 {
+            didLogCanvas = true
+            writeDebugLog(
+                "[\(logTag)] canvas page — hid Spotify's canvas lyrics card and header title"
+                    + " (\(hidden) view(s)); the video stays as the backdrop"
+            )
+        }
+        return changed
+    }
+
+    /// Canvas 页里页内歌词的 64pt 缩略图。
+    ///
+    /// 正常模式缩的是「我们自己那张整幅封面」（`artworkView`），Canvas 页里我们不画整幅封面
+    /// （视频就是背景）⇒ 没有东西可缩。这里用元数据封面单独画一张，位置沿用
+    /// `lyricsThumbFrame`，`placeTitleRow` / `lyricsStageFrame` 的几何完全不变。
+    @discardableResult
+    private static func updateCanvasLyricsThumb(in page: UIView) -> Bool {
+        guard lyricsModeActive, canvasCell != nil else {
+            guard let thumb = canvasLyricsThumb else { return false }
+            thumb.removeFromSuperview()
+            canvasLyricsThumb = nil
+            return true
+        }
+        guard let image = metadataArtworkImage ?? canvasCardImage else { return false }
+
+        let frame = lyricsThumbFrame(in: page)
+        let thumb: UIImageView
+        if let existing = canvasLyricsThumb, existing.superview === page {
+            thumb = existing
+        } else {
+            let view = UIImageView(frame: frame)
+            view.contentMode = .scaleAspectFill
+            view.clipsToBounds = true
+            view.layer.cornerRadius = Self.lyricsThumbCorner
+            view.layer.cornerCurve = .continuous
+            view.isUserInteractionEnabled = false
+            view.accessibilityIdentifier = "eevee-ios27-canvas-thumb"
+            page.addSubview(view)
+            page.bringSubviewToFront(view)
+            canvasLyricsThumb = view
+            thumb = view
+        }
+        var changed = false
+        if thumb.image !== image {
+            thumb.image = image
+            changed = true
+        }
+        if thumb.frame != frame {
+            thumb.frame = frame
+            changed = true
+        }
+        if !didLogCanvasThumb {
+            didLogCanvasThumb = true
+            writeDebugLog(
+                "[\(logTag)] canvas lyrics thumb — 64pt at \(Int(frame.minX)),\(Int(frame.minY))"
+                    + " (no full-bleed artwork to shrink on the Canvas page)"
+            )
+        }
+        return changed
+    }
+
+    /// 页内歌词模式下把 Canvas 视频压暗一点。
+    ///
+    /// 压暗层加在 Canvas 格里、视频之上：标题 / 进度 / 控件在另一层（`SPTNowPlayingView`），
+    /// 不会被一起压暗。歌词容器挂在 page 上，仍然盖在这层之上。
+    @discardableResult
+    private static func updateCanvasLyricsScrim() -> Bool {
+        guard lyricsModeActive, let cell = canvasCell else {
+            guard let scrim = canvasLyricsScrim else { return false }
+            scrim.removeFromSuperview()
+            canvasLyricsScrim = nil
+            return true
+        }
+        if let scrim = canvasLyricsScrim, scrim.superview === cell {
+            guard scrim.frame != cell.bounds else { return false }
+            scrim.frame = cell.bounds
+            return true
+        }
+        canvasLyricsScrim?.removeFromSuperview()
+        let scrim = UIView(frame: cell.bounds)
+        scrim.isUserInteractionEnabled = false
+        scrim.backgroundColor = UIColor.black.withAlphaComponent(canvasLyricsScrimAlpha)
+        scrim.accessibilityIdentifier = "eevee-ios27-canvas-lyrics-scrim"
+        cell.addSubview(scrim)
+        canvasLyricsScrim = scrim
+        return true
+    }
+
     /// 把一颗原生视图按 `alpha = 0` 藏掉（记原值；`revealChrome` 统一写回）。
     ///
     /// ⚠️ 它是 internal 而不是 private：传输行那两颗也走这一条，于是"记原值 / 收尾写回"
@@ -2026,6 +2220,12 @@ enum NowPlayingIOS27 {
         // 页内歌词先收（它不参与 `hadState` 的账，但必须先拆掉容器与化开层）。
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil
+        // Canvas 页里那张缩略图也是我们自己的，先摘掉。
+        canvasLyricsThumb?.removeFromSuperview()
+        canvasLyricsThumb = nil
+        canvasLyricsScrim?.removeFromSuperview()
+        canvasLyricsScrim = nil
+        canvasCardImage = nil
         // 歌名/艺人的透明点击区也要一起收，别留在回收的 cell 上。
         removeTitleTapTargets()
         // 歌词署名视图也要一起收，别留在回收的 cell 上。
@@ -2077,6 +2277,14 @@ enum NowPlayingIOS27 {
         lyricsModeActive = false
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil
+        canvasLyricsThumb?.removeFromSuperview()
+        canvasLyricsThumb = nil
+        canvasLyricsScrim?.removeFromSuperview()
+        canvasLyricsScrim = nil
+        canvasCardImage = nil
+        canvasCell = nil
+        didLogCanvas = false
+        didLogCanvasThumb = false
         lyricsCreditView?.removeFromSuperview()
         lyricsCreditView = nil
         lyricsModeRevealed = false
@@ -2218,6 +2426,11 @@ enum NowPlayingIOS27 {
     /// 屏幕上只剩模糊底。这时开歌词只会得到"一块歌词卡片 + 没有封面"的半成品。
     /// 等封面回到页面上再亮歌词（下一拍重试）。
     private static func artworkOnPage(in page: UIView) -> Bool {
+        // Canvas 页：歌词模式里的“封面”就是左上角那张自己画的缩略图。
+        if let thumb = canvasLyricsThumb, thumb.superview === page,
+           thumb.convert(thumb.bounds, to: page).width > 8 {
+            return true
+        }
         guard let view = artworkView, view.window != nil, view.superview != nil else { return false }
         let rect = view.convert(view.bounds, to: page)
         guard rect.width > 8, rect.height > 8 else { return false }
