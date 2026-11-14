@@ -927,6 +927,8 @@ private let premiumCoreKeys: Set<String> = [
     "shuffle-eligible",
 ]
 
+private var didLogCanvasForce = false
+
 private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
     let serverAuthoritativeAttributes = Dictionary(
         uniqueKeysWithValues: ServerSidedFeaturePolicy.serverAuthoritativeAccountAttributes
@@ -1117,6 +1119,13 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
     if LockScreenArtwork.wantsCanvas {
         attributes["canvas-disabled"] = AccountAttribute.with {
             $0.boolValue = false
+        }
+        if !didLogCanvasForce {
+            didLogCanvasForce = true
+            writeDebugLog(
+                "[Canvas] forced the account attribute canvas-disabled=false"
+                    + " — the lock-screen Canvas source is on"
+            )
         }
     }
 
