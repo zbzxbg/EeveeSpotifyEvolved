@@ -54,10 +54,18 @@ enum SpotifyCanvasClient {
         }
 
         let canvas = SpotifyCanvasProto.parseResponse(data)
+        // 诊断：有时拿到的是 42 字节的 1×1 GIF（响应头只有 Content-Type/Length/Connection，
+        // 没有 date/server/envoy）—— 那是代理/中间层合成的占位图，不是这条接口的 protobuf。
+        // 把"形状"打全，下一次看一行就能分清该查网络还是查解析。
+        let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? "-"
+        let server = http.value(forHTTPHeaderField: "Server") ?? "-"
+        let magic = data.prefix(4).map { String(format: "%02x", $0) }.joined(separator: " ")
+        let shape = magic.hasPrefix("47 49 46 38") ? "gif placeholder" : "protobuf-ish"
         writeDebugLog(
             "[\(LockScreenArtwork.logTag)] canvaz — "
                 + (canvas == nil ? "none" : "video")
                 + ", \(data.count) byte(s)"
+                + ", type=\(contentType), server=\(server), head=\(magic) (\(shape))"
         )
         return canvas
     }
