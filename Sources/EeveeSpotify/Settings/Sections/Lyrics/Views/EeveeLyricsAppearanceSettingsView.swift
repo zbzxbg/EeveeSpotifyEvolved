@@ -1,11 +1,11 @@
 import Foundation
 import SwiftUI
 
-/// 「歌词外观」页：字号 / 行距 + 分享卡。
+/// 「歌词外观」页：字号 / 行距。
 ///
 /// 从「歌词」页拆出来的两个理由：
 /// · 那一页装的是**取词源与行为**（逐词、AMLL、Genius 回退、罗马音、自动翻译……），
-///   字号与分享卡属于"长什么样"，混在里面要翻很久才找得到；
+///   字号属于"长什么样"，混在里面要翻很久才找得到；
 /// · 字号倍率对**全屏歌词页、页内歌词层、锁屏歌词**三处都生效
 ///   （`AppleMusicLyricsOverlayView` 的 `.fullscreen` / `.player` 与
 ///   `LyricClipRenderer` 的 `textScale`），跟「逐词歌词」开关无关 —— 留在原来那个门禁里时，
@@ -18,7 +18,6 @@ struct EeveeLyricsAppearanceSettingsView: View {
     var body: some View {
         List {
             lyricsTypographySection()
-            shareCardSection()
 
             NonIPadSpacerView()
         }
@@ -77,69 +76,6 @@ struct EeveeLyricsAppearanceSettingsView: View {
             Text("lyrics_typography_section".localized)
         } footer: {
             Text("lyrics_typography_description".localized)
-        }
-    }
-
-    /// 「分享卡」：模板 / 画幅 / 背景 / 文字颜色 + 实时预览。
-    ///
-    /// 选项都很少，所以用分段选择器而不是菜单：这里最想给的是"换一下长什么样"，
-    /// 上面那张预览会立刻跟着重画，不用分享出去才知道。
-    @ViewBuilder private func shareCardSection() -> some View {
-        Section {
-            LyricShareCardPreview(content: viewModel.shareCardPreviewContent)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-
-            Picker("share_card_template".localized, selection: $viewModel.shareCardTemplate) {
-                Text("share_card_template_native".localized)
-                    .tag(LyricShareCardTemplate.native)
-                Text("share_card_template_polaroid".localized)
-                    .tag(LyricShareCardTemplate.polaroid)
-                Text("share_card_template_minimal".localized)
-                    .tag(LyricShareCardTemplate.minimal)
-            }
-            .pickerStyle(.segmented)
-
-            Picker("share_card_size".localized, selection: $viewModel.shareCardSize) {
-                Text("9:16").tag(LyricShareCardSize.story)
-                Text("4:5").tag(LyricShareCardSize.portrait)
-                Text("1:1").tag(LyricShareCardSize.square)
-            }
-            .pickerStyle(.segmented)
-
-            Picker("share_card_background".localized, selection: $viewModel.shareCardBackground) {
-                Text("share_card_background_cover".localized)
-                    .tag(LyricShareCardBackground.cover)
-                Text("share_card_background_blur".localized)
-                    .tag(LyricShareCardBackground.blurredCover)
-                Text("share_card_background_black".localized)
-                    .tag(LyricShareCardBackground.black)
-            }
-            .pickerStyle(.segmented)
-
-            Picker("share_card_ink".localized, selection: $viewModel.shareCardInk) {
-                Text("share_card_ink_auto".localized)
-                    .tag(LyricShareCardInk.auto)
-                Text("share_card_ink_black".localized)
-                    .tag(LyricShareCardInk.black)
-                Text("share_card_ink_white".localized)
-                    .tag(LyricShareCardInk.white)
-                Text("share_card_ink_custom".localized)
-                    .tag(LyricShareCardInk.custom)
-            }
-            .pickerStyle(.segmented)
-
-            if viewModel.shareCardInk == .custom {
-                ColorPicker(
-                    "share_card_ink_custom_value".localized,
-                    selection: $viewModel.shareCardCustomInk,
-                    supportsOpacity: false
-                )
-            }
-        } header: {
-            Text("share_card_section".localized)
-        } footer: {
-            Text("share_card_footer".localized)
         }
     }
 }

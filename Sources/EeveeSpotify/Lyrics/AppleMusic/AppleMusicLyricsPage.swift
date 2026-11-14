@@ -132,11 +132,7 @@ struct AppleMusicLyricsPage: View {
     /// 3. **点行不跳转** —— 合成行的时间是 0，点了会把歌拉回开头。
     let isStatic: Bool
 
-    /// 长按某一行时把这一行交给调用方（用它去拼分享卡）。
-    ///
-    /// 为 `nil` 时不挂手势：这一页既用于全屏页，也用于"歌词进播放器"，
-    /// 后者旁边就是播放器自己的拖动手势，多一个长按只会多一处要保证不打架的地方。
-    let onShareLine: ((LyricLine) -> Void)?
+    let isStatic: Bool
 
     init(
         lines: [LyricLine],
@@ -161,8 +157,7 @@ struct AppleMusicLyricsPage: View {
         fadeBottomOpaqueRatio: CGFloat = 0.86,
         footerHeight: CGFloat = 116,
         fadeBottomBand: CGFloat = 40,
-        isStatic: Bool = false,
-        onShareLine: ((LyricLine) -> Void)? = nil
+        isStatic: Bool = false
     ) {
         self.isStatic = isStatic
         self.lines = lines
@@ -187,7 +182,6 @@ struct AppleMusicLyricsPage: View {
         self.fadeBottomOpaqueRatio = fadeBottomOpaqueRatio
         self.footerHeight = footerHeight
         self.fadeBottomBand = fadeBottomBand
-        self.onShareLine = onShareLine
     }
 
     private static var profile: AppleMusicLyricsMotionProfile { .iOS26_6 }
@@ -923,12 +917,6 @@ struct AppleMusicLyricsPage: View {
             // 静态档不做"点行跳转"：合成行的时间是 0，点了会把歌拉回开头。
             guard !isStatic else { return }
             handleTap(on: line, proxy: proxy)
-        }
-        // 长按分享一句歌词。与上面的点击共存：SwiftUI 在按住超过阈值后才判长按，
-        // 快速抬起仍然是"点行跳转"，两条路不会同时触发。
-        .onLongPressGesture(minimumDuration: 0.5) {
-            guard !isStatic, let shareLine = onShareLine else { return }
-            shareLine(line)
         }
         .animation(
             .spring(duration: 0.45, bounce: 0.05, blendDuration: 0),

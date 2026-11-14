@@ -315,28 +315,7 @@ struct AppleMusicLyricsOverlayView: View {
                     // 还会顺手把最后一行也压暗。让歌词一直清晰到卡片下缘即可。
                     fadeBottomBand: showsProviderFooter ? 40 : 0,
                     // 把"静态档"透传下去（见 `AppleMusicLyricsPage.isStatic`）。
-                    isStatic: isStatic,
-                    // 长按一句歌词 → 9:16 的分享卡。标题/歌手取壳上那两个已经跟着
-                    // 换歌更新过的值；署名走全局（与页脚、锁屏同一条来源）。
-                    //
-                    // ⚠️ 必须是**最后一个参数**：这个 init 是逐成员的，传参顺序必须与
-                    // 声明顺序一致（`onShareLine` 声明在 `isStatic` 之后）。
-                    onShareLine: { line in
-                        // 允许的两种宿主：全屏页（`showsProviderFooter`）与 iOS 27 播放页里的
-                        // 页内歌词层（`showsPreviewHeader == false`，`NowPlayingLyricsHost` 挂的那一档）。
-                        // 只挡卡片预览：它只有 200pt 高、歌词只露两三行，长按更容易和拖动抢事件。
-                        guard showsProviderFooter || !showsPreviewHeader else {
-                            writeDebugLog("[LyricsShare] ignored — the card preview does not share")
-                            return
-                        }
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        LyricShareCard.present(
-                            line: line,
-                            title: trackTitle,
-                            artist: trackArtist,
-                            credit: currentLyricsCreditText()
-                        )
-                    }
+                    isStatic: isStatic
                 )
             }
         }

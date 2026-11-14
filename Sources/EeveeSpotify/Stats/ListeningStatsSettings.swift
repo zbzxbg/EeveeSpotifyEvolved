@@ -2,7 +2,7 @@ import Foundation
 
 /// 「听歌统计」的开关与它占用的 `UserDefaults` 键。
 ///
-/// 键由功能自己拥有（与 `LyricShareCardStyle` / `LyricsTimingOffset` 同一条做法）：加在这里，
+/// 键由功能自己拥有（与 `LyricsTimingOffset` / `LyricsSourceOrder` 同一条做法）：加在这里，
 /// 再由 `UserDefaults.ownedKeys` 之类的地方拼接上去，「备份与重置」才认识它。
 ///
 /// 默认**开**：这条功能纯本地、不联网、不产生额外请求，开着没有副作用；不想要的人拨一下
