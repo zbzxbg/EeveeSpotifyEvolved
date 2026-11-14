@@ -1108,6 +1108,18 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
         }
     }
 
+    // 锁屏动态封面的 Canvas 源：压的是**账号属性** `canvas-disabled`，不是
+    // `ios-feature-canvas.canvas_enabled`（那条服务端本来就下发 true，压它没有意义）。
+    // 这一条才是「设置 → 播放 → Canvas」的真相：客户端据它决定要不要在曲目元数据里要
+    // `canvas.url`，`canvaz-cache` 也据它回答"有没有 canvas"。代价是播放页也会显示
+    // Canvas —— 与早先强制 flag 的效果一致；不想要就把设置里「锁屏动态封面」的
+    // Canvas 源关掉。
+    if LockScreenArtwork.wantsCanvas {
+        attributes["canvas-disabled"] = AccountAttribute.with {
+            $0.boolValue = false
+        }
+    }
+
     attributes.removeValue(forKey: "payment-state")
     attributes.removeValue(forKey: "last-premium-activation-date")
     
