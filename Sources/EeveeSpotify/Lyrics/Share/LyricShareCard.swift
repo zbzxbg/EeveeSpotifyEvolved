@@ -29,9 +29,12 @@ enum LyricShareCard {
         let lyric = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lyric.isEmpty else { return }
 
+        // iOS 27 播放页里的页内歌词层挂载时曲名/歌手传的是空串（那一层的标题由播放器自己画），
+        // 分享卡上不能跟着空着 —— 从播放器 metadata 兜底，两边都没有就留空，不编。
+        let names = trackNames(title: title, artist: artist)
         var content = LyricShareCardRenderer.Content(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            artist: artist.trimmingCharacters(in: .whitespacesAndNewlines),
+            title: names.title,
+            artist: names.artist,
             lyric: lyric,
             romanization: trimmed(line.romanization),
             translation: trimmed(line.translation),
@@ -117,5 +120,29 @@ enum LyricShareCard {
     private static func trimmed(_ text: String?) -> String? {
         let value = (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+
+    /// 曲名/歌手兜底。
+    ///
+    /// iOS 27 播放页里那一层（`NowPlayingLyricsHost`）挂载时传的是两个空串 —— 它的标题由
+    /// 播放器自己画。分享卡不能跟着空着，所以缺哪一项就从播放器 metadata 补哪一项；
+    /// 两边都没有就保持空，不编造。
+    private static func trackNames(
+        title: String,
+        artist: String
+    ) -> (title: String, artist: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTitle.isEmpty || trimmedArtist.isEmpty else {
+            return (trimmedTitle, trimmedArtist)
+        }
+        guard let track = statefulPlayer?.currentTrack()
+            ?? nowPlayingScrollViewController?.loadedTrack else {
+            return (trimmedTitle, trimmedArtist)
+        }
+        let metadata = track.metadata()
+        let resolvedTitle = trimmedTitle.isEmpty ? (metadata["title"] ?? "") : trimmedTitle
+        let resolvedArtist = trimmedArtist.isEmpty ? (metadata["artist_name"] ?? "") : trimmedArtist
+        return (resolvedTitle, resolvedArtist)
     }
 }
