@@ -14,7 +14,8 @@ import Combine
 /// · 「给没有歌词卡片的歌曲补一张」`ngzhwm_injectLyricsCardElement`
 /// · 「歌词入口开关」`ngzhwm_lyricsEntryPointFlag`
 ///
-/// 外加一颗「更详细的日志记录」（视图树 + customize 响应体合并）。
+/// 外加一颗「更详细的日志记录」（视图树 + customize 响应体合并）和一颗「音频输出探针」
+/// （只读诊断：RemoteIO 的格式与 RMS，见 `AudioTapProbe`）。
 ///
 /// 另有一个还没定性的候选：`ngzhwm_disableNpvPrereleaseProvider`（假预热卡的止血开关）——
 /// 它对应的代码这一轮已整体回退，所以**暂时不放进页面**，等重启那条线时再加。
@@ -78,6 +79,12 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         }
     }
 
+    /// 「音频输出探针」：只读诊断，确认能不能从 RemoteIO 的 PostRender 拿到 PCM。
+    /// 默认关；打开后重启 Spotify 生效（hook 在启动那一拍装）。
+    @Published var audioTapProbe = AudioTapProbe.isEnabled {
+        didSet { AudioTapProbe.setEnabled(audioTapProbe) }
+    }
+
     /// 见 `EeveeLyricsSettingsViewModel.animationValues` 的用法：把开关本身列进去，
     /// 值一变页面就会重绘（少了它会出现"改了开关但界面不刷新"）。
     var animationValues: [AnyHashable] {
@@ -85,6 +92,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
             injectLyricsCardElement,
             lyricsEntryPointFlag,
             detailedLogging,
+            audioTapProbe,
         ]
     }
 
@@ -100,6 +108,7 @@ class EeveeDebugSettingsViewModel: ObservableObject {
         logBooleanSetting($injectLyricsCardElement, "inject lyrics card element")
         logBooleanSetting($lyricsEntryPointFlag, "lyrics entry point flag")
         logBooleanSetting($detailedLogging, "detailed logging")
+        logBooleanSetting($audioTapProbe, "audio output probe")
     }
 
     /// 照抄 `EeveeLyricsSettingsViewModel+setupBindings` 的实现与理由：

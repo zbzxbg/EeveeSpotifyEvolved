@@ -29,6 +29,9 @@ struct EeveeDebugSettingsView: View {
             // 「更详细的日志记录」：视图树 + customize 响应体两条转储合并成一颗。
             detailedLoggingSection()
 
+            // 「音频输出探针」：只读诊断，确认 9.2.0 的 RemoteIO 能不能拿到 PCM。
+            audioTapProbeSection()
+
             // 「转储某个类的方法/ivar」：与上面同一目的、答的是另一半问题
             // —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
             dumpClassSection()
@@ -73,6 +76,19 @@ struct EeveeDebugSettingsView: View {
             Toggle(
                 "detailed_logging".localized,
                 isOn: $viewModel.detailedLogging
+            )
+        }
+    }
+
+    /// 「音频输出探针」—— 只读：记录 RemoteIO 的格式 + PostRender 的 RMS，
+    /// 用来确认 9.2.0 上能不能拿到解码后的 PCM（见 `AudioTapProbe`）。
+    ///
+    /// 默认关；hook 在启动那一拍装，所以打开后要重启 Spotify。
+    @ViewBuilder private func audioTapProbeSection() -> some View {
+        Section(footer: Text("audio_tap_probe_description".localized)) {
+            Toggle(
+                "audio_tap_probe".localized,
+                isOn: $viewModel.audioTapProbe
             )
         }
     }

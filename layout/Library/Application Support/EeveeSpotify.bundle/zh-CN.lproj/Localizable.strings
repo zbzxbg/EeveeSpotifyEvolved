@@ -426,6 +426,8 @@ dump_class_description = "把某一个类的名字、方法表和ivar表（含�
 dump_class_placeholder = "类名";
 dump_class_action = "转储这个类";
 detailed_logging = "更详细的日志记录";
+audio_tap_probe = "音频输出探针";
+audio_tap_probe_description = "只读诊断：每 2 秒记录 RemoteIO 的格式与 RMS。打开后重启 Spotify 生效。不会改动音频。";
 
 /* MARK: 外观 */
 theme_section = "主题";

@@ -431,6 +431,8 @@ dump_class_description = "Writes one class's name, method list and ivars (with t
 dump_class_placeholder = "Class name";
 dump_class_action = "Dump this class";
 detailed_logging = "More detailed logging";
+audio_tap_probe = "Audio output probe";
+audio_tap_probe_description = "Read-only diagnostic: logs the RemoteIO format and RMS every 2 seconds. Restart Spotify after turning it on. It does not alter the audio.";
 
 /* MARK: Appearance */
 theme_section = "Theme";

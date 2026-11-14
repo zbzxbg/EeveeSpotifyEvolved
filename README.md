@@ -35,7 +35,6 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - **12 sources** — Spicy Lyrics (needs your own client key), AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
 - **Auto Select** — asks the sources in an order you choose and keeps the best answer: word-by-word beats line-by-line, which beats plain text; within the same tier it prefers the answer that also has the translation, official romanization or word-level romanization your settings ask for. A plain-text answer never ends the search.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling.
-- **Share cards** — long-press a lyric line to render it as an image: native, polaroid or minimal template; 9:16, 4:5 or 1:1; cover colour, blurred cover or black background; and auto, black, white or any custom text colour. The card is rendered on the device and can be saved to Photos. Settings → Lyrics → Share card.
 
 ### Look and feel
 
