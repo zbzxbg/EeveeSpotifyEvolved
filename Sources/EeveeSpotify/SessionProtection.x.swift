@@ -168,12 +168,25 @@ class LegacyLoginControllerHook: ClassHook<NSObject> {
 }
 
 // MARK: - OauthAccessTokenBridge — Extend token expiry
-// Private Connectivity_SessionImpl class holding the OAuth expiry. Forcing a
-// far-future expiresAt keeps the internal timer from marking the token expired.
+// Private class holding the OAuth expiry. Forcing a far-future expiresAt keeps the
+// internal timer from marking the token expired.
+
+// 私有嵌套类的 mangled 名里带一个重编译判别串（`P33_…`），宿主模块也会搬：
+// 9.2.0 把它从 `Connectivity_SessionImpl` 挪进了 `Authentication_AuthAPI`。
+// 两种形态都留在这里，谁在就用谁；认不出就落到旧名（Orion 只跳过这一条）。
+enum OauthAccessTokenBridgeTargets {
+    static let spotify92 = "_TtC22Authentication_AuthAPIP33_51216C0E0622094D354255A3124BC44D22OauthAccessTokenBridge"
+    static let legacy = "_TtC24Connectivity_SessionImplP33_831B98CC28223E431E21CD27ADD20AF222OauthAccessTokenBridge"
+
+    static var current: String {
+        NSClassFromString(spotify92) != nil ? spotify92 : legacy
+    }
+}
 
 class OauthAccessTokenBridgeHook: ClassHook<NSObject> {
     typealias Group = SessionLogoutConnectivityHookGroup
-    static let targetName = "_TtC24Connectivity_SessionImplP33_831B98CC28223E431E21CD27ADD20AF222OauthAccessTokenBridge"
+
+    static var targetName: String { OauthAccessTokenBridgeTargets.current }
 
     func expiresAt() -> Any {
         let farFuture = Date(timeIntervalSinceNow: 365 * 24 * 60 * 60)

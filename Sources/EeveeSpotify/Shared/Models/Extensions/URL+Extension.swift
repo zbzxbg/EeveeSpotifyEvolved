@@ -26,10 +26,18 @@ extension URL {
     }
     
     var isCustomize: Bool {
+        // 9.1.x 的 UCS 路径（`spclient.wg.spotify.com/user-customization-service/v1/customize`）。
+        // 9.2.0 的包里搜不到 `user-customization-service`，也搜不到 `UcsResponse` / `UcsRequest`：
+        // 那条 customize 传输在 9.2.0 上不存在，所以这个判据在 9.2.0 上不命中。
+        // ⚠️ 别顺手把 resolver 的 `.../configuration` 塞进来 —— 回放与改写用的都是
+        // `CustomizeMessage` 的字节，喂给别的传输只会让 App 解析失败（配置空 = 歌单灰）。
         self.path.contains("v1/customize")
     }
     
     var isBootstrap: Bool {
+        // 9.1.x 的 bootstrap 路径。9.2.0 里 `BootstrapResponse` 这个类型名也没了，
+        // 就算命中，报文也可能解不开 —— 解不开就原样放行，见
+        // `DynamicPremium+ModifyBootstrap` 的 catch 分支。
         self.path.contains("v1/bootstrap")
     }
 

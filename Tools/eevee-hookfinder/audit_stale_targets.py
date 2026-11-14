@@ -11,7 +11,7 @@ Spotify 每个版本都会搬类、改名、删实验。仓库里 `static let ta
 
 三份真相来源（**可信度不一样，报告里分开标**）
 ------------------------------------------------
-1. `dump-<版本>.txt` 的 `[classes]` —— **只覆盖 Swift 类**（16930 条，全是 `_TtC…`）。
+1. `dump-<版本>.txt` 的 `[classes]` —— **只覆盖 Swift 类**（全是 `_TtC…`）。
    命中它 = 权威。
 2. `.spotify-ipa/objc-classnames-by-image.txt` —— ObjC 类名，但实测**只覆盖 2 个镜像**
    （`Spotify` / `SpotifyShared`，5837 条），连真机上明明存在的 `SPTEncoreLabel`、
@@ -35,7 +35,7 @@ Spotify 每个版本都会搬类、改名、删实验。仓库里 `static let ta
 
 判读
 ----
-    [✓ Swift]      命中 9.1.86 的 Swift 类表（权威）
+    [✓ Swift]      命中 dump 里的 Swift 类表（权威）
     [✓ ObjC]       命中 ObjC 线索清单（说明这份清单里有，正常）
     [✓ IPA]        名字在 IPA 里出现过（定义或引用）→ 正常
     [✗ 过时]       给出 --ipa 后才可能有这个结论：整个 IPA 里都没有这个名字
@@ -56,6 +56,8 @@ SRC_ROOTS = [os.path.join(REPO, "Sources")]
 
 RE_TARGET = re.compile(r'static\s+let\s+targetName\s*=\s*"([^"]+)"')
 RE_CLASS_FROM_STRING = re.compile(r'NSClassFromString\(\s*"([^"]+)"\s*\)')
+# `targetName` 写成计算属性时（按版本挑类名的那种），字面量在函数体里，上面那条抓不到。
+RE_MANGLED = re.compile(r'"(_TtC[A-Za-z0-9_]{5,})"')
 RE_KNOWN_FLAG = re.compile(r'KnownFlag\(\s*"([^"]+)"\s*,\s*"([^"]+)"', re.S)
 
 # 系统 / 私有前缀：本来就不该出现在 App 的类表里
@@ -184,7 +186,7 @@ def collect_literals():
         rel = os.path.relpath(path, REPO)
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             for lineno, line in enumerate(fh, 1):
-                for rx in (RE_TARGET, RE_CLASS_FROM_STRING):
+                for rx in (RE_TARGET, RE_CLASS_FROM_STRING, RE_MANGLED):
                     for lit in rx.findall(line):
                         key = (lit, rel, lineno)
                         if key in seen:
@@ -198,7 +200,7 @@ def main():
     ap = argparse.ArgumentParser()
     # 解密 IPA 的 dump 放哪：默认看 $EEVEE_IPA_DIR，没设就用当前目录。
     ap.add_argument("--dump", default=os.path.join(
-        os.environ.get("EEVEE_IPA_DIR", os.getcwd()), "dump-9.1.86.txt"))
+        os.environ.get("EEVEE_IPA_DIR", os.getcwd()), "dump-9.2.0.txt"))
     ap.add_argument("--ipa-classes",
                     default=os.path.join(REPO, ".spotify-ipa", "objc-classnames-by-image.txt"))
     ap.add_argument("--flag-table",
@@ -274,7 +276,7 @@ def main():
             if st.startswith("✓"):
                 print("  %-14s %-58s %s" % (st, lit, where))
 
-    # ---------- 2) KnownFlagCatalog vs 9.1.86 的字面量表 ----------
+    # ---------- 2) KnownFlagCatalog vs 随包 flag 表 ----------
     table = set()
     if os.path.isfile(args.flag_table):
         with open(args.flag_table, "r", encoding="utf-8", errors="replace") as fh:
@@ -290,7 +292,7 @@ def main():
 
     if table and catalog:
         gone = [(n, s) for (n, s) in catalog if (s, n) not in table]
-        print("\n==== 2) KnownFlagCatalog（%d 条）vs 9.1.86 字面量表（%d 条）===="
+        print("\n==== 2) KnownFlagCatalog（%d 条）vs 随包 flag 表（%d 条）===="
               % (len(catalog), len(table)))
         if gone:
             print("-- ✗ 表里没有的名字（可能已改名/已下线）--")

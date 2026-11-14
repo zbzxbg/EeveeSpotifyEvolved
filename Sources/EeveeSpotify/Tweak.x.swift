@@ -106,7 +106,7 @@ struct BasePremiumPatchingGroup: HookGroup { }
 struct IOS14PremiumPatchingGroup: HookGroup { }
 struct NonIOS14PremiumPatchingGroup: HookGroup { }
 struct IOS14And15PremiumPatchingGroup: HookGroup { }
-struct V91PremiumPatchingGroup: HookGroup { } // For Spotify 9.1.x versions
+struct V91PremiumPatchingGroup: HookGroup { } // For the 9.1.x / 9.2.x family
 struct LatestPremiumPatchingGroup: HookGroup { }
 
 // Spotify 9.1.x originally removed the offline helper, so this version family
@@ -282,14 +282,22 @@ struct EeveeSpotify: Tweak {
         
         NSLog("[EeveeSpotify] Detected Spotify version: \(version)")
         
+        // 9.1 与 9.2 是同一套 hook 目标：9.2.0 上我们 hook 的类名、选择器与 9.1.88
+        // 逐条对得上（`SPTDataLoaderService`、`Connectivity_HttpClientKit`、
+        // `Settings_PlatformImpl.SettingsListViewController` 等都在），所以按 major.minor
+        // 认族。写死 `contains("9.1")` 会把 9.2.0 判成 `.latest` —— 那条分支不挂
+        // `PremiumBootstrapGroup`（服务端改写/customize 回放/广告拦截全在里面），
+        // 而日志看起来仍然是正常的。
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        if parts.count >= 2, parts[0] == 9, parts[1] == 1 || parts[1] == 2 {
+            return .v91
+        }
+
         switch version {
         case "9.0.48":
             return .lastAvailableiOS15
         case "8.9.8":
             return .lastAvailableiOS14
-        case _ where version.contains("9.1"):
-            // 9.1.x versions don't have offline content helper classes
-            return .v91
         default:
             return .latest
         }
@@ -706,7 +714,6 @@ struct EeveeSpotify: Tweak {
             ("SPTAuthSessionImplementation", "SPTAuthSession"),
             ("_TtC24Connectivity_SessionImpl18SessionServiceImpl", "SessionServiceImpl"),
             ("SPTAuthLegacyLoginControllerImplementation", "LegacyLoginController"),
-            ("_TtC24Connectivity_SessionImplP33_831B98CC28223E431E21CD27ADD20AF222OauthAccessTokenBridge", "OauthAccessTokenBridge"),
             ("ARTWebSocketTransport", "AblyWebSocket"),
             ("ARTSRWebSocket", "AblySRWebSocket"),
         ]
@@ -719,6 +726,16 @@ struct EeveeSpotify: Tweak {
                 allFound = false
             }
         }
+        // 这个私有类的 mangled 名带重编译判别串，9.2.0 又换了宿主模块 —— 两个名字都试，
+        // 免得日志把"版本对不上"报成"类丢了"。
+        let oauthBridges = [OauthAccessTokenBridgeTargets.spotify92, OauthAccessTokenBridgeTargets.legacy]
+        if oauthBridges.contains(where: { NSClassFromString($0) != nil }) {
+            writeDebugLog("[INIT] OauthAccessTokenBridge class found")
+        } else {
+            writeDebugLog("[INIT] MISSING class for OauthAccessTokenBridge")
+            allFound = false
+        }
+
         if allFound {
             writeDebugLog("[INIT] All \(hookTargets.count) hook targets verified")
         }
@@ -740,10 +757,10 @@ struct EeveeSpotify: Tweak {
             writeDebugLog("[INIT] MISSING SPTPlayerTrack — the has_lyrics override cannot possibly work")
         }
 
-        // For 9.1.x, activate premium patching and lyrics
+        // For the 9.1/9.2 family, activate premium patching and lyrics
         if EeveeSpotify.hookTarget == .v91 {
 
-            // Premium patching (9.1.x)
+            // Premium patching (9.1/9.2)
             // Always activate the *bootstrap interceptor*; it is required for premium patching.
             if UserDefaults.patchType.isPatching {
                 PremiumBootstrapGroup().activate()
@@ -809,7 +826,7 @@ struct EeveeSpotify: Tweak {
             } else {
                 writeDebugLog("[INIT] Settings_PlatformImpl.SettingsListViewController missing")
             }
-            NSLog("[EeveeSpotify] Initialization complete for 9.1.x")
+            NSLog("[EeveeSpotify] Initialization complete for the 9.1/9.2 family")
             TrueShuffleHook.install()
             activateSponsorBlock()
             // 「实验 → 显示 Instagram 分享位」：**两条腿一起上** ——
@@ -823,7 +840,7 @@ struct EeveeSpotify: Tweak {
             activateLockScreenArtwork()
 
             // ⚠️⚠️ 这个 `return` 把 `init` 切成了两段 —— 它后面那句 "For other versions"
-            // 底下整段在 **9.1.x（本仓唯一的目标版本）上永远不会执行**。
+            // 底下整段在 **9.1/9.2 族（本仓的目标版本）上永远不会执行**。
             // 已经栽过两次：的 karaoke / SponsorBlock / 调试探针，以及
             // 的 beta 提示（`BetaVersionNotice` 写在函数最末尾 ⇒ 一次都没弹过，
             // 已删）。

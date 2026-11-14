@@ -2,7 +2,7 @@
 
 You supply your own decrypted Spotify IPA. This repository never ships one and never says where to get one — see [LEGAL.md](LEGAL.md).
 
-Two paths: **CI** (nothing installed locally) and **a local build on macOS**. Both take a decrypted Spotify 9.1.88 IPA and produce an unsigned `-patched.ipa` / `.ipa` to sign yourself.
+Two paths: **CI** (nothing installed locally) and **a local build on macOS**. Both take a decrypted Spotify 9.1.88 or 9.2.0 IPA and produce an unsigned `-patched.ipa` / `.ipa` to sign yourself.
 
 > [!WARNING]
 > While `main` is under active development, the `Build .deb` step in the IPA and deb release workflows can fail. That is a known problem in the source at that moment, not something you did wrong. Wait a few hours, pull the latest repository and run the workflow again, or investigate and fix it (pull requests are welcome).
@@ -44,7 +44,7 @@ ALLOW_LIQUID_GLASS=0 ./build-ipa-local.sh /path/to/Spotify-vanilla.ipa
 
 ## Symbol baseline
 
-`Tools/dump-spotify-symbols.py` dumps the classes, selectors, methods and flags of a Spotify build; `Tools/diff-symbol-dumps.py` diffs two dumps or a dump against the tracked baseline (`.spotify-ipa/`). The **Binary Symbol Diff** workflow wraps the two, which is what catches "Spotify renamed a class and the tweak silently stopped hooking it" before a release.
+`Scripts/dump-spotify-symbols.py` dumps the classes, selectors, methods and flags of a Spotify build; `Scripts/diff-symbol-dumps.py` diffs two dumps or a dump against a committed baseline (`Symbols/baseline-<version>.txt`; none is committed yet, so the first run only produces a dump). The **Binary Symbol Diff** workflow wraps the two, which is what catches "Spotify renamed a class and the tweak silently stopped hooking it" before a release.
 
 ---
 
