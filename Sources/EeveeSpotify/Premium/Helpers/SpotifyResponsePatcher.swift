@@ -735,6 +735,7 @@ enum SpotifyResponsePatcher {
         return (shouldReplaceLyrics && url.isLyrics)
             || (shouldPatchPremium && (
                 url.isBootstrap || url.isCustomize ||
+                url.isRemoteConfiguration || url.isAccountAttributes ||
                 url.isPremiumPlanRow || url.isPremiumBadge || url.isPlanOverview ||
                 isDAC
             ))
@@ -791,6 +792,8 @@ enum SpotifyResponsePatcher {
     enum PatchTag: String {
         case bootstrap   = "bootstrap"
         case customize   = "customize"
+        case remoteConfiguration = "RemoteConfiguration"
+        case accountAttributes   = "AccountAttributes"
         case planRow     = "PremiumPlanRow"
         case planBadge   = "YourPremiumBadge"
         case planOverview = "PlanOverview"
@@ -806,6 +809,19 @@ enum SpotifyResponsePatcher {
     }
 
     static func patch(url: URL, buffer: Data) throws -> PatchResult? {
+        // 9.2.0 的两条配置响应（9.1.x 上不会命中）。
+        // 旧链路（customize/bootstrap）在这版已经不请求了，所以改写点搬到这里。
+        if url.isRemoteConfiguration {
+            var resolved = try ResolveResponse(serializedBytes: buffer)
+            modifyResolvedConfiguration(&resolved.configuration)
+            return PatchResult(data: try resolved.serializedData(), tag: .remoteConfiguration)
+        }
+        if url.isAccountAttributes {
+            var attributes = try AccountAttributesResponse(serializedBytes: buffer)
+            modifyAccountAttributes(&attributes)
+            return PatchResult(data: try attributes.serializedData(), tag: .accountAttributes)
+        }
+
         if url.isPremiumPlanRow {
             return PatchResult(
                 data: try getPremiumPlanRowData(

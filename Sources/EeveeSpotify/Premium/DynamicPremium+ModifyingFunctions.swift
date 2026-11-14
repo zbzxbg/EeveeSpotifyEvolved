@@ -77,6 +77,20 @@ func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
     modifyAssignedValues(&configuration.assignedValues)
 }
 
+/// 9.2.0 把旧 UCS 的那一条响应拆成了两条：
+/// · `remote-config-resolver/v3/configuration` → 一份裸的 `ResolveResponse`（分配表）；
+/// · `nebula/v1/configuration/attributes` → 旧的 `[String: AccountAttribute]` 账号态。
+/// 两条套用与 9.1.x 相同的改写：键名与新响应对得上（`type`、`catalogue`、`ads`、
+/// `on-demand`、`streaming-rules`…），所以不需要第二套规则。
+func modifyResolvedConfiguration(_ configuration: inout ResolveConfiguration) {
+    modifyAssignedValues(&configuration.assignedValues)
+}
+
+func modifyAccountAttributes(_ response: inout AccountAttributesResponse) {
+    reportAccountTierOnTheWire(response.accountAttributes)
+    modifyAttributes(&response.accountAttributes)
+}
+
 private let propertyReplacements = [
     // Append when the account's config omits them, so they work without overwrite-configuration.
     EeveePropertyReplacement(name: "crossfade_enabled", scope: "ios-feature-settings", modification: .forceBool(true)),

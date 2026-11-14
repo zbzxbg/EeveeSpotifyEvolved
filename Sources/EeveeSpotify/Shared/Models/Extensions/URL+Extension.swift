@@ -41,6 +41,20 @@ extension URL {
         self.path.contains("v1/bootstrap")
     }
 
+    /// 9.2.0：登录态的功能分配表（一份裸的 `ResolveResponse`）。
+    /// `unauth` 那条是未登录时的 bootstrap，别碰。
+    var isRemoteConfiguration: Bool {
+        self.path.contains("remote-config-resolver")
+            && self.path.contains("configuration")
+            && !self.path.contains("unauth")
+    }
+
+    /// 9.2.0：账号态（`type` / `catalogue` / `ads` / `on-demand` …）。
+    /// 9.1.x 把它塞在 UCS 响应里，9.2.0 拆成了独立的一条。
+    var isAccountAttributes: Bool {
+        self.path.contains("nebula/v1/configuration/attributes")
+    }
+
     // Blocked endpoint matchers (session protection)
 
     var isDeleteToken: Bool {

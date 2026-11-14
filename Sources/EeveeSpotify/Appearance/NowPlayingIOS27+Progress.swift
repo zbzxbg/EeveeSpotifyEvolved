@@ -31,7 +31,7 @@ extension NowPlayingIOS27 {
     /// 未播部分：半透明白。
     static let progressRestColour = UIColor(white: 1, alpha: 0.30)
     /// 透明圆钮的边长 —— 留一点尺寸，免得 UISlider 把轨道算成整宽。
-    static let progressThumbSide: CGFloat = 4
+    static let progressThumbSide: CGFloat = 28
     /// 时间标签换的字体权重。
     static let progressTimeWeight: UIFont.Weight = .semibold
 

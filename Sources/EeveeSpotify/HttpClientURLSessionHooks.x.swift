@@ -168,6 +168,12 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, dataTask: task, didReceiveData: buffer)
             orig.URLSession(session, task: task, didCompleteWithError: nil)
         } catch {
+            // The bytes were already withheld from Spotify above; replay the original
+            // body rather than completing the task with no data.
+            writeDebugLog(
+                "[HCUS] patch failed for \(DebugLogSanitizer.logSafeURL(url)) - passing the original body through: \(error)"
+            )
+            orig.URLSession(session, dataTask: task, didReceiveData: buffer)
             orig.URLSession(session, task: task, didCompleteWithError: error)
         }
     }
