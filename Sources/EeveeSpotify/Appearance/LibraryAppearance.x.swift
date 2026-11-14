@@ -248,29 +248,30 @@ enum LibraryAppearance {
     private static func moveHeaderControls(in header: UIView) {
         guard header.bounds.width > 1 else { return }
 
-        // ① 先把右侧那一组（头像 + 按钮）找出来。**找不到就不动标题**：
-        //    头像认不出来时它留在 Spotify 的原位（贴左，9.1 的树是 x=16），标题也挪到 16
-        //    就会正好压在头像上（9.2.0 上出现的就是这个）。宁可保持原生布局。
+        // ① 右侧那一组：按钮按 id 收，头像单独认。
         var trailing: [UIView] = []
         for identifier in headerTrailingIdentifiers {
             guard let control = findView(in: header, where: { $0.accessibilityIdentifier == identifier }),
                   !control.isHidden, control.alpha > 0.01, control.bounds.width > 1 else { continue }
             trailing.append(control)
         }
-        if let face = headerFace(in: header) {
+        let face = headerFace(in: header)
+
+        // ② 标题贴左沿 —— **只有认出头像才动**：认不出来时头像还在 Spotify 的原位
+        //    （贴左，9.1 的树是 x=16），标题也挪到 16 就会正好压在头像上。
+        //    标题仍然是 **Spotify 自己那一个**（我们只放大过它的字号，见 §①）——
+        //    不像 pw 那样另画一个：那条路要连字号/字重一起自己负责，而"字号"这一项我们已经验过。
+        if let face {
             trailing.append(face)
-        }
-        guard !trailing.isEmpty else {
+            if let title = titleLabel ?? findTitleLabel(in: header) {
+                titleLabel = title
+                place(title, atLeading: headerSideMargin, in: header)
+            }
+        } else {
             logHeaderCandidates(header)
-            return
         }
 
-        // ② 标题贴左沿。标题仍然是 **Spotify 自己那一个**（我们只放大过它的字号，见 §①）——
-        // 不像 pw 那样另画一个：那条路要连字号/字重一起自己负责，而"字号"这一项我们已经验过。
-        if let title = titleLabel ?? findTitleLabel(in: header) {
-            titleLabel = title
-            place(title, atLeading: headerSideMargin, in: header)
-        }
+        guard !trailing.isEmpty else { return }
 
         var right = header.bounds.width - headerRowInset
         for control in trailing.reversed() {
@@ -281,9 +282,13 @@ enum LibraryAppearance {
 
         if !didLogHeaderRestyle, header.window != nil {
             didLogHeaderRestyle = true
+            let parts = trailing.map { control in
+                "\(className(control))[\(control.accessibilityIdentifier ?? "-")]"
+            }
             writeDebugLog(
-                "[Library] header restyled — the title sits at the leading edge, \(trailing.count) control(s) packed at the trailing edge"
-                    + " (rightmost: \(trailing.last.map { className($0) } ?? "none"))"
+                "[Library] header restyled — title moved: \(face != nil),"
+                    + " \(trailing.count) control(s) packed at the trailing edge:"
+                    + " \(parts.joined(separator: " | "))"
             )
         }
     }
@@ -307,7 +312,10 @@ enum LibraryAppearance {
     }
 
     private static func isAvatarSized(_ view: UIView) -> Bool {
-        // 尺寸兜底不能把搜索 / ＋ 那两颗认成头像（它们也是 48×48）——
+        // 头像不是控件。搜索 / ＋ 是 EncoreButton（48×48），尺寸判据会把它们认成头像，
+        // 于是"最右那颗"仍是按钮、真正的头像没被挪走 —— 按控件与类名排掉。
+        if view is UIControl { return false }
+        if className(view).contains("Button") { return false }
         // 右侧这一组按 id 已经单独收过了，这里按 id 排除。
         if let identifier = view.accessibilityIdentifier {
             if headerTrailingIdentifiers.contains(identifier) { return false }
