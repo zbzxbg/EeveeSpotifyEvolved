@@ -158,6 +158,19 @@ enum LyricClipRenderer {
 
     // MARK: - 文字
 
+    /// 「歌词 → 文字」那一档字号倍率。锁屏与 App 内共用同一个设置。
+    ///
+    /// 乘在**自适应起点**上：字号变大之后 `fittedFontSize` 仍会按画面高度往下收，
+    /// 所以放大只体现在"放得下时更大"，不会把一行顶出锁屏。
+    private static var textScale: CGFloat {
+        CGFloat(NgzhwmSettingsViewModel.lyricsTextScale)
+    }
+
+    /// 行距倍率。锁屏里唯一的"行距"是当前行与下一行之间那道空隙（`gap`）。
+    private static var spacingScale: CGFloat {
+        CGFloat(NgzhwmSettingsViewModel.lyricsLineSpacingScale)
+    }
+
     /// 在当前行下面再画一行压暗的"下一行"，这是锁屏歌词最有用的那点上下文：
     /// 只看一句不知道唱到哪，看到下一句就知道还有多久换行。
     private static func compose(
@@ -222,7 +235,7 @@ enum LyricClipRenderer {
                 for: following,
                 size: size,
                 columnWidth: columnWidth,
-                start: size.width * 0.062,
+                start: size.width * 0.062 * textScale,
                 maxHeight: size.height * 0.4
             )
             let height = textHeight(for: following, fontSize: fontSize, columnWidth: columnWidth)
@@ -245,7 +258,7 @@ enum LyricClipRenderer {
             for: current,
             size: size,
             columnWidth: columnWidth,
-            start: size.width * 0.075,
+            start: size.width * 0.075 * textScale,
             maxHeight: size.height * 0.42
         )
         let currentHeight = textHeight(for: current, fontSize: fontSize, columnWidth: columnWidth)
@@ -263,7 +276,7 @@ enum LyricClipRenderer {
             }
         }
 
-        let gap = following.isEmpty ? 0 : fontSize * 0.55
+        let gap = following.isEmpty ? 0 : fontSize * 0.55 * spacingScale
         let total = currentHeight + gap + nextHeight
         let top = centerY + total / 2
 

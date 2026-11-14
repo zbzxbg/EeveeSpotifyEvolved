@@ -108,6 +108,23 @@ final class LockScreenLyricsController {
         }
     }
 
+    /// 「歌词 → 文字」的两档倍率变了。
+    ///
+    /// 盘上那些片段不用删：倍率进了 `frameHash`（见 `LockScreenLyrics.frameHash`），
+    /// 新值自然落到新文件。要清的是**当前这一行已经装好**的那份 —— `tick()` 的判据是
+    /// `preparedLineKey == lineKey`，不清掉的话锁屏会一直显示旧字号，直到下一句。
+    ///
+    /// 只清 `preparedLineKey`、不清 `prepared`：后者是系统正在取的那份素材，
+    /// 清掉会让锁屏在重渲完之前短暂变回官方封面。
+    func typographyDidChange() {
+        guard LockScreenLyrics.isEnabled else { return }
+        lock.lock()
+        preparedLineKey = ""
+        lock.unlock()
+        refreshTimer()
+        writeDebugLog("[\(LockScreenLyrics.logTag)] typography changed — rebuilding the current line")
+    }
+
     /// 注入器发现开关关着时调用（每次 now-playing 写入都会走）。只在真的有东西装着时
     /// 收尾一次：停表、清状态、重写一次 now-playing 把我们的键撤掉。
     func noteDisabled(force: Bool = false) {
@@ -482,7 +499,11 @@ final class LockScreenLyricsController {
             line: texts.line,
             next: texts.next,
             credit: credit,
-            hasCover: cover != nil
+            hasCover: cover != nil,
+            // 两档倍率进文件名：改了「歌词 → 文字」之后旧片段不该再被命中，
+            // 否则锁屏上要等到下一次清理缓存才换字号。
+            textScale: NgzhwmSettingsViewModel.lyricsTextScale,
+            spacingScale: NgzhwmSettingsViewModel.lyricsLineSpacingScale
         )
 
         DispatchQueue.global(qos: .utility).async { [weak self] in

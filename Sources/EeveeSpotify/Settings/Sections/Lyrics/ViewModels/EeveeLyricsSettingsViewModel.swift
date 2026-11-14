@@ -47,6 +47,8 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
                 lyricsTextScale,
                 forKey: NgzhwmSettingsViewModel.lyricsTextScaleKey
             )
+            // 锁屏歌词的片段是按字号渲出来的：让当前这一行立刻重渲，否则要等到下一句。
+            LockScreenLyricsController.shared.typographyDidChange()
         }
     }
 
@@ -57,6 +59,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
                 lyricsLineSpacingScale,
                 forKey: NgzhwmSettingsViewModel.lyricsLineSpacingScaleKey
             )
+            LockScreenLyricsController.shared.typographyDidChange()
         }
     }
 

@@ -53,11 +53,20 @@ enum LockScreenLyrics {
         line: String?,
         next: String?,
         credit: String,
-        hasCover: Bool
+        hasCover: Bool,
+        textScale: Double,
+        spacingScale: Double
     ) -> String {
         FNV1a.hex(
             "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(credit)|\(hasCover ? "c" : "n")"
+                + "|\(scaleKey(textScale))|\(scaleKey(spacingScale))"
         )
+    }
+
+    /// 倍率进哈希时的小数口径：两位小数足够区分设置页的可选档位（0.05 一档），
+    /// 也不会因为浮点尾数把同一档算成两个名字。
+    private static func scaleKey(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 
     /// 一段片子的文件名。画幅与"间奏态"都要进来：同一行的两种形态是两份文件。
