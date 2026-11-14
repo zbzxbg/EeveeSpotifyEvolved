@@ -82,6 +82,11 @@ enum AudioTapProbe {
     /// 启动窗口里不能有任何可能卡住主线程的符号解析。
     static func installIfEnabled() {
         guard isEnabled else {
+            // 开关是关的：顺手清掉可能残留的 marker（例如上次在 5 秒存活窗口里被强杀），
+            // 免得磁盘上留一个和开关状态不一致的标记。
+            if UserDefaults.container.bool(forKey: launchMarkerKey) {
+                UserDefaults.container.set(false, forKey: launchMarkerKey)
+            }
             writeDebugLog("[\(logTag)] probe off — hooks not installed")
             return
         }
@@ -110,19 +115,26 @@ enum AudioTapProbe {
             guard !installed else { return }
             installed = true
             armCrashGuard()
-            guard activateAudioTapProbeHooks() else {
-                // 符号没解析到 ⇒ 什么都没装，别记成"装过"，下次开开关还能再试。
+            switch activateAudioTapProbeHooks() {
+            case .activated:
+                // 装 hook 这段时间里用户可能已经把开关关掉，别把 `active` 又拨回去。
+                setActive(isEnabled)
+                startTimer()
+                disarmCrashGuardAfterSurvival()
+                let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+                writeDebugLog("[\(logTag)] armed on Spotify \(version) — AudioUnitSetProperty / AudioOutputUnitStart, read-only")
+            case .symbolsMissing:
+                // 地址没解析到，一个函数都没动过 ⇒ 允许下次开开关再试。
                 installed = false
                 disarmCrashGuard()
                 setActive(false)
-                return
+            case .notPatched:
+                // 地址对、`activate()` 也调了，但目标入口没被改写：Orion 没挂上（它会另打一条
+                // `[ORION ERROR] …`）。组已算"激活过"，再激活只会再报一次错 ⇒ 保留 `installed`，
+                // 等下次启动。
+                disarmCrashGuard()
+                setActive(false)
             }
-            // 装 hook 这段时间里用户可能已经把开关关掉，别把 `active` 又拨回去。
-            setActive(isEnabled)
-            startTimer()
-            disarmCrashGuardAfterSurvival()
-            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-            writeDebugLog("[\(logTag)] armed on Spotify \(version) — AudioUnitSetProperty / AudioOutputUnitStart, read-only")
         }
     }
 

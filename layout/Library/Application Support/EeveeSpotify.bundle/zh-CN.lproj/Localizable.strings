@@ -427,7 +427,7 @@ dump_class_placeholder = "类名";
 dump_class_action = "转储这个类";
 detailed_logging = "更详细的日志记录";
 audio_tap_probe = "音频输出探针";
-audio_tap_probe_description = "只读诊断：每 2 秒记录 RemoteIO 的格式与 RMS。打开即生效，不必重启；第一行数据要等开始播放后才有。不会改动音频。";
+audio_tap_probe_description = "只读诊断：每 2 秒记录 RemoteIO 的格式与 RMS。打开即生效，不必重启。第一行数据要等下一次开始播放（或暂停再播）才有，正在播放时先暂停一下再继续。不会改动音频。";
 
 /* MARK: 外观 */
 theme_section = "主题";

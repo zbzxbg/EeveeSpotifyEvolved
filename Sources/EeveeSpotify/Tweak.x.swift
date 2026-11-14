@@ -839,7 +839,7 @@ struct EeveeSpotify: Tweak {
             // 开关实时读，Canvas 那条 flag 才需要重启。
             activateLockScreenArtwork()
 
-            // 音频输出域探针（只读诊断；默认关，打开后重启生效）。
+            // 音频输出域探针（只读诊断；默认关，开关打开即装，装 hook 在后台队列上，不必重启）。
             // 放在 `return` 之前：9.1/9.2 族都在这一支里。
             AudioTapProbe.installIfEnabled()
 
