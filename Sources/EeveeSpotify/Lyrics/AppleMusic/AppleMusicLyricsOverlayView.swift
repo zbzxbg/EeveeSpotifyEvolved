@@ -184,20 +184,6 @@ struct AppleMusicLyricsOverlayView: View {
                     background: AnyView(Color.clear),
                     onClose: nil,
                     onSeek: onSeek,
-                    // 长按一句歌词 → 9:16 的分享卡。标题/歌手取壳上那两个已经跟着
-                    // 换歌更新过的值；署名走全局（与页脚、锁屏同一条来源）。
-                    onShareLine: { line in
-                        // 只给全屏页：卡片预览与"歌词进播放器"都只有巴掌大一块，
-                        // 长按在那里更容易和拖动抢事件，也放不下一张 9:16 的卡。
-                        guard showsProviderFooter else { return }
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        LyricShareCard.present(
-                            line: line,
-                            title: trackTitle,
-                            artist: trackArtist,
-                            credit: currentLyricsCreditText()
-                        )
-                    },
                     contentInsets: EdgeInsets(
                         // ⚠️ 预览的底边距必须给够，否则"当前行居中"根本不会发生。
                         //
@@ -329,7 +315,24 @@ struct AppleMusicLyricsOverlayView: View {
                     // 还会顺手把最后一行也压暗。让歌词一直清晰到卡片下缘即可。
                     fadeBottomBand: showsProviderFooter ? 40 : 0,
                     // 把"静态档"透传下去（见 `AppleMusicLyricsPage.isStatic`）。
-                    isStatic: isStatic
+                    isStatic: isStatic,
+                    // 长按一句歌词 → 9:16 的分享卡。标题/歌手取壳上那两个已经跟着
+                    // 换歌更新过的值；署名走全局（与页脚、锁屏同一条来源）。
+                    //
+                    // ⚠️ 必须是**最后一个参数**：这个 init 是逐成员的，传参顺序必须与
+                    // 声明顺序一致（`onShareLine` 声明在 `isStatic` 之后）。
+                    onShareLine: { line in
+                        // 只给全屏页：卡片预览与"歌词进播放器"都只有巴掌大一块，
+                        // 长按在那里更容易和拖动抢事件，也放不下一张 9:16 的卡。
+                        guard showsProviderFooter else { return }
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        LyricShareCard.present(
+                            line: line,
+                            title: trackTitle,
+                            artist: trackArtist,
+                            credit: currentLyricsCreditText()
+                        )
+                    }
                 )
             }
         }
