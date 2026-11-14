@@ -28,13 +28,10 @@ enum AudioTapProbe {
 
     /// 装 hook 的串行队列。
     ///
-    /// **装 hook 绝不能压在主线程上**。Orion 激活 hook 前要先解析目标符号，这条路走
-    /// CydiaSubstrate 的 `MSFindSymbol`：它按 image 逐个解析 dyld shared cache 里的导出
-    /// 符号，整个 cache 过一遍是几十秒量级的 CPU。主线程被卡住 10 秒就是 scene-update
-    /// watchdog 的 `0x8BADF00D`（SIGKILL），崩溃栈正好停在
-    /// `stat` ← `fileExists(atPath:)` ← `sharedCachePath()` ← `findPrivateSymbol` 这条链上。
-    /// 装 hook 不需要任何 UI 资源，全部丢给这条队列；启动那一拍也一样，别在启动窗口里
-    /// 拖住 runloop。
+    /// 装 hook 要遍历所有已加载 image 的 `__la_symbol_ptr` 再改指针值（fishhook），是短任务，
+    /// 但它**不该压在主线程上**：主线程在 scene-update 窗口里被卡住 10 秒，watchdog 就会以
+    /// `0x8BADF00D` 直接 SIGKILL。装 hook 不需要任何 UI 资源，全部丢给这条队列；启动那一拍
+    /// 也一样，别在启动窗口里拖住 runloop。
     private static let installQueue = DispatchQueue(
         label: "com.eeveespotify.audiotapprobe.install",
         qos: .userInitiated
@@ -79,7 +76,7 @@ enum AudioTapProbe {
     // MARK: - 生命周期
 
     /// 启动时调一次：开关开着才装 hook。装的动作异步丢给 `installQueue`，这里立刻返回 ——
-    /// 启动窗口里不能有任何可能卡住主线程的符号解析。
+    /// 启动窗口里不做任何可能卡住主线程的符号/加载工作。
     static func installIfEnabled() {
         guard isEnabled else {
             // 开关是关的：顺手清掉可能残留的 marker（例如上次在 5 秒存活窗口里被强杀），
@@ -115,26 +112,24 @@ enum AudioTapProbe {
             guard !installed else { return }
             installed = true
             armCrashGuard()
-            switch activateAudioTapProbeHooks() {
-            case .activated:
-                // 装 hook 这段时间里用户可能已经把开关关掉，别把 `active` 又拨回去。
-                setActive(isEnabled)
-                startTimer()
-                disarmCrashGuardAfterSurvival()
-                let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-                writeDebugLog("[\(logTag)] armed on Spotify \(version) — AudioUnitSetProperty / AudioOutputUnitStart, read-only")
-            case .symbolsMissing:
-                // 地址没解析到，一个函数都没动过 ⇒ 允许下次开开关再试。
-                installed = false
+            let rebound = AudioTapProbeHooks.install()
+            guard rebound.setProperty, rebound.outputStart else {
+                // 至少一个函数没被重绑：探针拿不到完整数据。**不能重试** —— fishhook 把这一组
+                // rebindings 记着给后加载的 image 复用，再装一次属于未定义行为。等下次启动。
                 disarmCrashGuard()
                 setActive(false)
-            case .notPatched:
-                // 地址对、`activate()` 也调了，但目标入口没被改写：Orion 没挂上（它会另打一条
-                // `[ORION ERROR] …`）。组已算"激活过"，再激活只会再报一次错 ⇒ 保留 `installed`，
-                // 等下次启动。
-                disarmCrashGuard()
-                setActive(false)
+                writeDebugLog(
+                    "[\(logTag)] hook install incomplete — setProperty=\(rebound.setProperty)"
+                        + " outputUnitStart=\(rebound.outputStart), probe inactive"
+                )
+                return
             }
+            // 装 hook 这段时间里用户可能已经把开关关掉，别把 `active` 又拨回去。
+            setActive(isEnabled)
+            startTimer()
+            disarmCrashGuardAfterSurvival()
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+            writeDebugLog("[\(logTag)] armed on Spotify \(version) — AudioUnitSetProperty / AudioOutputUnitStart, read-only")
         }
     }
 
@@ -152,8 +147,8 @@ enum AudioTapProbe {
         }
     }
 
-    /// 根本没装上（符号没解析到）时立刻清掉 marker —— 这次没动过任何函数，不该让下次
-    /// 启动白关一次开关。
+    /// 没装上（重绑没成功）时立刻清掉 marker —— 这次没改过任何指针，不该让下次启动白关一次
+    /// 开关。
     private static func disarmCrashGuard() {
         UserDefaults.container.set(false, forKey: launchMarkerKey)
     }

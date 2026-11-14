@@ -32,10 +32,12 @@ BRANCH_NAME_FINAL := $(if $(BRANCH_NAME),$(BRANCH_NAME),Master)
 $(shell mkdir -p Sources/EeveeSpotify/Generated)
 $(shell printf 'enum GeneratedConfig {\n    static let repoSlug = "%s"\n    static let branchName = "%s"\n}\n' "$(REPO_SLUG_FINAL)" "$(BRANCH_NAME_FINAL)" > Sources/EeveeSpotify/Generated/RepoSlug.swift)
 
-EeveeSpotify_FILES = $(shell find Sources/EeveeSpotify -name '*.swift') $(shell find Sources/EeveeSpotifyC -name '*.m' -o -name '*.c' -o -name '*.mm' -o -name '*.cpp')
+EeveeSpotify_FILES = $(shell find Sources/EeveeSpotify -name '*.swift') $(shell find Sources/EeveeSpotifyC -name '*.m' -o -name '*.c' -o -name '*.mm' -o -name '*.cpp') $(shell find modules/fishhook -name '*.c')
 EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include -Osize
 EeveeSpotify_EXTRA_FRAMEWORKS = EeveeSwiftProtobuf
-EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Os
+# `modules/fishhook`: 音频输出探针用它重绑 `AudioUnitSetProperty` / `AudioOutputUnitStart`
+# 的符号指针（inline hook 这两个系统 framework 函数会被内核按 CODESIGNING 杀掉）。
+EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Imodules/fishhook -Os
 
 # ── 系统翻译：Translation.framework 现在是**强链接**（最低版本 17.4 起它一定在）──
 # `Sources/EeveeSpotify/Lyrics/OnDeviceLyricsTranslation.swift` 里有 `import Translation`。
