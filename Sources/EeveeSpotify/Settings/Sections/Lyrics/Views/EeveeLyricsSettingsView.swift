@@ -13,6 +13,12 @@ struct EeveeLyricsSettingsView: View {
             // （与下面 NetEase 那几项同一套写法）。
             if viewModel.wordByWordLyrics {
                 betterWordByWordLyricsSection()
+
+                // 「歌词文字」只作用于 App 内那套 Apple Music 渲染层（设置页的预览就是
+                // 那一页本身），所以门禁跟「更好的逐词歌词」同一套：它关着时这一块没有可调的对象。
+                if viewModel.betterWordByWordLyrics, Self.supportsBetterWordByWordLyrics {
+                    lyricsTypographySection()
+                }
             }
 
             lyricsSourceSection()
@@ -143,6 +149,60 @@ struct EeveeLyricsSettingsView: View {
             text += "\n\n" + "better_word_by_word_lyrics_needs_ios26".localized
         }
         return Text(text)
+    }
+
+    /// 「歌词 → 文字」：字号 / 行距两档倍率 + 一块实时预览。
+    ///
+    /// 为什么用**倍率**而不是几个固定档位：全屏歌词页与「歌词进播放器」那一层各有自己的
+    /// 基准字号（22pt 对 22pt，但容器一高一矮、行距 15 对 26），固定档位会让两处各自跳变；
+    /// 倍率让两处保持同一比例，见 `LyricsTypographyScale.applyingUserScale`。
+    @ViewBuilder private func lyricsTypographySection() -> some View {
+        Section {
+            // 预览直接塞生产那一页的缩小版，所以它要 iOS 26 —— 与「更好的逐词歌词」同一道门。
+            if #available(iOS 26.0, *) {
+                LyricsTypographyPreview(typography: viewModel.previewTypography)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("lyrics_text_scale".localized)
+                    Spacer()
+                    // `Text(verbatim:)`：带插值的字面量会被当成 LocalizedStringKey。
+                    Text(verbatim: "\(Int((viewModel.lyricsTextScale * 100).rounded()))%")
+                        .foregroundColor(.secondary)
+                        .monospacedDigit()
+                }
+
+                Slider(value: $viewModel.lyricsTextScale, in: 0.8...1.3, step: 0.05)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("lyrics_line_spacing".localized)
+                    Spacer()
+                    Text(verbatim: "\(Int((viewModel.lyricsLineSpacingScale * 100).rounded()))%")
+                        .foregroundColor(.secondary)
+                        .monospacedDigit()
+                }
+
+                Slider(value: $viewModel.lyricsLineSpacingScale, in: 0.7...1.5, step: 0.05)
+            }
+
+            Button("lyrics_typography_reset".localized) {
+                viewModel.lyricsTextScale = 1
+                viewModel.lyricsLineSpacingScale = 1
+            }
+            .disabled(
+                viewModel.lyricsTextScale == 1
+                    && viewModel.lyricsLineSpacingScale == 1
+            )
+        } header: {
+            Text("lyrics_typography_section".localized)
+        } footer: {
+            Text("lyrics_typography_description".localized)
+        }
     }
     
     @ViewBuilder private func disableLyricsSection() -> some View {

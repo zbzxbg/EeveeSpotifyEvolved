@@ -104,6 +104,29 @@ struct AppleMusicLyricsOverlayView: View {
     /// 全屏（有壳）时才显示自绘标题栏与播放控制；内嵌预览那一小块不显示。
     private var showsShell: Bool { showsProviderFooter }
 
+    /// 这一页该用的排版：先按容器选档，再套「歌词 → 文字」那两档倍率。
+    ///
+    /// 内嵌预览卡片（`showsPreviewHeader`）**不套倍率**：那张卡只有 200pt 高，字号是照它的
+    /// 容器量出来的，放大一档就会顶爆；而且它并不是用户调字号时看的那一档。
+    ///
+    /// 读的是静态 getter（不是从外面推入的属性）：`update` 在布局参数没变时会提前 return，
+    /// 不重建 rootView —— 推入的值会一直停在旧值，按"改完设置回来看还是老样子"。
+    private var pageTypography: LyricsTypographyScale {
+        if showsProviderFooter {
+            return .fullscreen.applyingUserScale(
+                text: NgzhwmSettingsViewModel.lyricsTextScale,
+                spacing: NgzhwmSettingsViewModel.lyricsLineSpacingScale
+            )
+        }
+        if showsPreviewHeader {
+            return .preview
+        }
+        return .player.applyingUserScale(
+            text: NgzhwmSettingsViewModel.lyricsTextScale,
+            spacing: NgzhwmSettingsViewModel.lyricsLineSpacingScale
+        )
+    }
+
     /// **译文要不要画** —— 尊重"歌词页面"里的那套选择。
     ///
     /// 两个条件：
@@ -224,9 +247,7 @@ struct AppleMusicLyricsOverlayView: View {
                     // 所以直接拿它当尺度判据，不必再往下传一个额外参数。
                     // 再加一档 `.player` —— 关掉预览标题栏的那一档
                     // （"歌词进播放器"）容器是**中段一整块**，用 `.preview` 太挤。
-                    typography: showsProviderFooter
-                        ? .fullscreen
-                        : (showsPreviewHeader ? .preview : .player),
+                    typography: pageTypography,
                     // （歌词进播放器的时候也没有额外的歌词结构）：
                     // 这一行原来写的是 `showsProviderFooter` —— 而"歌词进播放器"那一档
                     // **必须** `showsProviderFooter: false` ⇒ 副唱永远不画（链路与数据都在）。

@@ -24,6 +24,9 @@ class NgzhwmSettingsViewModel: ObservableObject {
     static let hideLyricsTranslationKey = "ngzhwm_neteaseHideTranslation"
     static let wordByWordLyricsKey = "ngzhwm_wordByWordLyrics"
     static let betterWordByWordLyricsKey = "ngzhwm_betterWordByWordLyrics"
+    /// 「歌词 → 文字」两档倍率：字号 / 行距。默认 1.0（等于各档量出来的原值）。
+    static let lyricsTextScaleKey = "ngzhwm_lyricsTextScale"
+    static let lyricsLineSpacingScaleKey = "ngzhwm_lyricsLineSpacingScale"
     /// 「AMLL 优先」的 UserDefaults 键。
     ///
     /// ⚠️**恢复**：曾因用户一句"感觉没什么用"把整条链删掉
@@ -71,6 +74,23 @@ class NgzhwmSettingsViewModel: ObservableObject {
         UserDefaults.standard.object(forKey: key) == nil
             ? defaultValue
             : UserDefaults.standard.bool(forKey: key)
+    }
+
+    /// 读取带默认值、并夹到给定范围的数值开关。
+    ///
+    /// 夹范围放在**读**这一侧：盘上的值可能来自旧版本、也可能被导入的备份改过。
+    /// 渲染层拿到的倍率一旦越界（0 或 10），字会直接消失或撑爆版面，而那看起来像"渲染坏了"。
+    private static func double(
+        forKey key: String,
+        defaultValue: Double,
+        range: ClosedRange<Double>
+    ) -> Double {
+        guard let number = UserDefaults.standard.object(forKey: key) as? NSNumber else {
+            return defaultValue
+        }
+        let value = number.doubleValue
+        guard value.isFinite else { return defaultValue }
+        return min(max(value, range.lowerBound), range.upperBound)
     }
 
     static var isWordByWordLyricsEnabled: Bool {
@@ -222,6 +242,16 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// **开着也不会生效**，走的是旧实现那条路（见 `AppleMusicLyricsOverlay` 的可用性判断）。
     static var isBetterWordByWordLyricsEnabled: Bool {
         bool(forKey: betterWordByWordLyricsKey, defaultValue: true)
+    }
+
+    /// 「歌词 → 文字」里那一档字号倍率（0.8…1.3）。
+    static var lyricsTextScale: Double {
+        double(forKey: lyricsTextScaleKey, defaultValue: 1, range: 0.8...1.3)
+    }
+
+    /// 行距倍率（0.7…1.5）。只作用于块间距与折行间距，见 `LyricsTypographyScale.applyingUserScale`。
+    static var lyricsLineSpacingScale: Double {
+        double(forKey: lyricsLineSpacingScaleKey, defaultValue: 1, range: 0.7...1.5)
     }
 
     /// 是否在模糊封面之上再叠一层系统材质压色带。

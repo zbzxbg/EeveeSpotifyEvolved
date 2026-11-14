@@ -35,6 +35,41 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             )
         }
     }
+
+    /// 「歌词 → 文字」两档倍率（字号 / 行距）。
+    ///
+    /// 写盘之后**不用重启**：渲染层每次重算排版都直接读静态 getter
+    /// （见 `AppleMusicLyricsOverlayView.pageTypography`），切回播放器就是新值。
+    @Published var lyricsTextScale = NgzhwmSettingsViewModel.lyricsTextScale {
+        didSet {
+            guard NgzhwmSettingsViewModel.lyricsTextScale != lyricsTextScale else { return }
+            UserDefaults.standard.set(
+                lyricsTextScale,
+                forKey: NgzhwmSettingsViewModel.lyricsTextScaleKey
+            )
+        }
+    }
+
+    @Published var lyricsLineSpacingScale = NgzhwmSettingsViewModel.lyricsLineSpacingScale {
+        didSet {
+            guard NgzhwmSettingsViewModel.lyricsLineSpacingScale != lyricsLineSpacingScale else { return }
+            UserDefaults.standard.set(
+                lyricsLineSpacingScale,
+                forKey: NgzhwmSettingsViewModel.lyricsLineSpacingScaleKey
+            )
+        }
+    }
+
+    /// 设置页那块实时预览用的排版：把两档倍率套到全屏那一档上。
+    ///
+    /// 套全屏档而不是播放器档：全屏页和设置页预览用的是同一份分档口径，
+    /// 用户在这里见到的相对大小，和点开全屏歌词见到的一致。
+    var previewTypography: LyricsTypographyScale {
+        LyricsTypographyScale.fullscreen.applyingUserScale(
+            text: lyricsTextScale,
+            spacing: lyricsLineSpacingScale
+        )
+    }
     
     /// 「AMLL 优先」开关。
     @Published var amllPreferred = NgzhwmSettingsViewModel.isAmllPreferred {
