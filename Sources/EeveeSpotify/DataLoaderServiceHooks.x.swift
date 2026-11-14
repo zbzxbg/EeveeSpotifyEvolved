@@ -28,26 +28,6 @@ func spotifyAccessTokenSnapshot() -> String? {
     return spotifyAccessToken
 }
 
-// spclient 的 `client-token` / `X-Client-Id`：App 给每条 spclient 请求都带这两样。
-// 我们自己发请求（如 `canvaz-cache`）时缺它们，服务器就可能只回一份"没有 canvas"的负缓存。
-// 从路过请求里捕获、按需复用；同样是跨队列读写，用一把锁保护。
-private let spotifyClientHeaderLock = NSLock()
-private var spotifyClientToken: String?
-private var spotifyClientID: String?
-
-func setSpotifyClientHeader(token: String?, clientID: String?) {
-    spotifyClientHeaderLock.lock()
-    if let token, !token.isEmpty { spotifyClientToken = token }
-    if let clientID, !clientID.isEmpty { spotifyClientID = clientID }
-    spotifyClientHeaderLock.unlock()
-}
-
-func spotifyClientHeaderSnapshot() -> (token: String?, clientID: String?) {
-    spotifyClientHeaderLock.lock()
-    defer { spotifyClientHeaderLock.unlock() }
-    return (spotifyClientToken, spotifyClientID)
-}
-
 // Spotify's primary URLSession delegate (wg-spclient: bootstrap, customize, PAM).
 // Patching lives in SpotifyResponsePatcher so HttpClientURLSessionHook can share it.
 
@@ -66,10 +46,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
            auth.hasPrefix("Bearer ") {
             let token = String(auth.dropFirst(7))
             setSpotifyAccessToken(token)
-            setSpotifyClientHeader(
-                token: headers["client-token"] ?? headers["Client-Token"],
-                clientID: headers["X-Client-Id"] ?? headers["x-client-id"]
-            )
             // 只记**形状**与来源，绝不记 token 本身。见 `HttpClientURLSessionHooks` 同处的说明：
             // 起 `prefix=前6字符` 换成轮换序号，URL 只留 scheme+host+path。
             let dotCount = token.filter { $0 == "." }.count

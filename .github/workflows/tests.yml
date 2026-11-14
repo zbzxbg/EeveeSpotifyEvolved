@@ -355,17 +355,6 @@ jobs:
                  -o pseudo-word-timing-tests
           ./pseudo-word-timing-tests
 
-      # 锁屏动态封面的 Canvas 源改成自己问 `canvaz-cache`（不再强制 Spotify 那条
-      # `canvas_enabled` flag）。这条接口**字段号写错时照样 200**，只是静默解析不出 URL ——
-      # 表现是"锁屏突然没有 Canvas 了"，没有任何报错可查。`SpotifyCanvasProto` 是不带
-      # UIKit / Orion 依赖的纯 Foundation，所以能在这里用固定字节钉住请求/响应的形状。
-      - name: Spotify Canvas protobuf (canvaz-cache)
-        run: |
-          swiftc Sources/EeveeSpotify/LockScreen/SpotifyCanvasProto.swift \
-                 Tests/SpotifyCanvasProto/main.swift \
-                 -o spotify-canvas-proto-tests
-          ./spotify-canvas-proto-tests
-
       # 「SpicyLyrics 交叉验证」的**补词判据**（`LyricsCensorFill`）。
       # 三件事必须钉住：
       #   ① 检测正则 —— 上游的 `\b\*{3,}\b` 只命中 `f***k`，`my **** line` 一个都

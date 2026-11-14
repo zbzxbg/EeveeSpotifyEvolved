@@ -9,9 +9,9 @@ import Foundation
 /// 自己起播放器，我们只负责"这一首对应哪个本地文件"。
 ///
 /// 数据来源三条，按顺序问：
-/// 1. **Canvas** —— Spotify 自己给这首歌的循环短片。优先读 track metadata 里的
-///    `canvas.url`；没有就直接问 `canvaz-cache`（见 `SpotifyCanvasClient`）。
-///    这条**不依赖** Spotify 的 Canvas 开关，也不会让播放页跟着变成 Canvas。
+/// 1. **Canvas** —— Spotify 自己给这首歌的循环短片。读 track metadata 里的 `canvas.url`
+///    （账号属性 `canvas-disabled` 被我们压成 false 后，播放核心才会把它填进来）。
+///    播放页那一层 Canvas 由 `NowPlayingIOS27` 用静态封面盖住，锁屏这段短片不受影响。
 /// 2. **Apple Music editorial video** —— 用 Apple Music 网页播放器的 developer token
 ///    查目录（不需要用户登录），取 `editorialVideo` 里对应画幅的那段 HLS。
 /// 3. **本地 Fill** —— 两条都没有时，用专辑封面渲染一段循环短片。只在缓存里没有这一首时
@@ -48,7 +48,7 @@ enum LockScreenArtwork {
 
     static var isEnabled: Bool { UserDefaults.lockScreenAnimatedArtwork }
 
-    /// Canvas 那条源要不要参与。总开关关着时它也不该去动 Spotify 的 flag。
+    /// Canvas 那条源要不要参与。总开关关着时它也不该去动账号属性。
     static var wantsCanvas: Bool { isEnabled && UserDefaults.lockScreenAnimatedArtworkCanvas }
 
     /// 前两条源都没有时要不要本地渲染一段。关掉它不影响 Canvas / Apple Music。

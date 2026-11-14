@@ -508,11 +508,10 @@ private let propertyReplacements = [
         modification: .setBool(false)
     ),
 
-    // 锁屏动态封面的 Canvas 源**不再**改这条 flag（`ios-feature-canvas.canvas_enabled`）。
-    //
-    // 这条 flag 是服务端配置，客户端还有自己的 Canvas 偏好；强制它只能让"用户的播放页也
-    // 跟着显示 Canvas"，而用户关着 Spotify 的 Canvas 时依然拿不到 `canvas.url`。
-    // 现在直接问 `canvaz-cache`（见 `SpotifyCanvasClient`），与这个 flag 完全解耦。
+    // 锁屏动态封面的 Canvas 源**不**改这条 flag（`ios-feature-canvas.canvas_enabled`）：
+    // 服务端本来就下发 true，压它没有意义。真正的闸门是账号属性 `canvas-disabled`
+    // （见 `modifyAttributes`）—— 压成 false 后播放核心才会在 metadata 里填 `canvas.url`。
+    // 播放页因此也会出现 Canvas，但 `NowPlayingIOS27` 会用静态封面把它盖住。
 
     // 睡眠定时器：Spotify 自己那份（`ios-feature-sleeptimer`）在播客菜单里就能用，但
     // "选项表 / 1 分钟档 / 到点淡出"都由这几条 flag 决定。打开之后它自己那份更好用；
@@ -794,8 +793,8 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
             continue
         }
 
-        // Canvas 那条 flag 已经不在替换表里了（锁屏的 Canvas 改为直接问 `canvaz-cache`，
-        // 见 `SpotifyCanvasClient`），所以这里没有"按开关跳过"的分支。
+        // Canvas 那条 flag 不在替换表里（锁屏的 Canvas 走账号属性 `canvas-disabled`，
+        // 见 `modifyAttributes`），所以这里没有"按开关跳过"的分支。
 
         let matchingIndices = values.indices.filter({ index in
             let value = values[index]
@@ -1113,9 +1112,8 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
     // 锁屏动态封面的 Canvas 源：压的是**账号属性** `canvas-disabled`，不是
     // `ios-feature-canvas.canvas_enabled`（那条服务端本来就下发 true，压它没有意义）。
     // 这一条才是「设置 → 播放 → Canvas」的真相：客户端据它决定要不要在曲目元数据里要
-    // `canvas.url`，`canvaz-cache` 也据它回答"有没有 canvas"。代价是播放页也会显示
-    // Canvas —— 与早先强制 flag 的效果一致；不想要就把设置里「锁屏动态封面」的
-    // Canvas 源关掉。
+    // `canvas.url`。代价是播放页也会出现 Canvas —— 那一层由 `NowPlayingIOS27` 用静态封面
+    // 盖住；不想要锁屏这段就关掉设置里「锁屏动态封面」的 Canvas 源。
     if LockScreenArtwork.wantsCanvas {
         attributes["canvas-disabled"] = AccountAttribute.with {
             $0.boolValue = false
