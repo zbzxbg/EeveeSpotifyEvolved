@@ -1,12 +1,17 @@
 import CoreGraphics
+import CoreImage
 import Foundation
 import UIKit
 
 /// 歌词分享卡片的绘制层：一张 9:16 竖图。
 ///
-/// 版式照 Spotify 自己那张「歌词分享卡」来：**封面取色铺满整张**、顶部一行小封面 + 曲名/歌手、
-/// 中间大字歌词、底沿一行小字署名。这样分享出去和用户在这个 App 里见过的卡片是同一个观感，
-/// 而我们的版本能存相册、能选词、带罗马音和译文。
+/// 三套模板（见 `LyricShareCardTemplate`）共用同一份"背景 + 文字"工具：
+/// · `native`   —— 照 Spotify 那张卡的结构：取色底 + 顶部小封面/曲名 + 大字歌词；
+/// · `polaroid` —— 白框拍立得：照片窗口放封面，下方留白写歌词与曲名/歌手；
+/// · `minimal`  —— 纯色/纯黑底，只留歌词与一行署名。
+///
+/// 拍立得比例用经典值 3.5 : 4.25（约 1:1.21）：照片窗口是正方形，左右上边长边约 6.2%，
+/// 底部留白约占 19% —— 比真实相纸的 16% 略多一点，因为我们要在留白里塞下一句歌词。
 ///
 /// 为什么不复用锁屏那份 `LyricClipRenderer`：那边的版式是系统预览键倒逼出来的
 /// （3:4 / 1:1、当前行 + 压暗的下一行 + 底沿署名），而分享卡是 9:16 + 顶部信息行，
@@ -24,30 +29,83 @@ enum LyricShareCardRenderer {
         /// Spotify 随 track metadata 下发的封面取色（`extracted_color`，6 位 RGB 或 8 位 ARGB）。
         /// 没有时退回封面平均色。
         var backgroundColorHex: String?
+        var template: LyricShareCardTemplate = .native
+        var background: LyricShareCardBackground = .cover
+        var ink: LyricShareCardInk = .auto
     }
 
     /// 9:16 —— 相册与主流社交 App 的预览都按这个比例完整显示。
     static let cardSize = CGSize(width: 1080, height: 1920)
 
     static func image(for content: Content) -> UIImage {
-        let background = resolvedBackground(content)
-        let ink = inkColor(on: background)
         let format = UIGraphicsImageRendererFormat.preferred()
         format.scale = 1
         format.opaque = true
         return UIGraphicsImageRenderer(size: cardSize, format: format).image { context in
-            drawBackground(background, in: context.cgContext)
-            drawHeader(content, ink: ink, in: context.cgContext)
-            drawLyricBlock(content, ink: ink, in: context.cgContext)
-            drawFooter(content, ink: ink, in: context.cgContext)
+            let cg = context.cgContext
+            let ink = drawBackdrop(content, in: cg)
+            switch content.template {
+            case .native:
+                drawNative(content, ink: ink, in: cg)
+            case .polaroid:
+                drawPolaroid(content, ink: ink, in: cg)
+            case .minimal:
+                drawMinimal(content, ink: ink, in: cg)
+            }
         }
     }
 
-    // MARK: - 底色
+    // MARK: - 背景
 
-    /// 取色顺序：metadata 里的 `extracted_color`（与播放页取色底同一个值）→ 封面平均色 →
-    /// 中性暗底。中间那两条都拿不到时也不能留白，白字压白底直接看不见。
-    private static func resolvedBackground(_ content: Content) -> UIColor {
+    /// 画底、并返回文字该用的颜色。
+    private static func drawBackdrop(_ content: Content, in context: CGContext) -> UIColor {
+        let full = CGRect(origin: .zero, size: cardSize)
+        switch content.background {
+        case .cover:
+            let color = resolvedCoverColor(content)
+            context.setFillColor(color.cgColor)
+            context.fill(full)
+            drawSheen(in: context, full: full)
+            return inkColor(content.ink, on: color)
+        case .blurredCover:
+            context.setFillColor(UIColor(white: 0.06, alpha: 1).cgColor)
+            context.fill(full)
+            if let cover = content.cover, let blurred = blurredCover(cover) {
+                UIGraphicsPushContext(context)
+                let scale = max(
+                    full.width / blurred.size.width,
+                    full.height / blurred.size.height
+                )
+                let drawn = CGSize(
+                    width: blurred.size.width * scale,
+                    height: blurred.size.height * scale
+                )
+                blurred.draw(
+                    in: CGRect(
+                        x: full.midX - drawn.width / 2,
+                        y: full.midY - drawn.height / 2,
+                        width: drawn.width,
+                        height: drawn.height
+                    )
+                )
+                UIGraphicsPopContext()
+            }
+            context.setFillColor(UIColor(white: 0, alpha: 0.45).cgColor)
+            context.fill(full)
+            return content.ink == .black
+                ? UIColor(white: 0.06, alpha: 1)
+                : UIColor(white: 1, alpha: 1)
+        case .black:
+            context.setFillColor(UIColor(white: 0.03, alpha: 1).cgColor)
+            context.fill(full)
+            return content.ink == .black
+                ? UIColor(white: 0.06, alpha: 1)
+                : UIColor(white: 1, alpha: 1)
+        }
+    }
+
+    /// 取色顺序：metadata 里的 `extracted_color` → 封面平均色 → 中性暗底。
+    private static func resolvedCoverColor(_ content: Content) -> UIColor {
         if let color = color(fromHex: content.backgroundColorHex) {
             return balanced(color)
         }
@@ -57,7 +115,7 @@ enum LyricShareCardRenderer {
         return UIColor(white: 0.10, alpha: 1)
     }
 
-    /// 把"太亮 / 太中间调"的封面色调到能压字的那一档：
+    /// 把"太亮 / 太中间调"的封面色调到能压字的那一档。
     ///
     /// · 很亮（白封面）→ 压到 0.9 的亮度，用黑字；
     /// · 很暗 → 保持，用白字；
@@ -87,10 +145,17 @@ enum LyricShareCardRenderer {
         return UIColor(hue: hue, saturation: saturation, brightness: ceiling, alpha: alpha)
     }
 
-    private static func inkColor(on background: UIColor) -> UIColor {
-        relativeLuminance(of: background) >= 0.55
-            ? UIColor(white: 0.06, alpha: 1)
-            : UIColor(white: 1, alpha: 1)
+    private static func inkColor(_ choice: LyricShareCardInk, on background: UIColor) -> UIColor {
+        switch choice {
+        case .black:
+            return UIColor(white: 0.06, alpha: 1)
+        case .white:
+            return UIColor(white: 1, alpha: 1)
+        case .auto:
+            return relativeLuminance(of: background) >= 0.55
+                ? UIColor(white: 0.06, alpha: 1)
+                : UIColor(white: 1, alpha: 1)
+        }
     }
 
     private static func relativeLuminance(of color: UIColor) -> CGFloat {
@@ -102,6 +167,47 @@ enum LyricShareCardRenderer {
             return 0
         }
         return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+
+    /// 上下各一层极轻的明暗：纯平色在聊天列表里看着像一块贴纸，压一点更接近原生那张卡。
+    private static func drawSheen(in context: CGContext, full: CGRect) {
+        let colors = [
+            UIColor(white: 1, alpha: 0.05).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor,
+            UIColor(white: 0, alpha: 0.10).cgColor
+        ] as CFArray
+        let locations: [CGFloat] = [0, 0.55, 1]
+        guard let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors,
+            locations: locations
+        ) else { return }
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: full.midX, y: full.minY),
+            end: CGPoint(x: full.midX, y: full.maxY),
+            options: []
+        )
+    }
+
+    /// 模糊封面：先缩到 160px 宽再高斯模糊，整幅原图在手机上糊会拖慢整机。
+    private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    private static func blurredCover(_ cover: UIImage) -> UIImage? {
+        guard let source = cover.cgImage, source.width > 0 else { return nil }
+        let smallWidth: CGFloat = 160
+        let scale = smallWidth / CGFloat(source.width)
+        let input = CIImage(cgImage: source).transformed(
+            by: CGAffineTransform(scaleX: scale, y: scale)
+        )
+        let blurred = input
+            .clampedToExtent()
+            .applyingGaussianBlur(sigma: smallWidth * 0.06)
+            .cropped(to: input.extent)
+        guard let cgImage = ciContext.createCGImage(blurred, from: input.extent) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 
     /// 解析 `#RRGGBB` / `RRGGBB` / `AARRGGBB`。仓库里那份同名工具是文件私有的，这里不跨文件借。
@@ -155,31 +261,6 @@ enum LyricShareCardRenderer {
         )
     }
 
-    private static func drawBackground(_ color: UIColor, in context: CGContext) {
-        let full = CGRect(origin: .zero, size: cardSize)
-        context.setFillColor(color.cgColor)
-        context.fill(full)
-
-        // 上下各一层极轻的明暗：纯平色在聊天列表里看着像一块贴纸，压一点更接近原生那张卡。
-        let colors = [
-            UIColor(white: 1, alpha: 0.05).cgColor,
-            UIColor(white: 1, alpha: 0).cgColor,
-            UIColor(white: 0, alpha: 0.10).cgColor
-        ] as CFArray
-        let locations: [CGFloat] = [0, 0.55, 1]
-        guard let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: colors,
-            locations: locations
-        ) else { return }
-        context.drawLinearGradient(
-            gradient,
-            start: CGPoint(x: cardSize.width / 2, y: 0),
-            end: CGPoint(x: cardSize.width / 2, y: cardSize.height),
-            options: []
-        )
-    }
-
     // MARK: - 版式常量
 
     private static let margin: CGFloat = 88
@@ -198,28 +279,19 @@ enum LyricShareCardRenderer {
         cardSize.width - margin * 2
     }
 
-    // MARK: - 顶部（小封面 + 曲名 / 歌手）
+    // MARK: - 模板：原生卡
+
+    private static func drawNative(_ content: Content, ink: UIColor, in context: CGContext) {
+        drawHeader(content, ink: ink, in: context)
+        drawLyricBlock(content, ink: ink, in: context)
+        drawCredit(content.credit, ink: ink, y: cardSize.height - 120, in: context)
+    }
 
     private static func drawHeader(_ content: Content, ink: UIColor, in context: CGContext) {
         var textX = margin
         if let cover = content.cover {
             let rect = CGRect(x: margin, y: coverTop, width: coverSide, height: coverSide)
-            UIGraphicsPushContext(context)
-            UIBezierPath(roundedRect: rect, cornerRadius: 12).addClip()
-            let scale = max(rect.width / cover.size.width, rect.height / cover.size.height)
-            let drawn = CGSize(
-                width: cover.size.width * scale,
-                height: cover.size.height * scale
-            )
-            cover.draw(
-                in: CGRect(
-                    x: rect.midX - drawn.width / 2,
-                    y: rect.midY - drawn.height / 2,
-                    width: drawn.width,
-                    height: drawn.height
-                )
-            )
-            UIGraphicsPopContext()
+            drawCover(cover, in: rect, cornerRadius: 12, context: context)
             textX = rect.maxX + headerGap
         }
 
@@ -258,8 +330,6 @@ enum LyricShareCardRenderer {
         }
     }
 
-    // MARK: - 歌词
-
     private static func drawLyricBlock(_ content: Content, ink: UIColor, in context: CGContext) {
         let romanization = (content.romanization ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let translation = (content.translation ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -283,7 +353,7 @@ enum LyricShareCardRenderer {
             + (romanization.isEmpty ? 0 : blockGap)
             + (translation.isEmpty ? 0 : blockGap)
 
-        // 主歌词：从 96pt 起按 6% 一档缩，缩到 56pt 为止。
+        // 主歌词：从 96pt 起按 6% 一档缩，缩到 52pt 为止。
         // 再放不下就让它溢出 —— 截断歌词比溢出更糟，用户无法知道少了什么。
         var lyricSize: CGFloat = 96
         var lyricHeight = height(
@@ -293,7 +363,7 @@ enum LyricShareCardRenderer {
             width: columnWidth
         )
         let available = max(blockBottom - blockTop - fixed, 240)
-        while lyricHeight > available, lyricSize > 56 {
+        while lyricHeight > available, lyricSize > 52 {
             lyricSize *= 0.94
             lyricHeight = height(
                 of: content.lyric,
@@ -342,34 +412,251 @@ enum LyricShareCardRenderer {
         }
     }
 
-    // MARK: - 底沿署名
+    // MARK: - 模板：拍立得
 
-    private static func drawFooter(_ content: Content, ink: UIColor, in context: CGContext) {
-        let credit = content.credit.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !credit.isEmpty else { return }
+    private static func drawPolaroid(_ content: Content, ink: UIColor, in context: CGContext) {
+        // 经典比例 3.5 : 4.25；照片窗口是正方形，所以先定宽再倒推高。
+        let cardWidth = cardSize.width * 0.80
+        let inset = cardWidth * 0.062
+        let photoSide = cardWidth - inset * 2
+        let cardHeight = (photoSide + inset) / 0.81
+        let cardRect = CGRect(
+            x: (cardSize.width - cardWidth) / 2,
+            y: (cardSize.height - cardHeight) / 2 - 30,
+            width: cardWidth,
+            height: cardHeight
+        )
+
+        // 略微歪一点、带投影，才有"一张相纸放桌上"的感觉。
+        context.saveGState()
+        context.translateBy(x: cardRect.midX, y: cardRect.midY)
+        context.rotate(by: -2 * .pi / 180)
+        context.translateBy(x: -cardRect.midX, y: -cardRect.midY)
+
+        context.setShadow(
+            offset: CGSize(width: 0, height: 22),
+            blur: 54,
+            color: UIColor(white: 0, alpha: 0.34).cgColor
+        )
+        let cardPath = UIBezierPath(roundedRect: cardRect, cornerRadius: 10)
+        context.addPath(cardPath.cgPath)
+        context.setFillColor(UIColor(red: 0.984, green: 0.976, blue: 0.957, alpha: 1).cgColor)
+        context.fillPath()
+        context.setShadow(offset: .zero, blur: 0, color: nil)
+
+        let photoRect = CGRect(
+            x: cardRect.minX + inset,
+            y: cardRect.minY + inset,
+            width: photoSide,
+            height: photoSide
+        )
+        if let cover = content.cover {
+            drawCover(cover, in: photoRect, cornerRadius: 2, context: context)
+        } else {
+            let colors = [
+                UIColor(white: 0.28, alpha: 1).cgColor,
+                UIColor(white: 0.16, alpha: 1).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: colors,
+                locations: [0, 1]
+            ) {
+                context.saveGState()
+                context.addRect(photoRect)
+                context.clip()
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: photoRect.midX, y: photoRect.minY),
+                    end: CGPoint(x: photoRect.midX, y: photoRect.maxY),
+                    options: []
+                )
+                context.restoreGState()
+            }
+        }
+
+        // 相纸上的字是深色：白框上不能用背景那套 ink。
+        let paperInk = UIColor(white: 0.10, alpha: 1)
+        let paperSecondary = UIColor(white: 0.32, alpha: 1)
+        let textWidth = photoSide
+        let textX = photoRect.minX
+        var textY = photoRect.maxY + 20
+
+        let lyricSize: CGFloat = 34
+        let lyricHeight = min(
+            height(of: content.lyric, fontSize: lyricSize, weight: .regular, width: textWidth),
+            88
+        )
+        draw(
+            content.lyric,
+            fontSize: lyricSize,
+            weight: .regular,
+            color: paperInk,
+            alignment: .left,
+            in: CGRect(x: textX, y: textY, width: textWidth, height: lyricHeight),
+            context: context
+        )
+        textY += lyricHeight + 6
+
+        let titleHeight = height(of: content.title, fontSize: 30, weight: .semibold, width: textWidth)
+        if !content.title.isEmpty {
+            draw(
+                content.title,
+                fontSize: 30,
+                weight: .semibold,
+                color: paperInk,
+                alignment: .left,
+                in: CGRect(x: textX, y: textY, width: textWidth, height: titleHeight),
+                context: context
+            )
+            textY += titleHeight + 2
+        }
+        let artistHeight = height(of: content.artist, fontSize: 26, weight: .regular, width: textWidth)
+        if !content.artist.isEmpty {
+            draw(
+                content.artist,
+                fontSize: 26,
+                weight: .regular,
+                color: paperSecondary,
+                alignment: .left,
+                in: CGRect(x: textX, y: textY, width: textWidth, height: artistHeight),
+                context: context
+            )
+        }
+
+        context.restoreGState()
+
+        // 相纸外面的署名（跟着背景选颜色）。
+        drawCredit(
+            content.credit,
+            ink: ink,
+            y: cardRect.maxY + 64,
+            in: context
+        )
+    }
+
+    // MARK: - 模板：极简
+
+    private static func drawMinimal(_ content: Content, ink: UIColor, in context: CGContext) {
+        let top = cardSize.height * 0.30
+        let bottom = cardSize.height * 0.70
+        let lyricWidth = cardSize.width * 0.84
+        var lyricSize: CGFloat = 88
+        var lyricHeight = height(
+            of: content.lyric,
+            fontSize: lyricSize,
+            weight: .semibold,
+            width: lyricWidth
+        )
+        let available = bottom - top
+        while lyricHeight > available, lyricSize > 52 {
+            lyricSize *= 0.94
+            lyricHeight = height(
+                of: content.lyric,
+                fontSize: lyricSize,
+                weight: .semibold,
+                width: lyricWidth
+            )
+        }
+
+        draw(
+            content.lyric,
+            fontSize: lyricSize,
+            weight: .semibold,
+            color: ink,
+            alignment: .center,
+            in: CGRect(
+                x: (cardSize.width - lyricWidth) / 2,
+                y: top + max((available - lyricHeight) / 2, 0),
+                width: lyricWidth,
+                height: lyricHeight
+            ),
+            context: context
+        )
+
+        var footerY = cardSize.height * 0.80
+        let titleHeight = height(of: content.title, fontSize: 34, weight: .semibold, width: columnWidth)
+        if !content.title.isEmpty {
+            draw(
+                content.title,
+                fontSize: 34,
+                weight: .semibold,
+                color: ink.withAlphaComponent(0.92),
+                alignment: .center,
+                in: CGRect(x: margin, y: footerY, width: columnWidth, height: titleHeight),
+                context: context
+            )
+            footerY += titleHeight + 4
+        }
+        let artistHeight = height(of: content.artist, fontSize: 30, weight: .regular, width: columnWidth)
+        if !content.artist.isEmpty {
+            draw(
+                content.artist,
+                fontSize: 30,
+                weight: .regular,
+                color: ink.withAlphaComponent(0.62),
+                alignment: .center,
+                in: CGRect(x: margin, y: footerY, width: columnWidth, height: artistHeight),
+                context: context
+            )
+        }
+
+        drawCredit(content.credit, ink: ink, y: cardSize.height - 130, in: context)
+    }
+
+    // MARK: - 公共部件
+
+    private static func drawCover(
+        _ cover: UIImage,
+        in rect: CGRect,
+        cornerRadius: CGFloat,
+        context: CGContext
+    ) {
+        guard cover.size.width >= 1, cover.size.height >= 1 else { return }
+        UIGraphicsPushContext(context)
+        UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius).addClip()
+        let scale = max(rect.width / cover.size.width, rect.height / cover.size.height)
+        let drawn = CGSize(
+            width: cover.size.width * scale,
+            height: cover.size.height * scale
+        )
+        cover.draw(
+            in: CGRect(
+                x: rect.midX - drawn.width / 2,
+                y: rect.midY - drawn.height / 2,
+                width: drawn.width,
+                height: drawn.height
+            )
+        )
+        UIGraphicsPopContext()
+    }
+
+    private static func drawCredit(
+        _ credit: String,
+        ink: UIColor,
+        y: CGFloat,
+        in context: CGContext
+    ) {
+        let text = credit.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
         let creditHeight = height(
-            of: credit,
+            of: text,
             fontSize: creditSize,
             weight: .regular,
             width: columnWidth
         )
         draw(
-            credit,
+            text,
             fontSize: creditSize,
             weight: .regular,
             color: ink.withAlphaComponent(0.48),
             alignment: .left,
-            in: CGRect(
-                x: margin,
-                y: cardSize.height - 120 - creditHeight,
-                width: columnWidth,
-                height: creditHeight
-            ),
+            in: CGRect(x: margin, y: y, width: columnWidth, height: creditHeight),
             context: context
         )
     }
 
-    // MARK: - 文字工具（左对齐，与原生那张卡一致）
+    // MARK: - 文字工具
 
     private static func height(
         of text: String,

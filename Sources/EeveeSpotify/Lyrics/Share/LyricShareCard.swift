@@ -45,7 +45,10 @@ enum LyricShareCard {
             translation: trimmed(line.translation),
             credit: credit.trimmingCharacters(in: .whitespacesAndNewlines),
             cover: nil,
-            backgroundColorHex: metadata?["extracted_color"]
+            backgroundColorHex: metadata?["extracted_color"],
+            template: UserDefaults.shareCardTemplate,
+            background: UserDefaults.shareCardBackground,
+            ink: UserDefaults.shareCardInk
         )
         writeDebugLog("[LyricsShare] preparing — \(content.title) / \(String(lyric.prefix(24)))")
 

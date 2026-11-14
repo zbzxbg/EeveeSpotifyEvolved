@@ -18,6 +18,7 @@ struct EeveeLyricsSettingsView: View {
                 // 那一页本身），所以门禁跟「更好的逐词歌词」同一套：它关着时这一块没有可调的对象。
                 if viewModel.betterWordByWordLyrics, Self.supportsBetterWordByWordLyrics {
                     lyricsTypographySection()
+                    shareCardSection()
                 }
             }
 
@@ -202,6 +203,52 @@ struct EeveeLyricsSettingsView: View {
             Text("lyrics_typography_section".localized)
         } footer: {
             Text("lyrics_typography_description".localized)
+        }
+    }
+
+    /// 「分享卡」：模板 / 背景 / 文字颜色 + 实时预览。
+    ///
+    /// 三组都只有三档，所以用分段选择器而不是菜单：这里最想给的是"换一下长什么样"，
+    /// 上面那张预览会立刻跟着重画，不用分享出去才知道。
+    @ViewBuilder private func shareCardSection() -> some View {
+        Section {
+            LyricShareCardPreview(content: viewModel.shareCardPreviewContent)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+
+            Picker("share_card_template".localized, selection: $viewModel.shareCardTemplate) {
+                Text("share_card_template_native".localized)
+                    .tag(LyricShareCardTemplate.native)
+                Text("share_card_template_polaroid".localized)
+                    .tag(LyricShareCardTemplate.polaroid)
+                Text("share_card_template_minimal".localized)
+                    .tag(LyricShareCardTemplate.minimal)
+            }
+            .pickerStyle(.segmented)
+
+            Picker("share_card_background".localized, selection: $viewModel.shareCardBackground) {
+                Text("share_card_background_cover".localized)
+                    .tag(LyricShareCardBackground.cover)
+                Text("share_card_background_blur".localized)
+                    .tag(LyricShareCardBackground.blurredCover)
+                Text("share_card_background_black".localized)
+                    .tag(LyricShareCardBackground.black)
+            }
+            .pickerStyle(.segmented)
+
+            Picker("share_card_ink".localized, selection: $viewModel.shareCardInk) {
+                Text("share_card_ink_auto".localized)
+                    .tag(LyricShareCardInk.auto)
+                Text("share_card_ink_black".localized)
+                    .tag(LyricShareCardInk.black)
+                Text("share_card_ink_white".localized)
+                    .tag(LyricShareCardInk.white)
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("share_card_section".localized)
+        } footer: {
+            Text("share_card_footer".localized)
         }
     }
     

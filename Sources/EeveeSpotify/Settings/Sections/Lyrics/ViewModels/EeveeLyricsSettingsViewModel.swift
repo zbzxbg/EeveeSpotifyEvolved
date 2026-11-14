@@ -73,6 +73,36 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             spacing: lyricsLineSpacingScale
         )
     }
+
+    /// 分享卡的三组选项。改了直接写盘；分享那一刻按需读（`LyricShareCard.present`）。
+    @Published var shareCardTemplate = UserDefaults.shareCardTemplate {
+        didSet { UserDefaults.shareCardTemplate = shareCardTemplate }
+    }
+
+    @Published var shareCardBackground = UserDefaults.shareCardBackground {
+        didSet { UserDefaults.shareCardBackground = shareCardBackground }
+    }
+
+    @Published var shareCardInk = UserDefaults.shareCardInk {
+        didSet { UserDefaults.shareCardInk = shareCardInk }
+    }
+
+    /// 设置页预览用的样例卡：同一句歌，三种模板/背景/颜色都看得出来。
+    var shareCardPreviewContent: LyricShareCardRenderer.Content {
+        LyricShareCardRenderer.Content(
+            title: "アルビレオ",
+            artist: "Rokudenashi",
+            lyric: "君は藍に浮かんだアルビレオ",
+            romanization: "Ki mi wa a i ni u ka n da a ru bi re o",
+            translation: "你就是浮现在蔚蓝中的天鹅座β",
+            credit: "KuGou · 上传者 热心用户",
+            cover: nil,
+            backgroundColorHex: "3E7FA6",
+            template: shareCardTemplate,
+            background: shareCardBackground,
+            ink: shareCardInk
+        )
+    }
     
     /// 「AMLL 优先」开关。
     @Published var amllPreferred = NgzhwmSettingsViewModel.isAmllPreferred {
