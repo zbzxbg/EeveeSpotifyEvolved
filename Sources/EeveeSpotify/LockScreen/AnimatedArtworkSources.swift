@@ -31,8 +31,9 @@ struct AppleMusicEditorialAssets {
 
 /// Canvas：Spotify 自己给这首歌的循环短片。
 ///
-/// 地址在 track metadata 里。播放核心只有在 `ios-feature-canvas.canvas_enabled` 为真时
-/// 才会填它 —— 那条 flag 由 `DynamicPremium+ModifyingFunctions.swift` 按本功能的开关替换。
+/// 优先读 track metadata 里的 `canvas.url`（Spotify 自己的 Canvas 开着时就有，零请求）。
+/// 没有时由 `LockScreenArtworkResolver` 直接问 `canvaz-cache` —— 那条路不依赖
+/// `ios-feature-canvas.canvas_enabled`，也不会把用户的播放页带成 Canvas。
 ///
 /// `canvas.type` 决定这是不是一段视频：IMAGE / GIF 类型的 Canvas 交给系统的播放器会
 /// 立刻失败，所以这里先按类型挡掉，别让下载去浪费时间。

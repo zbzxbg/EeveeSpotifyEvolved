@@ -9,9 +9,9 @@ import Foundation
 /// 自己起播放器，我们只负责"这一首对应哪个本地文件"。
 ///
 /// 数据来源三条，按顺序问：
-/// 1. **Canvas** —— Spotify 自己给这首歌的循环短片。地址在 track metadata 的
-///    `canvas.url` 里，只有在 Spotify 的 `ios-feature-canvas.canvas_enabled` 为真时
-///    播放核心才会填它（见 `DynamicPremium+ModifyingFunctions.swift` 里那条替换）。
+/// 1. **Canvas** —— Spotify 自己给这首歌的循环短片。优先读 track metadata 里的
+///    `canvas.url`；没有就直接问 `canvaz-cache`（见 `SpotifyCanvasClient`）。
+///    这条**不依赖** Spotify 的 Canvas 开关，也不会让播放页跟着变成 Canvas。
 /// 2. **Apple Music editorial video** —— 用 Apple Music 网页播放器的 developer token
 ///    查目录（不需要用户登录），取 `editorialVideo` 里对应画幅的那段 HLS。
 /// 3. **本地 Fill** —— 两条都没有时，用专辑封面渲染一段循环短片。只在缓存里没有这一首时

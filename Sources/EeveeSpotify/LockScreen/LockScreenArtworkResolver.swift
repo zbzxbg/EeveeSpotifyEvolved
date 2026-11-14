@@ -573,6 +573,11 @@ final class LockScreenArtworkResolver {
             } else {
                 reportNoMetadataOnce()
             }
+            // 元数据里没有 `canvas.url`（Spotify 自己的 Canvas 开关关着、或这首本来就没有）
+            // 就自己问一次。这条路径不依赖 Spotify 的任何开关，见 `SpotifyCanvasClient`。
+            if canvas == nil {
+                canvas = await canvasFromCanvaz()
+            }
         }
 
         let apple = await AppleMusicArtworkSource.assets(
@@ -600,6 +605,30 @@ final class LockScreenArtworkResolver {
             }
             return track.metadata()
         }
+    }
+
+    /// 元数据里没有 Canvas 时，直接问 Spotify 的 `canvaz-cache`。
+    ///
+    /// 失败（没抓到 token / 这首没有 Canvas / 网络不通）返回 nil，交给 Apple Music / Fill
+    /// 那两条源。token 是 Spotify 自己请求头里截下来的，App 启动后不久就有；冷启动
+    /// 第一首若还没截到，这次就退回静态封面或下一条源。
+    private func canvasFromCanvaz() async -> AnimatedArtworkAsset? {
+        let identifier: String? = await MainActor.run {
+            (statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack)?
+                .trackIdentifier
+        }
+        guard let identifier, !identifier.isEmpty else { return nil }
+        guard let canvas = await SpotifyCanvasClient.canvas(
+            trackIdentifier: identifier,
+            session: session
+        ), canvas.isVideo,
+              let url = URL(string: canvas.url),
+              url.scheme != nil else {
+            return nil
+        }
+        let absolute = url.absoluteString
+        let isHLS = url.pathExtension.lowercased() == "m3u8" || absolute.contains(".m3u8")
+        return AnimatedArtworkAsset(source: .canvas, videoURL: url, isHLS: isHLS)
     }
 
     /// 系统来要素材时，歌可能已经换了 —— 换过就不要再拿新歌的 Canvas 去配旧封面。

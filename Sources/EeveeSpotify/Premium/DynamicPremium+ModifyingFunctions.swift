@@ -494,14 +494,11 @@ private let propertyReplacements = [
         modification: .setBool(false)
     ),
 
-    // 锁屏动态封面：Spotify 的播放核心只有在 `ios-feature-canvas.canvas_enabled` 为真时
-    // 才把 `canvas.url` 填进 track metadata。我们只读那条地址、不自己去找 Canvas，
-    // 所以这条 flag 是 Canvas 那半条链的前置。开关关着时下面那圈会整条跳过。
-    EeveePropertyReplacement(
-        name: "canvas_enabled",
-        scope: "ios-feature-canvas",
-        modification: .forceBool(true)
-    ),
+    // 锁屏动态封面的 Canvas 源**不再**改这条 flag（`ios-feature-canvas.canvas_enabled`）。
+    //
+    // 这条 flag 是服务端配置，客户端还有自己的 Canvas 偏好；强制它只能让"用户的播放页也
+    // 跟着显示 Canvas"，而用户关着 Spotify 的 Canvas 时依然拿不到 `canvas.url`。
+    // 现在直接问 `canvaz-cache`（见 `SpotifyCanvasClient`），与这个 flag 完全解耦。
 
     // 睡眠定时器：Spotify 自己那份（`ios-feature-sleeptimer`）在播客菜单里就能用，但
     // "选项表 / 1 分钟档 / 到点淡出"都由这几条 flag 决定。打开之后它自己那份更好用；
@@ -522,9 +519,6 @@ private let propertyReplacements = [
         modification: .forceBool(true)
     )
 ]
-
-/// 上面那条 flag 的名字（开关判定用，避免再抄一遍字面量）。
-private let canvasFlagName = "canvas_enabled"
 
 /// 歌词入口 flag 的名字（同上）。
 private let lyricsEntryPointFlagName = "lyrics_entry_point_enabled"
@@ -786,13 +780,8 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
             continue
         }
 
-        // Canvas：锁屏动态封面关着（或它自己的 Canvas 开关关着）时整条跳过 ——
-        // 不去动 Spotify 的远端配置，播放页里 Canvas 的表现保持原样。
-        if index < builtInReplacementCount,
-           replacement.name == canvasFlagName,
-           !LockScreenArtwork.wantsCanvas {
-            continue
-        }
+        // Canvas 那条 flag 已经不在替换表里了（锁屏的 Canvas 改为直接问 `canvaz-cache`，
+        // 见 `SpotifyCanvasClient`），所以这里没有"按开关跳过"的分支。
 
         let matchingIndices = values.indices.filter({ index in
             let value = values[index]
