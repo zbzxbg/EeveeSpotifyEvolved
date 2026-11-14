@@ -37,7 +37,7 @@ petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp)：Spotify在日
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org)：提供逐词歌词及部分其他歌词来源没有的歌词。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
 spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
-spicylyrics_api_key_description = "不内置默认密钥：在这里填入你自己的密钥才能使用 Spicy Lyrics。留空则回退到 Musixmatch。密钥获取方法：在 Spicy Lyrics 上同意用户协议，按「Add」，复制它给出的客户端密钥即可。";
+spicylyrics_api_key_description = "不内置默认密钥：在这里填入你自己的密钥才能使用 Spicy Lyrics。留空则回退到下一个歌词来源。密钥获取方法：在 Spicy Lyrics 上同意用户协议，按「Add」，复制它给出的客户端密钥即可。";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
 spicylyrics_key_link = "在 Spicy Lyrics 上添加本应用";
 spicylyrics_key_invalid = "Spicy Lyrics 密钥被拒绝";
@@ -679,7 +679,7 @@ now_playing_style = "听歌页样式";
 now_playing_style_spotify = "Spotify原生";
 now_playing_style_immersive = "沉浸式";
 now_playing_style_apple_music = "Apple Music式";
-now_playing_style_description = "若选择Spotify原生、则不更改听歌页。若选择沉浸式，则听歌页仿照kumone。若选择Apple Music式，则听歌页仿照Apple Music。";
+now_playing_style_description = "若选择Spotify原生、则不更改听歌页。若选择沉浸式，则听歌页仿照kumone。若选择Apple Music式，则听歌页仿照Apple Music。\n沉浸式与Spotify原生两档暂停止维护，选择后可能会有 Bug。";
 // ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见

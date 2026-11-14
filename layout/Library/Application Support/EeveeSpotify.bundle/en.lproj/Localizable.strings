@@ -37,7 +37,7 @@ petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp): Spotify's main
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org): Provides word-by-word lyrics and lyrics that some other lyrics sources do not have.";
 spicylyrics_api_key = "Spicy Lyrics API Key";
 spicylyrics_api_key_placeholder = "Enter a Spicy client key (sl_pk_...)";
-spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics can only be used with your own key pasted here. Leave it empty and it falls back to Musixmatch. To get a key: agree to the terms on Spicy Lyrics, press Add, and copy the client key it gives you.";
+spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics can only be used with your own key pasted here. Leave it empty and lyrics fall back to the next source. To get a key: agree to the terms on Spicy Lyrics, press Add, and copy the client key it gives you.";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
 spicylyrics_key_link = "Add this app on Spicy Lyrics";
 spicylyrics_key_invalid = "Spicy Lyrics API key rejected";
@@ -691,7 +691,7 @@ now_playing_style = "Now-playing style";
 now_playing_style_spotify = "Spotify";
 now_playing_style_immersive = "Immersive";
 now_playing_style_apple_music = "Apple Music style";
-now_playing_style_description = "Spotify = the stock player. Immersive = the player is modeled on kumone. Apple Music style = the player is modeled on Apple Music.";
+now_playing_style_description = "Spotify = the stock player. Immersive = the player is modeled on kumone. Apple Music style = the player is modeled on Apple Music.\nImmersive and Spotify are temporarily unmaintained; picking either one may have bugs.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.
