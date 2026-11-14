@@ -19,6 +19,10 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
            auth.hasPrefix("Bearer ") {
             let token = String(auth.dropFirst(7))
             setSpotifyAccessToken(token)
+            setSpotifyClientHeader(
+                token: headers["client-token"] ?? headers["Client-Token"],
+                clientID: headers["X-Client-Id"] ?? headers["x-client-id"]
+            )
             // 只记**形状**与来源，绝不记 token 本身。
             // 再加两道：① `prefix=前6字符` 换成轮换序号 —— token 的任何片段
             // 都没有调试价值，"这一场里有没有换过 token"才是判据；

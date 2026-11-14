@@ -41,6 +41,21 @@ enum SpotifyCanvasClient {
         request.setValue("application/x-protobuf", forHTTPHeaderField: "Content-Type")
         request.setValue("application/x-protobuf", forHTTPHeaderField: "Accept")
 
+        // 照 App 自己那条 spclient 请求的形状补齐（抓包：`client-token` / `X-Client-Id` /
+        // `Spotify-App-Version` / `App-Platform`）。缺 `client-token` 时服务器可能只回
+        // 一份"没有 canvas"的负缓存（`EntityCanvazResponse{ttl_in_seconds}`）。
+        let clientHeaders = spotifyClientHeaderSnapshot()
+        if let clientToken = clientHeaders.token {
+            request.setValue(clientToken, forHTTPHeaderField: "client-token")
+        }
+        if let clientID = clientHeaders.clientID {
+            request.setValue(clientID, forHTTPHeaderField: "X-Client-Id")
+        }
+        request.setValue("iOS", forHTTPHeaderField: "App-Platform")
+        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+            request.setValue(version, forHTTPHeaderField: "Spotify-App-Version")
+        }
+
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse else {
             writeDebugLog("[\(LockScreenArtwork.logTag)] canvaz request failed — no response")
@@ -73,6 +88,7 @@ enum SpotifyCanvasClient {
                 + ", \(uri), \(data.count) byte(s)"
                 + ", type=\(contentType), server=\(server), head=\(magic) (\(shape))"
                 + ", body=\(body)"
+                + ", client-token=\(clientHeaders.token == nil ? "no" : "yes")"
         )
         return canvas
     }
