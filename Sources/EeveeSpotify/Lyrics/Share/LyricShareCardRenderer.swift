@@ -3,7 +3,7 @@ import CoreImage
 import Foundation
 import UIKit
 
-/// 歌词分享卡片的绘制层：一张 9:16 竖图。
+/// 歌词分享卡片的绘制层：9:16 / 4:5 / 1:1 三种画幅。
 ///
 /// 三套模板（见 `LyricShareCardTemplate`）共用同一份"背景 + 文字"工具：
 /// · `native`   —— 照 Spotify 那张卡的结构：取色底 + 顶部小封面/曲名 + 大字歌词；
@@ -12,9 +12,10 @@ import UIKit
 ///
 /// 拍立得比例用经典值 3.5 : 4.25（约 1:1.21）：照片窗口是正方形，左右上边长边约 6.2%，
 /// 底部留白约占 19% —— 比真实相纸的 16% 略多一点，因为我们要在留白里塞下一句歌词。
+/// 1:1 时相纸按可用高度反向收窄（见 `polaroidMetrics`），否则署名会贴到画布外。
 ///
 /// 为什么不复用锁屏那份 `LyricClipRenderer`：那边的版式是系统预览键倒逼出来的
-/// （3:4 / 1:1、当前行 + 压暗的下一行 + 底沿署名），而分享卡是 9:16 + 顶部信息行，
+/// （3:4 / 1:1、当前行 + 压暗的下一行 + 底沿署名），而分享卡是顶部信息行 + 大字歌词，
 /// 两套版式塞进同一个函数里，任何一边调间距都会牵到另一边。
 enum LyricShareCardRenderer {
 
@@ -32,25 +33,26 @@ enum LyricShareCardRenderer {
         var template: LyricShareCardTemplate = .native
         var background: LyricShareCardBackground = .cover
         var ink: LyricShareCardInk = .auto
+        var size: LyricShareCardSize = .story
+        /// `ink == .custom` 时使用。解析失败时退回 `auto` 的对比色。
+        var customInkHex: String?
     }
 
-    /// 9:16 —— 相册与主流社交 App 的预览都按这个比例完整显示。
-    static let cardSize = CGSize(width: 1080, height: 1920)
-
     static func image(for content: Content) -> UIImage {
+        let canvas = content.size.canvasSize
         let format = UIGraphicsImageRendererFormat.preferred()
         format.scale = 1
         format.opaque = true
-        return UIGraphicsImageRenderer(size: cardSize, format: format).image { context in
+        return UIGraphicsImageRenderer(size: canvas, format: format).image { context in
             let cg = context.cgContext
-            let ink = drawBackdrop(content, in: cg)
+            let ink = drawBackdrop(content, canvas: canvas, in: cg)
             switch content.template {
             case .native:
-                drawNative(content, ink: ink, in: cg)
+                drawNative(content, ink: ink, canvas: canvas, in: cg)
             case .polaroid:
-                drawPolaroid(content, ink: ink, in: cg)
+                drawPolaroid(content, ink: ink, canvas: canvas, in: cg)
             case .minimal:
-                drawMinimal(content, ink: ink, in: cg)
+                drawMinimal(content, ink: ink, canvas: canvas, in: cg)
             }
         }
     }
@@ -58,15 +60,19 @@ enum LyricShareCardRenderer {
     // MARK: - 背景
 
     /// 画底、并返回文字该用的颜色。
-    private static func drawBackdrop(_ content: Content, in context: CGContext) -> UIColor {
-        let full = CGRect(origin: .zero, size: cardSize)
+    private static func drawBackdrop(
+        _ content: Content,
+        canvas: CGSize,
+        in context: CGContext
+    ) -> UIColor {
+        let full = CGRect(origin: .zero, size: canvas)
         switch content.background {
         case .cover:
             let color = resolvedCoverColor(content)
             context.setFillColor(color.cgColor)
             context.fill(full)
             drawSheen(in: context, full: full)
-            return inkColor(content.ink, on: color)
+            return inkColor(content, on: color)
         case .blurredCover:
             context.setFillColor(UIColor(white: 0.06, alpha: 1).cgColor)
             context.fill(full)
@@ -92,15 +98,12 @@ enum LyricShareCardRenderer {
             }
             context.setFillColor(UIColor(white: 0, alpha: 0.45).cgColor)
             context.fill(full)
-            return content.ink == .black
-                ? UIColor(white: 0.06, alpha: 1)
-                : UIColor(white: 1, alpha: 1)
+            // 这两档的底都是压暗的，`auto` 要落到白字；`custom` / 手动黑白照旧。
+            return inkColor(content, on: UIColor(white: 0.06, alpha: 1))
         case .black:
             context.setFillColor(UIColor(white: 0.03, alpha: 1).cgColor)
             context.fill(full)
-            return content.ink == .black
-                ? UIColor(white: 0.06, alpha: 1)
-                : UIColor(white: 1, alpha: 1)
+            return inkColor(content, on: UIColor(white: 0.06, alpha: 1))
         }
     }
 
@@ -145,8 +148,8 @@ enum LyricShareCardRenderer {
         return UIColor(hue: hue, saturation: saturation, brightness: ceiling, alpha: alpha)
     }
 
-    private static func inkColor(_ choice: LyricShareCardInk, on background: UIColor) -> UIColor {
-        switch choice {
+    private static func inkColor(_ content: Content, on background: UIColor) -> UIColor {
+        switch content.ink {
         case .black:
             return UIColor(white: 0.06, alpha: 1)
         case .white:
@@ -155,7 +158,19 @@ enum LyricShareCardRenderer {
             return relativeLuminance(of: background) >= 0.55
                 ? UIColor(white: 0.06, alpha: 1)
                 : UIColor(white: 1, alpha: 1)
+        case .custom:
+            // 用户挑的颜色不做亮度补偿：那是他自己选的对比。只有解析失败才退回 auto。
+            return customInkColor(content)
+                ?? (relativeLuminance(of: background) >= 0.55
+                    ? UIColor(white: 0.06, alpha: 1)
+                    : UIColor(white: 1, alpha: 1))
         }
+    }
+
+    /// 自定义文字色；`auto` / 黑白 / 空值 / 非法 hex 都返回 nil。
+    private static func customInkColor(_ content: Content) -> UIColor? {
+        guard content.ink == .custom else { return nil }
+        return color(fromHex: content.customInkHex)
     }
 
     private static func relativeLuminance(of color: UIColor) -> CGFloat {
@@ -275,19 +290,35 @@ enum LyricShareCardRenderer {
     private static let blockGap: CGFloat = 26
     private static let lineSpacingRatio: CGFloat = 0.18
 
-    private static var columnWidth: CGFloat {
-        cardSize.width - margin * 2
+    private static func columnWidth(for canvas: CGSize) -> CGFloat {
+        canvas.width - margin * 2
     }
 
     // MARK: - 模板：原生卡
 
-    private static func drawNative(_ content: Content, ink: UIColor, in context: CGContext) {
-        drawHeader(content, ink: ink, in: context)
-        drawLyricBlock(content, ink: ink, in: context)
-        drawCredit(content.credit, ink: ink, y: cardSize.height - 120, in: context)
+    private static func drawNative(
+        _ content: Content,
+        ink: UIColor,
+        canvas: CGSize,
+        in context: CGContext
+    ) {
+        drawHeader(content, ink: ink, canvas: canvas, in: context)
+        drawLyricBlock(content, ink: ink, canvas: canvas, in: context)
+        drawCredit(
+            content.credit,
+            ink: ink,
+            y: canvas.height - 120,
+            width: columnWidth(for: canvas),
+            in: context
+        )
     }
 
-    private static func drawHeader(_ content: Content, ink: UIColor, in context: CGContext) {
+    private static func drawHeader(
+        _ content: Content,
+        ink: UIColor,
+        canvas: CGSize,
+        in context: CGContext
+    ) {
         var textX = margin
         if let cover = content.cover {
             let rect = CGRect(x: margin, y: coverTop, width: coverSide, height: coverSide)
@@ -295,7 +326,7 @@ enum LyricShareCardRenderer {
             textX = rect.maxX + headerGap
         }
 
-        let textWidth = cardSize.width - margin - textX
+        let textWidth = canvas.width - margin - textX
         let titleHeight = height(of: content.title, fontSize: titleSize, weight: .semibold, width: textWidth)
         let artistHeight = height(of: content.artist, fontSize: artistSize, weight: .regular, width: textWidth)
         let total = titleHeight + 6 + artistHeight
@@ -330,24 +361,30 @@ enum LyricShareCardRenderer {
         }
     }
 
-    private static func drawLyricBlock(_ content: Content, ink: UIColor, in context: CGContext) {
+    private static func drawLyricBlock(
+        _ content: Content,
+        ink: UIColor,
+        canvas: CGSize,
+        in context: CGContext
+    ) {
         let romanization = (content.romanization ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let translation = (content.translation ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let width = columnWidth(for: canvas)
 
         let blockTop = coverTop + coverSide + 84
-        let blockBottom = cardSize.height - 190
+        let blockBottom = canvas.height - 190
 
         let romanizationHeight = height(
             of: romanization,
             fontSize: romanizationSize,
             weight: .regular,
-            width: columnWidth
+            width: width
         )
         let translationHeight = height(
             of: translation,
             fontSize: translationSize,
             weight: .regular,
-            width: columnWidth
+            width: width
         )
         let fixed = romanizationHeight + translationHeight
             + (romanization.isEmpty ? 0 : blockGap)
@@ -360,7 +397,7 @@ enum LyricShareCardRenderer {
             of: content.lyric,
             fontSize: lyricSize,
             weight: .semibold,
-            width: columnWidth
+            width: width
         )
         let available = max(blockBottom - blockTop - fixed, 240)
         while lyricHeight > available, lyricSize > 52 {
@@ -369,7 +406,7 @@ enum LyricShareCardRenderer {
                 of: content.lyric,
                 fontSize: lyricSize,
                 weight: .semibold,
-                width: columnWidth
+                width: width
             )
         }
 
@@ -383,7 +420,7 @@ enum LyricShareCardRenderer {
                 weight: .regular,
                 color: ink.withAlphaComponent(0.62),
                 alignment: .left,
-                in: CGRect(x: margin, y: y, width: columnWidth, height: romanizationHeight),
+                in: CGRect(x: margin, y: y, width: width, height: romanizationHeight),
                 context: context
             )
             y += romanizationHeight + blockGap
@@ -394,7 +431,7 @@ enum LyricShareCardRenderer {
             weight: .semibold,
             color: ink,
             alignment: .left,
-            in: CGRect(x: margin, y: y, width: columnWidth, height: lyricHeight),
+            in: CGRect(x: margin, y: y, width: width, height: lyricHeight),
             context: context
         )
         y += lyricHeight
@@ -406,7 +443,7 @@ enum LyricShareCardRenderer {
                 weight: .regular,
                 color: ink.withAlphaComponent(0.74),
                 alignment: .left,
-                in: CGRect(x: margin, y: y, width: columnWidth, height: translationHeight),
+                in: CGRect(x: margin, y: y, width: width, height: translationHeight),
                 context: context
             )
         }
@@ -414,17 +451,79 @@ enum LyricShareCardRenderer {
 
     // MARK: - 模板：拍立得
 
-    private static func drawPolaroid(_ content: Content, ink: UIColor, in context: CGContext) {
-        // 经典比例 3.5 : 4.25；照片窗口是正方形，所以先定宽再倒推高。
-        let cardWidth = cardSize.width * 0.80
+    /// 相纸内部各块的高度。宽度先由画布高度定死（见 `drawPolaroid`），这里只负责
+    /// 在底部留白里把歌词字号收到放得下 —— 相纸宽度再收只会让留白和文字宽度一起变小。
+    private struct PolaroidMetrics {
+        let cardWidth: CGFloat
+        let inset: CGFloat
+        let photoSide: CGFloat
+        let cardHeight: CGFloat
+        let lyricSize: CGFloat
+        let lyricHeight: CGFloat
+        let titleHeight: CGFloat
+        let artistHeight: CGFloat
+        let fits: Bool
+    }
+
+    private static func polaroidMetrics(
+        cardWidth: CGFloat,
+        content: Content
+    ) -> PolaroidMetrics {
         let inset = cardWidth * 0.062
         let photoSide = cardWidth - inset * 2
         let cardHeight = (photoSide + inset) / 0.81
+        let textWidth = photoSide
+        let titleHeight = content.title.isEmpty
+            ? 0
+            : height(of: content.title, fontSize: 30, weight: .semibold, width: textWidth)
+        let artistHeight = content.artist.isEmpty
+            ? 0
+            : height(of: content.artist, fontSize: 26, weight: .regular, width: textWidth)
+        let gaps: CGFloat = 6 + (content.title.isEmpty ? 0 : 2)
+
+        // 底部留白里出去照片、上下内边距和一点底沿余量之后剩下的高度。
+        let available = cardHeight - (inset + photoSide + 20) - 8
+        var lyricSize: CGFloat = 34
+        var lyricHeight: CGFloat = 0
+        var stack: CGFloat = 0
+        while true {
+            lyricHeight = min(
+                height(of: content.lyric, fontSize: lyricSize, weight: .regular, width: textWidth),
+                88
+            )
+            stack = lyricHeight + gaps + titleHeight + artistHeight
+            if stack <= available || lyricSize <= 18 { break }
+            lyricSize -= 1
+        }
+        return PolaroidMetrics(
+            cardWidth: cardWidth,
+            inset: inset,
+            photoSide: photoSide,
+            cardHeight: cardHeight,
+            lyricSize: lyricSize,
+            lyricHeight: lyricHeight,
+            titleHeight: titleHeight,
+            artistHeight: artistHeight,
+            fits: stack <= available
+        )
+    }
+
+    private static func drawPolaroid(
+        _ content: Content,
+        ink: UIColor,
+        canvas: CGSize,
+        in context: CGContext
+    ) {
+        // 经典比例 3.5 : 4.25；照片窗口是正方形，所以先定宽再倒推高。
+        // 画幅越方，可用高度越小：1:1 时把相纸整体收窄，否则下沿会压到署名。
+        let maxCardHeight = canvas.height - 185
+        let cardWidth = min(canvas.width * 0.80, maxCardHeight / 1.158)
+        let metrics = polaroidMetrics(cardWidth: cardWidth, content: content)
         let cardRect = CGRect(
-            x: (cardSize.width - cardWidth) / 2,
-            y: (cardSize.height - cardHeight) / 2 - 30,
-            width: cardWidth,
-            height: cardHeight
+            x: (canvas.width - metrics.cardWidth) / 2,
+            y: (canvas.height - metrics.cardHeight) / 2 - 30,
+            width: metrics.cardWidth,
+            height: metrics.cardHeight
         )
 
         // 略微歪一点、带投影，才有"一张相纸放桌上"的感觉。
@@ -445,10 +544,10 @@ enum LyricShareCardRenderer {
         context.setShadow(offset: .zero, blur: 0, color: nil)
 
         let photoRect = CGRect(
-            x: cardRect.minX + inset,
-            y: cardRect.minY + inset,
-            width: photoSide,
-            height: photoSide
+            x: cardRect.minX + metrics.inset,
+            y: cardRect.minY + metrics.inset,
+            width: metrics.photoSide,
+            height: metrics.photoSide
         )
         if let cover = content.cover {
             drawCover(cover, in: photoRect, cornerRadius: 2, context: context)
@@ -475,30 +574,31 @@ enum LyricShareCardRenderer {
             }
         }
 
-        // 相纸上的字是深色：白框上不能用背景那套 ink。
-        let paperInk = UIColor(white: 0.10, alpha: 1)
-        let paperSecondary = UIColor(white: 0.32, alpha: 1)
-        let textWidth = photoSide
+        // 相纸上的字默认是深色：白框上不能用背景那套 ink。
+        // 自定义文字色是例外 —— 那是用户对相纸内容本身的指定。
+        let custom = customInkColor(content)
+        let paperInk = custom ?? UIColor(white: 0.10, alpha: 1)
+        let paperSecondary = custom?.withAlphaComponent(0.62) ?? UIColor(white: 0.32, alpha: 1)
+        let textWidth = metrics.photoSide
         let textX = photoRect.minX
         var textY = photoRect.maxY + 20
 
-        let lyricSize: CGFloat = 34
-        let lyricHeight = min(
-            height(of: content.lyric, fontSize: lyricSize, weight: .regular, width: textWidth),
-            88
-        )
         draw(
             content.lyric,
-            fontSize: lyricSize,
+            fontSize: metrics.lyricSize,
             weight: .regular,
             color: paperInk,
             alignment: .left,
-            in: CGRect(x: textX, y: textY, width: textWidth, height: lyricHeight),
+            in: CGRect(
+                x: textX,
+                y: textY,
+                width: textWidth,
+                height: metrics.lyricHeight
+            ),
             context: context
         )
-        textY += lyricHeight + 6
+        textY += metrics.lyricHeight + 6
 
-        let titleHeight = height(of: content.title, fontSize: 30, weight: .semibold, width: textWidth)
         if !content.title.isEmpty {
             draw(
                 content.title,
@@ -506,12 +606,16 @@ enum LyricShareCardRenderer {
                 weight: .semibold,
                 color: paperInk,
                 alignment: .left,
-                in: CGRect(x: textX, y: textY, width: textWidth, height: titleHeight),
+                in: CGRect(
+                    x: textX,
+                    y: textY,
+                    width: textWidth,
+                    height: metrics.titleHeight
+                ),
                 context: context
             )
-            textY += titleHeight + 2
+            textY += metrics.titleHeight + 2
         }
-        let artistHeight = height(of: content.artist, fontSize: 26, weight: .regular, width: textWidth)
         if !content.artist.isEmpty {
             draw(
                 content.artist,
@@ -519,7 +623,12 @@ enum LyricShareCardRenderer {
                 weight: .regular,
                 color: paperSecondary,
                 alignment: .left,
-                in: CGRect(x: textX, y: textY, width: textWidth, height: artistHeight),
+                in: CGRect(
+                    x: textX,
+                    y: textY,
+                    width: textWidth,
+                    height: metrics.artistHeight
+                ),
                 context: context
             )
         }
@@ -531,16 +640,24 @@ enum LyricShareCardRenderer {
             content.credit,
             ink: ink,
             y: cardRect.maxY + 64,
+            width: columnWidth(for: canvas),
             in: context
         )
     }
 
     // MARK: - 模板：极简
 
-    private static func drawMinimal(_ content: Content, ink: UIColor, in context: CGContext) {
-        let top = cardSize.height * 0.30
-        let bottom = cardSize.height * 0.70
-        let lyricWidth = cardSize.width * 0.84
+    private static func drawMinimal(
+        _ content: Content,
+        ink: UIColor,
+        canvas: CGSize,
+        in context: CGContext
+    ) {
+        // 1:1 的高度只够放歌词和一行署名，页脚整体上提一点，避免和底沿署名贴住。
+        let compact = canvas.height < 1200
+        let top = canvas.height * 0.30
+        let bottom = canvas.height * 0.70
+        let lyricWidth = canvas.width * 0.84
         var lyricSize: CGFloat = 88
         var lyricHeight = height(
             of: content.lyric,
@@ -566,7 +683,7 @@ enum LyricShareCardRenderer {
             color: ink,
             alignment: .center,
             in: CGRect(
-                x: (cardSize.width - lyricWidth) / 2,
+                x: (canvas.width - lyricWidth) / 2,
                 y: top + max((available - lyricHeight) / 2, 0),
                 width: lyricWidth,
                 height: lyricHeight
@@ -574,8 +691,9 @@ enum LyricShareCardRenderer {
             context: context
         )
 
-        var footerY = cardSize.height * 0.80
-        let titleHeight = height(of: content.title, fontSize: 34, weight: .semibold, width: columnWidth)
+        let width = columnWidth(for: canvas)
+        var footerY = canvas.height * (compact ? 0.74 : 0.80)
+        let titleHeight = height(of: content.title, fontSize: 34, weight: .semibold, width: width)
         if !content.title.isEmpty {
             draw(
                 content.title,
@@ -583,12 +701,12 @@ enum LyricShareCardRenderer {
                 weight: .semibold,
                 color: ink.withAlphaComponent(0.92),
                 alignment: .center,
-                in: CGRect(x: margin, y: footerY, width: columnWidth, height: titleHeight),
+                in: CGRect(x: margin, y: footerY, width: width, height: titleHeight),
                 context: context
             )
             footerY += titleHeight + 4
         }
-        let artistHeight = height(of: content.artist, fontSize: 30, weight: .regular, width: columnWidth)
+        let artistHeight = height(of: content.artist, fontSize: 30, weight: .regular, width: width)
         if !content.artist.isEmpty {
             draw(
                 content.artist,
@@ -596,12 +714,18 @@ enum LyricShareCardRenderer {
                 weight: .regular,
                 color: ink.withAlphaComponent(0.62),
                 alignment: .center,
-                in: CGRect(x: margin, y: footerY, width: columnWidth, height: artistHeight),
+                in: CGRect(x: margin, y: footerY, width: width, height: artistHeight),
                 context: context
             )
         }
 
-        drawCredit(content.credit, ink: ink, y: cardSize.height - 130, in: context)
+        drawCredit(
+            content.credit,
+            ink: ink,
+            y: canvas.height - 130,
+            width: width,
+            in: context
+        )
     }
 
     // MARK: - 公共部件
@@ -635,6 +759,7 @@ enum LyricShareCardRenderer {
         _ credit: String,
         ink: UIColor,
         y: CGFloat,
+        width: CGFloat,
         in context: CGContext
     ) {
         let text = credit.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -643,7 +768,7 @@ enum LyricShareCardRenderer {
             of: text,
             fontSize: creditSize,
             weight: .regular,
-            width: columnWidth
+            width: width
         )
         draw(
             text,
@@ -651,7 +776,7 @@ enum LyricShareCardRenderer {
             weight: .regular,
             color: ink.withAlphaComponent(0.48),
             alignment: .left,
-            in: CGRect(x: margin, y: y, width: columnWidth, height: creditHeight),
+            in: CGRect(x: margin, y: y, width: width, height: creditHeight),
             context: context
         )
     }

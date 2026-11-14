@@ -35,6 +35,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - **12 sources** — Spicy Lyrics (needs your own client key), AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
 - **Auto Select** — asks the sources in an order you choose and keeps the best answer: word-by-word beats line-by-line, which beats plain text; within the same tier it prefers the answer that also has the translation, official romanization or word-level romanization your settings ask for. A plain-text answer never ends the search.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling.
+- **Share cards** — long-press a lyric line to render it as an image: native, polaroid or minimal template; 9:16, 4:5 or 1:1; cover colour, blurred cover or black background; and auto, black, white or any custom text colour. The card is rendered on the device and can be saved to Photos. Settings → Lyrics → Share card.
 
 ### Look and feel
 
@@ -43,6 +44,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - Liquid-glass tab bar and mini player.
 - **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise. A third source, rendering a loop from the cover itself, is a separate switch and off by default. Settings → Animated lock screen.
 - **Lock screen lyrics** (iOS 26+) — the line being sung takes over the lock screen's full-screen artwork, with the next line dimmed under it. Every line is drawn once as a short clip and cached per track, so changes cost no network. Uses the same lyrics source as the in-app views. Settings → Lock screen lyrics.
+- **Listening stats** — plays and listening time are recorded on the device, with 7-day, 30-day, 1-year and all-time views plus top songs and artists. A play counts after 30 seconds; history starts when the feature first runs. Settings → Listening stats.
 
 <details>
 <summary>Lyrics source details</summary>

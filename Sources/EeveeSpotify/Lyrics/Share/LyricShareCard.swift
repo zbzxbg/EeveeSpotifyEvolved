@@ -48,7 +48,9 @@ enum LyricShareCard {
             backgroundColorHex: metadata?["extracted_color"],
             template: UserDefaults.shareCardTemplate,
             background: UserDefaults.shareCardBackground,
-            ink: UserDefaults.shareCardInk
+            ink: UserDefaults.shareCardInk,
+            size: UserDefaults.shareCardSize,
+            customInkHex: UserDefaults.shareCardCustomInkHex
         )
         writeDebugLog("[LyricsShare] preparing — \(content.title) / \(String(lyric.prefix(24)))")
 

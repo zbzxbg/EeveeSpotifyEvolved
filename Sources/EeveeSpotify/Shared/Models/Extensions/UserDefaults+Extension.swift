@@ -164,6 +164,10 @@ extension UserDefaults {
     // 「自动优选的来源顺序」。键由 `LyricsSourceOrder` 自己拥有 ——
     // 不登记的话，导入备份时用户排好的顺序会被静默丢掉（备份只碰白名单）。
     + [LyricsSourceOrder.userDefaultsKey]
+    // 分享卡的模板 / 画幅 / 背景 / 文字色：键由 `LyricShareCardSettings` 自己拥有。
+    + LyricShareCardSettings.ownedKeys
+    // 听歌统计的开关：键由 `ListeningStatsSettings` 自己拥有。
+    + ListeningStatsSettings.ownedKeys
 
     static var musixmatchToken: String {
         get {

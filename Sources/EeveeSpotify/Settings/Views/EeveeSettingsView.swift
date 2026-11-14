@@ -149,6 +149,14 @@ struct EeveeSettingsView: View {
                     subtitle: "settings_sub_sleep_timer",
                     imageSystemName: "moon.zzz.fill"
                 ) { AnyView(EeveeSleepTimerSettingsView()) }
+
+                // 听歌统计：本地记录播放次数与时长（见 `ListeningStatsRecorder`）。
+                settingsRow(
+                    color: .teal,
+                    title: "listening_stats_title",
+                    subtitle: "settings_sub_listening_stats",
+                    imageSystemName: "chart.bar.fill"
+                ) { AnyView(EeveeListeningStatsSettingsView()) }
             }
 
             // ── ② 外观

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// 分享卡的三套模板。
@@ -21,51 +22,126 @@ enum LyricShareCardBackground: String, CaseIterable {
     case black
 }
 
-/// 卡面文字颜色。`auto` 按背景亮度选黑白，另外两个是手动钉死。
+/// 卡面文字颜色。`auto` 按背景亮度选黑白，`black` / `white` 手动钉死，
+/// `custom` 用用户挑的那一档（`shareCardCustomInkHex`）。
 enum LyricShareCardInk: String, CaseIterable {
     case auto
     case black
     case white
+    case custom
+}
+
+/// 卡面画幅。三者都是 1080 宽；高度决定社媒预览里的裁切：
+///
+/// · `story`   9:16（1080×1920）—— 相册与主流社交 App 的整屏预览；
+/// · `portrait` 4:5（1080×1350）—— Instagram 信息流那一档；
+/// · `square`  1:1（1080×1080）—— 头像/正方形贴文。
+///
+/// 版式不是简单缩放：拍立得的相纸高度按画幅重新收，见渲染层。
+enum LyricShareCardSize: String, CaseIterable {
+    case story
+    case portrait
+    case square
+
+    var canvasSize: CGSize {
+        switch self {
+        case .story:
+            return CGSize(width: 1080, height: 1920)
+        case .portrait:
+            return CGSize(width: 1080, height: 1350)
+        case .square:
+            return CGSize(width: 1080, height: 1080)
+        }
+    }
+
+    var aspectRatio: CGFloat {
+        canvasSize.width / canvasSize.height
+    }
 }
 
 // MARK: - 存储
 
-extension UserDefaults {
+/// 分享卡设置与备份白名单共用的键名。
+///
+/// 这三个键从分享卡功能第一天起就由本文件拥有；`size` / `customInk` 是后加的。
+/// `UserDefaults.ownedKeys` 里通过 `LyricShareCardSettings.ownedKeys` 汇总，
+/// 新增键只改这里一处。
+enum LyricShareCardSettings {
 
-    private static let shareCardTemplateKey = "ngzhwm_shareCardTemplate"
-    private static let shareCardBackgroundKey = "ngzhwm_shareCardBackground"
-    private static let shareCardInkKey = "ngzhwm_shareCardInk"
+    static let templateKey = "ngzhwm_shareCardTemplate"
+    static let backgroundKey = "ngzhwm_shareCardBackground"
+    static let inkKey = "ngzhwm_shareCardInk"
+    static let sizeKey = "ngzhwm_shareCardSize"
+    static let customInkKey = "ngzhwm_shareCardCustomInk"
+
+    static let ownedKeys: [String] = [
+        templateKey,
+        backgroundKey,
+        inkKey,
+        sizeKey,
+        customInkKey,
+    ]
+
+    /// 自定义文字色的兜底值。白字在三种背景上都至少能看见；用户挑过之后以盘上的值为准。
+    static let defaultCustomInkHex = "#FFFFFF"
+}
+
+extension UserDefaults {
 
     static var shareCardTemplate: LyricShareCardTemplate {
         get {
             LyricShareCardTemplate(
-                rawValue: UserDefaults.standard.string(forKey: shareCardTemplateKey) ?? ""
+                rawValue: UserDefaults.container.string(forKey: LyricShareCardSettings.templateKey) ?? ""
             ) ?? .native
         }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: shareCardTemplateKey)
+            UserDefaults.container.set(newValue.rawValue, forKey: LyricShareCardSettings.templateKey)
         }
     }
 
     static var shareCardBackground: LyricShareCardBackground {
         get {
             LyricShareCardBackground(
-                rawValue: UserDefaults.standard.string(forKey: shareCardBackgroundKey) ?? ""
+                rawValue: UserDefaults.container.string(forKey: LyricShareCardSettings.backgroundKey) ?? ""
             ) ?? .cover
         }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: shareCardBackgroundKey)
+            UserDefaults.container.set(newValue.rawValue, forKey: LyricShareCardSettings.backgroundKey)
         }
     }
 
     static var shareCardInk: LyricShareCardInk {
         get {
             LyricShareCardInk(
-                rawValue: UserDefaults.standard.string(forKey: shareCardInkKey) ?? ""
+                rawValue: UserDefaults.container.string(forKey: LyricShareCardSettings.inkKey) ?? ""
             ) ?? .auto
         }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: shareCardInkKey)
+            UserDefaults.container.set(newValue.rawValue, forKey: LyricShareCardSettings.inkKey)
+        }
+    }
+
+    /// 默认 9:16。旧版本没有这个键，读不到时走 `.story`，与原来的固定画幅一致。
+    static var shareCardSize: LyricShareCardSize {
+        get {
+            LyricShareCardSize(
+                rawValue: UserDefaults.container.string(forKey: LyricShareCardSettings.sizeKey) ?? ""
+            ) ?? .story
+        }
+        set {
+            UserDefaults.container.set(newValue.rawValue, forKey: LyricShareCardSettings.sizeKey)
+        }
+    }
+
+    /// 自定义文字色，`RRGGBB` / `#RRGGBB`。空值或解析失败由渲染层退回 `auto`。
+    static var shareCardCustomInkHex: String {
+        get {
+            let stored = UserDefaults.container.string(forKey: LyricShareCardSettings.customInkKey) ?? ""
+            let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? LyricShareCardSettings.defaultCustomInkHex : trimmed
+        }
+        set {
+            UserDefaults.container.set(newValue, forKey: LyricShareCardSettings.customInkKey)
         }
     }
 }

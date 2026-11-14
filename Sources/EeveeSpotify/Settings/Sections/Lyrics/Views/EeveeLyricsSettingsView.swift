@@ -206,9 +206,9 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
-    /// 「分享卡」：模板 / 背景 / 文字颜色 + 实时预览。
+    /// 「分享卡」：模板 / 画幅 / 背景 / 文字颜色 + 实时预览。
     ///
-    /// 三组都只有三档，所以用分段选择器而不是菜单：这里最想给的是"换一下长什么样"，
+    /// 选项都很少，所以用分段选择器而不是菜单：这里最想给的是"换一下长什么样"，
     /// 上面那张预览会立刻跟着重画，不用分享出去才知道。
     @ViewBuilder private func shareCardSection() -> some View {
         Section {
@@ -223,6 +223,13 @@ struct EeveeLyricsSettingsView: View {
                     .tag(LyricShareCardTemplate.polaroid)
                 Text("share_card_template_minimal".localized)
                     .tag(LyricShareCardTemplate.minimal)
+            }
+            .pickerStyle(.segmented)
+
+            Picker("share_card_size".localized, selection: $viewModel.shareCardSize) {
+                Text("9:16").tag(LyricShareCardSize.story)
+                Text("4:5").tag(LyricShareCardSize.portrait)
+                Text("1:1").tag(LyricShareCardSize.square)
             }
             .pickerStyle(.segmented)
 
@@ -243,8 +250,18 @@ struct EeveeLyricsSettingsView: View {
                     .tag(LyricShareCardInk.black)
                 Text("share_card_ink_white".localized)
                     .tag(LyricShareCardInk.white)
+                Text("share_card_ink_custom".localized)
+                    .tag(LyricShareCardInk.custom)
             }
             .pickerStyle(.segmented)
+
+            if viewModel.shareCardInk == .custom {
+                ColorPicker(
+                    "share_card_ink_custom_value".localized,
+                    selection: $viewModel.shareCardCustomInk,
+                    supportsOpacity: false
+                )
+            }
         } header: {
             Text("share_card_section".localized)
         } footer: {

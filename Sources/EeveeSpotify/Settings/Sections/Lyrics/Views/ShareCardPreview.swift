@@ -3,8 +3,8 @@ import UIKit
 
 /// 设置页「分享卡」那块里的实时预览。
 ///
-/// 预览和成品走**同一个渲染器**（`LyricShareCardRenderer`），所以模板 / 背景 / 文字颜色
-/// 三组选项在这里看到什么，长按分享出来就是什么。没有封面时用一张合成图代替 ——
+/// 预览和成品走**同一个渲染器**（`LyricShareCardRenderer`），所以模板 / 画幅 / 背景 /
+/// 文字颜色四组选项在这里看到什么，长按分享出来就是什么。没有封面时用一张合成图代替 ——
 /// 模糊背景那一档在真机上靠的就是这张图。
 struct LyricShareCardPreview: View {
 
@@ -12,28 +12,40 @@ struct LyricShareCardPreview: View {
 
     @State private var image: UIImage?
 
-    /// 只在这三项变化时重渲；`content` 里其它字段预览用不到。
+    /// 只在影响画面的选项变化时重渲；`content` 里其它字段预览用不到。
     private var fingerprint: String {
         [
             content.template.rawValue,
             content.background.rawValue,
-            content.ink.rawValue
+            content.ink.rawValue,
+            content.size.rawValue,
+            content.customInkHex ?? ""
         ].joined(separator: "|")
     }
+
+    /// 预览高度固定 300，宽度按画幅算 —— 这样切换 9:16 / 4:5 / 1:1 时轮廓会真的变。
+    private static let previewHeight: CGFloat = 300
 
     var body: some View {
         Group {
             if let image {
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFit()
+                    .scaledToFill()
+                    .frame(
+                        width: Self.previewHeight * content.size.aspectRatio,
+                        height: Self.previewHeight
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 Color.clear
+                    .frame(
+                        width: Self.previewHeight * content.size.aspectRatio,
+                        height: Self.previewHeight
+                    )
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .task(id: fingerprint) {
             image = await Self.render(content)
         }

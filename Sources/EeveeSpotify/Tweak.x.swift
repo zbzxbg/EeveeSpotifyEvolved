@@ -508,6 +508,10 @@ struct EeveeSpotify: Tweak {
         // 不用新增 hook 的原因写在 `BlockedArtistSkip` 顶部。
         BlockedArtistSkip.start()
 
+        // 听歌统计：同一条 1 秒轮询，只读播放位置/速率并把「真的在播」的秒数记到本地。
+        // 开关实时读；默认开，关掉只停止累积、不清已有数据。
+        ListeningStatsRecorder.shared.start()
+
         // TESTING: extended ad blocker (NPV/lyrics ad, home brand-ads, in-stream).
         activateEeveeAdBlockerExtended()
 

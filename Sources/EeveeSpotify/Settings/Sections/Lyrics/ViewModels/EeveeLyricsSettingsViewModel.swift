@@ -74,7 +74,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         )
     }
 
-    /// 分享卡的三组选项。改了直接写盘；分享那一刻按需读（`LyricShareCard.present`）。
+    /// 分享卡的四组选项。改了直接写盘；分享那一刻按需读（`LyricShareCard.present`）。
     @Published var shareCardTemplate = UserDefaults.shareCardTemplate {
         didSet { UserDefaults.shareCardTemplate = shareCardTemplate }
     }
@@ -83,8 +83,17 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         didSet { UserDefaults.shareCardBackground = shareCardBackground }
     }
 
+    @Published var shareCardSize = UserDefaults.shareCardSize {
+        didSet { UserDefaults.shareCardSize = shareCardSize }
+    }
+
     @Published var shareCardInk = UserDefaults.shareCardInk {
         didSet { UserDefaults.shareCardInk = shareCardInk }
+    }
+
+    /// `ColorPicker` 直接绑这个值；写盘用 `Color.hexString`，分享时再解析回 UIColor。
+    @Published var shareCardCustomInk = Color(hex: UserDefaults.shareCardCustomInkHex) {
+        didSet { UserDefaults.shareCardCustomInkHex = shareCardCustomInk.hexString }
     }
 
     /// 设置页预览用的样例卡：同一句歌，三种模板/背景/颜色都看得出来。
@@ -100,7 +109,9 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             backgroundColorHex: "3E7FA6",
             template: shareCardTemplate,
             background: shareCardBackground,
-            ink: shareCardInk
+            ink: shareCardInk,
+            size: shareCardSize,
+            customInkHex: shareCardCustomInk.hexString
         )
     }
     

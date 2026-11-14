@@ -118,6 +118,16 @@ jobs:
                  -o flag-override-tests
           ./flag-override-tests
 
+      # 听歌统计的规则层（30 秒计一次播放、一拍封顶 3 秒、拖进度条不计、日桶/聚合/剪枝）。
+      # model/store 是 Foundation-only，所以这里能直接编；录音器依赖 UIKit/MediaPlayer，不在这里。
+      - name: Listening stats
+        run: |
+          swiftc Tests/ListeningStats/main.swift \
+                 Sources/EeveeSpotify/Stats/ListeningStatsModel.swift \
+                 Sources/EeveeSpotify/Stats/ListeningStatsStore.swift \
+                 -o listening-stats-tests
+          ./listening-stats-tests
+
       - name: URL ad classification (existing)
         run: |
           swiftc Tests/URLAdClassification/main.swift \
