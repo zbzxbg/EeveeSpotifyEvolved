@@ -1,17 +1,16 @@
 import CoreGraphics
-import CoreImage
 import Foundation
 import UIKit
 
 /// 歌词分享卡片的绘制层：一张 9:16 竖图。
 ///
-/// 为什么不复用锁屏那份 `LyricClipRenderer`：那边的版式是系统预览键倒逼出来的
-/// （3:4 / 1:1、当前行 + 压暗的下一行 + 底沿署名），而分享卡要的是
-/// 罗马字 / 当前行 / 译文三行结构 + 曲名歌手。两套版式放在同一个函数里，
-/// 任何一边调间距都会牵到另一边，所以文字排版各写一份。
+/// 版式照 Spotify 自己那张「歌词分享卡」来：**封面取色铺满整张**、顶部一行小封面 + 曲名/歌手、
+/// 中间大字歌词、底沿一行小字署名。这样分享出去和用户在这个 App 里见过的卡片是同一个观感，
+/// 而我们的版本能存相册、能选词、带罗马音和译文。
 ///
-/// 背景的模糊做法沿用锁屏那条已经验证过的结论：**先缩到 160px 宽再高斯模糊**。
-/// 整幅原图在手机上做高斯模糊要十几秒，而模糊本身已经把细节抹掉，先缩后糊看不出差别。
+/// 为什么不复用锁屏那份 `LyricClipRenderer`：那边的版式是系统预览键倒逼出来的
+/// （3:4 / 1:1、当前行 + 压暗的下一行 + 底沿署名），而分享卡是 9:16 + 顶部信息行，
+/// 两套版式塞进同一个函数里，任何一边调间距都会牵到另一边。
 enum LyricShareCardRenderer {
 
     struct Content {
@@ -22,81 +21,150 @@ enum LyricShareCardRenderer {
         var translation: String?
         let credit: String
         var cover: UIImage?
+        /// Spotify 随 track metadata 下发的封面取色（`extracted_color`，6 位 RGB 或 8 位 ARGB）。
+        /// 没有时退回封面平均色。
+        var backgroundColorHex: String?
     }
 
-    /// 9:16 —— 相册与主流社交 App 的预览都按这个比例完整显示，和锁屏那套竖图观感一致。
+    /// 9:16 —— 相册与主流社交 App 的预览都按这个比例完整显示。
     static let cardSize = CGSize(width: 1080, height: 1920)
 
     static func image(for content: Content) -> UIImage {
+        let background = resolvedBackground(content)
+        let ink = inkColor(on: background)
         let format = UIGraphicsImageRendererFormat.preferred()
         format.scale = 1
         format.opaque = true
         return UIGraphicsImageRenderer(size: cardSize, format: format).image { context in
-            drawBackdrop(cover: content.cover, in: context.cgContext)
-            drawScrim(in: context.cgContext)
-            drawLyricBlock(content, in: context.cgContext)
-            drawFooter(content, in: context.cgContext)
+            drawBackground(background, in: context.cgContext)
+            drawHeader(content, ink: ink, in: context.cgContext)
+            drawLyricBlock(content, ink: ink, in: context.cgContext)
+            drawFooter(content, ink: ink, in: context.cgContext)
         }
     }
 
-    // MARK: - 背景
+    // MARK: - 底色
 
-    private static func drawBackdrop(cover: UIImage?, in context: CGContext) {
-        let full = CGRect(origin: .zero, size: cardSize)
-        if let cover, let blurred = blurredImage(cover) {
-            drawFilling(blurred, in: full, context: context)
-        } else {
-            // 取不到封面时给一块中性暗底：白字仍然读得出来，也不会像加载失败。
-            context.setFillColor(CGColor(red: 0.10, green: 0.10, blue: 0.11, alpha: 1))
-            context.fill(full)
+    /// 取色顺序：metadata 里的 `extracted_color`（与播放页取色底同一个值）→ 封面平均色 →
+    /// 中性暗底。中间那两条都拿不到时也不能留白，白字压白底直接看不见。
+    private static func resolvedBackground(_ content: Content) -> UIColor {
+        if let color = color(fromHex: content.backgroundColorHex) {
+            return balanced(color)
         }
+        if let cover = content.cover, let average = averageColor(of: cover) {
+            return balanced(average)
+        }
+        return UIColor(white: 0.10, alpha: 1)
     }
 
-    private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+    /// 把"太亮 / 太中间调"的封面色调到能压字的那一档：
+    ///
+    /// · 很亮（白封面）→ 压到 0.9 的亮度，用黑字；
+    /// · 很暗 → 保持，用白字；
+    /// · 中间调（灰、饱和中等）→ 压到 0.40 并保留色相，改用白字 ——
+    ///   中间调上黑字和白字都糊，这是唯一稳的一档。
+    private static func balanced(_ color: UIColor) -> UIColor {
+        let luminance = relativeLuminance(of: color)
+        if luminance >= 0.72 {
+            return brightnessCapped(color, at: 0.9)
+        }
+        if luminance < 0.30 {
+            return color
+        }
+        return brightnessCapped(color, at: 0.40)
+    }
 
-    private static func blurredImage(_ cover: UIImage) -> UIImage? {
-        guard let source = cover.cgImage, source.width > 0 else { return nil }
-        let smallWidth: CGFloat = 160
-        let scale = smallWidth / CGFloat(source.width)
-        let input = CIImage(cgImage: source).transformed(
-            by: CGAffineTransform(scaleX: scale, y: scale)
-        )
-        let blurred = input
-            .clampedToExtent()
-            .applyingGaussianBlur(sigma: smallWidth * 0.05)
-            .cropped(to: input.extent)
-        guard let cgImage = ciContext.createCGImage(blurred, from: input.extent) else {
+    /// 压亮度、保留色相：白封面回来的近白色要压成"深一点的同色"，字才读得清。
+    private static func brightnessCapped(_ color: UIColor, at ceiling: CGFloat) -> UIColor {
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return color
+        }
+        guard brightness > ceiling else { return color }
+        return UIColor(hue: hue, saturation: saturation, brightness: ceiling, alpha: alpha)
+    }
+
+    private static func inkColor(on background: UIColor) -> UIColor {
+        relativeLuminance(of: background) >= 0.55
+            ? UIColor(white: 0.06, alpha: 1)
+            : UIColor(white: 1, alpha: 1)
+    }
+
+    private static func relativeLuminance(of color: UIColor) -> CGFloat {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return 0
+        }
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+
+    /// 解析 `#RRGGBB` / `RRGGBB` / `AARRGGBB`。仓库里那份同名工具是文件私有的，这里不跨文件借。
+    private static func color(fromHex raw: String?) -> UIColor? {
+        guard var hex = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !hex.isEmpty else {
             return nil
         }
-        return UIImage(cgImage: cgImage)
+        if hex.hasPrefix("#") { hex.removeFirst() }
+        guard hex.count == 6 || hex.count == 8, let value = UInt64(hex, radix: 16) else {
+            return nil
+        }
+        let red, green, blue: CGFloat
+        if hex.count == 8 {
+            red = CGFloat((value >> 16) & 0xFF) / 255
+            green = CGFloat((value >> 8) & 0xFF) / 255
+            blue = CGFloat(value & 0xFF) / 255
+        } else {
+            red = CGFloat((value >> 16) & 0xFF) / 255
+            green = CGFloat((value >> 8) & 0xFF) / 255
+            blue = CGFloat(value & 0xFF) / 255
+        }
+        return UIColor(red: red, green: green, blue: blue, alpha: 1)
     }
 
-    /// 用 `UIImage.draw` 而不是 `CGContext.draw`：UIKit 的绘制上下文是**翻转的**
-    /// （原点在左上、y 向下），CGImage 直接交给 `CGContext` 会上下颠倒，而 UIKit 这条路
-    /// 会把方向处理掉 —— 同一张图在两种画法下是镜像的，别把两者混着用。
-    private static func drawFilling(_ image: UIImage, in rect: CGRect, context: CGContext) {
-        let size = image.size
-        guard size.width >= 1, size.height >= 1 else { return }
-        let scale = max(rect.width / size.width, rect.height / size.height)
-        let drawn = CGSize(width: size.width * scale, height: size.height * scale)
-        let destination = CGRect(
-            x: rect.midX - drawn.width / 2,
-            y: rect.midY - drawn.height / 2,
-            width: drawn.width,
-            height: drawn.height
+    private static func averageColor(of image: UIImage) -> UIColor? {
+        guard let source = image.cgImage else { return nil }
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        let space = CGColorSpaceCreateDeviceRGB()
+        let drawn = pixel.withUnsafeMutableBufferPointer { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 4,
+                space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else {
+                return false
+            }
+            context.interpolationQuality = .medium
+            context.draw(source, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            return true
+        }
+        guard drawn else { return nil }
+        return UIColor(
+            red: CGFloat(pixel[0]) / 255,
+            green: CGFloat(pixel[1]) / 255,
+            blue: CGFloat(pixel[2]) / 255,
+            alpha: 1
         )
-        UIGraphicsPushContext(context)
-        defer { UIGraphicsPopContext() }
-        image.draw(in: destination)
     }
 
-    /// 上下渐变压暗。白字要压在任意亮度的封面上都读得出来，
-    /// 而分享图常常被缩到聊天窗口那样的小尺寸，底不够暗时字会糊成一片。
-    private static func drawScrim(in context: CGContext) {
+    private static func drawBackground(_ color: UIColor, in context: CGContext) {
+        let full = CGRect(origin: .zero, size: cardSize)
+        context.setFillColor(color.cgColor)
+        context.fill(full)
+
+        // 上下各一层极轻的明暗：纯平色在聊天列表里看着像一块贴纸，压一点更接近原生那张卡。
         let colors = [
-            UIColor(white: 0, alpha: 0.28).cgColor,
-            UIColor(white: 0, alpha: 0.46).cgColor,
-            UIColor(white: 0, alpha: 0.72).cgColor
+            UIColor(white: 1, alpha: 0.05).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor,
+            UIColor(white: 0, alpha: 0.10).cgColor
         ] as CFArray
         let locations: [CGFloat] = [0, 0.55, 1]
         guard let gradient = CGGradient(
@@ -112,68 +180,140 @@ enum LyricShareCardRenderer {
         )
     }
 
-    // MARK: - 歌词区
+    // MARK: - 版式常量
 
-    private static let margin: CGFloat = 96
+    private static let margin: CGFloat = 88
+    private static let coverSide: CGFloat = 112
+    private static let coverTop: CGFloat = 128
+    private static let headerGap: CGFloat = 28
+    private static let titleSize: CGFloat = 46
+    private static let artistSize: CGFloat = 36
     private static let romanizationSize: CGFloat = 36
-    private static let translationSize: CGFloat = 44
-    private static let blockGap: CGFloat = 40
-    private static let lineSpacingRatio: CGFloat = 0.24
+    private static let translationSize: CGFloat = 42
+    private static let creditSize: CGFloat = 26
+    private static let blockGap: CGFloat = 26
+    private static let lineSpacingRatio: CGFloat = 0.18
 
-    private static func drawLyricBlock(_ content: Content, in context: CGContext) {
-        let column = columnWidth
+    private static var columnWidth: CGFloat {
+        cardSize.width - margin * 2
+    }
+
+    // MARK: - 顶部（小封面 + 曲名 / 歌手）
+
+    private static func drawHeader(_ content: Content, ink: UIColor, in context: CGContext) {
+        var textX = margin
+        if let cover = content.cover {
+            let rect = CGRect(x: margin, y: coverTop, width: coverSide, height: coverSide)
+            UIGraphicsPushContext(context)
+            UIBezierPath(roundedRect: rect, cornerRadius: 12).addClip()
+            let scale = max(rect.width / cover.size.width, rect.height / cover.size.height)
+            let drawn = CGSize(
+                width: cover.size.width * scale,
+                height: cover.size.height * scale
+            )
+            cover.draw(
+                in: CGRect(
+                    x: rect.midX - drawn.width / 2,
+                    y: rect.midY - drawn.height / 2,
+                    width: drawn.width,
+                    height: drawn.height
+                )
+            )
+            UIGraphicsPopContext()
+            textX = rect.maxX + headerGap
+        }
+
+        let textWidth = cardSize.width - margin - textX
+        let titleHeight = height(of: content.title, fontSize: titleSize, weight: .semibold, width: textWidth)
+        let artistHeight = height(of: content.artist, fontSize: artistSize, weight: .regular, width: textWidth)
+        let total = titleHeight + 6 + artistHeight
+        let top = coverTop + max((coverSide - total) / 2, 0)
+
+        if !content.title.isEmpty {
+            draw(
+                content.title,
+                fontSize: titleSize,
+                weight: .semibold,
+                color: ink,
+                alignment: .left,
+                in: CGRect(x: textX, y: top, width: textWidth, height: titleHeight),
+                context: context
+            )
+        }
+        if !content.artist.isEmpty {
+            draw(
+                content.artist,
+                fontSize: artistSize,
+                weight: .regular,
+                color: ink.withAlphaComponent(0.66),
+                alignment: .left,
+                in: CGRect(
+                    x: textX,
+                    y: top + titleHeight + 6,
+                    width: textWidth,
+                    height: artistHeight
+                ),
+                context: context
+            )
+        }
+    }
+
+    // MARK: - 歌词
+
+    private static func drawLyricBlock(_ content: Content, ink: UIColor, in context: CGContext) {
         let romanization = (content.romanization ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let translation = (content.translation ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let blockTop = cardSize.height * 0.28
-        let blockBottom = cardSize.height - 430
+        let blockTop = coverTop + coverSide + 84
+        let blockBottom = cardSize.height - 190
 
         let romanizationHeight = height(
             of: romanization,
             fontSize: romanizationSize,
             weight: .regular,
-            column: column
+            width: columnWidth
         )
         let translationHeight = height(
             of: translation,
             fontSize: translationSize,
             weight: .regular,
-            column: column
+            width: columnWidth
         )
         let fixed = romanizationHeight + translationHeight
             + (romanization.isEmpty ? 0 : blockGap)
             + (translation.isEmpty ? 0 : blockGap)
 
-        // 主歌词：从 84pt 起按 6% 一档缩，缩到 46pt 为止。
+        // 主歌词：从 96pt 起按 6% 一档缩，缩到 56pt 为止。
         // 再放不下就让它溢出 —— 截断歌词比溢出更糟，用户无法知道少了什么。
-        var lyricSize: CGFloat = 84
+        var lyricSize: CGFloat = 96
         var lyricHeight = height(
             of: content.lyric,
             fontSize: lyricSize,
             weight: .semibold,
-            column: column
+            width: columnWidth
         )
-        let available = max(blockBottom - blockTop - fixed, 200)
-        while lyricHeight > available, lyricSize > 46 {
+        let available = max(blockBottom - blockTop - fixed, 240)
+        while lyricHeight > available, lyricSize > 56 {
             lyricSize *= 0.94
             lyricHeight = height(
                 of: content.lyric,
                 fontSize: lyricSize,
                 weight: .semibold,
-                column: column
+                width: columnWidth
             )
         }
 
         let total = fixed + lyricHeight
-        var y = blockTop + max((blockBottom - blockTop - total) / 2, 0)
+        var y = blockTop + max((blockBottom - blockTop - total) * 0.42, 0)
 
         if !romanization.isEmpty {
             draw(
                 romanization,
                 fontSize: romanizationSize,
                 weight: .regular,
-                alpha: 0.72,
-                in: CGRect(x: margin, y: y, width: column, height: romanizationHeight),
+                color: ink.withAlphaComponent(0.62),
+                alignment: .left,
+                in: CGRect(x: margin, y: y, width: columnWidth, height: romanizationHeight),
                 context: context
             )
             y += romanizationHeight + blockGap
@@ -182,8 +322,9 @@ enum LyricShareCardRenderer {
             content.lyric,
             fontSize: lyricSize,
             weight: .semibold,
-            alpha: 1,
-            in: CGRect(x: margin, y: y, width: column, height: lyricHeight),
+            color: ink,
+            alignment: .left,
+            in: CGRect(x: margin, y: y, width: columnWidth, height: lyricHeight),
             context: context
         )
         y += lyricHeight
@@ -193,69 +334,57 @@ enum LyricShareCardRenderer {
                 translation,
                 fontSize: translationSize,
                 weight: .regular,
-                alpha: 0.82,
-                in: CGRect(x: margin, y: y, width: column, height: translationHeight),
+                color: ink.withAlphaComponent(0.74),
+                alignment: .left,
+                in: CGRect(x: margin, y: y, width: columnWidth, height: translationHeight),
                 context: context
             )
         }
     }
 
-    // MARK: - 页脚（曲名 / 歌手 / 署名）
+    // MARK: - 底沿署名
 
-    private static func drawFooter(_ content: Content, in context: CGContext) {
-        let column = columnWidth
-        let entries: [(text: String, size: CGFloat, weight: UIFont.Weight, alpha: CGFloat)] = [
-            (content.title, 46, .semibold, 1),
-            (content.artist, 38, .regular, 0.82),
-            (content.credit, 28, .regular, 0.55)
-        ]
-        let visible = entries.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard !visible.isEmpty else { return }
-
-        let heights = visible.map {
-            height(of: $0.text, fontSize: $0.size, weight: $0.weight, column: column)
-        }
-        let gap: CGFloat = 12
-        let total = heights.reduce(0, +) + gap * CGFloat(max(visible.count - 1, 0))
-        var y = cardSize.height - 120 - total
-
-        for (index, entry) in visible.enumerated() {
-            draw(
-                entry.text,
-                fontSize: entry.size,
-                weight: entry.weight,
-                alpha: entry.alpha,
-                in: CGRect(x: margin, y: y, width: column, height: heights[index]),
-                context: context
-            )
-            y += heights[index] + gap
-        }
+    private static func drawFooter(_ content: Content, ink: UIColor, in context: CGContext) {
+        let credit = content.credit.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !credit.isEmpty else { return }
+        let creditHeight = height(
+            of: credit,
+            fontSize: creditSize,
+            weight: .regular,
+            width: columnWidth
+        )
+        draw(
+            credit,
+            fontSize: creditSize,
+            weight: .regular,
+            color: ink.withAlphaComponent(0.48),
+            alignment: .left,
+            in: CGRect(
+                x: margin,
+                y: cardSize.height - 120 - creditHeight,
+                width: columnWidth,
+                height: creditHeight
+            ),
+            context: context
+        )
     }
 
-    // MARK: - 文字工具
-
-    private static var columnWidth: CGFloat {
-        cardSize.width - margin * 2
-    }
+    // MARK: - 文字工具（左对齐，与原生那张卡一致）
 
     private static func height(
         of text: String,
         fontSize: CGFloat,
         weight: UIFont.Weight,
-        column: CGFloat
+        width: CGFloat
     ) -> CGFloat {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return 0 }
-        let bounds = attributed(
-            trimmed,
-            fontSize: fontSize,
-            weight: weight,
-            alpha: 1
-        ).boundingRect(
-            with: CGSize(width: column, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
-        )
+        let bounds = attributed(trimmed, fontSize: fontSize, weight: weight, color: .black)
+            .boundingRect(
+                with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                context: nil
+            )
         return ceil(bounds.height)
     }
 
@@ -263,20 +392,20 @@ enum LyricShareCardRenderer {
         _ text: String,
         fontSize: CGFloat,
         weight: UIFont.Weight,
-        alpha: CGFloat,
+        color: UIColor,
+        alignment: NSTextAlignment,
         in rect: CGRect,
         context: CGContext
     ) {
         guard rect.height > 0 else { return }
-        // `NSAttributedString.draw` 画到"当前"上下文上，而这里拿到的是显式传入的那一个；
-        // 压进去再弹出来，调用点就不依赖自己正处在渲染块里。
         UIGraphicsPushContext(context)
         defer { UIGraphicsPopContext() }
         attributed(
             text,
             fontSize: fontSize,
             weight: weight,
-            alpha: alpha
+            color: color,
+            alignment: alignment
         ).draw(
             with: rect,
             options: [.usesLineFragmentOrigin, .usesFontLeading],
@@ -288,26 +417,20 @@ enum LyricShareCardRenderer {
         _ text: String,
         fontSize: CGFloat,
         weight: UIFont.Weight,
-        alpha: CGFloat
+        color: UIColor,
+        alignment: NSTextAlignment = .left
     ) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
+        paragraph.alignment = alignment
         paragraph.lineSpacing = fontSize * lineSpacingRatio
         paragraph.lineBreakMode = .byWordWrapping
-
-        // 白字压在模糊封面上容易和底糊在一起，加一点阴影把字拉出来。
-        let shadow = NSShadow()
-        shadow.shadowColor = UIColor(white: 0, alpha: 0.45)
-        shadow.shadowOffset = CGSize(width: 0, height: 2)
-        shadow.shadowBlurRadius = 12
 
         return NSAttributedString(
             string: text,
             attributes: [
                 .font: UIFont.systemFont(ofSize: fontSize, weight: weight),
-                .foregroundColor: UIColor(white: 1, alpha: alpha),
-                .paragraphStyle: paragraph,
-                .shadow: shadow
+                .foregroundColor: color,
+                .paragraphStyle: paragraph
             ]
         )
     }

@@ -3,11 +3,11 @@ import UIKit
 
 /// 「把这一句歌词做成图片发出去」。
 ///
-/// 链路：长按歌词行 → 这一层在后台拼图（封面走 `LyricsArtworkResolver` 的
-/// 同一套元数据取法，因此和歌词背景、锁屏用的是同一张图）→ 主线程弹系统分享面板。
+/// 链路：长按歌词行 → 主线程上把播放器那一份快照取全（曲名/歌手、封面地址、封面取色）→
+/// 后台队列拼图 → 主线程弹系统分享面板。
 ///
-/// 为什么自己在后台队列上跑、而不是用 Swift concurrency：绘制是同步的 CoreGraphics，
-/// 而调用点（SwiftUI 手势回调）在主线程。放进一个串行队列最省事，也不会和播放器那一层
+/// 为什么手动分线程、而不是用 Swift concurrency：绘制是同步的 CoreGraphics，
+/// 调用点（SwiftUI 手势回调）在主线程。放进一个串行队列最省事，也不会和播放器那一层
 /// 抢主线程的帧预算。
 enum LyricShareCard {
 
@@ -29,9 +29,14 @@ enum LyricShareCard {
         let lyric = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lyric.isEmpty else { return }
 
-        // iOS 27 播放页里的页内歌词层挂载时曲名/歌手传的是空串（那一层的标题由播放器自己画），
-        // 分享卡上不能跟着空着 —— 从播放器 metadata 兜底，两边都没有就留空，不编。
-        let names = trackNames(title: title, artist: artist)
+        // ⚠️ 这些都在**主线程**上取：`statefulPlayer.currentTrack()` / `metadata()` 是播放器
+        // 那边的快照，给后台队列留下一个"回头问它"的口子迟早会读到半新半旧的状态。
+        let track = statefulPlayer?.currentTrack()
+            ?? nowPlayingScrollViewController?.loadedTrack
+        let metadata = track?.metadata()
+        let names = resolvedNames(title: title, artist: artist, metadata: metadata)
+        let artworkURL = track.flatMap { LyricsArtworkResolver.artworkURL(for: $0) }
+
         var content = LyricShareCardRenderer.Content(
             title: names.title,
             artist: names.artist,
@@ -39,12 +44,13 @@ enum LyricShareCard {
             romanization: trimmed(line.romanization),
             translation: trimmed(line.translation),
             credit: credit.trimmingCharacters(in: .whitespacesAndNewlines),
-            cover: nil
+            cover: nil,
+            backgroundColorHex: metadata?["extracted_color"]
         )
         writeDebugLog("[LyricsShare] preparing — \(content.title) / \(String(lyric.prefix(24)))")
 
         renderQueue.async {
-            content.cover = coverImage()
+            content.cover = coverImage(url: artworkURL)
             let image = LyricShareCardRenderer.image(for: content)
             DispatchQueue.main.async {
                 present(image)
@@ -52,11 +58,32 @@ enum LyricShareCard {
         }
     }
 
+    // MARK: - 快照
+
+    /// 曲名/歌手。
+    ///
+    /// iOS 27 播放页里那一层（`NowPlayingLyricsHost`）挂载时传的是两个空串 —— 它的标题由
+    /// 播放器自己画。分享卡不能跟着空着，所以缺哪一项就从 metadata 补哪一项；
+    /// 两边都没有就保持空，不编造。
+    private static func resolvedNames(
+        title: String,
+        artist: String,
+        metadata: [String: String]?
+    ) -> (title: String, artist: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTitle.isEmpty || trimmedArtist.isEmpty else {
+            return (trimmedTitle, trimmedArtist)
+        }
+        let resolvedTitle = trimmedTitle.isEmpty ? (metadata?["title"] ?? "") : trimmedTitle
+        let resolvedArtist = trimmedArtist.isEmpty ? (metadata?["artist_name"] ?? "") : trimmedArtist
+        return (resolvedTitle, resolvedArtist)
+    }
+
     // MARK: - 封面
 
-    private static func coverImage() -> UIImage? {
-        let track = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
-        guard let url = LyricsArtworkResolver.artworkURL(for: track) else {
+    private static func coverImage(url: URL?) -> UIImage? {
+        guard let url else {
             writeDebugLog("[LyricsShare] no artwork URL for this track")
             return nil
         }
@@ -120,29 +147,5 @@ enum LyricShareCard {
     private static func trimmed(_ text: String?) -> String? {
         let value = (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
-    }
-
-    /// 曲名/歌手兜底。
-    ///
-    /// iOS 27 播放页里那一层（`NowPlayingLyricsHost`）挂载时传的是两个空串 —— 它的标题由
-    /// 播放器自己画。分享卡不能跟着空着，所以缺哪一项就从播放器 metadata 补哪一项；
-    /// 两边都没有就保持空，不编造。
-    private static func trackNames(
-        title: String,
-        artist: String
-    ) -> (title: String, artist: String) {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedTitle.isEmpty || trimmedArtist.isEmpty else {
-            return (trimmedTitle, trimmedArtist)
-        }
-        guard let track = statefulPlayer?.currentTrack()
-            ?? nowPlayingScrollViewController?.loadedTrack else {
-            return (trimmedTitle, trimmedArtist)
-        }
-        let metadata = track.metadata()
-        let resolvedTitle = trimmedTitle.isEmpty ? (metadata["title"] ?? "") : trimmedTitle
-        let resolvedArtist = trimmedArtist.isEmpty ? (metadata["artist_name"] ?? "") : trimmedArtist
-        return (resolvedTitle, resolvedArtist)
     }
 }
