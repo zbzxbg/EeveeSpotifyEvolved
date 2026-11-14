@@ -1,5 +1,8 @@
 import Foundation
 import AudioToolbox
+// `UnsafeMutableAudioBufferListPointer` 是 CoreAudio 的 Swift 扩展类型，
+// AudioToolbox 不转出它，单独 import 才可见。
+import CoreAudio
 import os
 
 /// 音频输出域探针（只读诊断）。
@@ -199,8 +202,11 @@ enum AudioTapProbe {
         numberFrames: UInt32,
         ioData: UnsafeMutablePointer<AudioBufferList>?
     ) -> OSStatus {
-        let postRender = AudioUnitRenderActionFlags(rawValue: kAudioUnitRenderAction_PostRender)
-        guard actionFlags.pointee.contains(postRender) else { return noErr }
+        // `AudioUnitRenderActionFlags` 在 Swift 里是 OptionSet，C 侧的
+        // `kAudioUnitRenderAction_PostRender` 没有导成全局常量，只有这个静态成员。
+        guard actionFlags.pointee.contains(AudioUnitRenderActionFlags.unitRenderAction_PostRender) else {
+            return noErr
+        }
         guard let ioData else { return noErr }
         // render 线程：拿不到锁就丢掉这一拍，绝不阻塞。
         guard os_unfair_lock_trylock(lock) else { return noErr }
@@ -229,7 +235,9 @@ enum AudioTapProbe {
             let pointer = data.assumingMemoryBound(to: Float.self)
             var index = 0
             while index < count {
-                let value = Double(pointer[index])
+                // 显式标出 Float，别让 `Double(...)` 的重载解析依赖推断。
+                let sample: Float = pointer[index]
+                let value = Double(sample)
                 sum += value * value
                 let magnitude = abs(value)
                 if magnitude > peak { peak = magnitude }

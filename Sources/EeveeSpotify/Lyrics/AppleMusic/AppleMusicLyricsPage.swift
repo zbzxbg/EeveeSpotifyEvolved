@@ -132,8 +132,6 @@ struct AppleMusicLyricsPage: View {
     /// 3. **点行不跳转** —— 合成行的时间是 0，点了会把歌拉回开头。
     let isStatic: Bool
 
-    let isStatic: Bool
-
     init(
         lines: [LyricLine],
         playbackTime: TimeInterval,
