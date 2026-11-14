@@ -622,7 +622,16 @@ final class LockScreenLyricsController {
                     completion(nil)
                     return
                 }
-                if let ready = self.previewImage(for: artworkID) {
+                // 系统来取预览图。这一行是"它到底按 ID 重新取了几次"的唯一证据：
+                // 是否要给每行切片（Canvas 叠词那条路）取决于这个节奏。
+                let cached = self.previewImage(for: artworkID)
+                writeDebugLog(
+                    "[\(LockScreenLyrics.logTag)] still asked — line \(location.index)"
+                        + "\(location.resting ? "r" : "") \(aspect.rawValue)"
+                        + " \(Int(wanted.width))x\(Int(wanted.height))"
+                        + (cached == nil ? " cold" : " warm")
+                )
+                if let ready = cached {
                     completion(ArtworkImageScaling.fill(ready, to: wanted))
                     return
                 }
@@ -649,6 +658,10 @@ final class LockScreenLyricsController {
                     completion(nil)
                     return
                 }
+                writeDebugLog(
+                    "[\(LockScreenLyrics.logTag)] video asked — line \(location.index)"
+                        + "\(location.resting ? "r" : "") \(aspect.rawValue)"
+                )
                 Task { [weak self] in
                     guard let self else {
                         completion(nil)
@@ -703,6 +716,9 @@ final class LockScreenLyricsController {
             )
         )
         if FileManager.default.fileExists(atPath: file.path) {
+            writeDebugLog(
+                "[\(LockScreenLyrics.logTag)] clip reused — \(file.lastPathComponent)"
+            )
             return file
         }
 
@@ -712,6 +728,11 @@ final class LockScreenLyricsController {
             return await running.value
         }
         let size = LyricClipRenderer.clipSize(for: aspect)
+        // 编码一条要多久、每段名义时长是多少 —— 决定"按行切片"能不能对得上时间轴。
+        writeDebugLog(
+            "[\(LockScreenLyrics.logTag)] clip encoding — line \(lineIndex)"
+                + "\(resting ? "r" : "") \(aspect.rawValue) \(String(format: "%.1f", seconds))s"
+        )
         let task = Task<URL?, Never> {
             do {
                 try FileManager.default.createDirectory(
