@@ -70,7 +70,7 @@ enum SpotifyCanvasClient {
         writeDebugLog(
             "[\(LockScreenArtwork.logTag)] canvaz — "
                 + (canvas == nil ? "none" : "video")
-                + ", \(data.count) byte(s)"
+                + ", \(uri), \(data.count) byte(s)"
                 + ", type=\(contentType), server=\(server), head=\(magic) (\(shape))"
                 + ", body=\(body)"
         )
