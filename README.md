@@ -108,7 +108,7 @@ Common issues, a longer FAQ, and why some Premium features stay locked: **[commo
 ## Requirements
 
 - iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
-- Spotify 9.2.x (the baseline) or 9.1.x — current public release: [`v2.1.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
+- Spotify 9.2.x (the baseline) or 9.1.x — current public release: [`v2.2.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
 
 | Spotify | How far it has been checked |
 |---|---|
