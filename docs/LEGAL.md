@@ -17,6 +17,6 @@ Derived *technical identifiers* needed to attach to the client's own extension p
 
 ## Rights holders
 
-If you are a rights holder and want something removed, open an issue or contact the maintainer directly and it will be removed. There is no need for a formal takedown notice. The same applies to third-party projects credited in [CREDITS.md](CREDITS.md).
+If you are the rights holder and wish to have certain content removed, please submit an issue or contact the developer directly at ‘yuanhainihu@outlook.com’; the relevant content will be removed. There is no need to submit a formal takedown notice. This provision also applies to third-party projects where the source is credited in [CREDITS.md](CREDITS.md).
 
 > This is not legal advice. It is a statement of what the repository does and does not contain, which is the part a maintainer can actually control.
