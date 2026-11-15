@@ -70,10 +70,9 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - Both read the decoded PCM through a read-only tap: the audio itself is never altered. If a track is already playing when you turn them on, pause and resume once so the tap attaches.
 - **Audio effects** — a 10-band graphic equalizer (31.5 Hz to 16 kHz, ±12 dB) plus a preamp, inserted between Spotify's own source unit and the output unit. The first time you switch it on, restart Spotify so the tap can wrap the output callback; after that the sliders apply live. Lower the preamp if loud tracks start clipping. Settings → Advanced features → Audio Effects.
 
-### Gestures & Live Activity
+### Gestures
 
 - **Head gestures** — nod once for the next track, shake once for the previous one. Reads the head-attitude stream that AirPods Pro / AirPods Max expose through Core Motion, so it needs headphones with motion sensors. Detection is deliberately conservative (two opposite swings, 1.5 s cooldown) and the switch is off by default. Settings → Advanced features → Head Gestures.
-- **Live Activity** — the current track on the lock screen and in the Dynamic Island, with a progress line the system advances on its own. The card comes from a widget extension packaged into the IPA; a build made without it, or signed by a tool that skips nested extensions, simply shows no card. Settings → Advanced features → Live Activity.
 - The IPA build adds `NSMotionUsageDescription` to Spotify's Info.plist for the head gestures; the switch is inert when that string is missing.
 
 ## Install

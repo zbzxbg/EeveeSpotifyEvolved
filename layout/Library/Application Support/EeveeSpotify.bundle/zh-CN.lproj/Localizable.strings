@@ -478,13 +478,6 @@ music_haptics_strength_low = "低";
 music_haptics_strength_medium = "中";
 music_haptics_strength_high = "高";
 music_haptics_test = "试一下";
-// ── 高级页 · 实时活动（锁屏 + 灵动岛）──
-live_activity_title = "实时活动";
-settings_sub_live_activity = "锁屏与灵动岛上的正在播放卡片";
-live_activity_enabled = "显示正在播放卡片";
-live_activity_description = "在锁屏和灵动岛上画一张当前曲目的卡片，换歌或播放 / 暂停时更新一次。卡片由随包打进 IPA 的 widget 扩展提供 —— 没带上它、或签名工具不签嵌套扩展的安装方式不会有卡；还要在 iOS 设置里允许 Spotify 使用实时活动。";
-live_activity_unavailable = "iOS 设置里给 Spotify 的「实时活动」是关着的，卡片不会出现。";
-
 // ── 高级页 · AirPods 头部手势 ──
 head_gestures_title = "头部手势";
 settings_sub_head_gestures = "点头切下一首、摇头切上一首";
@@ -706,9 +699,9 @@ reduce_interventions_scope_yourlibaryx = "音乐库";
 now_playing_section = "歌曲播放页";
 now_playing_style = "听歌页样式";
 now_playing_style_spotify = "Spotify原生";
-now_playing_style_immersive = "沉浸式";
 now_playing_style_apple_music = "Apple Music式";
-now_playing_style_description = "若选择Spotify原生、则不更改听歌页。若选择沉浸式，则听歌页仿照kumone。若选择Apple Music式，则听歌页仿照Apple Music。\n沉浸式与Spotify原生两档暂停止维护，选择后可能会有 Bug。";
+now_playing_style_description = "若选择Spotify原生，则保留 Spotify 自己的听歌页版式；该档的「预览歌词」暂停维护，会出现不遵循部分歌词设置的情况（例如开启日语罗马化后，歌词正文仍显示日语）。若选择Apple Music式，则听歌页仿照 Apple Music。";
+now_playing_style_podcast_warning = "播客请用 Spotify 原生样式：Apple Music 式的布局是按照音乐播放页尺寸做的，播客控件会被挤出屏幕。";
 // ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见

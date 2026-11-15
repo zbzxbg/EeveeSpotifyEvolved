@@ -483,13 +483,6 @@ music_haptics_strength_low = "Low";
 music_haptics_strength_medium = "Medium";
 music_haptics_strength_high = "High";
 music_haptics_test = "Try a tap";
-// ── Advanced page · Live Activity (lock screen + Dynamic Island) ──
-live_activity_title = "Live Activity";
-settings_sub_live_activity = "Now Playing card on the lock screen";
-live_activity_enabled = "Show a Now Playing card";
-live_activity_description = "Draws a card with the current track on the lock screen and in the Dynamic Island, and updates it when the track or the play state changes. The card comes from the widget extension packaged into the IPA: builds made without it, or signed by a tool that skips nested extensions, will not show one. Live Activities must also be allowed for Spotify in iOS Settings.";
-live_activity_unavailable = "Live Activities are turned off for Spotify in the iOS Settings app, so no card can appear.";
-
 // ── Advanced page · AirPods head gestures ──
 head_gestures_title = "Head Gestures";
 settings_sub_head_gestures = "Nod for next track, shake for previous";
@@ -718,9 +711,9 @@ now_playing_section = "Now-playing page";
 // now_playing_style_description. The underlying keys are unchanged (see NowPlayingStyle).
 now_playing_style = "Now-playing style";
 now_playing_style_spotify = "Spotify";
-now_playing_style_immersive = "Immersive";
 now_playing_style_apple_music = "Apple Music style";
-now_playing_style_description = "Spotify = the stock player. Immersive = the player is modeled on kumone. Apple Music style = the player is modeled on Apple Music.\nImmersive and Spotify are temporarily unmaintained; picking either one may have bugs.";
+now_playing_style_description = "Spotify = Spotify's own player layout. Its lyric preview is unmaintained, so some lyric settings are ignored there (Japanese romanisation, for example, leaves the lyrics in Japanese). Apple Music style = the player is modelled on Apple Music.";
+now_playing_style_podcast_warning = "Use Spotify for podcasts: the Apple Music-style layout is sized for the music player, and a podcast's controls get pushed off screen.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.

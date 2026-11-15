@@ -223,14 +223,6 @@ struct EeveeSettingsView: View {
                     imageSystemName: "text.quote"
                 ) { AnyView(EeveeLockScreenLyricsSettingsView()) }
 
-                // 实时活动：锁屏 / 灵动岛上那张「正在播放」卡片 —— 与上面两条锁屏项同类。
-                // （它依赖随包打进 IPA 的 widget 扩展，页脚会说明。）
-                settingsRow(
-                    color: Color(hex: "#32D74B"),
-                    title: "live_activity_title",
-                    subtitle: "settings_sub_live_activity",
-                    imageSystemName: "widget.small"
-                ) { AnyView(EeveeLiveActivitySettingsView()) }
             }
 
             // ── ③ 进阶
@@ -291,8 +283,7 @@ struct EeveeSettingsView: View {
             //
             // 这一组装的是「要连到系统能力上、都不是纯 UI」的功能：音频特征驱动的律动与触感、
             // 音频效果、AirPods 头部姿态。它们默认全关，出错时影响面也比外观类开关大，
-            // 所以单独成组、不跟「外观」「进阶」混在一起。锁屏的实时活动归「外观」（与锁屏
-            // 封面/歌词同类）。
+            // 所以单独成组、不跟「外观」「进阶」混在一起。
             Section(header: Text("settings_group_high".localized)) {
                 settingsRow(
                     color: Color(hex: "#FF2D55"),

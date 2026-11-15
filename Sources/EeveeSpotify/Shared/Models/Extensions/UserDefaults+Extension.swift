@@ -39,8 +39,6 @@ extension UserDefaults {
     private static let musicHapticsStrengthKey = "musicHapticsStrength"
     /// AirPods 点头/摇头切歌（见 `HeadGestureControls`），默认关。
     private static let headGestureControlsEnabledKey = "headGestureControlsEnabled"
-    /// 锁屏 / 灵动岛的「实时活动」（见 `LiveActivityController`），默认关。
-    private static let liveActivityEnabledKey = "liveActivityEnabled"
     /// 音频效果（十段 EQ + 前置增益，见 `AudioDSP`），默认关。
     private static let dspEnabledKey = "dspEnabled"
     private static let dspPreampDbKey = "dspPreampDb"
@@ -125,7 +123,6 @@ extension UserDefaults {
         musicHapticsEnabledKey,
         musicHapticsStrengthKey,
         headGestureControlsEnabledKey,
-        liveActivityEnabledKey,
         dspEnabledKey,
         dspPreampDbKey,
         dspBandGainsDbKey,
@@ -524,19 +521,6 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: headGestureControlsEnabledKey)
-        }
-    }
-
-    /// 锁屏 / 灵动岛的「实时活动」，默认关。
-    ///
-    /// 侧载构建里 widget 扩展是随 IPA 一起打进去的；没签上嵌套扩展时这个开关开着也不会有卡，
-    /// 见 `LiveActivityController`。
-    static var liveActivityEnabled: Bool {
-        get {
-            container.object(forKey: liveActivityEnabledKey) as? Bool ?? false
-        }
-        set {
-            container.set(newValue, forKey: liveActivityEnabledKey)
         }
     }
 
@@ -1095,21 +1079,19 @@ extension UserDefaults {
 
     // MARK: - 听歌页（NPV）：仿 AM 的取色渐变底
     //
-    // 「**修改 Spotify 听歌页布局**」总开关。**默认开**。
+    // `nowPlayingLayout` —— **已删除的「沉浸式」档位留下的旧总开关**。
     //
-    // 它把这五件**结构改动**收进一颗开关（原来各占一行）：
+    // 它当年把那五件**结构改动**收进一颗开关（原来各占一行）：
     // · `nowPlayingBackdrop` —— 整页封面取色底；
     // · `nowPlayingOneScreen` —— 隐藏 Spotify 的播放页模块（卡片折叠 + 钉住列表）；
     // · `hideSingalongLine` —— 隐藏 Spotify 官方的单行歌词（含 `lyrics_under_cover_art_enabled` 那条 flag）；
     // · `hideNowPlayingPills` —— 隐藏「切换至视频 / 显示歌词」两颗胶囊；
     // · `nowPlayingLyricsInPlayer`—— 把（我们自己的）歌词画进播放器中段。
     //
-    // 语义：**总开关是这五件的唯一真相** —— 拨它时会把那五个键一起写成同一个值
-    // （见 `NowPlayingSettingsView.applyLayoutChange`），落地代码仍然读各自的键，
-    // 所以备份 / 导入看到的值与屏幕上的总开关永远一致。
-    //
-    // 那五颗键已经没有单独的 UI ⇒ 每次启动（以及每次导入备份之后）都由
-    // `normalizeNowPlayingLayoutKeys` 按总开关归一一次，理由写在该方法上。
+    // 沉浸式那一档删除之后，UI 上已经没有入口写这颗键；它现在只剩两件事：
+    // ① 参与 `nowPlayingAnyLayout`（老设备上它还是 true，结构件照旧生效）；
+    // ② 作为迁移信号 —— `normalizeNowPlayingLayoutKeys` 看到
+    //    `nowPlayingLayout && !nowPlayingIOS27` 就把用户迁到 `.appleMusic`。
     static var nowPlayingLayout: Bool {
         get {
             container.object(forKey: nowPlayingLayoutKey) as? Bool ?? true
@@ -1119,14 +1101,12 @@ extension UserDefaults {
         }
     }
 
-    /// 「iOS 27 听歌页」—— Apple Music（iOS 27）那一版的播放页（满屏封面）。**默认开**。
+    /// 「iOS 27 听歌页」—— Apple Music 那一版的播放页（满屏封面）。**默认开**。
     ///
-    /// 三档 Picker 的优先级见 `NowPlayingStyle`：这一颗开着就是 `.appleMusic`，
-    /// 旧总开关的值被忽略（与 `NowPlayingLyricsPlate.isEnabled` 里 `!nowPlayingIOS27` 那道门一致）。
-    /// 已经手动选过别的档的用户不受影响 —— 他们盘上已有明确的 `false`。
-    ///
-    /// 两者是**互斥**的两版布局：这颗开着时，旧那套「歌词进播放器」自动让位。
-    /// 结构类开关（取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊）两版**共用**，
+    /// 两档 Picker 的唯一真值见 `NowPlayingStyle`：这一颗开着就是 `.appleMusic`。
+    /// 它同时是旧那套「歌词进播放器」（`NowPlayingLyricsPlate.isEnabled`）的 `!` 门，
+    /// 所以两版布局互斥、开着时旧那套自动让位。
+    /// 结构类开关（取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊）两档**共用**，
     /// 统一看 `nowPlayingAnyLayout`。
     static var nowPlayingIOS27: Bool {
         get {
@@ -1160,7 +1140,19 @@ extension UserDefaults {
     /// —— 备份导入把单键写歪之后，用户再回到这一页时界面和听歌页才会一起收正。
     @discardableResult
     static func normalizeNowPlayingLayoutKeys() -> Int {
-        // 两版布局共用这四颗结构键 ⇒ 归一到「任一布局开着」。
+        // 「沉浸式」删除后的存量收口：
+        // · 选过它的人盘上是 `nowPlayingLayout = true`、`nowPlayingIOS27 = false` ⇒ 补上
+        //   `.appleMusic`（他们的意图是"我要改过的听歌页"，不是"我要 Spotify 原样"）；
+        // · **任何人**盘上的 `nowPlayingLayout` 都清成 false —— 旧那套「歌词进播放器」
+        //   （`NowPlayingLyricsPlate.isEnabled`）读它，留着 true 会和 AM 档同时挂载。
+        if nowPlayingLayout {
+            nowPlayingLayout = false
+            if !nowPlayingIOS27 {
+                nowPlayingIOS27 = true
+            }
+        }
+
+        // 两档布局共用这四颗结构键 ⇒ 归一到「任一布局开着」。
         let enabled = nowPlayingAnyLayout
         let keys = [
             nowPlayingBackdropKey,

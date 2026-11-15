@@ -1,48 +1,47 @@
 import Foundation
 
-/// 「听歌页样式」三态。
+/// 「听歌页样式」两态。
 ///
-/// ## 为什么合并
-/// 原来这里是**两颗各自独立的 Toggle**（「修改Spotify听歌页布局」+「iOS 27 听歌页（满屏
-/// 封面）」），而它们在落地代码里本来就**互斥** —— `NowPlayingLyricsPlate.isEnabled` 里挂着
-/// `!nowPlayingIOS27`，两颗同时打开时新那版静默让位。与「首页顶部样式」是同一个教训
-/// （两颗 Toggle 互相打架 ⇒ 合成一个三态选择，见 `HomeHeaderStyle`）。
+/// ## 历史：三档 → 两档
 ///
-/// ## 三档
+/// 这里原来有三档：`.spotify` / `.immersive` / `.appleMusic`。**沉浸式已删除。**
+///
+/// 沉浸式是旧总开关 `nowPlayingLayout` 那一套（版式照 kumone：标题在顶、封面居中、
+/// 歌词占封面区）。它和 AM 档在落地代码里本来就互斥（`NowPlayingLyricsPlate.isEnabled`
+/// 里挂着 `!nowPlayingIOS27`），而且从来不是默认选中的那一档 ⇒ 实际上只剩
+/// "一套没人维护的档位 + 一批只在它下面生效的条件"。删掉它之后，用户盘上
+/// `nowPlayingLayout = true`、`nowPlayingIOS27 = false` 的存量由
+/// `normalizeNowPlayingLayoutKeys()` 迁到 `.appleMusic`。
+///
+/// ## 两档
 ///
 /// | 选项 | 键 | 屏上看到的 |
-/// | `.spotify` | 两个键都 false | Spotify 默认听歌页 |
-/// | `.immersive` | `nowPlayingLayout = true`、`nowPlayingIOS27 = false` | 整页取色底 + 藏官方模块/单行歌词/两颗胶囊 + 歌词进播放器 |
-/// | `.appleMusic` | `nowPlayingIOS27 = true`（`nowPlayingLayout` 的值**被忽略**） | 封面铺满上半屏、歌名压在封面下沿的过渡带 |
+/// |---|---|---|
+/// | `.spotify` | `nowPlayingIOS27 = false` | Spotify 默认听歌页 |
+/// | `.appleMusic` | `nowPlayingIOS27 = true` | 封面铺满上半屏、歌名压在封面下沿的过渡带 |
 ///
-/// `nowPlayingIOS27` 默认 `true`，新装/没动过这颗键的用户直接落在 `.appleMusic`。
+/// 两档**共用**的结构件（取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊）仍然看
+/// `nowPlayingAnyLayout`，不随这道选择器变化。
 ///
 /// ## 纪律
 ///
-/// * **不新增存储键**：底下的 `nowPlayingLayout` / `nowPlayingIOS27` 保持原样，备份 / 导入 /
-///   日志 / `normalizeNowPlayingLayoutKeys` 全都不受影响，也不需要写迁移。
-/// * 取值的**唯一真相仍在那两个键上**（`UserDefaults.nowPlayingStyle` 只是推导），
-///   所以设置页的 Picker、备份、日志永远说的是同一件事。
-/// * 选项名不带版本号，版本只留在说明文字里，系统换代时不用改选项名。
+/// * **不新增存储键**：真值仍然只在 `nowPlayingIOS27` 上，`nowPlayingStyle` 只是推导。
+/// * 设置页 Picker、备份、日志说的永远是同一件事。
 enum NowPlayingStyle: Int, CaseIterable, Hashable {
 
     /// Spotify 默认。
     case spotify
-    /// 旧那套（原「修改Spotify听歌页布局」总开关）：整页取色底 + 歌词进播放器。
-    case immersive
-    /// 新那套（原「iOS 27 听歌页」）：满屏封面 + AM 的控制条。
+    /// 封面铺满上半屏 + AM 的控制条（原来叫「iOS 27 听歌页」）。
     case appleMusic
 
     /// 显示名的 l10n 键。
     ///
     /// ⚠️ 写成键、由视图调 `.localized`（而不是在这里直接翻）—— `Tools/l10n_lint.py` 只认
-    /// 「字面量直接跟 `.localized`」的形状；在 enum 里翻会让这三个键被误报成未使用。
+    /// 「字面量直接跟 `.localized`」的形状；在 enum 里翻会让这两个键被误报成未使用。
     var titleKey: String {
         switch self {
         case .spotify:
             return "now_playing_style_spotify"
-        case .immersive:
-            return "now_playing_style_immersive"
         case .appleMusic:
             return "now_playing_style_apple_music"
         }
@@ -51,13 +50,8 @@ enum NowPlayingStyle: Int, CaseIterable, Hashable {
 
 extension UserDefaults {
 
-    /// 当前听歌页样式 —— **从原来那两个键推出来**（见 `NowPlayingStyle` 的"纪律"）。
-    ///
-    /// 优先级：`nowPlayingIOS27` 开着就是 `.appleMusic`（此时旧总开关的值被忽略，
-    /// 与落地代码里 `NowPlayingLyricsPlate.isEnabled` 那道门一致）。
+    /// 当前听歌页样式 —— **从 `nowPlayingIOS27` 推出来**（见 `NowPlayingStyle` 的"纪律"）。
     static var nowPlayingStyle: NowPlayingStyle {
-        if nowPlayingIOS27 { return .appleMusic }
-        if nowPlayingLayout { return .immersive }
-        return .spotify
+        nowPlayingIOS27 ? .appleMusic : .spotify
     }
 }

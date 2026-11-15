@@ -4,7 +4,7 @@ import Foundation
 /// 锁屏动态封面：把一段短视频交给系统的 Now Playing，锁屏（以及系统其它正在播放视图）
 /// 用它替换静态专辑封面。
 ///
-/// 与 Live Activity 的区别：这一层**不需要 appex、也不需要改 bundle id**。系统在
+/// 这一层**不需要 appex、也不需要改 bundle id**：系统在
 /// `MPNowPlayingInfoCenter.nowPlayingInfo` 里读到 `MPMediaItemAnimatedArtwork` 之后
 /// 自己起播放器，我们只负责"这一首对应哪个本地文件"。
 ///

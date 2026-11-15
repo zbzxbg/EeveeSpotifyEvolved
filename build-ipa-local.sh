@@ -12,18 +12,13 @@
 #      libroot (/var/jb/...) out of the dylib: this deb is only a dylib source,
 #      and a load-time libroot dependency crashes the app on TrollStore.
 #   3. Build zxPluginsInject.dylib — sideload compat shim (keychain redirect,
-#      group containers, CloudKit stub). LC-injected via ipapatch in step 7.
+#      group containers, CloudKit stub). LC-injected via ipapatch in step 6.
 #   4. Extract the deb to get dylib + bundle + framework.
 #   5. cyan inject those into the vanilla IPA → Outputs/IPAS/<name>.ipa (no patch)
-#   6. Build EeveeLiveActivity.appex — the Live Activity widget (lock screen +
-#      Dynamic Island), via Scripts/build-live-activity-appex.sh: plain swiftc,
-#      no Xcode project. It stays UNSIGNED — this script only produces unsigned
-#      IPAs and the signing tool on the user's side has to cover nested PlugIns
-#      too. Needs an iOS SDK; without one the widget is skipped with a warning.
-#   7. copy that, then ipapatch LC-inject zxPluginsInject into main exec + every
-#      appex → Outputs/IPAS/<name>-patched.ipa  ← TrollStore / sideload: this one
-#   8. Embed the appex in both, add NSSupportsLiveActivities /
-#      NSMotionUsageDescription to the host Info.plist, strip Watch.app.
+#   6. copy that, then ipapatch LC-inject zxPluginsInject into main exec →
+#      Outputs/IPAS/<name>-patched.ipa  ← TrollStore / sideload: this one
+#   7. strip Watch.app, drop UIDesignRequiresCompatibility, add
+#      NSMotionUsageDescription to the host Info.plist.
 #
 # Requires: theos, cyan (pyzule-rw), ipapatch, dpkg, ldid, plutil.
 
@@ -49,22 +44,22 @@ mkdir -p "$OUT_DIR"
 
 color() { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
 
-color "1/8  EeveeSwiftProtobuf.framework"
+color "1/7  EeveeSwiftProtobuf.framework"
 chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 
-color "2/8  theos make package"
+color "2/7  theos make package"
 # NO_JBROOT=1：这份 deb 只当 dylib 的来源，不发布。TrollStore / 侧载设备上
 # 没有 /var/jb，而 libroot 是加载期依赖，链上它 App 会直接起不来。
 THEOS_PACKAGE_SCHEME=rootless NO_JBROOT=1 make package FINALPACKAGE=1
 DEB_FILE=$(ls -t packages/com.eevee.spotify_*.deb 2>/dev/null | head -1)
 [ -n "$DEB_FILE" ] || { echo "deb not produced"; exit 1; }
 
-color "3/8  zxPluginsInject.dylib"
+color "3/7  zxPluginsInject.dylib"
 chmod +x Tools/build-zxpi.sh
 Tools/build-zxpi.sh >/dev/null
 
-color "4/8  extract deb"
+color "4/7  extract deb"
 DEB_EXTRACT="$REPO_DIR/Outputs/deb-extract"
 rm -rf "$DEB_EXTRACT"; mkdir -p "$DEB_EXTRACT"
 dpkg-deb -R "$DEB_FILE" "$DEB_EXTRACT"
@@ -73,7 +68,7 @@ BUNDLE_SRC=$(find "$DEB_EXTRACT" -type d -name 'EeveeSpotify.bundle' | head -1)
 FRAMEWORK_SRC=$(find "$DEB_EXTRACT" -type d -name 'EeveeSwiftProtobuf.framework' | head -1)
 [ -n "$DYLIB_SRC" ] || { echo "dylib not in deb"; exit 1; }
 
-color "5/8  cyan inject"
+color "5/7  cyan inject"
 INJECT=("$DYLIB_SRC")
 [ -n "$FRAMEWORK_SRC" ] && INJECT+=("$FRAMEWORK_SRC")
 [ -n "$BUNDLE_SRC" ]    && INJECT+=("$BUNDLE_SRC")
@@ -84,31 +79,15 @@ rm -f "$OUT_IPA"
 # `Translation.framework` 是强链接，低版本系统上根本不存在这个框架）。
 cyan -i "$VANILLA_IPA" -o "$OUT_IPA" -f "${INJECT[@]}" -c 9 -m 17.4 -du
 
-color "6/8  Live Activity appex"
-# 组件用 Scripts/build-live-activity-appex.sh 编：纯 swiftc，不需要 Xcode 工程，也不需要
-# App Intents 元数据处理器（v1 没有按钮/意图）。宿主 Info.plist 取自 vanilla IPA，组件的
-# 版本号与标识都跟着这一份宿主走。
-# **故意 fail-soft**：编不出来不该让整份 IPA 作废 —— 只告警，包照出，只是没有实时活动。
-# 二进制不签名：本脚本只产未签名 IPA，签名由用户侧工具完成，它必须连 PlugIns 一起签。
-LIVEACTIVITY_APPEX=""
-HOST_PLIST_TMP="$REPO_DIR/Outputs/host-Info.plist"
-if unzip -p "$VANILLA_IPA" 'Payload/Spotify.app/Info.plist' > "$HOST_PLIST_TMP" 2>/dev/null \
-   && bash "$REPO_DIR/Scripts/build-live-activity-appex.sh" "$HOST_PLIST_TMP" "$REPO_DIR/Outputs/liveactivity-appex"; then
-    LIVEACTIVITY_APPEX="$REPO_DIR/Outputs/liveactivity-appex/EeveeLiveActivity.appex"
-    echo "appex: $LIVEACTIVITY_APPEX"
-else
-    echo "!! 没能编出 EeveeLiveActivity.appex —— 两份包都不带实时活动组件"
-fi
-
-color "7/8  ipapatch LC-inject zxPluginsInject (patched copy)"
+color "6/7  ipapatch LC-inject zxPluginsInject (patched copy)"
 # 先复制再注入：$OUT_IPA 保持"无 patch"那份（tweak 本体），另一个文件才带
 # zxPluginsInject。TrollStore / 侧载装 *-patched.ipa。
 PATCHED_IPA="${OUT_IPA%.ipa}-patched.ipa"
 cp -f "$OUT_IPA" "$PATCHED_IPA"
 ipapatch --input "$PATCHED_IPA" --inplace --noconfirm --dylib packages/zxPluginsInject.dylib
 
-color "8/8  Live Activity appex + host plist keys in both IPAs"
-# Belt-and-suspenders: cyan -du strips appex/Watch but verify. 两份都要查。
+color "7/7  host plist keys in both IPAs"
+# Belt-and-suspenders: cyan -du strips Watch but verify. 两份都要查。
 cd "$OUT_DIR"
 for IPA in "$(basename "$OUT_IPA")" "$(basename "$PATCHED_IPA")"; do
     rm -rf Payload
@@ -133,24 +112,9 @@ for IPA in "$(basename "$OUT_IPA")" "$(basename "$PATCHED_IPA")"; do
         echo "★ 已去掉 UIDesignRequiresCompatibility（ALLOW_LIQUID_GLASS=1）: $IPA"
     fi
 
-    # 实时活动：把组件和宿主 Info.plist 的两个键补上，再重新打包（必须在 zip 之前）。
-    # 组件二进制不签名：本脚本只产未签名 IPA，签名由用户侧工具完成，它必须连 PlugIns 一起签。
-    # 失败只告警：没有实时活动的包照样能装能跑。
-    if [ -n "$LIVEACTIVITY_APPEX" ] && [ -d "$LIVEACTIVITY_APPEX" ]; then
-        mkdir -p Payload/Spotify.app/PlugIns
-        rm -rf Payload/Spotify.app/PlugIns/EeveeLiveActivity.appex
-        cp -R "$LIVEACTIVITY_APPEX" Payload/Spotify.app/PlugIns/EeveeLiveActivity.appex
-        echo "已嵌入 EeveeLiveActivity.appex（未签名）: $IPA"
-    else
-        echo "!! 没有 EeveeLiveActivity.appex 可嵌入，这份包不带实时活动组件: $IPA"
-    fi
     NEEDS_REZIP=1
 
-    # ActivityKit：宿主自己必须声明支持实时活动，否则 App 侧 start() 直接抛错。
     # AirPods 头部手势要读运动数据，缺这条用途说明会被系统拒绝，而不是静默失败。
-    plutil -insert NSSupportsLiveActivities -bool true Payload/Spotify.app/Info.plist 2>/dev/null \
-        || plutil -replace NSSupportsLiveActivities -bool true Payload/Spotify.app/Info.plist \
-        || echo "!! 没能给宿主 Info.plist 设置 NSSupportsLiveActivities: $IPA"
     plutil -insert NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." Payload/Spotify.app/Info.plist 2>/dev/null \
         || plutil -replace NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." Payload/Spotify.app/Info.plist \
         || echo "!! 没能给宿主 Info.plist 设置 NSMotionUsageDescription: $IPA"

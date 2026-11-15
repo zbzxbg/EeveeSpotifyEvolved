@@ -194,23 +194,9 @@ enum NowPlayingPageOverlay {
                 interactive.interactiveFrame = target
                 changed = true
             }
-            // 沉浸式样式：音量行以下一直到屏幕底没有我们的控件 ⇒ 那条带接住、不做动作，
-            // 免得触摸漏给 Spotify 的 NPV 视图（表现为点底边时整页上抬）。
-            // AM 样式不设：那一段由工具行替身负责，这里再抢会把三颗字形吃掉。
-            let strip: CGRect
-            if UserDefaults.nowPlayingStyle == .immersive,
-               target.maxY > 1,
-               target.maxY < page.bounds.height - 1 {
-                let top = target.maxY + 8
-                strip = CGRect(
-                    x: 0,
-                    y: top,
-                    width: page.bounds.width,
-                    height: page.bounds.height - top
-                )
-            } else {
-                strip = .null
-            }
+            // 音量行以下不铺「接住但不做事」的带子：那一段的触摸由工具行替身负责，
+            // 这里再抢会把三颗字形吃掉。（原来只在已删除的「沉浸式」那一档铺。）
+            let strip = CGRect.null
             if interactive.inertFrame != strip {
                 interactive.inertFrame = strip
                 changed = true

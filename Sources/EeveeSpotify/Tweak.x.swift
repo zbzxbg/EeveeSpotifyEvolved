@@ -879,8 +879,6 @@ struct EeveeSpotify: Tweak {
             AudioReactiveEngine.shared.refresh()
             // AirPods 点头/摇头切歌：开关开着、且耳机真的在给头部姿态数据才启动。
             HeadGestureControls.syncWithSettings()
-            // 锁屏 / 灵动岛的实时活动：开关开着才向系统申请活动卡片。
-            LiveActivityController.syncWithSettings()
             // 音频效果（十段 EQ / 前置增益）：开关开着才装 tap，并把系数算好。
             AudioDSP.syncWithSettings()
 
