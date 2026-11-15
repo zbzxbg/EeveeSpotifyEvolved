@@ -464,6 +464,15 @@ jobs:
 
       # ── 6. 上传：本工作流只产出一份（无 patch）──────────────────────────
       # （patched 那份由 build-ipa-with-orion-patched.yml 单独跑、单独传。）
+      # ipapatch / zip 之后仍有若干条目是"数据描述符"写法（本地头里 csize/usize 为 0）：
+      # 桌面解压与 python zipfile 都读得动，但 LCSign 这类按本地头走查的工具会直接报
+      # "无法打开 zip"。这一步把整份包用标准写法重写一遍（条目顺序 / 时间戳 / 权限位不变），
+      # 上传的才是任何解压器都认的包。
+      - name: Normalize the IPA zip (no streaming entries)
+        run: |
+          set -euo pipefail
+          python3 "${{ github.workspace }}/Scripts/normalize-ipa.py" "$OUT_IPA"
+
       - name: Upload IPA artifact (no patch)
         if: ${{ inputs.upload_method == 'artifacts' || inputs.upload_method == 'both' }}
         uses: actions/upload-artifact@v4

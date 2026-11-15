@@ -160,6 +160,24 @@ for IPA in "$(basename "$OUT_IPA")" "$(basename "$PATCHED_IPA")"; do
 done
 cd - >/dev/null
 
+# ipapatch / zip 之后仍有若干条目是"数据描述符"写法（本地头里 csize/usize 为 0）：
+# 桌面解压与 zipfile 读得动，但 LCSign 这类按本地头走查的工具会直接报"无法打开 zip"。
+# 两份都重写成标准写法（顺序 / 时间戳 / 权限位不变），之后再交给你签名。
+color "Normalize the IPA zips (no streaming entries)"
+if command -v python3 >/dev/null 2>&1; then
+    NORMALIZE_PY=python3
+elif command -v python >/dev/null 2>&1; then
+    NORMALIZE_PY=python
+else
+    NORMALIZE_PY=""
+fi
+if [ -n "$NORMALIZE_PY" ]; then
+    "$NORMALIZE_PY" "$REPO_DIR/Scripts/normalize-ipa.py" "$OUT_IPA" "$PATCHED_IPA" \
+        || echo "!! 规范化失败 —— 这两份包可能仍带流式条目（某些签名工具会报无法打开）"
+else
+    echo "!! 没有 python3/python，跳过规范化：产物可能仍带流式条目"
+fi
+
 color "Done"
 ls -lh "$OUT_IPA" "$PATCHED_IPA"
 cat <<'EOF'

@@ -501,6 +501,14 @@ jobs:
           echo "PATCHED_OUT=$PATCHED_OUT" >> $GITHUB_ENV
           echo "patched: $PATCHED_OUT"
 
+      # ipapatch 重写过的条目是"数据描述符"写法（本地头里 csize/usize 为 0）：桌面解压与
+      # python zipfile 都读得动，但 LCSign 这类按本地头走查的工具会直接报"无法打开 zip"。
+      # 这一步把整份包用标准写法重写一遍（条目顺序 / 时间戳 / 权限位不变）。
+      - name: Normalize the IPA zip (no streaming entries)
+        run: |
+          set -euo pipefail
+          python3 "${{ github.workspace }}/Scripts/normalize-ipa.py" "$PATCHED_OUT"
+
       # ── 7. 上传：本工作流只产出一份（patched）───────────────────────────
       - name: Upload IPA artifact (patched)
         if: ${{ inputs.upload_method == 'artifacts' || inputs.upload_method == 'both' }}

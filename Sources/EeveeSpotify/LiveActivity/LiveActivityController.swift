@@ -39,10 +39,8 @@ enum LiveActivityController {
 
     private static var poller: DispatchSourceTimer?
     private static var card: Activity<NowPlayingActivityAttributes>?
-    /// 上一拍卡上写的"曲目 + 在不在播"。相同就不必再 `update`。
+    /// 上一拍卡上写的"标题/艺人/播放态/时长"。相同就不必再 `update`。
     private static var lastSignature = ""
-    /// 上一个真正打过 payload 的曲目（换歌才打一行，同一首只打一次）。
-    private static var lastTrackId = ""
     /// `nowPlayingInfo` 从什么时候开始没有曲目（nil = 有）。
     private static var idleSince: Date?
     /// 申请失败之后的冷却截止时刻（见 `requestRetryDelay`）。
@@ -127,10 +125,10 @@ enum LiveActivityController {
         let content = ActivityContent(state: snapshot.state, staleDate: nil)
 
         if let live = reusableCard() {
-            // 同一首、同一个播放状态：卡片上的东西一点没变，不花 ActivityKit 的更新预算。
+            // 卡上要显示的东西一点没变：不花 ActivityKit 的更新预算。
             guard wanted != lastSignature else { return }
             lastSignature = wanted
-            notePayloadIfTrackChanged(snapshot)
+            notePayload(snapshot)
             Task { await live.update(content, alertConfiguration: nil) }
             return
         }
@@ -190,7 +188,7 @@ enum LiveActivityController {
             )
             lastSignature = wanted
             nextRequestAttemptAt = nil
-            notePayloadIfTrackChanged(snapshot)
+            notePayload(snapshot)
             writeDebugLog("[\(tag)] started a card — lock screen and Dynamic Island")
         } catch {
             // 申请会被系统拒绝：额度用完、用户在设置里关掉了本 App 的实时活动、或者随包打进
@@ -206,7 +204,6 @@ enum LiveActivityController {
         let live = Activity<NowPlayingActivityAttributes>.activities
         card = nil
         lastSignature = ""
-        lastTrackId = ""
 
         guard !live.isEmpty else { return }
         Task {
@@ -272,13 +269,15 @@ enum LiveActivityController {
         )
     }
 
-    /// 曲目身份：从"最具体"退到"最笼统"，第一个有值的就用作 `trackId`
-    /// （它只进卡片上的那个字段，不参与渲染）：
+    /// 曲目身份：从"最具体"退到"最笼统"，第一个有值的就用作 `trackId`（它只进卡片上的那个
+    /// 字段，**不参与"要不要重画"的判断** —— 那是 `signature` 的事）：
     ///
-    /// 1. 外部内容标识 —— Spotify 放曲目 URI 的那一格；同一首换了播放位置也是同一个值；
+    /// 1. 外部内容标识 —— Spotify 放曲目 URI 的那一格；
     /// 2. 媒体项的持久 id —— 本地曲库里的那一串数字；
-    /// 3. 标题 + 艺人 + 时长 —— 前两格都没有时的兜底（同一专辑里同名同长的两首会撞上，
-    ///    代价只是"卡片不重画一次"）。
+    /// 3. 标题 + 艺人 + 时长 —— 前两格都没有时的兜底。
+    ///
+    /// ⚠️ 别拿它当"换歌"的判据：这一格由 Spotify 每次写 `nowPlayingInfo` 时决定，
+    /// 同一首歌里也会变（播放会话刷新时换了一串），拿它做签名等于每几秒 `update` 一次。
     private static func trackIdentity(
         info: [String: Any],
         title: String,
@@ -295,18 +294,19 @@ enum LiveActivityController {
         return "meta:\(title)|\(artist)|\(Int(duration))"
     }
 
+    /// "卡上要不要重画"的判据：只用**卡上真会显示的东西**。
+    ///
+    /// 标题 / 艺人 / 播放态 / 时长（取整）变了才 `update`；曲目 id 不进这里 —— 它会变，
+    /// 拿它当签名会把 ActivityKit 的更新预算耗光（日志里表现为同一首歌反复打 payload）。
     private static func signature(of snapshot: NowPlayingSnapshot) -> String {
         let playState = snapshot.isPlaying ? "1" : "0"
-        return "\(snapshot.trackId)#\(playState)"
+        return "\(snapshot.title)#\(snapshot.artist)#\(playState)#\(Int(snapshot.duration))"
     }
 
     // MARK: - 日志
 
-    /// 换歌时打一行 payload：卡片上写什么、判成在播还是暂停。同一首只打一次。
-    private static func notePayloadIfTrackChanged(_ snapshot: NowPlayingSnapshot) {
-        guard snapshot.trackId != lastTrackId else { return }
-        lastTrackId = snapshot.trackId
-
+    /// 卡片真的要重画时打一行：卡上写什么、判成在播还是暂停。
+    private static func notePayload(_ snapshot: NowPlayingSnapshot) {
         let playState = snapshot.isPlaying ? "playing" : "paused"
         writeDebugLog(
             "[\(tag)] payload — \"\(snapshot.title)\" / \"\(snapshot.artist)\","
