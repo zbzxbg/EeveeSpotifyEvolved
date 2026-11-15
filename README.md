@@ -117,7 +117,7 @@ Free profiles usually have no wildcard, so both builds ship without the Watch ap
 | Spotify | How far it has been checked |
 |---|---|
 | **9.2.0** | The baseline. Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb, premium patching included: 9.2.0 split the account configuration response in two and the patcher handles both |
-| **9.1.88** | Shares the same hook set; every hook target and UI identifier still resolves, and premium patching uses the 9.1.88 configuration snapshot. Not re-checked on a device since 9.2.0 became the baseline |
+| **9.1.88** | Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb. Shares the same hook set, so every hook target and UI identifier still resolves; premium patching uses the 9.1.88 configuration snapshot |
 | **9.1.94** | Static check only: every hook target, `@objc` method list and runtime UI identifier still resolves; the on-device look-and-feel has not been re-calibrated |
 | other **9.1.x / 9.2.x** | Untested, same code path |
 
