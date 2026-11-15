@@ -277,11 +277,11 @@ struct EeveeSettingsView: View {
                 ) { AnyView(EeveeMiscellaneousSettingsView()) }
             }
 
-            // ── ④ 高级（音频驱动）
+            // ── ④ 高级（音频驱动 / 手势 / 实时活动）
             //
-            // 单独一组而不是塞进「外观」或「进阶」：这两颗开关不描界面长什么样、也不改
-            // Spotify 的行为，它们是**拿音频本身驱动界面/触觉**（见 `AudioReactiveEngine`），
-            // 而且都要在听歌页里才看得出效果 —— 混在别的组里找不着，也不该默认被人碰到。
+            // 这一组装的是「要连到系统能力上、都不是纯 UI」的功能：音频特征驱动的律动与触感、
+            // AirPods 头部姿态、WidgetKit 的实时活动。它们默认全关，出错时影响面也比外观类开关大，
+            // 所以单独成组、不跟「外观」「进阶」混在一起。
             Section(header: Text("settings_group_high".localized)) {
                 settingsRow(
                     color: Color(hex: "#FF2D55"),
@@ -289,6 +289,20 @@ struct EeveeSettingsView: View {
                     subtitle: "settings_sub_audio_reactive",
                     imageSystemName: "waveform.path.ecg"
                 ) { AnyView(EeveeAudioReactiveSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#0A84FF"),
+                    title: "head_gestures_title",
+                    subtitle: "settings_sub_head_gestures",
+                    imageSystemName: "airpodspro"
+                ) { AnyView(EeveeHeadGestureSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#32D74B"),
+                    title: "live_activity_title",
+                    subtitle: "settings_sub_live_activity",
+                    imageSystemName: "widget.small"
+                ) { AnyView(EeveeLiveActivitySettingsView()) }
             }
 
             // ── ⑤ 维护

@@ -877,6 +877,10 @@ struct EeveeSpotify: Tweak {
             AudioTapService.startAtLaunch()
             // 音频驱动功能：两颗开关任一开着才起 30Hz 那条通道（关着时这里是两次 bool 读）。
             AudioReactiveEngine.shared.refresh()
+            // AirPods 点头/摇头切歌：开关开着、且耳机真的在给头部姿态数据才启动。
+            HeadGestureControls.syncWithSettings()
+            // 锁屏 / 灵动岛的实时活动：开关开着才向系统申请活动卡片。
+            LiveActivityController.syncWithSettings()
 
             // ⚠️⚠️ 这个 `return` 把 `init` 切成了两段 —— 它后面那句 "For other versions"
             // 底下整段在 **9.1/9.2 族（本仓的目标版本）上永远不会执行**。

@@ -398,3 +398,18 @@ music_haptics_strength_low = "低";
 music_haptics_strength_medium = "中";
 music_haptics_strength_high = "高";
 music_haptics_test = "試一下";
+// ── 高級頁 · 即時動態（鎖定畫面 + 動態島）──
+live_activity_title = "即時動態";
+settings_sub_live_activity = "鎖定畫面與動態島上的正在播放卡片";
+live_activity_enabled = "顯示正在播放卡片";
+live_activity_description = "在鎖定畫面與動態島上畫一張目前曲目的卡片，換歌或播放 / 暫停時更新一次。卡片由隨包打進 IPA 的 widget 擴充功能提供 —— 沒帶上它、或簽名工具不簽巢狀擴充功能的安裝方式不會有卡；還要在 iOS 設定裡允許 Spotify 使用即時動態。";
+live_activity_unavailable = "iOS 設定裡給 Spotify 的「即時動態」是關著的，卡片不會出現。";
+
+// ── 高級頁 · AirPods 頭部手勢 ──
+head_gestures_title = "頭部手勢";
+settings_sub_head_gestures = "點頭切換下一首、搖頭切換上一首";
+head_gestures_enabled = "點頭 / 搖頭切歌";
+head_gestures_description = "點一下頭切換下一首，搖一下頭切換上一首。只有帶姿態感測器的 AirPods Pro / AirPods Max 能提供頭部姿態資料；辨識並不完美，出現誤切歌時把它關掉即可。";
+head_gestures_motion_available = "頭部姿態資料可用";
+head_gestures_motion_unavailable = "沒有頭部姿態資料 —— 請連接 AirPods Pro / Max";
+

@@ -62,10 +62,15 @@ static OSStatus EeveeAudioUnitSetPropertyReplacement(
 ) {
     EeveeAudioTapSetPropertyCalls++;
 
-    // 这个替换函数挂在音频控制线程上，每次跨到 Swift 都有成本，而探针只关心两种属性 ——
+    // 这个替换函数挂在音频控制线程上，每次跨到 Swift 都有成本，而探针只关心三种属性 ——
     // 其余的直接放行，不白跨。
+    //
+    // `SetRenderCallback` 是给 DSP 那条线留的判据：它出现（且 `inputProc` 非空）说明
+    // Spotify 是**回调供数据**；只有 `MakeConnection` 说明是**连接供数据**。两者决定
+    // 效果单元该插在哪里。
     if (propertyID == kAudioUnitProperty_StreamFormat
-        || propertyID == kAudioUnitProperty_MakeConnection) {
+        || propertyID == kAudioUnitProperty_MakeConnection
+        || propertyID == kAudioUnitProperty_SetRenderCallback) {
         EeveeAudioTapNoteSetProperty((void *)unit, propertyID, scope, element, data, size);
     }
 

@@ -331,8 +331,27 @@ jobs:
             fi
           done < <(find "$TMPX/Payload/Spotify.app/Frameworks" -maxdepth 2 -type f)
 
+      # ── 4b. Live Activity 组件（WidgetKit appex）─────────────────────────
+      # Scripts/build-live-activity-appex.sh 直接调 swiftc 编出 EeveeLiveActivity.appex：
+      # 没有 xcodeproj，也没有 App Intents 元数据要合并（v1 没有按钮/意图）。
+      # 放在 cyan 之后，是为了让组件的版本号/标识取自**这一份 IPA 的宿主**；真正的嵌入
+      # 在下一步解包后的 Payload 里完成，早于重新 zip。
+      # **故意 fail-soft**：组件编不出来不该让整份 IPA 作废，只打 warning。
+      - name: Build EeveeLiveActivity.appex (unsigned Live Activity widget)
+        run: |
+          set -euo pipefail
+          HOST_PLIST="$RUNNER_TEMP/host-Info.plist"
+          unzip -p "$OUT_IPA" 'Payload/Spotify.app/Info.plist' > "$HOST_PLIST"
+          APPEX_OUT="$RUNNER_TEMP/liveactivity-appex"
+          if bash "${{ github.workspace }}/Scripts/build-live-activity-appex.sh" "$HOST_PLIST" "$APPEX_OUT"; then
+            echo "LIVEACTIVITY_APPEX=$APPEX_OUT/EeveeLiveActivity.appex" >> "$GITHUB_ENV"
+          else
+            echo "::warning::could not build EeveeLiveActivity.appex - the IPA is produced without the Live Activity widget"
+            echo "LIVEACTIVITY_APPEX=" >> "$GITHUB_ENV"
+          fi
+
       # ── 5. rpath：cyan 同样会静默失败的那一步 ───────────────────────────
-      - name: Ensure @executable_path/Frameworks rpath, then add OpeninSafari extension
+      - name: Ensure @executable_path/Frameworks rpath, then add OpeninSafari extension + Live Activity appex
         run: |
           set -euo pipefail
           cd "$(dirname "$OUT_IPA")"
@@ -391,6 +410,31 @@ jobs:
           else
             echo "::warning::could not fetch OpenSpotifySafariExtension, skipping (does not affect Orion)"
           fi
+
+          # ── Live Activity 组件（EeveeLiveActivity.appex，未签名）─────────────
+          # 二进制由上一步的 build-live-activity-appex.sh 编好；这里只做嵌入，外加宿主
+          # Info.plist 的两个键。**不签名**：这份 IPA 整体未签名，签名在用户侧完成，
+          # 而用户侧的工具必须连 PlugIns/ 一起签，否则组件会被系统拒绝加载。
+          # 同样 fail-soft：嵌不进去只告警，包照出，只是没有实时活动。
+          if [ -n "${LIVEACTIVITY_APPEX:-}" ] && [ -d "$LIVEACTIVITY_APPEX" ]; then
+            mkdir -p "$APP/PlugIns"
+            rm -rf "$APP/PlugIns/EeveeLiveActivity.appex"
+            cp -R "$LIVEACTIVITY_APPEX" "$APP/PlugIns/EeveeLiveActivity.appex"
+            echo "EeveeLiveActivity.appex embedded at Payload/Spotify.app/PlugIns/ (unsigned)"
+            echo "PlugIns/ contents:"
+            ls -1 "$APP/PlugIns"
+          else
+            echo "::warning::no EeveeLiveActivity.appex to embed - this IPA ships without the Live Activity widget"
+          fi
+
+          # ActivityKit 要求宿主自己声明支持实时活动，否则 App 侧 start() 直接抛错。
+          plutil -insert NSSupportsLiveActivities -bool true "$APP/Info.plist" 2>/dev/null \
+            || plutil -replace NSSupportsLiveActivities -bool true "$APP/Info.plist" \
+            || echo "::warning::could not set NSSupportsLiveActivities on the host Info.plist"
+          # AirPods 头部手势要读运动数据，缺这条用途说明会被系统拒绝，而不是静默失败。
+          plutil -insert NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." "$APP/Info.plist" 2>/dev/null \
+            || plutil -replace NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." "$APP/Info.plist" \
+            || echo "::warning::could not set NSMotionUsageDescription on the host Info.plist"
 
           # 应用图标（CFBundleAlternateIcons）—— **不注册的话设置里的「应用图标」页是空的**。
           #

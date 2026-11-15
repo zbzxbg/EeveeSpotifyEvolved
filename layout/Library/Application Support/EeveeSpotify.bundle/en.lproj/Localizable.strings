@@ -446,7 +446,7 @@ accent_color = "Accent color";
 settings_group_playback = "Playback & lyrics";
 settings_group_appearance = "Appearance";
 settings_group_advanced = "Advanced";
-settings_group_high = "Advanced audio";
+settings_group_high = "Advanced features";
 tabs_and_mini_bar_title = "Tab bar & mini player";
 home_and_library_title = "Pages & library";
 settings_sub_lyrics = "Settings related to lyrics";
@@ -486,6 +486,21 @@ music_haptics_strength_low = "Low";
 music_haptics_strength_medium = "Medium";
 music_haptics_strength_high = "High";
 music_haptics_test = "Try a tap";
+// ── Advanced page · Live Activity (lock screen + Dynamic Island) ──
+live_activity_title = "Live Activity";
+settings_sub_live_activity = "Now Playing card on the lock screen";
+live_activity_enabled = "Show a Now Playing card";
+live_activity_description = "Draws a card with the current track on the lock screen and in the Dynamic Island, and updates it when the track or the play state changes. The card comes from the widget extension packaged into the IPA: builds made without it, or signed by a tool that skips nested extensions, will not show one. Live Activities must also be allowed for Spotify in iOS Settings.";
+live_activity_unavailable = "Live Activities are turned off for Spotify in the iOS Settings app, so no card can appear.";
+
+// ── Advanced page · AirPods head gestures ──
+head_gestures_title = "Head Gestures";
+settings_sub_head_gestures = "Nod for next track, shake for previous";
+head_gestures_enabled = "Nod / shake to change tracks";
+head_gestures_description = "Nod once for the next track, shake once for the previous one. Works with AirPods Pro and AirPods Max, whose motion sensors report head attitude; detection is not perfect, so turn it off if tracks skip by themselves.";
+head_gestures_motion_available = "Head tracking is available";
+head_gestures_motion_unavailable = "No head tracking — connect AirPods Pro / Max";
+
 
 hide_mini_player_bar = "Hide the mini player bar";
 player_cards_section = "Now Playing cards";

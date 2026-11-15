@@ -481,6 +481,21 @@ music_haptics_strength_low = "低";
 music_haptics_strength_medium = "中";
 music_haptics_strength_high = "高";
 music_haptics_test = "试一下";
+// ── 高级页 · 实时活动（锁屏 + 灵动岛）──
+live_activity_title = "实时活动";
+settings_sub_live_activity = "锁屏与灵动岛上的正在播放卡片";
+live_activity_enabled = "显示正在播放卡片";
+live_activity_description = "在锁屏和灵动岛上画一张当前曲目的卡片，换歌或播放 / 暂停时更新一次。卡片由随包打进 IPA 的 widget 扩展提供 —— 没带上它、或签名工具不签嵌套扩展的安装方式不会有卡；还要在 iOS 设置里允许 Spotify 使用实时活动。";
+live_activity_unavailable = "iOS 设置里给 Spotify 的「实时活动」是关着的，卡片不会出现。";
+
+// ── 高级页 · AirPods 头部手势 ──
+head_gestures_title = "头部手势";
+settings_sub_head_gestures = "点头切下一首、摇头切上一首";
+head_gestures_enabled = "点头 / 摇头切歌";
+head_gestures_description = "点一下头切下一首，摇一下头切上一首。只有带姿态传感器的 AirPods Pro / AirPods Max 能提供头部姿态数据；识别并不完美，出现误切歌时把它关掉即可。";
+head_gestures_motion_available = "头部姿态数据可用";
+head_gestures_motion_unavailable = "没有头部姿态数据 —— 请连接 AirPods Pro / Max";
+
 
 hide_mini_player_bar = "隐藏迷你播放条";
 player_cards_section = "听歌页卡片";

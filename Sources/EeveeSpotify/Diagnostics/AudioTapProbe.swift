@@ -13,7 +13,7 @@ import os
 ///
 /// 只做两件事：
 /// · `AudioUnitSetProperty` / `AudioOutputUnitStart` 两个函数 hook，记录「哪个 unit、
-///   什么 component、什么格式」；
+///   什么 component、什么格式」，顺手记一条 `SetRenderCallback`（判断"谁在供数据"）；
 /// · RemoteIO 启动后挂一个 render notify，只读 PostRender 的 buffer，算 RMS / peak，
 ///   每 2 秒在**定时器**里写一行日志（render 线程里不写文件）。
 ///
@@ -150,6 +150,21 @@ enum AudioTapProbe {
                 "[\(logTag)] connection into \(describe(description)) unit=\(unit)"
                     + " from unit=\(String(describing: connection.sourceAudioUnit))"
                     + " bus=\(connection.sourceOutputNumber) remoteIO=\(remote)"
+            )
+        } else if id == kAudioUnitProperty_SetRenderCallback,
+                  let data,
+                  size >= UInt32(MemoryLayout<AURenderCallbackStruct>.size) {
+            // 「谁供数据」：有回调 = 回调供数据；只有 MakeConnection = 连接供数据。
+            // 这一行是决定效果单元插在哪的唯一判据，别删。
+            let callback = data.load(as: AURenderCallbackStruct.self)
+            let description = componentDescription(of: unit)
+            let remote = isRemoteIO(description)
+            let scopeName = scope == kAudioUnitScope_Output ? "out" : (scope == kAudioUnitScope_Input ? "in" : "scope\(scope)")
+            logOnce(
+                "render-\(unit)-\(scope)-\(element)",
+                "[\(logTag)] SetRenderCallback \(scopeName) element=\(element) unit=\(unit)"
+                    + " proc=\(String(describing: callback.inputProc))"
+                    + " remoteIO=\(remote) output=\(isOutput(description))"
             )
         }
     }

@@ -37,6 +37,10 @@ extension UserDefaults {
     private static let coverPulseEnabledKey = "coverPulseEnabled"
     private static let musicHapticsEnabledKey = "musicHapticsEnabled"
     private static let musicHapticsStrengthKey = "musicHapticsStrength"
+    /// AirPods 点头/摇头切歌（见 `HeadGestureControls`），默认关。
+    private static let headGestureControlsEnabledKey = "headGestureControlsEnabled"
+    /// 锁屏 / 灵动岛的「实时活动」（见 `LiveActivityController`），默认关。
+    private static let liveActivityEnabledKey = "liveActivityEnabled"
     private static let dumpViewTreeKey = "dumpViewTree"
     /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
@@ -115,6 +119,8 @@ extension UserDefaults {
         coverPulseEnabledKey,
         musicHapticsEnabledKey,
         musicHapticsStrengthKey,
+        headGestureControlsEnabledKey,
+        liveActivityEnabledKey,
         dumpViewTreeKey,
         detailedLoggingKey,
         hideMiniPlayerBarKey,
@@ -496,6 +502,32 @@ extension UserDefaults {
         }
         set {
             container.set(min(max(newValue, 1), 3), forKey: musicHapticsStrengthKey)
+        }
+    }
+
+    /// AirPods 点头/摇头切歌，默认关。
+    ///
+    /// 这个开关只管"要不要起 CoreMotion 的头部姿态流"，真正的启动/停止由
+    /// `HeadGestureControls.syncWithSettings()` 做（耳机断开、切歌都不需要重启）。
+    static var headGestureControlsEnabled: Bool {
+        get {
+            container.object(forKey: headGestureControlsEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: headGestureControlsEnabledKey)
+        }
+    }
+
+    /// 锁屏 / 灵动岛的「实时活动」，默认关。
+    ///
+    /// 侧载构建里 widget 扩展是随 IPA 一起打进去的；没签上嵌套扩展时这个开关开着也不会有卡，
+    /// 见 `LiveActivityController`。
+    static var liveActivityEnabled: Bool {
+        get {
+            container.object(forKey: liveActivityEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: liveActivityEnabledKey)
         }
     }
 

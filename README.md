@@ -65,9 +65,15 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 ### Audio
 
-- **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Only animates while the player page is visible. Settings → Advanced audio → Cover pulse.
-- **Beat haptics** — kick and snare transients become light taps. Taps are throttled to one per 90 ms and step themselves down after 30 seconds of continuous triggering; strength has three steps. Settings → Advanced audio → Beat haptics.
+- **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Only animates while the player page is visible. Settings → Advanced features → Cover pulse.
+- **Beat haptics** — kick and snare transients become light taps. Taps are throttled to one per 90 ms and step themselves down after 30 seconds of continuous triggering; strength has three steps. Settings → Advanced features → Beat haptics.
 - Both read the decoded PCM through a read-only tap: the audio itself is never altered. If a track is already playing when you turn them on, pause and resume once so the tap attaches.
+
+### Gestures & Live Activity
+
+- **Head gestures** — nod once for the next track, shake once for the previous one. Reads the head-attitude stream that AirPods Pro / AirPods Max expose through Core Motion, so it needs headphones with motion sensors. Detection is deliberately conservative (two opposite swings, 1.5 s cooldown) and the switch is off by default. Settings → Advanced features → Head Gestures.
+- **Live Activity** — the current track on the lock screen and in the Dynamic Island, with a progress line the system advances on its own. The card comes from a widget extension packaged into the IPA; a build made without it, or signed by a tool that skips nested extensions, simply shows no card. Settings → Advanced features → Live Activity.
+- The IPA build adds `NSMotionUsageDescription` to Spotify's Info.plist for the head gestures; the switch is inert when that string is missing.
 
 ## Install
 
