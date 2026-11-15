@@ -12,6 +12,9 @@ Spotify, arranged like Apple Music.
 
 </div>
 
+> [!NOTE]
+> Tested on Spotify 9.2.0, and local premium is restored.
+
 <p align="center">
   <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
   <img src="docs/screenshots/lyrics.webp" width="15%" alt="Word-by-word lyrics with romanization and translation, credit line showing QQ Music">
@@ -24,9 +27,6 @@ Spotify, arranged like Apple Music.
 > *Make EeveeSpotify Great Again* — the slogan is a jest; the pages, the player and the lock screen below are not.
 
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
-
-> [!NOTE]
-> Tested on Spotify 9.2.0 on iOS 27.0.1; 9.1.x shares the same hook set and still loads, but has not been re-checked on a device. The liquid-glass look needs iOS 26+.
 
 ## Features
 
