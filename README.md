@@ -13,10 +13,7 @@ Spotify, arranged like Apple Music.
 </div>
 
 > [!NOTE]
-> The next version is being built on the [`ng-dev` branch](https://github.com/zbzxbg/EeveeSpotifyEvolved/tree/ng-dev).
-> Everything on this page describes the current release; `ng-dev` is ahead of it, may not compile,
-> and is published as prereleases only. To see what has landed there:
-> [ng-dev against main](https://github.com/zbzxbg/EeveeSpotifyEvolved/compare/main...ng-dev).
+> Tested on Spotify 9.2.0, and local premium is restored.
 
 <p align="center">
   <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
