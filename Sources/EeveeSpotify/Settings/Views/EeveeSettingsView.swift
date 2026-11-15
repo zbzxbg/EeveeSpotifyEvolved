@@ -390,6 +390,8 @@ struct EeveeSettingsView: View {
                         return
                     }
                     try? "".write(toFile: logPath, atomically: true, encoding: .utf8)
+                    // 上面这行换掉了文件本体，常驻句柄要跟着重开，否则后面的日志写进旧 inode。
+                    resetDebugLogFile()
                     writeDebugLog("Log cleared by user")
                     PopUpHelper.showPopUp(message: "debug_log_cleared".localized, buttonText: "debug_log_cleared_ok".localized)
                 } label: {

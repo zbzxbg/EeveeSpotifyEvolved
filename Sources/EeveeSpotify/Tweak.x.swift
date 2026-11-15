@@ -25,24 +25,52 @@ private let eeveeLogger = Logger(
 /// 用 `sync` 而不是 `async`：崩溃取证时最后几行必须已经落盘（异步会把它们留在队列里）。
 private let logWriteQueue = DispatchQueue(label: "com.eeveespotify.debuglog.write")
 
+/// 常驻的日志文件句柄，只在 `logWriteQueue` 上访问。
+///
+/// 为什么不再"每行 open + seek + write + close"：那条链在 iOS 上是毫秒级的（沙箱检查 +
+/// 文件元数据），而日志是**突发**来的 —— 启动、配置改写、视图转储都能在一秒里打出上百行，
+/// 每行几毫秒就把调用线程（含主线程）按住不放，界面就是"卡"。
+/// 句柄常驻之后每行只剩一次 write。
+private var logFileHandle: FileHandle?
+/// 句柄打不开（容器不可写之类）就不要每行重试。
+private var logFileHandleUnavailable = false
+
 private func appendLogFile(_ message: String) {
     let timestamp = Date().description
     let logMessage = "[\(timestamp)] \(message)\n"
+    guard let data = logMessage.data(using: .utf8) else { return }
 
     logWriteQueue.sync {
-        let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
+        debugLogFileHandle()?.write(data)
+    }
+}
 
-        if FileManager.default.fileExists(atPath: logPath) {
-            if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                fileHandle.seekToEndOfFile()
-                if let data = logMessage.data(using: .utf8) {
-                    fileHandle.write(data)
-                }
-                fileHandle.closeFile()
-            }
-        } else {
-            try? logMessage.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
+/// 只在 `logWriteQueue` 上调用。
+private func debugLogFileHandle() -> FileHandle? {
+    if let logFileHandle { return logFileHandle }
+    guard !logFileHandleUnavailable else { return nil }
+
+    let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
+    if !FileManager.default.fileExists(atPath: logPath) {
+        FileManager.default.createFile(atPath: logPath, contents: nil)
+    }
+    guard let handle = FileHandle(forWritingAtPath: logPath) else {
+        logFileHandleUnavailable = true
+        return nil
+    }
+    handle.seekToEndOfFile()
+    logFileHandle = handle
+    return handle
+}
+
+/// 「清除调试日志」是 `write(toFile:atomically:)` —— 它会**换一个新文件**（写临时文件再改名），
+/// 旧句柄指向的那份 inode 已经没人看得见了。所以清完之后必须把句柄关掉重新打开，
+/// 否则接下来的日志会写进一个"被删掉的文件"。
+func resetDebugLogFile() {
+    logWriteQueue.sync {
+        logFileHandle?.closeFile()
+        logFileHandle = nil
+        logFileHandleUnavailable = false
     }
 }
 
