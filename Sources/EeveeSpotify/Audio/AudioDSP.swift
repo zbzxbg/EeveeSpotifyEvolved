@@ -78,14 +78,37 @@ enum AudioDSP {
         return pointer
     }()
 
+    /// 每个块（≈23ms）把"当前系数"往"目标系数"拉近的比例。
+    ///
+    /// 0.25 ⇒ 大约 4 个块（≈90ms）走完九成。拖滑杆时必须这样过渡：直接换系数会让滤波器的
+    /// 状态与冲激响应同时突变，听起来就是一格一格的咔哒声。
+    private static let coefficientSmoothing = 0.25
+
     private static var renderEnabled = false
+    /// 这一块要不要真的处理。与 `renderEnabled` 分开：关开关时先淡出到恒等，再退出处理。
+    private static var renderActive = false
     private static var renderPreamp = 1.0
+    private static var renderTargetPreamp = 1.0
     private static var renderResetSeen: UInt32 = 0
+    private static var statesResetRequested = false
     private static var renderBroken = false
     /// render 线程置位、主线程读：出过一次非有限样本就让刻度旁路，并只报一行。
     fileprivate static var brokenFlag = false
 
+    private static var renderTargetCoefficients: UnsafeMutablePointer<Double> = {
+        let count = AudioDSPBands.count * 5
+        let pointer = UnsafeMutablePointer<Double>.allocate(capacity: count)
+        pointer.initialize(repeating: 0, count: count)
+        for band in 0..<AudioDSPBands.count {
+            pointer[band * 5] = 1
+        }
+        return pointer
+    }()
+
     private static var didReportBroken = false
+    private static var didLogWrapped = false
+    private static var didLogFormat = false
+    private static var didLogActive = false
     private static var ticker: DispatchSourceTimer?
 
     // MARK: - 状态
@@ -110,17 +133,23 @@ enum AudioDSP {
     }
 
     /// 把 UserDefaults 里的参数读进来重算系数（主线程）。滑杆每动一下就调。
+    ///
+    /// 这里**不清滤波状态**（除非开关状态变了）：状态清零会砍掉正在衰减的尾巴，拖动滑杆时
+    /// 每个事件一次、听起来就是连续的咔哒。系数本身由 render 侧逐块平滑过去（见 `process`）。
     static func reloadParameters() {
         let bands = UserDefaults.dspBandGainsDb
         let preampDb = UserDefaults.dspPreampDb
+        let newEnabled = UserDefaults.dspEnabled
 
         os_unfair_lock_lock(lock)
-        enabled = UserDefaults.dspEnabled
+        if newEnabled != enabled {
+            enabled = newEnabled
+            resetCounter &+= 1
+        }
         preampLinear = pow(10, preampDb / 20)
         if sampleRate > 0 {
             recomputeCoefficientsLocked(bands: bands, sampleRate: sampleRate)
         }
-        resetCounter &+= 1
         os_unfair_lock_unlock(lock)
     }
 
@@ -133,23 +162,29 @@ enum AudioDSP {
         guard format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
               format.mBitsPerChannel == 32 else { return }
 
+        var line: String?
         os_unfair_lock_lock(lock)
-        defer { os_unfair_lock_unlock(lock) }
-
-        if let current = wrappedUnit {
-            guard current == unit else { return }
-        } else if isOutputUnit {
-            return
+        let matchesWrapped = wrappedUnit == nil ? !isOutputUnit : wrappedUnit == unit
+        if matchesWrapped {
+            sourceFormat = format
+            sampleRate = format.mSampleRate
+            recomputeCoefficientsLocked(bands: UserDefaults.dspBandGainsDb, sampleRate: sampleRate)
+            resetCounter &+= 1
+            if !didLogFormat {
+                didLogFormat = true
+                let interleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
+                line = "[\(logTag)] source format \(Int(format.mSampleRate))Hz"
+                    + " \(format.mChannelsPerFrame)ch interleaved=\(interleaved)"
+            }
         }
+        os_unfair_lock_unlock(lock)
 
-        sourceFormat = format
-        sampleRate = format.mSampleRate
-        recomputeCoefficientsLocked(bands: UserDefaults.dspBandGainsDb, sampleRate: sampleRate)
-        resetCounter &+= 1
+        if let line { writeDebugLog(line) }
     }
 
     /// 包装回调时由 C 侧转进来记一下 unit，并按已记下的格式激活参数。
     fileprivate static func noteWrappedUnit(_ unit: AudioUnit) {
+        var line: String?
         os_unfair_lock_lock(lock)
         wrappedUnit = unit
         if let format = sourceFormat, format.mSampleRate > 0 {
@@ -157,7 +192,13 @@ enum AudioDSP {
             recomputeCoefficientsLocked(bands: UserDefaults.dspBandGainsDb, sampleRate: sampleRate)
             resetCounter &+= 1
         }
+        if !didLogWrapped {
+            didLogWrapped = true
+            line = "[\(logTag)] wrapped the source render callback (unit=\(unit)) — pass-through until enabled"
+        }
         os_unfair_lock_unlock(lock)
+
+        if let line { writeDebugLog(line) }
     }
 
     private static func recomputeCoefficientsLocked(bands: [Double], sampleRate: Double) {
@@ -188,8 +229,14 @@ enum AudioDSP {
         ticker = timer
     }
 
-    /// 主线程每 5 秒看一眼 render 侧有没有"把自己旁路了"。只报一次。
+    /// 主线程每 5 秒看两眼：效果链是不是真的在跑、有没有把自己旁路了。各只报一次。
     private static func tick() {
+        if !didLogActive, isEnabled, isInsertActive {
+            didLogActive = true
+            writeDebugLog(
+                "[\(logTag)] chain active — \(bandCount) bands and the preamp run on every block"
+            )
+        }
         guard brokenFlag, !didReportBroken else { return }
         didReportBroken = true
         writeDebugLog(
@@ -200,28 +247,62 @@ enum AudioDSP {
     // MARK: - render 线程
 
     /// 原回调已经把 PCM 填进 `ioData` 了：在这里就地改样本。
+    ///
+    /// 开 / 关都不是"立刻切"：打开时从恒等系数淡入，关掉时先把系数拉回恒等再停处理。
+    /// 否则"处理 ⇄ 不处理"的突变本身就是一声咔哒。
     fileprivate static func process(ioData: UnsafeMutableRawPointer?, numberFrames: UInt32) {
-        guard let ioData, numberFrames > 0, !renderBroken else { return }
+        guard let ioData, numberFrames > 0 else { return }
 
         if os_unfair_lock_trylock(lock) {
-            let count = bandCount * coefficientStride
-            for index in 0..<count {
-                renderCoefficients[index] = coefficients[index]
+            if enabled {
+                let count = bandCount * coefficientStride
+                for index in 0..<count {
+                    renderTargetCoefficients[index] = coefficients[index]
+                }
+                renderTargetPreamp = preampLinear
+            } else {
+                // 关闭时的目标 = 恒等：系数往恒等滑，信号就淡回原声。
+                for band in 0..<bandCount {
+                    let base = band * coefficientStride
+                    renderTargetCoefficients[base] = 1
+                    renderTargetCoefficients[base + 1] = 0
+                    renderTargetCoefficients[base + 2] = 0
+                    renderTargetCoefficients[base + 3] = 0
+                    renderTargetCoefficients[base + 4] = 0
+                }
+                renderTargetPreamp = 1
             }
             renderEnabled = enabled
-            renderPreamp = preampLinear
             if resetCounter != renderResetSeen {
                 renderResetSeen = resetCounter
-                let states = bandCount * maxChannels * 2
-                for index in 0..<states {
-                    renderStates[index] = 0
-                }
-                renderBroken = false
+                statesResetRequested = true
             }
             os_unfair_lock_unlock(lock)
         }
 
-        guard renderEnabled else { return }
+        if renderEnabled, !renderActive {
+            // 刚打开：把"当前系数"放回恒等再往目标滑，效果是淡入而不是硬切。
+            renderActive = true
+            statesResetRequested = true
+            setIdentityCoefficients()
+        }
+
+        if statesResetRequested {
+            statesResetRequested = false
+            renderBroken = false
+            resetStates()
+        }
+        guard renderActive else { return }
+
+        smoothTowardsTarget()
+
+        if renderBroken { return }
+        if !renderEnabled, isCurrentIdentity() {
+            // 淡出已经走完：之后每块只剩一次 trylock。
+            renderActive = false
+            resetStates()
+            return
+        }
 
         let buffers = UnsafeMutableAudioBufferListPointer(
             ioData.assumingMemoryBound(to: AudioBufferList.self)
@@ -236,6 +317,58 @@ enum AudioDSP {
             // 非交错：一个 buffer 一个声道。
             processPlanar(buffers: buffers, frames: frames)
         }
+    }
+
+    private static func resetStates() {
+        let states = bandCount * maxChannels * 2
+        for index in 0..<states {
+            renderStates[index] = 0
+        }
+    }
+
+    /// 把"当前"系数摆成恒等（b0 = 1，其余 0），前置 1.0 —— 逐位等于原声。
+    private static func setIdentityCoefficients() {
+        for band in 0..<bandCount {
+            let base = band * coefficientStride
+            renderCoefficients[base] = 1
+            renderCoefficients[base + 1] = 0
+            renderCoefficients[base + 2] = 0
+            renderCoefficients[base + 3] = 0
+            renderCoefficients[base + 4] = 0
+        }
+        renderPreamp = 1
+    }
+
+    /// 淡出是否已经到位（系数全恒等、前置 1.0）。
+    private static func isCurrentIdentity() -> Bool {
+        for band in 0..<bandCount {
+            let base = band * coefficientStride
+            if abs(renderCoefficients[base] - 1) > 1e-6 { return false }
+            for offset in 1..<coefficientStride where abs(renderCoefficients[base + offset]) > 1e-6 {
+                return false
+            }
+        }
+        return abs(renderPreamp - 1) <= 1e-6
+    }
+
+    /// 逐块把"当前系数 / 前置"往目标推一步。
+    ///
+    /// 这是"拖滑杆不咔哒"的关键：直接换系数等于让滤波器的冲激响应瞬间跳变，听感就是一格
+    /// 一格的脆响。这里的步长很小（滑杆一档 0.5 dB），插值出来的中间系数仍在稳定范围内。
+    private static func smoothTowardsTarget() {
+        let count = bandCount * coefficientStride
+        for index in 0..<count {
+            let target = renderTargetCoefficients[index]
+            let current = renderCoefficients[index]
+            let difference = target - current
+            renderCoefficients[index] = abs(difference) < 1e-7
+                ? target
+                : current + difference * coefficientSmoothing
+        }
+        let preampDifference = renderTargetPreamp - renderPreamp
+        renderPreamp = abs(preampDifference) < 1e-6
+            ? renderTargetPreamp
+            : renderPreamp + preampDifference * coefficientSmoothing
     }
 
     private static func processInterleaved(buffer: AudioBuffer, frames: Int) {
