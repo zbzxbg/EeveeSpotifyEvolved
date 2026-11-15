@@ -198,11 +198,19 @@ class RealTimeAdControllerServiceKill: ClassHook<NSObject> {
 
 class AdsBaseSwiftServiceKill: ClassHook<NSObject> {
     typealias Group = AdsBaseSwiftServiceGroup
-    static let targetName =
-        "_TtC28AdsPlatform_AdsBaseSwiftImpl23AdsBaseSwiftServiceImpl"
+
+    // 9.2.0 renamed the module and the class together:
+    // `AdsPlatform_AdsBaseSwiftImpl.AdsBaseSwiftServiceImpl` → `AdsPlatform_AdsBaseImpl.AdsBaseServiceImpl`.
+    static var targetName: String {
+        let spotify92 = "_TtC23AdsPlatform_AdsBaseImpl18AdsBaseServiceImpl"
+        if NSClassFromString(spotify92) != nil {
+            return spotify92
+        }
+        return "_TtC28AdsPlatform_AdsBaseSwiftImpl23AdsBaseSwiftServiceImpl"
+    }
 
     func load() {
-        adlog("AdsBaseSwiftServiceImpl.load")
+        adlog("AdsBaseServiceImpl.load")
     }
 }
 
@@ -349,7 +357,7 @@ func activateEeveeAdBlockerExtended() {
         (SponsoredPlaylistHeaderServiceKill.targetName, "AdsSponsoredPlaylistHeaderServiceImpl", { SponsoredPlaylistHeaderServiceGroup().activate() }),
         (NativeAdsLoggerServiceImplKill.targetName, "NativeAdsLoggerServiceImpl", { NativeAdsLoggerServiceGroup().activate() }),
         (RealTimeAdControllerServiceKill.targetName, "RealTimeAdControllerServiceImpl", { RealTimeAdControllerServiceGroup().activate() }),
-        (AdsBaseSwiftServiceKill.targetName, "AdsBaseSwiftServiceImpl", { AdsBaseSwiftServiceGroup().activate() }),
+        (AdsBaseSwiftServiceKill.targetName, "AdsBaseServiceImpl", { AdsBaseSwiftServiceGroup().activate() }),
         (AudioAdPiPCoordinatorServiceKill.targetName, "AudioAdPictureInPictureCoordinatorService", { AudioAdPiPCoordinatorServiceGroup().activate() }),
         (AdsInstrumentationServiceKill.targetName, "AdsInstrumentationServiceImpl", { AdsInstrumentationServiceGroup().activate() }),
         (AdsElementServiceKill.targetName, "ElementServiceImpl", { AdsElementServiceGroup().activate() }),

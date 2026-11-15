@@ -305,7 +305,7 @@ flag_group_chrome_footer = "播放列上的元素開關 + 封面。這些是「�
 flag_note_interventions_master = "總開關：關掉它，下面那一批提示由 Spotify 自己統一收手";
 flag_note_int_needs_number = "整數開關：去「Flag 覆蓋」頁選「寫入數字」再填（節流秒數 / 次數上限這類）";
 flag_note_data_saver = "省流量提示；「省流量模式」本身是 ios-datasaver-automatic-impl.enabled";
-flag_note_canvas_off = "關掉 Canvas（封面變成靜態）";
+flag_note_canvas_off = "關掉聽歌頁裡的 Canvas（封面變成靜態；鎖屏動態封面不受影響）";
 flag_note_snake_on = "打開它 = Spotify 自己藏著的「封面貪食蛇」彩蛋";
 maintenance_section = "設定與關於";
 backup_title = "備份與重置";
@@ -356,12 +356,12 @@ licenses_inspiration_detail = "本倉庫重用了 spoti.pw v0.21.1（GPL-3.0，�
 aggressive_marker_removal = "更積極的刪除歌詞標註術語";
 aggressive_marker_removal_description = "刪除歌詞所有被 [] 包裹的歌詞行，目前僅對 Genius 生效。它也可能誤刪整行帶方括號的真歌詞。";
 
-lock_screen_artwork_title = "鎖定畫面動態封面";
+lock_screen_artwork_title = "鎖定畫面封面";
 settings_sub_lock_screen_artwork = "播放時顯示動態封面";
 lock_screen_artwork_enabled = "動態封面";
 lock_screen_artwork_description = "鎖定畫面會用一段循環短片取代靜態封面。Canvas 未回傳時改用 Apple Music 的官方動態封面，兩者都沒有時用封面在本機產生一段。系統最低版本需要 iOS 26。";
 lock_screen_artwork_canvas = "Canvas 加入鎖定畫面動態封面";
-lock_screen_artwork_canvas_description = "重新啟動 Spotify 後生效。";
+lock_screen_artwork_canvas_description = "用Spotify自帶的Canvas短片作為動態封面。";
 lock_screen_artwork_fill = "在本機產生動態封面";
 lock_screen_artwork_fill_description = "Canvas 和 Apple Music 均未回傳動態封面時，用專輯封面渲染一段循環短片。";
 lock_screen_artwork_cache = "已下載的封面";
@@ -383,3 +383,46 @@ sleep_timer_start = "開始計時";
 sleep_timer_cancel = "取消計時";
 sleep_timer_remaining = "剩餘時間";
 sleep_timer_pick_duration = "選一個時長";
+
+// 高級頁 · 律動與觸感
+
+settings_group_high = "高級";
+audio_reactive_title = "律動與觸感";
+settings_sub_audio_reactive = "封面隨低頻起伏、鼓點觸發輕觸";
+cover_pulse = "封面律動";
+cover_pulse_description = "讓封面跟著低頻輕微放大縮小。聽歌頁選擇Apple Music式時生效。";
+music_haptics = "音樂觸感";
+music_haptics_description = "把大鼓與小鼓變成輕觸。強度越高越耗電，連續觸發 30 秒後會自動降檔。需要 App 在前景。";
+music_haptics_strength = "強度";
+music_haptics_strength_low = "低";
+music_haptics_strength_medium = "中";
+music_haptics_strength_high = "高";
+music_haptics_test = "試一下";
+// ── 高級頁 · AirPods 頭部手勢 ──
+head_gestures_title = "頭部手勢";
+settings_sub_head_gestures = "點頭切換下一首、搖頭切換上一首";
+head_gestures_enabled = "點頭 / 搖頭切歌";
+head_gestures_description = "點一下頭切換下一首，搖一下頭切換上一首。只有帶姿態感測器的 AirPods Pro / AirPods Max 能提供頭部姿態資料；辨識並不完美，出現誤切歌時把它關掉即可。";
+head_gestures_motion_available = "頭部姿態資料可用";
+head_gestures_motion_unavailable = "沒有頭部姿態資料 —— 請連接 AirPods Pro / Max";
+
+// ── 高級頁 · 音訊效果（十段 EQ + 前置增益）──
+audio_effects_title = "音訊效果";
+settings_sub_audio_effects = "十段等化器與前置增益";
+audio_effects_enabled = "啟用音訊效果";
+audio_effects_description = "功能類似等化器。";
+audio_effects_preamp = "前置增益";
+audio_effects_equalizer = "等化器";
+audio_effects_presets = "預設";
+audio_effects_preset_flat = "平坦";
+audio_effects_preset_bass = "低音增強";
+audio_effects_preset_vocal = "人聲";
+audio_effects_preset_rock = "搖滾";
+audio_effects_preset_podcast = "播客";
+audio_effects_preset_custom = "自訂";
+audio_effects_status_active = "音訊輸出已走效果鏈";
+audio_effects_status_restart = "未接管，重啟 Spotify 後生效";
+
+// 介面触感（與「音樂触感」區分）
+haptics_title = "介面觸感";
+settings_sub_haptics = "點按介面控件時的震動";

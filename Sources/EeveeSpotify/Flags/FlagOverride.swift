@@ -139,6 +139,27 @@ enum FlagOverrideStore {
         mutate { $0 = [] }
     }
 
+    // MARK: - 默认覆盖
+
+    /// 「默认就想要的覆盖」只种一次：用户把它们删掉之后**不再补**，否则删了也白删。
+    private static let seedMarkerKey = "flagOverridesDidSeedDefaults"
+
+    /// 启动早期调一次（要在配置改写之前）。
+    ///
+    /// 目前只有一条：关掉 `ios-feature-canvas.canvas_enabled` —— 听歌页用静态封面。
+    /// 锁屏的动态封面走的是账号属性 `canvas-disabled` + track metadata 里的 `canvas.url`，
+    /// 与这条 flag 无关，两边可以共存（真机验证过：关掉后听歌页是静态封面，锁屏仍然动）。
+    /// 想重新在听歌页看到 Canvas，来「Flag 覆盖」把这一行删掉即可。
+    static func seedDefaultsIfNeeded() {
+        guard !container.bool(forKey: seedMarkerKey) else { return }
+        container.set(true, forKey: seedMarkerKey)
+
+        let canvasOff = FlagOverride(name: "canvas_enabled", scope: "ios-feature-canvas", mode: .off)
+        // 用户自己已经设过同名覆盖（开或关）就别动他。
+        guard !all.contains(where: { $0.id == canvasOff.id }) else { return }
+        upsert(canvasOff)
+    }
+
     // MARK: - 加锁的读改写
     //
     // 读-改-写必须在**同一把锁**里完成：`all` 的 getter/setter 各自加锁，

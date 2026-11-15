@@ -37,7 +37,7 @@ petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp): Spotify's main
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org): Provides word-by-word lyrics and lyrics that some other lyrics sources do not have.";
 spicylyrics_api_key = "Spicy Lyrics API Key";
 spicylyrics_api_key_placeholder = "Enter a Spicy client key (sl_pk_...)";
-spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics can only be used with your own key pasted here. Leave it empty and it falls back to Musixmatch. To get a key: agree to the terms on Spicy Lyrics, press Add, and copy the client key it gives you.";
+spicylyrics_api_key_description = "There is no built-in key: Spicy Lyrics can only be used with your own key pasted here. Leave it empty and lyrics fall back to the next source. To get a key: agree to the terms on Spicy Lyrics, press Add, and copy the client key it gives you.";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
 spicylyrics_key_link = "Add this app on Spicy Lyrics";
 spicylyrics_key_invalid = "Spicy Lyrics API key rejected";
@@ -186,6 +186,14 @@ lyrics_hide_translation = "Hide Translations From Some Sources";
 lyrics_hide_translation_description = "If this option is left at its default (on), you most likely have no use for the translations from some sources. Those sources are AMLL, NetEase, QQ Music and KuGou.";
 lyrics_auto_translate = "Translate Lyrics On Device";
 lyrics_auto_translate_description = "When the lyrics source gives no translation, the current lyric line is translated with iOS's built-in Translation framework; quality may be imperfect. Requires iOS 26 or later, with the languages downloaded in Settings → Apps → Translate → Languages.";
+lyrics_typography_section = "Text";
+lyrics_appearance_title = "Lyrics appearance";
+settings_sub_lyrics_appearance = "Text size and line spacing";
+lyrics_appearance_hint = "Text size lives in Settings → Lyrics appearance.";
+lyrics_text_scale = "Text size";
+lyrics_line_spacing = "Line spacing";
+lyrics_typography_description = "Applies to the full-screen lyrics page, the in-player lyrics layer and the lock screen lyrics. The small lyrics card on the now-playing page keeps its own size.";
+lyrics_typography_reset = "Reset to default";
 lyrics_offset_current_song = "Current song";
 lyrics_offset_clear_all = "Clear All Lyrics Offsets";
 lyrics_offset_description = "Applies to every lyrics source except Genius. Positive values show lyrics later; each entry is saved per song and per lyrics source, and survives track changes, source changes and restarts.";
@@ -221,7 +229,6 @@ enable_log_recording = "Enable Log Recording";
 enable_log_recording_description = "There's no need to enable log recording for normal use.";
 export_debug_log = "Export Debug Log";
 redact_shared_log = "Redact Log Before Sharing";
-redact_shared_log_description = "The exported file hides your listening history (tracks, artists, playlists), track and artwork IDs and device identifiers. Turn this off only when keeping the log for yourself.";
 redact_log_failed = "Couldn't build the redacted log, so nothing was exported. Try again, or clear the log first.";
 redact_log_failed_ok = "OK";
 clear_debug_log = "Clear Debug Log";
@@ -371,7 +378,7 @@ telemetry_stats_section = "This launch";
 telemetry_blocked_endpoints = "Reporting requests cancelled";
 telemetry_refresh_counters = "Refresh";
 telemetry_reset_counters = "Reset counters";
-haptics_title = "Haptics";
+haptics_title = "Interface haptics";
 haptics_enabled = "Vibrate on player controls";
 haptics_description = "Adds haptic feedback to Spotify's player controls using the system feedback engine. A Spotify restart is required for it to take effect.";
 haptics_strength = "Strength";
@@ -419,10 +426,10 @@ flag_group_home = "Home & sharing";
 flag_note_lyrics_v2 = "Spotify's lyrics v2 service — this project's lyrics depend on it. Don't turn it off.";
 flag_note_canvas_lyrics = "Draws lyrics over the Canvas video.";
 flag_catalog_unsupported = "not editable yet";
-dump_class_description = "Writes one class's name, method list and ivars (with their type encodings) to the debug log. Three forms of the name work: the runtime name, the short class name that the view-tree dump prints, or Module.Class. Read-only: the runtime is only asked to enumerate, and none of the selectors it finds is ever called.";
 dump_class_placeholder = "Class name";
 dump_class_action = "Dump this class";
 detailed_logging = "More detailed logging";
+audio_tap_probe = "Audio output probe";
 
 /* MARK: Appearance */
 theme_section = "Theme";
@@ -436,6 +443,7 @@ accent_color = "Accent color";
 settings_group_playback = "Playback & lyrics";
 settings_group_appearance = "Appearance";
 settings_group_advanced = "Advanced";
+settings_group_high = "Advanced features";
 tabs_and_mini_bar_title = "Tab bar & mini player";
 home_and_library_title = "Pages & library";
 settings_sub_lyrics = "Settings related to lyrics";
@@ -449,7 +457,7 @@ settings_sub_app_icon = "Pick the icon shown on the home screen";
 settings_sub_experiments = "Features that are not settled yet";
 settings_sub_flags = "Inject remote feature flags";
 settings_sub_reduce = "Hide Spotify's own prompts";
-settings_sub_haptics = "Vibration feedback";
+settings_sub_haptics = "Vibration when tapping controls";
 settings_sub_blocked_artists = "Skip tracks from blocked artists";
 settings_sub_privacy = "Telemetry blocking and reporting";
 settings_sub_misc = "Everything that has no other home";
@@ -461,6 +469,45 @@ settings_sub_debug = "Troubleshooting switches";
 settings_reset_page = "Reset This Page";
 settings_reset_page_footer = "Restores the options on this page to their defaults.";
 settings_reset_page_done = "Reset %d option(s) on this page.";
+
+// ── Advanced page · Pulse & haptics: audio-reactive row + its sub-page ──
+// Cover pulse reads the bass; beat haptics turns kick/snare hits into taps.
+audio_reactive_title = "Pulse & haptics";
+settings_sub_audio_reactive = "Cover pulse and beat haptics";
+cover_pulse = "Cover pulse";
+cover_pulse_description = "Scales the artwork slightly with the bass. Applies with the Apple Music now-playing style.";
+music_haptics = "Beat haptics";
+music_haptics_description = "Turns kick and snare hits into light taps. Higher strength drains the battery faster, and the Taptic Engine dulls when it fires for a long time, so it steps itself down after 30 seconds of continuous tapping. Needs the app in the foreground.";
+music_haptics_strength = "Strength";
+music_haptics_strength_low = "Low";
+music_haptics_strength_medium = "Medium";
+music_haptics_strength_high = "High";
+music_haptics_test = "Try a tap";
+// ── Advanced page · AirPods head gestures ──
+head_gestures_title = "Head Gestures";
+settings_sub_head_gestures = "Nod for next track, shake for previous";
+head_gestures_enabled = "Nod / shake to change tracks";
+head_gestures_description = "Nod once for the next track, shake once for the previous one. Works with AirPods Pro and AirPods Max, whose motion sensors report head attitude; detection is not perfect, so turn it off if tracks skip by themselves.";
+head_gestures_motion_available = "Head tracking is available";
+head_gestures_motion_unavailable = "No head tracking — connect AirPods Pro / Max";
+
+// ── Advanced page · Audio effects (10-band EQ + preamp) ──
+audio_effects_title = "Audio Effects";
+settings_sub_audio_effects = "10-band EQ and preamp";
+audio_effects_enabled = "Enable audio effects";
+audio_effects_description = "Works like an equalizer.";
+audio_effects_preamp = "Preamp";
+audio_effects_equalizer = "Equalizer";
+audio_effects_presets = "Presets";
+audio_effects_preset_flat = "Flat";
+audio_effects_preset_bass = "Bass boost";
+audio_effects_preset_vocal = "Vocal";
+audio_effects_preset_rock = "Rock";
+audio_effects_preset_podcast = "Podcast";
+audio_effects_preset_custom = "Custom";
+audio_effects_status_active = "Audio output is routed through the effect chain";
+audio_effects_status_restart = "Not routed yet — restart Spotify to apply";
+
 
 hide_mini_player_bar = "Hide the mini player bar";
 player_cards_section = "Now Playing cards";
@@ -547,7 +594,7 @@ flag_group_chrome_footer = "Element switches for the now-playing bar, plus cover
 flag_note_interventions_master = "Master switch: turn this off and Spotify drops the whole batch of nudges";
 flag_note_int_needs_number = "Integer flag: use “Write a number” on the Flag overrides page (throttle seconds, count caps)";
 flag_note_data_saver = "Data-saver tooltip. The mode itself is ios-datasaver-automatic-impl.enabled";
-flag_note_canvas_off = "Turn off Canvas (still cover art)";
+flag_note_canvas_off = "Turn off Canvas in the player (still cover art; the lock screen keeps its animated artwork)";
 flag_note_snake_on = "Turn on = the cover-art snake easter egg Spotify ships hidden";
 maintenance_section = "Settings & about";
 backup_title = "Backup & reset";
@@ -664,9 +711,9 @@ now_playing_section = "Now-playing page";
 // now_playing_style_description. The underlying keys are unchanged (see NowPlayingStyle).
 now_playing_style = "Now-playing style";
 now_playing_style_spotify = "Spotify";
-now_playing_style_immersive = "Immersive";
 now_playing_style_apple_music = "Apple Music style";
-now_playing_style_description = "Spotify = the stock player. Immersive = the player is modeled on kumone. Apple Music style = the player is modeled on Apple Music.";
+now_playing_style_description = "Spotify = Spotify's own player layout. Its lyric preview is unmaintained, so some lyric settings are ignored there (Japanese romanisation, for example, leaves the lyrics in Japanese). Apple Music style = the player is modelled on Apple Music.";
+now_playing_style_podcast_warning = "Use Spotify for podcasts: the Apple Music-style layout is sized for the music player, and a podcast's controls get pushed off screen.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.
@@ -686,12 +733,12 @@ apple_music_token_invalid = "Apple Music sign-in token is invalid or expired";
 apple_music_token_popup = "Apple Music official lyrics need your own sign-in token. Go to Settings > Experiments > \"Apple Music official TTML lyrics\" and paste a media-user-token (browser: music.apple.com > Developer Tools > Application > Cookies).";
 artist_latest_release_tracks = "%d songs";
 
-lock_screen_artwork_title = "Animated lock screen";
+lock_screen_artwork_title = "Lock screen artwork";
 settings_sub_lock_screen_artwork = "Animated artwork while a song plays";
 lock_screen_artwork_enabled = "Animated artwork";
 lock_screen_artwork_description = "Plays a looping clip in place of the still cover on the lock screen. Apple Music's editorial video is used when Canvas comes back empty; when both come back empty, a loop is rendered from the cover. Needs iOS 26 or later.";
 lock_screen_artwork_canvas = "Add Canvas to the lock screen artwork";
-lock_screen_artwork_canvas_description = "Takes effect after a restart of Spotify.";
+lock_screen_artwork_canvas_description = "Uses Spotify's own Canvas clip as the animated artwork.";
 lock_screen_artwork_fill = "Render the artwork locally";
 lock_screen_artwork_fill_description = "When neither Canvas nor Apple Music returns artwork, a loop is rendered from the cover.";
 lock_screen_artwork_cache = "Downloaded artwork";
@@ -713,3 +760,33 @@ sleep_timer_start = "Start timer";
 sleep_timer_cancel = "Cancel timer";
 sleep_timer_remaining = "Time left";
 sleep_timer_pick_duration = "Pick a duration";
+
+// ── Listening stats
+
+listening_stats_title = "Listening stats";
+settings_sub_listening_stats = "Plays, minutes and your top tracks";
+listening_stats_enabled = "Record plays";
+listening_stats_enabled_footer = "Recorded on this device only. A play counts once a track has played for 30 seconds; time listened is kept even below that. Nothing before this feature is enabled exists.";
+listening_stats_period = "Period";
+listening_stats_period_week = "7 days";
+listening_stats_period_month = "30 days";
+listening_stats_period_year = "1 year";
+listening_stats_period_all = "All time";
+listening_stats_overview_total_time = "Listening time";
+listening_stats_overview_plays = "Plays";
+listening_stats_overview_tracks = "Tracks";
+listening_stats_overview_artists = "Artists";
+listening_stats_last_7_days = "Last 7 days";
+listening_stats_top_songs = "Top songs";
+listening_stats_top_artists = "Top artists";
+listening_stats_empty = "Nothing here yet. Start playing something and it will show up here.";
+listening_stats_clear = "Clear listening stats";
+listening_stats_clear_title = "Clear listening stats?";
+listening_stats_clear_message = "This deletes every play and every minute recorded so far. It cannot be undone.";
+listening_stats_clear_confirm = "Clear";
+listening_stats_hours_only_format = "%d h";
+listening_stats_hours_format = "%d h %d min";
+listening_stats_minutes_format = "%d min";
+listening_stats_seconds_format = "%d s";
+listening_stats_plays_format = "%d plays";
+listening_stats_combo_format = "%@ · %@";

@@ -13,11 +13,12 @@
 #      and a load-time libroot dependency crashes the app on TrollStore.
 #   3. Build zxPluginsInject.dylib — sideload compat shim (keychain redirect,
 #      group containers, CloudKit stub). LC-injected via ipapatch in step 6.
-#   4. cyan inject deb-contents (dylib + framework + bundle) into vanilla IPA
-#      → Outputs/IPAS/<name>.ipa            (no patch)
-#   5. copy that, then ipapatch LC-inject zxPluginsInject into main exec + every
-#      appex → Outputs/IPAS/<name>-patched.ipa  ← TrollStore / sideload: this one
-#   6. Strip Watch.app from both if it survived cyan -du.
+#   4. Extract the deb to get dylib + bundle + framework.
+#   5. cyan inject those into the vanilla IPA → Outputs/IPAS/<name>.ipa (no patch)
+#   6. copy that, then ipapatch LC-inject zxPluginsInject into main exec →
+#      Outputs/IPAS/<name>-patched.ipa  ← TrollStore / sideload: this one
+#   7. strip Watch.app, drop UIDesignRequiresCompatibility, add
+#      NSMotionUsageDescription to the host Info.plist.
 #
 # Requires: theos, cyan (pyzule-rw), ipapatch, dpkg, ldid, plutil.
 
@@ -43,22 +44,22 @@ mkdir -p "$OUT_DIR"
 
 color() { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
 
-color "1/6  EeveeSwiftProtobuf.framework"
+color "1/7  EeveeSwiftProtobuf.framework"
 chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 
-color "2/6  theos make package"
+color "2/7  theos make package"
 # NO_JBROOT=1：这份 deb 只当 dylib 的来源，不发布。TrollStore / 侧载设备上
 # 没有 /var/jb，而 libroot 是加载期依赖，链上它 App 会直接起不来。
 THEOS_PACKAGE_SCHEME=rootless NO_JBROOT=1 make package FINALPACKAGE=1
 DEB_FILE=$(ls -t packages/com.eevee.spotify_*.deb 2>/dev/null | head -1)
 [ -n "$DEB_FILE" ] || { echo "deb not produced"; exit 1; }
 
-color "3/6  zxPluginsInject.dylib"
+color "3/7  zxPluginsInject.dylib"
 chmod +x Tools/build-zxpi.sh
 Tools/build-zxpi.sh >/dev/null
 
-color "4/6  extract deb"
+color "4/7  extract deb"
 DEB_EXTRACT="$REPO_DIR/Outputs/deb-extract"
 rm -rf "$DEB_EXTRACT"; mkdir -p "$DEB_EXTRACT"
 dpkg-deb -R "$DEB_FILE" "$DEB_EXTRACT"
@@ -67,7 +68,7 @@ BUNDLE_SRC=$(find "$DEB_EXTRACT" -type d -name 'EeveeSpotify.bundle' | head -1)
 FRAMEWORK_SRC=$(find "$DEB_EXTRACT" -type d -name 'EeveeSwiftProtobuf.framework' | head -1)
 [ -n "$DYLIB_SRC" ] || { echo "dylib not in deb"; exit 1; }
 
-color "5/6  cyan inject"
+color "5/7  cyan inject"
 INJECT=("$DYLIB_SRC")
 [ -n "$FRAMEWORK_SRC" ] && INJECT+=("$FRAMEWORK_SRC")
 [ -n "$BUNDLE_SRC" ]    && INJECT+=("$BUNDLE_SRC")
@@ -78,14 +79,15 @@ rm -f "$OUT_IPA"
 # `Translation.framework` 是强链接，低版本系统上根本不存在这个框架）。
 cyan -i "$VANILLA_IPA" -o "$OUT_IPA" -f "${INJECT[@]}" -c 9 -m 17.4 -du
 
-color "6/6  ipapatch LC-inject zxPluginsInject (patched copy)"
+color "6/7  ipapatch LC-inject zxPluginsInject (patched copy)"
 # 先复制再注入：$OUT_IPA 保持"无 patch"那份（tweak 本体），另一个文件才带
 # zxPluginsInject。TrollStore / 侧载装 *-patched.ipa。
 PATCHED_IPA="${OUT_IPA%.ipa}-patched.ipa"
 cp -f "$OUT_IPA" "$PATCHED_IPA"
 ipapatch --input "$PATCHED_IPA" --inplace --noconfirm --dylib packages/zxPluginsInject.dylib
 
-# Belt-and-suspenders: cyan -du strips appex/Watch but verify. 两份都要查。
+color "7/7  host plist keys in both IPAs"
+# Belt-and-suspenders: cyan -du strips Watch but verify. 两份都要查。
 cd "$OUT_DIR"
 for IPA in "$(basename "$OUT_IPA")" "$(basename "$PATCHED_IPA")"; do
     rm -rf Payload
@@ -110,10 +112,35 @@ for IPA in "$(basename "$OUT_IPA")" "$(basename "$PATCHED_IPA")"; do
         echo "★ 已去掉 UIDesignRequiresCompatibility（ALLOW_LIQUID_GLASS=1）: $IPA"
     fi
 
+    NEEDS_REZIP=1
+
+    # AirPods 头部手势要读运动数据，缺这条用途说明会被系统拒绝，而不是静默失败。
+    plutil -insert NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." Payload/Spotify.app/Info.plist 2>/dev/null \
+        || plutil -replace NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." Payload/Spotify.app/Info.plist \
+        || echo "!! 没能给宿主 Info.plist 设置 NSMotionUsageDescription: $IPA"
+
     [ "$NEEDS_REZIP" = "1" ] && zip -qry "$IPA" Payload
     rm -rf Payload
 done
 cd - >/dev/null
+
+# ipapatch / zip 之后仍有若干条目是"数据描述符"写法（本地头里 csize/usize 为 0）：
+# 桌面解压与 zipfile 读得动，但 LCSign 这类按本地头走查的工具会直接报"无法打开 zip"。
+# 两份都重写成标准写法（顺序 / 时间戳 / 权限位不变），之后再交给你签名。
+color "Normalize the IPA zips (no streaming entries)"
+if command -v python3 >/dev/null 2>&1; then
+    NORMALIZE_PY=python3
+elif command -v python >/dev/null 2>&1; then
+    NORMALIZE_PY=python
+else
+    NORMALIZE_PY=""
+fi
+if [ -n "$NORMALIZE_PY" ]; then
+    "$NORMALIZE_PY" "$REPO_DIR/Scripts/normalize-ipa.py" "$OUT_IPA" "$PATCHED_IPA" \
+        || echo "!! 规范化失败 —— 这两份包可能仍带流式条目（某些签名工具会报无法打开）"
+else
+    echo "!! 没有 python3/python，跳过规范化：产物可能仍带流式条目"
+fi
 
 color "Done"
 ls -lh "$OUT_IPA" "$PATCHED_IPA"

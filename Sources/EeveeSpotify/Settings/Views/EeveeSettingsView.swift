@@ -10,7 +10,7 @@ import UIKit
 /// 而"听歌页""标签栏"这种天天用的开关要滚到扩展页第 4、5 节。
 ///
 /// 现在：
-/// · 根页分**四组**（播放与歌词 / 外观 / 进阶 / 维护），每一行都带**副标题**
+/// · 根页分**五组**（播放与歌词 / 外观 / 进阶 / 高级 / 维护），每一行都带**副标题**
 /// （`NavigationSectionView.subtitle`）—— 一眼能看出这一行进去有什么；
 /// · 那 8 个子页全部提到根页按语义归组，一步可达；
 /// · 「扩展」页里那 24 个开关按**页面**拆成几页：
@@ -108,6 +108,16 @@ struct EeveeSettingsView: View {
                     imageSystemName: "quote.bubble.fill"
                 ) { AnyView(EeveeLyricsSettingsView()) }
 
+                // 「歌词外观」：字号 / 行距，从「歌词」页拆出来。
+                // 那一页是取词源与行为开关；这两项属于"长什么样"，而且字号倍率对
+                // 全屏歌词页、页内歌词层、锁屏歌词都生效，与逐词开关无关。
+                settingsRow(
+                    color: .blue,
+                    title: "lyrics_appearance_title",
+                    subtitle: "settings_sub_lyrics_appearance",
+                    imageSystemName: "textformat.size"
+                ) { AnyView(EeveeLyricsAppearanceSettingsView()) }
+
                 // （设置页里面放个可点击进去的页面吧）：歌词偏移
                 // 从歌词页拆成独立页 —— 它会随听歌不断长出条目，内嵌在歌词页里越拖越长。
                 // 从"网易云歌词偏移"扩成**所有源**（Genius 除外），
@@ -141,6 +151,14 @@ struct EeveeSettingsView: View {
                     imageSystemName: "forward.end.fill"
                 ) { AnyView(SponsorBlockSettingsView()) }
 
+                // 屏蔽艺人：与 SponsorBlock 同一类"跳过不想听的东西"，所以放在它后面。
+                settingsRow(
+                    color: Color(hex: "#FF9F0A"),
+                    title: "blocked_artists_title",
+                    subtitle: "settings_sub_blocked_artists",
+                    imageSystemName: "person.slash.fill"
+                ) { AnyView(EeveeBlockedArtistsSettingsView()) }
+
                 // 睡眠定时器：到点暂停播放（见 `SleepTimerController`）。Spotify 自己那份
                 // 在播客菜单里，那条不受影响，两者可以同时开。
                 settingsRow(
@@ -149,6 +167,14 @@ struct EeveeSettingsView: View {
                     subtitle: "settings_sub_sleep_timer",
                     imageSystemName: "moon.zzz.fill"
                 ) { AnyView(EeveeSleepTimerSettingsView()) }
+
+                // 听歌统计：本地记录播放次数与时长（见 `ListeningStatsRecorder`）。
+                settingsRow(
+                    color: .teal,
+                    title: "listening_stats_title",
+                    subtitle: "settings_sub_listening_stats",
+                    imageSystemName: "chart.bar.fill"
+                ) { AnyView(EeveeListeningStatsSettingsView()) }
             }
 
             // ── ② 外观
@@ -196,6 +222,7 @@ struct EeveeSettingsView: View {
                     subtitle: "settings_sub_lock_screen_lyrics",
                     imageSystemName: "text.quote"
                 ) { AnyView(EeveeLockScreenLyricsSettingsView()) }
+
             }
 
             // ── ③ 进阶
@@ -238,13 +265,6 @@ struct EeveeSettingsView: View {
                 ) { AnyView(EeveeHapticsSettingsView()) }
 
                 settingsRow(
-                    color: Color(hex: "#FF9F0A"),
-                    title: "blocked_artists_title",
-                    subtitle: "settings_sub_blocked_artists",
-                    imageSystemName: "person.slash.fill"
-                ) { AnyView(EeveeBlockedArtistsSettingsView()) }
-
-                settingsRow(
                     color: Color(hex: "#30B0C7"),
                     title: "privacy_title",
                     subtitle: "settings_sub_privacy",
@@ -259,7 +279,35 @@ struct EeveeSettingsView: View {
                 ) { AnyView(EeveeMiscellaneousSettingsView()) }
             }
 
-            // ── ④ 维护
+            // ── ④ 高级（音频 / 设备能力）
+            //
+            // 这一组装的是「要连到系统能力上、都不是纯 UI」的功能：音频特征驱动的律动与触感、
+            // 音频效果、AirPods 头部姿态。它们默认全关，出错时影响面也比外观类开关大，
+            // 所以单独成组、不跟「外观」「进阶」混在一起。
+            Section(header: Text("settings_group_high".localized)) {
+                settingsRow(
+                    color: Color(hex: "#FF2D55"),
+                    title: "audio_reactive_title",
+                    subtitle: "settings_sub_audio_reactive",
+                    imageSystemName: "waveform.path.ecg"
+                ) { AnyView(EeveeAudioReactiveSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#FF9F0A"),
+                    title: "audio_effects_title",
+                    subtitle: "settings_sub_audio_effects",
+                    imageSystemName: "slider.horizontal.3"
+                ) { AnyView(EeveeAudioEffectSettingsView()) }
+
+                settingsRow(
+                    color: Color(hex: "#0A84FF"),
+                    title: "head_gestures_title",
+                    subtitle: "settings_sub_head_gestures",
+                    imageSystemName: "airpodspro"
+                ) { AnyView(EeveeHeadGestureSettingsView()) }
+            }
+
+            // ── ⑤ 维护
             //
             // 「调试」页：只装**排查/验证型**开关（补时间轴 / 补卡片元素 / 强制歌词入口）。
             // 它们以前散在「歌词」页里，和用户真正的偏好混在一起 —— 见
@@ -372,6 +420,8 @@ struct EeveeSettingsView: View {
                         return
                     }
                     try? "".write(toFile: logPath, atomically: true, encoding: .utf8)
+                    // 上面这行换掉了文件本体，常驻句柄要跟着重开，否则后面的日志写进旧 inode。
+                    resetDebugLogFile()
                     writeDebugLog("Log cleared by user")
                     PopUpHelper.showPopUp(message: "debug_log_cleared".localized, buttonText: "debug_log_cleared_ok".localized)
                 } label: {

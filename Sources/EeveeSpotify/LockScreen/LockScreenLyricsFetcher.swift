@@ -53,7 +53,7 @@ enum LockScreenLyricsFetcher {
                         LyricsTimingOffset.offsetMs(forTrackId: trackId, source: source)
                     )
                 }
-                guard let lines = convert(dto) else {
+                guard let lines = convert(dto, source: source) else {
                     writeDebugLog(
                         "[\(LockScreenLyrics.logTag)] \(source.description) gave no timed lines"
                             + " — \(took(started))"
@@ -76,20 +76,35 @@ enum LockScreenLyricsFetcher {
 
     /// 内存里已经加载过这一首时直接转，不发网络请求。
     /// 只有 `currentLyricsDtoTrackId` 对得上才可信 —— 否则那是上一首的词。
-    static func convert(_ dto: LyricsDto) -> [LockScreenLyricLine]? {
+    ///
+    /// `source` 决定**要不要带译文**：与歌词页同一条规则（见 `showsTranslation`）。
+    static func convert(_ dto: LyricsDto, source: LyricsSource?) -> [LockScreenLyricLine]? {
         guard dto.timeSynced, !dto.isInstrumental else { return nil }
 
-        // 只保留有起点、且有文字的行。纯文本源（Genius）本来就没有时间轴，这里自然被筛掉。
-        var timed: [(start: Int, end: Int?, text: String)] = []
-        for line in dto.lines {
+        // 译文的配对口径必须与 `LyricLinesAdapter` 一致：按**"起点非空的行"排序后的位置**
+        // 取 `translation.lines[index]`。所以先在完整列表上排序，再筛掉没有文字的行 ——
+        // 反过来（先筛再排序）会让带空白行的歌整体错位一句。
+        let ordered = dto.lines.enumerated()
+            .filter { $0.element.offsetMs != nil }
+            .sorted { ($0.element.offsetMs ?? 0) < ($1.element.offsetMs ?? 0) }
+        guard !ordered.isEmpty else { return nil }
+
+        let translationLines = dto.translation?.lines ?? []
+        let showsTranslation = showsTranslation(for: source)
+
+        var timed: [(start: Int, end: Int?, text: String, translation: String)] = []
+        for (index, pair) in ordered.enumerated() {
+            let line = pair.element
             guard let start = line.offsetMs else { continue }
             let text = line.content.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
-            timed.append((start, line.endOffsetMs, text))
+            let translation = showsTranslation && index < translationLines.count
+                ? normalizedTranslation(translationLines[index], text: text)
+                : ""
+            timed.append((start, line.endOffsetMs, text, translation))
         }
         // 一行也算：有些歌整首只有一句词（念白/采样），不该被当成"没词"。
         guard !timed.isEmpty else { return nil }
-        timed.sort { $0.start < $1.start }
 
         var lines: [LockScreenLyricLine] = []
         lines.reserveCapacity(timed.count)
@@ -101,11 +116,35 @@ enum LockScreenLyricsFetcher {
                 LockScreenLyricLine(
                     startMs: item.start,
                     endMs: max(end, item.start),
-                    text: item.text
+                    text: item.text,
+                    translation: item.translation
                 )
             )
         }
         return lines
+    }
+
+    /// 锁屏这一行要不要带译文 —— 与歌词页的 `showsTranslationNow` 同一条规则：
+    /// · 「用系统翻译」开着时歌词页会自己补译文，锁屏照常显示源给的译文；
+    /// · 「隐藏部分歌词源的翻译」开着时，AMLL / 网易云 / QQ / 酷狗 那几家不下发译文行。
+    private static func showsTranslation(for source: LyricsSource?) -> Bool {
+        if UserDefaults.lyricsAutoTranslate { return true }
+        guard let source else { return true }
+        if NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled,
+           source.hidesTranslationWhenToggled {
+            return false
+        }
+        return true
+    }
+
+    /// 译文与正文完全一样时不画（AMLL 的英文歌 x-translation 常常就是原文）。
+    private static func normalizedTranslation(_ raw: String, text: String) -> String {
+        let translation = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !translation.isEmpty else { return "" }
+        guard translation.compare(text, options: .caseInsensitive) != .orderedSame else {
+            return ""
+        }
+        return translation
     }
 
     // MARK: - 来源

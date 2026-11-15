@@ -103,6 +103,14 @@ class SpotifySessionDelegateBootstrapHook: ClassHook<NSObject>, SpotifySessionDe
                 return
             }
             catch {
+                // The payload did not decode as the bootstrap message this build sends
+                // (a changed proto, e.g. a newer Spotify). `didReceiveData` buffered the
+                // body and never forwarded it, so hand the original bytes back instead of
+                // completing the task with no data — otherwise the app loses its config.
+                writeDebugLog("[BOOTSTRAP] Payload did not decode; passing the original body through")
+                orig.URLSession(session, dataTask: task, didReceiveData: buffer)
+                orig.URLSession(session, task: task, didCompleteWithError: error)
+                return
             }
         }
         

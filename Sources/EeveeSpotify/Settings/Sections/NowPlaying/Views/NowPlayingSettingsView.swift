@@ -9,17 +9,15 @@ import SwiftUI
 /// 滚很久。现在按**页面**拆开：听歌页 / 标签栏与迷你条 / 首页与音乐库 / 歌单与专辑页，
 /// 四个都在根页上一步可达。
 ///
-/// ## 结构：一颗总开关 + 一个三档选择
+/// ## 结构：一个两档选择
 ///
-/// 「修改Spotify听歌页布局」是总开关（默认开），管整页取色底、隐藏官方模块、隐藏官方
-/// 单行歌词、隐藏两个胶囊、歌词进播放器；二级菜单里是展示音量条 / 自画单行歌词 / 罗马化 /
-/// 译文 / 未播放行模糊 / 控制键本地字形。
+/// 听歌页样式是**两档**：Spotify 原生 / Apple Music 式。两档**共用**的结构件（整页取色底、
+/// 一屏、隐藏官方单行歌词、隐藏两颗胶囊）由 `nowPlayingAnyLayout` 统一开，不随选择器变化。
+/// 原来的第三档「沉浸式」（版式照 kumone）已删除，理由与存量迁移见 `NowPlayingStyle`。
 ///
 /// 于是本页三节：
-/// · `now_playing_section` —— **听歌页样式三档选择**（Spotify 原生 / 沉浸式 / Apple Music
-///   式）。原来那颗二级菜单整块删除，那些功能按**默认开启**落地；罗马化与译文仍可在
-///   「设置 → 歌词」里逐语言改。两颗互斥的 Toggle 合成一个三档 `Picker`，见
-///   `NowPlayingStyle`。
+/// · `now_playing_section` —— **听歌页样式两档选择**。旧二级菜单那些功能按**默认开启**
+///   落地；罗马化与译文仍可在「设置 → 歌词」里逐语言改。见 `NowPlayingStyle`。
 /// · **清爽** —— 按类名藏 Spotify 自己的 chrome（迷你条、传输条两颗按钮）。
 /// · `player_cards_section` —— 听歌页**卡片类**清爽（一张卡一个键 + 一颗总开关）。
 struct NowPlayingSettingsView: View {
@@ -46,22 +44,21 @@ struct NowPlayingSettingsView: View {
         List {
             Section(
                 header: Text("now_playing_section".localized),
-                // 三档各自的语义放在节脚：它说的是整页的行为，挂在标题下面会把
+                // 两档各自的语义放在节脚：它说的是整页的行为，挂在标题下面会把
                 // 第一行撑得过高（与「首页顶部样式」那条 footer 同一做法）。
-                // 选项名只是三个短词，不放长句 —— `Picker` 行尾会显示当前选中值，
+                // 选项名只是两个短词，不放长句 —— `Picker` 行尾会显示当前选中值，
                 // 414pt 上长名字会被截断（`home_header_style` 那次踩过，见那个文件头）。
                 footer: Text(styleDescriptionText)
             ) {
-                // （给那两个修改的做成这样（类似艺人简介展示）的选择方式，
-                // 三个选项：Spotify 原生 + 另外两个）：**两颗互斥的 Toggle → 一个三态 Picker**。
-                //
-                // 为什么必须合成一个：两版布局在落地代码里是互斥的
-                // （`NowPlayingLyricsPlate.isEnabled` 里那道 `!nowPlayingIOS27` 的门），
+                // **两颗互斥的 Toggle → 一个选择器**。为什么必须合成一个：两版布局在落地代码
+                // 里是互斥的（`NowPlayingLyricsPlate.isEnabled` 里那道 `!nowPlayingIOS27` 的门），
                 // 两颗同时打开时新那版会**静默让位** —— 屏幕上看到的和开关说的不一致。
                 // 这与「首页顶部样式」把两颗 Toggle 合成三态是同一个教训。
                 //
-                // ⚠️ 存储一个字没变：仍然只写 `nowPlayingLayout` / `nowPlayingIOS27`
-                // （备份 / 导入 / 日志 / `normalizeNowPlayingLayoutKeys` 全不受影响）。
+                // ⚠️ 存储一个字没变：仍然只写 `nowPlayingIOS27`（备份 / 导入 / 日志 /
+                // `normalizeNowPlayingLayoutKeys` 全不受影响）。原来的第三档「沉浸式」
+                // （`nowPlayingLayout` 那一套）已经删除，存量值由 `normalizeNowPlayingLayoutKeys`
+                // 迁到 `.appleMusic`。
                 Picker(
                     selection: settingsShadowBinding($shadow.style) { value in
                         applyStyleChange(value)
@@ -74,13 +71,11 @@ struct NowPlayingSettingsView: View {
                     Text("now_playing_style".localized)
                 }
 
-                // ⛔ 选择沉浸式的那几个按键，全部写默认开启、相关本地化文件删掉 —— 二级菜单整块删除；
-                // 本地控制键字形 / 罗马化 / 译文现在都按默认开启落地
+                // ⛔ 旧的二级菜单（控制键字形 / 罗马化 / 译文）不再有快捷开关：三样都按默认
+                // 开启落地
                 // （见 `NowPlayingPageOverlay.isEnabled` / `NowPlayingControlsPlate.isEnabled` /
                 // `AppleMusicLyricsPage` 的模糊判定 / `LyricLinesAdapter` 的 bit 16）。
-                // 罗马化与译文仍可在「设置 → 歌词」里逐语言改，这里不再摆快捷开关。
-                //
-                // 二级菜单已删除（见上）。
+                // 罗马化与译文仍可在「设置 → 歌词」里逐语言改。
                 //
                 // ⛔「禁止回弹」已删除：
                 // 它把列表的 `alwaysBounceVertical` 关掉，**开了就划不掉播放器**
@@ -185,8 +180,9 @@ struct NowPlayingSettingsView: View {
         // 每次进页重新同步一次：别处（Flag 页、重置、上一版遗留的存储）改了 UserDefaults 时
         // 影子值不该停在旧值上。
         .onAppear {
-            // 那五颗结构键的唯一合法来源是总开关；备份导入 / 旧版本残留
-            // 都可能把它们写歪 ⇒ 进页先按总开关归一，再读影子值（详见 `normalizeNowPlayingLayoutKeys`）。
+            // 那几颗结构键的唯一合法来源是 `nowPlayingAnyLayout`；备份导入 / 旧版本残留
+            // 都可能把它们写歪 ⇒ 进页先归一，再读影子值（详见 `normalizeNowPlayingLayoutKeys`）。
+            // 已删除的「沉浸式」留下的存量也在这条路里迁到 `.appleMusic`。
             // 真的改到了东西（例如刚导入完旧备份）就当场重放一遍，别让听歌页停在旧状态。
             if UserDefaults.normalizeNowPlayingLayoutKeys() > 0 {
                 applyStyleChange(UserDefaults.nowPlayingStyle)
@@ -195,73 +191,40 @@ struct NowPlayingSettingsView: View {
         }
     }
 
-    /// 三档各自的语义（节脚第一段）。
+    /// 两档各自的语义（节脚第一段）。
     ///
     /// 选项名只是短词（`Picker` 行尾要显示它），**长句全部放这里** ——
     /// 与「首页顶部样式」那条 footer 同一做法（那边就是被 segmented 截断才改的）。
     ///
-    /// 沉浸式二级菜单删除后，这段不再拼「包含：…」的五个功能名，
-    /// 直接读一条完整说明（`now_playing_style_description` 里的 `%@` 也一并去掉）。
+    /// 这段不拼「包含：…」的功能名，直接读一条完整说明
+    /// （`now_playing_style_description` 里的 `%@` 也一并去掉）。
     private var styleDescriptionText: String {
+        // 两段：选项各自的语义，空一行接播客的警告。
+        // 播客那段是**临时措施**：Apple Music 式的几何是照音乐播放页算的（封面 0.58 屏、
+        // 底部栈上移 55pt），播客的控件（快退 / 快进 / 倍速）比音乐那行多，会被挤到屏幕外。
+        // 干净的解法是在入口按 `spotify:show:` / `spotify:episode:` 判断并自动退回原生渲染。
         "now_playing_style_description".localized
+            + "\n\n"
+            + "now_playing_style_podcast_warning".localized
     }
 
     /// 当场落地 / 还原。
     ///
-    /// 只做一件事：把选择器选中的那一档翻成那两个**已有**的键，然后复用两条老路
-    /// （`applyIOS27Change` / `applyLayoutChange`）落地 —— 它们的写盘与重放顺序都是真机调
-    /// 出来的（尤其是"新层与旧层的重放顺序，开着与关着不一样"那一条），这里再抄一份就等于
+    /// 只做一件事：把选择器选中的那一档翻成 `nowPlayingIOS27`，然后复用那条老路
+    /// （`applyIOS27Change`）落地 —— 它的写盘与重放顺序是真机调出来的
+    /// （尤其是"新层与旧层的重放顺序，开着与关着不一样"那一条），这里再抄一份就等于
     /// 给自己加第二个真相。
     ///
-    /// 三条转换的顺序都是有讲究的：
-    /// · → `.spotify`：先关新层（把封面 transform 写回原值），再关旧层；
-    /// · → `.immersive`：同样先关新层，再按旧总开关铺上；
-    /// · → `.appleMusic`：**先关旧总开关**（清掉 `nowPlayingLyricsInPlayer` 与那几颗结构
-    ///   键），再开新层 —— 反过来会让旧层在新层已经接管之后又铺一遍。
+    /// 沉浸式那一档删除之后，这条路径就是一次开关翻转：旧那套
+    /// （`NowPlayingLyricsPlate.isEnabled`，它带着 `!nowPlayingIOS27` 的门）在
+    /// `applyIOS27Change` 内部按自己的门让位。
     private func applyStyleChange(_ style: NowPlayingStyle) {
         switch style {
         case .spotify:
             applyIOS27Change(false)
-            applyLayoutChange(false)
-        case .immersive:
-            applyIOS27Change(false)
-            applyLayoutChange(true)
         case .appleMusic:
-            applyLayoutChange(false)
             applyIOS27Change(true)
         }
-    }
-
-    /// 旧总开关（`.immersive` 那一档）的「当场落地 / 还原」。
-    ///
-    /// 先把那五颗旧键写成同一个值 —— 落地代码读的仍然是各自的键
-    /// （取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊 / 歌词进播放器），
-    ///
-    /// 然后逐个叫"复查/重放"入口：**关掉时它们自己走还原分支** ——
-    /// 每个入口的 `apply` 里都有 `guard isEnabled else { restore/remove }`，所以这里
-    /// 不需要分两套分支，也不会漏掉"关总开关后屏幕上还留着"的东西。
-    /// 音量条与控制键这两颗二级菜单项也在其中：它们的 `isEnabled` 带着总开关的门。
-    private func applyLayoutChange(_ enabled: Bool) {
-        UserDefaults.nowPlayingLayout = enabled
-        // 这四颗结构键是两版布局**共用**的 ⇒ 写「任一布局开着」。
-        // （当年那五颗里的第五颗 `nowPlayingLyricsInPlayer` 仍只跟总开关 ——
-        // 它是旧层的开关，新版布局不用它。）
-        let structural = UserDefaults.nowPlayingAnyLayout
-        UserDefaults.nowPlayingBackdrop = structural
-        UserDefaults.nowPlayingOneScreen = structural
-        UserDefaults.nowPlayingLyricsInPlayer = enabled
-        UserDefaults.hideSingalongLine = structural
-        UserDefaults.hideNowPlayingPills = structural
-
-        refreshNowPlayingBackdrop()
-        NowPlayingOneScreen.reapply()
-        NowPlayingPageOverlay.reapply()
-        NowPlayingControlsPlate.reapply()
-        NowPlayingIOS27.reapply()
-        // 歌词进播放器：`reapply` 自己按总开关与子开关重建或回滚。
-        NowPlayingLyricsPlate.reapply()
-        // 官方单行歌词 + 两颗胶囊：藏过的 chrome 不一定再有 layout 回合 ⇒ 当场复查。
-        DeclutterChrome.reconcileNow()
     }
 
     /// 「Apple Music 式」那一档（`nowPlayingIOS27`）的「当场落地 / 还原」。
@@ -273,6 +236,9 @@ struct NowPlayingSettingsView: View {
     /// 旧层按它自己的总开关回来。
     private func applyIOS27Change(_ enabled: Bool) {
         UserDefaults.nowPlayingIOS27 = enabled
+        // 旧那套「歌词进播放器」（`NowPlayingLyricsPlate.isEnabled`）读这颗键：旧档位删除之后
+        // 它必须一直是 false，否则 AM 档开着时旧歌词板也会挂载，两层叠在一起。
+        UserDefaults.nowPlayingLayout = false
 
         let structural = UserDefaults.nowPlayingAnyLayout
         UserDefaults.nowPlayingBackdrop = structural
@@ -300,13 +266,15 @@ struct NowPlayingSettingsView: View {
 
     /// 本页「重置本页」的作用范围。
     ///
-    /// 沉浸式二级菜单删除后，`nowPlayingVolume` /
-    /// `nowPlayingBlurUnplayedLyrics` / `nowPlayingControlGlyphs` 已从本页与 `ownedKeys` 移除；
-    /// 罗马化 / 译文本来就不在本页重置（它们属于歌词页）。
+    /// 旧二级菜单的 `nowPlayingVolume` / `nowPlayingBlurUnplayedLyrics` /
+    /// `nowPlayingControlGlyphs` 已从本页与 `ownedKeys` 移除；罗马化 / 译文本来就不在本页
+    /// 重置（它们属于歌词页）。
     private static let ownedKeys = [
-        // 新的「iOS 27 听歌页」。
+        // 「Apple Music 式」那一档的总开关。
         "nowPlayingIOS27",
-        // 总开关 + 它写的那五颗旧键（总开关关掉时五颗一起写 false）。
+        // 四颗结构键，由 `normalizeNowPlayingLayoutKeys` 归一到 `nowPlayingAnyLayout`。
+        // `nowPlayingLayout` 是已删除的「沉浸式」留下的旧键：仍然参与归一、存量也会
+        // 迁到 `nowPlayingIOS27`，所以重置时一起清。
         "nowPlayingLayout",
         "nowPlayingBackdrop",
         "nowPlayingOneScreen",

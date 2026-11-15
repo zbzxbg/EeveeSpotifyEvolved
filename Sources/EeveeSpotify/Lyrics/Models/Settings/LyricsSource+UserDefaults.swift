@@ -29,7 +29,7 @@ extension LyricsSource {
         guard lastStyleOverrideLogged != rawValue else { return }
         lastStyleOverrideLogged = rawValue
         writeDebugLog(
-            "[Lyrics] source \"\(description)\" needs the immersive / Apple Music now-playing style"
+            "[Lyrics] source \"\(description)\" needs the Apple Music now-playing style"
                 + " — using \(LyricsSource.stockStyleFallback.description) instead"
         )
     }

@@ -12,6 +12,10 @@
 // 替身"（`NowPlayingIOS27RemoteRelayView`）；只对封面壳写 `alpha`（记原值、每拍补、收尾写回）；
 // 自己的视图挂在封面所在的整页 cell 里（contentlayer 在 UI 栈下面），z-order 天然正确；
 // 量位置一律用 `convert`（带 transform）；每 0.3s 蹭 `DeclutterChrome` 的节拍，不新开定时器。
+//
+// Canvas：Spotify 的 Canvas 播放页会把当前 contentlayer 换成 `CanvasNowPlayingCell`，
+// 视频上另铺一张「歌词卡」和页顶歌名。这一页开着时把那张卡藏掉，并把 Canvas 格里那张
+// 被 Spotify 按成透明的封面壳交给正常的封面流程 —— 播放页仍是静态封面，Canvas 只留在锁屏。
 // 日志 tag：`[iOS27]`。
 import Foundation
 import UIKit
@@ -44,13 +48,6 @@ enum NowPlayingIOS27 {
     static let artworkHeightRatio: CGFloat = 0.58
     /// 封面高宽比上限：方图裁成竖图最多裁到 1.30；再大会把封面两边裁掉太多。
     static let artworkMaxAspect: CGFloat = 1.30
-    /// 顶部压暗带：**封面仍然满血到顶**，只在状态栏/灵动岛那一带再压一层黑。
-    ///
-    /// 封面不下移（AM 也是顶到最上沿），要解决的是亮度：浅色封面会让状态栏时间和
-    /// 下拉把手糊掉。所以在最上层叠一层上重下无的黑色渐变，只压这一带、不碰封面构图。
-    /// 高度 = 安全区顶 + 64（刘海/灵动岛 + 把手 + 状态栏文字），下限 96。
-    static let topScrimExtraHeight: CGFloat = 64
-    static let topScrimMinHeight: CGFloat = 96
     /// 底部那一坨（`npv.bottomStackView`：曲名 / 进度 / 时间 / 传输行 / 工具行）整体上移多少。
     ///
     /// 上移 55 后曲名从 600 落到 545，只比封面下沿（520）低 25pt，与 AM 一致；
@@ -58,14 +55,16 @@ enum NowPlayingIOS27 {
     /// ⚠️ 只有**这一层** transform；量位置的地方必须用 `convert`（带 transform），不能用
     /// `untransformed`，否则字形/音量行会留在原位。
     static let bottomStackYOffset: CGFloat = -55
-    /// 压黑渐变：从页面 64% 起渐到纯黑（pw 的 `kBlackFrom` 是 0.55；这里推后一点，
-    /// 让封面淡出来的那块颜色多留一会儿，过渡更长）。
-    static let blackFromRatio: CGFloat = 0.64
+    /// 压黑渐变：从页面 55% 起渐到纯黑（pw 的 `kBlackFrom` 就是 0.55）。
+    ///
+    /// 起点必须落在封面下沿（0.58）**之前**：否则封面下沿与这行歌名（y≈545）之间那一条
+    /// 完全没有压暗，浅色封面上就是一条亮灰/亮蓝的带（"渐变遮不住封面底部"）。
+    static let blackFromRatio: CGFloat = 0.55
     /// 压黑渐变终点的**不透明度**。
     ///
-    /// 取 0.42 而不是纯黑：背景里铺了封面的模糊延续，这条纱只负责压暗。AM 那块是
-    /// "暗下去"不是"灰掉"——它先把封面过饱和再压暗，所以我们这条纱要更淡，颜色才透得出来。
-    static let blackScrimAlpha: CGFloat = 0.42
+    /// 背景里铺了封面的模糊延续，这条纱只负责压暗。AM 那块是"暗下去"不是"灰掉" ——
+    /// 它先把封面过饱和再压暗；这里取 0.50，让封面的颜色仍透一点出来。
+    static let blackScrimAlpha: CGFloat = 0.50
     /// 字段颜色的两条上限（pw 原值：饱和度 0.55、线性亮度 0.07 ⇒ sRGB ≈ 0.29）。
     ///
     /// pw 这两条是为整块纯色底定的；我们底下还铺了封面模糊图，颜色不需要压那么死，
@@ -79,9 +78,9 @@ enum NowPlayingIOS27 {
     /// 模糊底是**整张封面**铺满整页，字段色只在它下面 —— 白封面时中间那块（曲名、
     /// 歌词、时间、控件全是白字）就是一片白。压黑的量按"超出去多少"线性给，
     /// 暗封面完全不加（观感与不压时一模一样）。
-    static let readableBackdropBrightness: CGFloat = 0.45
+    static let readableBackdropBrightness: CGFloat = 0.38
     /// 可读性压黑的上限（白封面的极端情况）。
-    static let maxReadabilityScrimAlpha: CGFloat = 0.58
+    static let maxReadabilityScrimAlpha: CGFloat = 0.68
     /// 顶部导航那三件的 id。
     ///
     /// · `now-playing-minimize-button` —— 左上那颗向下箭头（48×48，`Tertiary`）；
@@ -100,6 +99,16 @@ enum NowPlayingIOS27 {
     // MARK: - 状态
 
     static weak var lastPage: UIView?
+
+    /// 当前这一页的 Canvas 格（`nowplaying-contentlayer-cell-5xxx` / `CanvasNowPlayingCell`）。
+    ///
+    /// Canvas 打开时 contentlayer 的当前页不再是封面格：视频铺满整页，上面另铺一张
+    /// 「歌词卡」和页顶那行歌名。这一页开着时把卡藏掉，并把格子里那张被 Spotify 按成
+    /// 透明的封面壳（`Encore.ImageView`）当作普通壳 —— 播放页继续画静态封面，
+    /// Canvas 只留在锁屏。
+    static weak var canvasCell: UIView?
+    /// "Canvas 页的卡藏掉了"只报一行。
+    static var didLogCanvas = false
 
     /// Spotify 那张**真正画封面**的壳（`Encore.ImageView`，366×366）。
     static weak var artworkShell: UIView?
@@ -129,10 +138,6 @@ enum NowPlayingIOS27 {
     /// 被我们按下 `alpha` 的原生壳（记原值，收尾按原值写回）。
     static let hiddenShells = NSHashTable<UIView>.weakObjects()
     static var shellAlphas: [ObjectIdentifier: CGFloat] = [:]
-
-    /// 顶部压暗带（盖在封面之上、状态栏那一带；见 `topScrimExtraHeight`）。
-    static weak var topScrim: UIView?
-    static var didLogTopScrim = false
 
     /// 被我们藏掉的顶部 chrome（歌单名 / 向下箭头）。
     static let hiddenChrome = NSHashTable<UIView>.weakObjects()
@@ -529,6 +534,8 @@ enum NowPlayingIOS27 {
         // 前提（标题行就长在这个 stack 里）。
         if placeBottomStack(in: page) { changed = true }
         if placeTitleRow(in: page) { changed = true }
+        // Canvas 页自带的歌词卡 / 页顶歌名压在我们的版式上，每拍按下去。
+        if placeCanvasChrome(in: page) { changed = true }
         // `setLyricsMode` 那一拍标题可能还没量到（换歌转场/页面重建）⇒ 它把"亮歌词"挂起；
         // 这里每一拍重试，标题真到缩略图旁边了才铺歌词。
         if lyricsModeActive, !lyricsModeRevealed, lyricsRevealPending,
@@ -709,6 +716,11 @@ enum NowPlayingIOS27 {
     /// 2. **挡住"挑到离屏那张"**：横向翻页转场中途会出现 `at 399,161` / `at -138252,161`
     /// 这种格子，画进去等于屏幕上什么都没有。
     private static func resolvedShell(in page: UIView) -> UIView? {
+        // Canvas 页先认这一格里的封面壳：记忆里的 `artworkShell` 可能还是上一页（旧封面格）
+        // 的那一张，而 Canvas 格里的图被 Spotify 按成了 alpha 0、`visibleCover` 也认不出来。
+        if canvasCell != nil, let shell = canvasArtworkShell(in: page) {
+            return shell
+        }
         if let shell = artworkShell, shell.window != nil,
            isControlOnPage(shell, in: page, requireAlpha: false),
            isNowPlayingCoverCell(shell) {
@@ -950,7 +962,6 @@ enum NowPlayingIOS27 {
                     + " · page \(Int(page.bounds.width))×\(Int(page.bounds.height))"
             )
         }
-        if updateTopScrim(in: host, page: page) { changed = true }
         // 我们的封面在原生那张**上面**（同一个 cell 里），原生那张必须按下去。
         hideShell(shell)
         return changed
@@ -1022,6 +1033,58 @@ enum NowPlayingIOS27 {
         return changed
     }
 
+    // MARK: - 音频律动（`AudioReactiveEngine` 每 30Hz 调一次）
+    //
+    // 只动**我们自己的**两样东西：封面的 `layer` 仿射变换、field 模糊底的 alpha。
+    //
+    // ⚠️ 刻意不用 `UIView.transform`：这一页的几何全是"`frame` 跟想要的值比"
+    // （`updateArtwork` / `syncArtworkFrameWithoutShell`），而 `transform` 会让 `frame`
+    // 读回缩放后的包围盒 ⇒ 每拍都判成"帧变了"、重设一次，封面会抖。
+    // `layer` 上的变换不参与 `UIView.frame` 的计算，几何那一套完全不受影响。
+    private static weak var audioPulseArtwork: UIView?
+    private static var audioPulseScale: CGFloat = 1
+    private static var audioPulseBreath: CGFloat = 0
+
+    /// 把这一拍的律动幅度落到屏幕上（`scale` 1.0 / `breath` 0 = 静止）。
+    ///
+    /// 只在**目标值变了**（或换了一张新封面 / 新 field）时才写属性：静止的那些拍一个字节
+    /// 都不写，否则 30Hz 会无休止地给图层打脏标记。
+    ///
+    /// - Returns: 这一拍有没有真的改东西（调用方可以忽略）。
+    @discardableResult
+    static func applyAudioPulse(scale: CGFloat, breath: CGFloat) -> Bool {
+        // 先钳位：算错了宁可不动，也不要把封面放大成一张糊块。
+        let targetScale = lyricsModeActive ? 1 : min(max(scale, 1), 1.10)
+        let targetBreath = min(max(breath, 0), 1)
+        var changed = false
+
+        if let art = artworkView, art.window != nil {
+            let newArtwork = audioPulseArtwork !== art
+            let newScale = abs(targetScale - audioPulseScale) > 0.0005
+            if newArtwork { audioPulseArtwork = art }
+            if newScale { audioPulseScale = targetScale }
+            if newArtwork || newScale {
+                art.layer.setAffineTransform(CGAffineTransform(scaleX: targetScale, y: targetScale))
+                changed = true
+            }
+        } else {
+            audioPulseArtwork = nil
+        }
+
+        if let backdrop = fieldBackdrop {
+            if abs(targetBreath - audioPulseBreath) > 0.005 {
+                audioPulseBreath = targetBreath
+                // 模糊底的 alpha 跟着低频轻微起伏：压到 1 以下时，下面那层字段色会透一点出来，
+                // 整块底看起来在"呼吸"。幅度只到 12%，不会把封面糊成另一种颜色。
+                backdrop.alpha = 1 - 0.12 * targetBreath
+                changed = true
+            }
+        } else {
+            audioPulseBreath = 0
+        }
+        return changed
+    }
+
     /// 把自己画的那张封面按**当前模式**摆好 —— 不依赖封面壳。
     ///
     /// 只处理"收起歌词时长回满屏"那一向的话，（打开时缩成 64pt）只有 `updateArtwork` 会做，
@@ -1059,76 +1122,6 @@ enum NowPlayingIOS27 {
             }
         }
         if applyArtworkMode(to: view) { changed = true }
-        // 压暗带跟着封面走（歌词模式里它只该盖住状态栏那一段，见 `updateTopScrim`）。
-        if updateTopScrim(in: host, page: page) { changed = true }
-        return changed
-    }
-
-    /// 状态栏那一带的压暗（封面**不下移**，只压亮度；见 `topScrimExtraHeight`）。
-    ///
-    /// 盖在封面之上、同一个 cell 里：0…(safeArea.top + 64)，黑 0.34 → 0.12 → 透明。
-    /// 曲名在 545、离这一带很远，所以不会把标题压暗。
-    @discardableResult
-    private static func updateTopScrim(in host: UIView, page: UIView) -> Bool {
-        // 页内歌词模式下封面缩略图就长在状态栏下面（`lyricsThumbTopInset` = 46），
-        // 这条压暗带有 96…112pt 高、还插在封面**上面**，会横过缩略图上沿。
-        // 那一档只保留状态栏那一段（顶层安全区量到 0 时也就 1pt：宁可没有这条压暗，
-        // 也不让它压到缩略图）。
-        let height = lyricsModeActive
-            ? max(page.safeAreaInsets.top, 1)
-            : max(page.safeAreaInsets.top + topScrimExtraHeight, topScrimMinHeight)
-        let frame = host.convert(
-            CGRect(x: 0, y: 0, width: page.bounds.width, height: height),
-            from: page
-        )
-
-        var changed = false
-        let scrim: UIView
-        if let existing = topScrim, existing.superview === host {
-            scrim = existing
-        } else {
-            teardownTopScrim()
-            let fresh = UIView(frame: frame)
-            fresh.isUserInteractionEnabled = false
-            fresh.accessibilityIdentifier = "eevee-ios27-top-scrim"
-            let gradient = CAGradientLayer()
-            gradient.name = "eevee-ios27-top-scrim-gradient"
-            gradient.colors = [
-                UIColor.black.withAlphaComponent(0.34).cgColor,
-                UIColor.black.withAlphaComponent(0.12).cgColor,
-                UIColor.clear.cgColor,
-            ]
-            gradient.locations = [0, 0.55, 1]
-            gradient.startPoint = CGPoint(x: 0.5, y: 0)
-            gradient.endPoint = CGPoint(x: 0.5, y: 1)
-            fresh.layer.addSublayer(gradient)
-            if let art = artworkView, art.superview === host {
-                host.insertSubview(fresh, aboveSubview: art)
-            } else {
-                host.addSubview(fresh)
-            }
-            topScrim = fresh
-            scrim = fresh
-            changed = true
-        }
-        if scrim.frame != frame {
-            scrim.frame = frame
-            changed = true
-        }
-        if let gradient = scrim.layer.sublayers?.first as? CAGradientLayer,
-           gradient.frame != scrim.bounds {
-            gradient.frame = scrim.bounds
-            changed = true
-        }
-        if !didLogTopScrim {
-            didLogTopScrim = true
-            writeDebugLog(
-                "[\(logTag)] top scrim — 0…\(Int(height))pt, black 0.34 → 0.12 → clear"
-                    + (lyricsModeActive
-                        ? " (lyrics mode: only the status-bar band, the thumbnail stays clear)"
-                        : " (the artwork still runs full-bleed under the island)")
-            )
-        }
         return changed
     }
 
@@ -1979,6 +1972,98 @@ enum NowPlayingIOS27 {
         return true
     }
 
+    // MARK: - Canvas 播放页
+    //
+    // Canvas 打开时 Spotify 把 contentlayer 的当前页换成 `CanvasNowPlayingCell`：视频铺满整页，
+    // 视频上另铺一张「歌词卡」和页顶歌名。AM 版式自己就有歌名行与页内歌词 ⇒ 那张卡每拍按成
+    // 透明；格子里那张被按成透明的封面壳交给正常的封面流程，播放页继续画静态封面。
+
+    /// 当前这一页的 Canvas 格；Canvas 没开时返回 nil。
+    private static func visibleCanvasCell(in page: UIView) -> UIView? {
+        var queue: [UIView] = [page]
+        var visited = 0
+        while !queue.isEmpty, visited < 3000 {
+            let view = queue.removeFirst()
+            visited += 1
+            if let identifier = view.accessibilityIdentifier,
+               identifier.contains("nowplaying-contentlayer-cell-5"),
+               !view.isHidden,
+               isControlOnPage(view, in: page, requireAlpha: false, horizontalMargin: 0) {
+                return view
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    /// 藏掉 Canvas 页自带的歌词卡（歌词 + 小封面 + 歌名 + 分享/全屏）和页顶歌名。
+    ///
+    /// 每拍重做：换歌时 Canvas 格与卡片都会换对象；`hideChrome` 按对象记原值，
+    /// `restore` 的 `revealChrome` 统一写回。
+    @discardableResult
+    private static func placeCanvasChrome(in page: UIView) -> Bool {
+        canvasCell = visibleCanvasCell(in: page)
+        guard let cell = canvasCell else { return false }
+        var changed = false
+        var hidden = 0
+
+        var queue: [UIView] = [cell]
+        var visited = 0
+        while !queue.isEmpty, visited < 900 {
+            let view = queue.removeFirst()
+            visited += 1
+            queue.append(contentsOf: view.subviews)
+            let className = String(describing: type(of: view))
+
+            if className.contains("CanvasNowPlayingLyricsElementView") {
+                if hideChrome(view) { changed = true }
+                hidden += 1
+            }
+            // Canvas 页顶部那行「歌名 / 歌手」：`ElementView<(), Any, Any>`，居中、约 98×48。
+            // 只认「Canvas 格里 + 页顶带 + 像标题行那么宽」的那一个 —— 底部标题行在
+            // `npv.bottomStackView` 里、不在这一格，不会被抓到。
+            if className.hasPrefix("ElementView<") {
+                let rect = view.convert(view.bounds, to: page)
+                if rect.minY >= 80, rect.minY <= 170,
+                   rect.width >= 70, rect.width <= 260,
+                   rect.height >= 36, rect.height <= 60 {
+                    if hideChrome(view) { changed = true }
+                    hidden += 1
+                }
+            }
+        }
+        if !didLogCanvas, hidden > 0 {
+            didLogCanvas = true
+            writeDebugLog(
+                "[\(logTag)] canvas page — hid Spotify's canvas lyrics card and header title"
+                    + " (\(hidden) view(s)); the still cover stays on top"
+            )
+        }
+        return changed
+    }
+
+    /// Canvas 格里那张“原生封面”的壳。
+    ///
+    /// Canvas 页的封面壳被 Spotify 自己按成了 `alpha = 0`（视频替代它），`visibleCover`
+    /// 的 `alpha > 0.01` 判据认不出来。这里只认「Canvas 格里、id 是 `Encore.ImageView`、
+    /// 尺寸够大」的那一张，交给正常的封面流程把静态封面画上去。
+    private static func canvasArtworkShell(in page: UIView) -> UIView? {
+        guard let cell = canvasCell else { return nil }
+        var queue: [UIView] = [cell]
+        var visited = 0
+        while !queue.isEmpty, visited < 900 {
+            let view = queue.removeFirst()
+            visited += 1
+            if view.accessibilityIdentifier == NowPlayingLyricsPlate.coverImageIdentifier,
+               view.bounds.width >= 200, view.bounds.height >= 200,
+               isControlOnPage(view, in: page, requireAlpha: false) {
+                return view
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
     /// 把一颗原生视图按 `alpha = 0` 藏掉（记原值；`revealChrome` 统一写回）。
     ///
     /// ⚠️ 它是 internal 而不是 private：传输行那两颗也走这一条，于是"记原值 / 收尾写回"
@@ -2077,6 +2162,8 @@ enum NowPlayingIOS27 {
         lyricsModeActive = false
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil
+        canvasCell = nil
+        didLogCanvas = false
         lyricsCreditView?.removeFromSuperview()
         lyricsCreditView = nil
         lyricsModeRevealed = false
@@ -2099,8 +2186,6 @@ enum NowPlayingIOS27 {
         bottomStack = nil
         bottomStackBase = nil
         didLogBottomStack = false
-        topScrim = nil
-        didLogTopScrim = false
         grabber = nil
         fieldHost = nil
         fieldSolid = nil
@@ -2145,20 +2230,20 @@ enum NowPlayingIOS27 {
         fieldSolid = nil
         fieldBackdrop = nil
         fieldBlack = nil
+        // 下一块 field 是全新的视图（alpha 默认 1）：把律动的基线一起归位。
+        audioPulseBreath = 0
     }
 
     private static func teardownArtwork() {
-        teardownTopScrim()
         artworkView?.layer.mask = nil
+        artworkView?.layer.setAffineTransform(.identity)
         artworkView?.removeFromSuperview()
         artworkView = nil
         artworkHost = nil
         artworkMask = nil
-    }
-
-    private static func teardownTopScrim() {
-        topScrim?.removeFromSuperview()
-        topScrim = nil
+        // 下一张封面是新视图：同一条基线的理由（见 `teardownField`）。
+        audioPulseArtwork = nil
+        audioPulseScale = 1
     }
 
     // MARK: - 小工具
@@ -2255,6 +2340,12 @@ enum NowPlayingIOS27 {
     /// 所以：整页祖先里**跳过任何包含 bottomStack 的**，只认封面自己那一格；
     /// 全都不合适时才退回老行为（至少封面还在）。
     private static func fullPageAncestor(of view: UIView, in page: UIView) -> UIView? {
+        // Canvas 页：封面壳在 Canvas 格里，而格子本身就是为了铺满整页 —— 直接把我们的
+        // 封面 / field 挂到这一格上，保证它们压在视频与那层文案上面；不依赖祖先里
+        // 哪一层先达到整页尺寸、也不依赖那一层与视频的 sibling 顺序。
+        if let cell = canvasCell, view.isDescendant(of: cell) {
+            return cell
+        }
         var current = view.superview
         var fallback: UIView?
         var visited = 0

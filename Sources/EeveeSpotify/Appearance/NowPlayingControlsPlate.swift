@@ -789,9 +789,21 @@ enum NowPlayingControlsPlate {
 // 见 `installTapTargetIfNeeded`：这是"点击那一刻就翻字形"在 9.1.88 上唯一真正生效的路
 // —— `PlayButtonView.uiButtonTapped` 那个钩子从不触发。
 func activateNowPlayingControls() {
-    if NSClassFromString(PlaybackControlsUnitHook.targetName) != nil {
+    let unitClass = NSClassFromString(PlaybackControlsUnitHook.targetName)
+    // 9.2.0 起这个类不再是 UIView（Orion 报 `targetHasIncompatibleType(expected: UIView, …)`），
+    // 挂 `layoutSubviews` 只会换来一条错误日志。字形刷新还有页面那一条 —— 跳过它。
+    // 用 `layoutSubviews` 探而不是 `is UIView.Type`：Swift 的元类型不协变，子类判不出来。
+    let unitIsView = unitClass.map {
+        class_getInstanceMethod($0, #selector(UIView.layoutSubviews)) != nil
+    } ?? false
+    if unitIsView {
         NowPlayingControlsGroup().activate()
         writeDebugLog("[NPVControls] hook installed (\(PlaybackControlsUnitHook.targetName))")
+    } else if unitClass != nil {
+        writeDebugLog(
+            "[NPVControls] \(PlaybackControlsUnitHook.targetName) is not a UIView on this build"
+                + " - layout hook skipped, glyphs refresh from the page tick"
+        )
     } else {
         writeDebugLog(
             "[NPVControls] missing \(PlaybackControlsUnitHook.targetName)"

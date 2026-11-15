@@ -77,6 +77,20 @@ func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
     modifyAssignedValues(&configuration.assignedValues)
 }
 
+/// 9.2.0 把旧 UCS 的那一条响应拆成了两条：
+/// · `remote-config-resolver/v3/configuration` → 一份裸的 `ResolveResponse`（分配表）；
+/// · `nebula/v1/configuration/attributes` → 旧的 `[String: AccountAttribute]` 账号态。
+/// 两条套用与 9.1.x 相同的改写：键名与新响应对得上（`type`、`catalogue`、`ads`、
+/// `on-demand`、`streaming-rules`…），所以不需要第二套规则。
+func modifyResolvedConfiguration(_ configuration: inout ResolveConfiguration) {
+    modifyAssignedValues(&configuration.assignedValues)
+}
+
+func modifyAccountAttributes(_ response: inout AccountAttributesResponse) {
+    reportAccountTierOnTheWire(response.accountAttributes)
+    modifyAttributes(&response.accountAttributes)
+}
+
 private let propertyReplacements = [
     // Append when the account's config omits them, so they work without overwrite-configuration.
     EeveePropertyReplacement(name: "crossfade_enabled", scope: "ios-feature-settings", modification: .forceBool(true)),
@@ -494,14 +508,10 @@ private let propertyReplacements = [
         modification: .setBool(false)
     ),
 
-    // 锁屏动态封面：Spotify 的播放核心只有在 `ios-feature-canvas.canvas_enabled` 为真时
-    // 才把 `canvas.url` 填进 track metadata。我们只读那条地址、不自己去找 Canvas，
-    // 所以这条 flag 是 Canvas 那半条链的前置。开关关着时下面那圈会整条跳过。
-    EeveePropertyReplacement(
-        name: "canvas_enabled",
-        scope: "ios-feature-canvas",
-        modification: .forceBool(true)
-    ),
+    // 锁屏动态封面的 Canvas 源**不**改这条 flag（`ios-feature-canvas.canvas_enabled`）：
+    // 服务端本来就下发 true，压它没有意义。真正的闸门是账号属性 `canvas-disabled`
+    // （见 `modifyAttributes`）—— 压成 false 后播放核心才会在 metadata 里填 `canvas.url`。
+    // 播放页因此也会出现 Canvas，但 `NowPlayingIOS27` 会用静态封面把它盖住。
 
     // 睡眠定时器：Spotify 自己那份（`ios-feature-sleeptimer`）在播客菜单里就能用，但
     // "选项表 / 1 分钟档 / 到点淡出"都由这几条 flag 决定。打开之后它自己那份更好用；
@@ -522,9 +532,6 @@ private let propertyReplacements = [
         modification: .forceBool(true)
     )
 ]
-
-/// 上面那条 flag 的名字（开关判定用，避免再抄一遍字面量）。
-private let canvasFlagName = "canvas_enabled"
 
 /// 歌词入口 flag 的名字（同上）。
 private let lyricsEntryPointFlagName = "lyrics_entry_point_enabled"
@@ -786,13 +793,8 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
             continue
         }
 
-        // Canvas：锁屏动态封面关着（或它自己的 Canvas 开关关着）时整条跳过 ——
-        // 不去动 Spotify 的远端配置，播放页里 Canvas 的表现保持原样。
-        if index < builtInReplacementCount,
-           replacement.name == canvasFlagName,
-           !LockScreenArtwork.wantsCanvas {
-            continue
-        }
+        // Canvas 那条 flag 不在替换表里（锁屏的 Canvas 走账号属性 `canvas-disabled`，
+        // 见 `modifyAttributes`），所以这里没有"按开关跳过"的分支。
 
         let matchingIndices = values.indices.filter({ index in
             let value = values[index]
@@ -923,6 +925,8 @@ private let premiumCoreKeys: Set<String> = [
     "unrestricted",
     "shuffle-eligible",
 ]
+
+private var didLogCanvasForce = false
 
 private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
     let serverAuthoritativeAttributes = Dictionary(
@@ -1102,6 +1106,24 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
             seeded += 1
         } else {
             skipped.append(key)
+        }
+    }
+
+    // 锁屏动态封面的 Canvas 源：压的是**账号属性** `canvas-disabled`，不是
+    // `ios-feature-canvas.canvas_enabled`（那条服务端本来就下发 true，压它没有意义）。
+    // 这一条才是「设置 → 播放 → Canvas」的真相：客户端据它决定要不要在曲目元数据里要
+    // `canvas.url`。代价是播放页也会出现 Canvas —— 那一层由 `NowPlayingIOS27` 用静态封面
+    // 盖住；不想要锁屏这段就关掉设置里「锁屏动态封面」的 Canvas 源。
+    if LockScreenArtwork.wantsCanvas {
+        attributes["canvas-disabled"] = AccountAttribute.with {
+            $0.boolValue = false
+        }
+        if !didLogCanvasForce {
+            didLogCanvasForce = true
+            writeDebugLog(
+                "[Canvas] forced the account attribute canvas-disabled=false"
+                    + " — the lock-screen Canvas source is on"
+            )
         }
     }
 

@@ -37,7 +37,7 @@ petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp)：Spotify在日
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org)：提供逐词歌词及部分其他歌词来源没有的歌词。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
 spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
-spicylyrics_api_key_description = "不内置默认密钥：在这里填入你自己的密钥才能使用 Spicy Lyrics。留空则回退到 Musixmatch。密钥获取方法：在 Spicy Lyrics 上同意用户协议，按「Add」，复制它给出的客户端密钥即可。";
+spicylyrics_api_key_description = "不内置默认密钥：在这里填入你自己的密钥才能使用 Spicy Lyrics。留空则回退到下一个歌词来源。密钥获取方法：在 Spicy Lyrics 上同意用户协议，按「Add」，复制它给出的客户端密钥即可。";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
 spicylyrics_key_link = "在 Spicy Lyrics 上添加本应用";
 spicylyrics_key_invalid = "Spicy Lyrics 密钥被拒绝";
@@ -185,6 +185,14 @@ lyrics_hide_translation = "不展示部分歌词源的翻译";
 lyrics_hide_translation_description = "如果此选项是默认开启状态，那你大概率用不上部分歌词源的翻译。这些歌词源包括AMLL，NetEase，QQ Music，KuGou。";
 lyrics_auto_translate = "本机歌词翻译";
 lyrics_auto_translate_description = "歌词源没有给出译文时，用iOS自带翻译框架翻译当前歌词行，翻译质量可能欠佳。系统版本最低需要iOS26，并先在「设置 → App → 翻译 → 语言」里下好语言。";
+lyrics_typography_section = "文字";
+lyrics_appearance_title = "歌词外观";
+settings_sub_lyrics_appearance = "字号与行距";
+lyrics_appearance_hint = "字号在「设置 → 歌词外观」里。";
+lyrics_text_scale = "字号";
+lyrics_line_spacing = "行距";
+lyrics_typography_description = "影响全屏歌词页、播放器里的歌词层和锁屏歌词；听歌页卡片上那块小歌词预览保持原样。";
+lyrics_typography_reset = "恢复默认";
 lyrics_offset_current_song = "当前歌曲";
 lyrics_offset_clear_all = "清除全部歌词偏移";
 lyrics_offset_description = "对所有歌词源生效（Genius除外）。正数表示歌词延后显示。";
@@ -220,7 +228,6 @@ enable_log_recording = "开启日志记录";
 enable_log_recording_description = "日常使用无须开启日志记录功能。";
 export_debug_log = "导出调试日志";
 redact_shared_log = "分享日志前脱敏";
-redact_shared_log_description = "导出的那一份会隐去你的听歌记录（曲目、艺人、歌单）、曲目与封面 ID、设备标识。只有自己留档时才建议关闭。";
 redact_log_failed = "生成脱敏日志失败，因此没有导出任何内容。请重试，或先清除日志。";
 redact_log_failed_ok = "确定";
 clear_debug_log = "清除调试日志";
@@ -369,7 +376,7 @@ telemetry_stats_section = "本次启动";
 telemetry_blocked_endpoints = "已取消的上报请求";
 telemetry_refresh_counters = "刷新";
 telemetry_reset_counters = "清零计数";
-haptics_title = "触感";
+haptics_title = "界面触感";
 haptics_enabled = "播放器控件震动";
 haptics_description = "用系统反馈引擎给Spotify播放器控件加震动。功能生效需要重启Spotify。";
 haptics_strength = "震动强度";
@@ -414,10 +421,10 @@ flag_group_home = "首页与分享";
 flag_note_lyrics_v2 = "Spotify的歌词v2服务 —— 本项目的歌词依赖它，别关。";
 flag_note_canvas_lyrics = "把歌词画在Canvas视频上。";
 flag_catalog_unsupported = "暂不支持";
-dump_class_description = "把某一个类的名字、方法表和ivar表（含类型编码）写进调试日志。类名三种写法都收：运行期名、视图树日志里那种短名，或Module.Class。只读：只让runtime枚举，找到的方法一个都不会被调用。";
 dump_class_placeholder = "类名";
 dump_class_action = "转储这个类";
 detailed_logging = "更详细的日志记录";
+audio_tap_probe = "音频输出探针";
 
 /* MARK: 外观 */
 theme_section = "主题";
@@ -431,6 +438,7 @@ accent_color = "强调色";
 settings_group_playback = "播放与歌词";
 settings_group_appearance = "外观";
 settings_group_advanced = "进阶";
+settings_group_high = "高级";
 tabs_and_mini_bar_title = "标签栏与迷你条";
 home_and_library_title = "页面与音乐库";
 settings_sub_lyrics = "有关于歌词的设置";
@@ -444,7 +452,7 @@ settings_sub_app_icon = "选择App图标";
 settings_sub_experiments = "尚未定性的功能";
 settings_sub_flags = "注入远程开关";
 settings_sub_reduce = "关闭Spotify官方提示";
-settings_sub_haptics = "震动反馈";
+settings_sub_haptics = "点按界面控件时的震动";
 settings_sub_blocked_artists = "跳过艺人曲目";
 settings_sub_privacy = "遥测拦截与上报";
 settings_sub_misc = "没有其它归属的零碎项";
@@ -456,6 +464,45 @@ settings_sub_debug = "排查开关";
 settings_reset_page = "重置本页";
 settings_reset_page_footer = "把本页的选项恢复默认值。";
 settings_reset_page_done = "已重置本页 %d 项。";
+
+// ── 高级页 · 律动与触感：音频响应那一行 + 它的子页 ──
+// 封面律动跟着低频走；音乐触感把底鼓/军鼓变成轻触。
+audio_reactive_title = "律动与触感";
+settings_sub_audio_reactive = "封面随低频起伏、鼓点触发轻触";
+cover_pulse = "封面律动";
+cover_pulse_description = "让封面跟着低频轻微放大缩小。听歌页选择Apple Music式时生效。";
+music_haptics = "音乐触感";
+music_haptics_description = "把底鼓和军鼓变成轻触。强度越高越费电，连续触发 30 秒后会自动降档（Taptic Engine 长时间高频会变钝、发热）。需要 App 在前台。";
+music_haptics_strength = "强度";
+music_haptics_strength_low = "低";
+music_haptics_strength_medium = "中";
+music_haptics_strength_high = "高";
+music_haptics_test = "试一下";
+// ── 高级页 · AirPods 头部手势 ──
+head_gestures_title = "头部手势";
+settings_sub_head_gestures = "点头切下一首、摇头切上一首";
+head_gestures_enabled = "点头 / 摇头切歌";
+head_gestures_description = "点一下头切下一首，摇一下头切上一首。只有带姿态传感器的 AirPods Pro / AirPods Max 能提供头部姿态数据；识别并不完美，出现误切歌时把它关掉即可。";
+head_gestures_motion_available = "头部姿态数据可用";
+head_gestures_motion_unavailable = "没有头部姿态数据 —— 请连接 AirPods Pro / Max";
+
+// ── 高级页 · 音频效果（十段 EQ + 前置增益）──
+audio_effects_title = "音频效果";
+settings_sub_audio_effects = "十段均衡器与前置增益";
+audio_effects_enabled = "启用音频效果";
+audio_effects_description = "功能类似均衡器。";
+audio_effects_preamp = "前置增益";
+audio_effects_equalizer = "均衡器";
+audio_effects_presets = "预设";
+audio_effects_preset_flat = "平直";
+audio_effects_preset_bass = "低音增强";
+audio_effects_preset_vocal = "人声";
+audio_effects_preset_rock = "摇滚";
+audio_effects_preset_podcast = "播客";
+audio_effects_preset_custom = "自定义";
+audio_effects_status_active = "音频输出已走效果链";
+audio_effects_status_restart = "未接管，重启 Spotify 后生效";
+
 
 hide_mini_player_bar = "隐藏迷你播放条";
 player_cards_section = "听歌页卡片";
@@ -545,7 +592,7 @@ flag_group_chrome_footer = "播放条上的元素开关 + 封面。这些是「�
 flag_note_interventions_master = "总闸：关掉它，下面这一批提示由Spotify自己统一收手";
 flag_note_int_needs_number = "整数开关：去「Flag覆盖」页选「写入数字」再填（节流秒数 / 次数上限这类）";
 flag_note_data_saver = "省流量提示；「省流量模式」本身是ios-datasaver-automatic-impl.enabled";
-flag_note_canvas_off = "关掉 Canvas（封面变成静态）";
+flag_note_canvas_off = "关掉听歌页里的 Canvas（封面变成静态；锁屏动态封面不受影响）";
 flag_note_snake_on = "打开它 = Spotify自己藏着的「封面贪吃蛇」彩蛋";
 maintenance_section = "设置与关于";
 backup_title = "备份与重置";
@@ -652,9 +699,9 @@ reduce_interventions_scope_yourlibaryx = "音乐库";
 now_playing_section = "歌曲播放页";
 now_playing_style = "听歌页样式";
 now_playing_style_spotify = "Spotify原生";
-now_playing_style_immersive = "沉浸式";
 now_playing_style_apple_music = "Apple Music式";
-now_playing_style_description = "若选择Spotify原生、则不更改听歌页。若选择沉浸式，则听歌页仿照kumone。若选择Apple Music式，则听歌页仿照Apple Music。";
+now_playing_style_description = "若选择Spotify原生，则保留 Spotify 自己的听歌页版式；该档的「预览歌词」暂停维护，会出现不遵循部分歌词设置的情况（例如开启日语罗马化后，歌词正文仍显示日语）。若选择Apple Music式，则听歌页仿照 Apple Music。";
+now_playing_style_podcast_warning = "播客请用 Spotify 原生样式：Apple Music 式的布局是按照音乐播放页尺寸做的，播客控件会被挤出屏幕。";
 // ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
 // 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
@@ -670,12 +717,12 @@ apple_music_token_invalid = "Apple Music登录令牌无效或已过期";
 apple_music_token_popup = "Apple Music官方歌词需要你自己的登录令牌：请在「设置 → 实验 → 启用Apple Music官方TTML歌词」里填入 media-user-token（浏览器：music.apple.com → 开发者工具 → 应用 → Cookie）。";
 artist_latest_release_tracks = "%d 首歌曲";
 
-lock_screen_artwork_title = "锁屏动态封面";
+lock_screen_artwork_title = "锁屏封面";
 settings_sub_lock_screen_artwork = "播放时显示动态封面";
 lock_screen_artwork_enabled = "动态封面";
 lock_screen_artwork_description = "锁屏页会用一段循环短片代替静态封面。Canvas未返回时用Apple Music的官方动态封面，两者都没有时用封面本地生成一段。系统最低版本需要iOS26。";
 lock_screen_artwork_canvas = "Canvas加入锁屏动态封面";
-lock_screen_artwork_canvas_description = "重启Spotify后生效。";
+lock_screen_artwork_canvas_description = "用Spotify自带的Canvas短片作为动态封面。";
 lock_screen_artwork_fill = "本地生成动态封面";
 lock_screen_artwork_fill_description = "Canvas和Apple Music均未返回动态封面时，用专辑封面渲染一段循环短片。";
 lock_screen_artwork_cache = "已下载的封面";
@@ -697,3 +744,33 @@ sleep_timer_start = "开始计时";
 sleep_timer_cancel = "取消定时";
 sleep_timer_remaining = "剩余时间";
 sleep_timer_pick_duration = "选一个时长";
+
+// ── 听歌统计
+
+listening_stats_title = "听歌统计";
+settings_sub_listening_stats = "播放次数、收听时长与最常听的歌";
+listening_stats_enabled = "记录播放";
+listening_stats_enabled_footer = "只记录在这台设备上。一首歌累计播放 30 秒算一次播放；不足 30 秒的时长也会保留。开启之前的历史不存在。";
+listening_stats_period = "时间范围";
+listening_stats_period_week = "近 7 天";
+listening_stats_period_month = "近 30 天";
+listening_stats_period_year = "近一年";
+listening_stats_period_all = "全部";
+listening_stats_overview_total_time = "收听时长";
+listening_stats_overview_plays = "播放次数";
+listening_stats_overview_tracks = "曲目数";
+listening_stats_overview_artists = "艺人数";
+listening_stats_last_7_days = "近 7 天";
+listening_stats_top_songs = "最常听的歌";
+listening_stats_top_artists = "最常听的艺人";
+listening_stats_empty = "还没有记录。开始播放后会自动出现在这里。";
+listening_stats_clear = "清除听歌统计";
+listening_stats_clear_title = "清除听歌统计？";
+listening_stats_clear_message = "会删除到目前为止记录的所有播放次数与时长，无法恢复。";
+listening_stats_clear_confirm = "清除";
+listening_stats_hours_only_format = "%d 小时";
+listening_stats_hours_format = "%d 小时 %d 分";
+listening_stats_minutes_format = "%d 分钟";
+listening_stats_seconds_format = "%d 秒";
+listening_stats_plays_format = "%d 次";
+listening_stats_combo_format = "%@ · %@";

@@ -25,24 +25,52 @@ private let eeveeLogger = Logger(
 /// 用 `sync` 而不是 `async`：崩溃取证时最后几行必须已经落盘（异步会把它们留在队列里）。
 private let logWriteQueue = DispatchQueue(label: "com.eeveespotify.debuglog.write")
 
+/// 常驻的日志文件句柄，只在 `logWriteQueue` 上访问。
+///
+/// 为什么不再"每行 open + seek + write + close"：那条链在 iOS 上是毫秒级的（沙箱检查 +
+/// 文件元数据），而日志是**突发**来的 —— 启动、配置改写、视图转储都能在一秒里打出上百行，
+/// 每行几毫秒就把调用线程（含主线程）按住不放，界面就是"卡"。
+/// 句柄常驻之后每行只剩一次 write。
+private var logFileHandle: FileHandle?
+/// 句柄打不开（容器不可写之类）就不要每行重试。
+private var logFileHandleUnavailable = false
+
 private func appendLogFile(_ message: String) {
     let timestamp = Date().description
     let logMessage = "[\(timestamp)] \(message)\n"
+    guard let data = logMessage.data(using: .utf8) else { return }
 
     logWriteQueue.sync {
-        let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
+        debugLogFileHandle()?.write(data)
+    }
+}
 
-        if FileManager.default.fileExists(atPath: logPath) {
-            if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                fileHandle.seekToEndOfFile()
-                if let data = logMessage.data(using: .utf8) {
-                    fileHandle.write(data)
-                }
-                fileHandle.closeFile()
-            }
-        } else {
-            try? logMessage.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
+/// 只在 `logWriteQueue` 上调用。
+private func debugLogFileHandle() -> FileHandle? {
+    if let logFileHandle { return logFileHandle }
+    guard !logFileHandleUnavailable else { return nil }
+
+    let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
+    if !FileManager.default.fileExists(atPath: logPath) {
+        FileManager.default.createFile(atPath: logPath, contents: nil)
+    }
+    guard let handle = FileHandle(forWritingAtPath: logPath) else {
+        logFileHandleUnavailable = true
+        return nil
+    }
+    handle.seekToEndOfFile()
+    logFileHandle = handle
+    return handle
+}
+
+/// 「清除调试日志」是 `write(toFile:atomically:)` —— 它会**换一个新文件**（写临时文件再改名），
+/// 旧句柄指向的那份 inode 已经没人看得见了。所以清完之后必须把句柄关掉重新打开，
+/// 否则接下来的日志会写进一个"被删掉的文件"。
+func resetDebugLogFile() {
+    logWriteQueue.sync {
+        logFileHandle?.closeFile()
+        logFileHandle = nil
+        logFileHandleUnavailable = false
     }
 }
 
@@ -106,7 +134,7 @@ struct BasePremiumPatchingGroup: HookGroup { }
 struct IOS14PremiumPatchingGroup: HookGroup { }
 struct NonIOS14PremiumPatchingGroup: HookGroup { }
 struct IOS14And15PremiumPatchingGroup: HookGroup { }
-struct V91PremiumPatchingGroup: HookGroup { } // For Spotify 9.1.x versions
+struct V91PremiumPatchingGroup: HookGroup { } // For the 9.1.x / 9.2.x family
 struct LatestPremiumPatchingGroup: HookGroup { }
 
 // Spotify 9.1.x originally removed the offline helper, so this version family
@@ -282,14 +310,22 @@ struct EeveeSpotify: Tweak {
         
         NSLog("[EeveeSpotify] Detected Spotify version: \(version)")
         
+        // 9.1 与 9.2 是同一套 hook 目标：9.2.0 上我们 hook 的类名、选择器与 9.1.88
+        // 逐条对得上（`SPTDataLoaderService`、`Connectivity_HttpClientKit`、
+        // `Settings_PlatformImpl.SettingsListViewController` 等都在），所以按 major.minor
+        // 认族。写死 `contains("9.1")` 会把 9.2.0 判成 `.latest` —— 那条分支不挂
+        // `PremiumBootstrapGroup`（服务端改写/customize 回放/广告拦截全在里面），
+        // 而日志看起来仍然是正常的。
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        if parts.count >= 2, parts[0] == 9, parts[1] == 1 || parts[1] == 2 {
+            return .v91
+        }
+
         switch version {
         case "9.0.48":
             return .lastAvailableiOS15
         case "8.9.8":
             return .lastAvailableiOS14
-        case _ where version.contains("9.1"):
-            // 9.1.x versions don't have offline content helper classes
-            return .v91
         default:
             return .latest
         }
@@ -337,6 +373,10 @@ struct EeveeSpotify: Tweak {
         activateEeveePremiumForce()
 
         activateEeveeCrossfadeForce()
+
+        // 默认 flag 覆盖（目前只有一条：听歌页关掉 Canvas 的视频，锁屏不受影响）。
+        // 必须在配置改写之前种进去；只种一次，用户删掉后不会再补。
+        FlagOverrideStore.seedDefaultsIfNeeded()
 
         // customize 种子：必须在任何网络改写之前跑。
         //
@@ -507,6 +547,10 @@ struct EeveeSpotify: Tweak {
         // 屏蔽艺人：1 秒一次的只读轮询，发现换歌就判一次（名单空着时它什么都不做）。
         // 不用新增 hook 的原因写在 `BlockedArtistSkip` 顶部。
         BlockedArtistSkip.start()
+
+        // 听歌统计：同一条 1 秒轮询，只读播放位置/速率并把「真的在播」的秒数记到本地。
+        // 开关实时读；默认开，关掉只停止累积、不清已有数据。
+        ListeningStatsRecorder.shared.start()
 
         // TESTING: extended ad blocker (NPV/lyrics ad, home brand-ads, in-stream).
         activateEeveeAdBlockerExtended()
@@ -702,7 +746,6 @@ struct EeveeSpotify: Tweak {
             ("SPTAuthSessionImplementation", "SPTAuthSession"),
             ("_TtC24Connectivity_SessionImpl18SessionServiceImpl", "SessionServiceImpl"),
             ("SPTAuthLegacyLoginControllerImplementation", "LegacyLoginController"),
-            ("_TtC24Connectivity_SessionImplP33_831B98CC28223E431E21CD27ADD20AF222OauthAccessTokenBridge", "OauthAccessTokenBridge"),
             ("ARTWebSocketTransport", "AblyWebSocket"),
             ("ARTSRWebSocket", "AblySRWebSocket"),
         ]
@@ -715,6 +758,16 @@ struct EeveeSpotify: Tweak {
                 allFound = false
             }
         }
+        // 这个私有类的 mangled 名带重编译判别串，9.2.0 又换了宿主模块 —— 两个名字都试，
+        // 免得日志把"版本对不上"报成"类丢了"。
+        let oauthBridges = [OauthAccessTokenBridgeTargets.spotify92, OauthAccessTokenBridgeTargets.legacy]
+        if oauthBridges.contains(where: { NSClassFromString($0) != nil }) {
+            writeDebugLog("[INIT] OauthAccessTokenBridge class found")
+        } else {
+            writeDebugLog("[INIT] MISSING class for OauthAccessTokenBridge")
+            allFound = false
+        }
+
         if allFound {
             writeDebugLog("[INIT] All \(hookTargets.count) hook targets verified")
         }
@@ -736,10 +789,10 @@ struct EeveeSpotify: Tweak {
             writeDebugLog("[INIT] MISSING SPTPlayerTrack — the has_lyrics override cannot possibly work")
         }
 
-        // For 9.1.x, activate premium patching and lyrics
+        // For the 9.1/9.2 family, activate premium patching and lyrics
         if EeveeSpotify.hookTarget == .v91 {
 
-            // Premium patching (9.1.x)
+            // Premium patching (9.1/9.2)
             // Always activate the *bootstrap interceptor*; it is required for premium patching.
             if UserDefaults.patchType.isPatching {
                 PremiumBootstrapGroup().activate()
@@ -805,7 +858,7 @@ struct EeveeSpotify: Tweak {
             } else {
                 writeDebugLog("[INIT] Settings_PlatformImpl.SettingsListViewController missing")
             }
-            NSLog("[EeveeSpotify] Initialization complete for 9.1.x")
+            NSLog("[EeveeSpotify] Initialization complete for the 9.1/9.2 family")
             TrueShuffleHook.install()
             activateSponsorBlock()
             // 「实验 → 显示 Instagram 分享位」：**两条腿一起上** ——
@@ -818,8 +871,19 @@ struct EeveeSpotify: Tweak {
             // 开关实时读，Canvas 那条 flag 才需要重启。
             activateLockScreenArtwork()
 
+            // 音频观察服务：fishhook **一个进程只装一次**，只读诊断探针与音频驱动功能
+            // （封面律动 / 音乐触感）共用它；装的动作在后台队列上，不压启动窗口。
+            // 两条都放在 `return` 之前：9.1/9.2 族都在这一支里，后面那段永远不会执行。
+            AudioTapService.startAtLaunch()
+            // 音频驱动功能：两颗开关任一开着才起 30Hz 那条通道（关着时这里是两次 bool 读）。
+            AudioReactiveEngine.shared.refresh()
+            // AirPods 点头/摇头切歌：开关开着、且耳机真的在给头部姿态数据才启动。
+            HeadGestureControls.syncWithSettings()
+            // 音频效果（十段 EQ / 前置增益）：开关开着才装 tap，并把系数算好。
+            AudioDSP.syncWithSettings()
+
             // ⚠️⚠️ 这个 `return` 把 `init` 切成了两段 —— 它后面那句 "For other versions"
-            // 底下整段在 **9.1.x（本仓唯一的目标版本）上永远不会执行**。
+            // 底下整段在 **9.1/9.2 族（本仓的目标版本）上永远不会执行**。
             // 已经栽过两次：的 karaoke / SponsorBlock / 调试探针，以及
             // 的 beta 提示（`BetaVersionNotice` 写在函数最末尾 ⇒ 一次都没弹过，
             // 已删）。

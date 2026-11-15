@@ -142,9 +142,10 @@ struct EeveeLyricsSettingsView: View {
         if !Self.supportsBetterWordByWordLyrics {
             text += "\n\n" + "better_word_by_word_lyrics_needs_ios26".localized
         }
+        text += "\n\n" + "lyrics_appearance_hint".localized
         return Text(text)
     }
-    
+
     @ViewBuilder private func disableLyricsSection() -> some View {
         Section(
             footer: Text("disable_lyrics_feature_description".localized)

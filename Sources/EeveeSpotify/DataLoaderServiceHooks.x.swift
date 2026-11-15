@@ -99,6 +99,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         do {
+            SpotifyResponsePatcher.dumpConfigurationBodyIfNeeded(url: url, buffer: buffer)
             // Lyrics — async fetch with 18s budget, falls back to Spotify's own response on failure.
             //
             // iOS 27 / Spotify 9.1.60 fix: Spotify's URLSession delegate handler for
@@ -216,6 +217,12 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, dataTask: task, didReceiveData: buffer)
             orig.URLSession(session, task: task, didCompleteWithError: nil)
         } catch {
+            // The bytes were already withheld from Spotify above; if the rewrite throws,
+            // hand the original body back instead of completing the task empty.
+            writeDebugLog(
+                "[DL] patch failed for \(DebugLogSanitizer.logSafeURL(url)) - passing the original body through: \(error)"
+            )
+            orig.URLSession(session, dataTask: task, didReceiveData: buffer)
             orig.URLSession(session, task: task, didCompleteWithError: error)
         }
     }

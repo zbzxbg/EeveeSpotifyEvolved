@@ -161,19 +161,13 @@ enum EntityPageAppearance {
     private static var heroHeightKey: UInt8 = 0
     /// hero 的最小高度（pw 的 `kMinHero = 120`）：比这矮就不画，免得出来一条细带。
     private static let minHeroHeight: CGFloat = 120
-    /// **顶上那一条"纱"**（见 `ensureScrim`）—— 现在它**挂在照片自己身上**，
-    /// 颜色取**照片顶边那一小条的平均色**，高度只到状态栏。
-    private static var scrim: GradientView?
-    /// 那一截在"安全区顶"之外还要往下化开多少 —— 不留这一截的话，色带底沿会看到一条硬边。
-    private static let scrimExtraFade: CGFloat = 12
     /// 取顶边颜色时只看**图高最上面这一小条**，不是整图平均 ——
-    /// 整图平均会把主体也算进去（白猫那张就是被"整图 + 压暗"糊成一条灰带的，见 `ensureScrim`）。
+    /// 整图平均会把主体也算进去。现在只用于**状态栏字色**
+    /// （`ensureField` 的 `statusLight` 判据），不再画顶部色带。
     private static let topEdgeStripFraction: CGFloat = 0.06
     /// 顶边那一小条的平均色，按"哪张图"缓存一次（0.6s 一拍，不能每拍重算 CoreGraphics）。
     private static var cachedTopEdgeSource: UIImage?
     private static var cachedTopEdgeColour: UIColor?
-    /// 那一条**当前用着哪个颜色**（`#RRGGBB`）：换封面才重写 layer，0.6s 那一拍不重复写。
-    private static var scrimColourKey: String?
     /// 化开区间、图源尺寸这两条日志这页打过没有（各一条）。
     private static var didReportMelt = false
     private static var didReportHeroSource = false
@@ -498,7 +492,7 @@ enum EntityPageAppearance {
         guard let target = currentTarget() else {
             // 页面走了：把上一页留下的东西全部还原（切页/退出都不留残迹）。
             if currentPage != nil || field != nil || sharpHero != nil
-                || scrim != nil || concealedNativeCover != nil {
+                || concealedNativeCover != nil {
                 restore(reason: "left the page")
             }
             // （`⋯` 已经由上面那一句 `refreshPinnedMore` 收尾，见它的说明。）
@@ -581,7 +575,7 @@ enum EntityPageAppearance {
             // **两种版式都要藏 Spotify 自己那层色晕**：sharp 那一支只在"宿主认出来"时才藏
             // （`ensureSharpHero` 里的 `concealWash` / `concealAlbumWash`），宿主认不出就会漏，
             // 而它是一条**模糊 / 径向**的渐变，压在我们的 field 上就是一整片脏色。
-            // `concealNativeWash` 自己会跳过我们的 hero / scrim，幂等，多叫一次没有代价。
+            // `concealNativeWash` 自己会跳过我们的 hero，幂等，多叫一次没有代价。
             if target.kind != .artist {
                 concealNativeWash(for: target)
             }
@@ -1091,9 +1085,7 @@ enum EntityPageAppearance {
         /// 高度按**宿主**算、且**不要求封面已经量好**（专辑页与艺人页：封面可能这一拍还没布局）。
         let fillsHost: Bool
         /// 顶部留出状态栏那一条（= 把图**往下挪**，上面露出取色底）。**恒 false** ——
-        /// 缓冲没和封面接上、而且太大；AM 与歌单页都是铺到顶的。
-        /// （用户再问"怎么搞好"）：他二选一里选了**方案 A（照片照旧铺到顶 + 顶上叠一层纱）**
-        /// ⇒ 这一条**仍然是 false**，顶上那件事由 `ensureScrim` 做。变量留着只作记录。
+        /// 缓冲没和封面接上、而且太大；AM 与歌单页都是铺到顶的。变量留着只作记录。
         let wantsTopInset: Bool
 
         if let plane, plane.bounds.width > 1 {
@@ -1153,8 +1145,7 @@ enum EntityPageAppearance {
             objc_setAssociatedObject(host, &heroHeightKey, NSNumber(value: height), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         // 缓冲（只有专辑页要，见 `wantsTopInset`）：把图从状态栏下面开始画。
-        // 这条**永远是死路** —— 用户二选一里选了方案 A（图照旧铺到顶 + 顶上加纱），
-        // 顶上那件事现在由 `ensureScrim` 做。算式留着，将来真要翻回"把图往下挪"时不用重推。
+        // 这条**恒 false**（图照旧铺到顶）。算式留着，将来真要翻回"把图往下挪"时不用重推。
         let topInset = wantsTopInset ? page.safeAreaInsets.top : 0
         // **整幅上移**（`frame.y` 取负）—— AM 的照片主体落在上半部分，
         // 我们原来顶对齐、主体偏下。
@@ -1233,95 +1224,6 @@ enum EntityPageAppearance {
                     + " — the picture itself fades into the field, there is no strip pasted under it"
             )
         }
-
-        // 顶上那条纱**挂在照片自己身上**、颜色取**照片顶边那一小条** ——
-        // 不再是"页面取色"。
-        ensureScrim(in: view, page: page, image: source)
-    }
-
-    /// **顶上那一条"纱"** —— 状态栏压在满幅照片上时，给它一条与照片同色的底。
-    ///
-    /// AM 的做法：顶上那一条**就是照片自己的颜色**（照片从这片颜色里长出来），
-    /// 不是叠一层深色。所以这里的三条：
-    ///
-    /// * 颜色 = **照片顶边那一小条的平均色**（`topEdgeStripFraction`）。整图平均不行 ——
-    /// 我们上一版用的是**页面取色**（封面被压到亮度上限之后的那一档深灰，
-    /// 白猫那张 ≈ `#7B7D7F`）⇒ 深灰糊在白照片顶上，就是顶上那条脏灰带。
-    /// * 高度 = **安全区（状态栏 / 灵动岛）+ 一小截化开**，不再往下伸进页头。
-    /// * **顶边偏亮就整条不画**：那种情况状态栏已经翻成黑字（`ensureField` 用同一小条判），
-    /// 照片自己就是最好的底，再叠一层只会把它弄脏（图偏亮就弱化或直接不要）。
-    /// * 挂在**照片视图自己身上**（`hero.addSubview`）⇒ 照片被缩放 / 视差 / 被宿主裁切时，
-    /// 纱的位置永远和图钉在一起，不会和图错开。
-    ///
-    /// ⚠️ 与 `wantsTopInset`（真正把图往下挪）仍**不是一回事**：那条被用户否过
-    /// （"缓冲没和封面接上、而且太大"），现在仍然恒 `false`。
-    private static func ensureScrim(in hero: UIImageView, page: UIView, image: UIImage) {
-        // 取不到顶边颜色、或顶边本来就亮 ⇒ **什么都不画**：宁可没有这一条，
-        // 也不能拿一个错的颜色顶上去（黑纱、灰带都是这么来的，AM 那边根本没有那一层）。
-        guard let colour = topEdgeColour(of: image), !isLight(colour) else {
-            removeScrim()
-            return
-        }
-
-        let host = hero.superview ?? page
-        let view: GradientView
-        if let scrim, scrim.superview === hero {
-            view = scrim
-        } else {
-            removeScrim()
-            let fresh = GradientView()
-            fresh.isUserInteractionEnabled = false
-            fresh.accessibilityIdentifier = "eevee-page-scrim"
-            let gradient = fresh.gradient
-            gradient.startPoint = CGPoint(x: 0.5, y: 0)
-            gradient.endPoint = CGPoint(x: 0.5, y: 1)
-            hero.addSubview(fresh)
-            scrim = fresh
-            view = fresh
-        }
-
-        let safeTop = resolvedSafeAreaTop(in: host, page: page)
-        let height = max(12, safeTop + scrimExtraFade)
-        let solid = min(1, safeTop / height)
-
-        // 颜色 / 高度只在变了的时候才写 layer（0.6s 一拍，不能每拍都写）。
-        let key = "\(hex(of: colour))@\(Int(height))"
-        if key != scrimColourKey {
-            scrimColourKey = key
-            let gradient = view.gradient
-            gradient.colors = [
-                colour.cgColor,
-                colour.cgColor,
-                colour.withAlphaComponent(0).cgColor,
-            ]
-            gradient.locations = [
-                NSNumber(value: 0),
-                NSNumber(value: Double(solid)),
-                NSNumber(value: 1),
-            ]
-            writeDebugLog(
-                "[\(logTag)] top band #\(hex(of: colour)) — the cover's own top edge,"
-                    + " \(Int(height))pt (status bar + \(Int(scrimExtraFade))pt) over the picture;"
-                    + " nothing at all when that edge is light"
-            )
-        }
-
-        let frame = CGRect(x: 0, y: 0, width: hero.bounds.width, height: height)
-        if !view.frame.equalTo(frame) { view.frame = frame }
-    }
-
-    /// 顶上那一条安全区 —— **窗口那一份才是准的**（嵌在别人里的视图常常读到 0，
-    /// 与 `EntityPageHeader.pinMoreButton` / `LyricsWordByWord.resolvedSafeAreaInsets` 同一条纪律）。
-    private static func resolvedSafeAreaTop(in host: UIView, page: UIView) -> CGFloat {
-        if let top = host.window?.safeAreaInsets.top, top > 0 { return top }
-        if host.safeAreaInsets.top > 0 { return host.safeAreaInsets.top }
-        return page.safeAreaInsets.top
-    }
-
-    private static func removeScrim() {
-        scrim?.removeFromSuperview()
-        scrim = nil
-        scrimColourKey = nil
     }
 
     /// 专辑页的 wash：页面里那个 `LegacyUI…HeaderView`（头的高度），里面是 Spotify 的 `GradientView`。
@@ -1391,7 +1293,6 @@ enum EntityPageAppearance {
             if name.contains("GradientView"),
                !identifier.hasPrefix("eevee-"),
                view !== field,
-               view !== scrim,
                !(sharpHero.map { view === $0 } ?? false) {
                 // ② 几何：整页宽的一条色带，而且还在页面上半部分。
                 let band = view.bounds.width >= widthFloor
@@ -1535,8 +1436,7 @@ enum EntityPageAppearance {
     /// 画在我们的图之上，把整张封面盖掉。pw 的 `applyBackground` 用的是 **`SGForEachView(container, …)`（递归）** ——
     /// 之上，把整张封面盖掉。pw 的 `applyBackground` 用的是 **`SGForEachView(container, …)`（递归）** ——
     /// 这里照它改成递归，并且**跳过我们自己的 hero 及其子树**（pw 同样跳：
-    /// `if (hero && (v == hero || [v isDescendantOfView:hero])) return;`）——
-    /// **顶上那条纱（`scrim`）也一起跳**，理由见下面那一行。
+    /// `if (hero && (v == hero || [v isDescendantOfView:hero])) return;`）。
     ///
     /// pw 在同一段里还会把"底色漆"从容器里每个视图上擦掉（issue #53：wash 的 alpha 被抬高后
     /// 不透明的一层会盖住图），这里一并做，并且**把原值记下来**（我们有开关，关掉要还原）。
@@ -1574,10 +1474,6 @@ enum EntityPageAppearance {
             queue.append(contentsOf: view.subviews)
 
             if let hero = sharpHero, view === hero || view.isDescendant(of: hero) { continue }
-            // **顶上那条纱也是 `GradientView`** —— 不跳过的话，这一趟会把它当成
-            // Spotify 的 wash 藏掉（歌单页那条路每拍都走这里 ⇒ 纱永远不出现）。
-            // （专辑/艺人页那两条路不用管：它们的"藏"按 `eevee-` 前缀认自己人，见 `isOurs`。）
-            if let scrim, view === scrim { continue }
             if let plane, view === plane { continue }
 
             if NSStringFromClass(type(of: view)).contains("GradientView") {
@@ -1741,7 +1637,6 @@ enum EntityPageAppearance {
     }
 
     private static func removeHero() {
-        removeScrim()
         revealNativeCover()
         revealWash()
         didReportMelt = false

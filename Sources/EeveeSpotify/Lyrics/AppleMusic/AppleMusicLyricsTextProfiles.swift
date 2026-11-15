@@ -156,4 +156,21 @@ struct LyricsTypographyScale {
             supplementalSpacing: supplementalSpacing
         )
     }
+
+    /// 用户在「歌词 → 文字」里调的两档倍率：字号与行距。
+    ///
+    /// 用倍率而不是绝对值：`fullscreen` / `player` 两档的字号是各自按容器宽度量出来的，
+    /// 倍率让两档保持同一比例；直接改某一档的绝对值会让「全屏 ↔ 播放器」换档时跳一下。
+    ///
+    /// 行距只缩 `lineSpacing`（块与块）与 `wrappedLineSpacing`（同一句折行），
+    /// 译文/罗马音那一层的间距跟着字号走 —— 它是"同一行里的补充文字"，量级跟着正文。
+    func applyingUserScale(text textScale: Double, spacing spacingScale: Double) -> Self {
+        Self(
+            primaryFontSize: primaryFontSize * CGFloat(textScale),
+            supplementalFontSize: supplementalFontSize * CGFloat(textScale),
+            lineSpacing: lineSpacing * CGFloat(spacingScale),
+            wrappedLineSpacing: wrappedLineSpacing * CGFloat(spacingScale),
+            supplementalSpacing: supplementalSpacing * CGFloat(textScale)
+        )
+    }
 }

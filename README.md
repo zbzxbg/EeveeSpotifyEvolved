@@ -5,7 +5,7 @@
 Spotify, arranged like Apple Music.
 
 [![iOS](https://img.shields.io/badge/iOS-17.4%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
-[![Spotify](https://img.shields.io/badge/Spotify-9.1.88-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
+[![Spotify](https://img.shields.io/badge/Spotify-9.2.0-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/License-GPL--3.0-2C6EDB?style=for-the-badge)](LICENSE)
 
 [Download](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases) · [Features](#features) · [Install](#install) · [Build](docs/BUILDING.md) · [Credits](#credits)
@@ -32,7 +32,7 @@ Spotify, arranged like Apple Music.
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
 > [!NOTE]
-> Tested on Spotify 9.1.88 on iOS 27.0.1; the liquid-glass look needs iOS 26+.
+> Tested on Spotify 9.1.88 on iOS 27.0.1; 9.2.0 passes the static hook check but has not been re-calibrated on a device. The liquid-glass look needs iOS 26+.
 
 ## Features
 
@@ -49,6 +49,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - Liquid-glass tab bar and mini player.
 - **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise. A third source, rendering a loop from the cover itself, is a separate switch and off by default. Settings → Animated lock screen.
 - **Lock screen lyrics** (iOS 26+) — the line being sung takes over the lock screen's full-screen artwork, with the next line dimmed under it. Every line is drawn once as a short clip and cached per track, so changes cost no network. Uses the same lyrics source as the in-app views. Settings → Lock screen lyrics.
+- **Listening stats** — plays and listening time are recorded on the device, with 7-day, 30-day, 1-year and all-time views plus top songs and artists. A play counts after 30 seconds; history starts when the feature first runs. Settings → Listening stats.
 
 <details>
 <summary>Lyrics source details</summary>
@@ -68,6 +69,18 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 - **Sleep timer** — pauses playback when the time is up, 1 to 90 minutes, and keeps counting with the screen off. Settings → Playback → Sleep timer.
 
+### Audio
+
+- **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Only animates while the player page is visible. Settings → Advanced features → Cover pulse.
+- **Beat haptics** — kick and snare transients become light taps. Taps are throttled to one per 90 ms and step themselves down after 30 seconds of continuous triggering; strength has three steps. Settings → Advanced features → Beat haptics.
+- Both read the decoded PCM through a read-only tap: the audio itself is never altered. If a track is already playing when you turn them on, pause and resume once so the tap attaches.
+- **Audio effects** — a 10-band graphic equalizer (31.5 Hz to 16 kHz, ±12 dB) plus a preamp, inserted between Spotify's own source unit and the output unit. The first time you switch it on, restart Spotify so the tap can wrap the output callback; after that the sliders apply live. Lower the preamp if loud tracks start clipping. Settings → Advanced features → Audio Effects.
+
+### Gestures
+
+- **Head gestures** — nod once for the next track, shake once for the previous one. Reads the head-attitude stream that AirPods Pro / AirPods Max expose through Core Motion, so it needs headphones with motion sensors. Detection is deliberately conservative (two opposite swings, 1.5 s cooldown) and the switch is off by default. Settings → Advanced features → Head Gestures.
+- The IPA build adds `NSMotionUsageDescription` to Spotify's Info.plist for the head gestures; the switch is inert when that string is missing.
+
 ## Install
 
 | Your setup | Download |
@@ -78,7 +91,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 | SideStore / AltStore / Sideloadly / free or enterprise certificate | `.ipa` (no patch) |
 | LiveContainer | `.ipa` (no patch) |
 
-Get everything from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases). Building it yourself — from your own decrypted Spotify 9.1.88 IPA, with GitHub Actions or on a Mac — is covered in **[docs/BUILDING.md](docs/BUILDING.md)**.
+Get everything from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases). Building it yourself — from your own decrypted Spotify 9.1.88 or 9.2.0 IPA, with GitHub Actions or on a Mac — is covered in **[docs/BUILDING.md](docs/BUILDING.md)**.
 
 > [!IMPORTANT]
 > **Jailbroken users:** the `.deb` depends on `dev.theos.orion`. Add <https://repo.theos.dev/> to your package manager first, otherwise the install fails with an unmet dependency.
@@ -105,13 +118,14 @@ Free profiles usually have no wildcard, so both builds ship without the Watch ap
 ## Requirements
 
 - iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
-- Spotify 9.1.x — current public release: [`v3.0.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
+- Spotify 9.1.x or 9.2.x — current public release: [`v2.1.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
 
 | Spotify | How far it has been checked |
 |---|---|
 | **9.1.88** | Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb |
+| **9.2.0** | Static check only: every hook target resolves in the decrypted 9.2.0 build and 9.2.x is routed onto the same hook set as 9.1.x. Spotify 9.2.0 replaced the `user-customization-service` configuration endpoint the premium patcher rewrites, so premium patching is unverified there; the rest of the tweak loads normally. Not re-checked on a device |
 | **9.1.94** | Static check only: every hook target, `@objc` method list and runtime UI identifier still resolves; the on-device look-and-feel has not been re-calibrated |
-| other **9.1.x** | Untested, same code path |
+| other **9.1.x / 9.2.x** | Untested, same code path |
 
 ## Credits
 

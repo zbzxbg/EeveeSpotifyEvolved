@@ -52,12 +52,23 @@ enum LockScreenLyrics {
     static func frameHash(
         line: String?,
         next: String?,
+        translation: String?,
         credit: String,
-        hasCover: Bool
+        hasCover: Bool,
+        textScale: Double,
+        spacingScale: Double
     ) -> String {
         FNV1a.hex(
-            "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(credit)|\(hasCover ? "c" : "n")"
+            "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(translation ?? "")"
+                + "|\(credit)|\(hasCover ? "c" : "n")"
+                + "|\(scaleKey(textScale))|\(scaleKey(spacingScale))"
         )
+    }
+
+    /// 倍率进哈希时的小数口径：两位小数足够区分设置页的可选档位（0.05 一档），
+    /// 也不会因为浮点尾数把同一档算成两个名字。
+    private static func scaleKey(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 
     /// 一段片子的文件名。画幅与"间奏态"都要进来：同一行的两种形态是两份文件。
@@ -161,4 +172,9 @@ struct LockScreenLyricLine: Equatable {
     /// 这一句**唱完**的时刻（没有 `endOffsetMs` 时用下一行的起点兜底）。
     var endMs: Int
     var text: String
+    /// 这一行的译文。空串表示没有 —— 渲染层据此决定要不要多画一行。
+    ///
+    /// 只在「歌词页也会显示译文」的那些来源上填（见 `LockScreenLyricsFetcher`）：
+    /// 锁屏没有开关，跟着同一套判据走，两处才不会一边有一边没有。
+    var translation: String = ""
 }

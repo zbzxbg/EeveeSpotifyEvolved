@@ -35,6 +35,10 @@ enum BundledConfigurationPolicy {
     // `[HCUS] customize 304 -> replaying the seed`），而 9.1.76 那份快照里**没有** 9.1.88
     // （其中 `enable_has_lyrics_check_bypass` 正是免费号最需要的那颗绕过）。
     // 所以 9.1.88 起改用新快照：100278 字节 / 1096 条 assignment（旧的 99439 / 1089）。
+    //
+    // 9.2.x 也回放这一份：assignment 是服务端下发的，9.2.0 二进制里这 194 个名字仍有 169 个
+    // 定义着，其余已退役（改写它们只会打出 `0 match(es)`）。换成 9.2.0 自己的快照要先把
+    // 真机 customize body 抓下来，见 `Tools/eevee-hookfinder/bnk_from_customize_dump.py`。
     private static let minimumVersionForSpotify9188Configuration = SpotifyVersion("9.1.88")!
 
     static func resourceName(for spotifyVersion: String) -> String {

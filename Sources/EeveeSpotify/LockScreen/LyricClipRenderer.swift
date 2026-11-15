@@ -38,11 +38,19 @@ enum LyricClipRenderer {
         cover: CGImage?,
         line: String?,
         next: String?,
+        translation: String?,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
         let backdrop = try backdrop(cover: cover, size: size)
-        return try compose(backdrop: backdrop, line: line, next: next, credit: credit, size: size)
+        return try compose(
+            backdrop: backdrop,
+            line: line,
+            next: next,
+            translation: translation,
+            credit: credit,
+            size: size
+        )
     }
 
     /// 写一段单帧短片。`seconds` 是这段片子的名义时长：系统用它算循环点，
@@ -51,6 +59,7 @@ enum LyricClipRenderer {
         cover: CGImage?,
         line: String?,
         next: String?,
+        translation: String?,
         credit: String,
         size: CGSize,
         seconds: Double,
@@ -66,6 +75,7 @@ enum LyricClipRenderer {
                         backdrop: backdrop,
                         line: line,
                         next: next,
+                        translation: translation,
                         credit: credit,
                         size: size
                     )
@@ -158,12 +168,26 @@ enum LyricClipRenderer {
 
     // MARK: - 文字
 
+    /// 「歌词 → 文字」那一档字号倍率。锁屏与 App 内共用同一个设置。
+    ///
+    /// 乘在**自适应起点**上：字号变大之后 `fittedFontSize` 仍会按画面高度往下收，
+    /// 所以放大只体现在"放得下时更大"，不会把一行顶出锁屏。
+    private static var textScale: CGFloat {
+        CGFloat(NgzhwmSettingsViewModel.lyricsTextScale)
+    }
+
+    /// 行距倍率。锁屏里唯一的"行距"是当前行与下一行之间那道空隙（`gap`）。
+    private static var spacingScale: CGFloat {
+        CGFloat(NgzhwmSettingsViewModel.lyricsLineSpacingScale)
+    }
+
     /// 在当前行下面再画一行压暗的"下一行"，这是锁屏歌词最有用的那点上下文：
     /// 只看一句不知道唱到哪，看到下一句就知道还有多久换行。
     private static func compose(
         backdrop: CGImage,
         line: String?,
         next: String?,
+        translation: String?,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
@@ -187,7 +211,14 @@ enum LyricClipRenderer {
         context.interpolationQuality = .high
         context.draw(backdrop, in: CGRect(origin: .zero, size: size))
 
-        drawLyricText(line: line, next: next, credit: credit, size: size, context: context)
+        drawLyricText(
+            line: line,
+            next: next,
+            translation: translation,
+            credit: credit,
+            size: size,
+            context: context
+        )
 
         guard let composed = context.makeImage() else {
             throw Failure(reason: "could not compose the frame")
@@ -198,6 +229,7 @@ enum LyricClipRenderer {
     private static func drawLyricText(
         line: String?,
         next: String?,
+        translation: String?,
         credit: String,
         size: CGSize,
         context: CGContext
@@ -222,7 +254,7 @@ enum LyricClipRenderer {
                 for: following,
                 size: size,
                 columnWidth: columnWidth,
-                start: size.width * 0.062,
+                start: size.width * 0.062 * textScale,
                 maxHeight: size.height * 0.4
             )
             let height = textHeight(for: following, fontSize: fontSize, columnWidth: columnWidth)
@@ -245,7 +277,7 @@ enum LyricClipRenderer {
             for: current,
             size: size,
             columnWidth: columnWidth,
-            start: size.width * 0.075,
+            start: size.width * 0.075 * textScale,
             maxHeight: size.height * 0.42
         )
         let currentHeight = textHeight(for: current, fontSize: fontSize, columnWidth: columnWidth)
@@ -263,8 +295,28 @@ enum LyricClipRenderer {
             }
         }
 
-        let gap = following.isEmpty ? 0 : fontSize * 0.55
-        let total = currentHeight + gap + nextHeight
+        // 译文：压在正文下面一小行。上限 14% 画面高 —— 它只是辅助，
+        // 再加上"下一行"提示，三者一起仍要给锁屏上方的时间/日期留出余量。
+        let translationText = (translation ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var translationFontSize: CGFloat = 0
+        var translationHeight: CGFloat = 0
+        if !translationText.isEmpty {
+            translationFontSize = max(12, fontSize * 0.52)
+            translationHeight = textHeight(
+                for: translationText,
+                fontSize: translationFontSize,
+                columnWidth: columnWidth
+            )
+            let budget = size.height * 0.14
+            if translationHeight > budget {
+                translationFontSize *= budget / translationHeight
+                translationHeight = budget
+            }
+        }
+        let translationGap = translationText.isEmpty ? 0 : fontSize * 0.22 * spacingScale
+
+        let nextGap = following.isEmpty ? 0 : fontSize * 0.55 * spacingScale
+        let total = currentHeight + translationGap + translationHeight + nextGap + nextHeight
         let top = centerY + total / 2
 
         draw(
@@ -280,6 +332,22 @@ enum LyricClipRenderer {
             context: context
         )
 
+        let translationTop = top - currentHeight - translationGap - translationHeight
+        if !translationText.isEmpty {
+            draw(
+                translationText,
+                fontSize: translationFontSize,
+                alpha: 0.78,
+                rect: CGRect(
+                    x: columnX,
+                    y: translationTop,
+                    width: columnWidth,
+                    height: translationHeight
+                ),
+                context: context
+            )
+        }
+
         guard !following.isEmpty else { return }
         draw(
             following,
@@ -287,7 +355,7 @@ enum LyricClipRenderer {
             alpha: 0.42,
             rect: CGRect(
                 x: columnX,
-                y: top - currentHeight - gap - nextHeight,
+                y: translationTop - nextGap - nextHeight,
                 width: columnWidth,
                 height: nextHeight
             ),

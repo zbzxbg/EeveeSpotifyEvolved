@@ -352,7 +352,7 @@ jobs:
           done < <(find "$TMPX/Payload/Spotify.app/Frameworks" -maxdepth 2 -type f)
 
       # ── 5. rpath：cyan 同样会静默失败的那一步 ───────────────────────────
-      - name: Ensure @executable_path/Frameworks rpath, then add OpeninSafari extension
+      - name: Ensure @executable_path/Frameworks rpath, then add the OpeninSafari extension
         run: |
           set -euo pipefail
           cd "$(dirname "$OUT_IPA")"
@@ -412,6 +412,11 @@ jobs:
             echo "::warning::could not fetch OpenSpotifySafariExtension, skipping (does not affect Orion)"
           fi
 
+          # AirPods 头部手势要读运动数据，缺这条用途说明会被系统拒绝，而不是静默失败。
+          plutil -insert NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." "$APP/Info.plist" 2>/dev/null \
+            || plutil -replace NSMotionUsageDescription -string "Used for head-gesture track controls on supported headphones." "$APP/Info.plist" \
+            || echo "::warning::could not set NSMotionUsageDescription on the host Info.plist"
+
           # 应用图标（CFBundleAlternateIcons）—— **不注册的话设置里的「应用图标」页是空的**。
           #
           # iOS 只认 **app 的 Info.plist 里注册过**的图标：光把 PNG 放进 .app 不够，
@@ -454,6 +459,14 @@ jobs:
                    --dylib packages/zxPluginsInject.dylib
           echo "PATCHED_OUT=$PATCHED_OUT" >> $GITHUB_ENV
           echo "patched: $PATCHED_OUT"
+
+      # ipapatch 重写过的条目是"数据描述符"写法（本地头里 csize/usize 为 0）：桌面解压与
+      # python zipfile 都读得动，但 LCSign 这类按本地头走查的工具会直接报"无法打开 zip"。
+      # 这一步把整份包用标准写法重写一遍（条目顺序 / 时间戳 / 权限位不变）。
+      - name: Normalize the IPA zip (no streaming entries)
+        run: |
+          set -euo pipefail
+          python3 "${{ github.workspace }}/Scripts/normalize-ipa.py" "$PATCHED_OUT"
 
       # ── 7. 上传：本工作流只产出一份（patched）───────────────────────────
       - name: Upload IPA artifact (patched)

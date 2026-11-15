@@ -19,6 +19,12 @@ struct EeveeDebugSettingsView: View {
 
     var body: some View {
         List {
+            // 顶部警示：这一页是排查开关，不是日常设置。
+            // 这里的开关会改行为（补元素 / 钉入口），也会持续把视图树与响应体写进调试日志
+            // （文件变大，且可能带上曲目与账号相关信息）。日志只在本机，导出时才离开设备 ——
+            // 所以"导出前脱敏"必须留在开的位置。不弹窗、不拦操作，只把后果写在最上面。
+            debugWarningSection()
+
             // 「补充模块5」：往元素列表里补 `5`。
             // 没有 footer —— 用途是判定"404 曲目上那张卡是不是这个元素渲出来的"。
             injectLyricsCardElementSection()
@@ -28,6 +34,9 @@ struct EeveeDebugSettingsView: View {
 
             // 「更详细的日志记录」：视图树 + customize 响应体两条转储合并成一颗。
             detailedLoggingSection()
+
+            // 「音频输出探针」：只读诊断，确认 9.2.0 的 RemoteIO 能不能拿到 PCM。
+            audioTapProbeSection()
 
             // 「转储某个类的方法/ivar」：与上面同一目的、答的是另一半问题
             // —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
@@ -40,6 +49,20 @@ struct EeveeDebugSettingsView: View {
                 // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
+    }
+
+    /// 顶部警示：只陈述后果，不拦操作（排查时它不该碍事）。
+    ///
+    /// 写法照「实验」页那一格：独立 Section、footnote、次要色、左对齐、长文本自动换行。
+    /// 文字直接用字面量，**不走本地化** —— 这一页是给排查的人看的，26 种语言各翻一遍没有意义。
+    @ViewBuilder private func debugWarningSection() -> some View {
+        Section {
+            Text(verbatim: "请注意：这里的开关会改变 Spotify 行为，在不了解这些功能的用途的情况下，请不要随便开关任何选项或修改任何值。否则可能造成日志冗余，隐私泄露等日常使用不该出现的问题。")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）。
@@ -77,6 +100,22 @@ struct EeveeDebugSettingsView: View {
         }
     }
 
+    /// 「音频输出探针」—— 只读：记录 RemoteIO 的格式 + PostRender 的 RMS，
+    /// 用来确认 9.2.0 上能不能拿到解码后的 PCM（见 `AudioTapProbe`）。
+    ///
+    /// 默认关；打开即装 hook，不需要重启 —— 第一次拿到数据要等下一次
+    /// `AudioOutputUnitStart`（开始播放 / 换歌 / 暂停再播）。
+    ///
+    /// 页脚说明已删掉（这一页只留开关与顶部那一句警示）。
+    @ViewBuilder private func audioTapProbeSection() -> some View {
+        Section {
+            Toggle(
+                "audio_tap_probe".localized,
+                isOn: $viewModel.audioTapProbe
+            )
+        }
+    }
+
     /// 「转储某个类」—— 把类名 + 方法表 + ivar 表写进调试日志（见 `ClassDumper`）。
     ///
     /// 与上面那节的分工：`ViewTreeDumper` 答"谁在谁里面"，这里答"这个类里有什么"。
@@ -86,7 +125,7 @@ struct EeveeDebugSettingsView: View {
     /// 猜 `value(forKey:)` 在键不存在时会抛不可捕获的异常、把 Spotify 直接弄崩。
     /// 同样属于"验证完就删"的临时工具（本页定位）。
     @ViewBuilder private func dumpClassSection() -> some View {
-        Section(footer: Text("dump_class_description".localized)) {
+        Section {
             TextField("dump_class_placeholder".localized, text: $dumpClassName)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -110,7 +149,7 @@ struct EeveeDebugSettingsView: View {
     /// ⚠️ 这一节不是"验证完就删"的临时件，而是**导出的隐私默认值**。它不在
     /// `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，用 `Binding` 直接读写）。
     @ViewBuilder private func redactSharedLogSection() -> some View {
-        Section(footer: Text("redact_shared_log_description".localized)) {
+        Section {
             Toggle(
                 "redact_shared_log".localized,
                 isOn: Binding<Bool>(

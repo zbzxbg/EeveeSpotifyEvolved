@@ -293,6 +293,27 @@ enum InlineLyricsHostLocator {
         return NSStringFromClass(type(of: view)) == "Lyrics_TextComponentImpl.LyricsView"
     }
 
+    /// 这个歌词视图是不是在 Spotify 的 Canvas 播放页里（`CanvasNowPlayingCell`）。
+    ///
+    /// Canvas 打开时 contentlayer 的当前页是 Canvas 格，它自带一张「歌词」卡；卡里的
+    /// `Lyrics_TextElementImpl.LyricsTextView` 会被 `viewHost` 当成预览卡片歌词视图。
+    /// 但 iOS 27 听歌页自己就有一套页内歌词 ⇒ 挂上去就是两层字叠在一起（Canvas 叠词）。
+    /// 只在这一页开着时排除；关着时那行歌词仍是用户唯一的逐词宿主。
+    private static func isInsideCanvasNowPlayingCell(_ view: UIView) -> Bool {
+        guard UserDefaults.nowPlayingIOS27 else { return false }
+        var node: UIView? = view.superview
+        var hops = 0
+        while let current = node, hops < 12 {
+            if let identifier = current.accessibilityIdentifier,
+               identifier.contains("nowplaying-contentlayer-cell-5") {
+                return true
+            }
+            node = current.superview
+            hops += 1
+        }
+        return false
+    }
+
     /// 先找 VC 候选（含子 VC 与 present 链）；视图候选命中时返回**该视图本身**
     /// 作为挂载内容视图，而不是它上溯到的 VC 根视图。
     ///
@@ -347,6 +368,9 @@ enum InlineLyricsHostLocator {
             let view = queue.removeFirst()
             visited += 1
             if viewCandidates.contains(NSStringFromClass(type(of: view))) {
+                // Canvas 播放页的歌词卡：iOS 27 听歌页自备页内歌词，这里跳过（见
+                // `isInsideCanvasNowPlayingCell`）。
+                if isInsideCanvasNowPlayingCell(view) { continue }
                 var responder: UIResponder? = view
                 while let current = responder {
                     if let vc = current as? UIViewController {

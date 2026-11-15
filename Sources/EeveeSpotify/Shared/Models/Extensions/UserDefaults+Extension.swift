@@ -33,6 +33,17 @@ extension UserDefaults {
     private static let hapticsStrengthKey = "hapticsStrength"
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
     private static let hapticsLogControlsKey = "hapticsLogControls"
+    /// 音频驱动功能的两颗开关与强度档（同一份只读音频特征，见 `AudioReactiveEngine`）。
+    private static let coverPulseEnabledKey = "coverPulseEnabled"
+    private static let musicHapticsEnabledKey = "musicHapticsEnabled"
+    private static let musicHapticsStrengthKey = "musicHapticsStrength"
+    /// AirPods 点头/摇头切歌（见 `HeadGestureControls`），默认关。
+    private static let headGestureControlsEnabledKey = "headGestureControlsEnabled"
+    /// 音频效果（十段 EQ + 前置增益，见 `AudioDSP`），默认关。
+    private static let dspEnabledKey = "dspEnabled"
+    private static let dspPreampDbKey = "dspPreampDb"
+    private static let dspBandGainsDbKey = "dspBandGainsDb"
+    private static let dspPresetKey = "dspPreset"
     private static let dumpViewTreeKey = "dumpViewTree"
     /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
@@ -108,6 +119,14 @@ extension UserDefaults {
         hapticsStrengthKey,
         hapticsSurfaceKeywordsKey,
         hapticsLogControlsKey,
+        coverPulseEnabledKey,
+        musicHapticsEnabledKey,
+        musicHapticsStrengthKey,
+        headGestureControlsEnabledKey,
+        dspEnabledKey,
+        dspPreampDbKey,
+        dspBandGainsDbKey,
+        dspPresetKey,
         dumpViewTreeKey,
         detailedLoggingKey,
         hideMiniPlayerBarKey,
@@ -164,6 +183,8 @@ extension UserDefaults {
     // 「自动优选的来源顺序」。键由 `LyricsSourceOrder` 自己拥有 ——
     // 不登记的话，导入备份时用户排好的顺序会被静默丢掉（备份只碰白名单）。
     + [LyricsSourceOrder.userDefaultsKey]
+    // 听歌统计的开关：键由 `ListeningStatsSettings` 自己拥有。
+    + ListeningStatsSettings.ownedKeys
 
     static var musixmatchToken: String {
         get {
@@ -451,6 +472,107 @@ extension UserDefaults {
         set {
             container.set(newValue, forKey: hapticsLogControlsKey)
         }
+    }
+
+    // MARK: - 音频驱动（封面律动 / 音乐触感）
+    //
+    // 两颗都**默认关**：它们会改观感、会让手机震，凭空替用户打开是错的。
+    // 真正干活的是 `AudioReactiveEngine` —— 它每 30Hz 直接读这三个键，所以改完立即生效，
+    // 不必重启（唯一的延迟是音频 hook 的安装时机：单元已经在跑时要等下一次开始播放）。
+
+    /// 「封面律动」：封面跟着低频轻微缩放，默认关。
+    static var coverPulseEnabled: Bool {
+        get {
+            container.object(forKey: coverPulseEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: coverPulseEnabledKey)
+        }
+    }
+
+    /// 「音乐触感」：底鼓 / 军鼓触发轻触，默认关。与 `hapticsEnabled`（界面触感）互不影响。
+    static var musicHapticsEnabled: Bool {
+        get {
+            container.object(forKey: musicHapticsEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: musicHapticsEnabledKey)
+        }
+    }
+
+    /// 音乐触感的强度档 1…3，默认 2（中档）。每次触发都重新读，改动立即生效。
+    static var musicHapticsStrength: Int {
+        get {
+            let raw = container.object(forKey: musicHapticsStrengthKey) as? Int ?? 2
+            return min(max(raw, 1), 3)
+        }
+        set {
+            container.set(min(max(newValue, 1), 3), forKey: musicHapticsStrengthKey)
+        }
+    }
+
+    /// AirPods 点头/摇头切歌，默认关。
+    ///
+    /// 这个开关只管"要不要起 CoreMotion 的头部姿态流"，真正的启动/停止由
+    /// `HeadGestureControls.syncWithSettings()` 做（耳机断开、切歌都不需要重启）。
+    static var headGestureControlsEnabled: Bool {
+        get {
+            container.object(forKey: headGestureControlsEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: headGestureControlsEnabledKey)
+        }
+    }
+
+    // MARK: - 音频效果（十段 EQ / 前置增益，见 `AudioDSP`）
+
+    /// 音频效果总开关，默认关。
+    static var dspEnabled: Bool {
+        get {
+            container.object(forKey: dspEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: dspEnabledKey)
+        }
+    }
+
+    /// 前置增益（dB）—— 抬 EQ 之后靠它把峰值压回不削波的位置。
+    ///
+    /// 默认 **0 dB**：十段全 0 时整条链逐位等于原声，方便 AB 判断"效果链有没有染色"。
+    static var dspPreampDb: Double {
+        get {
+            let raw = container.object(forKey: dspPreampDbKey) as? Double ?? 0
+            return min(max(raw, -12), 6)
+        }
+        set {
+            container.set(min(max(newValue, -12), 6), forKey: dspPreampDbKey)
+        }
+    }
+
+    /// 十段增益（dB）。缺省 = 全 0（直通）。
+    ///
+    /// `UserDefaults` 里存的是 `[NSNumber]`，`as? [Double]` 拿不到，要逐项转。
+    static var dspBandGainsDb: [Double] {
+        get {
+            let stored = (container.array(forKey: dspBandGainsDbKey) as? [NSNumber])?
+                .map(\.doubleValue) ?? []
+            if stored.count == AudioDSPBands.count {
+                return stored.map { min(max($0, AudioDSPBands.minGainDb), AudioDSPBands.maxGainDb) }
+            }
+            return Array(repeating: 0, count: AudioDSPBands.count)
+        }
+        set {
+            let clamped = newValue
+                .prefix(AudioDSPBands.count)
+                .map { min(max($0, AudioDSPBands.minGainDb), AudioDSPBands.maxGainDb) }
+            container.set(clamped, forKey: dspBandGainsDbKey)
+        }
+    }
+
+    /// 上一次选中的预设（只用于把选择器显示回来，`custom` = 自己调过）。
+    static var dspPreset: String {
+        get { container.string(forKey: dspPresetKey) ?? AudioDSPPreset.flat.rawValue }
+        set { container.set(newValue, forKey: dspPresetKey) }
     }
 
     // MARK: - 视图树转储（Diagnostics）
@@ -957,21 +1079,19 @@ extension UserDefaults {
 
     // MARK: - 听歌页（NPV）：仿 AM 的取色渐变底
     //
-    // 「**修改 Spotify 听歌页布局**」总开关。**默认开**。
+    // `nowPlayingLayout` —— **已删除的「沉浸式」档位留下的旧总开关**。
     //
-    // 它把这五件**结构改动**收进一颗开关（原来各占一行）：
+    // 它当年把那五件**结构改动**收进一颗开关（原来各占一行）：
     // · `nowPlayingBackdrop` —— 整页封面取色底；
     // · `nowPlayingOneScreen` —— 隐藏 Spotify 的播放页模块（卡片折叠 + 钉住列表）；
     // · `hideSingalongLine` —— 隐藏 Spotify 官方的单行歌词（含 `lyrics_under_cover_art_enabled` 那条 flag）；
     // · `hideNowPlayingPills` —— 隐藏「切换至视频 / 显示歌词」两颗胶囊；
     // · `nowPlayingLyricsInPlayer`—— 把（我们自己的）歌词画进播放器中段。
     //
-    // 语义：**总开关是这五件的唯一真相** —— 拨它时会把那五个键一起写成同一个值
-    // （见 `NowPlayingSettingsView.applyLayoutChange`），落地代码仍然读各自的键，
-    // 所以备份 / 导入看到的值与屏幕上的总开关永远一致。
-    //
-    // 那五颗键已经没有单独的 UI ⇒ 每次启动（以及每次导入备份之后）都由
-    // `normalizeNowPlayingLayoutKeys` 按总开关归一一次，理由写在该方法上。
+    // 沉浸式那一档删除之后，UI 上已经没有入口写这颗键；它现在只剩两件事：
+    // ① 参与 `nowPlayingAnyLayout`（老设备上它还是 true，结构件照旧生效）；
+    // ② 作为迁移信号 —— `normalizeNowPlayingLayoutKeys` 看到
+    //    `nowPlayingLayout && !nowPlayingIOS27` 就把用户迁到 `.appleMusic`。
     static var nowPlayingLayout: Bool {
         get {
             container.object(forKey: nowPlayingLayoutKey) as? Bool ?? true
@@ -981,14 +1101,12 @@ extension UserDefaults {
         }
     }
 
-    /// 「iOS 27 听歌页」—— Apple Music（iOS 27）那一版的播放页（满屏封面）。**默认开**。
+    /// 「iOS 27 听歌页」—— Apple Music 那一版的播放页（满屏封面）。**默认开**。
     ///
-    /// 三档 Picker 的优先级见 `NowPlayingStyle`：这一颗开着就是 `.appleMusic`，
-    /// 旧总开关的值被忽略（与 `NowPlayingLyricsPlate.isEnabled` 里 `!nowPlayingIOS27` 那道门一致）。
-    /// 已经手动选过别的档的用户不受影响 —— 他们盘上已有明确的 `false`。
-    ///
-    /// 两者是**互斥**的两版布局：这颗开着时，旧那套「歌词进播放器」自动让位。
-    /// 结构类开关（取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊）两版**共用**，
+    /// 两档 Picker 的唯一真值见 `NowPlayingStyle`：这一颗开着就是 `.appleMusic`。
+    /// 它同时是旧那套「歌词进播放器」（`NowPlayingLyricsPlate.isEnabled`）的 `!` 门，
+    /// 所以两版布局互斥、开着时旧那套自动让位。
+    /// 结构类开关（取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊）两档**共用**，
     /// 统一看 `nowPlayingAnyLayout`。
     static var nowPlayingIOS27: Bool {
         get {
@@ -1022,7 +1140,19 @@ extension UserDefaults {
     /// —— 备份导入把单键写歪之后，用户再回到这一页时界面和听歌页才会一起收正。
     @discardableResult
     static func normalizeNowPlayingLayoutKeys() -> Int {
-        // 两版布局共用这四颗结构键 ⇒ 归一到「任一布局开着」。
+        // 「沉浸式」删除后的存量收口：
+        // · 选过它的人盘上是 `nowPlayingLayout = true`、`nowPlayingIOS27 = false` ⇒ 补上
+        //   `.appleMusic`（他们的意图是"我要改过的听歌页"，不是"我要 Spotify 原样"）；
+        // · **任何人**盘上的 `nowPlayingLayout` 都清成 false —— 旧那套「歌词进播放器」
+        //   （`NowPlayingLyricsPlate.isEnabled`）读它，留着 true 会和 AM 档同时挂载。
+        if nowPlayingLayout {
+            nowPlayingLayout = false
+            if !nowPlayingIOS27 {
+                nowPlayingIOS27 = true
+            }
+        }
+
+        // 两档布局共用这四颗结构键 ⇒ 归一到「任一布局开着」。
         let enabled = nowPlayingAnyLayout
         let keys = [
             nowPlayingBackdropKey,
