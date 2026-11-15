@@ -9,7 +9,7 @@ body:
 
         These features are **server-sided** and will **never** work, with or without Premium emulation. Requests for them will be **closed immediately**:
         - Very High audio quality
-        - Native playlist/track downloading (podcast episodes and local playlists over Wi-Fi are the only exceptions)
+        - Native playlist/track downloading, including third-party APIs and audio export (podcast episodes and local playlists over Wi-Fi are the only exceptions)
         - Hosting a Spotify Jam (joining in-person is fine)
         - AI DJ / AI Playlist
         - Spotify Connect playback (server-side streaming; the device acts only as a remote)
