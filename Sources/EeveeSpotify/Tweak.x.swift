@@ -871,9 +871,12 @@ struct EeveeSpotify: Tweak {
             // 开关实时读，Canvas 那条 flag 才需要重启。
             activateLockScreenArtwork()
 
-            // 音频输出域探针（只读诊断；默认关，开关打开即装，装 hook 在后台队列上，不必重启）。
-            // 放在 `return` 之前：9.1/9.2 族都在这一支里。
-            AudioTapProbe.installIfEnabled()
+            // 音频观察服务：fishhook **一个进程只装一次**，只读诊断探针与音频驱动功能
+            // （封面律动 / 音乐触感）共用它；装的动作在后台队列上，不压启动窗口。
+            // 两条都放在 `return` 之前：9.1/9.2 族都在这一支里，后面那段永远不会执行。
+            AudioTapService.startAtLaunch()
+            // 音频驱动功能：两颗开关任一开着才起 30Hz 那条通道（关着时这里是两次 bool 读）。
+            AudioReactiveEngine.shared.refresh()
 
             // ⚠️⚠️ 这个 `return` 把 `init` 切成了两段 —— 它后面那句 "For other versions"
             // 底下整段在 **9.1/9.2 族（本仓的目标版本）上永远不会执行**。

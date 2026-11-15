@@ -446,6 +446,7 @@ accent_color = "Accent color";
 settings_group_playback = "Playback & lyrics";
 settings_group_appearance = "Appearance";
 settings_group_advanced = "Advanced";
+settings_group_high = "Advanced audio";
 tabs_and_mini_bar_title = "Tab bar & mini player";
 home_and_library_title = "Pages & library";
 settings_sub_lyrics = "Settings related to lyrics";
@@ -471,6 +472,20 @@ settings_sub_debug = "Troubleshooting switches";
 settings_reset_page = "Reset This Page";
 settings_reset_page_footer = "Restores the options on this page to their defaults.";
 settings_reset_page_done = "Reset %d option(s) on this page.";
+
+// ── Advanced page · Pulse & haptics: audio-reactive row + its sub-page ──
+// Cover pulse reads the bass; beat haptics turns kick/snare hits into taps.
+audio_reactive_title = "Pulse & haptics";
+settings_sub_audio_reactive = "Cover pulse and beat haptics";
+cover_pulse = "Cover pulse";
+cover_pulse_description = "Scales the artwork slightly with the bass. Only runs while the player page is visible, and only on the iOS 27 layout. If a track is already playing, pause and resume once so the audio hooks attach.";
+music_haptics = "Beat haptics";
+music_haptics_description = "Turns kick and snare hits into light taps. Higher strength drains the battery faster, and the Taptic Engine dulls when it fires for a long time, so it steps itself down after 30 seconds of continuous tapping. Needs the app in the foreground.";
+music_haptics_strength = "Strength";
+music_haptics_strength_low = "Low";
+music_haptics_strength_medium = "Medium";
+music_haptics_strength_high = "High";
+music_haptics_test = "Try a tap";
 
 hide_mini_player_bar = "Hide the mini player bar";
 player_cards_section = "Now Playing cards";

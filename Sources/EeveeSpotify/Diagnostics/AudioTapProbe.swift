@@ -20,23 +20,13 @@ import os
 /// 不改音频、不注册新的音频单元；拿不到数据就什么都不做。
 /// 开关：设置 → 调试 → 音频输出探针（默认关；打开即装 hook，不必重启）。
 /// 日志 tag：`[AudioTap]`。
+///
+/// 安装（fishhook 只能装一次）与 render notify 的分发都在 `AudioTapService` 里 ——
+/// 这里只做"探针自己要不要算"和日志；音频驱动功能（`AudioFeatures`）是另一个消费方。
 enum AudioTapProbe {
 
     static let logTag = "AudioTap"
     static let defaultsKey = "audioTapProbeEnabled"
-    /// 探针装好后的 5 秒内如果进程就没了，下一次启动自动关掉探针（防 crash loop）。
-    private static let launchMarkerKey = "audioTapProbeLaunchMarker"
-
-    /// 装 hook 的串行队列。
-    ///
-    /// 装 hook 要遍历所有已加载 image 的 `__la_symbol_ptr` 再改指针值（fishhook），是短任务，
-    /// 但它**不该压在主线程上**：主线程在 scene-update 窗口里被卡住 10 秒，watchdog 就会以
-    /// `0x8BADF00D` 直接 SIGKILL。装 hook 不需要任何 UI 资源，全部丢给这条队列；启动那一拍
-    /// 也一样，别在启动窗口里拖住 runloop。
-    private static let installQueue = DispatchQueue(
-        label: "com.eeveespotify.audiotapprobe.install",
-        qos: .userInitiated
-    )
 
     static var isEnabled: Bool {
         UserDefaults.container.bool(forKey: defaultsKey)
@@ -55,7 +45,6 @@ enum AudioTapProbe {
     }()
 
     private static var active = false
-    private static var installed = false
     private static var timer: DispatchSourceTimer?
 
     private static var callbacks: UInt64 = 0
@@ -67,7 +56,6 @@ enum AudioTapProbe {
     private static var lastBus: UInt32 = 0
     private static var streamFormat: AudioStreamBasicDescription?
     private static var formatIsFloat = false
-    private static var renderUnits = Set<AudioUnit>()
     private static var loggedKeys = Set<String>()
 
     /// 定时器上一次打过的回调数；没变化就不重复刷日志。
@@ -76,82 +64,19 @@ enum AudioTapProbe {
 
     // MARK: - 生命周期
 
-    /// 启动时调一次：开关开着才装 hook。装的动作异步丢给 `installQueue`，这里立刻返回 ——
-    /// 启动窗口里不做任何可能卡住主线程的符号/加载工作。
-    static func installIfEnabled() {
-        guard isEnabled else {
-            // 开关是关的：顺手清掉可能残留的 marker（例如上次在 5 秒存活窗口里被强杀），
-            // 免得磁盘上留一个和开关状态不一致的标记。
-            if UserDefaults.container.bool(forKey: launchMarkerKey) {
-                UserDefaults.container.set(false, forKey: launchMarkerKey)
-            }
-            writeDebugLog("[\(logTag)] probe off — hooks not installed")
-            return
-        }
-        if UserDefaults.container.bool(forKey: launchMarkerKey) {
-            // 上一次开探针后 5 秒内进程就消失了 ⇒ 很可能是装 hook 时崩的。
-            // 先关掉，别把 App 卡在启动即崩的循环里。
-            UserDefaults.container.set(false, forKey: defaultsKey)
-            UserDefaults.container.set(false, forKey: launchMarkerKey)
-            writeDebugLog("[\(logTag)] disabled after an unclean launch — crash-loop guard")
-            return
-        }
-        install()
-    }
-
-    /// 调试页的开关。打开时尝试当场激活 hook（异步，开关本身立刻返回）；音频单元已经
-    /// 跑起来时，下一次 Start（换歌 / 暂停再播）才会挂上 render notify。
+    /// 调试页的开关。打开时立刻请求装 hook（异步，开关本身不等待）；音频单元已经跑起来时，
+    /// 下一次 `AudioOutputUnitStart`（换歌 / 暂停再播）才会挂上 render notify。
     static func setEnabled(_ enabled: Bool) {
         UserDefaults.container.set(enabled, forKey: defaultsKey)
-        if enabled { install() }
+        if enabled { AudioTapService.ensureInstalled() }
         setActive(enabled)
     }
 
-    /// 在 `installQueue` 上装 hook；调用方（主线程 / Tweak init）立刻返回。
-    private static func install() {
-        installQueue.async {
-            guard !installed else { return }
-            installed = true
-            armCrashGuard()
-            let rebound = AudioTapProbeHooks.install()
-            guard rebound.setProperty, rebound.outputStart else {
-                // 至少一个函数没被重绑：探针拿不到完整数据。**不能重试** —— fishhook 把这一组
-                // rebindings 记着给后加载的 image 复用，再装一次属于未定义行为。等下次启动。
-                disarmCrashGuard()
-                setActive(false)
-                writeDebugLog(
-                    "[\(logTag)] hook install incomplete — setProperty=\(rebound.setProperty)"
-                        + " outputUnitStart=\(rebound.outputStart), probe inactive"
-                )
-                return
-            }
-            // 装 hook 这段时间里用户可能已经把开关关掉，别把 `active` 又拨回去。
-            setActive(isEnabled)
-            startTimer()
-            disarmCrashGuardAfterSurvival()
-            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-            writeDebugLog("[\(logTag)] armed on Spotify \(version) — AudioUnitSetProperty / AudioOutputUnitStart, read-only")
-        }
-    }
-
-    /// 装之前先落 marker：这次装 hook 之后 5 秒内进程如果没了，下一次启动会看到 marker、
-    /// 自动把开关关掉，不会把 App 卡在启动即崩的循环里。
-    private static func armCrashGuard() {
-        UserDefaults.container.set(true, forKey: launchMarkerKey)
-    }
-
-    /// 装完还活过 5 秒才算这次安全。用 main 队列是因为它只是清一个 UserDefaults 键，
-    /// 顺便避开"后台队列在 App 已经被挂起后才执行"的那种情况。
-    private static func disarmCrashGuardAfterSurvival() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            UserDefaults.container.set(false, forKey: launchMarkerKey)
-        }
-    }
-
-    /// 没装上（重绑没成功）时立刻清掉 marker —— 这次没改过任何指针，不该让下次启动白关一次
-    /// 开关。
-    private static func disarmCrashGuard() {
-        UserDefaults.container.set(false, forKey: launchMarkerKey)
+    /// 安装完成后由 `AudioTapService` 调一次：把 `active` 对齐到开关的当前值。
+    ///
+    /// 不能反过来让安装那边直接写死一个值 —— 装 hook 是异步的，那段时间里开关可能已经被关掉。
+    static func syncActiveWithSetting() {
+        setActive(isEnabled)
     }
 
     private static func setActive(_ value: Bool) {
@@ -160,7 +85,8 @@ enum AudioTapProbe {
         os_unfair_lock_unlock(lock)
     }
 
-    private static func startTimer() {
+    /// 2 秒一拍的日志定时器。只在安装成功后起一次；开关关着时 `tick` 只做一次 bool 读。
+    static func startTimerIfNeeded() {
         guard timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 2, repeating: 2)
@@ -204,6 +130,9 @@ enum AudioTapProbe {
                     formatIsFloat = isFloat
                 }
                 os_unfair_lock_unlock(lock)
+                // 音频驱动功能（`AudioFeatures`）读的是同一份格式：它要知道采样率（换算时间）
+                // 与是否交错（怎么取 mono），这些在 render 线程上算不了。
+                AudioFeatures.noteFormat(format)
             }
         } else if id == kAudioUnitProperty_MakeConnection,
                   let data,
@@ -231,23 +160,14 @@ enum AudioTapProbe {
                 + " status=\(status) output=\(output) remoteIO=\(remote)"
         )
         guard output, status == noErr else { return }
-        installRenderNotify(on: unit)
-    }
-
-    private static func installRenderNotify(on unit: AudioUnit) {
-        os_unfair_lock_lock(lock)
-        let already = renderUnits.contains(unit)
-        if !already { renderUnits.insert(unit) }
-        os_unfair_lock_unlock(lock)
-        guard !already else { return }
-
-        let status = AudioUnitAddRenderNotify(unit, audioTapRenderCallback, audioTapRefCon)
-        writeDebugLog("[\(logTag)] AddRenderNotify unit=\(unit) status=\(status)")
+        AudioTapService.installRenderNotify(on: unit)
     }
 
     // MARK: - render 线程
 
-    fileprivate static func handleRender(
+    /// 探针自己的统计（只读诊断）。`AudioTapService` 的渲染回调里调它，另一个消费方
+    /// （`AudioFeatures`）有自己的一份，互不共享状态。
+    static func handleRender(
         actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
         busNumber: UInt32,
         numberFrames: UInt32,
@@ -393,29 +313,4 @@ enum AudioTapProbe {
         guard first else { return }
         writeDebugLog(message())
     }
-}
-
-/// render notify 的 refCon。必须是一个**活到进程结束**的非空指针；
-/// 回调里不读它，只是 AudioUnit 的 API 要求成对出现。
-private let audioTapRefCon: UnsafeMutableRawPointer = {
-    let pointer = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
-    pointer.storeBytes(of: 0, as: UInt8.self)
-    return pointer
-}()
-
-/// render notify 的 C 回调。只做统计，不分配、不写文件；详情见 `handleRender`。
-private func audioTapRenderCallback(
-    _ refCon: UnsafeMutableRawPointer,
-    _ actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
-    _ timeStamp: UnsafePointer<AudioTimeStamp>,
-    _ busNumber: UInt32,
-    _ numberFrames: UInt32,
-    _ ioData: UnsafeMutablePointer<AudioBufferList>?
-) -> OSStatus {
-    AudioTapProbe.handleRender(
-        actionFlags: actionFlags,
-        busNumber: busNumber,
-        numberFrames: numberFrames,
-        ioData: ioData
-    )
 }

@@ -383,3 +383,18 @@ sleep_timer_start = "開始計時";
 sleep_timer_cancel = "取消計時";
 sleep_timer_remaining = "剩餘時間";
 sleep_timer_pick_duration = "選一個時長";
+
+// 高級頁 · 律動與觸感
+
+settings_group_high = "高級";
+audio_reactive_title = "律動與觸感";
+settings_sub_audio_reactive = "封面隨低頻起伏、鼓點觸發輕觸";
+cover_pulse = "封面律動";
+cover_pulse_description = "讓封面跟著低頻輕微放大縮小。只在播放頁可見時執行，且只對 iOS 27 版面生效。如果正在播放，先暫停再繼續一次，音訊 hook 才會掛上。";
+music_haptics = "音樂觸感";
+music_haptics_description = "把大鼓與小鼓變成輕觸。強度越高越耗電，連續觸發 30 秒後會自動降檔。需要 App 在前景。";
+music_haptics_strength = "強度";
+music_haptics_strength_low = "低";
+music_haptics_strength_medium = "中";
+music_haptics_strength_high = "高";
+music_haptics_test = "試一下";

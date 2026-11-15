@@ -10,7 +10,7 @@ import UIKit
 /// 而"听歌页""标签栏"这种天天用的开关要滚到扩展页第 4、5 节。
 ///
 /// 现在：
-/// · 根页分**四组**（播放与歌词 / 外观 / 进阶 / 维护），每一行都带**副标题**
+/// · 根页分**五组**（播放与歌词 / 外观 / 进阶 / 高级 / 维护），每一行都带**副标题**
 /// （`NavigationSectionView.subtitle`）—— 一眼能看出这一行进去有什么；
 /// · 那 8 个子页全部提到根页按语义归组，一步可达；
 /// · 「扩展」页里那 24 个开关按**页面**拆成几页：
@@ -277,7 +277,21 @@ struct EeveeSettingsView: View {
                 ) { AnyView(EeveeMiscellaneousSettingsView()) }
             }
 
-            // ── ④ 维护
+            // ── ④ 高级（音频驱动）
+            //
+            // 单独一组而不是塞进「外观」或「进阶」：这两颗开关不描界面长什么样、也不改
+            // Spotify 的行为，它们是**拿音频本身驱动界面/触觉**（见 `AudioReactiveEngine`），
+            // 而且都要在听歌页里才看得出效果 —— 混在别的组里找不着，也不该默认被人碰到。
+            Section(header: Text("settings_group_high".localized)) {
+                settingsRow(
+                    color: Color(hex: "#FF2D55"),
+                    title: "audio_reactive_title",
+                    subtitle: "settings_sub_audio_reactive",
+                    imageSystemName: "waveform.path.ecg"
+                ) { AnyView(EeveeAudioReactiveSettingsView()) }
+            }
+
+            // ── ⑤ 维护
             //
             // 「调试」页：只装**排查/验证型**开关（补时间轴 / 补卡片元素 / 强制歌词入口）。
             // 它们以前散在「歌词」页里，和用户真正的偏好混在一起 —— 见

@@ -441,6 +441,7 @@ accent_color = "强调色";
 settings_group_playback = "播放与歌词";
 settings_group_appearance = "外观";
 settings_group_advanced = "进阶";
+settings_group_high = "高级";
 tabs_and_mini_bar_title = "标签栏与迷你条";
 home_and_library_title = "页面与音乐库";
 settings_sub_lyrics = "有关于歌词的设置";
@@ -466,6 +467,20 @@ settings_sub_debug = "排查开关";
 settings_reset_page = "重置本页";
 settings_reset_page_footer = "把本页的选项恢复默认值。";
 settings_reset_page_done = "已重置本页 %d 项。";
+
+// ── 高级页 · 律动与触感：音频响应那一行 + 它的子页 ──
+// 封面律动跟着低频走；音乐触感把底鼓/军鼓变成轻触。
+audio_reactive_title = "律动与触感";
+settings_sub_audio_reactive = "封面随低频起伏、鼓点触发轻触";
+cover_pulse = "封面律动";
+cover_pulse_description = "让封面跟着低频轻微放大缩小。只在播放页可见时运行，且只对 iOS 27 布局生效。如果正在播放，先暂停再继续一次，音频 hook 才会挂上。";
+music_haptics = "音乐触感";
+music_haptics_description = "把底鼓和军鼓变成轻触。强度越高越费电，连续触发 30 秒后会自动降档（Taptic Engine 长时间高频会变钝、发热）。需要 App 在前台。";
+music_haptics_strength = "强度";
+music_haptics_strength_low = "低";
+music_haptics_strength_medium = "中";
+music_haptics_strength_high = "高";
+music_haptics_test = "试一下";
 
 hide_mini_player_bar = "隐藏迷你播放条";
 player_cards_section = "听歌页卡片";

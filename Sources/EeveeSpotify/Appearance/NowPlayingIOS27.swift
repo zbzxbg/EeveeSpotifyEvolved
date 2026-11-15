@@ -1033,6 +1033,58 @@ enum NowPlayingIOS27 {
         return changed
     }
 
+    // MARK: - 音频律动（`AudioReactiveEngine` 每 30Hz 调一次）
+    //
+    // 只动**我们自己的**两样东西：封面的 `layer` 仿射变换、field 模糊底的 alpha。
+    //
+    // ⚠️ 刻意不用 `UIView.transform`：这一页的几何全是"`frame` 跟想要的值比"
+    // （`updateArtwork` / `syncArtworkFrameWithoutShell`），而 `transform` 会让 `frame`
+    // 读回缩放后的包围盒 ⇒ 每拍都判成"帧变了"、重设一次，封面会抖。
+    // `layer` 上的变换不参与 `UIView.frame` 的计算，几何那一套完全不受影响。
+    private static weak var audioPulseArtwork: UIView?
+    private static var audioPulseScale: CGFloat = 1
+    private static var audioPulseBreath: CGFloat = 0
+
+    /// 把这一拍的律动幅度落到屏幕上（`scale` 1.0 / `breath` 0 = 静止）。
+    ///
+    /// 只在**目标值变了**（或换了一张新封面 / 新 field）时才写属性：静止的那些拍一个字节
+    /// 都不写，否则 30Hz 会无休止地给图层打脏标记。
+    ///
+    /// - Returns: 这一拍有没有真的改东西（调用方可以忽略）。
+    @discardableResult
+    static func applyAudioPulse(scale: CGFloat, breath: CGFloat) -> Bool {
+        // 先钳位：算错了宁可不动，也不要把封面放大成一张糊块。
+        let targetScale = lyricsModeActive ? 1 : min(max(scale, 1), 1.10)
+        let targetBreath = min(max(breath, 0), 1)
+        var changed = false
+
+        if let art = artworkView, art.window != nil {
+            let newArtwork = audioPulseArtwork !== art
+            let newScale = abs(targetScale - audioPulseScale) > 0.0005
+            if newArtwork { audioPulseArtwork = art }
+            if newScale { audioPulseScale = targetScale }
+            if newArtwork || newScale {
+                art.layer.setAffineTransform(CGAffineTransform(scaleX: targetScale, y: targetScale))
+                changed = true
+            }
+        } else {
+            audioPulseArtwork = nil
+        }
+
+        if let backdrop = fieldBackdrop {
+            if abs(targetBreath - audioPulseBreath) > 0.005 {
+                audioPulseBreath = targetBreath
+                // 模糊底的 alpha 跟着低频轻微起伏：压到 1 以下时，下面那层字段色会透一点出来，
+                // 整块底看起来在"呼吸"。幅度只到 12%，不会把封面糊成另一种颜色。
+                backdrop.alpha = 1 - 0.12 * targetBreath
+                changed = true
+            }
+        } else {
+            audioPulseBreath = 0
+        }
+        return changed
+    }
+
     /// 把自己画的那张封面按**当前模式**摆好 —— 不依赖封面壳。
     ///
     /// 只处理"收起歌词时长回满屏"那一向的话，（打开时缩成 64pt）只有 `updateArtwork` 会做，
@@ -2178,14 +2230,20 @@ enum NowPlayingIOS27 {
         fieldSolid = nil
         fieldBackdrop = nil
         fieldBlack = nil
+        // 下一块 field 是全新的视图（alpha 默认 1）：把律动的基线一起归位。
+        audioPulseBreath = 0
     }
 
     private static func teardownArtwork() {
         artworkView?.layer.mask = nil
+        artworkView?.layer.setAffineTransform(.identity)
         artworkView?.removeFromSuperview()
         artworkView = nil
         artworkHost = nil
         artworkMask = nil
+        // 下一张封面是新视图：同一条基线的理由（见 `teardownField`）。
+        audioPulseArtwork = nil
+        audioPulseScale = 1
     }
 
     // MARK: - 小工具

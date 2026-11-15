@@ -33,6 +33,10 @@ extension UserDefaults {
     private static let hapticsStrengthKey = "hapticsStrength"
     private static let hapticsSurfaceKeywordsKey = "hapticsSurfaceKeywords"
     private static let hapticsLogControlsKey = "hapticsLogControls"
+    /// 音频驱动功能的两颗开关与强度档（同一份只读音频特征，见 `AudioReactiveEngine`）。
+    private static let coverPulseEnabledKey = "coverPulseEnabled"
+    private static let musicHapticsEnabledKey = "musicHapticsEnabled"
+    private static let musicHapticsStrengthKey = "musicHapticsStrength"
     private static let dumpViewTreeKey = "dumpViewTree"
     /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
@@ -108,6 +112,9 @@ extension UserDefaults {
         hapticsStrengthKey,
         hapticsSurfaceKeywordsKey,
         hapticsLogControlsKey,
+        coverPulseEnabledKey,
+        musicHapticsEnabledKey,
+        musicHapticsStrengthKey,
         dumpViewTreeKey,
         detailedLoggingKey,
         hideMiniPlayerBarKey,
@@ -452,6 +459,43 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: hapticsLogControlsKey)
+        }
+    }
+
+    // MARK: - 音频驱动（封面律动 / 音乐触感）
+    //
+    // 两颗都**默认关**：它们会改观感、会让手机震，凭空替用户打开是错的。
+    // 真正干活的是 `AudioReactiveEngine` —— 它每 30Hz 直接读这三个键，所以改完立即生效，
+    // 不必重启（唯一的延迟是音频 hook 的安装时机：单元已经在跑时要等下一次开始播放）。
+
+    /// 「封面律动」：封面跟着低频轻微缩放，默认关。
+    static var coverPulseEnabled: Bool {
+        get {
+            container.object(forKey: coverPulseEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: coverPulseEnabledKey)
+        }
+    }
+
+    /// 「音乐触感」：底鼓 / 军鼓触发轻触，默认关。与 `hapticsEnabled`（界面触感）互不影响。
+    static var musicHapticsEnabled: Bool {
+        get {
+            container.object(forKey: musicHapticsEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: musicHapticsEnabledKey)
+        }
+    }
+
+    /// 音乐触感的强度档 1…3，默认 2（中档）。每次触发都重新读，改动立即生效。
+    static var musicHapticsStrength: Int {
+        get {
+            let raw = container.object(forKey: musicHapticsStrengthKey) as? Int ?? 2
+            return min(max(raw, 1), 3)
+        }
+        set {
+            container.set(min(max(newValue, 1), 3), forKey: musicHapticsStrengthKey)
         }
     }
 
