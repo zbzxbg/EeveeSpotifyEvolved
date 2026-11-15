@@ -145,7 +145,6 @@ payment_notice = "EeveeSpotify 通過應用修補以啟用 Premium 功能且完�
 // 除錯
 
 debug_title = "除錯";
-debug_warning_body = "這是排查開關，不是日常設定。這裡的開關會改變 App 行為（補元素、釘入口），也會讓除錯日誌變得很大；日誌裡還可能包含你聽過的曲目。日誌只留在本機，匯出時才離開裝置，所以除非你清楚後果，請保持「分享日誌前脫敏」開著；排查完把這些開關關回去，否則以後看到的現象不再等於預設狀態。";
 export_debug_log = "匯出除錯日誌";
 clear_debug_log = "清除除錯日誌";
 debug_log_cleared = "已清理除錯日誌";

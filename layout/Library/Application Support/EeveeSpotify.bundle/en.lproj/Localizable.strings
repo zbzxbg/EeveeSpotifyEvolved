@@ -225,7 +225,6 @@ track_mismatch = "The track changed while lyrics were loading. Play it again to 
 // Debug
 
 debug_title = "Debug";
-debug_warning_body = "Diagnostics switches, not everyday settings. They change app behaviour (element injection, forced entry points) and make the debug log much larger; that log can also contain the tracks you played. It stays on this device until you export it, so keep redaction before sharing on unless you know what you are doing, and turn these back off when you are done - otherwise later observations no longer describe the default app.";
 enable_log_recording = "Enable Log Recording";
 enable_log_recording_description = "There's no need to enable log recording for normal use.";
 export_debug_log = "Export Debug Log";

@@ -52,14 +52,16 @@ struct EeveeDebugSettingsView: View {
     }
 
     /// 顶部警示：只陈述后果，不拦操作（排查时它不该碍事）。
+    ///
+    /// 写法照「实验」页那一格：独立 Section、footnote、次要色、左对齐、长文本自动换行。
+    /// 文字直接用字面量，**不走本地化** —— 这一页是给排查的人看的，26 种语言各翻一遍没有意义。
     @ViewBuilder private func debugWarningSection() -> some View {
         Section {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
-                Text("debug_warning_body".localized)
-                    .font(.footnote)
-            }
+            Text(verbatim: "请注意：这里的开关会改变 Spotify 行为，在不了解这些功能的用途的情况下，请不要随便开关任何选项或修改任何值。否则可能造成日志冗余，隐私泄露等日常使用不该出现的问题。")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
