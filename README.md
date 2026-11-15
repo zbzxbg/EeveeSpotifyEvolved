@@ -65,7 +65,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 
 ### Audio
 
-- **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Runs only while the player page is visible. Settings → Advanced audio → Cover pulse.
+- **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Only animates while the player page is visible. Settings → Advanced audio → Cover pulse.
 - **Beat haptics** — kick and snare transients become light taps. Taps are throttled to one per 90 ms and step themselves down after 30 seconds of continuous triggering; strength has three steps. Settings → Advanced audio → Beat haptics.
 - Both read the decoded PCM through a read-only tap: the audio itself is never altered. If a track is already playing when you turn them on, pause and resume once so the tap attaches.
 

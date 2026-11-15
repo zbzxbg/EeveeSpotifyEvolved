@@ -1,4 +1,5 @@
 import AudioToolbox
+import CoreAudio
 import Foundation
 import os
 
@@ -66,10 +67,17 @@ enum AudioTapService {
             let rebound = AudioTapProbeHooks.install()
             guard rebound.setProperty, rebound.outputStart else {
                 // 至少一个函数没重绑上：拿不到完整数据。**不能重试** —— 理由见类型说明。
+                // 三个开关一起关掉：留着"看起来开着"的开关只是个空转的 30Hz ticker。
                 disarmCrashGuard()
+                UserDefaults.container.set(false, forKey: AudioTapProbe.defaultsKey)
+                UserDefaults.coverPulseEnabled = false
+                UserDefaults.musicHapticsEnabled = false
+                AudioTapProbe.syncActiveWithSetting()
+                AudioFeatures.setActive(false)
+                AudioReactiveEngine.shared.refresh()
                 writeDebugLog(
                     "[\(logTag)] hook install incomplete — setProperty=\(rebound.setProperty)"
-                        + " outputUnitStart=\(rebound.outputStart), consumers stay silent"
+                        + " outputUnitStart=\(rebound.outputStart), consumers turned off"
                 )
                 return
             }
@@ -91,23 +99,27 @@ enum AudioTapService {
     /// `AudioOutputUnitStart` 之后（由 `AudioTapProbe.noteStarted` 转发）给这个 unit 挂一次渲染通知。
     ///
     /// 一个 unit 只挂一次：`AudioUnitAddRenderNotify` 没有"去重"语义，挂两次同一个回调意味着
-    /// 每块 PCM 会被算两遍。
+    /// 每块 PCM 会被算两遍。**挂成功之后**才记进 `renderUnits` —— 挂失败还记着的话，这个 unit
+    /// 这一辈子都拿不到数据了。
     static func installRenderNotify(on unit: AudioUnit) {
         os_unfair_lock_lock(lock)
         let ready = hooksReady
-        os_unfair_lock_unlock(lock)
-        guard ready else { return }
-
-        os_unfair_lock_lock(lock)
         let already = renderUnits.contains(unit)
-        if !already { renderUnits.insert(unit) }
         os_unfair_lock_unlock(lock)
-        guard !already else { return }
+        guard ready, !already else { return }
 
         let status = AudioUnitAddRenderNotify(unit, audioServiceRenderCallback, audioServiceRefCon)
-        writeDebugLog("[\(logTag)] AddRenderNotify unit=\(unit) status=\(status)")
-        guard status == noErr else { return }
-        readBackFormat(of: unit)
+        if status == noErr {
+            os_unfair_lock_lock(lock)
+            renderUnits.insert(unit)
+            os_unfair_lock_unlock(lock)
+            readBackFormat(of: unit)
+        }
+        // 这一行落在 `AudioOutputUnitStart` 的调用路径上（音频控制线程）：日志写文件不该压在
+        // 开始播放这一拍，挪回主队列。
+        DispatchQueue.main.async {
+            writeDebugLog("[\(logTag)] AddRenderNotify unit=\(unit) status=\(status)")
+        }
     }
 
     /// 把 unit **现在**的 StreamFormat 读回来喂给特征层。
@@ -115,8 +127,8 @@ enum AudioTapService {
     /// 为什么不能只靠 `AudioUnitSetProperty` 那一拍：格式通常在音频单元建起来时设一次，
     /// 中途打开开关时那次调用早就过去了 ⇒ 特征层会一直"不知道采样率"、什么都不输出。
     ///
-    /// RemoteIO 的硬件格式挂在 **input scope（bus 0）** 上（与探针收格式的判据同一条），
-    /// 所以先问它，读不到再退回 output scope。
+    /// 两个 scope 都问：RemoteIO 的格式可能设在 input scope（bus 0）上，也可能在 output
+    /// scope 上（探针两条都见过），float32 的那份优先。
     private static func readBackFormat(of unit: AudioUnit) {
         // float32 的那份优先（特征层只认它）；两个 scope 都不是 float32 时把第一个能读到的
         // 喂过去 —— 这样排查时至少能看到"格式不支持"，而不是一片空白。

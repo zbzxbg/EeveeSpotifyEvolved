@@ -132,7 +132,12 @@ enum AudioTapProbe {
                 os_unfair_lock_unlock(lock)
                 // 音频驱动功能（`AudioFeatures`）读的是同一份格式：它要知道采样率（换算时间）
                 // 与是否交错（怎么取 mono），这些在 render 线程上算不了。
-                AudioFeatures.noteFormat(format)
+                //
+                // 只认 RemoteIO：别的输出单元（比如录制/通话那条路）也会设 StreamFormat，
+                // 拿它的交错标志去解释 RemoteIO 的 buffer 会把 mono 取错。
+                if remote {
+                    AudioFeatures.noteFormat(format)
+                }
             }
         } else if id == kAudioUnitProperty_MakeConnection,
                   let data,

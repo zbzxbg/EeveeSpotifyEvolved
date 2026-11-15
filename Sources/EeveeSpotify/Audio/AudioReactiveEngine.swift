@@ -34,6 +34,8 @@ final class AudioReactiveEngine: NSObject {
     private var lastTickAt: CFTimeInterval = 0
     private var startedAt: CFTimeInterval = 0
     private var envelope: Double = 0
+    private var pulseRunning = false
+    private var hapticsRunning = false
     private var didLogStart = false
     private var didLogAudio = false
     private var didLogSilence = false
@@ -90,6 +92,8 @@ final class AudioReactiveEngine: NSObject {
         displayLink?.invalidate()
         displayLink = nil
         envelope = 0
+        pulseRunning = false
+        hapticsRunning = false
         // 关开关要**当场**把封面缩放 / field 透明度放回去：留着 1.02 的变换没人收，
         // 下次再开会对不上"当前幅度"。
         CoverPulse.reset()
@@ -136,13 +140,23 @@ final class AudioReactiveEngine: NSObject {
         if envelope < Self.envelopeFloor { envelope = 0 }
 
         if UserDefaults.coverPulseEnabled {
+            pulseRunning = true
             CoverPulse.apply(
                 scale: CGFloat(1 + Self.amplitude * envelope),
                 breath: CGFloat(envelope)
             )
+        } else if pulseRunning {
+            // 只关掉律动、留触感时 ticker 不会停 ⇒ 这里必须当场把封面/field 写回静止值。
+            pulseRunning = false
+            CoverPulse.reset()
         }
         if UserDefaults.musicHapticsEnabled {
+            hapticsRunning = true
             MusicHaptics.consume(snapshot, isFresh: fresh, now: now)
+        } else if hapticsRunning {
+            // 同上：关掉触感后要让 `primed` 归位，否则再打开时会用冻结的基准补打一下。
+            hapticsRunning = false
+            MusicHaptics.reset()
         }
     }
 }

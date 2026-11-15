@@ -59,6 +59,7 @@ enum MusicHaptics {
         lastTriggerAt = 0
         windowStartedAt = 0
         windowTriggers = 0
+        didLogFirstTrigger = false
     }
 
     /// 一拍：有新的 kick / snare 就按闸门决定要不要打一下。

@@ -89,7 +89,8 @@ enum AudioFeatures {
     private static var alphaLow = 0.0
     private static var alphaHigh = 0.0
     /// 上一次报过的"能不能读"。只在支持状态**变化**时写一行日志（同一格式会被设好几次）。
-    private static var loggedSupported: Bool?
+    private static var didLogFormat = false
+    private static var didLogSupportedValue = false
 
     /// 滤波器状态（跨块保持）。两个都是一阶低通的状态。
     private static var lowState = 0.0
@@ -151,10 +152,11 @@ enum AudioFeatures {
         return value
     }
 
-    /// StreamFormat 那一拍：记下采样率 / 声道 / 是否交错 / 是否 float32，并把一阶低通的
+    /// StreamFormat 那一拍：记下采样率 / 是否交错 / 是否 float32，并把一阶低通的
     /// 系数算好 —— `exp` 不能出现在 render 线程上。
     ///
-    /// `AudioTapProbe` 只在 output unit 的 element 0 上转发，所以这里不再判 unit。
+    /// 喂进来的必须是**真正会被挂渲染通知的那个 output unit**（RemoteIO）；别的输出单元
+    /// 的格式不能拿来解释 RemoteIO 的 buffer 布局。
     static func noteFormat(_ format: AudioStreamBasicDescription) {
         let float = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
         let supported = float
@@ -178,8 +180,11 @@ enum AudioFeatures {
             self.alphaLow = alphaLow
             self.alphaHigh = alphaHigh
         }
-        let shouldLog = loggedSupported != supported
-        if shouldLog { loggedSupported = supported }
+        let shouldLog = !didLogFormat || didLogSupportedValue != supported
+        if shouldLog {
+            didLogFormat = true
+            didLogSupportedValue = supported
+        }
         os_unfair_lock_unlock(lock)
 
         guard shouldLog else { return }
@@ -209,9 +214,7 @@ enum AudioFeatures {
             return noErr
         }
 
-        callbacks &+= 1
         elapsedFrames &+= UInt64(numberFrames)
-
         let buffers = UnsafeMutableAudioBufferListPointer(ioData)
         let scanFrames = min(Int(numberFrames), maxScanFrames)
         guard scanFrames > 0 else {
@@ -287,6 +290,9 @@ enum AudioFeatures {
             os_unfair_lock_unlock(lock)
             return noErr
         }
+        // 只有真的读到帧才记一拍：`callbacks` 是消费方判"有没有新数据"的唯一依据，
+        // 空块也加会让引擎把上一块的电平当成新的一拍。
+        callbacks &+= 1
 
         let count = Double(readFrames)
         let lowRms = (sumLow / count).squareRoot()
