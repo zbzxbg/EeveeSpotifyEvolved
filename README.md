@@ -28,9 +28,6 @@ Spotify, arranged like Apple Music.
 
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
-> [!NOTE]
-> Tested on Spotify 9.2.0 on iOS 27.0.1; 9.1.x shares the same hook set and still loads, but has not been re-checked on a device. The liquid-glass look needs iOS 26+.
-
 ## Features
 
 ### Lyrics
