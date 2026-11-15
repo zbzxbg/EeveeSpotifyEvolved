@@ -553,9 +553,11 @@ extension UserDefaults {
     }
 
     /// 前置增益（dB）—— 抬 EQ 之后靠它把峰值压回不削波的位置。
+    ///
+    /// 默认 **0 dB**：十段全 0 时整条链逐位等于原声，方便 AB 判断"效果链有没有染色"。
     static var dspPreampDb: Double {
         get {
-            let raw = container.object(forKey: dspPreampDbKey) as? Double ?? -4
+            let raw = container.object(forKey: dspPreampDbKey) as? Double ?? 0
             return min(max(raw, -12), 6)
         }
         set {

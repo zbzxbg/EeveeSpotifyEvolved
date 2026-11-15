@@ -126,13 +126,17 @@ enum AudioDSPPreset: String, CaseIterable {
         }
     }
 
+    /// 每个预设自带的前置增益（dB）。
+    ///
+    /// `flat` 是 **0 dB**：全 0 dB + 前置 0 时整条链逐位等于原声（系数是恒等，前置是 1.0）——
+    /// 打开 DSP 之后不做任何事就应该是"什么都没变"，这是判断"效果链有没有偷偷染色"的基准。
     var preampDb: Double {
         switch self {
-        case .flat: return -4
-        case .bass: return -8
-        case .vocal: return -4
-        case .rock: return -7
-        case .podcast: return -4
+        case .flat: return 0
+        case .bass: return -6
+        case .vocal: return -2
+        case .rock: return -5
+        case .podcast: return -2
         }
     }
 
