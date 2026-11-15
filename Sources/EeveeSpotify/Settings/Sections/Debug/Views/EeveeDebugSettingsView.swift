@@ -19,6 +19,12 @@ struct EeveeDebugSettingsView: View {
 
     var body: some View {
         List {
+            // 顶部警示：这一页是排查开关，不是日常设置。
+            // 这里的开关会改行为（补元素 / 钉入口），也会持续把视图树与响应体写进调试日志
+            // （文件变大，且可能带上曲目与账号相关信息）。日志只在本机，导出时才离开设备 ——
+            // 所以"导出前脱敏"必须留在开的位置。不弹窗、不拦操作，只把后果写在最上面。
+            debugWarningSection()
+
             // 「补充模块5」：往元素列表里补 `5`。
             // 没有 footer —— 用途是判定"404 曲目上那张卡是不是这个元素渲出来的"。
             injectLyricsCardElementSection()
@@ -43,6 +49,18 @@ struct EeveeDebugSettingsView: View {
                 // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
+    }
+
+    /// 顶部警示：只陈述后果，不拦操作（排查时它不该碍事）。
+    @ViewBuilder private func debugWarningSection() -> some View {
+        Section {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text("debug_warning_body".localized)
+                    .font(.footnote)
+            }
+        }
     }
 
     /// 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）。

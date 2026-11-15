@@ -224,6 +224,7 @@ track_mismatch = "取词期间切了歌，重新播放这一首即可获取歌�
 // Debug
 
 debug_title = "调试";
+debug_warning_body = "这是排查开关，不是日常设置。这里的开关会改变 App 行为（补元素、钉入口），也会让调试日志变得很大；日志里还可能包含你听过的曲目。日志只留在本机，导出时才离开设备，所以除非你清楚后果，请保持「分享日志前脱敏」开着；排查完把这些开关关回去，否则以后看到的现象不再等于默认状态。";
 enable_log_recording = "开启日志记录";
 enable_log_recording_description = "日常使用无须开启日志记录功能。";
 export_debug_log = "导出调试日志";
@@ -377,7 +378,7 @@ telemetry_stats_section = "本次启动";
 telemetry_blocked_endpoints = "已取消的上报请求";
 telemetry_refresh_counters = "刷新";
 telemetry_reset_counters = "清零计数";
-haptics_title = "触感";
+haptics_title = "界面触感";
 haptics_enabled = "播放器控件震动";
 haptics_description = "用系统反馈引擎给Spotify播放器控件加震动。功能生效需要重启Spotify。";
 haptics_strength = "震动强度";
@@ -455,7 +456,7 @@ settings_sub_app_icon = "选择App图标";
 settings_sub_experiments = "尚未定性的功能";
 settings_sub_flags = "注入远程开关";
 settings_sub_reduce = "关闭Spotify官方提示";
-settings_sub_haptics = "震动反馈";
+settings_sub_haptics = "点按界面控件时的震动";
 settings_sub_blocked_artists = "跳过艺人曲目";
 settings_sub_privacy = "遥测拦截与上报";
 settings_sub_misc = "没有其它归属的零碎项";

@@ -225,6 +225,7 @@ track_mismatch = "The track changed while lyrics were loading. Play it again to 
 // Debug
 
 debug_title = "Debug";
+debug_warning_body = "Diagnostics switches, not everyday settings. They change app behaviour (element injection, forced entry points) and make the debug log much larger; that log can also contain the tracks you played. It stays on this device until you export it, so keep redaction before sharing on unless you know what you are doing, and turn these back off when you are done - otherwise later observations no longer describe the default app.";
 enable_log_recording = "Enable Log Recording";
 enable_log_recording_description = "There's no need to enable log recording for normal use.";
 export_debug_log = "Export Debug Log";
@@ -379,7 +380,7 @@ telemetry_stats_section = "This launch";
 telemetry_blocked_endpoints = "Reporting requests cancelled";
 telemetry_refresh_counters = "Refresh";
 telemetry_reset_counters = "Reset counters";
-haptics_title = "Haptics";
+haptics_title = "Interface haptics";
 haptics_enabled = "Vibrate on player controls";
 haptics_description = "Adds haptic feedback to Spotify's player controls using the system feedback engine. A Spotify restart is required for it to take effect.";
 haptics_strength = "Strength";
@@ -460,7 +461,7 @@ settings_sub_app_icon = "Pick the icon shown on the home screen";
 settings_sub_experiments = "Features that are not settled yet";
 settings_sub_flags = "Inject remote feature flags";
 settings_sub_reduce = "Hide Spotify's own prompts";
-settings_sub_haptics = "Vibration feedback";
+settings_sub_haptics = "Vibration when tapping controls";
 settings_sub_blocked_artists = "Skip tracks from blocked artists";
 settings_sub_privacy = "Telemetry blocking and reporting";
 settings_sub_misc = "Everything that has no other home";
