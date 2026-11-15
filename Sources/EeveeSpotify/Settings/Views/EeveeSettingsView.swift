@@ -291,6 +291,13 @@ struct EeveeSettingsView: View {
                 ) { AnyView(EeveeAudioReactiveSettingsView()) }
 
                 settingsRow(
+                    color: Color(hex: "#FF9F0A"),
+                    title: "audio_effects_title",
+                    subtitle: "settings_sub_audio_effects",
+                    imageSystemName: "slider.horizontal.3"
+                ) { AnyView(EeveeAudioEffectSettingsView()) }
+
+                settingsRow(
                     color: Color(hex: "#0A84FF"),
                     title: "head_gestures_title",
                     subtitle: "settings_sub_head_gestures",

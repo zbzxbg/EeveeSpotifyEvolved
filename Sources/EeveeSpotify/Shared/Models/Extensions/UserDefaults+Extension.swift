@@ -41,6 +41,11 @@ extension UserDefaults {
     private static let headGestureControlsEnabledKey = "headGestureControlsEnabled"
     /// 锁屏 / 灵动岛的「实时活动」（见 `LiveActivityController`），默认关。
     private static let liveActivityEnabledKey = "liveActivityEnabled"
+    /// 音频效果（十段 EQ + 前置增益，见 `AudioDSP`），默认关。
+    private static let dspEnabledKey = "dspEnabled"
+    private static let dspPreampDbKey = "dspPreampDb"
+    private static let dspBandGainsDbKey = "dspBandGainsDb"
+    private static let dspPresetKey = "dspPreset"
     private static let dumpViewTreeKey = "dumpViewTree"
     /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
@@ -121,6 +126,10 @@ extension UserDefaults {
         musicHapticsStrengthKey,
         headGestureControlsEnabledKey,
         liveActivityEnabledKey,
+        dspEnabledKey,
+        dspPreampDbKey,
+        dspBandGainsDbKey,
+        dspPresetKey,
         dumpViewTreeKey,
         detailedLoggingKey,
         hideMiniPlayerBarKey,
@@ -529,6 +538,55 @@ extension UserDefaults {
         set {
             container.set(newValue, forKey: liveActivityEnabledKey)
         }
+    }
+
+    // MARK: - 音频效果（十段 EQ / 前置增益，见 `AudioDSP`）
+
+    /// 音频效果总开关，默认关。
+    static var dspEnabled: Bool {
+        get {
+            container.object(forKey: dspEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: dspEnabledKey)
+        }
+    }
+
+    /// 前置增益（dB）—— 抬 EQ 之后靠它把峰值压回不削波的位置。
+    static var dspPreampDb: Double {
+        get {
+            let raw = container.object(forKey: dspPreampDbKey) as? Double ?? -4
+            return min(max(raw, -12), 6)
+        }
+        set {
+            container.set(min(max(newValue, -12), 6), forKey: dspPreampDbKey)
+        }
+    }
+
+    /// 十段增益（dB）。缺省 = 全 0（直通）。
+    ///
+    /// `UserDefaults` 里存的是 `[NSNumber]`，`as? [Double]` 拿不到，要逐项转。
+    static var dspBandGainsDb: [Double] {
+        get {
+            let stored = (container.array(forKey: dspBandGainsDbKey) as? [NSNumber])?
+                .map(\.doubleValue) ?? []
+            if stored.count == AudioDSPBands.count {
+                return stored.map { min(max($0, AudioDSPBands.minGainDb), AudioDSPBands.maxGainDb) }
+            }
+            return Array(repeating: 0, count: AudioDSPBands.count)
+        }
+        set {
+            let clamped = newValue
+                .prefix(AudioDSPBands.count)
+                .map { min(max($0, AudioDSPBands.minGainDb), AudioDSPBands.maxGainDb) }
+            container.set(clamped, forKey: dspBandGainsDbKey)
+        }
+    }
+
+    /// 上一次选中的预设（只用于把选择器显示回来，`custom` = 自己调过）。
+    static var dspPreset: String {
+        get { container.string(forKey: dspPresetKey) ?? AudioDSPPreset.flat.rawValue }
+        set { container.set(newValue, forKey: dspPresetKey) }
     }
 
     // MARK: - 视图树转储（Diagnostics）

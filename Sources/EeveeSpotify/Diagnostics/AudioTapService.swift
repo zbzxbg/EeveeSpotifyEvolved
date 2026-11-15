@@ -45,8 +45,10 @@ enum AudioTapService {
     private static var hooksReady = false
     private static var renderUnits = Set<AudioUnit>()
 
-    /// 两个消费方里任意一个开着就需要 hook。
-    static var isWanted: Bool { AudioTapProbe.isEnabled || AudioReactiveEngine.isWanted }
+    /// 三类消费方里任意一个开着就需要 hook。
+    static var isWanted: Bool {
+        AudioTapProbe.isEnabled || AudioReactiveEngine.isWanted || AudioDSP.isEnabled
+    }
 
     /// 启动时调一次（在 `Tweak.x.swift` 的 `return` 之前）。
     static func startAtLaunch() {
@@ -72,8 +74,10 @@ enum AudioTapService {
                 UserDefaults.container.set(false, forKey: AudioTapProbe.defaultsKey)
                 UserDefaults.coverPulseEnabled = false
                 UserDefaults.musicHapticsEnabled = false
+                UserDefaults.dspEnabled = false
                 AudioTapProbe.syncActiveWithSetting()
                 AudioFeatures.setActive(false)
+                AudioDSP.syncWithSettings()
                 AudioReactiveEngine.shared.refresh()
                 writeDebugLog(
                     "[\(logTag)] hook install incomplete — setProperty=\(rebound.setProperty)"
@@ -193,6 +197,7 @@ enum AudioTapService {
         UserDefaults.container.set(false, forKey: AudioTapProbe.defaultsKey)
         UserDefaults.coverPulseEnabled = false
         UserDefaults.musicHapticsEnabled = false
+        UserDefaults.dspEnabled = false
         writeDebugLog(
             "[\(logTag)] turned off the audio consumers after an unclean launch — crash-loop guard"
         )

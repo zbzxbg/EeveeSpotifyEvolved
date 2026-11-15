@@ -413,3 +413,20 @@ head_gestures_description = "點一下頭切換下一首，搖一下頭切換上
 head_gestures_motion_available = "頭部姿態資料可用";
 head_gestures_motion_unavailable = "沒有頭部姿態資料 —— 請連接 AirPods Pro / Max";
 
+// ── 高級頁 · 音訊效果（十段 EQ + 前置增益）──
+audio_effects_title = "音訊效果";
+settings_sub_audio_effects = "十段等化器與前置增益";
+audio_effects_enabled = "啟用音訊效果";
+audio_effects_description = "十段圖形等化器 + 前置增益，作用在解碼後、送進輸出單元之前的 PCM 上。接管輸出之後改動立即生效；第一次開啟要重啟 Spotify，再看狀態列。響的歌開始削波時把前置增益調低。";
+audio_effects_preamp = "前置增益";
+audio_effects_equalizer = "等化器";
+audio_effects_presets = "預設";
+audio_effects_preset_flat = "平坦";
+audio_effects_preset_bass = "低音增強";
+audio_effects_preset_vocal = "人聲";
+audio_effects_preset_rock = "搖滾";
+audio_effects_preset_podcast = "播客";
+audio_effects_preset_custom = "自訂";
+audio_effects_status_active = "音訊輸出已走效果鏈";
+audio_effects_status_restart = "還沒接管 —— 重啟 Spotify 後生效";
+

@@ -139,6 +139,10 @@ enum AudioTapProbe {
                     AudioFeatures.noteFormat(format)
                 }
             }
+            // DSP 要的是**源单元**（非输出单元）的格式：它的回调产出的就是最终 PCM。
+            if element == 0 {
+                AudioDSP.noteFormat(unit: unit, format: format, isOutputUnit: output)
+            }
         } else if id == kAudioUnitProperty_MakeConnection,
                   let data,
                   size >= UInt32(MemoryLayout<AudioUnitConnection>.size) {

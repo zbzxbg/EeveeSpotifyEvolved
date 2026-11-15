@@ -1,5 +1,6 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <stdint.h>
+#import <stdlib.h>
 
 #import "fishhook.h"
 
@@ -52,6 +53,96 @@ void EeveeAudioTapReadCounters(uint64_t *setPropertyCalls, uint64_t *startCalls)
     }
 }
 
+// ── DSP：包住源单元的 render callback ────────────────────────────────────────
+//
+// 音频图是「源单元（回调供数据）→ 连接 → RemoteIO」，所以"原回调填完 ioData、单元把数据
+// 交给 RemoteIO 之前"是唯一能零延迟改样本的位置：把回调换成我们的，先调原回调，再就地
+// 处理同一块 `ioData`。
+//
+// 这两个函数由 Swift 侧（`AudioDSP.swift`）实现。`ShouldWrap` 只在 tap 已经装好时被问到，
+// 返回 1 表示"包"；包不包与 DSP 开关无关 —— 开关只在 `Process` 里决定处不处理，这样打开
+// DSP 不必等音频图重建。
+int EeveeAudioDSPShouldWrapCallback(void *unit);
+void EeveeAudioDSPProcess(void *ioData, uint32_t numberFrames);
+
+typedef struct {
+    AURenderCallback original;
+    void *originalRefCon;
+} EeveeDSPCallbackContext;
+
+static OSStatus EeveeDSPWrappedRenderCallback(
+    void *refCon,
+    AudioUnitRenderActionFlags *actionFlags,
+    const AudioTimeStamp *timeStamp,
+    UInt32 busNumber,
+    UInt32 numberFrames,
+    AudioBufferList *ioData
+) {
+    EeveeDSPCallbackContext *context = (EeveeDSPCallbackContext *)refCon;
+    if (context == NULL || context->original == NULL) {
+        return noErr;
+    }
+    OSStatus status = context->original(
+        context->originalRefCon, actionFlags, timeStamp, busNumber, numberFrames, ioData);
+    if (status != noErr) {
+        return status;
+    }
+    EeveeAudioDSPProcess(ioData, numberFrames);
+    return noErr;
+}
+
+// 返回 1 = 这次 `SetRenderCallback` 已经用包装后的回调替掉了（`*outStatus` 是原实现的
+// 返回值）；返回 0 = 按原样放行。
+static int EeveeAudioDSPWrapRenderCallback(
+    AudioUnit unit,
+    AudioUnitScope scope,
+    AudioUnitElement element,
+    const void *data,
+    UInt32 size,
+    OSStatus *outStatus
+) {
+    if (data == NULL || size < sizeof(AURenderCallbackStruct)) {
+        return 0;
+    }
+    if (!EeveeAudioDSPShouldWrapCallback((void *)unit)) {
+        return 0;
+    }
+    const AURenderCallbackStruct *original = (const AURenderCallbackStruct *)data;
+    if (original->inputProc == NULL) {
+        return 0;
+    }
+    if (EeveeOrigAudioUnitSetProperty == NULL) {
+        return 0;
+    }
+
+    // 上下文活到进程结束（回调挂在音频图里，拆不掉也不需要拆）。
+    EeveeDSPCallbackContext *context =
+        (EeveeDSPCallbackContext *)malloc(sizeof(EeveeDSPCallbackContext));
+    if (context == NULL) {
+        return 0;
+    }
+    context->original = original->inputProc;
+    context->originalRefCon = original->inputProcRefCon;
+
+    AURenderCallbackStruct wrapped;
+    wrapped.inputProc = EeveeDSPWrappedRenderCallback;
+    wrapped.inputProcRefCon = context;
+
+    OSStatus status = EeveeOrigAudioUnitSetProperty(
+        unit, kAudioUnitProperty_SetRenderCallback, scope, element, &wrapped, sizeof(wrapped));
+    if (status != noErr) {
+        free(context);
+        return 0;
+    }
+    if (outStatus != NULL) {
+        *outStatus = status;
+    }
+    return 1;
+}
+
+
+// fishhook 会把"改之前那个指针值"写回 `replaced`，而且**新 image 加载时会再写一次**（它把
+// rebindings 存起来重复用）⇒ 这两个变量必须是活到进程结束的静态存储，不能指向栈上临时量。
 static OSStatus EeveeAudioUnitSetPropertyReplacement(
     AudioUnit unit,
     AudioUnitPropertyID propertyID,
@@ -72,6 +163,15 @@ static OSStatus EeveeAudioUnitSetPropertyReplacement(
         || propertyID == kAudioUnitProperty_MakeConnection
         || propertyID == kAudioUnitProperty_SetRenderCallback) {
         EeveeAudioTapNoteSetProperty((void *)unit, propertyID, scope, element, data, size);
+    }
+
+    // DSP：把源单元的回调换成"先调原回调、再审同一块 ioData"的包装。返回 1 表示这次已经
+    // 用包装后的回调替掉了，原样返回它的状态即可。
+    if (propertyID == kAudioUnitProperty_SetRenderCallback) {
+        OSStatus dspStatus = noErr;
+        if (EeveeAudioDSPWrapRenderCallback(unit, scope, element, data, size, &dspStatus)) {
+            return dspStatus;
+        }
     }
 
     if (EeveeOrigAudioUnitSetProperty == NULL) {

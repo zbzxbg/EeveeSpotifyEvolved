@@ -496,6 +496,23 @@ head_gestures_description = "点一下头切下一首，摇一下头切上一首
 head_gestures_motion_available = "头部姿态数据可用";
 head_gestures_motion_unavailable = "没有头部姿态数据 —— 请连接 AirPods Pro / Max";
 
+// ── 高级页 · 音频效果（十段 EQ + 前置增益）──
+audio_effects_title = "音频效果";
+settings_sub_audio_effects = "十段均衡器与前置增益";
+audio_effects_enabled = "启用音频效果";
+audio_effects_description = "十段图形均衡器 + 前置增益，作用在解码后、送进输出单元之前的 PCM 上。接管输出之后改动立即生效；第一次打开要重启 Spotify，再看状态行。响的歌开始削波时把前置增益调低。";
+audio_effects_preamp = "前置增益";
+audio_effects_equalizer = "均衡器";
+audio_effects_presets = "预设";
+audio_effects_preset_flat = "平直";
+audio_effects_preset_bass = "低音增强";
+audio_effects_preset_vocal = "人声";
+audio_effects_preset_rock = "摇滚";
+audio_effects_preset_podcast = "播客";
+audio_effects_preset_custom = "自定义";
+audio_effects_status_active = "音频输出已走效果链";
+audio_effects_status_restart = "还没接管 —— 重启 Spotify 后生效";
+
 
 hide_mini_player_bar = "隐藏迷你播放条";
 player_cards_section = "听歌页卡片";

@@ -501,6 +501,23 @@ head_gestures_description = "Nod once for the next track, shake once for the pre
 head_gestures_motion_available = "Head tracking is available";
 head_gestures_motion_unavailable = "No head tracking — connect AirPods Pro / Max";
 
+// ── Advanced page · Audio effects (10-band EQ + preamp) ──
+audio_effects_title = "Audio Effects";
+settings_sub_audio_effects = "10-band EQ and preamp";
+audio_effects_enabled = "Enable audio effects";
+audio_effects_description = "A 10-band graphic equalizer plus a preamp, applied to the decoded PCM before it reaches the output unit. Once the chain has taken over the output, changes apply immediately; the first time you turn it on, restart Spotify and check the status row. If loud tracks start clipping, lower the preamp.";
+audio_effects_preamp = "Preamp";
+audio_effects_equalizer = "Equalizer";
+audio_effects_presets = "Presets";
+audio_effects_preset_flat = "Flat";
+audio_effects_preset_bass = "Bass boost";
+audio_effects_preset_vocal = "Vocal";
+audio_effects_preset_rock = "Rock";
+audio_effects_preset_podcast = "Podcast";
+audio_effects_preset_custom = "Custom";
+audio_effects_status_active = "Audio output is routed through the effect chain";
+audio_effects_status_restart = "Not routed yet — restart Spotify to take over the output";
+
 
 hide_mini_player_bar = "Hide the mini player bar";
 player_cards_section = "Now Playing cards";

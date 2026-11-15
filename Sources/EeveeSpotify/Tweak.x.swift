@@ -881,6 +881,8 @@ struct EeveeSpotify: Tweak {
             HeadGestureControls.syncWithSettings()
             // 锁屏 / 灵动岛的实时活动：开关开着才向系统申请活动卡片。
             LiveActivityController.syncWithSettings()
+            // 音频效果（十段 EQ / 前置增益）：开关开着才装 tap，并把系数算好。
+            AudioDSP.syncWithSettings()
 
             // ⚠️⚠️ 这个 `return` 把 `init` 切成了两段 —— 它后面那句 "For other versions"
             // 底下整段在 **9.1/9.2 族（本仓的目标版本）上永远不会执行**。

@@ -429,6 +429,17 @@ jobs:
                  -o lyrics-door-tests
           ./lyrics-door-tests
 
+      # 十段 EQ 的系数与滤波数学（纯 Foundation）。
+      # 接线那一半（`AudioDSP.swift`）要 AudioToolbox / AudioBufferList，进不来；但系数公式、
+      # 稳定性条件、稳态增益、十段级联与预设形状都在这里钉住 —— 本机没有 Swift 工具链，
+      # 这是这段 DSP 数学在打包之前唯一被编译并运行的地方。
+      - name: Audio DSP filters (biquad EQ + presets)
+        run: |
+          swiftc Sources/EeveeSpotify/Audio/AudioDSPFilters.swift \
+                 Tests/AudioDSP/main.swift \
+                 -o audio-dsp-tests
+          ./audio-dsp-tests
+
       # 唯一一个**不是** swiftc 的测试（纯 Python，不需要工具链）。
       - name: Resolve-configuration snapshot
         run: python3 Tests/ResolveConfigurationSnapshot/test.py
