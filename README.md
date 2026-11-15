@@ -103,11 +103,7 @@ Free profiles usually have no wildcard, so both builds ship without the Watch ap
 
 ## Troubleshooting
 
-**Now Playing misbehaves** (lyrics not showing, or a stale "coming soon" card): leave the Now Playing page and enter it again. This only applies if "Hide Spotify song Now Playing modules" is off.
-
-**One song has no lyrics** — open Settings → Lyrics → Lyrics Source Order and check that a source which carries it is enabled. Auto Select asks the sources in order and skips any that return nothing, so one gap never blocks the others.
-
-**A switch seems to do nothing** — force-quit Spotify once. Hooks are installed at launch, so a setting you just changed applies the next time the app starts.
+Common issues, a longer FAQ, and why some Premium features stay locked: **[common_issues.md](common_issues.md)**.
 
 ## Requirements
 

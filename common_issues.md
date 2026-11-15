@@ -46,6 +46,14 @@ If you're unable to sign in and see an error, try these solutions:
 3. Check your internet connection
 4. If using a VPN, try disconnecting/reconnecting
 
+## Now Playing Looks Wrong, or Shows a Stale Card
+
+Leave the Now Playing page and enter it again — our layers are rebuilt when the page appears. This only applies while "Hide Spotify song Now Playing modules" is off.
+
+## A Switch Does Nothing
+
+Force-quit Spotify once. Most hooks are installed at launch, so a switch you just changed applies the next time the app starts.
+
 ## Lyrics Not Showing Up
 
 If you see the "Couldn't load the lyrics for this song" message and no lyrics load:
@@ -54,6 +62,8 @@ If you see the "Couldn't load the lyrics for this song" message and no lyrics lo
 3. Try changing the lyrics source
 4. If that doesn't help, go to the Patching section and enable "Overwrite Configuration"
 5. Reset data within the EeveeSpotify settings
+
+If a single song has no lyrics while the others do, open Settings → Lyrics → Lyrics Source Order and check that a source which carries it is enabled. Auto Select asks the sources in order and skips any that return nothing, so one gap never blocks the others.
 
 ## Premium Not Working
 
