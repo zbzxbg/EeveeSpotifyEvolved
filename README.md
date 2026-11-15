@@ -13,7 +13,7 @@ Spotify, arranged like Apple Music.
 </div>
 
 > [!NOTE]
-> Tested on Spotify 9.2.0, and Local Premium is restored.
+> Tested on Spotify 9.2.0, and Premium emulation is restored.
 
 <p align="center">
   <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
