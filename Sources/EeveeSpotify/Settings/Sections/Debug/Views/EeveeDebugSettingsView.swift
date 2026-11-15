@@ -105,8 +105,10 @@ struct EeveeDebugSettingsView: View {
     ///
     /// 默认关；打开即装 hook，不需要重启 —— 第一次拿到数据要等下一次
     /// `AudioOutputUnitStart`（开始播放 / 换歌 / 暂停再播）。
+    ///
+    /// 页脚说明已删掉（这一页只留开关与顶部那一句警示）。
     @ViewBuilder private func audioTapProbeSection() -> some View {
-        Section(footer: Text("audio_tap_probe_description".localized)) {
+        Section {
             Toggle(
                 "audio_tap_probe".localized,
                 isOn: $viewModel.audioTapProbe
@@ -123,7 +125,7 @@ struct EeveeDebugSettingsView: View {
     /// 猜 `value(forKey:)` 在键不存在时会抛不可捕获的异常、把 Spotify 直接弄崩。
     /// 同样属于"验证完就删"的临时工具（本页定位）。
     @ViewBuilder private func dumpClassSection() -> some View {
-        Section(footer: Text("dump_class_description".localized)) {
+        Section {
             TextField("dump_class_placeholder".localized, text: $dumpClassName)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -147,7 +149,7 @@ struct EeveeDebugSettingsView: View {
     /// ⚠️ 这一节不是"验证完就删"的临时件，而是**导出的隐私默认值**。它不在
     /// `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，用 `Binding` 直接读写）。
     @ViewBuilder private func redactSharedLogSection() -> some View {
-        Section(footer: Text("redact_shared_log_description".localized)) {
+        Section {
             Toggle(
                 "redact_shared_log".localized,
                 isOn: Binding<Bool>(

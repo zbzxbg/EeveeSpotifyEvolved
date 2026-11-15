@@ -228,7 +228,6 @@ enable_log_recording = "开启日志记录";
 enable_log_recording_description = "日常使用无须开启日志记录功能。";
 export_debug_log = "导出调试日志";
 redact_shared_log = "分享日志前脱敏";
-redact_shared_log_description = "导出的那一份会隐去你的听歌记录（曲目、艺人、歌单）、曲目与封面 ID、设备标识。只有自己留档时才建议关闭。";
 redact_log_failed = "生成脱敏日志失败，因此没有导出任何内容。请重试，或先清除日志。";
 redact_log_failed_ok = "确定";
 clear_debug_log = "清除调试日志";
@@ -422,12 +421,10 @@ flag_group_home = "首页与分享";
 flag_note_lyrics_v2 = "Spotify的歌词v2服务 —— 本项目的歌词依赖它，别关。";
 flag_note_canvas_lyrics = "把歌词画在Canvas视频上。";
 flag_catalog_unsupported = "暂不支持";
-dump_class_description = "把某一个类的名字、方法表和ivar表（含类型编码）写进调试日志。类名三种写法都收：运行期名、视图树日志里那种短名，或Module.Class。只读：只让runtime枚举，找到的方法一个都不会被调用。";
 dump_class_placeholder = "类名";
 dump_class_action = "转储这个类";
 detailed_logging = "更详细的日志记录";
 audio_tap_probe = "音频输出探针";
-audio_tap_probe_description = "只读诊断：每 2 秒记录 RemoteIO 的格式与 RMS。打开即生效，不必重启。第一行数据要等下一次开始播放（或暂停再播）才有，正在播放时先暂停一下再继续。不会改动音频。";
 
 /* MARK: 外观 */
 theme_section = "主题";
