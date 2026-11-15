@@ -11,3 +11,6 @@
 //
 // 一个进程只能调一次：fishhook 记着这一组 rebindings 给后加载的 image 复用，重复安装属于未定义。
 int EeveeAudioTapInstallHooks(void);
+
+// 两个被替换函数的累计调用次数（诊断用：判断它们有多热）。
+void EeveeAudioTapReadCounters(uint64_t *setPropertyCalls, uint64_t *startCalls);

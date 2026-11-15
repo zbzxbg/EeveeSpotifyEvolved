@@ -39,6 +39,19 @@ static OSStatus (*EeveeOrigAudioUnitSetProperty)(
 ) = NULL;
 static OSStatus (*EeveeOrigAudioOutputUnitStart)(AudioUnit) = NULL;
 
+// 调用计数：只做诊断用，给 Swift 侧定时器读，判断这两个 API 到底有多热。
+static uint64_t EeveeAudioTapSetPropertyCalls = 0;
+static uint64_t EeveeAudioTapStartCalls = 0;
+
+void EeveeAudioTapReadCounters(uint64_t *setPropertyCalls, uint64_t *startCalls) {
+    if (setPropertyCalls != NULL) {
+        *setPropertyCalls = EeveeAudioTapSetPropertyCalls;
+    }
+    if (startCalls != NULL) {
+        *startCalls = EeveeAudioTapStartCalls;
+    }
+}
+
 static OSStatus EeveeAudioUnitSetPropertyReplacement(
     AudioUnit unit,
     AudioUnitPropertyID propertyID,
@@ -47,7 +60,15 @@ static OSStatus EeveeAudioUnitSetPropertyReplacement(
     const void *data,
     UInt32 size
 ) {
-    EeveeAudioTapNoteSetProperty((void *)unit, propertyID, scope, element, data, size);
+    EeveeAudioTapSetPropertyCalls++;
+
+    // 这个替换函数挂在音频控制线程上，每次跨到 Swift 都有成本，而探针只关心两种属性 ——
+    // 其余的直接放行，不白跨。
+    if (propertyID == kAudioUnitProperty_StreamFormat
+        || propertyID == kAudioUnitProperty_MakeConnection) {
+        EeveeAudioTapNoteSetProperty((void *)unit, propertyID, scope, element, data, size);
+    }
+
     if (EeveeOrigAudioUnitSetProperty == NULL) {
         // 重绑没成却还是被调到：状态已经乱了，别再往下传一个空指针。
         return -50; // paramErr
@@ -56,6 +77,7 @@ static OSStatus EeveeAudioUnitSetPropertyReplacement(
 }
 
 static OSStatus EeveeAudioOutputUnitStartReplacement(AudioUnit unit) {
+    EeveeAudioTapStartCalls++;
     if (EeveeOrigAudioOutputUnitStart == NULL) {
         return -50; // paramErr
     }

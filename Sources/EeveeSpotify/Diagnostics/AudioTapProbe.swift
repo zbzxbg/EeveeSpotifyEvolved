@@ -3,6 +3,7 @@ import AudioToolbox
 // `UnsafeMutableAudioBufferListPointer` 是 CoreAudio 的 Swift 扩展类型，
 // AudioToolbox 不转出它，单独 import 才可见。
 import CoreAudio
+import EeveeSpotifyC
 import os
 
 /// 音频输出域探针（只读诊断）。
@@ -193,10 +194,15 @@ enum AudioTapProbe {
                     + " \(format.mBitsPerChannel)bit flags=\(format.mFormatFlags)"
                     + " unit=\(unit) output=\(output) remoteIO=\(remote)"
             )
-            if scope == kAudioUnitScope_Output, element == 0, output {
+            // RemoteIO 的硬件格式是通过 **input scope（bus 0）** 设进来的，不能只认 output scope；
+            // 同一个 unit 上后到的 float 格式优先（先到的那条可能是 Spotify 内部的中间格式）。
+            if element == 0, output {
+                let isFloat = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
                 os_unfair_lock_lock(lock)
-                streamFormat = format
-                formatIsFloat = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
+                if streamFormat == nil || isFloat {
+                    streamFormat = format
+                    formatIsFloat = isFloat
+                }
                 os_unfair_lock_unlock(lock)
             }
         } else if id == kAudioUnitProperty_MakeConnection,
@@ -274,9 +280,12 @@ enum AudioTapProbe {
 
         for buffer in buffers {
             bytes += Int(buffer.mDataByteSize)
-            channels = max(channels, Int(buffer.mNumberChannels))
+            // 非交错布局是「一个 buffer 一个声道」，交错是「一个 buffer N 个声道」——
+            // 累加才对；取最大值在非交错时会少报成 1。
+            channels += Int(buffer.mNumberChannels)
             guard isFloat, let data = buffer.mData else { continue }
-            let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
+            // render 线程上不值当为统计把整个 buffer 走一遍：每块最多看 256 个样本就算 RMS/peak。
+            let count = min(Int(buffer.mDataByteSize) / MemoryLayout<Float>.size, 256)
             let pointer = data.assumingMemoryBound(to: Float.self)
             var index = 0
             while index < count {
@@ -331,12 +340,17 @@ enum AudioTapProbe {
         } else {
             formatText = "format unknown"
         }
+        // C 侧的累计调用次数：这两个 API 到底有多热，只能靠它看。
+        var setPropertyCalls: UInt64 = 0
+        var startCalls: UInt64 = 0
+        EeveeAudioTapReadCounters(&setPropertyCalls, &startCalls)
         writeDebugLog(
             "[\(logTag)] render callbacks=\(snapshot.0) frames=\(snapshot.1)"
                 + " rms=\(String(format: "%.4f", snapshot.2))"
                 + " peak=\(String(format: "%.3f", snapshot.3))"
                 + " ch=\(snapshot.4) bytes=\(snapshot.5) bus=\(snapshot.6)"
                 + " · \(formatText)"
+                + " · calls setProperty=\(setPropertyCalls) start=\(startCalls)"
         )
     }
 
