@@ -188,5 +188,5 @@ layout/Library/Application Support/EeveeSpotify.bundle/Info.plist
 
 ## Questions
 
-- General usage and install questions: see [common_issues.md](common_issues.md) or the [Telegram channel](https://t.me/zbzxbg).
+- General usage and install questions: see [common_issues.md](common_issues.md).
 - For anything about this guide itself, open an issue or PR against this file.
