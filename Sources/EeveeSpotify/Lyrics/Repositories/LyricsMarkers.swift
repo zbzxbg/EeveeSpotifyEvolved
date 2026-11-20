@@ -110,7 +110,7 @@ enum LyricsMarkerFilter {
 
     /// 整行被一对 `[]` 包住（`[Refrain]` / `[Verse 3: A & B]` / `[本段由 … 提供]` …）。
     ///
-    /// 「更激进的删除歌词标注术语」那条实验开关用它（见 `mapLyricsLines`）。
+    /// 「更激进的删除歌词标注术语」那条开关用它（见 `mapLyricsLines`）。
     /// 只认**一整对**方括号：`[a] [b]` 这种多个括号拼成的行不在这里删 ——
     /// 那形状更像真歌词（`[Oh] [yeah]`），而且白名单那几条本来就盖不住它。
     private static let fullyBracketedLinePattern = "^\\[[^\\[\\]]*\\]$"
@@ -189,7 +189,7 @@ enum LyricsMarkerFilter {
 
     /// 去除结构标注行并清理首尾空行。
     ///
-    /// `aggressive` 是「更激进的删除歌词标注术语」那条实验开关（默认关）：
+    /// `aggressive` 是「更激进的删除歌词标注术语」那条开关（默认关）：
     /// 打开后**凡是整行被 `[]` 包住**的都删，不再要求括号里落在白名单上。
     /// 只有 Genius 的调用点传 true —— 别的源里 `[]` 是时间轴 / 转写标记，
     /// 一刀切会删掉真歌词（见 `ExperimentsOptions.aggressiveMarkerRemoval`）。

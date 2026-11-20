@@ -214,7 +214,7 @@ extension LyricsDto {
             )
             let isPrecise = !authoredSyllables.isEmpty
 
-            // 没有作者逐字时间轴时的**伪逐字**（实验开关，默认关）。
+            // 没有作者逐字时间轴时的**伪逐字**（歌词页的开关，默认关）。
             //
             // ⚠️ 合成的那份**只给渲染层用**，`timingKind` 仍按"有没有作者时间轴"决定 ——
             // 见 `PseudoWordTiming` 文件头第 1 条：标成 `.precise` 会让间奏判定

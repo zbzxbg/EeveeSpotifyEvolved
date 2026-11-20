@@ -1,5 +1,11 @@
 import Foundation
 
+/// 「实验」页的开关，以及三个从那一页**毕业**到「歌词」页的歌词开关。
+///
+/// 结构体名与 `experimentsOptions` 这个存储键不随 UI 位置变 —— 它们决定已落盘的数据
+/// 能不能解开。三个歌词开关的 UI 在 `EeveeLyricsSettingsView` 里（伪逐字跟在「逐词歌词」
+/// 主开关下面，AMLL 模糊搜索在来源一处，激进删标注在 Genius 一处），存储仍走这里，
+/// 只是为了不动用户盘上那份 JSON。
 struct ExperimentsOptions: Codable, Equatable {
     var liveContainerSharing: Bool
     /// 「显示 Instagram 分享位」——删过一次（它挂的 `SPTSharingSDK` /
@@ -33,7 +39,7 @@ struct ExperimentsOptions: Codable, Equatable {
     /// 没有逐字档的网易云与 Musixmatch / QQ 与酷狗的 LRC 兜底），把整行按
     /// **估算演唱时长**逐字填亮，而不是一次亮起。
     ///
-    /// 为什么放在「实验」里：它确实在编时间（行内分布是估的），估偏了前沿就会提前/滞后。
+    /// 行内分布是估的，估偏了前沿就会提前/滞后，所以默认关。
     /// 实现见 `PseudoWordTiming`；接线在 `LyricLinesAdapter.toAppleMusicLyricLines()`。
     /// ⚠️ 它**不改变** `timingKind`（仍是 `.lineSynchronized`）—— 改了会让间奏判定
     /// 把估算值当作者时间轴。
@@ -51,15 +57,6 @@ struct ExperimentsOptions: Codable, Equatable {
     /// ⚠️ 它会误删"整行被方括号包住的真歌词"（`[I love you]` 这种写法确实存在，但极少）；
     /// 默认关，就是这个原因。
     var aggressiveMarkerRemoval: Bool
-    /// 「PetitLyrics 回退逐行」—— PetitLyrics 有一部分 `wordsSynced` 不是真点出来的：
-    /// 每行每个词固定同一个 step，而 step 的大小（80 / 15 / 5 / 2 …）与这首歌的行间距无关 ⇒
-    /// 整行词轴只占行间距的一小截（判据见 `PetitLyricsRepository.wordTimingCoverage`）。
-    /// 后果是逐字高亮一两秒就扫完整句、剩下时间被间奏判定当成"没人唱"，
-    /// 于是句与句之间几乎每一处都冒出呼吸点。
-    ///
-    /// **默认开**：开了只会少一层本就可疑的逐字高亮，不会让正确的时间轴变差 ——
-    /// 覆盖率中位数在两种数据上差一个量级（点出来的 65% 以上，等距编的 15% 上下）。
-    var petitLyricsLineFallback: Bool
 
     init(
         liveContainerSharing: Bool,
@@ -68,8 +65,7 @@ struct ExperimentsOptions: Codable, Equatable {
         spicyLyricsCrossValidation: Bool = false,
         appleMusicOfficialTtml: Bool = false,
         pseudoWordByWordLyrics: Bool = false,
-        aggressiveMarkerRemoval: Bool = false,
-        petitLyricsLineFallback: Bool = true
+        aggressiveMarkerRemoval: Bool = false
     ) {
         self.liveContainerSharing = liveContainerSharing
         self.showInstagramDestination = showInstagramDestination
@@ -78,7 +74,6 @@ struct ExperimentsOptions: Codable, Equatable {
         self.appleMusicOfficialTtml = appleMusicOfficialTtml
         self.pseudoWordByWordLyrics = pseudoWordByWordLyrics
         self.aggressiveMarkerRemoval = aggressiveMarkerRemoval
-        self.petitLyricsLineFallback = petitLyricsLineFallback
     }
 
     /// 手写解码：`liveContainerSharing` 之外那些都是**后加的**字段，早期盘上根本没有它们。
@@ -98,10 +93,5 @@ struct ExperimentsOptions: Codable, Equatable {
             ?? false
         aggressiveMarkerRemoval = try container.decodeIfPresent(Bool.self, forKey: .aggressiveMarkerRemoval)
             ?? false
-        // 默认**开**：缺键时按"新功能已启用"处理，否则一次升级会把新功能关掉。
-        petitLyricsLineFallback = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .petitLyricsLineFallback
-        ) ?? true
     }
 }

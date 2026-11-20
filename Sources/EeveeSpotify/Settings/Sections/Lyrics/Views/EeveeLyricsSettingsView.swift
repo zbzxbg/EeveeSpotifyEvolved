@@ -13,6 +13,9 @@ struct EeveeLyricsSettingsView: View {
             // （与下面 NetEase 那几项同一套写法）。
             if viewModel.wordByWordLyrics {
                 betterWordByWordLyricsSection()
+                // 「伪逐字填充」同样只对逐字有意义：它补的是"没有作者词轴"的行。
+                // 原「实验」页的一项，搬到这里是因为它的作用面就是逐字渲染。
+                pseudoWordByWordLyricsSection()
             }
 
             lyricsSourceSection()
@@ -48,11 +51,29 @@ struct EeveeLyricsSettingsView: View {
                     && viewModel.lyricsSource != .amllTtml {
                     amllPreferredSection()
                 }
+
+                // 「AMLL 模糊搜索」只在 AMLL 真会被问到的三种情形下有话可说：
+                // 来源就是 AMLL、自动优选链路、或勾了「AMLL 优先」。
+                // 原「实验」页的一项，搬回它真正生效的位置。
+                if viewModel.lyricsSource == .amllTtml
+                    || viewModel.lyricsSource == .autoSelect
+                    || viewModel.amllPreferred {
+                    amllFuzzySearchSection()
+                }
                 
                 // Genius 回退保持原有条件：自动优选链路本身以 Genius 收尾，
                 // 不再重复提供该开关；来源为 Genius 时自己回退给自己没有意义。
                 if viewModel.lyricsSource != .genius && viewModel.lyricsSource != .autoSelect {
                     geniusFallbackSection()
+                }
+
+                // 「更激进的删除歌词标注术语」只改 Genius 的正文：来源是 Genius、
+                // 自动优选（链路以 Genius 收尾）、或开了 Genius 回退时才有意义。
+                // 原「实验」页的一项，搬回 Genius 这一节。
+                if viewModel.lyricsSource == .genius
+                    || viewModel.lyricsSource == .autoSelect
+                    || viewModel.lyricsOptions.geniusFallback {
+                    aggressiveMarkerRemovalSection()
                 }
                 
                 hideOnErrorSection()
@@ -146,6 +167,22 @@ struct EeveeLyricsSettingsView: View {
         return Text(text)
     }
 
+    /// 「伪逐字填充」：只有行级时间轴的来源，按估算演唱时长把整行逐字填亮。
+    ///
+    /// 这是**估算**，所以默认关；`timingKind` 不变（仍算行级同步），间奏判定不会被
+    /// 带偏。PetitLyrics 里被可信度闸门退回来的那一类整首也会落到这里
+    /// （见 `PetitLyricsRepository.wordTimingCoverage`）。
+    @ViewBuilder private func pseudoWordByWordLyricsSection() -> some View {
+        Section(
+            footer: Text("pseudo_word_by_word_lyrics_description".localized)
+        ) {
+            Toggle(
+                "pseudo_word_by_word_lyrics".localized,
+                isOn: $viewModel.pseudoWordByWordLyrics
+            )
+        }
+    }
+
     @ViewBuilder private func disableLyricsSection() -> some View {
         Section(
             footer: Text("disable_lyrics_feature_description".localized)
@@ -170,6 +207,21 @@ struct EeveeLyricsSettingsView: View {
         }
     }
     
+    /// 「更激进的删除歌词标注术语」：整行被 `[]` 包住就删，不再只认白名单里的章节名。
+    ///
+    /// 只对 Genius 生效（QQ / 酷狗 / 网易的 `[]` 里是时间轴与转写标记，一刀切会删真歌词），
+    /// 代价是可能误删 `[I love you]` 这种整行带括号的真歌词，所以默认关。
+    @ViewBuilder private func aggressiveMarkerRemovalSection() -> some View {
+        Section(
+            footer: Text("aggressive_marker_removal_description".localized)
+        ) {
+            Toggle(
+                "aggressive_marker_removal".localized,
+                isOn: $viewModel.aggressiveMarkerRemoval
+            )
+        }
+    }
+    
     /// 「AMLL 优先」：勾选后先向 AMLL 要逐词歌词，没正常返回再回退到
     /// 在来源选择器里设置的那个源。选项依赖逐词歌词，未开启时整体禁用。
     ///
@@ -183,6 +235,20 @@ struct EeveeLyricsSettingsView: View {
             .disabled(!viewModel.wordByWordLyrics)
         } footer: {
             Text("amll_preferred_description".localized)
+        }
+    }
+    
+    /// 「AMLL 模糊搜索」：精确（spotifyId）查不到时，按歌名再搜一次。
+    ///
+    /// 代价是每首精确查不到的曲目多一次请求；逐词质量闸门不受影响。
+    @ViewBuilder private func amllFuzzySearchSection() -> some View {
+        Section(
+            footer: Text("amll_fuzzy_search_description".localized)
+        ) {
+            Toggle(
+                "amll_fuzzy_search".localized,
+                isOn: $viewModel.amllFuzzySearch
+            )
         }
     }
     

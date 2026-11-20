@@ -21,7 +21,7 @@ struct EeveeMiscellaneousSettingsView: View {
 
     @State private var cleanShareLinks = UserDefaults.cleanShareLinks
     @State private var blockRatingPrompts = UserDefaults.blockRatingPrompts
-    /// 「分享到 LiveContainer」的值住在 `experimentsOptions` 那个 Codable struct 里（另外三个实验也住那儿），
+    /// 「分享到 LiveContainer」的值住在 `experimentsOptions` 那个 Codable struct 里（实验页那几项、歌词页从实验搬过去的三项也住那儿），
     /// 所以这一行是"读字段 / 写回整个 struct"，不是普通 Bool 键 —— 见下面的 `onChange` 与重置闭包。
     @State private var liveContainerSharing = UserDefaults.experimentsOptions.liveContainerSharing
 
@@ -102,8 +102,8 @@ struct EeveeMiscellaneousSettingsView: View {
 
     /// 本页拥有的键（`SettingsResetSection` 只删这几个）。键名与 `UserDefaults` 属性同名。
     ///
-    /// ⚠️ **不要**把 `experimentsOptions` 加进来：它装着四个实验字段（Instagram 分享位 /
-    /// PetitLyrics 回退 NetEase / AMLL 模糊搜索 / 本页的 LiveContainer），删键会把四个一起重置。
+    /// ⚠️ **不要**把 `experimentsOptions` 加进来：它装着实验页那几项、歌词页的三项与本页的 LiveContainer，
+    /// 删键会把它们一起重置。
     /// 本页那一行由上面 `afterReset` 按值写回默认。
     private static let ownedKeys = [
         "cleanShareLinks",

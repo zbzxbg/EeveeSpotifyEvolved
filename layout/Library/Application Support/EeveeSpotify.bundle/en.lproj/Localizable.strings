@@ -105,13 +105,11 @@ show_instagram_destination = "Show Instagram Destination";
 show_instagram_destination_description = "Always show the Instagram share destination. %@";
 
 amll_fuzzy_search = "AMLL fuzzy search";
-amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or the lyrics source is AMLL. Changes AMLL's lyrics search from an exact search to a fuzzy one.";
+amll_fuzzy_search_description = "Applies whenever AMLL is queried: the lyrics source is AMLL or Auto Select, or \"AMLL preferred\" is on. Changes AMLL's lyrics search from an exact search to a fuzzy one.";
 
 pseudo_word_by_word_lyrics = "Enable pseudo word-by-word";
 pseudo_word_by_word_lyrics_description = "Estimates line-level lyrics timing and expands it into word-by-word lyrics. Character-level precision may be imperfect.";
 
-petitlyrics_line_fallback = "PetitLyrics: fall back to line level";
-petitlyrics_line_fallback_description = "If the word-by-word lyrics PetitLyrics returns are malformed, the whole song falls back to line-synced lyrics.";
 
 aggressive_marker_removal = "Remove lyrics annotations more aggressively";
 aggressive_marker_removal_description = "Removes every lyric line wrapped in [ ]. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed.";
