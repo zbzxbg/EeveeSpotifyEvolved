@@ -26,7 +26,7 @@ If you're using a paid certificate, to navigate to a song from the lock screen, 
 
 This project accepts new feature requests (so you don't need to pay for this), but features will be added at the project's discretion.
 
-Note that many Premium features are server-sided and will never work without a Premium subscription (e.g., very high quality audio, offline downloads on mobile data).
+Note that many Premium features are server-sided and will never work without a Premium subscription (e.g., lossless audio, offline downloads).
 
 # Troubleshooting & Issues
 
@@ -77,9 +77,9 @@ If all tracks are skipped, a song stops as soon as you play it, songs play in a 
 
 This issue is solely related to your account region. Do not enable "Overwrite Configuration" unless you've also tried the region fix. If your region is already correct, still try connecting to a VPN, changing your region to somewhere else, signing out, and then logging back into the Spotify app.
 
-## Downloading
+## Downloading and lossless audio
 
-Downloading is out of scope for this project. It requires a Premium offline entitlement and per-track keys issued by Spotify's servers. It is technically possible, but shipping it would mean reproducing and distributing copyrighted audio, which this project does not do. Questions and pull requests about downloading are closed without a reply.
+Neither is supported, and neither will be. Offline downloads need a Premium offline entitlement plus the per-track keys Spotify's servers hand out per account — faking the account attributes only lights up buttons the backend still refuses. Lossless audio is gated the same way. Carrying those patches would mean a fork drifting far enough from upstream that it can't keep up, and legal exposure this project is not taking. If you consider either essential, look at [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) or [Taurus](https://github.com/samj-exe/taurus). Questions and pull requests about them are closed without a reply.
 
 You may see a "Download local playlist" option. This is specifically for downloading playlists that contain only local tracks from your PC within a Wi-Fi network.
 

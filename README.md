@@ -13,7 +13,7 @@ Spotify, arranged like Apple Music.
 </div>
 
 > [!NOTE]
-> Tested on Spotify 9.2.0, and Local Premium is restored.
+> Tested on Spotify 9.2.0. This repository does not do offline downloads, and does not do lossless audio. I can't maintain that feature and I'm not taking the legal risk. So not now, and not ever. If you consider it essential, look at [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) or [Taurus](https://github.com/samj-exe/taurus).
 
 <p align="center">
   <img src="docs/screenshots/player.webp" width="15%" alt="Now Playing, immersive layout">
