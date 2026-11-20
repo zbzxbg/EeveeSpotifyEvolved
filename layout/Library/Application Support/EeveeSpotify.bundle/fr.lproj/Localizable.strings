@@ -2,7 +2,6 @@
 
 patching = "Patchage";
 lyrics = "Paroles";
-customization = "Personnalisation";
 experiments = "Expériences";
 
 common_issues_tip_title = "Des problèmes ?";

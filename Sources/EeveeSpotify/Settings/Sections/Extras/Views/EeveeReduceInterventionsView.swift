@@ -27,7 +27,18 @@ import UIKit
 /// * flag 覆盖要**重启 Spotify** 才生效（远端配置按会话下发一次），页头写明。
 /// * 少数 flag（`observedValue` 为空 = 只在 IPA 字面量表里见过）是否被服务端采纳，
 ///   只能从 `[Flags] replacement … N match(es)` 判断。
+///
+/// ## 二级入口：完整的 flag 清单
+///
+/// 这一页只列**目录里写好了人话文案**的那些提示。要改别的 flag（搜索、按类型编辑、
+/// 手动写入一条服务端没下发过的）走页底那一行「Flag 覆盖」——
+/// 它推的是自动扫出来的浏览器（`EeveeFlagBrowserView`），两页写同一张
+/// `FlagOverrideStore`。浏览器还要继续推「手动写入」，所以它需要导航栈：
+/// 本页自己不造栈，由根页把 `navigationController` 传进来。
 struct EeveeReduceInterventionsView: View {
+
+    /// 从根页传进来的导航栈 —— 只用于推「Flag 覆盖」浏览器（见类型说明）。
+    let navigationController: UINavigationController
 
     /// 当前**已生效**的覆盖表（页面重进时用它反查，而不是自己记状态）。
     @State private var overrides = FlagOverrideStore.all
@@ -63,10 +74,36 @@ struct EeveeReduceInterventionsView: View {
                     }
                 }
             }
+
+            // ── 二级入口：完整的 flag 清单 / 手动写入
+            //
+            // 这一页只覆盖"目录里写好文案的提示"；想看全部扫出来的 flag、或手写一条
+            // 服务端没下发过的，走这一行。入口放在最后：日常用的是上面那些开关。
+            Section(footer: Text("settings_sub_flags".localized)) {
+                Button(action: pushFlagBrowser) {
+                    HStack {
+                        Image(systemName: "slider.horizontal.3")
+                        Text("flag_override_title".localized)
+                        Spacer()
+                        ChevronRightView()
+                    }
+                }
+            }
         }
                 // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear { overrides = FlagOverrideStore.all }
+    }
+
+    /// 推「Flag 覆盖」浏览器。它还要继续推「手动写入」那一页，所以必须拿到同一个导航栈；
+    /// 本页的栈由根页传进来（见类型说明）。
+    private func pushFlagBrowser() {
+        let controller = EeveeSettingsViewController(
+            navigationController.view.frame,
+            settingsView: AnyView(EeveeFlagBrowserView(navigationController: navigationController)),
+            navigationTitle: "flag_override_title".localized
+        )
+        navigationController.pushViewController(controller, animated: true)
     }
 
     // MARK: - 行模型

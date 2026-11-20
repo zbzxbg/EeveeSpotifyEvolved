@@ -292,9 +292,9 @@ struct EeveeLyricsSettingsView: View {
         }
     }
 
-    // 已移除两个 Section：`injectLyricsCardElementSection` /
-    // `lyricsEntryPointFlagSection` —— 它们是**排查/验证型**开关，已整体挪到
-    // 「调试」页（`EeveeDebugSettingsView`）。key 与 l10n 都没变，用户已设的值照旧生效。
+    // 已移除两个 Section：`injectLyricsCardElementSection` / `lyricsEntryPointFlagSection`
+    // —— 这两颗排查/验证型开关先在「调试」页，随后写死为开（见 `NgzhwmSettingsViewModel`
+    // 与 `DynamicPremium+ModifyingFunctions`），开关、key 与 l10n 一起摘掉了。
     // 同批**删除**的 `syntheticLineTimingSection`（「补全歌词时间轴」）是另一回事：
     // 验证完毕、功能整体删掉，key 与 l10n 也一起删了，不再有任何入口。
     //

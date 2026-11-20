@@ -2,7 +2,6 @@
 
 patching = "Yamaq tətbiqi";
 lyrics = "Mahnı sözləri";
-customization = "Fərdiləşdirmə";
 
 common_issues_tip_title = "Problem yaşayırsınız?";
 common_issues_tip_message = "Əgər məsələn, mahnı səsləndirməkdə problem varsa, bu bölməyə baxın:";

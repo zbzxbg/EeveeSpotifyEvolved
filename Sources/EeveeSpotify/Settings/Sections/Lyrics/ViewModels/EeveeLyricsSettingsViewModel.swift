@@ -120,10 +120,11 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
 
-    // 已**搬走**两个开关：`injectLyricsCardElement` / `lyricsEntryPointFlag`
-    // —— 它们是排查/验证型开关，属性与绑定整体挪到 `EeveeDebugSettingsViewModel`（「调试」页）。
-    // UserDefaults key 一字未改，设备上已设的值照旧生效；`[Settings] ... -> ON/OFF`
-    // 那两行日志也随绑定一起搬过去了。
+    // 已**删除**两个开关：`injectLyricsCardElement` / `lyricsEntryPointFlag`
+    // —— 它们先从这一页挪到「调试」页，随后整体写死为开（见 `NgzhwmSettingsViewModel`
+    // 与 `DynamicPremium+ModifyingFunctions` 里对应的说明），属性、绑定与 l10n 都已摘掉。
+    // UserDefaults 里的旧键不再被读、也不会被清；`[Settings] ... -> ON/OFF` 那两行日志
+    // 随绑定一起消失。
     // 同批**删除**：`syntheticLineTiming` ——「补全歌词时间轴」验证完毕
     // （关掉后观感差不多或略好，且给纯文本源伪造时间轴不合语义），开关、key、l10n
     // 与那段合成代码一起去掉；只剩占位文案写死补时间轴。
@@ -232,7 +233,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             aggressiveMarkerRemoval,
             // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`（已整体删除）、
             // `removeMxmInterludeSymbol`（已整体删除，间奏行改为无条件丢弃），
-            // 以及搬去「调试」页的 `injectLyricsCardElement` / `lyricsEntryPointFlag`
+            // 以及 `injectLyricsCardElement` / `lyricsEntryPointFlag`（已写死启用、属性已删）
             // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
             hideLyricsTranslation,

@@ -3,20 +3,22 @@ import UIKit
 
 /// 「杂项设定」页。
 ///
-/// 三行，都是"改的是**行为**、不是某块界面"的开关：
+/// 四行，都是"改的是**行为**、不是某块界面"的开关：
 /// · 移除追踪参数 —— 清掉分享链接里的 `si` 追踪码（`CleanShareLinks`，当场生效）；
 /// · 分享到 LiveContainer —— 分享面板里**打不开的目标**改走 LC 的深链，失败把 URL 复制到剪贴板
 /// （`LiveContainerSharing.x.swift`，当场生效）。**从「实验」页搬来**：
 /// 它的行为早已定性，没定性的只是 LC 那一侧的私有深链 ⇒ 按「实验」页文件头的准入三条，
 /// 它不该占实验位（见 `EeveeExperimentsSettingsView`）；
-/// · 阻止评分提示 —— 拦 App Store 的系统评分弹窗（`RatingPromptBlock`，**要重启**）。
+/// · 阻止评分提示 —— 拦 App Store 的系统评分弹窗（`RatingPromptBlock`，**要重启**）；
+/// · 深色弹窗 —— 把 `UIAlertController` 换成深色（`DarkPopUps`，**要重启**）。
+///   原来在「定制」页，那页拆掉之后归到这里：它同样是"没有其它归属的零碎项"。
 ///
 /// 与「隐私与上报」的分工（别把两边搞混、也别合并）：
 /// · 这里的「移除追踪参数」收拾的是**你发出去的链接**（字符串层面，不出网）；
 /// · 那页的「拦截上报」收拾的是**应用自己发出的网络请求**（`TelemetryEndpointRules`）。
 /// 上游把"拦截上报"也塞在杂项里，本仓库重排时把它单独做成一页
 /// （多了"只观察不拦截"、额外关键词、本次启动计数）。「分享到 LiveContainer」
-/// 也从「实验」页搬来 ⇒ 本页现在是三行。
+/// 也从「实验」页搬来 ⇒ 本页现在是四行。
 struct EeveeMiscellaneousSettingsView: View {
 
     @State private var cleanShareLinks = UserDefaults.cleanShareLinks
@@ -24,6 +26,7 @@ struct EeveeMiscellaneousSettingsView: View {
     /// 「分享到 LiveContainer」的值住在 `experimentsOptions` 那个 Codable struct 里（实验页那几项、歌词页从实验搬过去的三项也住那儿），
     /// 所以这一行是"读字段 / 写回整个 struct"，不是普通 Bool 键 —— 见下面的 `onChange` 与重置闭包。
     @State private var liveContainerSharing = UserDefaults.experimentsOptions.liveContainerSharing
+    @State private var darkPopUps = UserDefaults.darkPopUps
 
     var body: some View {
         List {
@@ -72,6 +75,25 @@ struct EeveeMiscellaneousSettingsView: View {
                 }
             }
 
+            // 深色弹窗：从「定制」页搬来。
+            // ⚠️ 它在 9.1 / 9.2 族上点了没反应：`Tweak.x.swift` 的 9.1/9.2 分支在 `init`
+            // 中途就 `return` 了，而唯一读它、唯一 activate 它的那两行在 `return` **之后**
+            // ⇒ `DarkPopUps` 这个组在这两代上从不激活（见 `DarkPopUps.x.swift`）。
+            // 想让它真的生效，得把那两行挪进 9.1/9.2 分支；但 `popUpContainerViewController`
+            // 在那两代下解析成 `UIView` 这条判据没在真机上验过，所以只记录、不改行为。
+            Section {
+                Toggle(
+                    "dark_popups".localized,
+                    isOn: Binding<Bool>(
+                        get: { darkPopUps },
+                        set: { darkPopUps = $0 }
+                    )
+                )
+                .onChange(of: darkPopUps) { value in
+                    UserDefaults.darkPopUps = value
+                }
+            }
+
             // 评分提示拦截是"启动时按开关决定 hook 装不装"的 ⇒ 改完必须重启。
             // 拿当前值和启动快照比，不一样才显示这一行。
             RestartSection(visible: blockRatingPrompts != RatingPromptBlock.launchEnabled)
@@ -79,9 +101,10 @@ struct EeveeMiscellaneousSettingsView: View {
             SettingsResetSection(
                 keys: Self.ownedKeys,
                 afterReset: {
-                    // 只回读影子值：这三行都没有"当场改屏幕"的副作用
+                    // 只回读影子值：这几行都没有"当场改屏幕"的副作用
                     // （链接清理在每次分享时读一次、LC 那一条在每次 openURL 时读一次，
-                    // 评分拦截只影响下次启动）。
+                    // 评分拦截与深色弹窗只影响下次启动）。
+                    // ⚠️ 深色弹窗不在 `ownedKeys` 里，所以不在这里回读（见下方说明）。
                     cleanShareLinks = UserDefaults.cleanShareLinks
                     blockRatingPrompts = UserDefaults.blockRatingPrompts
 
@@ -105,6 +128,9 @@ struct EeveeMiscellaneousSettingsView: View {
     /// ⚠️ **不要**把 `experimentsOptions` 加进来：它装着实验页那几项、歌词页的三项与本页的 LiveContainer，
     /// 删键会把它们一起重置。
     /// 本页那一行由上面 `afterReset` 按值写回默认。
+    ///
+    /// ⚠️ `darkPopUps` 也**不在这里**：它从已经拆掉的「定制」页搬来，那一页从来没有
+    /// 「重置本页」，一直只有全局重置会清它 —— 放进来会改变这一页重置的作用面。
     private static let ownedKeys = [
         "cleanShareLinks",
         "blockRatingPrompts",

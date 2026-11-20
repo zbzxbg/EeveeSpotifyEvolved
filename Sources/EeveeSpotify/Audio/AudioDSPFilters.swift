@@ -373,13 +373,19 @@ enum AudioDSPCrossfeed {
         )
     }
 
-    /// 设置页 Picker 的 l10n 键。
+    /// 设置页 Picker 的 l10n 键：`audio_effects_crossfeed_` + 档位后缀。
+    ///
+    /// 用前缀拼接而不是四条字面量，`Tools/l10n_lint.py` 才认得出这四条键是活的
+    /// （它的用法扫描只认"字面量 + `.localized`"、"实参位置"和"前缀 + 运行时拼接"三种形状；
+    /// 函数体里 `return "…"` 的字面量不在其中）。
     static func titleKey(for level: Int) -> String {
+        let suffix: String
         switch min(max(level, 0), levelCount - 1) {
-        case 1: return "audio_effects_crossfeed_low"
-        case 2: return "audio_effects_crossfeed_medium"
-        case 3: return "audio_effects_crossfeed_high"
-        default: return "audio_effects_crossfeed_off"
+        case 1: suffix = "low"
+        case 2: suffix = "medium"
+        case 3: suffix = "high"
+        default: suffix = "off"
         }
+        return "audio_effects_crossfeed_" + suffix
     }
 }

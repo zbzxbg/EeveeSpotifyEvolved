@@ -743,7 +743,7 @@ enum SpotifyResponsePatcher {
             // 正在播放页元素列表：补卡片，或「禁用歌词功能」时**摘掉**卡片。
             // ⚠️ 注意 `BrowsitaSectionStripper.shouldHandle` 本身就覆盖 `/scrollsita/`，
             // 所以上一行已经让这个 URL 进入改写流程 —— 这一条只决定 `patch` 里
-            // "要不要注入那个 5 元素"；把开关关掉**不会**影响去广告那一步。
+            // "要不要注入那个 5 元素"；`isLyricsCardElementInjectionEnabled` 现在恒为真。
             || ((NgzhwmSettingsViewModel.isLyricsCardElementInjectionEnabled
                  || isLyricsFeatureDisabled)
                 && ScrollsitaLyricsElementInjector.shouldHandle(url))

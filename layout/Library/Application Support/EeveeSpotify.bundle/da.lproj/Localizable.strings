@@ -2,7 +2,6 @@
 
 patching = "Patches";
 lyrics = "Sangtekster";
-customization = "Tilpasning";
 experiments = "Eksperimenter";
 
 common_issues_tip_title = "Problemer?";

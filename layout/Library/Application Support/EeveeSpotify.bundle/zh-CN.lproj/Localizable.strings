@@ -2,7 +2,6 @@
 
 patching = "补丁";
 lyrics = "歌词";
-customization = "定制";
 experiments = "实验";
 
 common_issues_tip_title = "发现问题？";
@@ -181,8 +180,6 @@ better_word_by_word_lyrics = "更好的逐词歌词";
 better_word_by_word_lyrics_description = "像Apple Music那样，系统版本最低要求iOS26。";
 better_word_by_word_lyrics_needs_ios26 = "如果此选项被禁用，则说明你的系统版本低于iOS26，无法使用此功能。";
 word_by_word_lyrics_provider = "逐词歌词提供者：%@";
-inject_lyrics_card_element = "补充模块5";
-lyrics_entry_point_flag = "歌词入口开关";
 lyrics_source_auto = "自动选择";
 lyrics_source_auto_description = "自动选择:依次查询所有可用歌词源，最后使用当前歌曲下质量最高的歌词。";
 lyrics_source_auto_unavailable = "「自动选择」只在听歌页样式为「沉浸式」或「Apple Music式」时可用。如果要用它，请先在「听歌页」设置里切换样式。";
@@ -456,9 +453,8 @@ settings_sub_lyrics = "有关于歌词的设置";
 settings_sub_now_playing = "有关于播放页的设置";
 settings_sub_patching = "Premium 补丁与配置覆盖";
 settings_sub_sponsorblock = "跳过赞助片段";
-settings_sub_tabs = "标签栏与迷你条的设置";
+settings_sub_tabs = "标签栏、迷你条与主题";
 settings_sub_home_library = "首页、音乐库、专辑 / 歌单 / 艺人页";
-settings_sub_customization = "其它细节";
 settings_sub_app_icon = "选择App图标";
 settings_sub_experiments = "尚未定性的功能";
 settings_sub_flags = "注入远程开关";
@@ -476,12 +472,14 @@ settings_reset_page = "重置本页";
 settings_reset_page_footer = "把本页的选项恢复默认值。";
 settings_reset_page_done = "已重置本页 %d 项。";
 
-// ── 高级页 · 律动与触感：音频响应那一行 + 它的子页 ──
+// ── 高级页 · 音频与手势：一页四节（音频效果 / 律动 / 节拍触感 / 头部手势）──
 // 封面律动跟着低频走；音乐触感把底鼓/军鼓变成轻触。
-audio_reactive_title = "律动与触感";
-settings_sub_audio_reactive = "封面随低频起伏、鼓点触发轻触";
+audio_title = "音频与手势";
+settings_sub_audio = "均衡器、律动、节拍触感与头部手势";
+audio_rhythm_section = "律动";
 cover_pulse = "封面律动";
 cover_pulse_description = "让封面跟着低频轻微放大缩小。听歌页选择Apple Music式时生效。";
+music_haptics_section = "节拍触感";
 music_haptics = "音乐触感";
 music_haptics_description = "把底鼓和军鼓变成轻触。强度越高越费电，连续触发 30 秒后会自动降档（Taptic Engine 长时间高频会变钝、发热）。需要 App 在前台。";
 music_haptics_strength = "强度";
@@ -491,7 +489,6 @@ music_haptics_strength_high = "高";
 music_haptics_test = "试一下";
 // ── 高级页 · AirPods 头部手势 ──
 head_gestures_title = "头部手势";
-settings_sub_head_gestures = "点头切下一首、摇头切上一首";
 head_gestures_enabled = "点头 / 摇头切歌";
 head_gestures_description = "点一下头切下一首，摇一下头切上一首。只有带姿态传感器的 AirPods Pro / AirPods Max 能提供头部姿态数据；识别并不完美，出现误切歌时把它关掉即可。";
 head_gestures_motion_available = "头部姿态数据可用";
@@ -499,7 +496,6 @@ head_gestures_motion_unavailable = "没有头部姿态数据 —— 请连接 Ai
 
 // ── 高级页 · 音频效果（十段 EQ + 前置增益）──
 audio_effects_title = "音频效果";
-settings_sub_audio_effects = "十段均衡器与前置增益";
 audio_effects_enabled = "启用音频效果";
 audio_effects_description = "均衡器、音色架、压缩器与耳机交叉馈送串成一条链。";
 audio_effects_preamp = "前置增益";
@@ -741,8 +737,9 @@ apple_music_token_invalid = "Apple Music登录令牌无效或已过期";
 apple_music_token_popup = "Apple Music官方歌词需要你自己的登录令牌：请在「设置 → 实验 → 启用Apple Music官方TTML歌词」里填入 media-user-token（浏览器：music.apple.com → 开发者工具 → 应用 → Cookie）。";
 artist_latest_release_tracks = "%d 首歌曲";
 
+lock_screen_title = "锁屏";
+settings_sub_lock_screen = "动态封面与锁屏歌词";
 lock_screen_artwork_title = "锁屏封面";
-settings_sub_lock_screen_artwork = "播放时显示动态封面";
 lock_screen_artwork_enabled = "动态封面";
 lock_screen_artwork_description = "锁屏页会用一段循环短片代替静态封面。Canvas未返回时用Apple Music的官方动态封面，两者都没有时用封面本地生成一段。系统最低版本需要iOS26。";
 lock_screen_artwork_canvas = "Canvas加入锁屏动态封面";
@@ -753,7 +750,6 @@ lock_screen_artwork_cache = "已下载的封面";
 lock_screen_artwork_clear = "清除";
 lock_screen_artwork_cleared = "已清除";
 lock_screen_lyrics_title = "锁屏歌词";
-settings_sub_lock_screen_lyrics = "锁屏页面上显示歌词";
 lock_screen_lyrics_enabled = "在锁屏显示歌词";
 lock_screen_lyrics_description = "把正在唱的这一句画在锁屏全屏封面上。系统版本最低需要iOS26。";
 lock_screen_lyrics_cache = "已渲染的歌词片段";
