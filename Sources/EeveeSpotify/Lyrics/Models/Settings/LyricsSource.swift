@@ -184,7 +184,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     /// 链路自己会跳过没填密钥的 Spicy Lyrics（见 `CustomLyrics` 里那条 `continue`），
     /// 并按"逐字优先、覆盖兜底"排好序，比钉死某一个单源更接近"点开就有最好的那份"。
     ///
-    /// ⚠️ 自动优选只在沉浸式 / Apple Music 样式下可选，原生样式由 `stockStyleFallback` 接手。
+    /// ⚠️ 自动优选只在 Apple Music 样式下可选，原生样式由 `stockStyleFallback` 接手。
     static var defaultSource: LyricsSource {
         isJapaneseRegion ? .petit : .autoSelect
     }

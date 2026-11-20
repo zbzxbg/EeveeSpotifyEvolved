@@ -4,11 +4,9 @@ extension LyricsSource {
 
     /// 这一项在**当前听歌页样式**下能不能选、会不会生效。
     ///
-    /// 「如果听歌页样式那里选择的是 spotify 原生，该自动优选不可选择。
-    /// 此选项只对选择沉浸式/am式生效」。
-    ///
-    /// 只挡 `.autoSelect` 一项：单源模式在三种样式下都照常工作（原生听歌页那一侧本来就是
-    /// 靠我们注入 payload 换掉 Spotify 自己的歌词，单源一直这么跑）。
+    /// 只挡 `.autoSelect` 一项：自动优选只在 Apple Music 样式下有意义 —— 原生样式里歌词直接
+    /// 进 Spotify 自己的卡片，没有"挑最好的一档"可做。单源模式在两种样式下都照常工作
+    /// （原生听歌页那一侧本来就是靠我们注入 payload 换掉 Spotify 自己的歌词）。
     var isAvailableInCurrentNowPlayingStyle: Bool {
         self != .autoSelect || UserDefaults.nowPlayingStyle != .spotify
     }

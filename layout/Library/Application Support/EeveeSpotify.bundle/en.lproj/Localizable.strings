@@ -183,7 +183,7 @@ better_word_by_word_lyrics_needs_ios26 = "If this option is disabled, your syste
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
 lyrics_source_auto = "Auto Select";
 lyrics_source_auto_description = "Auto Select: every available provider is asked in turn, and the best lyrics for the current song are used.";
-lyrics_source_auto_unavailable = "Auto Select is only available when the now-playing style is Immersive or Apple Music. To use it, change the style on the Now Playing settings page first.";
+lyrics_source_auto_unavailable = "Auto Select is only available with the Apple Music now-playing style. To use it, change the style on the Now Playing settings page first.";
 lyrics_source_order = "Lyrics Source Order";
 lyrics_source_order_description = "These providers are asked in order, from top to bottom.";
 lyrics_source_order_reset = "Reset to Default Order";
@@ -725,8 +725,8 @@ reduce_interventions_scope_yourlibaryx = "Your Library";
 // The recipe (gradient tint, not a blur) is borrowed from kumone (LGPL-3.0 / GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift.
 now_playing_section = "Now-playing page";
-// ★ 2026-10-25: the two mutually exclusive layout switches became one three-way picker
-// (Spotify / Immersive / Apple Music style). Option names are short on purpose - the
+// The two mutually exclusive layout switches became one picker
+// (Spotify / Apple Music style). Option names are short on purpose - the
 // Picker shows the selected value at the row's trailing edge; long explanations go in
 // now_playing_style_description. The underlying keys are unchanged (see NowPlayingStyle).
 now_playing_style = "Now-playing style";
