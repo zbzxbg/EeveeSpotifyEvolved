@@ -100,6 +100,9 @@ livecontainer_sharing = "Share to LiveContainer";
 livecontainer_sharing_description = "Share to LiveContainer and copy the URL if the selected destination is not supported.";
 
 lyrics_source_imported = "Imported file";
+apple_self_test_section = "Apple Music token";
+apple_self_test_description = "Runs the Apple Music lookups step by step and shows where it stops: web token, storefront, search, then lyrics.";
+apple_self_test_run = "Run self-test";
 imported_lyrics_title = "Imported lyrics";
 settings_sub_imported_lyrics = "Use your own lyric files";
 imported_lyrics_enabled = "Prefer imported lyrics";

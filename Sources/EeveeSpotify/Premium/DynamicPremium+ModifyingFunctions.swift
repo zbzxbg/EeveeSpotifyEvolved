@@ -100,6 +100,9 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "crossfade_enabled", scope: "core-playback-setup", modification: .forceBool(true)),
 
     EeveePropertyReplacement(name: "use_playback_settings_crossfade", scope: "ios-feature-settings", modification: .forceBool(false)),
+    // 9.2 的内核还会从 playback-settings 这一档读同一个开关：只改 ios-feature-settings
+    // 时"行在、时长也能拖"，但歌与歌之间不淡。
+    EeveePropertyReplacement(name: "use_playback_settings_crossfade", scope: "playback-settings", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "use_playback_settings_gapless", scope: "ios-feature-settings", modification: .forceBool(false)),
 
     // capping

@@ -102,6 +102,9 @@ livecontainer_sharing = "分享到LiveContainer";
 livecontainer_sharing_description = "如果不支持所选分享目标，则分享到LiveContainer并复制URL。";
 
 lyrics_source_imported = "导入文件";
+apple_self_test_section = "Apple Music 令牌";
+apple_self_test_description = "把 Apple Music 取词链路逐步跑一遍并显示停在哪一步：网页令牌 → storefront → 搜索 → 取词。";
+apple_self_test_run = "运行自检";
 imported_lyrics_title = "导入歌词";
 settings_sub_imported_lyrics = "使用自己的歌词文件";
 imported_lyrics_enabled = "优先使用导入的歌词";

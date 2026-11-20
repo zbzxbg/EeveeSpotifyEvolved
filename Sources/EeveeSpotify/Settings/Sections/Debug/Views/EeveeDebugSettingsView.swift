@@ -17,6 +17,9 @@ struct EeveeDebugSettingsView: View {
     /// 照 `redactSharedLogSection` 的先例直接用 `@State`）。
     @State private var dumpClassName = ""
 
+    /// 「测试 Apple Music 令牌」的结果（每步一行，失败停在那一步）。
+    @State private var appleSelfTestLines: [String] = []
+
     var body: some View {
         List {
             // 顶部警示：这一页是排查开关，不是日常设置。
@@ -37,6 +40,9 @@ struct EeveeDebugSettingsView: View {
 
             // 「音频输出探针」：只读诊断，确认 9.2.0 的 RemoteIO 能不能拿到 PCM。
             audioTapProbeSection()
+
+            // 「测试 Apple Music 令牌」：把令牌 / storefront / 搜索 / 取词四步各跑一遍。
+            appleMusicSelfTestSection()
 
             // 「转储某个类的方法/ivar」：与上面同一目的、答的是另一半问题
             // —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
@@ -134,6 +140,24 @@ struct EeveeDebugSettingsView: View {
                 ClassDumper.dump(name: dumpClassName)
             }
             .disabled(dumpClassName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    /// 「测试 Apple Music 令牌」：结果直接画在按钮下面，同时写调试日志。
+    @ViewBuilder private func appleMusicSelfTestSection() -> some View {
+        Section(
+            header: Text("apple_self_test_section".localized),
+            footer: Text("apple_self_test_description".localized)
+        ) {
+            Button("apple_self_test_run".localized) {
+                appleSelfTestLines = AppleMusicOfficialTtmlLyricsRepository.runTokenSelfTest()
+            }
+            if !appleSelfTestLines.isEmpty {
+                Text(appleSelfTestLines.joined(separator: "\n"))
+                    .font(.caption)
+                    .monospaced()
+                    .textSelection(.enabled)
+            }
         }
     }
 
