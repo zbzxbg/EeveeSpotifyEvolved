@@ -440,6 +440,13 @@ jobs:
                  -o audio-dsp-tests
           ./audio-dsp-tests
 
+      - name: Imported lyrics parsers (LRC / SPL / YRC)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Import/ImportedLyricsParser.swift \
+                 Tests/ImportedLyrics/main.swift \
+                 -o imported-lyrics-tests
+          ./imported-lyrics-tests
+
       # 唯一一个**不是** swiftc 的测试（纯 Python，不需要工具链）。
       - name: Resolve-configuration snapshot
         run: python3 Tests/ResolveConfigurationSnapshot/test.py
