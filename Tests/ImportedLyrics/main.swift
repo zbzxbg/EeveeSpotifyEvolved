@@ -22,7 +22,7 @@ func require(_ condition: Bool, _ message: String) {
 require(ImportedLyricsParser.detect(fileExtension: "LRC") == .lrc, "extension matching is case-insensitive")
 require(ImportedLyricsParser.detect(fileExtension: " spl ") == .spl, "extension matching trims whitespace")
 require(ImportedLyricsParser.detect(fileExtension: "yrc") == .yrc, "yrc is recognized")
-for unsupported in ["srt", "ass", "qrc", "krc", "ttml", "lys", "lyl", "spl2"] {
+for unsupported in ["srt", "ass", "qrc", "krc", "ttml", "lqe", "spl2"] {
     require(
         ImportedLyricsParser.detect(fileExtension: unsupported) == nil,
         "\(unsupported) is not accepted by the importer"
@@ -121,6 +121,35 @@ require(ImportedLyricsDecoder.decode(utf8Bytes) == "你好", "UTF-8 bytes still 
 let bomBytes = Data([0xFF, 0xFE]) + "hi".data(using: .utf16LittleEndian)!
 require(ImportedLyricsDecoder.decode(bomBytes) == "hi", "a UTF-16 BOM is honoured")
 
+// MARK: - Lyricify Syllable / Lines
+
+let lysText = """
+[0]Lately (358,1336)I've (1694,487)been, (2181,673)I've (2854,268)been (3122,280)losing (3402,345)sleep(3747,1186)
+[6]Backing (1000,500)vocal(1500,500)
+"""
+let lysParsed = ImportedLyricsParser.parse(text: lysText, format: .lys)
+require(lysParsed.lines.count == 2, "every lyric syllable line is kept")
+let lysFirst = lysParsed.lines[0]
+require(lysFirst.startMs == 358, "a syllable line starts at its first word")
+require(lysFirst.endMs == 4933, "a syllable line ends at its last word's end")
+require(lysFirst.text == "Lately I've been, I've been losing sleep",
+        "the syllable text is the concatenation of its words")
+require(lysFirst.words?.count == 7, "every timed word is kept")
+require(lysFirst.words?.first?.endMs == 1694, "each word's end is start plus duration")
+require(lysParsed.lines[1].text == "Backing vocal", "the row property is not part of the text")
+
+let lylText = """
+[type:LyricifyLines]
+[54260,57380]Stop and stare
+[57380,62840]I think I'm moving but I go nowhere
+"""
+let lylParsed = ImportedLyricsParser.parse(text: lylText, format: .lyl)
+require(lylParsed.lines.count == 2, "the type header is not a lyric line")
+require(lylParsed.lines[0].startMs == 54260 && lylParsed.lines[0].endMs == 57380,
+        "a lines entry keeps its start and end")
+require(lylParsed.lines[1].endMs == 62840, "the second entry keeps its own end")
+require(lylParsed.lines[0].words == nil, "lines entries stay line-level")
+
 // MARK: - 文件名与归一化
 
 let guesses = ImportedLyricsMatcher.fileNameGuesses("周杰伦 - 晴天.lrc")
@@ -129,6 +158,8 @@ require(guesses[0].title == "晴天" && guesses[0].artist == "周杰伦",
         "the first reading treats the right side as the title")
 require(guesses[1].title == "周杰伦" && guesses[1].artist == "晴天",
         "the second reading swaps the sides")
+require(ImportedLyricsParser.detect(fileExtension: "lys") == .lys, "lys is recognized")
+require(ImportedLyricsParser.detect(fileExtension: "lyl") == .lyl, "lyl is recognized")
 let singleGuess = ImportedLyricsMatcher.fileNameGuesses("晴天.lrc")
 require(singleGuess.count == 1 && singleGuess[0].artist == nil,
         "a file name without a separator is title-only")

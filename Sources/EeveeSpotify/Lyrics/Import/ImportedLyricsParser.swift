@@ -7,13 +7,16 @@ import Foundation
 /// 落盘、匹配当前曲目、接到 `LyricsDto` 都在上层。
 ///
 /// 支持的格式只收"歌词格式"：LRC（含增强型的词级标记）、SPL（Salt Player，LRC 的
-/// 超集）、YRC（网易云逐字）。QRC / KRC 是加密打包的（正文需各自的密钥/包头），
+/// 超集）、YRC（网易云逐字）、Lyricify Syllable（`.lys`，逐音节 + 行属性）、
+/// Lyricify Lines（`.lyl`，逐行）。QRC / KRC 是加密打包的（正文需各自的密钥/包头），
 /// SRT / ASS 是字幕容器（cue 与样式，行内时间语义与歌词不同），TTML 复用
 /// `AmllTtmlParser` 那条线 —— 这几类不在这里解析，扩展名也不会被识别。
 enum ImportedLyricFormat: String, CaseIterable {
     case lrc
     case spl
     case yrc
+    case lys
+    case lyl
 
     /// 允许出现在文件里的扩展名。
     var fileExtensions: [String] {
@@ -21,6 +24,8 @@ enum ImportedLyricFormat: String, CaseIterable {
         case .lrc: return ["lrc"]
         case .spl: return ["spl"]
         case .yrc: return ["yrc"]
+        case .lys: return ["lys"]
+        case .lyl: return ["lyl"]
         }
     }
 }
@@ -75,6 +80,10 @@ enum ImportedLyricsParser {
             return parseLrcFamily(text, format: format)
         case .yrc:
             return parseYrc(text)
+        case .lys:
+            return parseLys(text)
+        case .lyl:
+            return parseLyl(text)
         }
     }
 
@@ -383,6 +392,142 @@ enum ImportedLyricsParser {
             )
         }
         return ImportedLyrics(format: .yrc, metadata: ImportedLyricMetadata(), lines: lines)
+    }
+
+    // MARK: - Lyricify Syllable（.lys）
+
+    /// 行头是**行属性**而不是时间：`[property]Word (start,duration)word(start,duration)`。
+    /// 属性 0–8 编码"背景人声 / 对唱视图"（0/3 无对唱、1 左、2 右、6–8 背景人声）。
+    /// `ImportedLyricLine` 还没有这两个维度，属性先只读不用 —— 按属性丢行会把主歌词
+    /// 也一起丢掉（背景人声行与主歌词行属性不同），所以这里保守地保留所有行。
+    private static let lysLinePattern = try? NSRegularExpression(pattern: #"^\[(\d{1,2})\]"#)
+    /// LYS 的括号在**词后面**：`Lately (358,1336)` = Lately 从 358 起持续 1336 ms。
+    private static let lysWordPattern = try? NSRegularExpression(pattern: #"\((\d+),(\d+)\)"#)
+
+    private static func parseLys(_ text: String) -> ImportedLyrics {
+        var metadata = ImportedLyricMetadata()
+        var lines: [ImportedLyricLine] = []
+
+        for rawLine in text.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            let nsLine = line as NSString
+            let fullRange = NSRange(location: 0, length: nsLine.length)
+
+            if let metadataPattern,
+               let match = metadataPattern.firstMatch(in: line, range: fullRange),
+               let key = substring(match, 1, nsLine)?.lowercased(),
+               let value = substring(match, 2, nsLine) {
+                switch key {
+                case "ti": metadata.title = value.nonEmpty
+                case "ar": metadata.artist = value.nonEmpty
+                case "al": metadata.album = value.nonEmpty
+                default: break
+                }
+                continue
+            }
+
+            guard let lysLinePattern,
+                  let header = lysLinePattern.firstMatch(in: line, range: fullRange),
+                  let lysWordPattern else { continue }
+
+            let body = nsLine.substring(
+                from: header.range.location + header.range.length
+            ) as NSString
+            let matches = lysWordPattern.matches(
+                in: body as String,
+                range: NSRange(location: 0, length: body.length)
+            )
+            guard !matches.isEmpty else { continue }
+
+            var words: [ImportedLyricWord] = []
+            var cursor = 0
+            for match in matches {
+                let wordText = body.substring(
+                    with: NSRange(location: cursor, length: match.range.location - cursor)
+                )
+                guard let start = integer(match, 1, body) else { continue }
+                let duration = integer(match, 2, body) ?? 0
+                words.append(
+                    ImportedLyricWord(
+                        text: wordText,
+                        startMs: start,
+                        endMs: start + max(duration, 0)
+                    )
+                )
+                cursor = match.range.location + match.range.length
+            }
+            // 尾部落单的文字（没有时间）挂到最后一个词上：宁可时间不准，也别整句少字。
+            let tail = body.substring(from: cursor)
+            if !tail.isEmpty, var last = words.last {
+                last.text += tail
+                words[words.count - 1] = last
+            }
+
+            let content = words.map(\.text).joined()
+            guard !content.trimmingCharacters(in: .whitespaces).isEmpty,
+                  let first = words.first else { continue }
+            lines.append(
+                ImportedLyricLine(
+                    startMs: first.startMs,
+                    endMs: words.last?.endMs,
+                    text: content,
+                    translation: nil,
+                    words: words.count > 1 ? words : nil
+                )
+            )
+        }
+        return ImportedLyrics(format: .lys, metadata: metadata, lines: lines)
+    }
+
+    // MARK: - Lyricify Lines（.lyl）
+
+    /// `[start,end]Lyrics`，单位毫秒；头部带 `[type:LyricifyLines]`，由元信息分支吞掉。
+    private static let lylLinePattern = try? NSRegularExpression(
+        pattern: #"^\[(\d+),(\d+)\](.*)$"#
+    )
+
+    private static func parseLyl(_ text: String) -> ImportedLyrics {
+        var metadata = ImportedLyricMetadata()
+        var lines: [ImportedLyricLine] = []
+
+        for rawLine in text.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            let nsLine = line as NSString
+            let fullRange = NSRange(location: 0, length: nsLine.length)
+
+            if let metadataPattern,
+               let match = metadataPattern.firstMatch(in: line, range: fullRange),
+               let key = substring(match, 1, nsLine)?.lowercased(),
+               let value = substring(match, 2, nsLine) {
+                switch key {
+                case "ti": metadata.title = value.nonEmpty
+                case "ar": metadata.artist = value.nonEmpty
+                case "al": metadata.album = value.nonEmpty
+                default: break
+                }
+                continue
+            }
+
+            guard let lylLinePattern,
+                  let match = lylLinePattern.firstMatch(in: line, range: fullRange),
+                  let start = integer(match, 1, nsLine),
+                  let duration = integer(match, 2, nsLine) else { continue }
+            let content = (substring(match, 3, nsLine) ?? "")
+                .trimmingCharacters(in: .whitespaces)
+            guard !content.isEmpty else { continue }
+            lines.append(
+                ImportedLyricLine(
+                    startMs: start,
+                    endMs: start + max(duration, 0),
+                    text: content,
+                    translation: nil,
+                    words: nil
+                )
+            )
+        }
+        return ImportedLyrics(format: .lyl, metadata: metadata, lines: lines)
     }
 }
 
