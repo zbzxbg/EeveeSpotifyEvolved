@@ -204,6 +204,55 @@ require(ImportedLyricsMatcher.bestMatch(
     title: "晴天", artists: ["周杰伦"], durationMs: nil) == nil,
     "a merely similar title without evidence is rejected")
 
+// MARK: - 目录与导入
+
+let temporaryRoot = FileManager.default.temporaryDirectory
+    .appendingPathComponent("EeveeSpotifyImportTests-\(UUID().uuidString)", isDirectory: true)
+let sourceDirectory = temporaryRoot.appendingPathComponent("source", isDirectory: true)
+try? FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+
+let storeDirectory = temporaryRoot.appendingPathComponent("library", isDirectory: true)
+let store = ImportedLyricsStore(directory: storeDirectory)
+
+let sourceFile = sourceDirectory.appendingPathComponent("周杰伦 - 晴天.lrc")
+let sourceText = """
+[ti:晴天]
+[ar:周杰伦]
+[length:04:29]
+[00:00.00]故事的小黄花
+[00:04.00]从出生那年就飘着
+"""
+try? sourceText.write(to: sourceFile, atomically: true, encoding: .utf8)
+
+let imported = try? store.importFile(at: sourceFile)
+require(imported != nil, "a supported file is copied into the library")
+require(store.list().count == 1, "the copied file shows up in the listing")
+let loadedRecord = imported.flatMap { store.load($0) }
+require(loadedRecord?.lines.count == 2, "the copied file parses back into two lines")
+require(loadedRecord?.metadata.title == "晴天", "metadata survives the copy and the parse")
+require(
+    store.match(title: "晴天", artists: ["周杰伦"], durationMs: nil)?.name == "周杰伦 - 晴天.lrc",
+    "the store matches the playing track by title and artist"
+)
+require(
+    store.match(title: "七里香", artists: ["周杰伦"], durationMs: nil) == nil,
+    "an unrelated title does not match anything"
+)
+
+let duplicate = try? store.importFile(at: sourceFile)
+require(duplicate?.name == "周杰伦 - 晴天-2.lrc", "importing the same name again gets a numeric suffix")
+require(store.list().count == 2, "the suffixed copy is a separate file")
+
+let unsupportedSource = sourceDirectory.appendingPathComponent("notes.txt")
+try? "not lyrics".write(to: unsupportedSource, atomically: true, encoding: .utf8)
+require((try? store.importFile(at: unsupportedSource)) == nil,
+        "an unsupported extension is rejected")
+
+if let imported { try? store.delete(imported) }
+require(store.list().count == 1, "deleting removes exactly one file")
+
+try? FileManager.default.removeItem(at: temporaryRoot)
+
 // MARK: - 结果
 
 if failures > 0 {
