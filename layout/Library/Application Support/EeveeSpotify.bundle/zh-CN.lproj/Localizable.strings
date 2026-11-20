@@ -112,7 +112,7 @@ imported_lyrics_enabled_description = "文件与当前歌曲匹配时，这一�
 imported_lyrics_files = "文件";
 imported_lyrics_import = "导入歌词文件";
 imported_lyrics_empty = "还没有导入文件。";
-imported_lyrics_formats_description = "支持 LRC、SPL、YRC、Lyricify Syllable（.lys）与 Lyricify Lines（.lyl）。QRC 与 KRC 是加密格式，SRT / ASS 是字幕格式——请先转成 LRC。";
+imported_lyrics_formats_description = "支持 LRC、SPL、YRC、Lyricify Syllable（.lys）、Lyricify Lines（.lyl）与 TTML。QRC 与 KRC 是加密格式，SRT / ASS 是字幕格式——请先转成 LRC。";
 imported_lyrics_import_failed = "导入失败：文件读不出来。";
 experiments_page_warning = "请注意：以下功能可能未经测试。如果你愿意为我测试的话，也可以打开它们测试一下，这些功能不会导致插件崩溃。";
 

@@ -136,7 +136,7 @@ struct LyricsFilePicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         // 这些扩展名在 UTType 里不一定有注册类型，拿不到就退回纯文本 —— 选择器仍会
         // 按扩展名过滤不了的部分交给 `ImportedLyricsStore.importFile` 再拒一次。
-        let types = ["lrc", "spl", "yrc", "lys", "lyl"].compactMap {
+        let types = ["lrc", "spl", "yrc", "lys", "lyl", "ttml"].compactMap {
             UTType(filenameExtension: $0) ?? .plainText
         }
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)

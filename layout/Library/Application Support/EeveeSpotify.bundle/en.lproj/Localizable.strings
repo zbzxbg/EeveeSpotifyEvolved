@@ -110,7 +110,7 @@ imported_lyrics_enabled_description = "When a file matches the playing track, th
 imported_lyrics_files = "Files";
 imported_lyrics_import = "Import lyric file";
 imported_lyrics_empty = "No files yet.";
-imported_lyrics_formats_description = "LRC, SPL, YRC, Lyricify Syllable (.lys) and Lyricify Lines (.lyl). QRC and KRC are encrypted and SRT/ASS are subtitle formats - convert those to LRC first.";
+imported_lyrics_formats_description = "LRC, SPL, YRC, Lyricify Syllable (.lys), Lyricify Lines (.lyl) and TTML. QRC and KRC are encrypted and SRT/ASS are subtitle formats - convert those to LRC first.";
 imported_lyrics_import_failed = "Import failed - the file could not be read.";
 experiments_page_warning = "Please note: the features below may be untested. If you are willing to test them for me, you are welcome to switch them on — none of them will crash the tweak.";
 

@@ -31,7 +31,36 @@ final class ImportedLyricsRepository: LyricsRepository {
             title: query.title,
             artists: artists,
             durationMs: query.durationMs
-        ), let imported = store.load(record) else {
+        ) else {
+            return nil
+        }
+
+        // TTML 走 AMLL 那条解析器（词级、译文、罗马字、背景人声都能白拿），
+        // 其余格式走自己的解析层。
+        if record.url.pathExtension.lowercased() == "ttml" {
+            guard let data = try? Data(contentsOf: record.url),
+                  let importedText = ImportedLyricsDecoder.decode(data) else {
+                writeDebugLog("[Lyrics] imported TTML unreadable: \(record.name)")
+                return nil
+            }
+            do {
+                let parsed = try AmllTtmlParser.parse(importedText)
+                let dto = AmllLyricsMapper.makeDto(parsed, logTag: "Import")
+                guard !dto.lines.isEmpty else {
+                    writeDebugLog("[Lyrics] imported TTML has no lines: \(record.name)")
+                    return nil
+                }
+                writeDebugLog(
+                    "[Lyrics] imported file matched: \(record.name) — \(dto.lines.count) line(s), ttml"
+                )
+                return dto
+            } catch {
+                writeDebugLog("[Lyrics] imported TTML failed to parse: \(error)")
+                return nil
+            }
+        }
+
+        guard let imported = store.load(record) else {
             return nil
         }
         writeDebugLog(

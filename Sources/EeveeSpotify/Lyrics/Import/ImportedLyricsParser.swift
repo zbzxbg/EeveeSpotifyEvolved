@@ -17,6 +17,7 @@ enum ImportedLyricFormat: String, CaseIterable {
     case yrc
     case lys
     case lyl
+    case ttml
 
     /// 允许出现在文件里的扩展名。
     var fileExtensions: [String] {
@@ -26,6 +27,7 @@ enum ImportedLyricFormat: String, CaseIterable {
         case .yrc: return ["yrc"]
         case .lys: return ["lys"]
         case .lyl: return ["lyl"]
+        case .ttml: return ["ttml"]
         }
     }
 }
@@ -84,6 +86,10 @@ enum ImportedLyricsParser {
             return parseLys(text)
         case .lyl:
             return parseLyl(text)
+        case .ttml:
+            // TTML 的行/词解析复用 `AmllTtmlParser`（App 层，测试目标里没有）：
+            // 这一层只负责被识别、进入候选列表，真正取词在 `ImportedLyricsRepository`。
+            return ImportedLyrics(format: .ttml, metadata: ImportedLyricMetadata(), lines: [])
         }
     }
 
@@ -482,7 +488,8 @@ enum ImportedLyricsParser {
 
     // MARK: - Lyricify Lines（.lyl）
 
-    /// `[start,end]Lyrics`，单位毫秒；头部带 `[type:LyricifyLines]`，由元信息分支吞掉。
+    /// `[start,end]Lyrics`：**两个数字都是绝对毫秒**（第二个是结束时刻，不是时长）；
+    /// 头部带 `[type:LyricifyLines]`，由元信息分支吞掉。
     private static let lylLinePattern = try? NSRegularExpression(
         pattern: #"^\[(\d+),(\d+)\](.*)$"#
     )
@@ -513,14 +520,15 @@ enum ImportedLyricsParser {
             guard let lylLinePattern,
                   let match = lylLinePattern.firstMatch(in: line, range: fullRange),
                   let start = integer(match, 1, nsLine),
-                  let duration = integer(match, 2, nsLine) else { continue }
+                  let end = integer(match, 2, nsLine),
+                  end >= start else { continue }
             let content = (substring(match, 3, nsLine) ?? "")
                 .trimmingCharacters(in: .whitespaces)
             guard !content.isEmpty else { continue }
             lines.append(
                 ImportedLyricLine(
                     startMs: start,
-                    endMs: start + max(duration, 0),
+                    endMs: end,
                     text: content,
                     translation: nil,
                     words: nil

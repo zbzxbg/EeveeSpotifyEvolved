@@ -22,7 +22,7 @@ func require(_ condition: Bool, _ message: String) {
 require(ImportedLyricsParser.detect(fileExtension: "LRC") == .lrc, "extension matching is case-insensitive")
 require(ImportedLyricsParser.detect(fileExtension: " spl ") == .spl, "extension matching trims whitespace")
 require(ImportedLyricsParser.detect(fileExtension: "yrc") == .yrc, "yrc is recognized")
-for unsupported in ["srt", "ass", "qrc", "krc", "ttml", "lqe", "spl2"] {
+for unsupported in ["srt", "ass", "qrc", "krc", "lqe", "spl2"] {
     require(
         ImportedLyricsParser.detect(fileExtension: unsupported) == nil,
         "\(unsupported) is not accepted by the importer"
@@ -160,6 +160,7 @@ require(guesses[1].title == "周杰伦" && guesses[1].artist == "晴天",
         "the second reading swaps the sides")
 require(ImportedLyricsParser.detect(fileExtension: "lys") == .lys, "lys is recognized")
 require(ImportedLyricsParser.detect(fileExtension: "lyl") == .lyl, "lyl is recognized")
+require(ImportedLyricsParser.detect(fileExtension: "ttml") == .ttml, "ttml is recognized for import")
 let singleGuess = ImportedLyricsMatcher.fileNameGuesses("晴天.lrc")
 require(singleGuess.count == 1 && singleGuess[0].artist == nil,
         "a file name without a separator is title-only")
