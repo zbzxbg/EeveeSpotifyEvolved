@@ -103,13 +103,14 @@ final class ImportedLyricsStore {
                 artist: lyrics.metadata.artist,
                 durationMs: lyrics.metadata.lengthMs
             )
-            return (record, candidate)
+            return (record: record, candidate: candidate)
         }
     }
 
     func match(title: String, artists: [String], durationMs: Int?) -> ImportedLyricsFileRecord? {
         let all = candidates()
-        let candidates = all.map(\.candidate)
+        // 元组元素不能用 key path（`\.candidate` 不是合法写法）——这里显式取。
+        let candidates = all.map { $0.candidate }
         guard let index = ImportedLyricsMatcher.bestMatch(
             candidates: candidates,
             title: title,
