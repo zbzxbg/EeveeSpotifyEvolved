@@ -94,6 +94,12 @@ for IPA in "$(basename "$OUT_IPA")" "$(basename "$PATCHED_IPA")"; do
     unzip -q "$IPA"
     NEEDS_REZIP=0
 
+    # 原始解密包还带着 App Store 的签名与 FairPlay 元数据：SC_Info/*.sinf、.supp …
+    # 分布在 App、每个 appex、每个 framework 上，外加 _CodeSignature/CodeResources。
+    # 重签之后这些都不参与校验，但过期的那份 CodeResources 会被原样带进成品 —— 两样都剔。
+    # 洗过的底包本来就没有这些目录，这一步对它是空操作。
+    find Payload -type d \( -name SC_Info -o -name _CodeSignature \) -prune -exec rm -rf {} +
+
     if [ -d "Payload/Spotify.app/Watch" ]; then
         rm -rf Payload/Spotify.app/Watch
         NEEDS_REZIP=1

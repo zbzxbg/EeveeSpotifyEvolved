@@ -341,6 +341,14 @@ jobs:
           touch Payload/Spotify.app Payload/Spotify.app/Frameworks   # zip timestamp
           APP="Payload/Spotify.app"
 
+          # A raw decrypted App Store bundle still carries the old signature and its FairPlay
+          # metadata: SC_Info/*.sinf, .supp ... sit on the app, on every appex and on every
+          # framework, next to a _CodeSignature/CodeResources from the App Store build. None of
+          # it is validated once the app is re-signed, but a stale CodeResources can survive into
+          # the signed IPA. Strip both here; a cleaned base IPA has neither, so this is a no-op
+          # for it.
+          find Payload -type d \( -name SC_Info -o -name _CodeSignature \) -prune -exec rm -rf {} +
+
           # Liquid glass switch (ON by default = the current baseline).
           # Spotify itself ships UIDesignRequiresCompatibility=true in its Info.plist, which asks
           # iOS 26 to run it in COMPATIBILITY MODE - so the whole app stays out of the new design
