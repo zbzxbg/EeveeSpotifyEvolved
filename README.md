@@ -24,8 +24,6 @@ Spotify, arranged like Apple Music.
   <img src="docs/screenshots/lock.webp" width="15%" alt="Lock screen, where the animated artwork and the sung line are drawn">
 </p>
 
-> *Make EeveeSpotify Great Again* — the slogan is a jest; the pages, the player and the lock screen below are not.
-
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
 
 ## Features
