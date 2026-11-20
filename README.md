@@ -112,11 +112,12 @@ Common issues, a longer FAQ, and why some Premium features stay locked: **[commo
 ## Requirements
 
 - iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
-- Spotify 9.2.x (the baseline) or 9.1.x — current public release: [`v2.2.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
+- Spotify 9.2.x (the baseline) or 9.1.x — current public release: [`v2.3.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
 
 | Spotify | How far it has been checked |
 |---|---|
 | **9.2.0** | The baseline. Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb, premium patching included: 9.2.0 split the account configuration response in two and the patcher handles both |
+| **9.2.2** | Static check only: a symbol diff against 9.2.0 keeps the premium hook set intact; the artist bio card moved to `CreatorElements_ECMKit` and is hooked under both names. The on-device behaviour has not been re-checked |
 | **9.1.88** | Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb. Shares the same hook set, so every hook target and UI identifier still resolves; premium patching uses the 9.1.88 configuration snapshot |
 | **9.1.94** | Static check only: every hook target, `@objc` method list and runtime UI identifier still resolves; the on-device look-and-feel has not been re-calibrated |
 | other **9.1.x / 9.2.x** | Untested, same code path |
