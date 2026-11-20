@@ -217,6 +217,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     // 开关与文件管理在「设置 → 歌词 → 导入歌词」；匹配规则见 `ImportedLyricsMatcher`——
     // 没把握就不选（把别的歌的词贴上比没有词更糟），那种情况继续走下面的正常链路。
     if UserDefaults.importedLyricsEnabled,
+       // 用户明确选了「禁用歌词替换」时尊重它：导入的文件也是一次替换。
+       UserDefaults.lyricsSource != .notReplaced,
        let importedDto = ImportedLyricsRepository.shared.matchingDto(for: searchQuery) {
         lastRequestedLyricsSourceDescription = LyricsSource.imported.description
         return makeLyrics(from: importedDto, source: .imported)
