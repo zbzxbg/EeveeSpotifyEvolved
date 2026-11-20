@@ -156,6 +156,159 @@ require(AudioDSPBands.label(for: 16000) == "16 kHz", "16 kHz formats without a d
 require(AudioDSPBands.label(for: 31.5) == "31.5 Hz", "31.5 Hz keeps one decimal")
 require(AudioDSPBands.label(for: 63) == "63 Hz", "63 Hz formats without a decimal")
 
+// MARK: - 架式（低音 / 清晰度）
+
+/// 任意二阶系数在某个频点的稳态增益（正弦 RMS 比，跳过起始瞬态）。
+func measuredGain(_ coefficients: BiquadCoefficients, probeFrequency: Double) -> Double {
+    var state = BiquadState()
+    let omega = 2 * Double.pi * probeFrequency / sampleRate
+    let total = 8192
+    var inputSquares = 0.0
+    var outputSquares = 0.0
+    for index in 0..<total {
+        let input = sin(omega * Double(index))
+        let output = state.process(input, coefficients)
+        if index >= total / 2 {
+            inputSquares += input * input
+            outputSquares += output * output
+        }
+    }
+    guard inputSquares > 0, outputSquares > 0 else { return 0 }
+    return sqrt(outputSquares / inputSquares)
+}
+
+require(
+    BiquadCoefficients.lowShelf(frequency: AudioDSPShelves.lowFrequency, gainDb: 0,
+                                slope: AudioDSPShelves.slope, sampleRate: sampleRate).isBypass,
+    "0 dB designs the identity for the low shelf"
+)
+require(
+    BiquadCoefficients.highShelf(frequency: AudioDSPShelves.highFrequency, gainDb: 0,
+                                 slope: AudioDSPShelves.slope, sampleRate: sampleRate).isBypass,
+    "0 dB designs the identity for the high shelf"
+)
+require(
+    BiquadCoefficients.highShelf(frequency: AudioDSPShelves.highFrequency, gainDb: 6,
+                                 slope: AudioDSPShelves.slope, sampleRate: 8000).isBypass,
+    "a shelf above Nyquist falls back to bypass"
+)
+
+let lowShelfBoost = BiquadCoefficients.lowShelf(
+    frequency: AudioDSPShelves.lowFrequency, gainDb: 6,
+    slope: AudioDSPShelves.slope, sampleRate: sampleRate)
+let lowShelfGainAtBass = measuredGain(lowShelfBoost, probeFrequency: 40)
+let lowShelfGainAtTreble = measuredGain(lowShelfBoost, probeFrequency: 12000)
+require(
+    abs(lowShelfGainAtBass - pow(10, 6.0 / 20)) < 0.30,
+    "a +6 dB low shelf lifts 40 Hz by about 6 dB (measured \(lowShelfGainAtBass))"
+)
+require(
+    abs(lowShelfGainAtTreble - 1) < 0.05,
+    "the low shelf leaves 12 kHz alone (measured \(lowShelfGainAtTreble))"
+)
+
+let highShelfBoost = BiquadCoefficients.highShelf(
+    frequency: AudioDSPShelves.highFrequency, gainDb: 6,
+    slope: AudioDSPShelves.slope, sampleRate: sampleRate)
+let highShelfGainAtTreble = measuredGain(highShelfBoost, probeFrequency: 12000)
+let highShelfGainAtBass = measuredGain(highShelfBoost, probeFrequency: 100)
+require(
+    abs(highShelfGainAtTreble - pow(10, 6.0 / 20)) < 0.35,
+    "a +6 dB high shelf lifts 12 kHz by about 6 dB (measured \(highShelfGainAtTreble))"
+)
+require(
+    abs(highShelfGainAtBass - 1) < 0.05,
+    "the high shelf leaves 100 Hz alone (measured \(highShelfGainAtBass))"
+)
+
+var shelvesStable = true
+for gain in [-12.0, -6.0, 6.0, 12.0] {
+    let designs = [
+        BiquadCoefficients.lowShelf(frequency: AudioDSPShelves.lowFrequency, gainDb: gain,
+                                    slope: AudioDSPShelves.slope, sampleRate: sampleRate),
+        BiquadCoefficients.highShelf(frequency: AudioDSPShelves.highFrequency, gainDb: gain,
+                                     slope: AudioDSPShelves.slope, sampleRate: sampleRate),
+    ]
+    for coefficients in designs {
+        let finite = coefficients.b0.isFinite && coefficients.b1.isFinite
+            && coefficients.b2.isFinite && coefficients.a1.isFinite && coefficients.a2.isFinite
+        // 极点都在单位圆内的充要条件（二阶实系数）：三个三角不等式同时成立。
+        let insideUnitCircle = 1 + coefficients.a1 + coefficients.a2 > 0
+            && 1 - coefficients.a1 + coefficients.a2 > 0
+            && 1 - coefficients.a2 > 0
+        if !finite || !insideUnitCircle {
+            shelvesStable = false
+        }
+    }
+}
+require(shelvesStable, "every shelf design is finite and keeps its poles inside the unit circle")
+
+// MARK: - 压缩器
+
+require(AudioDSPCompander.parameters(amount: 0, sampleRate: sampleRate).isBypass,
+        "0 % compander amount is a bypass")
+require(AudioDSPCompander.parameters(amount: 1, sampleRate: sampleRate).isBypass == false,
+        "100 % compander amount is active")
+
+let heavyCompander = AudioDSPCompander.parameters(amount: 1, sampleRate: sampleRate)
+require(heavyCompander.thresholdDb < -20 && heavyCompander.ratio > 3.5,
+        "the top of the range is a low threshold and a high ratio")
+require(heavyCompander.attackCoefficient > 0, "the attack coefficient is positive")
+require(heavyCompander.attackCoefficient < heavyCompander.releaseCoefficient,
+        "attack is faster than release")
+
+var bypassEnvelope = AudioDSPCompander.Envelope()
+require(bypassEnvelope.gain(for: 0.9, parameters: .bypass) == 1,
+        "a bypassed compander returns unity gain")
+
+var loudEnvelope = AudioDSPCompander.Envelope()
+var loudGain = 1.0
+for _ in 0..<Int(sampleRate) {
+    loudGain = loudEnvelope.gain(for: 0.5, parameters: heavyCompander)
+}
+require(loudGain.isFinite, "the compander gain stays finite under a steady loud tone")
+require(loudGain < 0.9, "a steady loud tone is pulled down (gain \(loudGain))")
+require(loudGain > 0.05, "the compander does not mute the material (gain \(loudGain))")
+
+var quietEnvelope = AudioDSPCompander.Envelope()
+var quietGain = 1.0
+for _ in 0..<Int(sampleRate) {
+    quietGain = quietEnvelope.gain(for: 0.001, parameters: heavyCompander)
+}
+require(quietGain >= 1, "quiet material only sees the makeup gain")
+require(quietGain.isFinite && quietGain < 8, "the makeup gain stays inside its cap")
+
+// MARK: - 交叉馈送
+
+require(AudioDSPCrossfeed.settings(level: 0, sampleRate: sampleRate).isBypass,
+        "level 0 turns crossfeed off")
+
+let crossfeedLevels = (1..<AudioDSPCrossfeed.levelCount).map {
+    AudioDSPCrossfeed.settings(level: $0, sampleRate: sampleRate)
+}
+var crossfeedOrdered = true
+for index in 1..<crossfeedLevels.count where crossfeedLevels[index].feed <= crossfeedLevels[index - 1].feed {
+    crossfeedOrdered = false
+}
+require(crossfeedOrdered, "the higher crossfeed levels mix in more")
+
+var crossfeedValid = true
+for settings in crossfeedLevels {
+    if !(settings.feed > 0 && settings.feed < 0.5) { crossfeedValid = false }
+    if !(settings.lowpassCoefficient > 0 && settings.lowpassCoefficient < 1) { crossfeedValid = false }
+    if !(settings.delaySamples >= 1 && settings.delaySamples <= AudioDSPCrossfeed.maxDelaySamples) {
+        crossfeedValid = false
+    }
+}
+require(crossfeedValid, "every crossfeed level has a sane feed, filter and delay")
+
+let crossfeed48k = AudioDSPCrossfeed.settings(level: 2, sampleRate: 48000)
+require(crossfeed48k.delaySamples == Int((0.0003 * 48000).rounded()),
+        "the interaural delay scales with the sample rate")
+require(AudioDSPCrossfeed.settings(level: 99, sampleRate: sampleRate)
+            == AudioDSPCrossfeed.settings(level: 3, sampleRate: sampleRate),
+        "an out-of-range level clamps to the loudest preset")
+
 // MARK: - 结果
 
 if failures > 0 {

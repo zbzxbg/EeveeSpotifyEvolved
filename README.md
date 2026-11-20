@@ -68,7 +68,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Only animates while the player page is visible. Settings → Advanced features → Cover pulse.
 - **Beat haptics** — kick and snare transients become light taps. Taps are throttled to one per 90 ms and step themselves down after 30 seconds of continuous triggering; strength has three steps. Settings → Advanced features → Beat haptics.
 - Both read the decoded PCM through a read-only tap: the audio itself is never altered. If a track is already playing when you turn them on, pause and resume once so the tap attaches.
-- **Audio effects** — a 10-band graphic equalizer (31.5 Hz to 16 kHz, ±12 dB) plus a preamp, inserted between Spotify's own source unit and the output unit. The first time you switch it on, restart Spotify so the tap can wrap the output callback; after that the sliders apply live. Lower the preamp if loud tracks start clipping. Settings → Advanced features → Audio Effects.
+- **Audio effects** — a chain built from a preamp, bass and clarity shelves (below 150 Hz, above 6 kHz), a 10-band graphic equalizer (31.5 Hz to 16 kHz, ±12 dB), a single-band compressor and headphone crossfeed, inserted between Spotify's own source unit and the output unit. The first time you switch it on, restart Spotify so the tap can wrap the output callback; after that the sliders apply live. Lower the preamp if loud tracks start clipping. Settings → Advanced features → Audio Effects.
 
 ### Gestures
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 「音频效果」页 —— 十段图形 EQ + 前置增益（`AudioDSP`）。
+/// 「音频效果」页 —— 前置增益 + 低/高架 + 十段图形 EQ + 压缩器 + 耳机交叉馈送（`AudioDSP`）。
 ///
 /// 所有改动都是"滑杆一动就重算系数"，不需要重启；唯一需要重启的是**第一次打开**：
 /// 音频图的回调是在 Spotify 启动时挂上的，我们的包装要等到下一次挂回调才会生效，
@@ -13,6 +13,10 @@ struct EeveeAudioEffectSettingsView: View {
         "dspPreampDb",
         "dspBandGainsDb",
         "dspPreset",
+        "dspLowShelfDb",
+        "dspHighShelfDb",
+        "dspCompanderAmount",
+        "dspCrossfeedLevel",
     ]
 
     /// 「自己调过」不是 `AudioDSPPreset` 的档位，但选择器要能显示它。
@@ -22,6 +26,10 @@ struct EeveeAudioEffectSettingsView: View {
     @State private var preamp = UserDefaults.dspPreampDb
     @State private var gains = UserDefaults.dspBandGainsDb
     @State private var preset = UserDefaults.dspPreset
+    @State private var lowShelf = UserDefaults.dspLowShelfDb
+    @State private var highShelf = UserDefaults.dspHighShelfDb
+    @State private var compander = UserDefaults.dspCompanderAmount
+    @State private var crossfeed = UserDefaults.dspCrossfeedLevel
     @State private var insertActive = AudioDSP.isInsertActive
 
     var body: some View {
@@ -52,13 +60,66 @@ struct EeveeAudioEffectSettingsView: View {
                 }
             }
 
+            // 架式放在十段之前：它是"整体往哪边偏"，十段是"具体哪个频点"，先粗后细。
+            Section(
+                header: Text("audio_effects_shelves".localized),
+                footer: Text("audio_effects_shelves_description".localized)
+            ) {
+                shelfRow(titleKey: "audio_effects_low_shelf", value: $lowShelf) { value in
+                    UserDefaults.dspLowShelfDb = value
+                    AudioDSP.reloadParameters()
+                }
+                shelfRow(titleKey: "audio_effects_high_shelf", value: $highShelf) { value in
+                    UserDefaults.dspHighShelfDb = value
+                    AudioDSP.reloadParameters()
+                }
+            }
+
             Section(header: Text("audio_effects_equalizer".localized)) {
                 ForEach(Array(AudioDSPBands.frequencies.enumerated()), id: \.offset) { index, frequency in
                     bandRow(index: index, frequency: frequency)
                 }
             }
 
-            Section(header: Text("audio_effects_presets".localized)) {
+            // 压缩器与交叉馈送都有"关"的档：滑杆/档位到 0 即直通，
+            // 不必再给一颗总开关（多一颗开关只会多一种"开了没反应"的解释）。
+            Section(
+                header: Text("audio_effects_compander".localized),
+                footer: Text("audio_effects_compander_description".localized)
+            ) {
+                HStack(spacing: 10) {
+                    Slider(value: $compander, in: 0...1, step: 0.05)
+                        .onChange(of: compander) { value in
+                            UserDefaults.dspCompanderAmount = value
+                            AudioDSP.reloadParameters()
+                        }
+                    Text(verbatim: "\(Int((compander * 100).rounded()))%")
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundColor(.secondary)
+                        .frame(width: 46, alignment: .trailing)
+                }
+            }
+
+            Section(
+                header: Text("audio_effects_crossfeed".localized),
+                footer: Text("audio_effects_crossfeed_description".localized)
+            ) {
+                Picker("audio_effects_crossfeed".localized, selection: $crossfeed) {
+                    ForEach(0..<AudioDSPCrossfeed.levelCount, id: \.self) { level in
+                        Text(AudioDSPCrossfeed.titleKey(for: level).localized).tag(level)
+                    }
+                }
+                .onChange(of: crossfeed) { value in
+                    UserDefaults.dspCrossfeedLevel = value
+                    AudioDSP.reloadParameters()
+                }
+            }
+
+            Section(
+                header: Text("audio_effects_presets".localized),
+                footer: Text("audio_effects_presets_description".localized)
+            ) {
                 Picker("audio_effects_presets".localized, selection: $preset) {
                     ForEach(AudioDSPPreset.allCases, id: \.self) { value in
                         Text(value.titleKey.localized).tag(value.rawValue)
@@ -76,10 +137,7 @@ struct EeveeAudioEffectSettingsView: View {
                 keys: Self.ownedKeys,
                 afterReset: {
                     // 键回默认（全直通）之后：影子值跟上，并把系数重算一遍。
-                    enabled = UserDefaults.dspEnabled
-                    preamp = UserDefaults.dspPreampDb
-                    gains = UserDefaults.dspBandGainsDb
-                    preset = UserDefaults.dspPreset
+                    refreshFromDefaults()
                     AudioDSP.syncWithSettings()
                     insertActive = AudioDSP.isInsertActive
                 }
@@ -88,10 +146,7 @@ struct EeveeAudioEffectSettingsView: View {
                 // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear {
-            enabled = UserDefaults.dspEnabled
-            preamp = UserDefaults.dspPreampDb
-            gains = UserDefaults.dspBandGainsDb
-            preset = UserDefaults.dspPreset
+            refreshFromDefaults()
             AudioDSP.syncWithSettings()
             insertActive = AudioDSP.isInsertActive
         }
@@ -128,6 +183,31 @@ struct EeveeAudioEffectSettingsView: View {
         }
     }
 
+    /// 一行：架式名称 + 滑杆 + 当前 dB。
+    private func shelfRow(
+        titleKey: String,
+        value: Binding<Double>,
+        onChange: @escaping (Double) -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            Text(titleKey.localized)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 76, alignment: .leading)
+
+            Slider(value: value, in: AudioDSPShelves.minGainDb...AudioDSPShelves.maxGainDb, step: 0.5)
+                .onChange(of: value.wrappedValue) { newValue in
+                    onChange(newValue)
+                }
+
+            Text(verbatim: String(format: "%+.1f", value.wrappedValue))
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundColor(.secondary)
+                .frame(width: 42, alignment: .trailing)
+        }
+    }
+
     /// 状态行：这一版有没有真的接管音频输出。`AudioDSP.isInsertActive` 不是 `@Published`，
     /// 所以在进页面 / 动开关 / 重置之后各重读一次就够。
     private var statusRow: some View {
@@ -142,6 +222,17 @@ struct EeveeAudioEffectSettingsView: View {
             .font(.footnote)
             .foregroundColor(.secondary)
         }
+    }
+
+    private func refreshFromDefaults() {
+        enabled = UserDefaults.dspEnabled
+        preamp = UserDefaults.dspPreampDb
+        gains = UserDefaults.dspBandGainsDb
+        preset = UserDefaults.dspPreset
+        lowShelf = UserDefaults.dspLowShelfDb
+        highShelf = UserDefaults.dspHighShelfDb
+        compander = UserDefaults.dspCompanderAmount
+        crossfeed = UserDefaults.dspCrossfeedLevel
     }
 
     private func applyPreset(named name: String) {

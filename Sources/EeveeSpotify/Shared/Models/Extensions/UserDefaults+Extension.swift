@@ -44,6 +44,11 @@ extension UserDefaults {
     private static let dspPreampDbKey = "dspPreampDb"
     private static let dspBandGainsDbKey = "dspBandGainsDb"
     private static let dspPresetKey = "dspPreset"
+    /// 「低音 / 清晰度」两颗架式增益、压缩器强度、耳机交叉馈送档位（见 `AudioDSP`）。
+    private static let dspLowShelfDbKey = "dspLowShelfDb"
+    private static let dspHighShelfDbKey = "dspHighShelfDb"
+    private static let dspCompanderAmountKey = "dspCompanderAmount"
+    private static let dspCrossfeedLevelKey = "dspCrossfeedLevel"
     private static let dumpViewTreeKey = "dumpViewTree"
     /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
@@ -127,6 +132,10 @@ extension UserDefaults {
         dspPreampDbKey,
         dspBandGainsDbKey,
         dspPresetKey,
+        dspLowShelfDbKey,
+        dspHighShelfDbKey,
+        dspCompanderAmountKey,
+        dspCrossfeedLevelKey,
         dumpViewTreeKey,
         detailedLoggingKey,
         hideMiniPlayerBarKey,
@@ -573,6 +582,59 @@ extension UserDefaults {
     static var dspPreset: String {
         get { container.string(forKey: dspPresetKey) ?? AudioDSPPreset.flat.rawValue }
         set { container.set(newValue, forKey: dspPresetKey) }
+    }
+
+    /// 「低音」低频架增益（dB），默认 0。
+    static var dspLowShelfDb: Double {
+        get {
+            let raw = container.object(forKey: dspLowShelfDbKey) as? Double ?? 0
+            return min(max(raw, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb)
+        }
+        set {
+            container.set(
+                min(max(newValue, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb),
+                forKey: dspLowShelfDbKey
+            )
+        }
+    }
+
+    /// 「清晰度」高频架增益（dB），默认 0。
+    static var dspHighShelfDb: Double {
+        get {
+            let raw = container.object(forKey: dspHighShelfDbKey) as? Double ?? 0
+            return min(max(raw, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb)
+        }
+        set {
+            container.set(
+                min(max(newValue, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb),
+                forKey: dspHighShelfDbKey
+            )
+        }
+    }
+
+    /// 压缩器强度：0 = 关，1 = 最重（阈值 -24 dB、4:1）。
+    static var dspCompanderAmount: Double {
+        get {
+            let raw = container.object(forKey: dspCompanderAmountKey) as? Double ?? 0
+            return min(max(raw, 0), 1)
+        }
+        set {
+            container.set(min(max(newValue, 0), 1), forKey: dspCompanderAmountKey)
+        }
+    }
+
+    /// 耳机交叉馈送档位：0 = 关，1…3 逐级加强。
+    static var dspCrossfeedLevel: Int {
+        get {
+            let raw = container.object(forKey: dspCrossfeedLevelKey) as? Int ?? 0
+            return min(max(raw, 0), AudioDSPCrossfeed.levelCount - 1)
+        }
+        set {
+            container.set(
+                min(max(newValue, 0), AudioDSPCrossfeed.levelCount - 1),
+                forKey: dspCrossfeedLevelKey
+            )
+        }
     }
 
     // MARK: - 视图树转储（Diagnostics）
