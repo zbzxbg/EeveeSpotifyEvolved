@@ -443,6 +443,7 @@ jobs:
       - name: Imported lyrics parsers (LRC / SPL / YRC)
         run: |
           swiftc Sources/EeveeSpotify/Lyrics/Import/ImportedLyricsParser.swift \
+                 Sources/EeveeSpotify/Lyrics/Import/ImportedLyricsMatcher.swift \
                  Tests/ImportedLyrics/main.swift \
                  -o imported-lyrics-tests
           ./imported-lyrics-tests

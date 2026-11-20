@@ -121,6 +121,58 @@ require(ImportedLyricsDecoder.decode(utf8Bytes) == "你好", "UTF-8 bytes still 
 let bomBytes = Data([0xFF, 0xFE]) + "hi".data(using: .utf16LittleEndian)!
 require(ImportedLyricsDecoder.decode(bomBytes) == "hi", "a UTF-16 BOM is honoured")
 
+// MARK: - 文件名与归一化
+
+let guesses = ImportedLyricsMatcher.fileNameGuesses("周杰伦 - 晴天.lrc")
+require(guesses.count == 2, "a dash-separated file name yields both readings")
+require(guesses[0].title == "晴天" && guesses[0].artist == "周杰伦",
+        "the first reading treats the right side as the title")
+require(guesses[1].title == "周杰伦" && guesses[1].artist == "晴天",
+        "the second reading swaps the sides")
+let singleGuess = ImportedLyricsMatcher.fileNameGuesses("晴天.lrc")
+require(singleGuess.count == 1 && singleGuess[0].artist == nil,
+        "a file name without a separator is title-only")
+
+require(ImportedLyricsMatcher.normalize("Hello (Live) [Remix] feat. Someone") == "hello",
+        "bracketed version notes and feat. are stripped before comparing")
+require(ImportedLyricsMatcher.normalize("【Live】晴天　周杰伦") == "晴天 周杰伦",
+        "full-width brackets and ideographic spaces are normalized")
+
+// MARK: - 匹配
+
+let jayChou = ImportedLyricsCandidate(fileName: "周杰伦 - 晴天.lrc", title: nil, artist: nil, durationMs: nil)
+let reversedName = ImportedLyricsCandidate(fileName: "晴天 - 周杰伦.lrc", title: nil, artist: nil, durationMs: nil)
+let noArtist = ImportedLyricsCandidate(fileName: "晴天.lrc", title: nil, artist: nil, durationMs: nil)
+let cover = ImportedLyricsCandidate(
+    fileName: "翻唱歌手 - 晴天.lrc", title: "晴天", artist: "翻唱歌手", durationMs: 240_000)
+let unrelated = ImportedLyricsCandidate(fileName: "周杰伦 - 七里香.lrc", title: nil, artist: nil, durationMs: nil)
+
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [jayChou], title: "晴天", artists: ["周杰伦"], durationMs: nil) == 0,
+    "title and artist from the file name match")
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [reversedName], title: "晴天", artists: ["周杰伦"], durationMs: nil) == 0,
+    "the reverse file-name order still matches")
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [noArtist], title: "晴天", artists: ["周杰伦"], durationMs: nil) == 0,
+    "a candidate without any artist information matches on the title alone")
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [cover], title: "晴天", artists: ["周杰伦"], durationMs: nil) == nil,
+    "a cover with a different artist is rejected when there is no other evidence")
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [cover], title: "晴天", artists: ["周杰伦"], durationMs: 239_500) == 0,
+    "a close duration is enough evidence to accept a cover entry")
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [unrelated], title: "晴天", artists: ["周杰伦"], durationMs: nil) == nil,
+    "a different song is rejected")
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [cover, jayChou], title: "晴天", artists: ["周杰伦"], durationMs: 239_500) == 1,
+    "the candidate with matching artist outranks the duration-only one")
+require(ImportedLyricsMatcher.bestMatch(
+    candidates: [ImportedLyricsCandidate(fileName: "晴天娃娃.lrc", title: nil, artist: nil, durationMs: nil)],
+    title: "晴天", artists: ["周杰伦"], durationMs: nil) == nil,
+    "a merely similar title without evidence is rejected")
+
 // MARK: - 结果
 
 if failures > 0 {
