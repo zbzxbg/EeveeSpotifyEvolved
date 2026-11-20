@@ -15,13 +15,24 @@ final class ImportedLyricsRepository: LyricsRepository {
     }
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
+        guard let dto = matchingDto(for: query) else {
+            throw LyricsError.noSuchSong
+        }
+        return dto
+    }
+
+    /// 匹配上就返回管线 DTO，没匹配上返回 nil。
+    ///
+    /// 取词链最前面那一步用它：有文件就用文件，没有就静默地走正常链路 ——
+    /// 不能抛错，否则"用户没给这首歌导文件"会被当成一次失败（还会弹提示）。
+    func matchingDto(for query: LyricsSearchQuery) -> LyricsDto? {
         let artists = query.artistNames.isEmpty ? [query.primaryArtist] : query.artistNames
         guard let record = store.match(
             title: query.title,
             artists: artists,
             durationMs: query.durationMs
         ), let imported = store.load(record) else {
-            throw LyricsError.noSuchSong
+            return nil
         }
         writeDebugLog(
             "[Lyrics] imported file matched: \(record.name) — \(imported.lines.count) line(s),"

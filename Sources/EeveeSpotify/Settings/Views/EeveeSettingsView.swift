@@ -118,6 +118,14 @@ struct EeveeSettingsView: View {
                     imageSystemName: "textformat.size"
                 ) { AnyView(EeveeLyricsAppearanceSettingsView()) }
 
+                // 「导入歌词」：用户自己的文件比任何在线源都准，入口就放在歌词相关页旁边。
+                settingsRow(
+                    color: .blue,
+                    title: "imported_lyrics_title",
+                    subtitle: "settings_sub_imported_lyrics",
+                    imageSystemName: "doc.text"
+                ) { AnyView(EeveeImportedLyricsSettingsView()) }
+
                 // （设置页里面放个可点击进去的页面吧）：歌词偏移
                 // 从歌词页拆成独立页 —— 它会随听歌不断长出条目，内嵌在歌词页里越拖越长。
                 // 从"网易云歌词偏移"扩成**所有源**（Genius 除外），

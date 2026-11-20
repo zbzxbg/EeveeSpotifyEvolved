@@ -98,7 +98,7 @@ extension EeveeLyricsSettingsView {
         case .unison:          return "unison_description".localized
         case .qqMusic:         return "qqmusic_description".localized
         case .kugou:           return "kugou_description".localized
-        case .notReplaced, .autoSelect, .appleMusicOfficialTtml:
+        case .notReplaced, .autoSelect, .appleMusicOfficialTtml, .imported:
             return nil
         }
     }

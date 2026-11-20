@@ -173,6 +173,7 @@ enum LockScreenLyricsFetcher {
         case .qqMusic: return QQMusicLyricsRepository.shared
         case .kugou: return KuGouLyricsRepository.shared
         case .appleMusicOfficialTtml: return AppleMusicOfficialTtmlLyricsRepository.shared
+        case .imported: return ImportedLyricsRepository.shared
         case .notReplaced, .autoSelect: return nil
         }
     }

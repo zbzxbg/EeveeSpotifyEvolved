@@ -37,6 +37,8 @@ extension UserDefaults {
     private static let coverPulseEnabledKey = "coverPulseEnabled"
     private static let musicHapticsEnabledKey = "musicHapticsEnabled"
     private static let musicHapticsStrengthKey = "musicHapticsStrength"
+    /// 「歌词 → 导入歌词」：匹配到用户的文件时优先用它。
+    private static let importedLyricsEnabledKey = "importedLyricsEnabled"
     /// AirPods 点头/摇头切歌（见 `HeadGestureControls`），默认关。
     private static let headGestureControlsEnabledKey = "headGestureControlsEnabled"
     /// 音频效果（十段 EQ + 前置增益，见 `AudioDSP`），默认关。
@@ -127,6 +129,7 @@ extension UserDefaults {
         coverPulseEnabledKey,
         musicHapticsEnabledKey,
         musicHapticsStrengthKey,
+        importedLyricsEnabledKey,
         headGestureControlsEnabledKey,
         dspEnabledKey,
         dspPreampDbKey,
@@ -638,6 +641,18 @@ extension UserDefaults {
     }
 
     // MARK: - 视图树转储（Diagnostics）
+    // MARK: - 导入歌词（见 ImportedLyricsStore）
+
+    /// 「优先使用导入的歌词」，默认开：有匹配文件就这一首用它。
+    static var importedLyricsEnabled: Bool {
+        get {
+            container.object(forKey: importedLyricsEnabledKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: importedLyricsEnabledKey)
+        }
+    }
+
     //
     // 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志，默认关。
     //
