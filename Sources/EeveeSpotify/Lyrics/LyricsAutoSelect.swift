@@ -315,7 +315,7 @@ enum LyricsAutoSelect {
             // 这四个新源每个都要**两个**请求（搜索 + 取词），酷狗还可能连试三条候选，
             // 所以一律按"慢源"给 5 秒。
             return slowSourceTimeout
-        case .notReplaced, .autoSelect:
+        case .notReplaced, .autoSelect, .imported:
             return 0
         }
     }
@@ -377,7 +377,7 @@ extension LyricsSource {
             // Genius 是纯文本；LRCLIB 只给行级；后两个不是具体来源。
             return false
         case .musixmatch, .petit, .netease, .spicy, .amllTtml, .appleMusicOfficialTtml,
-             .bini, .unison, .kugou, .qqMusic:
+             .bini, .unison, .kugou, .qqMusic, .imported:
             // MxM 的 richsync、Petit 的逐字档、网易云的 yrc、Spicy 的 syllable、
             // AMLL / Apple Music / BiniLyrics / Unison 的 TTML syllable、酷狗的 KRC、
             // QQ 的 QRC —— 都能给到词级。

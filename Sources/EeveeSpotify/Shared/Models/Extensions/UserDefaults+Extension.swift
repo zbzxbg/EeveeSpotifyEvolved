@@ -37,6 +37,8 @@ extension UserDefaults {
     private static let coverPulseEnabledKey = "coverPulseEnabled"
     private static let musicHapticsEnabledKey = "musicHapticsEnabled"
     private static let musicHapticsStrengthKey = "musicHapticsStrength"
+    /// 「歌词 → 导入歌词」：匹配到用户的文件时优先用它。
+    private static let importedLyricsEnabledKey = "importedLyricsEnabled"
     /// AirPods 点头/摇头切歌（见 `HeadGestureControls`），默认关。
     private static let headGestureControlsEnabledKey = "headGestureControlsEnabled"
     /// 音频效果（十段 EQ + 前置增益，见 `AudioDSP`），默认关。
@@ -44,6 +46,11 @@ extension UserDefaults {
     private static let dspPreampDbKey = "dspPreampDb"
     private static let dspBandGainsDbKey = "dspBandGainsDb"
     private static let dspPresetKey = "dspPreset"
+    /// 「低音 / 清晰度」两颗架式增益、压缩器强度、耳机交叉馈送档位（见 `AudioDSP`）。
+    private static let dspLowShelfDbKey = "dspLowShelfDb"
+    private static let dspHighShelfDbKey = "dspHighShelfDb"
+    private static let dspCompanderAmountKey = "dspCompanderAmount"
+    private static let dspCrossfeedLevelKey = "dspCrossfeedLevel"
     private static let dumpViewTreeKey = "dumpViewTree"
     /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
@@ -122,11 +129,16 @@ extension UserDefaults {
         coverPulseEnabledKey,
         musicHapticsEnabledKey,
         musicHapticsStrengthKey,
+        importedLyricsEnabledKey,
         headGestureControlsEnabledKey,
         dspEnabledKey,
         dspPreampDbKey,
         dspBandGainsDbKey,
         dspPresetKey,
+        dspLowShelfDbKey,
+        dspHighShelfDbKey,
+        dspCompanderAmountKey,
+        dspCrossfeedLevelKey,
         dumpViewTreeKey,
         detailedLoggingKey,
         hideMiniPlayerBarKey,
@@ -575,7 +587,72 @@ extension UserDefaults {
         set { container.set(newValue, forKey: dspPresetKey) }
     }
 
+    /// 「低音」低频架增益（dB），默认 0。
+    static var dspLowShelfDb: Double {
+        get {
+            let raw = container.object(forKey: dspLowShelfDbKey) as? Double ?? 0
+            return min(max(raw, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb)
+        }
+        set {
+            container.set(
+                min(max(newValue, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb),
+                forKey: dspLowShelfDbKey
+            )
+        }
+    }
+
+    /// 「清晰度」高频架增益（dB），默认 0。
+    static var dspHighShelfDb: Double {
+        get {
+            let raw = container.object(forKey: dspHighShelfDbKey) as? Double ?? 0
+            return min(max(raw, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb)
+        }
+        set {
+            container.set(
+                min(max(newValue, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb),
+                forKey: dspHighShelfDbKey
+            )
+        }
+    }
+
+    /// 压缩器强度：0 = 关，1 = 最重（阈值 -24 dB、4:1）。
+    static var dspCompanderAmount: Double {
+        get {
+            let raw = container.object(forKey: dspCompanderAmountKey) as? Double ?? 0
+            return min(max(raw, 0), 1)
+        }
+        set {
+            container.set(min(max(newValue, 0), 1), forKey: dspCompanderAmountKey)
+        }
+    }
+
+    /// 耳机交叉馈送档位：0 = 关，1…3 逐级加强。
+    static var dspCrossfeedLevel: Int {
+        get {
+            let raw = container.object(forKey: dspCrossfeedLevelKey) as? Int ?? 0
+            return min(max(raw, 0), AudioDSPCrossfeed.levelCount - 1)
+        }
+        set {
+            container.set(
+                min(max(newValue, 0), AudioDSPCrossfeed.levelCount - 1),
+                forKey: dspCrossfeedLevelKey
+            )
+        }
+    }
+
     // MARK: - 视图树转储（Diagnostics）
+    // MARK: - 导入歌词（见 ImportedLyricsStore）
+
+    /// 「优先使用导入的歌词」，默认开：有匹配文件就这一首用它。
+    static var importedLyricsEnabled: Bool {
+        get {
+            container.object(forKey: importedLyricsEnabledKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: importedLyricsEnabledKey)
+        }
+    }
+
     //
     // 「转储视图树」：把当前屏幕的视图结构每 2s 写一行进调试日志，默认关。
     //

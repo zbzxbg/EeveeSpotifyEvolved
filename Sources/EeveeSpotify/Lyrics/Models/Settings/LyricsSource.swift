@@ -36,6 +36,11 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     case qqMusic
     /// 酷狗：中文曲库，**逐字**（KRC）。
     case kugou
+    /// 用户自带的歌词文件（`Documents/EeveeSpotifyLyrics/`，见 `ImportedLyricsStore`）。
+    ///
+    /// **不进 `allCases`**：它不是来源选择器里的一项，而是"这一首有用户的文件"时的覆盖
+    /// （入口在 `CustomLyrics` 取词链最前面，开关在「歌词 → 导入歌词」）。
+    case imported
     
     static var allCases: [LyricsSource] {
         return [
@@ -78,6 +83,9 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
         return "QQ Music"
     case .kugou:
         return "KuGou"
+    case .imported:
+        // 显示名（注入 payload 的 `providedBy` / 页脚署名兜底）。
+        return "lyrics_source_imported".localized
     case .appleMusicOfficialTtml:
         // 这是**提供者署名**（注入 payload 的 `providedBy` / 页脚那一行），不是源选择器的标签。
         //
@@ -112,6 +120,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
         case .unison: return "unison"
         case .qqMusic: return "qqmusic"
         case .kugou: return "kugou"
+        case .imported: return "imported"
         }
     }
 
@@ -132,6 +141,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
         case "unison": self = .unison
         case "qqmusic": self = .qqMusic
         case "kugou": self = .kugou
+        case "imported": self = .imported
         default: return nil
         }
     }
@@ -144,7 +154,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     /// Apple Music 官方 TTML（实验开关，不进链路）。
     var orderKey: String? {
         switch self {
-        case .notReplaced, .autoSelect, .appleMusicOfficialTtml:
+        case .notReplaced, .autoSelect, .appleMusicOfficialTtml, .imported:
             return nil
         default:
             return offsetStorageKey
@@ -163,7 +173,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
         case .amllTtml, .netease, .qqMusic, .kugou:
             return true
         case .genius, .lrclib, .musixmatch, .petit, .notReplaced, .spicy,
-             .autoSelect, .appleMusicOfficialTtml, .bini, .unison:
+             .autoSelect, .appleMusicOfficialTtml, .bini, .unison, .imported:
             return false
         }
     }
@@ -174,7 +184,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     /// 链路自己会跳过没填密钥的 Spicy Lyrics（见 `CustomLyrics` 里那条 `continue`），
     /// 并按"逐字优先、覆盖兜底"排好序，比钉死某一个单源更接近"点开就有最好的那份"。
     ///
-    /// ⚠️ 自动优选只在沉浸式 / Apple Music 样式下可选，原生样式由 `stockStyleFallback` 接手。
+    /// ⚠️ 自动优选只在 Apple Music 样式下可选，原生样式由 `stockStyleFallback` 接手。
     static var defaultSource: LyricsSource {
         isJapaneseRegion ? .petit : .autoSelect
     }

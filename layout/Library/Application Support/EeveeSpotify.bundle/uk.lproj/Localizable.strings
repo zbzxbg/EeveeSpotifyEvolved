@@ -2,7 +2,6 @@
 
 patching = "Патчинг";
 lyrics = "Тексти";
-customization = "Кастомізація";
 experiments = "Експериментальні функції";
 
 common_issues_tip_title = "Є проблеми?";

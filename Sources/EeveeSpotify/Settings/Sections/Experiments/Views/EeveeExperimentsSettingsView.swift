@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// 「实验」页：只放**尚未真机定性**的功能（默认关，用户主动开；下面那个回退开关例外）。
+/// 「实验」页：只放**尚未真机定性**的功能（默认关，用户主动开）。
 ///
 /// 准入三条：
 /// ① 还没在真机上验证过效果；
@@ -10,14 +10,13 @@ import UIKit
 /// 三条里占一条才进来。**行为早已定性、只是"依赖外部"的开关不属于这里** ——
 /// 「分享到 LiveContainer」因此搬到「杂项设定」（见 `EeveeMiscellaneousSettingsView`）。
 ///
-/// 「PetitLyrics 回退逐行」是唯一**默认开**的一项：它把一层本就可疑的逐字高亮
-/// 摘掉，判据是覆盖率中位数（见 `ExperimentsOptions.petitLyricsLineFallback`），
-/// 关掉只是"强行按行换算单位后照用"。
+/// 一批歌词类的开关也**毕业**到「歌词」页（`EeveeLyricsSettingsView`）：
+/// 伪逐字填充、AMLL 模糊搜索、更激进的删除标注术语，以及已用样本定性的
+/// 「PetitLyrics 回退逐行」——最后这条现在**无条件生效**，不再有开关。
+/// 它们的问题不在于"依赖外部"，只是作用面在歌词本身，放在这一页等于让人去实验区找日常设置。
 ///
-/// ⚠️ 「NetEase 交叉验证」与「PetitLyrics 回退 NetEase」两个实验**已整体撤掉**
-/// （NE 目前只在来源说明里标注"不推荐非中国用户使用"）。
-/// 这一页现在只留 Instagram 分享位、AMLL 模糊搜索、伪逐字、更激进的标注删除、
-/// SpicyLyrics 交叉验证、Apple 官方 TTML，以及 PetitLyrics 回退逐行。
+/// 这一页现在只剩三件：Instagram 分享位、SpicyLyrics 交叉验证、Apple Music 官方 TTML，
+/// 三件都默认关、且都占准入的 ① 与 ②。
 struct EeveeExperimentsSettingsView: View {
     @State var experimentsOptions = UserDefaults.experimentsOptions
 
@@ -61,46 +60,6 @@ struct EeveeExperimentsSettingsView: View {
                 Toggle(
                     "show_instagram_destination".localized,
                     isOn: $experimentsOptions.showInstagramDestination
-                )
-            }
-
-            Section(footer: Text("amll_fuzzy_search_description".localized)) {
-                Toggle(
-                    "amll_fuzzy_search".localized,
-                    isOn: $experimentsOptions.amllFuzzySearch
-                )
-            }
-
-            // 伪逐字填充（**默认关**）。
-            // 只对"给了行时间、没给逐字"的源生效：整行按估算演唱时长逐字填亮。
-            // 行内分布是估的 ⇒ 放在实验页；`timingKind` 不动，间奏判定不受影响
-            // （见 `PseudoWordTiming` 文件头）。
-            Section(footer: Text("pseudo_word_by_word_lyrics_description".localized)) {
-                Toggle(
-                    "pseudo_word_by_word_lyrics".localized,
-                    isOn: $experimentsOptions.pseudoWordByWordLyrics
-                )
-            }
-
-            // PetitLyrics 回退逐行（**默认开**）。
-            // 只管"这一首的词轴值不值得用"：覆盖率中位数低于阈值就整首退回行级，
-            // 关闭后仍按行换算单位照用（判据见 `PetitLyricsRepository.wordTimingCoverage`）。
-            Section(footer: Text("petitlyrics_line_fallback_description".localized)) {
-                Toggle(
-                    "petitlyrics_line_fallback".localized,
-                    isOn: $experimentsOptions.petitLyricsLineFallback
-                )
-            }
-
-            // 更激进的删除歌词标注术语（**默认关**）。
-            // 白名单（`LyricsMarkerFilter` 的章节名清单）永远追不完：Genius 上还有
-            // `[Refrain]`、`[Verse 3: A & B]`、各种自造段落名会被当正文画出来。
-            // 打开后凡是整行被 `[]` 包住的都删，代价是可能误删 `[I love you]` 这种
-            // 整行带括号的真歌词 —— 所以默认关，且**只对 Genius 生效**。
-            Section(footer: Text("aggressive_marker_removal_description".localized)) {
-                Toggle(
-                    "aggressive_marker_removal".localized,
-                    isOn: $experimentsOptions.aggressiveMarkerRemoval
                 )
             }
 

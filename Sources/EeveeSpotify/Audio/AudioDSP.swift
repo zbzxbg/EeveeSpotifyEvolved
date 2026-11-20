@@ -3,19 +3,23 @@ import CoreAudio
 import Foundation
 import os
 
-/// 音频效果（十段图形 EQ + 前置增益）的 DSP 层。
+/// 音频效果（十段图形 EQ + 低/高架 + 压缩器 + 耳机交叉馈送 + 前置增益）的 DSP 层。
 ///
 /// 插入点：**包住源单元的 render callback**。这台机器上的音频图是「Spotify 自己的源单元
 /// （回调供数据）→ 连接 → RemoteIO」：原回调把 PCM 填进 `ioData`，紧接着那个单元把数据
 /// 交给 RemoteIO。所以"原回调返回之后、数据离开单元之前"是我们唯一能做到**零额外缓冲、
 /// 零额外延迟**地改样本的位置。
 ///
+/// 一条链的顺序：前置 → 低频架 → 高频架 → 十段 peaking → 压缩器 → 交叉馈送 → 限幅。
+/// 架式在 ten-band 之前、压缩器在后：先定音色再压动态，压缩器看到的是用户最终想要的
+/// 频谱；交叉馈送必须拿到**左右两个声道**，所以它放在逐帧层（见 `renderFrame`）。
+///
 /// 三条纪律：
 /// · 回调包装在 tap 装好之后**总是装上**：关掉 DSP 时只是"原回调 + 一次立刻返回的空调用"，
 ///   这样开关可以立即生效，不必为了装/卸包装重启；
 /// · render 线程上不分配、不等锁：参数用 `trylock` 拷一份到 render 本地的缓冲，拿不到锁就
 ///   用上一份；
-/// · 系数（EQ / 前置 / 采样率）在主线程或音频控制线程算好，render 线程只做乘加。
+/// · 系数（EQ / 架式 / 前置 / 采样率）在主线程或音频控制线程算好，render 线程只做乘加。
 ///
 /// 块内布局由 buffer list 自己决定（一个 buffer 多声道 = 交错；多个 buffer = 非交错），
 /// 不依赖格式标志：标志来自 control 线程，块却是实时线程拿到的，两者不一致时按实际布局走
@@ -26,8 +30,11 @@ enum AudioDSP {
     static let bandCount = AudioDSPBands.count
     /// 每组系数 5 个 double：b0, b1, b2, a1, a2。
     private static let coefficientStride = 5
-    /// 只处理前两个声道：这套 EQ 是给立体声播放用的，多声道布局其余声道原样放行。
+    /// 只处理前两个声道：这套链路是给立体声播放用的，多声道布局其余声道原样放行。
     private static let maxChannels = 2
+    private static let shelfCount = AudioDSPShelves.count
+    /// 交叉馈送延迟线：最大延迟 + 1，读写下标错开一格不会撞上自己。
+    private static let crossfeedRingSize = AudioDSPCrossfeed.maxDelaySamples + 1
 
     private static let lock: UnsafeMutablePointer<os_unfair_lock> = {
         let pointer = UnsafeMutablePointer<os_unfair_lock>.allocate(capacity: 1)
@@ -44,39 +51,48 @@ enum AudioDSP {
     private static var resetCounter: UInt32 = 0
     private static var sourceFormat: AudioStreamBasicDescription?
 
+    /// 控制线程侧的最后一组界面值：采样率变化时靠它们重算，不必再读 UserDefaults。
+    private static var bandGainsDb = [Double](repeating: 0, count: AudioDSPBands.count)
+    private static var lowShelfGainDb = 0.0
+    private static var highShelfGainDb = 0.0
+    private static var companderAmount = 0.0
+    private static var crossfeedLevel = 0
+
+    private static var companderParameters = AudioDSPCompander.Parameters.bypass
+    private static var crossfeedSettings = AudioDSPCrossfeed.bypass
+
     /// 被包装过回调的源单元（只为状态提示与日志：`nil` 说明这次启动还没接管）。
     private(set) static var wrappedUnit: AudioUnit?
 
-    private static var coefficients: UnsafeMutablePointer<Double> = {
-        let count = AudioDSPBands.count * 5
-        let pointer = UnsafeMutablePointer<Double>.allocate(capacity: count)
-        pointer.initialize(repeating: 0, count: count)
-        // 初始 = 每段直通（b0 = 1，其余 0）。全 0 会让输出恒为 0。
-        for band in 0..<AudioDSPBands.count {
-            pointer[band * 5] = 1
-        }
-        return pointer
-    }()
+    private static var coefficients: UnsafeMutablePointer<Double> = makeIdentity(bandCount)
+    private static var shelfCoefficients: UnsafeMutablePointer<Double> = makeIdentity(shelfCount)
 
     // MARK: - render 线程本地副本
 
-    private static var renderCoefficients: UnsafeMutablePointer<Double> = {
-        let count = AudioDSPBands.count * 5
-        let pointer = UnsafeMutablePointer<Double>.allocate(capacity: count)
-        pointer.initialize(repeating: 0, count: count)
-        for band in 0..<AudioDSPBands.count {
-            pointer[band * 5] = 1
-        }
-        return pointer
-    }()
+    private static var renderCoefficients: UnsafeMutablePointer<Double> = makeIdentity(bandCount)
+    private static var renderShelfCoefficients: UnsafeMutablePointer<Double> = makeIdentity(shelfCount)
+    private static var renderTargetCoefficients: UnsafeMutablePointer<Double> = makeIdentity(bandCount)
+    private static var renderShelfTargets: UnsafeMutablePointer<Double> = makeIdentity(shelfCount)
 
-    /// 每段 × 每声道 × 两个状态量。
-    private static var renderStates: UnsafeMutablePointer<Double> = {
-        let count = AudioDSPBands.count * 2 * 2
-        let pointer = UnsafeMutablePointer<Double>.allocate(capacity: count)
-        pointer.initialize(repeating: 0, count: count)
-        return pointer
-    }()
+    /// 每段 / 每架 × 每声道 × 两个状态量。
+    private static var renderStates: UnsafeMutablePointer<Double> = makeZeros(bandCount * maxChannels * 2)
+    private static var renderShelfStates: UnsafeMutablePointer<Double> = makeZeros(shelfCount * maxChannels * 2)
+
+    /// 每个声道一个压缩器包络。
+    private static var renderCompanderEnvelopes: UnsafeMutablePointer<Double> = makeZeros(maxChannels)
+    private static var renderCompanderParameters = AudioDSPCompander.Parameters.bypass
+    private static var renderCompanderMix = 0.0
+    private static var renderCompanderTargetMix = 0.0
+
+    /// 交叉馈送：混入量逐块平滑；低通系数与延迟按采样率算好，直接换。
+    private static var renderCrossfeedFeed = 0.0
+    private static var renderCrossfeedTargetFeed = 0.0
+    private static var renderCrossfeedCoefficient = 0.0
+    private static var renderCrossfeedDelay = 1
+    private static var renderCrossfeedStates: UnsafeMutablePointer<Double> = makeZeros(maxChannels)
+    private static var renderCrossfeedDelayLineLeft: UnsafeMutablePointer<Double> = makeZeros(crossfeedRingSize)
+    private static var renderCrossfeedDelayLineRight: UnsafeMutablePointer<Double> = makeZeros(crossfeedRingSize)
+    private static var renderCrossfeedIndex = 0
 
     /// 每个块（≈23ms）把"当前系数"往"目标系数"拉近的比例。
     ///
@@ -95,21 +111,30 @@ enum AudioDSP {
     /// render 线程置位、主线程读：出过一次非有限样本就让刻度旁路，并只报一行。
     fileprivate static var brokenFlag = false
 
-    private static var renderTargetCoefficients: UnsafeMutablePointer<Double> = {
-        let count = AudioDSPBands.count * 5
-        let pointer = UnsafeMutablePointer<Double>.allocate(capacity: count)
-        pointer.initialize(repeating: 0, count: count)
-        for band in 0..<AudioDSPBands.count {
-            pointer[band * 5] = 1
-        }
-        return pointer
-    }()
-
     private static var didReportBroken = false
     private static var didLogWrapped = false
     private static var didLogFormat = false
     private static var didLogActive = false
     private static var ticker: DispatchSourceTimer?
+
+    // MARK: - 内存
+
+    /// 一组恒等系数（每项 b0 = 1，其余 0）。全 0 会让输出恒为 0。
+    private static func makeIdentity(_ count: Int) -> UnsafeMutablePointer<Double> {
+        let pointer = UnsafeMutablePointer<Double>.allocate(capacity: max(count, 1) * coefficientStride)
+        pointer.initialize(repeating: 0, count: max(count, 1) * coefficientStride)
+        for index in 0..<count {
+            pointer[index * coefficientStride] = 1
+        }
+        return pointer
+    }
+
+    private static func makeZeros(_ count: Int) -> UnsafeMutablePointer<Double> {
+        let capacity = max(count, 1)
+        let pointer = UnsafeMutablePointer<Double>.allocate(capacity: capacity)
+        pointer.initialize(repeating: 0, count: capacity)
+        return pointer
+    }
 
     // MARK: - 状态
 
@@ -134,11 +159,16 @@ enum AudioDSP {
 
     /// 把 UserDefaults 里的参数读进来重算系数（主线程）。滑杆每动一下就调。
     ///
-    /// 这里**不清滤波状态**（除非开关状态变了）：状态清零会砍掉正在衰减的尾巴，拖动滑杆时
-    /// 每个事件一次、听起来就是连续的咔哒。系数本身由 render 侧逐块平滑过去（见 `process`）。
+    /// 这里**不清滤波状态**（除非开关状态或交叉馈送档位变了）：状态清零会砍掉正在衰减的
+    /// 尾巴，拖动滑杆时每个事件一次、听起来就是连续的咔哒。系数本身由 render 侧逐块
+    /// 平滑过去（见 `process`）。
     static func reloadParameters() {
         let bands = UserDefaults.dspBandGainsDb
         let preampDb = UserDefaults.dspPreampDb
+        let lowShelf = UserDefaults.dspLowShelfDb
+        let highShelf = UserDefaults.dspHighShelfDb
+        let compander = UserDefaults.dspCompanderAmount
+        let crossfeed = UserDefaults.dspCrossfeedLevel
         let newEnabled = UserDefaults.dspEnabled
 
         os_unfair_lock_lock(lock)
@@ -146,9 +176,18 @@ enum AudioDSP {
             enabled = newEnabled
             resetCounter &+= 1
         }
+        if crossfeed != crossfeedLevel {
+            // 档位一换，环形缓冲里装的是"旧延迟"的样本，直接清掉比听一段错位的过渡好。
+            crossfeedLevel = crossfeed
+            resetCounter &+= 1
+        }
         preampLinear = pow(10, preampDb / 20)
+        bandGainsDb = bands
+        lowShelfGainDb = lowShelf
+        highShelfGainDb = highShelf
+        companderAmount = compander
         if sampleRate > 0 {
-            recomputeCoefficientsLocked(bands: bands, sampleRate: sampleRate)
+            recomputeCoefficientsLocked()
         }
         os_unfair_lock_unlock(lock)
     }
@@ -168,7 +207,7 @@ enum AudioDSP {
         if matchesWrapped {
             sourceFormat = format
             sampleRate = format.mSampleRate
-            recomputeCoefficientsLocked(bands: UserDefaults.dspBandGainsDb, sampleRate: sampleRate)
+            recomputeCoefficientsLocked()
             resetCounter &+= 1
             if !didLogFormat {
                 didLogFormat = true
@@ -189,7 +228,7 @@ enum AudioDSP {
         wrappedUnit = unit
         if let format = sourceFormat, format.mSampleRate > 0 {
             sampleRate = format.mSampleRate
-            recomputeCoefficientsLocked(bands: UserDefaults.dspBandGainsDb, sampleRate: sampleRate)
+            recomputeCoefficientsLocked()
             resetCounter &+= 1
         }
         if !didLogWrapped {
@@ -201,9 +240,12 @@ enum AudioDSP {
         if let line { writeDebugLog(line) }
     }
 
-    private static func recomputeCoefficientsLocked(bands: [Double], sampleRate: Double) {
+    /// 重算 10 段 peaking、两个架式、压缩器参数与交叉馈送设置（持锁调用）。
+    private static func recomputeCoefficientsLocked() {
+        guard sampleRate > 0 else { return }
+
         for band in 0..<bandCount {
-            let raw = band < bands.count ? bands[band] : 0
+            let raw = band < bandGainsDb.count ? bandGainsDb[band] : 0
             let gain = min(max(raw, AudioDSPBands.minGainDb), AudioDSPBands.maxGainDb)
             let c = BiquadCoefficients.peaking(
                 frequency: AudioDSPBands.frequencies[band],
@@ -218,6 +260,34 @@ enum AudioDSP {
             coefficients[base + 3] = c.a1
             coefficients[base + 4] = c.a2
         }
+
+        let shelfGains = [lowShelfGainDb, highShelfGainDb]
+        for shelf in 0..<shelfCount {
+            let raw = shelf < shelfGains.count ? shelfGains[shelf] : 0
+            let gain = min(max(raw, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb)
+            let c = shelf == 0
+                ? BiquadCoefficients.lowShelf(
+                    frequency: AudioDSPShelves.lowFrequency,
+                    gainDb: gain,
+                    slope: AudioDSPShelves.slope,
+                    sampleRate: sampleRate
+                )
+                : BiquadCoefficients.highShelf(
+                    frequency: AudioDSPShelves.highFrequency,
+                    gainDb: gain,
+                    slope: AudioDSPShelves.slope,
+                    sampleRate: sampleRate
+                )
+            let base = shelf * coefficientStride
+            shelfCoefficients[base] = c.b0
+            shelfCoefficients[base + 1] = c.b1
+            shelfCoefficients[base + 2] = c.b2
+            shelfCoefficients[base + 3] = c.a1
+            shelfCoefficients[base + 4] = c.a2
+        }
+
+        companderParameters = AudioDSPCompander.parameters(amount: companderAmount, sampleRate: sampleRate)
+        crossfeedSettings = AudioDSPCrossfeed.settings(level: crossfeedLevel, sampleRate: sampleRate)
     }
 
     private static func startTickerIfNeeded() {
@@ -234,7 +304,8 @@ enum AudioDSP {
         if !didLogActive, isEnabled, isInsertActive {
             didLogActive = true
             writeDebugLog(
-                "[\(logTag)] chain active — \(bandCount) bands and the preamp run on every block"
+                "[\(logTag)] chain active — preamp, \(shelfCount) shelves, \(bandCount) bands,"
+                    + " compander and crossfeed run on every block"
             )
         }
         guard brokenFlag, !didReportBroken else { return }
@@ -255,22 +326,17 @@ enum AudioDSP {
 
         if os_unfair_lock_trylock(lock) {
             if enabled {
-                let count = bandCount * coefficientStride
-                for index in 0..<count {
-                    renderTargetCoefficients[index] = coefficients[index]
-                }
+                copy(coefficients, to: renderTargetCoefficients, count: bandCount)
+                copy(shelfCoefficients, to: renderShelfTargets, count: shelfCount)
                 renderTargetPreamp = preampLinear
+                renderCompanderParameters = companderParameters
+                renderCompanderTargetMix = companderParameters.isBypass ? 0 : 1
+                renderCrossfeedTargetFeed = crossfeedSettings.feed
+                renderCrossfeedCoefficient = crossfeedSettings.lowpassCoefficient
+                renderCrossfeedDelay = crossfeedSettings.delaySamples
             } else {
                 // 关闭时的目标 = 恒等：系数往恒等滑，信号就淡回原声。
-                for band in 0..<bandCount {
-                    let base = band * coefficientStride
-                    renderTargetCoefficients[base] = 1
-                    renderTargetCoefficients[base + 1] = 0
-                    renderTargetCoefficients[base + 2] = 0
-                    renderTargetCoefficients[base + 3] = 0
-                    renderTargetCoefficients[base + 4] = 0
-                }
-                renderTargetPreamp = 1
+                setTargetsIdentity()
             }
             renderEnabled = enabled
             if resetCounter != renderResetSeen {
@@ -319,101 +385,227 @@ enum AudioDSP {
         }
     }
 
+    private static func copy(_ source: UnsafeMutablePointer<Double>,
+                             to destination: UnsafeMutablePointer<Double>,
+                             count: Int) {
+        for index in 0..<(count * coefficientStride) {
+            destination[index] = source[index]
+        }
+    }
+
     private static func resetStates() {
-        let states = bandCount * maxChannels * 2
-        for index in 0..<states {
+        for index in 0..<(bandCount * maxChannels * 2) {
             renderStates[index] = 0
         }
+        for index in 0..<(shelfCount * maxChannels * 2) {
+            renderShelfStates[index] = 0
+        }
+        for channel in 0..<maxChannels {
+            renderCompanderEnvelopes[channel] = 0
+            renderCrossfeedStates[channel] = 0
+        }
+        for index in 0..<crossfeedRingSize {
+            renderCrossfeedDelayLineLeft[index] = 0
+            renderCrossfeedDelayLineRight[index] = 0
+        }
+        renderCrossfeedIndex = 0
     }
 
-    /// 把"当前"系数摆成恒等（b0 = 1，其余 0），前置 1.0 —— 逐位等于原声。
+    /// 把"当前"系数摆成恒等（b0 = 1，其余 0），前置 1.0、压缩器与交叉馈送退到 0 ——
+    /// 逐位等于原声。
     private static func setIdentityCoefficients() {
         for band in 0..<bandCount {
-            let base = band * coefficientStride
-            renderCoefficients[base] = 1
-            renderCoefficients[base + 1] = 0
-            renderCoefficients[base + 2] = 0
-            renderCoefficients[base + 3] = 0
-            renderCoefficients[base + 4] = 0
+            setIdentity(renderCoefficients, index: band)
+        }
+        for shelf in 0..<shelfCount {
+            setIdentity(renderShelfCoefficients, index: shelf)
         }
         renderPreamp = 1
+        renderCompanderMix = 0
+        renderCrossfeedFeed = 0
     }
 
-    /// 淡出是否已经到位（系数全恒等、前置 1.0）。
-    private static func isCurrentIdentity() -> Bool {
+    private static func setTargetsIdentity() {
         for band in 0..<bandCount {
-            let base = band * coefficientStride
-            if abs(renderCoefficients[base] - 1) > 1e-6 { return false }
-            for offset in 1..<coefficientStride where abs(renderCoefficients[base + offset]) > 1e-6 {
-                return false
-            }
+            setIdentity(renderTargetCoefficients, index: band)
+        }
+        for shelf in 0..<shelfCount {
+            setIdentity(renderShelfTargets, index: shelf)
+        }
+        renderTargetPreamp = 1
+        renderCompanderTargetMix = 0
+        renderCrossfeedTargetFeed = 0
+    }
+
+    private static func setIdentity(_ coefficients: UnsafeMutablePointer<Double>, index: Int) {
+        let base = index * coefficientStride
+        coefficients[base] = 1
+        coefficients[base + 1] = 0
+        coefficients[base + 2] = 0
+        coefficients[base + 3] = 0
+        coefficients[base + 4] = 0
+    }
+
+    private static func isIdentity(_ coefficients: UnsafeMutablePointer<Double>, index: Int) -> Bool {
+        let base = index * coefficientStride
+        if abs(coefficients[base] - 1) > 1e-6 { return false }
+        for offset in 1..<coefficientStride where abs(coefficients[base + offset]) > 1e-6 {
+            return false
+        }
+        return true
+    }
+
+    /// 淡出是否已经到位（系数全恒等、前置 1.0、压缩器与交叉馈送都到 0）。
+    private static func isCurrentIdentity() -> Bool {
+        for band in 0..<bandCount where !isIdentity(renderCoefficients, index: band) {
+            return false
+        }
+        for shelf in 0..<shelfCount where !isIdentity(renderShelfCoefficients, index: shelf) {
+            return false
         }
         return abs(renderPreamp - 1) <= 1e-6
+            && abs(renderCompanderMix) <= 1e-6
+            && abs(renderCrossfeedFeed) <= 1e-6
     }
 
-    /// 逐块把"当前系数 / 前置"往目标推一步。
+    /// 逐块把"当前系数 / 前置 / 两个混入量"往目标推一步。
     ///
     /// 这是"拖滑杆不咔哒"的关键：直接换系数等于让滤波器的冲激响应瞬间跳变，听感就是一格
     /// 一格的脆响。这里的步长很小（滑杆一档 0.5 dB），插值出来的中间系数仍在稳定范围内。
     private static func smoothTowardsTarget() {
-        let count = bandCount * coefficientStride
-        for index in 0..<count {
-            let target = renderTargetCoefficients[index]
-            let current = renderCoefficients[index]
-            let difference = target - current
-            renderCoefficients[index] = abs(difference) < 1e-7
-                ? target
-                : current + difference * coefficientSmoothing
-        }
+        smooth(renderCoefficients, towards: renderTargetCoefficients, count: bandCount)
+        smooth(renderShelfCoefficients, towards: renderShelfTargets, count: shelfCount)
+
         let preampDifference = renderTargetPreamp - renderPreamp
         renderPreamp = abs(preampDifference) < 1e-6
             ? renderTargetPreamp
             : renderPreamp + preampDifference * coefficientSmoothing
+
+        let mixDifference = renderCompanderTargetMix - renderCompanderMix
+        renderCompanderMix = abs(mixDifference) < 1e-6
+            ? renderCompanderTargetMix
+            : renderCompanderMix + mixDifference * coefficientSmoothing
+
+        let feedDifference = renderCrossfeedTargetFeed - renderCrossfeedFeed
+        renderCrossfeedFeed = abs(feedDifference) < 1e-6
+            ? renderCrossfeedTargetFeed
+            : renderCrossfeedFeed + feedDifference * coefficientSmoothing
+    }
+
+    private static func smooth(_ current: UnsafeMutablePointer<Double>,
+                               towards target: UnsafeMutablePointer<Double>,
+                               count: Int) {
+        let total = count * coefficientStride
+        for index in 0..<total {
+            let difference = target[index] - current[index]
+            current[index] = abs(difference) < 1e-7
+                ? target[index]
+                : current[index] + difference * coefficientSmoothing
+        }
     }
 
     private static func processInterleaved(buffer: AudioBuffer, frames: Int) {
         guard let raw = buffer.mData else { return }
         let channelCount = Int(buffer.mNumberChannels)
         guard channelCount >= 1 else { return }
-        let usableChannels = min(channelCount, maxChannels)
         let samples = raw.assumingMemoryBound(to: Float.self)
         let available = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
         let total = min(frames * channelCount, available)
+        let stereo = channelCount >= 2
 
-        var index = 0
-        while index < total {
-            let channel = index % channelCount
-            if channel < usableChannels {
-                let processed = processSample(Double(samples[index]), channel: channel)
-                samples[index] = Float(processed)
-            }
-            index += 1
+        var frame = 0
+        while frame * channelCount < total {
+            let base = frame * channelCount
+            let leftInput = Double(samples[base])
+            let rightInput = stereo ? Double(samples[base + 1]) : nil
+            let (left, right) = renderFrame(left: leftInput, right: rightInput)
+            samples[base] = left
+            if stereo, let right { samples[base + 1] = right }
+            frame += 1
         }
     }
 
     private static func processPlanar(buffers: UnsafeMutableAudioBufferListPointer, frames: Int) {
         let usable = min(buffers.count, maxChannels)
-        guard usable >= 1 else { return }
-        var channel = 0
-        while channel < usable {
-            defer { channel += 1 }
-            guard let raw = buffers[channel].mData else { continue }
-            let samples = raw.assumingMemoryBound(to: Float.self)
-            let available = Int(buffers[channel].mDataByteSize) / MemoryLayout<Float>.size
-            let total = min(frames, available)
-            var index = 0
-            while index < total {
-                let processed = processSample(Double(samples[index]), channel: channel)
-                samples[index] = Float(processed)
-                index += 1
-            }
+        guard usable >= 1, let leftRaw = buffers[0].mData else { return }
+
+        let left = leftRaw.assumingMemoryBound(to: Float.self)
+        let leftAvailable = Int(buffers[0].mDataByteSize) / MemoryLayout<Float>.size
+        let rightRaw: UnsafeMutableRawPointer? = usable >= 2 ? buffers[1].mData : nil
+        let right = rightRaw?.assumingMemoryBound(to: Float.self)
+        let rightAvailable = right == nil
+            ? frames
+            : Int(buffers[1].mDataByteSize) / MemoryLayout<Float>.size
+        let frameCount = min(frames, min(leftAvailable, rightAvailable))
+
+        for index in 0..<frameCount {
+            let rightInput = right.map { Double($0[index]) }
+            let (leftValue, rightValue) = renderFrame(left: Double(left[index]), right: rightInput)
+            left[index] = leftValue
+            if let right, let rightValue { right[index] = rightValue }
         }
     }
 
-    /// 一个样本走完"前置 → 十段级联 → 限幅"。非有限值会让整条链旁路（见 `markBroken`）。
+    /// 一帧：两个声道各过一遍链，然后做一次交叉馈送，最后限幅。
     @inline(__always)
-    private static func processSample(_ input: Double, channel: Int) -> Float {
-        var value = input * renderPreamp
+    private static func renderFrame(left: Double, right: Double?) -> (Float, Float?) {
+        var leftValue = processChannel(left * renderPreamp, channel: 0)
+        var rightValue = right.map { processChannel($0 * renderPreamp, channel: 1) }
+
+        if let currentRight = rightValue, renderCrossfeedFeed > 1e-4 {
+            // 读"延迟 N 拍之前的对侧样本"，再把这一拍的样本写进环形缓冲。
+            let index = renderCrossfeedIndex
+            let readIndex = (index + crossfeedRingSize - renderCrossfeedDelay) % crossfeedRingSize
+            let delayedRight = renderCrossfeedDelayLineRight[readIndex]
+            let delayedLeft = renderCrossfeedDelayLineLeft[readIndex]
+            renderCrossfeedDelayLineLeft[index] = leftValue
+            renderCrossfeedDelayLineRight[index] = currentRight
+            renderCrossfeedIndex = index + 1 == crossfeedRingSize ? 0 : index + 1
+
+            // 一阶低通：模拟头颅对高频的遮蔽；两个声道各一份状态。
+            let coefficient = renderCrossfeedCoefficient
+            renderCrossfeedStates[0] += (delayedRight - renderCrossfeedStates[0]) * coefficient
+            renderCrossfeedStates[1] += (delayedLeft - renderCrossfeedStates[1]) * coefficient
+            leftValue += renderCrossfeedFeed * renderCrossfeedStates[0]
+            rightValue = currentRight + renderCrossfeedFeed * renderCrossfeedStates[1]
+        }
+
+        guard leftValue.isFinite, rightValue?.isFinite ?? true else {
+            markBroken()
+            return (0, rightValue == nil ? nil : 0)
+        }
+        return (
+            Float(min(max(leftValue, -1), 1)),
+            rightValue.map { Float(min(max($0, -1), 1)) }
+        )
+    }
+
+    /// 一个声道走完"前置 → 低频架 → 高频架 → 十段 → 压缩器"。
+    @inline(__always)
+    private static func processChannel(_ input: Double, channel: Int) -> Double {
+        var value = input
+
+        var shelfStateIndex = channel * 2
+        for shelf in 0..<shelfCount {
+            let base = shelf * coefficientStride
+            let b0 = renderShelfCoefficients[base]
+            let b1 = renderShelfCoefficients[base + 1]
+            let b2 = renderShelfCoefficients[base + 2]
+            let a1 = renderShelfCoefficients[base + 3]
+            let a2 = renderShelfCoefficients[base + 4]
+            let z1 = renderShelfStates[shelfStateIndex]
+            let z2 = renderShelfStates[shelfStateIndex + 1]
+            let y = b0 * value + z1
+            var nextZ1 = b1 * value + (-a1) * y + z2
+            var nextZ2 = b2 * value + (-a2) * y
+            if abs(nextZ1) < 1e-15 { nextZ1 = 0 }
+            if abs(nextZ2) < 1e-15 { nextZ2 = 0 }
+            renderShelfStates[shelfStateIndex] = nextZ1
+            renderShelfStates[shelfStateIndex + 1] = nextZ2
+            value = y
+            shelfStateIndex += maxChannels * 2
+        }
+
         var stateIndex = channel * 2
         for band in 0..<bandCount {
             let base = band * coefficientStride
@@ -425,8 +617,8 @@ enum AudioDSP {
             let z1 = renderStates[stateIndex]
             let z2 = renderStates[stateIndex + 1]
             let y = b0 * value + z1
-            var nextZ1 = b1 * value - a1 * y + z2
-            var nextZ2 = b2 * value - a2 * y
+            var nextZ1 = b1 * value + (-a1) * y + z2
+            var nextZ2 = b2 * value + (-a2) * y
             if abs(nextZ1) < 1e-15 { nextZ1 = 0 }
             if abs(nextZ2) < 1e-15 { nextZ2 = 0 }
             renderStates[stateIndex] = nextZ1
@@ -434,11 +626,15 @@ enum AudioDSP {
             value = y
             stateIndex += maxChannels * 2
         }
-        guard value.isFinite else {
-            markBroken()
-            return 0
+
+        if renderCompanderMix > 1e-4 || renderCompanderTargetMix > 1e-4 {
+            var envelope = AudioDSPCompander.Envelope(magnitude: renderCompanderEnvelopes[channel])
+            let gain = envelope.gain(for: value, parameters: renderCompanderParameters)
+            renderCompanderEnvelopes[channel] = envelope.magnitude
+            let wet = value * gain
+            value += (wet - value) * renderCompanderMix
         }
-        return Float(min(max(value, -1), 1))
+        return value
     }
 
     private static func markBroken() {

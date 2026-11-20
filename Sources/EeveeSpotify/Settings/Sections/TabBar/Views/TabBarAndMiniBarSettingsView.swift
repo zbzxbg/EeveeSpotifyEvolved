@@ -6,9 +6,11 @@ import UIKit
 /// 拆页背景见 `NowPlayingSettingsView` 的文件头（设置页面有点乱了，
 /// 方案 B：把「扩展」那个 627 行的杂物袋按页面拆成四页）。
 ///
-/// 两节：
+/// 三节：
 /// · `tab_bar_glass_section` —— 藏文字 / 藏「创建」/ 改用系统玻璃；
-/// · `mini_bar_glass_section` —— 迷你条玻璃（与上面那条同高同材质）。
+/// · `mini_bar_glass_section` —— 迷你条玻璃（与上面那条同高同材质）；
+/// · `theme_section` —— 整页换色（纯黑 + 强调色）。原来在「定制」页，
+///   那一页拆掉之后归到这里：本页管的就是"界面外壳"（两条栏与整页配色）。
 ///
 /// ── 「迷你播放条那一族」五颗开关的分布（更新）
 ///
@@ -31,6 +33,11 @@ import UIKit
 struct TabBarAndMiniBarSettingsView: View {
 
     @State private var shadow = Shadow()
+
+    // 主题（AMOLED 纯黑 + 强调色）。两颗都是**启动时读一次**，
+    // 所以下面配了 `RestartSection`（改完出现「立即重启」）。
+    @State private var amoledTheme = UserDefaults.amoledTheme
+    @State private var accentRGB = UserDefaults.accentColorRGB
 
     private struct Shadow {
         var tabBarHideLabels = UserDefaults.tabBarHideLabels
@@ -139,6 +146,53 @@ struct TabBarAndMiniBarSettingsView: View {
                 )
             }
 
+            // ── 主题：整页换色（Spotify 的 #121212 → 纯黑、品牌绿 → 你选的强调色）。
+            // 机制在 `Sources/EeveeSpotifyC/ColorSwap.m`（颜色出生点换），说明见 `Theme`。
+            // footer 用既有的 `restart_is_required_description`：留下"要重启"这条真信息，
+            // 不写"功能未测试"那种过程记录（真正验过之后它只会变成假话）。
+            Section(
+                header: Text("theme_section".localized),
+                footer: Text("restart_is_required_description".localized)
+            ) {
+                Toggle(
+                    "amoled".localized,
+                    isOn: Binding<Bool>(
+                        get: { amoledTheme },
+                        set: { amoledTheme = $0 }
+                    )
+                )
+                .onChange(of: amoledTheme) { value in
+                    UserDefaults.amoledTheme = value
+                }
+
+                HStack {
+                    ColorPicker(
+                        "accent_color".localized,
+                        selection: Binding<Color>(
+                            get: { Color(Theme.color(Theme.accentOrGreen(accentRGB))) },
+                            set: { accentRGB = Theme.rgb(of: UIColor($0)) }
+                        ),
+                        supportsOpacity: false
+                    )
+
+                    // 设过强调色才显示还原键（`-1` = 不换色）。
+                    if accentRGB >= 0 {
+                        Button {
+                            accentRGB = -1
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward.circle.fill")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                .onChange(of: accentRGB) { value in
+                    UserDefaults.accentColorRGB = value
+                }
+            }
+
+            // 两颗只在启动时读 ⇒ 当前值与启动快照不一样才显示「立即重启」。
+            RestartSection(visible: amoledTheme != Theme.launchAmoled || accentRGB != Theme.launchAccent)
+
             SettingsResetSection(
                 keys: Self.ownedKeys,
                 afterReset: {
@@ -159,6 +213,11 @@ struct TabBarAndMiniBarSettingsView: View {
         .onAppear { shadow = Shadow() }
     }
 
+    /// 本页「重置本页」的作用范围。
+    ///
+    /// ⚠️ 主题那两颗（`amoledTheme` / `accentColorRGB`）刻意**不在这里**：它们从已经拆掉的
+    /// 「定制」页搬来，那一页从来没有「重置本页」，一直只有全局重置会清这两颗 ——
+    /// 放进来会改变这一页重置的作用面（用户已经设好的值不该被多清一次）。
     private static let ownedKeys = [
         "tabBarSystemGlass",
         "tabBarHideLabels",

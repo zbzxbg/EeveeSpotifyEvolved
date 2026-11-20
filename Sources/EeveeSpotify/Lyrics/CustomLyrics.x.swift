@@ -66,6 +66,8 @@ private func lyricsRepository(for source: LyricsSource) -> LyricsRepository {
         return KuGouLyricsRepository.shared
     case .appleMusicOfficialTtml:
         return appleMusicTtmlLyricsRepository
+    case .imported:
+        return ImportedLyricsRepository.shared
     case .notReplaced, .autoSelect:
         // Never actually reached — callers filter these out beforehand.
         return geniusLyricsRepository
@@ -209,6 +211,18 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     // 两条分支都会在真正发请求之前写回它（单源在 `requestSingleSource` 入口，
     // 自动优选在下面那一行）。
     lastRequestedLyricsSourceDescription = ""
+
+    // 用户自己的歌词文件：这一首匹配上就是最终答案，不再问网络源。
+    //
+    // 开关与文件管理在「设置 → 歌词 → 导入歌词」；匹配规则见 `ImportedLyricsMatcher`——
+    // 没把握就不选（把别的歌的词贴上比没有词更糟），那种情况继续走下面的正常链路。
+    if UserDefaults.importedLyricsEnabled,
+       // 用户明确选了「禁用歌词替换」时尊重它：导入的文件也是一次替换。
+       UserDefaults.lyricsSource != .notReplaced,
+       let importedDto = ImportedLyricsRepository.shared.matchingDto(for: searchQuery) {
+        lastRequestedLyricsSourceDescription = LyricsSource.imported.description
+        return makeLyrics(from: importedDto, source: .imported)
+    }
 
     // 「设置 → 实验 → 启用 Apple Music 官方 TTML 歌词」（默认关）是一个**总覆盖**开关：
     // 打开后这一首**只**问 Apple Music 官方 TTML，歌词来源（`UserDefaults.lyricsSource`）、

@@ -1,9 +1,9 @@
 import Foundation
 import SwiftUI
 
-/// 「歌词外观」页：字号 / 行距。
+/// 「歌词外观」页：字号 / 行距 / 歌词背景颜色。
 ///
-/// 从「歌词」页拆出来的两个理由：
+/// 从「歌词」页拆出来的理由：
 /// · 那一页装的是**取词源与行为**（逐词、AMLL、Genius 回退、罗马音、自动翻译……），
 ///   字号属于"长什么样"，混在里面要翻很久才找得到；
 /// · 字号倍率对**全屏歌词页、页内歌词层、锁屏歌词**三处都生效
@@ -11,18 +11,26 @@ import SwiftUI
 ///   `LyricClipRenderer` 的 `textScale`），跟「逐词歌词」开关无关 —— 留在原来那个门禁里时，
 ///   关掉逐词就再也够不到字号。
 ///
+/// 背景颜色那一节原来在「定制」页；那页拆掉之后归到这里 —— 它改的是歌词层本身的底色，
+/// 与字号同属"歌词长什么样"。只有歌词替换启用时才显示（没有歌词层就没有底色可改）。
+///
 /// 预览仍然只在 iOS 26+ 显示：它就是生产页的缩小版（`AppleMusicLyricsPage`）。
 struct EeveeLyricsAppearanceSettingsView: View {
     @StateObject var viewModel = EeveeLyricsSettingsViewModel()
+
+    @State private var lyricsColors = UserDefaults.lyricsColors
 
     var body: some View {
         List {
             lyricsTypographySection()
 
+            lyricsBackgroundColorSection()
+
             NonIPadSpacerView()
         }
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
+        .animation(.default, value: lyricsColors)
     }
 
     /// 「文字」：字号 / 行距两档倍率 + 一块实时预览。
@@ -76,6 +84,57 @@ struct EeveeLyricsAppearanceSettingsView: View {
             Text("lyrics_typography_section".localized)
         } footer: {
             Text("lyrics_typography_description".localized)
+        }
+    }
+
+    /// 「歌词背景颜色」：两个开关（显示原始颜色 / 使用静态颜色）+ 取色器或标准参数。
+    ///
+    /// 只在**歌词替换**启用时显示：这一节改的是我们自己画的歌词层，来源选「不替换」时
+    /// 根本没有这一层。
+    ///
+    /// 「标准参数」决定深色变浅、浅色变暗的程度 —— 它只在不使用静态颜色时才有意义，
+    /// 所以两者是互斥的两条分支，不是叠加。
+    @ViewBuilder private func lyricsBackgroundColorSection() -> some View {
+        if UserDefaults.lyricsSource.isReplacingLyrics {
+            Section(
+                header: Text("lyrics_background_color_section".localized),
+                footer: Text("lyrics_background_color_section_description".localized)
+            ) {
+                Toggle(
+                    "display_original_colors".localized,
+                    isOn: $lyricsColors.displayOriginalColors
+                )
+
+                Toggle(
+                    "use_static_color".localized,
+                    isOn: $lyricsColors.useStaticColor
+                )
+
+                if lyricsColors.useStaticColor {
+                    ColorPicker(
+                        "static_color".localized,
+                        selection: Binding<Color>(
+                            get: { Color(hex: lyricsColors.staticColor) },
+                            set: { lyricsColors.staticColor = $0.hexString }
+                        ),
+                        supportsOpacity: false
+                    )
+                }
+                else {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("color_normalization_factor".localized)
+
+                        Slider(
+                            value: $lyricsColors.normalizationFactor,
+                            in: 0.2...0.8,
+                            step: 0.1
+                        )
+                    }
+                }
+            }
+            .onChange(of: lyricsColors) { value in
+                UserDefaults.lyricsColors = value
+            }
         }
     }
 }

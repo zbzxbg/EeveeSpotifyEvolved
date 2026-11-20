@@ -2,7 +2,6 @@
 
 patching = "修補";
 lyrics = "歌詞";
-customization = "客製化";
 experiments = "實驗性";
 sponsorblock = "SponsorBlock";
 appIcon = "圖標";
@@ -356,8 +355,9 @@ licenses_inspiration_detail = "本倉庫重用了 spoti.pw v0.21.1（GPL-3.0，�
 aggressive_marker_removal = "更積極的刪除歌詞標註術語";
 aggressive_marker_removal_description = "刪除歌詞所有被 [] 包裹的歌詞行，目前僅對 Genius 生效。它也可能誤刪整行帶方括號的真歌詞。";
 
+lock_screen_title = "鎖定畫面";
+settings_sub_lock_screen = "動態封面與鎖定畫面歌詞";
 lock_screen_artwork_title = "鎖定畫面封面";
-settings_sub_lock_screen_artwork = "播放時顯示動態封面";
 lock_screen_artwork_enabled = "動態封面";
 lock_screen_artwork_description = "鎖定畫面會用一段循環短片取代靜態封面。Canvas 未回傳時改用 Apple Music 的官方動態封面，兩者都沒有時用封面在本機產生一段。系統最低版本需要 iOS 26。";
 lock_screen_artwork_canvas = "Canvas 加入鎖定畫面動態封面";
@@ -368,7 +368,6 @@ lock_screen_artwork_cache = "已下載的封面";
 lock_screen_artwork_clear = "清除";
 lock_screen_artwork_cleared = "已清除";
 lock_screen_lyrics_title = "鎖定畫面歌詞";
-settings_sub_lock_screen_lyrics = "在鎖定畫面顯示歌詞";
 lock_screen_lyrics_enabled = "在鎖定畫面顯示歌詞";
 lock_screen_lyrics_description = "把正在唱的那一句畫在鎖定畫面的全螢幕封面上。系統最低版本需要 iOS 26。";
 lock_screen_lyrics_cache = "已渲染的歌詞片段";
@@ -384,13 +383,15 @@ sleep_timer_cancel = "取消計時";
 sleep_timer_remaining = "剩餘時間";
 sleep_timer_pick_duration = "選一個時長";
 
-// 高級頁 · 律動與觸感
+// 高級頁 · 音訊與手勢：一頁四節（音訊效果 / 律動 / 節拍觸感 / 頭部手勢）
 
 settings_group_high = "高級";
-audio_reactive_title = "律動與觸感";
-settings_sub_audio_reactive = "封面隨低頻起伏、鼓點觸發輕觸";
+audio_title = "音訊與手勢";
+settings_sub_audio = "等化器、律動、節拍觸感與頭部手勢";
+audio_rhythm_section = "律動";
 cover_pulse = "封面律動";
 cover_pulse_description = "讓封面跟著低頻輕微放大縮小。聽歌頁選擇Apple Music式時生效。";
+music_haptics_section = "節拍觸感";
 music_haptics = "音樂觸感";
 music_haptics_description = "把大鼓與小鼓變成輕觸。強度越高越耗電，連續觸發 30 秒後會自動降檔。需要 App 在前景。";
 music_haptics_strength = "強度";
@@ -400,7 +401,6 @@ music_haptics_strength_high = "高";
 music_haptics_test = "試一下";
 // ── 高級頁 · AirPods 頭部手勢 ──
 head_gestures_title = "頭部手勢";
-settings_sub_head_gestures = "點頭切換下一首、搖頭切換上一首";
 head_gestures_enabled = "點頭 / 搖頭切歌";
 head_gestures_description = "點一下頭切換下一首，搖一下頭切換上一首。只有帶姿態感測器的 AirPods Pro / AirPods Max 能提供頭部姿態資料；辨識並不完美，出現誤切歌時把它關掉即可。";
 head_gestures_motion_available = "頭部姿態資料可用";
@@ -408,7 +408,6 @@ head_gestures_motion_unavailable = "沒有頭部姿態資料 —— 請連接 Ai
 
 // ── 高級頁 · 音訊效果（十段 EQ + 前置增益）──
 audio_effects_title = "音訊效果";
-settings_sub_audio_effects = "十段等化器與前置增益";
 audio_effects_enabled = "啟用音訊效果";
 audio_effects_description = "功能類似等化器。";
 audio_effects_preamp = "前置增益";

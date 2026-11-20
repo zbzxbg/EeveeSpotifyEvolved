@@ -7,7 +7,7 @@ body:
       value: |
         **Before you submit:**
         - Check the [Common Issues / FAQ](https://github.com/zbzxbg/EeveeSpotifyEvolved/blob/main/common_issues.md) — most premium, logout, lyrics, and download questions are answered there.
-        - Issues about server-sided features (Very High audio quality, native playlist downloading, Jam hosting, AI DJ/Playlist, Spotify Connect, homescreen/podcast ads) will be closed without further discussion.
+        - Issues about server-sided features (lossless audio, offline downloads, Jam hosting, AI DJ/Playlist, Spotify Connect, homescreen/podcast ads) will be closed without further discussion.
         - If you can, update to the latest EeveeSpotify and Spotify versions and check whether the bug still happens.
 
   - type: dropdown

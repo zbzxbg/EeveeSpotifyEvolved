@@ -2,7 +2,6 @@
 
 patching = "Patching";
 lyrics = "Lyrics";
-customization = "Customization";
 experiments = "Experiments";
 
 common_issues_tip_title = "Having Trouble?";
@@ -99,19 +98,30 @@ dark_popups = "Dark PopUps";
 livecontainer_sharing = "Share to LiveContainer";
 livecontainer_sharing_description = "Share to LiveContainer and copy the URL if the selected destination is not supported.";
 
+lyrics_source_imported = "Imported file";
+apple_self_test_section = "Apple Music token";
+apple_self_test_description = "Runs the Apple Music lookups step by step and shows where it stops: web token, storefront, search, then lyrics.";
+apple_self_test_run = "Run self-test";
+imported_lyrics_title = "Imported lyrics";
+settings_sub_imported_lyrics = "Use your own lyric files";
+imported_lyrics_enabled = "Prefer imported lyrics";
+imported_lyrics_enabled_description = "When a file matches the playing track, this song uses it instead of the online sources.";
+imported_lyrics_files = "Files";
+imported_lyrics_import = "Import lyric file";
+imported_lyrics_empty = "No files yet.";
+imported_lyrics_formats_description = "LRC, SPL, YRC, Lyricify Syllable (.lys), Lyricify Lines (.lyl) and TTML. QRC and KRC are encrypted and SRT/ASS are subtitle formats - convert those to LRC first. If the timeline sits consistently early or late, use the lyrics offset in the player menu; it is stored per song.";
+imported_lyrics_import_failed = "Import failed - the file could not be read.";
 experiments_page_warning = "Please note: the features below may be untested. If you are willing to test them for me, you are welcome to switch them on — none of them will crash the tweak.";
 
 show_instagram_destination = "Show Instagram Destination";
 show_instagram_destination_description = "Always show the Instagram share destination. %@";
 
 amll_fuzzy_search = "AMLL fuzzy search";
-amll_fuzzy_search_description = "Only applies when \"AMLL preferred\" is on or the lyrics source is AMLL. Changes AMLL's lyrics search from an exact search to a fuzzy one.";
+amll_fuzzy_search_description = "Applies whenever AMLL is queried: the lyrics source is AMLL or Auto Select, or \"AMLL preferred\" is on. Changes AMLL's lyrics search from an exact search to a fuzzy one.";
 
 pseudo_word_by_word_lyrics = "Enable pseudo word-by-word";
 pseudo_word_by_word_lyrics_description = "Estimates line-level lyrics timing and expands it into word-by-word lyrics. Character-level precision may be imperfect.";
 
-petitlyrics_line_fallback = "PetitLyrics: fall back to line level";
-petitlyrics_line_fallback_description = "If the word-by-word lyrics PetitLyrics returns are malformed, the whole song falls back to line-synced lyrics.";
 
 aggressive_marker_removal = "Remove lyrics annotations more aggressively";
 aggressive_marker_removal_description = "Removes every lyric line wrapped in [ ]. Currently only applies to Genius. It may also remove a real lyric line that happens to be fully bracketed.";
@@ -171,11 +181,9 @@ better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
 better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum.";
 better_word_by_word_lyrics_needs_ios26 = "If this option is disabled, your system is older than iOS 26 and this feature is unavailable.";
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
-inject_lyrics_card_element = "Add module 5";
-lyrics_entry_point_flag = "Lyrics entry point flag";
 lyrics_source_auto = "Auto Select";
 lyrics_source_auto_description = "Auto Select: every available provider is asked in turn, and the best lyrics for the current song are used.";
-lyrics_source_auto_unavailable = "Auto Select is only available when the now-playing style is Immersive or Apple Music. To use it, change the style on the Now Playing settings page first.";
+lyrics_source_auto_unavailable = "Auto Select is only available with the Apple Music now-playing style. To use it, change the style on the Now Playing settings page first.";
 lyrics_source_order = "Lyrics Source Order";
 lyrics_source_order_description = "These providers are asked in order, from top to bottom.";
 lyrics_source_order_reset = "Reset to Default Order";
@@ -450,9 +458,8 @@ settings_sub_lyrics = "Settings related to lyrics";
 settings_sub_now_playing = "Settings related to the now playing page";
 settings_sub_patching = "Premium patching and config overrides";
 settings_sub_sponsorblock = "Skip sponsored segments";
-settings_sub_tabs = "Tab bar and mini player settings";
+settings_sub_tabs = "Tab bar, mini player and theme";
 settings_sub_home_library = "Home, library, album, playlist & artist pages";
-settings_sub_customization = "Other interface details";
 settings_sub_app_icon = "Pick the icon shown on the home screen";
 settings_sub_experiments = "Features that are not settled yet";
 settings_sub_flags = "Inject remote feature flags";
@@ -470,12 +477,14 @@ settings_reset_page = "Reset This Page";
 settings_reset_page_footer = "Restores the options on this page to their defaults.";
 settings_reset_page_done = "Reset %d option(s) on this page.";
 
-// ── Advanced page · Pulse & haptics: audio-reactive row + its sub-page ──
+// ── Advanced page · Audio & gestures: one page, four sections ──
 // Cover pulse reads the bass; beat haptics turns kick/snare hits into taps.
-audio_reactive_title = "Pulse & haptics";
-settings_sub_audio_reactive = "Cover pulse and beat haptics";
+audio_title = "Audio & gestures";
+settings_sub_audio = "Equalizer, pulse, beat haptics and head gestures";
+audio_rhythm_section = "Rhythm";
 cover_pulse = "Cover pulse";
 cover_pulse_description = "Scales the artwork slightly with the bass. Applies with the Apple Music now-playing style.";
+music_haptics_section = "Beat haptics";
 music_haptics = "Beat haptics";
 music_haptics_description = "Turns kick and snare hits into light taps. Higher strength drains the battery faster, and the Taptic Engine dulls when it fires for a long time, so it steps itself down after 30 seconds of continuous tapping. Needs the app in the foreground.";
 music_haptics_strength = "Strength";
@@ -485,7 +494,6 @@ music_haptics_strength_high = "High";
 music_haptics_test = "Try a tap";
 // ── Advanced page · AirPods head gestures ──
 head_gestures_title = "Head Gestures";
-settings_sub_head_gestures = "Nod for next track, shake for previous";
 head_gestures_enabled = "Nod / shake to change tracks";
 head_gestures_description = "Nod once for the next track, shake once for the previous one. Works with AirPods Pro and AirPods Max, whose motion sensors report head attitude; detection is not perfect, so turn it off if tracks skip by themselves.";
 head_gestures_motion_available = "Head tracking is available";
@@ -493,9 +501,8 @@ head_gestures_motion_unavailable = "No head tracking — connect AirPods Pro / M
 
 // ── Advanced page · Audio effects (10-band EQ + preamp) ──
 audio_effects_title = "Audio Effects";
-settings_sub_audio_effects = "10-band EQ and preamp";
 audio_effects_enabled = "Enable audio effects";
-audio_effects_description = "Works like an equalizer.";
+audio_effects_description = "Equalizer, tone shelves, a compressor and headphone crossfeed, all in one chain.";
 audio_effects_preamp = "Preamp";
 audio_effects_equalizer = "Equalizer";
 audio_effects_presets = "Presets";
@@ -507,6 +514,19 @@ audio_effects_preset_podcast = "Podcast";
 audio_effects_preset_custom = "Custom";
 audio_effects_status_active = "Audio output is routed through the effect chain";
 audio_effects_status_restart = "Not routed yet — restart Spotify to apply";
+audio_effects_shelves = "Tone";
+audio_effects_shelves_description = "Broad boosts for everything under 150 Hz and above 6 kHz. They stack with the 10 bands below.";
+audio_effects_low_shelf = "Bass";
+audio_effects_high_shelf = "Clarity";
+audio_effects_compander = "Compressor";
+audio_effects_compander_description = "Evens out loud peaks and quiet parts. 0% turns it off.";
+audio_effects_crossfeed = "Crossfeed";
+audio_effects_crossfeed_description = "Mixes a filtered, slightly delayed copy of each channel into the other. Use it with headphones; on speakers it narrows the image.";
+audio_effects_crossfeed_off = "Off";
+audio_effects_crossfeed_low = "Low";
+audio_effects_crossfeed_medium = "Medium";
+audio_effects_crossfeed_high = "High";
+audio_effects_presets_description = "Presets set the 10 bands and the preamp only.";
 
 
 hide_mini_player_bar = "Hide the mini player bar";
@@ -705,8 +725,8 @@ reduce_interventions_scope_yourlibaryx = "Your Library";
 // The recipe (gradient tint, not a blur) is borrowed from kumone (LGPL-3.0 / GPL-3.0);
 // see Sources/EeveeSpotify/Appearance/NowPlayingBackdrop.swift.
 now_playing_section = "Now-playing page";
-// ★ 2026-10-25: the two mutually exclusive layout switches became one three-way picker
-// (Spotify / Immersive / Apple Music style). Option names are short on purpose - the
+// The two mutually exclusive layout switches became one picker
+// (Spotify / Apple Music style). Option names are short on purpose - the
 // Picker shows the selected value at the row's trailing edge; long explanations go in
 // now_playing_style_description. The underlying keys are unchanged (see NowPlayingStyle).
 now_playing_style = "Now-playing style";
@@ -733,8 +753,9 @@ apple_music_token_invalid = "Apple Music sign-in token is invalid or expired";
 apple_music_token_popup = "Apple Music official lyrics need your own sign-in token. Go to Settings > Experiments > \"Apple Music official TTML lyrics\" and paste a media-user-token (browser: music.apple.com > Developer Tools > Application > Cookies).";
 artist_latest_release_tracks = "%d songs";
 
+lock_screen_title = "Lock Screen";
+settings_sub_lock_screen = "Animated artwork and lock screen lyrics";
 lock_screen_artwork_title = "Lock screen artwork";
-settings_sub_lock_screen_artwork = "Animated artwork while a song plays";
 lock_screen_artwork_enabled = "Animated artwork";
 lock_screen_artwork_description = "Plays a looping clip in place of the still cover on the lock screen. Apple Music's editorial video is used when Canvas comes back empty; when both come back empty, a loop is rendered from the cover. Needs iOS 26 or later.";
 lock_screen_artwork_canvas = "Add Canvas to the lock screen artwork";
@@ -745,7 +766,6 @@ lock_screen_artwork_cache = "Downloaded artwork";
 lock_screen_artwork_clear = "Clear";
 lock_screen_artwork_cleared = "Cleared";
 lock_screen_lyrics_title = "Lock screen lyrics";
-settings_sub_lock_screen_lyrics = "Lyrics on the lock screen";
 lock_screen_lyrics_enabled = "Show lyrics on the lock screen";
 lock_screen_lyrics_description = "Draws the line being sung on the lock screen's full-screen artwork. Needs iOS 26 or later.";
 lock_screen_lyrics_cache = "Rendered lyric clips";

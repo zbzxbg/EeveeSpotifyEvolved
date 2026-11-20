@@ -302,7 +302,7 @@ func eeveeEnvFlag(_ name: String) -> Bool {
 // `SPTPlayerTrack` 存在。运行时探针在本机不可观测也不可控，别再走那条路。
 
 struct EeveeSpotify: Tweak {
-    static let version = "2.2.0"
+    static let version = "2.3.0"
     static let repoSlug = GeneratedConfig.repoSlug
     
     static var hookTarget: VersionHookTarget {
@@ -629,31 +629,15 @@ struct EeveeSpotify: Tweak {
         writeDebugLog("[INIT] Hook target: \(EeveeSpotify.hookTarget)")
         writeDebugLog("[INIT] Patch type: \(UserDefaults.patchType)")
         writeDebugLog("[INIT] Lyrics source: \(UserDefaults.lyricsSource)")
-        // 一个真开关（补卡片元素）+ 一个写死启用的修复（隐藏官方歌词）
-        // + 禁用歌词功能 + Genius 回退开关，一次打出来：
-        // · 补卡片元素 ——起是读 UserDefaults 的真开关（默认 ON），
-        // 这里记的是**实际生效值**；
-        // · 隐藏官方歌词 ——起写死在 `NgzhwmSettingsViewModel` 里；
-        // · 禁用歌词功能 —— 仍然是用户开关，值是它自己。
-        //
-        // ⚠️`synthetic line timing` 一栏已删 —— 「补全歌词时间轴」那个开关
-        // 连同它给真实歌词源合成时间轴的代码一起删了（只剩占位文案写死补，见
-        // `makeUnavailableLyrics`）。所以这一栏不再有"两档"，A/B 分组看的是别的字段。
-        //
-        // 这行同时是排障时的"这一轮跑的是哪一档"标记（A/B 就靠它分组）。
-        //
-        // ⚠️ 「补卡片元素」必须打出来：排查"预热卡时有时无"时，
-        // 间接的（没注入 ≠ 开关关着 —— 也可能是服务端本来就带那个元素，或客户端走了
-        // 缓存、我们连响应都没看到）。没有这一行，状态只能靠猜。
-        //
-        // ⚠️ 「Genius 回退」同样必须打出来 —— 它是**跨场次在变**的那个状态：
-        // 一次
-        // Genius 回退都没有 —— 当时只能靠"有没有 `falling back to Genius` 这一行"反推，
-        // 没法区分"开关关着"和"回退跑了但 0 命中"。补上这一行之后每份日志自证状态。
-        //
-        // ⚠️ 打的是**用户设置里的原值**（不是"本次是否真的会回退"）：来源选 Genius 或
-        // 多级回退时那个开关在设置页不显示、也不参与决策，这里照打原值，读日志时
-        // 与同一行的 `Lyrics source:` 合起来看。
+        // 一次打出这几个状态：补卡片元素 / 隐藏官方歌词 / 禁用歌词功能 / Genius 回退 /
+        // AMLL 优先 / Apple Music 官方 TTML。
+        // · 前两项已写死在 `NgzhwmSettingsViewModel`（永远是 ON），保留这两栏是为了让日志
+        //   与旧版本对得上；
+        // · 禁用歌词功能仍是用户开关，值是它自己；
+        // · Genius 回退打的是**用户设置里的原值**（不是"本次是否真的会回退"）：来源选 Genius
+        //   或走多级回退时那个开关在设置页不显示、也不参与决策，这里照打原值，
+        //   读日志时与同一行的 `Lyrics source:` 合起来看；
+        // · 实验开关必须自证 —— 它会**整体覆盖**上面这些设置（连"来源"都不看）。
         writeDebugLog(
             "[INIT] card element inject: "
                 + "\(NgzhwmSettingsViewModel.isLyricsCardElementInjectionEnabled ? "ON" : "OFF")"

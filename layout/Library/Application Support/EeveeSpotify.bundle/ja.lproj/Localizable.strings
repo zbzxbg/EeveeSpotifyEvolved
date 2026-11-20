@@ -2,7 +2,6 @@
 
 patching = "パッチ";
 lyrics = "歌詞";
-customization = "カスタマイズ";
 experiments = "実験設定";
 
 common_issues_tip_title = "問題が発生していますか？";

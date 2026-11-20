@@ -15,6 +15,89 @@ final class AppleMusicOfficialTtmlLyricsRepository: LyricsRepository {
 
     static let shared = AppleMusicOfficialTtmlLyricsRepository()
 
+    // MARK: - 调试页自检
+
+    /// 按取词链路顺序把四步各跑一遍：网页令牌 → storefront → 搜索 → 取词。
+    ///
+    /// 只在调试页按钮上调用。每一步无论成败都返回一行（同时写 `[AMTTML] self-test` 日志），
+    /// 用来把"填了令牌却拿不到词"缩小到具体一步：令牌坏了停在 1/2，storefront 不认停在 2，
+    /// 搜索不出停在 3，取词那一步才轮到 4。
+    static func runTokenSelfTest() -> [String] {
+        var lines: [String] = []
+        func note(_ line: String) {
+            lines.append(line)
+            writeDebugLog("[AMTTML] self-test \(line)")
+        }
+
+        let repository = shared
+        let mediaUserToken = UserDefaults.appleMusicMediaUserToken
+        guard !mediaUserToken.isEmpty else {
+            note("stop — no media-user-token")
+            return lines
+        }
+
+        do {
+            let token = try webDeveloperToken()
+            note("1/4 web token ok — \(token.count) chars")
+        } catch {
+            note("1/4 web token failed — \(error)")
+            return lines
+        }
+
+        let context: AccountContext
+        do {
+            context = try repository.accountContext(mediaUserToken: mediaUserToken)
+            note("2/4 storefront=\(context.storefront) language=\(context.language)")
+        } catch {
+            note("2/4 storefront failed — \(error)")
+            return lines
+        }
+
+        let headers: [String: String]
+        do {
+            headers = try repository.apiHeaders(mediaUserToken: mediaUserToken)
+        } catch {
+            note("2/4 headers failed — \(error)")
+            return lines
+        }
+
+        let songId: String
+        do {
+            guard let url = URL(
+                string: "\(apiBase)/v1/catalog/\(context.storefront)/search?term=hello&types=songs&limit=1"
+            ) else {
+                note("3/4 search skipped — bad URL")
+                return lines
+            }
+            let response = try repository.perform(url, headers: headers, label: "self-test search")
+            let json = try repository.jsonObject(response, label: "self-test search")
+            let songs = (json["results"] as? [String: Any])?["songs"] as? [String: Any]
+            let items = songs?["data"] as? [[String: Any]] ?? []
+            guard let first = items.first, let id = first["id"] as? String else {
+                note("3/4 search returned no song")
+                return lines
+            }
+            songId = id
+            note("3/4 search ok — \(items.count) song(s), first=\(id)")
+        } catch {
+            note("3/4 search failed — \(error)")
+            return lines
+        }
+
+        for kind in ["lyrics", "syllable-lyrics"] {
+            guard let url = URL(
+                string: "\(apiBase)/v1/catalog/\(context.storefront)/songs/\(songId)/\(kind)"
+            ) else { continue }
+            do {
+                let response = try repository.perform(url, headers: headers, label: "self-test \(kind)")
+                note("4/4 \(kind) ok — HTTP \(response.statusCode), \(response.data.count) bytes")
+            } catch {
+                note("4/4 \(kind) failed — \(error)")
+            }
+        }
+        return lines
+    }
+
     // MARK: - 端点与常量
 
     private static let webBase = "https://music.apple.com"

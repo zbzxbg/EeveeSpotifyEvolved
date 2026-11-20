@@ -33,7 +33,7 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// （提交 `50528cd`，8 个文件），用户随后要求加回来。键名沿用旧名
     /// （`ngzhwm_amllPreferred`），设备上可能还留着上次的值。
     static let amllPreferredKey = "ngzhwm_amllPreferred"
-    // 已删除一个 key：`ngzhwm_syntheticLineTiming` —— 「补全歌词时间轴」。
+    // 已移除一个 key：`ngzhwm_syntheticLineTiming` —— 「补全歌词时间轴」。
     //
     // 为什么删：真机 A/B（用户关掉它跑了一整场）结论是"差不多、或略好一点"，而**给本来就
     // 没有时间轴的源（Genius / Petit 纯文本）伪造一层时间轴本身就不合语义** ——
@@ -42,18 +42,10 @@ class NgzhwmSettingsViewModel: ObservableObject {
     // · 只有**占位文案**仍然补（`makeUnavailableLyrics` 里写死）——
     // 那是"未找到歌词"这一行能不能显示出来的前提，不是给某个源伪造时间轴。
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
-    // 「补充模块5」（往元素列表里补 `5` = 保留官方布局时那个歌词预览模块）—— 见 `isLyricsCardElementInjectionEnabled`。
-    //
-    // ⚠️**恢复为真开关**（曾一度写死启用）：的真机日志
-    // 显示这个元素在部分曲目上渲染成了「即将发布 / 已预收藏」卡，需要 A/B 才能定性。
-    // 沿用旧 key 名，设备上残留的值会被重新读起来。
-    static let injectLyricsCardElementKey = "ngzhwm_injectLyricsCardElement"
-    /// 「把服务端那条 `lyrics_entry_point_enabled` 钉成 true」—— 见 `isLyricsEntryPointFlagForced`。
-    ///
-    /// ⚠️由**写死**改为真开关：真机 A/B 已经排除了「补卡片元素」那一处
-    /// （关掉它之后那张过期的「即将发布」卡**依然出现**），于是剩下的、唯一还能影响
-    /// 正在播放页卡片渲染的我们自家改动就是这条 flag。留开关就是为了判定它。
-    static let lyricsEntryPointFlagKey = "ngzhwm_lyricsEntryPointFlag"
+    // 已删除两个 key：`ngzhwm_injectLyricsCardElement` / `ngzhwm_lyricsEntryPointFlag` ——
+    // 它们对应的两段行为现在**写死为开**（补卡片元素见文件底部那个 getter；歌词入口那条
+    // 替换见 `DynamicPremium+ModifyingFunctions.lyricsEntryPointFlagName` 的说明），不再是开关。
+    // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     // 已移除一个 key：`ngzhwm_hideOfficialLyrics` ——
     // 它对应的行为已在下面**写死启用**，不再读 UserDefaults。
     // 旧设备上残留的键不再被读、也不会被清（留着无害）。
@@ -267,31 +259,6 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 补上之后，缺这一项的响应会被写入这一项（byte 级，只在能完整解析时动手，
     /// 任何异常都原样放行）。见 `ScrollsitaLyricsElementInjector`。
     ///
-    /// ⚠️**恢复为真开关**（此前一度写死 `true`）。默认 **ON** ——
-    /// 保持"404 曲目也有歌词卡片"的既有行为不变。
-    ///
-    /// 在 404 曲目上我们补的这一个元素
-    /// 是那份响应里**唯一**多出来的东西，而这些曲目上会间歇出现一张
-    /// 「即将发布 / 已预收藏」卡（日期早已过期，甚至有 2021 年的）。
-    /// 关掉它即可判定：那张卡到底是这个元素渲出来的，还是另一条路来的。
-    static var isLyricsCardElementInjectionEnabled: Bool {
-        bool(forKey: injectLyricsCardElementKey, defaultValue: true)
-    }
-
-    /// 是否把服务端下发的 `lyrics_entry_point_enabled`（scope `ios-feature-lyrics`）钉成 true。
-    ///
-    /// 默认 **ON** —— 保持"9.1.86 上歌词卡片能出现"的既有行为不变。
-    ///
-    /// 为什么要留开关：排查那张**日期早已过期**的「即将发布 / 已预收藏」卡。
-    /// 三条路已经排掉了两条：
-    /// · **元素列表** —— 假卡出现在原生只有 `[2,3,4]`、连 `12`（正版预热卡）都没有的曲目上；
-    /// · **补卡片元素**（`isLyricsCardElementInjectionEnabled`）—— 真机关掉它，假卡**照样出现**；
-    /// 连 metadata / entity 类接口都不存在，那份数据 100% 在客户端本地。
-    ///
-    /// ⇒ 我们唯一还可能"让客户端多渲染一张卡"的就是这条 flag。关掉它即可判定：
-    /// 假卡消失 = 是它；假卡还在 = 与我们无关，那是 Spotify 自己拿着过期的专辑
-    /// prerelease 记录渲出来的。
-    static var isLyricsEntryPointFlagForced: Bool {
-        bool(forKey: lyricsEntryPointFlagKey, defaultValue: true)
-    }
+    /// **写死为 true**："404 曲目也有歌词卡片"是既有观感，关掉只会少一张卡。
+    static var isLyricsCardElementInjectionEnabled: Bool { true }
 }

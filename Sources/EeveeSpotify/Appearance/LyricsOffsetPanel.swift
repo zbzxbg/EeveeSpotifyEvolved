@@ -49,7 +49,7 @@ struct LyricsOffsetPanel: View {
                                 get: { Double(offsetMs) },
                                 set: { apply(Int($0.rounded())) }
                             ),
-                            in: -1000...1000,
+                            in: -Double(LyricsTimingOffset.maxOffsetMs)...Double(LyricsTimingOffset.maxOffsetMs),
                             step: 25
                         )
                     }
@@ -101,7 +101,7 @@ struct LyricsOffsetPanel: View {
 
     /// 写盘 + 立刻重放。`trackTitle` 传"歌名 — 歌手"，这样设置页那张"已保存"列表里认得出是谁。
     private func apply(_ value: Int) {
-        let clamped = max(-1000, min(1000, value))
+        let clamped = max(-LyricsTimingOffset.maxOffsetMs, min(LyricsTimingOffset.maxOffsetMs, value))
         guard clamped != offsetMs else { return }
         offsetMs = clamped
         LyricsTimingOffset.setOffset(clamped, forTrackId: trackId, source: source, trackTitle: song)

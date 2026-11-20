@@ -4,7 +4,7 @@ import Foundation
 //
 // 数据来源：`https://api.amll.dev/v1/lyrics/get?spotifyId=<trackID>`，**精确匹配优先** —— Spotify Track ID 是唯一入口，拿不到就抛 `.noSuchSong` 交给既有的 `geniusFallback`，猜错比没有更糟。
 //
-// 「实验 → AMLL 模糊搜索」（默认**关**）：打开后精确那步失败时**再按歌名搜一次**（`/v1/lyrics/search?q=<歌名>` → 候选里挑一条 → `/v1/lyrics/get?id=<候选 id>`）。官方搜索很宽松（`q=あのね` 会把"風色Letter"也返回），所以候选要**自己打分**：登记过本曲 spotifyId 最强；其次歌名归一化后完全一致；"部分重合 + 歌手也对得上"才过闸。只靠歌手对得上、或只靠歌名部分重合**一律不要** —— 宁可没有词，也不能拿别的歌冒充。关掉时这一整条路不存在。
+// 「歌词 → AMLL 模糊搜索」（默认**关**）：打开后精确那步失败时**再按歌名搜一次**（`/v1/lyrics/search?q=<歌名>` → 候选里挑一条 → `/v1/lyrics/get?id=<候选 id>`）。官方搜索很宽松（`q=あのね` 会把"風色Letter"也返回），所以候选要**自己打分**：登记过本曲 spotifyId 最强；其次歌名归一化后完全一致；"部分重合 + 歌手也对得上"才过闸。只靠歌手对得上、或只靠歌名部分重合**一律不要** —— 宁可没有词，也不能拿别的歌冒充。关掉时这一整条路不存在。
 //
 // 为什么用官方 API 而不是社区镜像：AMLL 的镜像站（bikonoo / stevexmh / dimeta / GDBA）都按**网易云 / QQ 音乐 ID** 建索引，而本项目播放上下文里只有 Spotify Track ID，没有可用的 URL 模板。
 //
@@ -89,7 +89,7 @@ class AmllTtmlLyricsRepository: LyricsRepository {
             lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey)
             return dto
         } catch let exactError {
-            // ② **模糊**（「实验 → AMLL 模糊搜索」，默认关）：精确查不到时按歌名再搜一次。
+            // ② **模糊**（「歌词 → AMLL 模糊搜索」，默认关）：精确查不到时按歌名再搜一次。
             //
             // ⚠️ 判据放在**仓库层**而不是调用方：这个仓库只在两种情况被叫到 ——
             // 「AMLL 优先」那一跳，或者用户把来源直接选成 AMLL ⇒ 设置页那句
@@ -318,7 +318,7 @@ class AmllTtmlLyricsRepository: LyricsRepository {
         return .success(item)
     }
 
-    // MARK: - 模糊搜索（「实验 → AMLL 模糊搜索」）
+    // MARK: - 模糊搜索（「歌词 → AMLL 模糊搜索」）
     //
     // `/v1/lyrics/search?q=<歌名>` 的一条候选。
     //

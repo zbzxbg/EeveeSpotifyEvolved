@@ -100,6 +100,9 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "crossfade_enabled", scope: "core-playback-setup", modification: .forceBool(true)),
 
     EeveePropertyReplacement(name: "use_playback_settings_crossfade", scope: "ios-feature-settings", modification: .forceBool(false)),
+    // 9.2 的内核还会从 playback-settings 这一档读同一个开关：只改 ios-feature-settings
+    // 时"行在、时长也能拖"，但歌与歌之间不淡。
+    EeveePropertyReplacement(name: "use_playback_settings_crossfade", scope: "playback-settings", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "use_playback_settings_gapless", scope: "ios-feature-settings", modification: .forceBool(false)),
 
     // capping
@@ -534,6 +537,10 @@ private let propertyReplacements = [
 ]
 
 /// 歌词入口 flag 的名字（同上）。
+///
+/// ⚠️ 这条替换**永远不跳过**，也没有"关掉它"的开关：它用的是 `.forceBool(true)`
+/// （命中就钉住、没下发就**补一条**）。服务端那份的取值是 false，只要某份 customize
+/// payload 没带这条 flag、而我们又不去补，歌词入口就会整个消失。
 private let lyricsEntryPointFlagName = "lyrics_entry_point_enabled"
 
 /// 「封面下单行歌词」那条 flag 的名字（同上）。
@@ -542,16 +549,6 @@ private let singalongLineFlagName = "lyrics_under_cover_art_enabled"
 /// 新「歌词内容层」的两条 flag（同上；见 `propertyReplacements` 末尾）。
 private let lyricsMigrationFlagName = "lyrics_element_migration_enabled"
 private let lyricsRefactorFlagName = "is_lyrics_cover_art_refactor_enabled"
-
-/// 「歌词入口 flag 已按开关跳过」只打一次 —— `modifyAssignedValues` 每次 customize
-/// 响应都会跑，重复打只会刷屏。
-private var entryPointFlagSkippedReported = false
-
-private func reportEntryPointFlagSkippedOnce() {
-    guard !entryPointFlagSkippedReported else { return }
-    entryPointFlagSkippedReported = true
-    writeDebugLog("[Flags] lyrics_entry_point_enabled — SKIPPED (switch off, A/B)")
-}
 
 /// 「封面下单行歌词」那条被跳过时也打一行（同上，只打一次）。
 private var singalongFlagSkippedReported = false
@@ -665,13 +662,10 @@ private func reportLyricsReplacementOutcome(_ values: [AssignedValue]) {
         let key = "\(scope ?? "*").\(name)"
         guard reportedLyricsReplacements.insert(key).inserted else { continue }
 
-        // 关掉开关时 `hits` 照样是 1（服务端确实下发了这条），但**我们没改**。
-        // 不标出来，日志就会读成"改了"，判读 A/B 时会直接得出相反结论。
-        // 读 `DeclutterChrome.hideSingalongLine` 而不是裸键 —— 它把
-        // 「修改Spotify听歌页布局」总开关也算了进去。
-        let skipped = (name == lyricsEntryPointFlagName
-                        && !NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced)
-            || (name == singalongLineFlagName && !DeclutterChrome.hideSingalongLine)
+        // 「封面下单行歌词」被跳过时（用户把那个开关关掉）照样命中，但**我们没改** ——
+        // 不标出来，日志就会读成"改了"。读 `DeclutterChrome.hideSingalongLine` 而不是裸键：
+        // 它把「修改Spotify听歌页布局」总开关也算了进去。
+        let skipped = (name == singalongLineFlagName && !DeclutterChrome.hideSingalongLine)
             // 新内容层的两条也跟「隐藏封面下单行歌词」走。
             || ((name == lyricsMigrationFlagName || name == lyricsRefactorFlagName)
                 && !DeclutterChrome.hideSingalongLine)
@@ -756,26 +750,12 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
     // 「实验」页里靠 flag 落地的那些（目前只有 Instagram 分享位）插在
     // 内置与用户覆盖**之间**：既是"我们自己的默认"，又允许Flag 覆盖压过它。
     // 关着实验时 `ExperimentFlagReplacements.active` 是空数组 ⇒ 这一段等于不存在。
-    //
-    // ⚠️ 下面那条「歌词入口」flag 的跳过开关**只作用于内置项**：用户自己在设置页
-    // 写了一条同名覆盖，那是他的明确意图，不该被我们的 A/B 开关吞掉。
     let builtInReplacementCount = propertyReplacements.count
     let replacements = propertyReplacements
         + ExperimentFlagReplacements.active
         + FlagOverrideStore.activeReplacements
 
     for (index, replacement) in replacements.enumerated() {
-        // 「歌词入口」flag 是**唯一**还能影响正在播放页卡片渲染的我们自家改动
-        // —— 另外两条路（补卡片元素 / HTTP 数据）都已被真机 A/B 与九份日志排除。
-        // 关掉开关时整条替换跳过，并在启动时打一行，好让日志能区分
-        // "我们没改" 与 "改了但没命中"。
-        if index < builtInReplacementCount,
-           replacement.name == lyricsEntryPointFlagName,
-           !NgzhwmSettingsViewModel.isLyricsEntryPointFlagForced {
-            reportEntryPointFlagSkippedOnce()
-            continue
-        }
-
         // 同一条纪律给「封面下单行歌词」——用户把那个开关关掉时，
         // 这一条内置替换**整条跳过**，让 Spotify 的行为原样保留（他没有要求我们改它）。
         // 跟着总开关走（`DeclutterChrome.hideSingalongLine` 里带总开关的门）。

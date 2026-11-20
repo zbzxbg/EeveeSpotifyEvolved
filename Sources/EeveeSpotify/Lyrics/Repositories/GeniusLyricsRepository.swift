@@ -233,7 +233,7 @@ class GeniusLyricsRepository: LyricsRepository {
         let songInfo = try getSongInfo(song.id)
 
         let plainLines = songInfo.lyrics.plain.components(separatedBy: .newlines)
-        // 「更激进的删除歌词标注术语」（实验页开关，默认关）：
+        // 「更激进的删除歌词标注术语」（歌词页 Genius 一节的开关，默认关）：
         // 打开后凡是整行被 `[]` 包住的都删，不再要求括号里落在白名单上。
         // **只有这一处**传 true —— 别的源的 `[]` 是时间轴 / 转写标记。
         let mappedLines = LyricsMarkerFilter.mapLyricsLines(

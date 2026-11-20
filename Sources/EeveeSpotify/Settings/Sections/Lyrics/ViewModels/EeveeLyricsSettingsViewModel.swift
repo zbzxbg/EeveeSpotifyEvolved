@@ -84,10 +84,47 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
         }
     }
 
-    // 已**搬走**两个开关：`injectLyricsCardElement` / `lyricsEntryPointFlag`
-    // —— 它们是排查/验证型开关，属性与绑定整体挪到 `EeveeDebugSettingsViewModel`（「调试」页）。
-    // UserDefaults key 一字未改，设备上已设的值照旧生效；`[Settings] ... -> ON/OFF`
-    // 那两行日志也随绑定一起搬过去了。
+    /// 「AMLL 模糊搜索」—— 原「实验」页的一项，已搬到歌词来源一处；精确查不到时按歌名再搜一次。
+    ///
+    /// 存储仍在 `UserDefaults.experimentsOptions` 那份 JSON 里（键名与 UI 位置无关）：
+    /// 下面三个属性都改一份副本再整份写回，不新增独立的 UserDefaults 键 ——
+    /// 否则同一条设置会有两个来源，读的时候看不出哪个算数。
+    @Published var amllFuzzySearch = UserDefaults.experimentsOptions.amllFuzzySearch {
+        didSet {
+            guard UserDefaults.experimentsOptions.amllFuzzySearch != amllFuzzySearch else { return }
+            var options = UserDefaults.experimentsOptions
+            options.amllFuzzySearch = amllFuzzySearch
+            UserDefaults.experimentsOptions = options
+        }
+    }
+
+    /// 「伪逐字填充」—— 跟在「逐词歌词」主开关下面（它是逐字的一个来源策略）。
+    ///
+    /// 只对没有作者词轴的行走作用；`timingKind` 不变，间奏判定不受影响。
+    @Published var pseudoWordByWordLyrics = UserDefaults.experimentsOptions.pseudoWordByWordLyrics {
+        didSet {
+            guard UserDefaults.experimentsOptions.pseudoWordByWordLyrics != pseudoWordByWordLyrics else { return }
+            var options = UserDefaults.experimentsOptions
+            options.pseudoWordByWordLyrics = pseudoWordByWordLyrics
+            UserDefaults.experimentsOptions = options
+        }
+    }
+
+    /// 「更激进的删除歌词标注术语」—— 只对 Genius 生效，所以 UI 挂在 Genius 那一节。
+    @Published var aggressiveMarkerRemoval = UserDefaults.experimentsOptions.aggressiveMarkerRemoval {
+        didSet {
+            guard UserDefaults.experimentsOptions.aggressiveMarkerRemoval != aggressiveMarkerRemoval else { return }
+            var options = UserDefaults.experimentsOptions
+            options.aggressiveMarkerRemoval = aggressiveMarkerRemoval
+            UserDefaults.experimentsOptions = options
+        }
+    }
+
+    // 已**删除**两个开关：`injectLyricsCardElement` / `lyricsEntryPointFlag`
+    // —— 它们先从这一页挪到「调试」页，随后整体写死为开（见 `NgzhwmSettingsViewModel`
+    // 与 `DynamicPremium+ModifyingFunctions` 里对应的说明），属性、绑定与 l10n 都已摘掉。
+    // UserDefaults 里的旧键不再被读、也不会被清；`[Settings] ... -> ON/OFF` 那两行日志
+    // 随绑定一起消失。
     // 同批**删除**：`syntheticLineTiming` ——「补全歌词时间轴」验证完毕
     // （关掉后观感差不多或略好，且给纯文本源伪造时间轴不合语义），开关、key、l10n
     // 与那段合成代码一起去掉；只剩占位文案写死补时间轴。
@@ -191,9 +228,12 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
             betterWordByWordLyrics,
             wordByWordLyrics,
             amllPreferred,
+            amllFuzzySearch,
+            pseudoWordByWordLyrics,
+            aggressiveMarkerRemoval,
             // ⚠️ `hideOfficialLyrics`（已写死启用）、`syntheticLineTiming`（已整体删除）、
             // `removeMxmInterludeSymbol`（已整体删除，间奏行改为无条件丢弃），
-            // 以及搬去「调试」页的 `injectLyricsCardElement` / `lyricsEntryPointFlag`
+            // 以及 `injectLyricsCardElement` / `lyricsEntryPointFlag`（已写死启用、属性已删）
             // 都**不能**再列在这里 —— 属性本身没了，列着就是编译错误。
             disableLyricsFeature,
             hideLyricsTranslation,

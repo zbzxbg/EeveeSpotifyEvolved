@@ -158,17 +158,18 @@ class PetitLyricsRepository: LyricsRepository {
             }
 
             let wordByWordEnabled = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
-            // 这一首的词轴值不值得用：见 `wordTimingCoverage`。不可信就整首退回行级
-            // （实验开关，默认开）—— 否则逐字高亮一两秒扫完，剩下的时间被间奏判定
-            // 当成"没人唱"，每两句之间都冒出呼吸点。
+            // 这一首的词轴值不值得用：见 `wordTimingCoverage`。不可信就整首退回行级 ——
+            // 否则逐字高亮一两秒扫完，剩下的时间被间奏判定当成"没人唱"，
+            // 每两句之间都冒出呼吸点。
+            //
+            // 退回行级只是把作者给的词轴丢掉，不等于整首失去逐字：开着「伪逐字」时
+            // `LyricLinesAdapter` 只看"这一行有没有作者音节"，没有就按估算重新铺一遍。
             let coverage = Self.wordTimingCoverage(mergedLines)
             let unreliable = coverage < Self.minimumWordTimingCoverage
-            let fallback = unreliable && UserDefaults.experimentsOptions.petitLyricsLineFallback
-            let preserveWords = wordByWordEnabled && !fallback
+            let preserveWords = wordByWordEnabled && !unreliable
             if wordByWordEnabled && unreliable {
                 writeDebugLog(
-                    "[Petit] word timing covers \(Int(coverage * 100))% of a line (median) — "
-                        + (fallback ? "line-level fallback" : "kept (experiment off)")
+                    "[Petit] word timing covers \(Int(coverage * 100))% of a line (median) — line-level fallback"
                 )
             }
             // 「Petit 会返回空白行歌词 ⇒ AM 呼吸灯过后（间奏）
@@ -352,6 +353,11 @@ class PetitLyricsRepository: LyricsRepository {
     /// 而 step 的大小（80 / 15 / 5 / 2 …）与这首歌的行间距毫无关系 ⇒ 整行词轴只占
     /// 行间距的一小截。真点出来的词时间这一比值在 65% 以上；等距编出来的只有 15% 上下。
     ///
+    /// 单位换算救不了这一类：`isCentiseconds` 修的是"整行被乘/除以 10"的错位，
+    /// 而等距数据换算完仍然是等距 —— 上传者填的是「字数 × 常数」，与这首歌怎么唱无关。
+    /// 唯一的例外是词轴确实只占行首一小段（比如一句里最后几个词拖长音），
+    /// 那种情况覆盖率同样低，所以判据取的是**中位数**而不是任何一行。
+    ///
     /// 只统计「≥2 个词、行间距为正、词轴跨度为正」的行 —— 单词行（间奏/语气词）没有
     /// 跨度可量；可比行不足 3 组时返回 1（不判，宁可照用）。
     private static func wordTimingCoverage(_ lines: [PetitLyricsLine]) -> Double {
@@ -376,6 +382,7 @@ class PetitLyricsRepository: LyricsRepository {
     /// 覆盖率中位数低于这个值 ⇒ 认为这一首的词轴不可信，整首退回行级。
     ///
     /// 阈值取在两端的中间：点出来的词时间 65%–98%，等距编的 15% 上下。
+    /// 这是一道数据可信度闸门，不是可选偏好 —— 它永远生效。
     private static let minimumWordTimingCoverage = 0.5
 
     /// Petit 的 wordsSynced 词元素带 `wordstring`（词文本，含空格 token）+ starttime + endtime。

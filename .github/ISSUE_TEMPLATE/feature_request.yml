@@ -8,12 +8,14 @@ body:
         **Read this first — what you can't request:**
 
         These features are **server-sided** and will **never** work, with or without Premium emulation. Requests for them will be **closed immediately**:
-        - Very High audio quality
-        - Native playlist/track downloading, including third-party APIs and audio export (podcast episodes and local playlists over Wi-Fi are the only exceptions)
+        - Lossless / Very High audio quality
+        - Offline downloads (tracks, albums, playlists). Podcast episodes and Wi-Fi local-playlist sync are the only things that download, and both come from Spotify itself
         - Hosting a Spotify Jam (joining in-person is fine)
         - AI DJ / AI Playlist
         - Spotify Connect playback (server-side streaming; the device acts only as a remote)
         - Anything that requires actually having a Premium subscription on Spotify's servers
+
+        If you need downloads or lossless audio, look at [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) or [Taurus](https://github.com/samj-exe/taurus).
 
         Also not accepted:
         - **Free feature requests in general.** EeveeSpotify is maintained by volunteers. If you need something, feel free to implement it yourself and submit a pull request — or open an issue to discuss paid opportunities.

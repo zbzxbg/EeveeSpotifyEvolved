@@ -115,7 +115,14 @@ class ArtistBiographyViewHook: ClassHook<UIView> {
 /// 一个解析不到的名字有把**整组页头钩子**（页头 / 取色底 / 状态栏）一起拖下水的风险。
 /// 单独一组 + 装之前先问一句 `NSClassFromString`（与上游 `ArtistHides` / 本仓库
 /// `activatePlayerCardsDeclutter` 同一条纪律）⇒ 最坏情况只是少这一条事件线，
+///
+/// 同一张卡在 9.2.2 换了模块：`Creator_ECMKit` → `CreatorElements_ECMKit`，
+/// `P33_` 后面的哈希也不同。两个名字各占一组、各自在 `activateEntityPageHeader`
+/// 里先问再装 —— 一个版本只会命中其中一个，装错组也不会连累另一个。
 struct ArtistBioCardHookGroup: HookGroup {}
+
+/// 9.2.2 起 `CreatorBiographyCardLayout` 所在的模块（见 `ArtistBioCardHookGroup` 的说明）。
+struct ArtistBioCardElementHookGroup: HookGroup {}
 
 /// **Spotify 自己那条"关于艺人"的数据线**（`SPTArtistAboutDataLoader`）。
 ///
@@ -199,6 +206,19 @@ class ArtistBiographyCardLayoutHook: ClassHook<UIView> {
     typealias Group = ArtistBioCardHookGroup
     static let targetName =
         "_TtC14Creator_ECMKitP33_9A9A9C9886A2DEDE51521D11F82E7F9026CreatorBiographyCardLayout"
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        EntityPageHeaderManager.artistBiographyAppeared(target)
+    }
+}
+
+/// 同一张卡在 9.2.2 的拼写（模块 `Creator_ECMKit` → `CreatorElements_ECMKit`）。
+/// 两块二进制里各自只存在一个名字，所以两组分开装、分开判。
+class ArtistBiographyCardElementHook: ClassHook<UIView> {
+    typealias Group = ArtistBioCardElementHookGroup
+    static let targetName =
+        "_TtC22CreatorElements_ECMKitP33_FB046894CC455ACDB6DE84F3134A9A6E26CreatorBiographyCardLayout"
 
     func layoutSubviews() {
         orig.layoutSubviews()
