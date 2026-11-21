@@ -934,17 +934,33 @@ enum StreamingHistoryTimestamp {
         return date.timeIntervalSince1970 + fraction - Double(offset)
     }
 
-    /// `Z` / 空 / `±hh:mm` → 相对 UTC 的秒数；认不出返回 nil。
+    /// `Z` / 空 / `±hh:mm` / `±hhmm` → 相对 UTC 的秒数；认不出返回 nil。
     private static func zoneOffsetSeconds(_ text: Substring) -> Int? {
         if text.isEmpty { return 0 }
         if text == "Z" || text == "z" { return 0 }
 
         guard let sign = text.first, sign == "+" || sign == "-" else { return nil }
         let body = text.dropFirst()
-        let pieces = body.split(separator: ":")
 
-        guard let hoursText = pieces.first, let hours = Int(hoursText) else { return nil }
-        let minutes = pieces.count > 1 ? (Int(pieces[1]) ?? 0) : 0
+        let hours: Int
+        let minutes: Int
+        if body.contains(":") {
+            let pieces = body.split(separator: ":")
+            guard pieces.count == 2,
+                  let parsedHours = Int(pieces[0]),
+                  let parsedMinutes = Int(pieces[1]) else { return nil }
+            hours = parsedHours
+            minutes = parsedMinutes
+        } else {
+            // `+0200`（ISO 8601 基本格式）也认：前两位小时、后两位分钟。
+            guard body.count == 4,
+                  let parsedHours = Int(body.prefix(2)),
+                  let parsedMinutes = Int(body.suffix(2)) else { return nil }
+            hours = parsedHours
+            minutes = parsedMinutes
+        }
+
+        guard (0...23).contains(hours), (0...59).contains(minutes) else { return nil }
         let value = hours * 3600 + minutes * 60
         return sign == "-" ? -value : value
     }

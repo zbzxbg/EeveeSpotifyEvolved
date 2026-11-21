@@ -57,8 +57,12 @@ require(
     "an explicit offset must be subtracted"
 )
 require(
-    StreamingHistoryTimestamp.seconds(from: "2020-01-01T12:34:56+0200") == nil,
-    "an offset without a colon is not part of the export format"
+    StreamingHistoryTimestamp.seconds(from: "2020-01-01T12:34:56+0200") == 1577874896,
+    "the basic-format offset (+hhmm) must be accepted as well"
+)
+require(
+    StreamingHistoryTimestamp.seconds(from: "2020-01-01T12:34:56+2") == nil,
+    "a truncated offset must be rejected"
 )
 require(
     StreamingHistoryTimestamp.seconds(from: "not a date") == nil,
