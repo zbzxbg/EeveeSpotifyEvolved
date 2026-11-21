@@ -274,6 +274,16 @@ enum SettingsCatalog {
             destination: { _ in AnyView(EeveeExperimentsSettingsView()) }
         ),
         SettingsEntry(
+            id: "spotify_features",
+            group: .advanced,
+            titleKey: "spotify_features_title",
+            subtitleKey: "settings_sub_spotify_features",
+            iconName: "checklist",
+            color: Color(hex: "#5E5CE6"),
+            aliases: ["spotify", "feature", "recents", "sort", "功能", "最近播放", "排序", "本地文件", "ai"],
+            destination: { _ in AnyView(SpotifyFeaturesSettingsView()) }
+        ),
+        SettingsEntry(
             id: "flag_overrides",
             group: .advanced,
             titleKey: "flag_override_title",
