@@ -464,6 +464,7 @@ final class LockScreenLyricsController {
     ) {
         lock.lock()
         guard stamp == generation, trackKey == key, trackId == identifier,
+              !linesFetched,
               result.lines != lines else {
             lock.unlock()
             return
