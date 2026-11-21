@@ -277,6 +277,15 @@ enum KrcText {
     static func dto(from krc: String) -> LyricsDto? {
         let tags = LyricsCreditLine.headerTags(in: krc)
         let all = rows(from: krc)
+        // 删掉的那条页眉行写进日志：真机上"第一行还是歌名"这种反馈，
+        // 一眼能看出是没认出来（有这行日志）还是根本没走到这个过滤器（没有）。
+        if let header = all.first(where: {
+            LyricsCreditLine.isTitleArtistHeader(
+                $0.line.content, title: tags.title, artist: tags.artist
+            )
+        }) {
+            writeDebugLog("[KuGou] dropped the title/artist header line — \(header.line.content)")
+        }
         let kept = all.filter {
             !LyricsCreditLine.isCreditLine($0.line.content)
                 && !LyricsCreditLine.isTitleArtistHeader(

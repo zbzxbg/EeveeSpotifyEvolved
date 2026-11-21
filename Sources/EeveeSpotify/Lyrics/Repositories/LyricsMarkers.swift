@@ -359,8 +359,10 @@ enum LyricsCreditLine {
     /// 「**歌名 - 歌手**」这种页眉行（酷狗 / QQ 的歌词第一行常是它，形如 `[00:00.00]歌名 - 歌手`）。
     ///
     /// 它不是歌词，但既不是 `词：` 那种制作信息、也带时间戳，前面几道过滤器都接不住。
-    /// 判据用同一份文件头：破折号左边要等于 `[ti:]`（允许括号后缀），右边要含 `[ar:]`。
-    /// **两条都成立才删** —— 真歌词里的破折号不会被这一条误伤。
+    /// 判据用同一份文件头：破折号一侧要等于 `[ti:]`（允许括号后缀），另一侧要含 `[ar:]`。
+    /// **两种顺序都认** —— 酷狗的 KRC 里两种都出现过（`夏霞 - あたらよ` 与
+    /// `あたらよ - 夏霞`）；只认一种时，另一种会原样留在第一行当歌词。
+    /// 要求"两侧分别是歌名与歌手"才删：真歌词里的破折号不会被这一条误伤。
     static func isTitleArtistHeader(_ text: String, title: String?, artist: String?) -> Bool {
         guard let title, let artist else { return false }
         let ns = text as NSString
@@ -370,7 +372,9 @@ enum LyricsCreditLine {
         let left = ns.substring(to: match.range.location)
         let right = ns.substring(from: NSMaxRange(match.range))
         guard !left.isEmpty, !right.isEmpty else { return false }
-        guard LyricsMatch.titlesMatch(left, title) else { return false }
-        return LyricsMatch.sameArtist(right, artist)
+
+        let titleFirst = LyricsMatch.titlesMatch(left, title) && LyricsMatch.sameArtist(right, artist)
+        if titleFirst { return true }
+        return LyricsMatch.titlesMatch(right, title) && LyricsMatch.sameArtist(left, artist)
     }
 }

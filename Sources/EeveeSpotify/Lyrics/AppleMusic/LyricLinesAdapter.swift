@@ -358,6 +358,9 @@ extension LyricsDto {
     /// 首字母大写只在第一组上做：源给的罗马字全是小写，而整行那条路径
     /// （`romanizedContentsForDisplay`）会给行首字母大写 —— 两条路显示的是同一行，
     /// 大小写必须一致，否则看起来像少做了一步。
+    /// 首字母大写只做**一次**，落在第一个真正含字母的那一组上 —— 装饰（`「`、`(`）常常
+    /// 自成一组，只大写"第 0 组"时那种行会整行保持小写（`「 su ki da yo`），
+    /// 与整行那条路径（`romanizedContentsForDisplay`）的大小写对不上。
     private static func romanizationSyllables(
         for line: LyricsLineDto,
         index: Int,
@@ -370,9 +373,18 @@ extension LyricsDto {
         let texts = groups[index]
         var out: [LyricSyllable] = []
         out.reserveCapacity(words.count)
+        var hasCapitalized = false
         for wordIndex in 0..<words.count {
             var text = texts[wordIndex]
-            if wordIndex == 0 { text = text.capitalizingFirstLetterIfAlphabetic() }
+            if !hasCapitalized {
+                text = text.capitalizingFirstLetterIfAlphabetic()
+                // 按"这一组里有没有字母"判断，而不是"这次调用改没改动它"：
+                // 装饰组改不动，按改动判断会一路把后几组也大写（与
+                // `LyricsDto.capitalizingFirstLettersForDisplay` 同一条纪律）。
+                if text.contains(where: { $0.isLetter }) {
+                    hasCapitalized = true
+                }
+            }
             guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
             let start = TimeInterval(words[wordIndex].startMs) / 1000
             let end = words[wordIndex].endMs.map { TimeInterval($0) / 1000 } ?? start

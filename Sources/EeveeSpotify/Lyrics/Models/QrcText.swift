@@ -93,6 +93,14 @@ enum QrcText {
     static func dto(from qrc: String) -> LyricsDto? {
         let tags = LyricsCreditLine.headerTags(in: qrc)
         let all = lines(from: qrc)
+        // 与酷狗那条同样：删掉的页眉行写一行日志，真机反馈"第一行还是歌名"时能一眼定位。
+        if let header = all.first(where: {
+            LyricsCreditLine.isTitleArtistHeader(
+                $0.content, title: tags.title, artist: tags.artist
+            )
+        }) {
+            writeDebugLog("[QQ Music] dropped the title/artist header line — \(header.content)")
+        }
         let kept = all.filter {
             !LyricsCreditLine.isCreditLine($0.content)
                 && !LyricsCreditLine.isTitleArtistHeader(

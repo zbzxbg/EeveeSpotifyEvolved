@@ -308,6 +308,16 @@ jobs:
                  -o lyrics-match-tests
           ./lyrics-match-tests
 
+      # 「歌名 - 歌手」标题行（酷狗 / QQ 歌词文件的第一行）：两种顺序都要删，
+      # 真歌词里的破折号不能误伤，没有 `[ti:]` / `[ar:]` 时不动。
+      - name: Title–artist header line (Kugou / QQ)
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/LyricsMatch.swift \
+                 Sources/EeveeSpotify/Lyrics/Repositories/LyricsMarkers.swift \
+                 Tests/LyricsHeaderLine/main.swift \
+                 -o lyrics-header-line-tests
+          ./lyrics-header-line-tests
+
       # QQ 音乐加密 QRC 的 DES **变体**（`QrcDES`）。
       # 它不是标准 3DES：S 盒 S4 有一处 `10`（标准是 `1`）、密钥扩展 PC-2 的 D 半段
       # 下标整体少 1 ⇒ CommonCrypto 的 `kCCAlgorithm3DES` 解出来永远是随机字节
