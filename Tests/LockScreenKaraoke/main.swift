@@ -189,6 +189,41 @@ require(
     "an empty current line does not produce a pair table"
 )
 
+// MARK: - ⑥ 空格分隔的语言：整词一帧，不是按音节
+
+let syllableWords = [
+    LyricsWordDto(text: "Dar", startMs: 1_000),
+    LyricsWordDto(text: "ling", startMs: 1_200),
+    LyricsWordDto(text: " take", startMs: 1_400),
+    LyricsWordDto(text: " my", startMs: 1_600),
+]
+if let grouped = LockScreenKaraoke.frames(words: syllableWords, lineText: "Darling take my") {
+    requireEqual(grouped.count, 3, "syllables of one word share a frame")
+    requireEqual(grouped[0].offsetMs, 0, "the first word starts the clip")
+    requireEqual(grouped[0].revealedCharacters, 7, "the whole first word lights at its first syllable")
+    requireEqual(grouped[1].offsetMs, 400, "the next word keeps its own start")
+    requireEqual(grouped[1].revealedCharacters, 12, "the second frame reveals through the second word")
+    requireEqual(grouped[2].revealedCharacters, 15, "the last frame reveals the whole line")
+} else {
+    failures += 1
+    print("  FAIL space-delimited words should group syllables into one frame")
+}
+
+// 已经按整词切分的源不受影响。
+let wholeWords = [
+    LyricsWordDto(text: "Take", startMs: 0),
+    LyricsWordDto(text: " my", startMs: 200),
+    LyricsWordDto(text: " hand", startMs: 500),
+]
+if let wholeFrames = LockScreenKaraoke.frames(words: wholeWords, lineText: "Take my hand") {
+    requireEqual(wholeFrames.count, 3, "whole-word sources keep one frame per word")
+    requireEqual(wholeFrames[1].offsetMs, 200, "each word keeps its own start")
+    requireEqual(wholeFrames[2].revealedCharacters, 12, "the last whole word reveals the line")
+} else {
+    failures += 1
+    print("  FAIL whole-word sources should still produce frames")
+}
+
 if failures == 0 {
     print("LockScreenKaraoke: all assertions passed")
 } else {
