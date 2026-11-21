@@ -75,29 +75,30 @@ enum EntityPageCurationHide {
 
         var marked: [UIView] = []
         var labelled: [UIView] = []
+        var rows: [UIView] = []
 
         // 1) 页头那一棵先扫：那排 pill 在页头里，而页根下先排着整个列表。
         if let header = EntityPageHeaderManager.headerHost,
            header === page || header.isDescendant(of: page) || page.isDescendant(of: header) {
-            collect(in: header, limit: headerNodes, marked: &marked, labelled: &labelled)
+            collect(in: header, limit: headerNodes, marked: &marked, labelled: &labelled, rows: &rows)
         }
 
         // 2) 页头那一棵没凑齐就扫整页。
-        if marked.isEmpty, labelled.count < 2 {
-            collect(in: page, limit: maxNodes, marked: &marked, labelled: &labelled)
+        var scannedPage = false
+        if marked.isEmpty, rows.isEmpty, labelled.count < 2 {
+            collect(in: page, limit: maxNodes, marked: &marked, labelled: &labelled, rows: &rows)
+            scannedPage = true
         }
 
-        // 文字那条：四颗按钮要收**它们共同的那一行**（一颗颗藏会在原处留四个洞）。
-        var targets = marked
-        if labelled.count >= 2, let row = commonAncestor(of: labelled) {
-            targets.append(row)
+        var targets = resolvedTargets(marked: marked, labelled: labelled, rows: rows)
+
+        // 3) 页头那一趟可能只认出文字、又凑不出共同祖先（文字落在不同子树里）——
+        //    这时整页再扫一遍。类名判据不看文字，所以这一趟仍可能整排收掉。
+        if targets.isEmpty, !scannedPage, labelled.count >= 2 {
+            collect(in: page, limit: maxNodes, marked: &marked, labelled: &labelled, rows: &rows)
+            targets = resolvedTargets(marked: marked, labelled: labelled, rows: rows)
         }
-        // 同一行只认得其中两颗时（9.2.2 的「编辑 / 姓名和详情 / 排序」三颗**没有 id**，
-        // 文字也不在 `UILabel` / `accessibilityLabel` 上）⇒ 收它们**共同的那一层**：
-        // 那是 `ToolbarChipCollectionView`（414×32），一行五颗全在里面。
-        if marked.count >= 2, let row = commonAncestor(of: marked) {
-            targets.append(row)
-        }
+
         guard !targets.isEmpty else {
             noteEmptyPass(on: page)
             return
@@ -137,20 +138,43 @@ enum EntityPageCurationHide {
         didReportEmpty = false
     }
 
+    /// 把三路候选折成要藏的视图：类名命中的那一排、id 命中的、以及文字命中的共同祖先。
+    ///
+    /// 文字那条必须收**它们共同的那一行**（一颗颗藏会在原处留四个洞）；
+    /// 只认得其中两颗时也收共同那一层（9.2.2 的「编辑 / 姓名和详情 / 排序」三颗没有 id，
+    /// 文字也不在 `UILabel` / `accessibilityLabel` 上）。
+    private static func resolvedTargets(marked: [UIView], labelled: [UIView], rows: [UIView]) -> [UIView] {
+        var targets = rows
+        targets.append(contentsOf: marked)
+        if labelled.count >= 2, let row = commonAncestor(of: labelled) {
+            targets.append(row)
+        }
+        if marked.count >= 2, let row = commonAncestor(of: marked) {
+            targets.append(row)
+        }
+        return targets
+    }
+
     // MARK: - 扫描
 
-    /// 深度优先收候选。`marked` 命中就**不再进它的子树**（那一行已经到手）；
+    /// 深度优先收候选。类名 / id 命中就**不再进它的子树**（那一行已经到手）；
     /// 文字命中同理（命中的是按钮 / 标签本身，行要从它的祖先里找）。
     private static func collect(
         in root: UIView,
         limit: Int,
         marked: inout [UIView],
-        labelled: inout [UIView]
+        labelled: inout [UIView],
+        rows: inout [UIView]
     ) {
         var stack: [UIView] = [root]
         var visited = 0
         while let view = stack.popLast(), visited < limit {
             visited += 1
+            if isRowChrome(view) {
+                rows.append(view)
+                if rows.count >= 2 { return }
+                continue
+            }
             if isMarked(view) {
                 marked.append(view)
                 if marked.count >= 4 { return }
@@ -167,6 +191,19 @@ enum EntityPageCurationHide {
     }
 
     // MARK: - 判据
+
+    /// 那排 pill 的容器类名。
+    ///
+    /// 9.2.2 上中间三颗既没有 id、文字也读不到，只有这一条能整排收掉 ——
+    /// 而且它和 `Toolbar_Core` 那批搜索 / 资料库的 chip 不是同一个类。
+    private static let rowClassNameMarker = "ToolbarChipCollectionView"
+
+    /// 类名命中那排 pill 的容器。只认高度像"一排"的：同名的外层容器也可能出现。
+    private static func isRowChrome(_ view: UIView) -> Bool {
+        let className = NSStringFromClass(type(of: view))
+        guard className.contains(rowClassNameMarker) else { return false }
+        return view.bounds.height > 1 && view.bounds.height <= 200
+    }
 
     private static func isMarked(_ view: UIView) -> Bool {
         let identifier = view.accessibilityIdentifier ?? ""
