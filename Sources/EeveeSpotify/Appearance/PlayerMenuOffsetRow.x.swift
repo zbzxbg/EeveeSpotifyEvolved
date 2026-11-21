@@ -49,31 +49,56 @@ enum LyricsOffsetMenuRow {
     static func attach(to menu: UIViewController) {
         guard let view = menu.viewIfLoaded else { return }
         guard isPlayerMenu(menu) else { return }
-        guard let context = currentContext() else {
-            logOnce("noContext", "player menu: no lyrics context (no track / no source) — no offset row")
+        // 两行共用这张菜单：
+        // · 「歌词偏移」——只有能调偏移的源才有；
+        // · 「这首歌的歌词来源」——任何源都有（Genius 这种纯文本源也能被排除）。
+        let sourceContext = LyricsSongSourcePrompt.currentContext()
+        let offsetContext = currentContext()
+        guard sourceContext != nil || offsetContext != nil else {
+            logOnce("noContext", "player menu: no lyrics context (no track / no source) — no lyric rows")
             return
         }
         guard let table = tableView(in: view) else {
             logOnce(
                 "noTable",
                 "player menu: no UITableView inside \(NSStringFromClass(type(of: menu)))"
-                    + " — the offset row has nowhere to go"
+                    + " — the lyric rows have nowhere to go"
             )
             return
         }
 
         activeMenu = menu
-        activeContext = context
+        activeContext = offsetContext
         // 表还没量过宽度时退回页面宽度 —— `UITableView` 自己会把 footer 的宽度改成自己的 bounds，
         // 这里只是别让它一开始就是 1pt（那样会闪一下）。
         let width = table.bounds.width > 1 ? table.bounds.width : view.bounds.width
-        let row = makeRow(context: context, width: width)
-        table.tableFooterView = row
+
+        var rows: [UIView] = []
+        if let offsetContext {
+            rows.append(makeRow(context: offsetContext, width: width))
+        }
+        if sourceContext != nil {
+            rows.append(makeSourceRow(width: width))
+        }
+        let container = UIView(
+            frame: CGRect(x: 0, y: 0, width: max(width, 1), height: rowHeight * CGFloat(rows.count))
+        )
+        for (index, row) in rows.enumerated() {
+            row.frame = CGRect(
+                x: 0,
+                y: rowHeight * CGFloat(index),
+                width: max(width, 1),
+                height: rowHeight
+            )
+            container.addSubview(row)
+        }
+        table.tableFooterView = container
+
         logOnce(
             "attached",
-            "player menu: offset row attached — \(NSStringFromClass(type(of: table)))"
+            "player menu: lyric row(s) attached (\(rows.count)) — \(NSStringFromClass(type(of: table)))"
                 + " \(Int(table.bounds.width))×\(Int(table.bounds.height)),"
-                + " \(context.source.description), \(context.trackId)"
+                + " \(sourceContext?.source.description ?? "-"), \(sourceContext?.trackId ?? "-")"
         )
     }
 
@@ -178,11 +203,60 @@ enum LyricsOffsetMenuRow {
         return row
     }
 
+    /// 「这首歌的歌词来源」那一行：点开弹窗（排除这个源 / 调偏移）。
+    private static func makeSourceRow(width: CGFloat) -> UIView {
+        let row = UIControl(frame: CGRect(x: 0, y: 0, width: max(width, 1), height: rowHeight))
+        row.autoresizingMask = [.flexibleWidth]
+
+        let icon = UIImageView(image: UIImage(systemName: "music.note.list"))
+        icon.tintColor = .secondaryLabel
+        icon.contentMode = .scaleAspectFit
+        icon.frame = CGRect(x: 20, y: (rowHeight - 22) / 2, width: 22, height: 22)
+        row.addSubview(icon)
+
+        let title = UILabel()
+        title.text = "lyrics_source_menu_row".localized
+        title.font = .systemFont(ofSize: 17)
+        title.textColor = .label
+        title.frame = CGRect(x: 54, y: 0, width: max(width - 160, 1), height: rowHeight)
+        title.autoresizingMask = [.flexibleWidth]
+        row.addSubview(title)
+
+        let value = UILabel()
+        value.text = LyricsSongSourcePrompt.currentContext()?.source.description ?? ""
+        value.font = .systemFont(ofSize: 15)
+        value.textColor = .secondaryLabel
+        value.textAlignment = .right
+        value.frame = CGRect(x: width - 160, y: 0, width: 124, height: rowHeight)
+        value.autoresizingMask = [.flexibleLeftMargin]
+        row.addSubview(value)
+
+        let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
+        chevron.tintColor = .tertiaryLabel
+        chevron.contentMode = .scaleAspectFit
+        chevron.frame = CGRect(x: width - 28, y: (rowHeight - 14) / 2, width: 12, height: 14)
+        chevron.autoresizingMask = [.flexibleLeftMargin]
+        row.addSubview(chevron)
+
+        row.addTarget(Target.shared, action: #selector(Target.sourceTapped), for: .touchUpInside)
+        row.accessibilityLabel = "lyrics_source_menu_row".localized
+        return row
+    }
+
     // MARK: - 点开
     //
     // `UIControl` 的 target 必须是个存活的对象 —— 用一个单例，别让行自己持有。
     final class Target: NSObject {
         static let shared = Target()
+
+        /// ⋯ 菜单里「这首歌的歌词来源」那一行：先收菜单，再弹窗。
+        @objc func sourceTapped() {
+            let menu = LyricsOffsetMenuRow.activeMenu
+            LyricsOffsetMenuRow.activeMenu = nil
+            LyricsOffsetMenuRow.activeContext = nil
+            writeDebugLog("[Lyrics] player menu source row tapped")
+            LyricsSongSourcePrompt.present(afterDismissing: menu?.topmostPresented())
+        }
 
         @objc func tapped() {
             guard let context = LyricsOffsetMenuRow.activeContext else { return }

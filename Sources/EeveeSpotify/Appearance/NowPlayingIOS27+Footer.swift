@@ -449,16 +449,14 @@ extension NowPlayingIOS27 {
             // 同一颗「歌词」键**长按**开歌词偏移面板 —— 看到歌词差半拍时不用翻设置。
             // 短按仍是开/关歌词页（两个手势用 `require(toFail:)` 绑好，不会连击）。
             longPressZones.append((tapRect(frames[0]), {
-                guard let context = LyricsOffsetMenuRow.currentContext() else {
-                    writeDebugLog("[LyricsOffset] long press ignored — no track / source yet")
+                // 长按：这一首的歌词有问题时的入口 —— 换掉这个源（不当场改全局顺序）、
+                // 或调这一首的时间轴偏移。两件事都是"这一首的词不对"，放同一个弹窗里。
+                guard let context = LyricsSongSourcePrompt.currentContext() else {
+                    writeDebugLog("[Lyrics] long press ignored — no lyrics loaded for this track yet")
                     return
                 }
-                writeDebugLog("[LyricsOffset] long press on the lyrics key — \(context.trackId)")
-                LyricsOffsetPanel.present(
-                    trackId: context.trackId,
-                    source: context.source,
-                    song: context.song
-                )
+                writeDebugLog("[Lyrics] long press on the lyrics key — \(context.trackId)")
+                LyricsSongSourcePrompt.present()
             }))
         }
         // Connect 这颗 `accessibilityActivate` / `sendActions` 都不认。把它从栈里
