@@ -344,6 +344,57 @@ extension LyricsDto {
     /// `officialRomanizedLines[i]`），只删 `lines` 会让整份译文/罗马字错位一行。
     ///
     /// ⚠️ 只认**真正的空白**，`♪` 那类占位符不动（理由见 `LyricsLineDto.isBlankForDisplay`）。
+    /// 删掉**正文第一行**那条「歌名 - 歌手」页眉（用曲目元数据判定，不依赖 `[ti:]`/`[ar:]`）。
+    ///
+    /// 酷狗的 KRC 常常只给两个空标签，页眉写在正文里；源自己的过滤器因此接不住它。
+    /// 这里在取词结果落地前，用**当前曲目**的标题候选与艺人名单再判一次：
+    /// 这是"源格式与元数据脱节"的补丁，不属于任何单个仓库（QQ 也可能这么写）。
+    ///
+    /// 只在**第一行**上判，并且要求 `lines.count >= 3` —— 整首只有一两句时，第一句很可能
+    /// 就是真歌词（哪怕它恰好是标题）。删行时按同一套 keep 映射同步译文/罗马字那几份数组
+    /// （与 `droppingBlankLinesForDisplay` 同一个理由：只删 `lines` 会让后面整体错位一行）。
+    func droppingTitleArtistHeader(
+        titleCandidates: [String],
+        artists: [String]
+    ) -> LyricsDto {
+        guard lines.count >= 3 else { return self }
+        guard let firstIndex = lines.indices
+            .filter({ lines[$0].offsetMs != nil })
+            .min(by: { (lines[$0].offsetMs ?? 0) < (lines[$1].offsetMs ?? 0) }) else {
+            return self
+        }
+        let headerText = lines[firstIndex].content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !headerText.isEmpty,
+              LyricsCreditLine.isTitleArtistHeader(
+                headerText,
+                titleCandidates: titleCandidates,
+                artists: artists
+              ) else {
+            return self
+        }
+
+        var result = self
+        result.lines = lines.enumerated().filter { $0.offset != firstIndex }.map(\.element)
+        if officialRomanizedLines.count == lines.count {
+            result.officialRomanizedLines = officialRomanizedLines
+                .enumerated().filter { $0.offset != firstIndex }.map(\.element)
+        }
+        if officialRomanizedWordGroups.count == lines.count {
+            result.officialRomanizedWordGroups = officialRomanizedWordGroups
+                .enumerated().filter { $0.offset != firstIndex }.map(\.element)
+        }
+        if let translation, translation.lines.count == lines.count {
+            result.translation = LyricsTranslationDto(
+                languageCode: translation.languageCode,
+                lines: translation.lines.enumerated().filter { $0.offset != firstIndex }.map(\.element)
+            )
+        }
+        writeDebugLog(
+            "[Lyrics] dropped the title/artist header line — \(headerText)"
+        )
+        return result
+    }
+
     func droppingBlankLinesForDisplay() -> LyricsDto {
         let keep = lines.indices.filter { !lines[$0].isBlankForDisplay }
         // 没有空白行 ⇒ 原样返回（这是绝大多数歌的路径，别白拷一份数组）。

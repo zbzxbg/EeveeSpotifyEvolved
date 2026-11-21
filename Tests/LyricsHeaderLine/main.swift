@@ -80,6 +80,57 @@ require(
     "a bracketed suffix on the title still matches"
 )
 
+// MARK: - ⑤ 没有文件头时，用**曲目元数据**判（酷狗常给空 `[ti:]` / `[ar:]`）
+
+require(
+    LyricsCreditLine.isTitleArtistHeader(
+        "独自 (DJ版) - 王晗General/造梦师DreamMaker",
+        titleCandidates: ["独自"],
+        artists: ["王晗General", "造梦师DreamMaker"]
+    ),
+    "artist roster split on the slash matches the header written in the body"
+)
+require(
+    LyricsCreditLine.isTitleArtistHeader(
+        "DUSTCELL - 独自",
+        titleCandidates: ["独自"],
+        artists: ["DUSTCELL"]
+    ),
+    "artist - title in the body matches the track metadata"
+)
+require(
+    !LyricsCreditLine.isTitleArtistHeader(
+        "夜に駆ける - あたらよ",
+        titleCandidates: ["独自"],
+        artists: ["DUSTCELL"]
+    ),
+    "a lyric line with a dash is kept when neither side is this track's title or artist"
+)
+require(
+    !LyricsCreditLine.isTitleArtistHeader(
+        "独自 - 夜に駆ける",
+        titleCandidates: ["独自"],
+        artists: ["DUSTCELL"]
+    ),
+    "the title alone is not enough - the other side must be the artist"
+)
+require(
+    !LyricsCreditLine.isTitleArtistHeader(
+        "独自 - 王晗General",
+        titleCandidates: [],
+        artists: ["王晗General"]
+    ),
+    "no title candidates means nothing is dropped"
+)
+require(
+    !LyricsCreditLine.isTitleArtistHeader(
+        "独自 - 王晗General",
+        titleCandidates: ["独自"],
+        artists: []
+    ),
+    "no artist names means nothing is dropped"
+)
+
 if failures == 0 {
     print("LyricsHeaderLine: all assertions passed")
 } else {

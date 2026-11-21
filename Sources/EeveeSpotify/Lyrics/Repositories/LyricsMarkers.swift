@@ -377,4 +377,50 @@ enum LyricsCreditLine {
         if titleFirst { return true }
         return LyricsMatch.titlesMatch(right, title) && LyricsMatch.sameArtist(left, artist)
     }
+
+    /// 用**曲目元数据**判断「歌名 - 歌手」页眉行（不依赖 `[ti:]` / `[ar:]`）。
+    ///
+    /// 为什么需要第二条判据：酷狗的 KRC 经常下发**两个空标签**（`[ti:]` / `[ar:]`），
+    /// 「歌名 - 歌手」那条页眉写在**正文第一行**里 —— 拿文件头去比时左右两边都是 nil，
+    /// `isTitleArtistHeader(_:title:artist:)` 永远返回 false，于是它就留在第一行当歌词了。
+    ///
+    /// 这里的输入是**当前曲目自己的**标题候选（曲目名 + 本地化名）与全部艺人名。
+    /// 只认"一侧是标题、另一侧是歌手"：真歌词里的破折号不会被误伤。
+    /// 调用方只在**正文第一行**上用它（页眉只可能在那儿）。
+    static func isTitleArtistHeader(
+        _ text: String,
+        titleCandidates: [String],
+        artists: [String]
+    ) -> Bool {
+        guard !titleCandidates.isEmpty, !artists.isEmpty else { return false }
+        let ns = text as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        guard let match = titleArtistSeparator?.firstMatch(in: text, range: full),
+              match.range.location != NSNotFound else { return false }
+        let left = ns.substring(to: match.range.location)
+        let right = ns.substring(from: NSMaxRange(match.range))
+        guard !left.isEmpty, !right.isEmpty else { return false }
+
+        let leftIsTitle = titleCandidates.contains { LyricsMatch.titlesMatch(left, $0) }
+        let rightIsTitle = titleCandidates.contains { LyricsMatch.titlesMatch(right, $0) }
+        if leftIsTitle, artistRosterMatches(right, artists: artists) { return true }
+        return rightIsTitle && artistRosterMatches(left, artists: artists)
+    }
+
+    /// 一行里的歌手串是否命中我们的艺人名单。
+    ///
+    /// 酷狗那条页眉的歌手侧常写成 `王晗General/造梦师DreamMaker`（斜杠分隔的整串），
+    /// 而 `LyricsMatch.sameArtist` 只按 `feat./& ` 取主艺人 —— 拿整串去比永远对不上。
+    /// 所以先按各家常用的分隔符切开，逐段比。
+    private static func artistRosterMatches(_ text: String, artists: [String]) -> Bool {
+        let separators: [Character] = ["/", "、", "，", ",", "&", "＆", "·", "・", "|", ";", "；"]
+        let tokens = text
+            .split(whereSeparator: { separators.contains($0) })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !tokens.isEmpty else { return false }
+        return tokens.contains { token in
+            artists.contains { LyricsMatch.sameArtist(token, $0) }
+        }
+    }
 }

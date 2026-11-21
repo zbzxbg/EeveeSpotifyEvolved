@@ -221,7 +221,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
        UserDefaults.lyricsSource != .notReplaced,
        let importedDto = ImportedLyricsRepository.shared.matchingDto(for: searchQuery) {
         lastRequestedLyricsSourceDescription = LyricsSource.imported.description
-        return makeLyrics(from: importedDto, source: .imported)
+        return makeLyrics(from: importedDto, source: .imported, query: searchQuery)
     }
 
     // 「设置 → 实验 → 启用 Apple Music 官方 TTML 歌词」（默认关）是一个**总覆盖**开关：
@@ -247,7 +247,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             allowGeniusFallback: false
         )
 
-        return makeLyrics(from: result.dto, source: result.source)
+        return makeLyrics(from: result.dto, source: result.source, query: searchQuery)
     }
 
     var source = UserDefaults.lyricsSource
@@ -285,7 +285,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         lastRequestedLyricsSourceDescription = LyricsSource.autoSelect.description
 
         let picked = try autoSelectLyrics(searchQuery: searchQuery, options: options)
-        return makeLyrics(from: picked.dto, source: picked.source)
+        return makeLyrics(from: picked.dto, source: picked.source, query: searchQuery)
 
     } else {
 
@@ -351,7 +351,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                 writeDebugLog("[Lyrics] AMLL succeeded — using it (\(result.dto.lines.count) line(s))")
                 return makeLyrics(
                     from: result.dto,
-                    source: result.source
+                    source: result.source,
+                    query: searchQuery
                 )
             }
 
@@ -376,7 +377,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
             )
             return makeLyrics(
                 from: result.dto,
-                source: result.source
+                source: result.source,
+                query: searchQuery
             )
         }
 
@@ -389,7 +391,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
         return makeLyrics(
             from: result.dto,
-            source: result.source
+            source: result.source,
+            query: searchQuery
         )
     }
     }
@@ -1009,16 +1012,24 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     /// 那条兜底已经不存在了（见 `LyricsDto.toSpotifyLyricsData` 顶部说明）。
     private func makeLyrics(
         from dto: LyricsDto,
-        source: LyricsSource
+        source: LyricsSource,
+        query: LyricsSearchQuery
     ) -> Lyrics {
         lyricsState.isEmpty = dto.lines.isEmpty
         lyricsState.wasRomanized = dto.romanization == .romanized
             || dto.romanization == .canBeRomanized
         lyricsState.loadedSuccessfully = true
 
+        // 页眉行（「歌名 - 歌手」）在这里删：只有这一层同时拿得到**曲目元数据**与 dto。
+        // 源自己的过滤只看文件头 `[ti:]`/`[ar:]`，而酷狗常常只给空标签（见那里的说明）。
+        let withoutHeader = dto.droppingTitleArtistHeader(
+            titleCandidates: [query.title] + query.titleVariants,
+            artists: query.allArtistNames
+        )
+
         // 偏移在这里施加，返回值是**平移过**的那一份 —— 注入 payload
         // 必须用它，否则原生歌词页会比自绘层差一个偏移量。
-        let shifted = storeLyricsDto(dto, source: source)
+        let shifted = storeLyricsDto(withoutHeader, source: source)
 
         return Lyrics.with {
             $0.data = shifted.toSpotifyLyricsData(
