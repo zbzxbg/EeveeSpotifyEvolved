@@ -195,10 +195,21 @@ struct AppleMusicLyricsPage: View {
     @State private var lastDragTime: Date = .distantPast
     /// 上一次自动滚动的时间，用于给连续点击节流（避免多段动画互相打断）。
     @State private var lastAutoScrollTime: Date = .distantPast
+    /// 自动跟随的目标（**防抖**用）。换行那一刻高亮可能连跳两次，先落到旧目标会让页面
+    /// 停在前一句；这里只记最新目标，等 `autoScrollDebounce` 再滚。
+    @State private var pendingScrollTarget: LyricLine.ID?
+    /// 已经请求过的目标（同一句不重复排队）。
+    @State private var lastRequestedScrollTarget: LyricLine.ID?
+    /// 防抖 / 补滚任务，以及滚完之后的居中校验任务。
+    @State private var autoScrollTask: Task<Void, Never>?
+    @State private var autoScrollVerifyTask: Task<Void, Never>?
     /// 松手后继续暂停自动跟随的时长。
     private let postDragPauseDuration: TimeInterval = 2
     /// 两次自动滚动之间的最小间隔。
     private let minimumAutoScrollInterval: TimeInterval = 0.35
+    /// 换行后等多久再滚：跨过对唱换句时那几十毫秒的"上一句还在唱"空档，
+    /// 又不至于让人看见"先滚错一句、再滚回来"。
+    private let autoScrollDebounce: TimeInterval = 0.18
 
     // MARK: 壳的占位 / 淡出带
     //
@@ -385,6 +396,10 @@ struct AppleMusicLyricsPage: View {
                 highlighted: position.highlightedLyricID,
                 interludePosition: interludePosition
             )
+            // 焦点行在数组里的位置 —— 每帧算一次，用来决定"哪几句该保持清晰"。
+            let focusedLineIndex = focusedLyricID.flatMap { id in
+                lines.firstIndex(where: { $0.id == id })
+            }
             // 自绘壳占掉的高度：从安全区再往里让，避免歌词钻到标题栏/控件栏底下。
             //
             // 62 / 116 是量出来的，不是拍的：
@@ -431,7 +446,8 @@ struct AppleMusicLyricsPage: View {
                             spacing: typography.lineSpacing
                                 + max(typography.lineSpacing * 0.6, 4)
                         ) {
-                            ForEach(lines) { line in
+                            ForEach(Array(lines.enumerated()), id: \.element.id) { pair in
+                                let line = pair.element
                                 // 间奏行驻留在**这一句的上面**（MeloX 的
                                 // `displayBeforeLyricID` 就是这个意思）：没有对应间奏时
                                 // `interludeRow` 一个视图都不产出，布局与改动前逐像素一致。
@@ -444,6 +460,9 @@ struct AppleMusicLyricsPage: View {
                                         for: line,
                                         position: position,
                                         focusedLyricID: focusedLyricID,
+                                        focusDistance: focusedLineIndex.map {
+                                            abs(pair.offset - $0)
+                                        },
                                         availableWidth: availableWidth,
                                         proxy: proxy
                                     )
@@ -473,7 +492,10 @@ struct AppleMusicLyricsPage: View {
                         guard !isStatic else { return }
                         // 与 onChange 同理：首行之前高亮为 nil，这里要落到**第一行**上，
                         // 否则全屏打开时若歌曲还在前奏，歌词会停在列表顶部。
-                        guard let id = position.highlightedLyricID ?? lines.first?.id else { return }
+                        guard let id = focusedLyricID
+                            ?? position.highlightedLyricID
+                            ?? lines.first?.id else { return }
+                        lastRequestedScrollTarget = id
                         // 延后一帧再滚：`LazyVStack` 是先物化可见区域再响应 scrollTo 的，
                         // 在 onAppear 里立刻调用时目标行往往还没生成，会静默失效。
                         // 延后一帧仍然是不带动画的落位。
@@ -489,33 +511,33 @@ struct AppleMusicLyricsPage: View {
                     .onChange(of: lyricsFingerprint) { _, _ in
                         refreshInterludes()
                     }
-                    .onChange(of: position.highlightedLyricID) { _, newValue in
+                    // 换行 / 换焦点 ⇒ 请求自动跟随。
+                    //
+                    // ⚠️ 这里只登记目标，真正滚动由 0.18s 的防抖任务发起。对唱换句时
+                    // 高亮会先落到"还在唱的上一句"几十毫秒，再落到新一句；立刻滚第一次会
+                    // 让页面停在上一句，而第二次请求又被 0.35s 节流吞掉 —— 屏幕上的表现
+                    // 就是当前句被挤到最下面（页面反而去追上一句）。
+                    .onChange(of: position.highlightedLyricID) { _, _ in
                         // 静态档不跟随（见 `isStatic`）。
                         guard !isStatic else { return }
                         // ⚠️ `nil` 不是"没事发生"：它表示播放位置落在**第一行之前**
                         // （按上一首回到本曲开头、或把进度拖到 0，而首行要几秒后才开始）。
                         // 旧写法 `guard let newValue else { return }` 把这一路直接吞掉，
                         // 表现就是"回到开头时歌词不跟着回第一行"。
-                        guard let targetID = newValue ?? lines.first?.id else { return }
-
-                        // 回到开头这一路**绕过节流**：之后高亮会一直停在 nil（前奏可能
-                        // 十几秒），被节流吞掉就没有第二次补滚的机会。这里只避开"手指还在拖"。
-                        if newValue == nil {
-                            guard Date().timeIntervalSince(lastDragTime) > 0.15 else { return }
-                        } else {
-                            guard shouldAutoScroll() else { return }
-                        }
-
-                        lastAutoScrollTime = Date()
-                        withAnimation(
-                            .spring(
-                                duration: 0.5,
-                                bounce: 0.08,
-                                blendDuration: 0
-                            )
-                        ) {
-                            proxy.scrollTo(targetID, anchor: .center)
-                        }
+                        guard let target = focusedLyricID
+                            ?? position.highlightedLyricID
+                            ?? lines.first?.id else { return }
+                        requestAutoScroll(to: target, proxy: proxy)
+                    }
+                    // 焦点行可能在高亮没变时换人（间奏尾巴把它交给下一句）——
+                    // 滚动要跟的是**焦点**，否则会停在已经暗下去的那一句上。
+                    .onChange(of: focusedLyricID) { _, newValue in
+                        guard !isStatic, let newValue else { return }
+                        requestAutoScroll(to: newValue, proxy: proxy)
+                    }
+                    .onDisappear {
+                        autoScrollTask?.cancel()
+                        autoScrollVerifyTask?.cancel()
                     }
                     // 滚动打断保护：用户一碰就暂停自动跟随。
                     //
@@ -531,13 +553,21 @@ struct AppleMusicLyricsPage: View {
                                 lastDragTime = Date()
                                 autoScrollPauseUntil = Date()
                                     .addingTimeInterval(postDragPauseDuration)
+                                // 用户正在滚：取消排队中的自动跟随，别在松手后又补滚一个旧目标。
+                                pendingScrollTarget = nil
+                                autoScrollTask?.cancel()
                                 hideShellWhileScrolling()
+                                // 每次移动都续期"停止后把当前句拉回中间"——
+                                // 与 `scheduleShellRestore` 同一个理由：`onEnded` 可能不来。
+                                scheduleFollowAfterDrag(proxy: proxy, target: focusedLyricID)
                             }
                             .onEnded { _ in
                                 lastDragTime = Date()
                                 autoScrollPauseUntil = Date()
                                     .addingTimeInterval(postDragPauseDuration)
                                 scheduleShellRestore()
+                                // 暂停窗口过去后把**当前句**拉回中间 —— 不再等下一句换行。
+                                scheduleFollowAfterDrag(proxy: proxy, target: focusedLyricID)
                             }
                     )
                     // 上下边缘淡出。
@@ -631,6 +661,97 @@ struct AppleMusicLyricsPage: View {
             return false
         }
         return true
+    }
+
+    // MARK: 自动跟随：防抖 + 补滚 + 居中校验
+    //
+    // 高亮一变就滚有两个坑：
+    // 1. 对唱换句时高亮可能先落到"还在唱的另一位"几十毫秒、再落到新一句。
+    //    第一次滚动会把页面拉去上一句，第二次请求又被 `minimumAutoScrollInterval`
+    //    吞掉 —— 屏幕上就是当前句被挤到最下面，页面却停在更早那一句。
+    // 2. 用户在滚 / 上一段动画还没走完时，滚动会被闸门拒绝；拒绝之后不再补，
+    //    页面就停在旧位置，直到下一句换行才被拉回。
+    // 所以变化只登记**最新**目标，由一个防抖任务等闸门放行后再滚，滚完再补一次
+    // 无动画的居中（spring 被打断时也能落回正中间）。
+
+    /// 登记"要跟到这一句"，并按防抖窗口发起滚动。
+    private func requestAutoScroll(to id: LyricLine.ID, proxy: ScrollViewProxy) {
+        // 已经在排队 / 已经滚过这一句：不重复发起（避免把防抖窗口一次次重置）。
+        guard id != pendingScrollTarget, id != lastRequestedScrollTarget else { return }
+        lastRequestedScrollTarget = id
+        pendingScrollTarget = id
+        schedulePendingAutoScroll(proxy: proxy)
+    }
+
+    /// 防抖任务：等换句的"毛刺"过去，再等用户滚动暂停 / 节流窗口放行，然后滚动。
+    private func schedulePendingAutoScroll(proxy: ScrollViewProxy) {
+        autoScrollTask?.cancel()
+        autoScrollTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(autoScrollDebounce * 1_000_000_000)
+            )
+            guard !Task.isCancelled else { return }
+
+            // 闸门还没放行就等（暂停窗口最长 2s；4s 兜底避免任务无限挂着）。
+            let deadline = Date().addingTimeInterval(4)
+            while !Task.isCancelled {
+                guard pendingScrollTarget != nil else { return }
+                if shouldAutoScroll() { break }
+                guard Date() < deadline else { return }
+                try? await Task.sleep(nanoseconds: 60_000_000)
+            }
+            guard !Task.isCancelled, let target = pendingScrollTarget else { return }
+
+            pendingScrollTarget = nil
+            lastAutoScrollTime = Date()
+            withAnimation(.spring(duration: 0.42, bounce: 0.06, blendDuration: 0)) {
+                proxy.scrollTo(target, anchor: .center)
+            }
+            writeDebugLog("[LyricsPage] auto-scroll → \(target)")
+            scheduleScrollVerification(target: target, proxy: proxy)
+        }
+    }
+
+    /// 动画结束后再落一次位（不带画）：spring 被打断时，这是"一定回到中间"的兜底。
+    private func scheduleScrollVerification(target: LyricLine.ID, proxy: ScrollViewProxy) {
+        autoScrollVerifyTask?.cancel()
+        autoScrollVerifyTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled,
+                  pendingScrollTarget == nil,
+                  lastRequestedScrollTarget == target,
+                  shouldAutoScroll() else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                proxy.scrollTo(target, anchor: .center)
+            }
+        }
+    }
+
+    /// 用户松手、暂停窗口过去之后，把**当前句**拉回中间。
+    ///
+    /// 以前只有"下一句换行"才会再滚一次：用户翻走之后要等几秒才被拉回，
+    /// 而这几秒里当前句可能已经滑出可视区。
+    private func scheduleFollowAfterDrag(proxy: ScrollViewProxy, target: LyricLine.ID?) {
+        guard let target, !isStatic else { return }
+        pendingScrollTarget = target
+        lastRequestedScrollTarget = target
+        autoScrollTask?.cancel()
+        autoScrollTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64((postDragPauseDuration + 0.05) * 1_000_000_000)
+            )
+            guard !Task.isCancelled,
+                  pendingScrollTarget == target,
+                  shouldAutoScroll() else { return }
+            pendingScrollTarget = nil
+            lastAutoScrollTime = Date()
+            withAnimation(.spring(duration: 0.5, bounce: 0.08, blendDuration: 0)) {
+                proxy.scrollTo(target, anchor: .center)
+            }
+            writeDebugLog("[LyricsPage] auto-scroll after drag → \(target)")
+        }
     }
 
     // MARK: 划动时收起 / 恢复壳
@@ -801,6 +922,10 @@ struct AppleMusicLyricsPage: View {
     // 2. 立刻把被点的这一行居中（不带动画，避免先看见一段位移）
     // 3. 再执行 seek；若实际高亮落在别的行，`onChange` 会补一次动画滚动
     private func handleTap(on line: LyricLine, proxy: ScrollViewProxy) {
+        autoScrollTask?.cancel()
+        autoScrollVerifyTask?.cancel()
+        pendingScrollTarget = nil
+        lastRequestedScrollTarget = line.id
         autoScrollPauseUntil = .distantPast
         lastDragTime = .distantPast
         lastAutoScrollTime = .distantPast
@@ -858,6 +983,7 @@ struct AppleMusicLyricsPage: View {
         for line: LyricLine,
         position: LyricPlaybackPosition,
         focusedLyricID: LyricLine.ID?,
+        focusDistance: Int?,
         availableWidth: CGFloat,
         proxy: ScrollViewProxy
     ) -> some View {
@@ -866,6 +992,11 @@ struct AppleMusicLyricsPage: View {
         // 判据（二选一、不是 OR）在 `LyricInterludeTimeline.focusedLyricID`，有 CI 测试。
         let isFocused = !isStatic && focusedLyricID == line.id
         let isActive = !isStatic && position.activeLyricIDs.contains(line.id)
+        // 焦点行的前后各一句**不发糊**（仍然按非焦点的透明度变暗）。
+        //
+        // 对唱时另一位歌手永远就在这两句里：把那一句糊掉，等于看不到对方唱到哪、
+        // 下一句是谁接；更远的行继续模糊，焦点感还在。
+        let isAdjacentToFocus = (focusDistance ?? Int.max) <= 1
         // 静态档：每一行都按"焦点行"画（满亮度、不模糊、不缩放），只是没有焦点这一说。
         let focusStrength = isStatic ? 1 : focusStrength(
             isFocused: isFocused,
@@ -938,7 +1069,12 @@ struct AppleMusicLyricsPage: View {
                 + (Self.profile.selectedTextOpacity
                     - Self.profile.deselectedTextOpacity) * focusStrength
         )
-        .blur(radius: blurRadius(focusStrength: focusStrength))
+        .blur(
+            radius: blurRadius(
+                focusStrength: focusStrength,
+                isAdjacentToFocus: isAdjacentToFocus
+            )
+        )
         .contentShape(Rectangle())
         .onTapGesture {
             // 静态档不做"点行跳转"：合成行的时间是 0，点了会把歌拉回开头。
@@ -968,15 +1104,15 @@ struct AppleMusicLyricsPage: View {
 
     /// 非焦点行的模糊：跟随焦点强度，离焦点越"远"越糊（这里只做线性过渡）。
     ///
-    /// 「现在是未播放歌词行是模糊不清的，加个功能叫**未播放歌词行模糊化**」。
-    /// 作为「修改Spotify听歌页布局」的二级菜单项，**默认值改成开**。
-    /// 「选择沉浸式的那几个按键，全部写默认开启」——
-    /// 二级菜单删除，这一条固定开启（非当前行变淡 + 发糊）。
+    /// 「未播放歌词行模糊化」是常开的沉浸项（非当前行变淡 + 发糊）。
+    ///
+    /// 但**焦点行的前后各一句不糊**：对唱里另一位歌手就在这两句上，糊掉它等于
+    /// 看不到对方唱到哪、谁接下一句。这两句仍然按 `deselectedTextOpacity` 变暗，
+    /// 只是保持清晰；隔一句以上的行继续按下面的公式发糊。
     ///
     /// 公式：`maximumNonFocusedBlurRadius × (1 − 焦点强度)`。
-    private func blurRadius(focusStrength: Double) -> CGFloat {
-        // 「选择沉浸式的那几个按键，全部写默认开启」——
-        // 「未播放歌词行模糊化」不再看 `nowPlayingBlurUnplayedLyrics`，固定开启。
+    private func blurRadius(focusStrength: Double, isAdjacentToFocus: Bool) -> CGFloat {
+        if isAdjacentToFocus { return 0 }
         let radius = Self.profile.nonFocusedBlurRadius
             + (Self.profile.maximumNonFocusedBlurRadius
                 - Self.profile.nonFocusedBlurRadius)
