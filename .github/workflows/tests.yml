@@ -131,6 +131,14 @@ jobs:
                  -o listening-stats-tests
           ./listening-stats-tests
 
+      # 几何：底排 / 迷你条 / 标签栏的纯函数。七种屏幕宽度，钉住"不越界、不错位"。
+      - name: Layout geometry
+        run: |
+          swiftc Tests/LayoutGeometry/main.swift \
+                 Sources/EeveeSpotify/Appearance/LayoutGeometry.swift \
+                 -o layout-geometry-tests
+          ./layout-geometry-tests
+
       - name: URL ad classification (existing)
         run: |
           swiftc Tests/URLAdClassification/main.swift \

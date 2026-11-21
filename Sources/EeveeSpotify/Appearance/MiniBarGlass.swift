@@ -204,7 +204,7 @@ enum MiniBarGlassPlate {
     private static func capsuleWidth(in host: UIView) -> CGFloat {
         let ratio = TabBarGlassPlate.capsuleWidthRatio
         let usable = (ratio > 0.4 && ratio < 1.0) ? ratio : fallbackWidthRatio
-        return min(host.bounds.width, max(160, host.bounds.width * usable))
+        return LayoutGeometry.miniPlateWidth(hostWidth: host.bounds.width, usableRatio: usable)
     }
 
     /// 内容要等比缩到多少：让它左右各留 `sideInset` 之后正好放进胶囊。

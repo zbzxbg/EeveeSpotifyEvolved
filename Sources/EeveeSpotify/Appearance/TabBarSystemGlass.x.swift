@@ -1384,7 +1384,12 @@ enum TabBarSystemGlass {
         let height = glassHeight(systemBar, width: bar.bounds.width)
         // Spotify 的常规宽度栏是固定 76pt、不吃 inset；窄宽度时它的栏就是 49 + inset。
         let compact = container.traitCollection.horizontalSizeClass == .compact
-        let room = compact ? max(0, ceil(height - stockRowHeight - inset)) : 0
+        let room = LayoutGeometry.tabBarRoom(
+            containerHeight: height,
+            stockRowHeight: stockRowHeight,
+            bottomInset: inset,
+            compact: compact
+        )
         guard abs(extra.bottom - room) > 0.5 else { return }
 
         rememberOriginalRoom(for: container, current: extra.bottom)
