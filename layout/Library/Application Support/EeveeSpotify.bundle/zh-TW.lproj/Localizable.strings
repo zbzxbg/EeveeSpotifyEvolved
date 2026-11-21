@@ -437,3 +437,5 @@ settings_search_title = "搜尋設定";
 settings_search_subtitle = "依名稱尋找設定項目";
 settings_search_placeholder = "搜尋";
 settings_search_empty = "沒有符合的設定項目。";
+log_tools_section = "日誌";
+sleep_timer_shortcut_hint = "在 Apple Music 樣式的聽歌頁長按播放佇列，也能開啟這個面板。";

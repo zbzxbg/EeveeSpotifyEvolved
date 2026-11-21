@@ -24,7 +24,7 @@ struct EeveeSleepTimerSettingsView: View {
                 }
             }
 
-            Section {
+            Section(footer: Text("sleep_timer_shortcut_hint".localized)) {
                 if let remaining {
                     HStack {
                         Text("sleep_timer_remaining".localized)

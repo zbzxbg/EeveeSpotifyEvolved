@@ -816,3 +816,5 @@ settings_search_title = "Search settings";
 settings_search_subtitle = "Find a setting by name";
 settings_search_placeholder = "Search";
 settings_search_empty = "No setting matches that.";
+log_tools_section = "Log";
+sleep_timer_shortcut_hint = "In the Apple Music style player, long-press the queue button to open this panel.";

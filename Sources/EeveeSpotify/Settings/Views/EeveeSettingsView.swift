@@ -65,6 +65,10 @@ struct EeveeSettingsView: View {
                 }
             }
 
+            // 日志入口放在「关于与维护」之后、重置之前：遇到问题的顺序是
+            // "看版本 → 开记录 → 导出 → 发给人"，重置是最后一步。
+            SettingsLogSection()
+
             Section(footer: Text("reset_data_description".localized)) {
                 Button {
                     confirmDestructive(
