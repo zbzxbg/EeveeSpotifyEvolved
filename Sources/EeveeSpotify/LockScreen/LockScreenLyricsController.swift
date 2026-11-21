@@ -43,6 +43,10 @@ final class LockScreenLyricsController {
     private var waitingForPlayer = false
     private var generation: UInt64 = 0
     private var loggedNoLyricsFor = ""
+    /// 页内那份 dto 往往比锁屏这次取词晚到（自动优选要跑完整条链），而词级时间轴
+    /// 只有它可能带来。这个标记保证同一首只尝试转换一次：对不上行文本的词每拍重算
+    /// 没有意义（真的换上之后 `lines` 里就有帧，判据自己会停）。
+    private var upgradeAttempted = false
 
     /// 这一行要装的 artwork，按 now-playing 键（1x1 / 3x4）存。
     /// 注入器只负责把它和现有字典比对后写回去。
@@ -317,6 +321,10 @@ final class LockScreenLyricsController {
 
         guard ready, !currentLines.isEmpty else { return }
 
+        // 页内那份 dto 可能这时才落地，而且只有它可能带词级时间轴。转换放后台队列，
+        // 成功时清掉 `preparedLineKey`，下一拍按新帧表重装当前行（见 `finishUpgrade`）。
+        upgradeLinesFromLoadedDto(replacing: currentLines, key: key)
+
         let positionMs = Int((elapsed * 1000).rounded())
         guard let location = Self.locate(in: currentLines, positionMs: positionMs) else { return }
         let lineKey = Self.lineKey(for: location)
@@ -347,6 +355,7 @@ final class LockScreenLyricsController {
         lines = []
         credit = ""
         linesFetched = false
+        upgradeAttempted = false
         fetchInFlight = true
         waitingForPlayer = false
         prepared = [:]
@@ -412,6 +421,7 @@ final class LockScreenLyricsController {
             lock.unlock()
             writeDebugLog(
                 "[\(LockScreenLyrics.logTag)] \(converted.count) line(s) already loaded"
+                    + LockScreenLyricsFetcher.coverageLogSuffix(for: converted)
             )
             return true
         }
@@ -421,13 +431,55 @@ final class LockScreenLyricsController {
             let result = LockScreenLyricsFetcher.lines(
                 for: query,
                 trackId: identifier,
-                deadline: Date().addingTimeInterval(20)
+                deadline: Date().addingTimeInterval(20),
+                onFallback: { [weak self] partial in
+                    // 仍在取词队列上：只把兜底交给主线程装上去，最终结果由
+                    // `finishFetch` 再收口（逐字档会整体替换）。
+                    DispatchQueue.main.async {
+                        self?.applyFetchedFallback(
+                            stamp: stamp,
+                            key: key,
+                            identifier: identifier,
+                            result: partial
+                        )
+                    }
+                }
             )
             DispatchQueue.main.async {
                 self?.finishFetch(stamp: stamp, key: key, identifier: identifier, result: result)
             }
         }
         return false
+    }
+
+    /// 取词这一跳先交出来的**行级兜底**（逐字那一档还在后面几个源里找）。
+    ///
+    /// 锁屏要尽快有字：同步取词整条链能跑好几秒，等升级完成再交就等于每首歌开头
+    /// 空白这么久。这里先把兜底装上；`finishFetch` 拿到逐字那一份时再整体替换。
+    private func applyFetchedFallback(
+        stamp: UInt64,
+        key: String,
+        identifier: String,
+        result: LockScreenLyricsFetcher.Result
+    ) {
+        lock.lock()
+        guard stamp == generation, trackKey == key, trackId == identifier,
+              result.lines != lines else {
+            lock.unlock()
+            return
+        }
+        lines = result.lines
+        credit = result.source.description
+        linesFetched = true
+        // `fetchInFlight` 保持 true：词级那一跳还没回来。
+        lock.unlock()
+
+        writeDebugLog(
+            "[\(LockScreenLyrics.logTag)] \(result.lines.count) line(s) ready"
+                + LockScreenLyricsFetcher.coverageLogSuffix(for: result.lines)
+                + " — line-timed fallback shown, still looking for word-by-word"
+        )
+        tick()
     }
 
     private func finishFetch(
@@ -441,14 +493,28 @@ final class LockScreenLyricsController {
             lock.unlock()
             return
         }
-        lines = result?.lines ?? []
+        // 兜底已经装上了（`applyFetchedFallback`）：这一跳若没升级就把原样留着 ——
+        // `result` 为 nil 只可能是"一个源都没答上来"，那时也不该把已经显示的词抽掉。
+        let previous = lines
         if let result {
-            credit = result.source.description
+            // 这一跳是**行级兜底**、而手里已经是页内 dto 升级来的逐字行时不能往回退。
+            let previousHadKaraoke = previous.contains { !$0.karaoke.isEmpty }
+            let incomingHasKaraoke = result.lines.contains { !$0.karaoke.isEmpty }
+            if !(previousHadKaraoke && !incomingHasKaraoke) {
+                lines = result.lines
+                credit = result.source.description
+            }
+        }
+        // 换成另一份（逐字升级 / 换源 / 行数变化）⇒ 当前这一行已经装出去的素材作废，
+        // 下一拍按新帧表重装（`tick` 的判据只有行号，不比对内容）。
+        if lines != previous {
+            preparedLineKey = ""
         }
         linesFetched = true
         fetchInFlight = false
         waitingForPlayer = false
         let count = lines.count
+        let coverage = LockScreenLyricsFetcher.coverageLogSuffix(for: lines)
         lock.unlock()
 
         if count == 0 {
@@ -466,8 +532,101 @@ final class LockScreenLyricsController {
             return
         }
 
-        writeDebugLog("[\(LockScreenLyrics.logTag)] \(count) line(s) ready")
+        writeDebugLog("[\(LockScreenLyrics.logTag)] \(count) line(s) ready\(coverage)")
         tick()
+    }
+
+    // MARK: - 逐字升级（页内 dto → 锁屏）
+
+    /// 锁屏自己取词时往往只能拿到**行级**时间轴（例如 Spicy 对这首歌只回 `type=Line`），
+    /// 词级时间轴要等页内那条链跑完、`currentLyricsDto` 落地才可能有。同一首的 dto
+    /// 对得上、且到了逐字档时，把行换成转换后的那一份，并清掉 `preparedLineKey`：
+    /// 当前这一行已经装出去的素材是按单帧画的，下一拍要按帧表重装一次。
+    ///
+    /// 转换（罗马化 + 逐字对齐）在后台队列上做，锁只在读/写状态时短暂持有；
+    /// 回到主线程时按 generation 判断这一首还在不在。
+    private func upgradeLinesFromLoadedDto(
+        replacing current: [LockScreenLyricLine],
+        key: String
+    ) {
+        // 逐字关着时不升级：`convert` 那时根本不建帧表。
+        guard UserDefaults.lockScreenWordByWord else { return }
+        // 已经有帧（取词那次就是逐字档，或已经升级过）就不用再看。
+        guard !current.contains(where: { !$0.karaoke.isEmpty }) else { return }
+
+        lock.lock()
+        let identifier = trackId
+        let stamp = generation
+        let canAttempt = trackKey == key && !identifier.isEmpty && !upgradeAttempted
+        lock.unlock()
+        guard canAttempt else { return }
+
+        // dto 还没落地时 `loadedLyrics` 给 nil —— 这时**不能**记"试过了"，
+        // 下一拍还要再看一次。
+        guard let dto = loadedLyrics(for: identifier) else { return }
+        // 档次判据与页内 auto-select 同一份：行级/纯文本的 dto 换过来也不会有帧。
+        guard LyricsAutoSelect.tier(of: dto) == .word else { return }
+
+        lock.lock()
+        guard stamp == generation, trackKey == key, trackId == identifier else {
+            lock.unlock()
+            return
+        }
+        upgradeAttempted = true
+        lock.unlock()
+
+        let source = currentLyricsSource
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let converted = LockScreenLyricsFetcher.convert(dto, source: source)
+            DispatchQueue.main.async {
+                self?.finishUpgrade(
+                    stamp: stamp,
+                    key: key,
+                    identifier: identifier,
+                    converted: converted,
+                    providerName: dto.providerName
+                )
+            }
+        }
+    }
+
+    /// 升级转换回到主线程。只有真的带上了帧才换 —— 词拼起来和行文本对不上时
+    /// `convert` 给的是空帧表，换过去只是把同一份行级词重画一遍。
+    private func finishUpgrade(
+        stamp: UInt64,
+        key: String,
+        identifier: String,
+        converted: [LockScreenLyricLine]?,
+        providerName: String
+    ) {
+        guard let converted,
+              converted.contains(where: { !$0.karaoke.isEmpty }) else { return }
+
+        lock.lock()
+        guard stamp == generation, trackKey == key, trackId == identifier else {
+            lock.unlock()
+            return
+        }
+        let previousCount = lines.count
+        lines = converted
+        // 署名跟着**实际**给词的那一份走（与 `beginTrack` 里"内存里已加载"那条同一条规则）。
+        if !providerName.isEmpty { credit = providerName }
+        // 只清标记：下一拍会按新帧表重装。不清 `prepared` —— 系统可能还在取那份素材
+        // （同 `typographyDidChange`）。
+        preparedLineKey = ""
+        lock.unlock()
+
+        let provider = providerName.isEmpty ? "currentLyricsDto" : providerName
+        writeDebugLog(
+            "[\(LockScreenLyrics.logTag)] word-by-word upgrade — \(converted.count) line(s)"
+                + LockScreenLyricsFetcher.coverageLogSuffix(for: converted)
+                + (previousCount == converted.count
+                    ? ""
+                    : " (line count \(previousCount) → \(converted.count))")
+                + " from \(provider)"
+        )
+        // 帧表变了 = 这一行的素材整个换了：让定时器继续跑，下一拍就会重装。
+        refreshTimer()
     }
 
     // MARK: - 装一行
@@ -852,6 +1011,7 @@ final class LockScreenLyricsController {
         linesFetched = false
         fetchInFlight = false
         waitingForPlayer = false
+        upgradeAttempted = false
         playerRetryDeadline = 0
         nextPlayerRetryAt = 0
         prepared = [:]

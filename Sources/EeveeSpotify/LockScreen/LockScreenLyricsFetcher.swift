@@ -7,8 +7,12 @@ import Foundation
 /// 安静的数据 —— 给一个 `LyricsSearchQuery`，拿行；失败就返回 nil，界面退回动态封面。
 ///
 /// 来源选择仍是用户自己那一套：`UserDefaults.lyricsSource` 选单源，`.autoSelect` 走
-/// `LyricsAutoSelect.chain()` 的顺序。锁屏不需要"逐字优先"这类质量档 —— 每一行只取一次
-/// 文本，谁先给出**行级时间轴**就用谁。
+/// `LyricsAutoSelect.chain()` 的顺序。
+///
+/// 锁屏「逐字」关着时：谁先给出**行级时间轴**就用谁（一次都不多问）。
+/// 开着时：先收一份行级的当**兜底**，再为**词级时间轴**继续问后面的源 —— 档次判据复用
+/// 页内自动优选那一份（`LyricsAutoSelect.tier(of:)`），多花的时间也复用同一条预算
+/// （`LyricsAutoSelect.upgradeBudget`），不另立一套。
 enum LockScreenLyricsFetcher {
 
     struct Result {
@@ -18,10 +22,16 @@ enum LockScreenLyricsFetcher {
 
     /// 同步执行（调用方负责放到后台队列）。`deadline` 是"整次取词"的预算：
     /// 每个源之间查一次，过了就不再问下一个。
+    ///
+    /// `onFallback` 在逐字开着、并且第一份行级结果到手时**立刻**回调一次（仍在调用方
+    /// 的后台队列上）。同步取词没法"先返回再继续找"，而整条链找逐字要好几秒 —— 不回调
+    /// 的话锁屏在每首歌开头都会空白这么久。调用方先把这份兜底装上，函数返回的最终
+    /// 结果若升级成逐字档，再整体替换。
     static func lines(
         for query: LyricsSearchQuery,
         trackId: String,
-        deadline: Date
+        deadline: Date,
+        onFallback: ((Result) -> Void)? = nil
     ) -> Result? {
         // 「实验 → 启用 Apple Music 官方 TTML 歌词」是**忽略其它所有歌词设置**的总覆盖
         // （见 `CustomLyrics.loadCustomLyricsForCurrentTrack` 顶部）：它连"禁用歌词替换"
@@ -37,11 +47,41 @@ enum LockScreenLyricsFetcher {
             : (setting == .autoSelect ? LyricsAutoSelect.chain() : [setting])
         let options = UserDefaults.lyricsOptions
 
-        for candidate in candidates {
+        // 锁屏这颗开关决定这一层要不要为词级时间轴继续问。页内那颗
+        // `LyricsAutoSelect.wantsWordTiming` 只决定仓库层要不要保留 `words`
+        // （Spicy / Petit / 网易 / MxM 按它裁剪），锁屏这边以 dto 的实际内容为准。
+        let wantsWordTiming = UserDefaults.lockScreenWordByWord
+        // 手里第一份可用的行级结果。逐字开着时它不一定是最终结果 —— 只是兜底。
+        var fallback: Result?
+        // 兜底到手之后最多再问多久。起点是**兜底到手**那一刻，不是整次取词的起点：
+        // 这里的每个源都是同步请求，没法像 `LyricsAutoSelect.autoSelectLyrics` 那样
+        // 按剩余预算给单源夹超时 —— 从起跑算窗口的话，一个慢源就能在问到任何能出
+        // 词级时间轴的源之前把窗口花光。
+        var upgradeDeadline: Date?
+
+        for (index, candidate) in candidates.enumerated() {
             guard Date() < deadline else {
                 writeDebugLog("[\(LockScreenLyrics.logTag)] out of time before \(candidate.description)")
                 break
             }
+            if let upgradeDeadline, Date() >= upgradeDeadline {
+                writeDebugLog(
+                    "[\(LockScreenLyrics.logTag)] upgrade budget spent — keeping the line-timed fallback"
+                )
+                break
+            }
+            if fallback != nil,
+               !candidates.dropFirst(index).contains(where: \.canProduceWordTiming) {
+                // ⚠️ 从**当前这一个**算起（`dropFirst(index)`），不是从下一个：这一跳还没问，
+                // 排除了它就会在"唯一能出词级时间轴的源正好排在这一位"时提前收工
+                // （`LyricsAutoSelect.shouldStop` 的注释里记着同一个坑）。
+                writeDebugLog(
+                    "[\(LockScreenLyrics.logTag)] no word-capable source left —"
+                        + " keeping the line-timed fallback"
+                )
+                break
+            }
+
             let source = substituteIfNeeded(candidate)
             guard let repository = repository(for: source) else { continue }
 
@@ -60,18 +100,74 @@ enum LockScreenLyricsFetcher {
                     )
                     continue
                 }
-                writeDebugLog(
-                    "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"
-                        + " \(source.description) — \(took(started))"
-                )
-                return Result(lines: lines, source: source)
+                // 逐字关着 = 与改动前完全一致：第一个给出带时间轴行的源就是结果。
+                if !wantsWordTiming {
+                    writeDebugLog(
+                        "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"
+                            + " \(source.description) — \(took(started))"
+                    )
+                    return Result(lines: lines, source: source)
+                }
+
+                let coverage = coverageLogSuffix(for: lines)
+                // 「升级完成」要同时满足两条：dto 确实到了词级档（`tier(of:)`，与页内
+                // auto-select 同一判据），且转换后的行真的带上了帧（词拼起来等于行文本，
+                // 见 `LockScreenKaraoke.frames`）。只有前一条时整首仍是单帧。
+                if LyricsAutoSelect.tier(of: dto) == .word,
+                   wordByWordLineCount(in: lines) > 0 {
+                    writeDebugLog(
+                        "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"
+                            + " \(source.description) — \(took(started))\(coverage)"
+                    )
+                    return Result(lines: lines, source: source)
+                }
+
+                if fallback == nil {
+                    let result = Result(lines: lines, source: source)
+                    fallback = result
+                    upgradeDeadline = Date().addingTimeInterval(LyricsAutoSelect.upgradeBudget)
+                    writeDebugLog(
+                        "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"
+                            + " \(source.description) — \(took(started))\(coverage)"
+                            + " — line-timed fallback, still asking for word-by-word"
+                    )
+                    // 先让锁屏有字：整条链找逐字可能要好几秒（见函数头注）。
+                    onFallback?(result)
+                } else {
+                    writeDebugLog(
+                        "[\(LockScreenLyrics.logTag)] \(source.description) gave no word-by-word"
+                            + " — \(took(started))"
+                    )
+                }
             } catch {
                 writeDebugLog(
                     "[\(LockScreenLyrics.logTag)] \(source.description) failed — \(error) (\(took(started)))"
                 )
             }
         }
-        return nil
+
+        if let fallback {
+            writeDebugLog(
+                "[\(LockScreenLyrics.logTag)] kept \(fallback.lines.count) line(s) from"
+                    + " \(fallback.source.description)\(coverageLogSuffix(for: fallback.lines))"
+                    + " — no word-by-word data, single-frame lines"
+            )
+        }
+        return fallback
+    }
+
+    /// 这一份行里有多少行真的带上了逐字帧（0 ⇒ 整首都会按单帧画）。
+    private static func wordByWordLineCount(in lines: [LockScreenLyricLine]) -> Int {
+        lines.reduce(0) { $0 + ($1.karaoke.isEmpty ? 0 : 1) }
+    }
+
+    /// 日志后缀：` (5/41 word-by-word)`。
+    ///
+    /// 逐字开关关着时为空串 —— 那时 `convert` 根本不建帧表，打一个 `0/41` 只会让人
+    /// 误以为"取不到词级时间轴"。锁屏的两条日志（取词那行、升级那行）共用这一份格式。
+    static func coverageLogSuffix(for lines: [LockScreenLyricLine]) -> String {
+        guard UserDefaults.lockScreenWordByWord, !lines.isEmpty else { return "" }
+        return " (\(wordByWordLineCount(in: lines))/\(lines.count) word-by-word)"
     }
 
     /// 内存里已经加载过这一首时直接转，不发网络请求。
