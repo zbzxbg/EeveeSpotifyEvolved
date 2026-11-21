@@ -423,3 +423,23 @@ audio_effects_status_restart = "未接管，重啟 Spotify 後生效";
 // 介面触感（與「音樂触感」區分）
 haptics_title = "介面觸感";
 settings_sub_haptics = "點按介面控件時的震動";
+
+// 設定根頁：分組與行
+settings_group_features = "Premium 與播放";
+settings_group_lyrics = "歌詞";
+lyrics_sources_title = "歌詞來源與行為";
+settings_group_interface = "介面";
+settings_group_audio = "音訊與手勢";
+settings_group_about = "關於與維護";
+audio_reactive_title = "律動與節拍觸感";
+settings_sub_audio_effects = "等化器、壓縮器與交叉饋送";
+settings_sub_audio_reactive = "封面隨低頻起伏，鼓點變輕觸";
+settings_sub_head_gestures = "點頭或搖頭切歌";
+settings_sub_lock_screen_artwork = "用循環短片代替靜態封面";
+settings_sub_lock_screen_lyrics = "正在唱的那一行接管整屏";
+settings_status_on = "已啟用";
+settings_status_off = "未啟用";
+settings_search_title = "搜尋設定";
+settings_search_subtitle = "依名稱尋找設定項目";
+settings_search_placeholder = "搜尋";
+settings_search_empty = "沒有符合的設定項目。";

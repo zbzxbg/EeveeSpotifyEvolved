@@ -7,6 +7,9 @@ struct NavigationSectionView: View {
     /// 第二行灰色小字：这一行进去有什么。加 —— 根页重排后一行只有名字时
     /// 根本看不出「扩展」里装了什么（那个杂物袋就是这么长出来的）。传 nil = 不显示。
     var subtitle: String? = nil
+    /// 行尾状态（"已启用""未启用"）。只在副标题右侧、箭头左侧显示一行小字，
+    /// 用来回答"这个开关到底开没开"，而不是等用户点进去看。
+    var status: String? = nil
 
     var body: some View {
         HStack(spacing: 15) {
@@ -33,6 +36,12 @@ struct NavigationSectionView: View {
             }
             
             Spacer()
+
+            if let status {
+                Text(status)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             
             ChevronRightView()
         }

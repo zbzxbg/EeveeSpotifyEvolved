@@ -95,6 +95,9 @@ jobs:
         run: python3 Tools/eevee-hookfinder/orion_hook_guard.py
       - name: Guard — l10n keys
         run: python3 Tools/l10n_lint.py --quiet
+      # 设置根页的目录是唯一数据源：key 拼错不会崩，只会在界面上显示原始 key。
+      - name: Guard — settings catalog (rows, groups, keys)
+        run: python3 Scripts/check_settings_catalog.py
       - name: Guard — missing Foundation imports (Sources + Tests)
         run: python3 Tools/eevee-hookfinder/swift_import_check.py
       # iOS 最低版本写在六处（两个 TARGET、control 的 firmware、三处 cyan -m）。

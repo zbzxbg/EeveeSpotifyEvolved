@@ -788,3 +788,23 @@ listening_stats_minutes_format = "%d 分钟";
 listening_stats_seconds_format = "%d 秒";
 listening_stats_plays_format = "%d 次";
 listening_stats_combo_format = "%@ · %@";
+
+// 设置根页：分组与行
+settings_group_features = "Premium 与播放";
+settings_group_lyrics = "歌词";
+lyrics_sources_title = "歌词源与行为";
+settings_group_interface = "界面";
+settings_group_audio = "音频与手势";
+settings_group_about = "关于与维护";
+audio_reactive_title = "律动与节拍触感";
+settings_sub_audio_effects = "均衡器、压缩器与交叉馈送";
+settings_sub_audio_reactive = "封面随低频起伏，鼓点变轻触";
+settings_sub_head_gestures = "点头或摇头切歌";
+settings_sub_lock_screen_artwork = "用循环短片代替静态封面";
+settings_sub_lock_screen_lyrics = "正在唱的那一行接管整屏";
+settings_status_on = "已启用";
+settings_status_off = "未启用";
+settings_search_title = "搜索设置";
+settings_search_subtitle = "按名称查找设置项";
+settings_search_placeholder = "搜索";
+settings_search_empty = "没有匹配的设置项。";

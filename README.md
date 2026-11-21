@@ -38,45 +38,45 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 - **12 sources** — Spicy Lyrics (needs your own client key), AMLL, PetitLyrics, NetEase, QQ Music, KuGou, Unison, Musixmatch, BiniLyrics, LRCLIB, Genius, plus an experimental Apple Music source.
 - **Auto Select** — asks the sources in an order you choose and keeps the best answer: word-by-word beats line-by-line, which beats plain text; within the same tier it prefers the answer that also has the translation, official romanization or word-level romanization your settings ask for. A plain-text answer never ends the search.
 - **Word-by-word karaoke** — real word timing, long-tone emphasis and interlude handling.
-- **Imported lyrics** — bring your own LRC, SPL, YRC, Lyricify Syllable/Lines or TTML file; one whose file name (or metadata) matches the playing track is used before any online source, with the player's per-song offset still applying. Files are copied into the app's Documents folder, so they survive restarts; the switch, the import button and the file list are under Settings → Imported lyrics.
+- **Imported lyrics** — bring your own LRC, SPL, YRC, Lyricify Syllable/Lines or TTML file; one whose file name (or metadata) matches the playing track is used before any online source, with the player's per-song offset still applying. Files are copied into the app's Documents folder, so they survive restarts; the switch, the import button and the file list are under Settings → Lyrics → Imported lyrics.
 
 ### Look and feel
 
 - Apple Music–style album, playlist and artist pages.
 - A single cover for playlists instead of the four-up mosaic.
 - Liquid-glass tab bar and mini player.
-- **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise. A third source, rendering a loop from the cover itself, is a separate switch and off by default. Settings → Lock screen.
-- **Lock screen lyrics** (iOS 26+) — the line being sung takes over the lock screen's full-screen artwork, with the next line dimmed under it. Every line is drawn once as a short clip and cached per track, so changes cost no network. Uses the same lyrics source as the in-app views. Settings → Lock screen.
-- **Listening stats** — plays and listening time are recorded on the device, with 7-day, 30-day, 1-year and all-time views plus top songs and artists. A play counts after 30 seconds; history starts when the feature first runs. Settings → Listening stats.
+- **Animated lock screen** (iOS 26+) — a short looping video in place of the still cover: Spotify's Canvas when the track has one, Apple Music's editorial video otherwise. A third source, rendering a loop from the cover itself, is a separate switch and off by default. Settings → Interface → Lock screen artwork.
+- **Lock screen lyrics** (iOS 26+) — the line being sung takes over the lock screen's full-screen artwork, with the next line dimmed under it. Every line is drawn once as a short clip and cached per track, so changes cost no network. Uses the same lyrics source as the in-app views. Settings → Interface → Lock screen lyrics.
+- **Listening stats** — plays and listening time are recorded on the device, with 7-day, 30-day, 1-year and all-time views plus top songs and artists. A play counts after 30 seconds; history starts when the feature first runs. Settings → Premium & playback → Listening stats.
 
 <details>
 <summary>Lyrics source details</summary>
 
-- The default order is `AMLL → Spicy Lyrics → PetitLyrics → KuGou → NetEase → QQ Music → Unison → Musixmatch → BiniLyrics → LRCLIB → Genius`. Drag to reorder it under Settings → Lyrics → Lyrics Source Order.
-- Spicy Lyrics is **skipped without being asked** when no client key is set (Settings → Lyrics), so a fresh install starts the chain at AMLL instead of waiting on a source that cannot answer.
+- The default order is `AMLL → Spicy Lyrics → PetitLyrics → KuGou → NetEase → QQ Music → Unison → Musixmatch → BiniLyrics → LRCLIB → Genius`. Drag to reorder it under Settings → Lyrics → Lyrics sources & behaviour → Lyrics Source Order.
+- Spicy Lyrics is **skipped without being asked** when no client key is set (Settings → Lyrics → Lyrics sources & behaviour), so a fresh install starts the chain at AMLL instead of waiting on a source that cannot answer.
 - An answer that reports the track as **instrumental** ends the chain on the spot: no later source can carry lyrics for that track.
 - The order only decides **who is asked first**; it never decides who wins. A word-by-word answer always beats a line-by-line one, which always beats plain text. Among answers with the same timing tier, the one that also carries a translation, official romanization, or word-level romanization (whichever switch asks for it) wins; a tie keeps the first arrival.
 - With word-by-word lyrics on, Auto Select may keep asking until 4 seconds after the chain started — to upgrade a line-timed answer to a word-timed one, or to find one that also has the translation / romanization the current settings ask for. That cap exists so the lyrics card is not delayed past the point where it can still be built. It stops earlier when the best answer so far is line-timed and no source left in the chain can produce word timing.
 - Auto Select is only offered when the now-playing style is **Apple Music**. With Spotify's own layout the lyrics go straight into Spotify's card, so a single source is used instead.
 - Word-timed sources: Spicy Lyrics, AMLL, PetitLyrics, NetEase (yrc), QQ Music (QRC), KuGou (KRC), Unison, Musixmatch (richsync), BiniLyrics, Apple Music TTML. LRCLIB is line-timed, Genius is plain text.
-- The Apple Music official TTML source is under Settings → Experiments. It needs your own `media-user-token`, because Apple has no public lyrics API.
+- The Apple Music official TTML source is under Settings → Advanced → Experiments. It needs your own `media-user-token`, because Apple has no public lyrics API.
 
 </details>
 
 ### Playback
 
-- **Sleep timer** — pauses playback when the time is up, 1 to 90 minutes, and keeps counting with the screen off. Settings → Sleep timer.
+- **Sleep timer** — pauses playback when the time is up, 1 to 90 minutes, and keeps counting with the screen off. Settings → Premium & playback → Sleep timer.
 
 ### Audio
 
-- **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Only animates while the player page is visible. Settings → Advanced features → Audio & gestures → Rhythm.
-- **Beat haptics** — kick and snare transients become light taps. Taps are throttled to one per 90 ms and step themselves down after 30 seconds of continuous triggering; strength has three steps. Settings → Advanced features → Audio & gestures → Beat haptics.
+- **Cover pulse** — on the iOS 27 player the artwork breathes with the bass (low-band envelope, up to 2% scale) and the blurred backdrop follows it. Only animates while the player page is visible. Settings → Audio & gestures → Rhythm & beat haptics.
+- **Beat haptics** — kick and snare transients become light taps. Taps are throttled to one per 90 ms and step themselves down after 30 seconds of continuous triggering; strength has three steps. Settings → Audio & gestures → Rhythm & beat haptics.
 - Both read the decoded PCM through a read-only tap: the audio itself is never altered. If a track is already playing when you turn them on, pause and resume once so the tap attaches.
-- **Audio effects** — a chain built from a preamp, bass and clarity shelves (below 150 Hz, above 6 kHz), a 10-band graphic equalizer (31.5 Hz to 16 kHz, ±12 dB), a single-band compressor and headphone crossfeed, inserted between Spotify's own source unit and the output unit. The first time you switch it on, restart Spotify so the tap can wrap the output callback; after that the sliders apply live. Lower the preamp if loud tracks start clipping. Settings → Advanced features → Audio & gestures → Audio Effects.
+- **Audio effects** — a chain built from a preamp, bass and clarity shelves (below 150 Hz, above 6 kHz), a 10-band graphic equalizer (31.5 Hz to 16 kHz, ±12 dB), a single-band compressor and headphone crossfeed, inserted between Spotify's own source unit and the output unit. The first time you switch it on, restart Spotify so the tap can wrap the output callback; after that the sliders apply live. Lower the preamp if loud tracks start clipping. Settings → Audio & gestures → Audio effects.
 
 ### Gestures
 
-- **Head gestures** — nod once for the next track, shake once for the previous one. Reads the head-attitude stream that AirPods Pro / AirPods Max expose through Core Motion, so it needs headphones with motion sensors. Detection is deliberately conservative (two opposite swings, 1.5 s cooldown) and the switch is off by default. Settings → Advanced features → Audio & gestures → Head Gestures.
+- **Head gestures** — nod once for the next track, shake once for the previous one. Reads the head-attitude stream that AirPods Pro / AirPods Max expose through Core Motion, so it needs headphones with motion sensors. Detection is deliberately conservative (two opposite swings, 1.5 s cooldown) and the switch is off by default. Settings → Audio & gestures → Head gestures.
 - The IPA build adds `NSMotionUsageDescription` to Spotify's Info.plist for the head gestures; the switch is inert when that string is missing.
 
 ## Install

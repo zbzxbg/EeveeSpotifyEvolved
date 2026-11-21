@@ -804,3 +804,23 @@ listening_stats_minutes_format = "%d min";
 listening_stats_seconds_format = "%d s";
 listening_stats_plays_format = "%d plays";
 listening_stats_combo_format = "%@ · %@";
+
+// 设置根页：分组与行
+settings_group_features = "Premium & playback";
+settings_group_lyrics = "Lyrics";
+lyrics_sources_title = "Lyrics sources & behaviour";
+settings_group_interface = "Interface";
+settings_group_audio = "Audio & gestures";
+settings_group_about = "About & maintenance";
+audio_reactive_title = "Rhythm & beat haptics";
+settings_sub_audio_effects = "Equalizer, compressor, crossfeed";
+settings_sub_audio_reactive = "Cover pulse and taps on the beat";
+settings_sub_head_gestures = "Nod or shake to change track";
+settings_sub_lock_screen_artwork = "Looping clip instead of the still cover";
+settings_sub_lock_screen_lyrics = "The line being sung takes over the screen";
+settings_status_on = "On";
+settings_status_off = "Off";
+settings_search_title = "Search settings";
+settings_search_subtitle = "Find a setting by name";
+settings_search_placeholder = "Search";
+settings_search_empty = "No setting matches that.";

@@ -63,7 +63,7 @@ If you see the "Couldn't load the lyrics for this song" message and no lyrics lo
 4. If that doesn't help, go to the Patching section and enable "Overwrite Configuration"
 5. Reset data within the EeveeSpotify settings
 
-If a single song has no lyrics while the others do, open Settings → Lyrics → Lyrics Source Order and check that a source which carries it is enabled. Auto Select asks the sources in order and skips any that return nothing, so one gap never blocks the others.
+If a single song has no lyrics while the others do, open Settings → Lyrics → Lyrics sources & behaviour → Lyrics Source Order and check that a source which carries it is enabled. Auto Select asks the sources in order and skips any that return nothing, so one gap never blocks the others.
 
 ## Premium Not Working
 
