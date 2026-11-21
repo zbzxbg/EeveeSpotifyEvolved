@@ -440,3 +440,8 @@ settings_search_empty = "沒有符合的設定項目。";
 log_tools_section = "日誌";
 sleep_timer_shortcut_hint = "在 Apple Music 樣式的聽歌頁長按播放佇列，也能開啟這個面板。";
 glass_iphone_only_footer = "標籤欄玻璃是按 iPhone 標籤欄量的，iPad 上不啟用。";
+
+// iPad 回退提示
+ipad_fallback_title = "已為 iPad 調整";
+ipad_fallback_message = "偵測到目前裝置是 iPad。標籤欄與迷你條的玻璃，以及藝人 / 專輯 / 歌單頁面的外觀改動，都是按 iPhone 的尺寸做的，已回退為 Spotify 原生外觀。重啟 Spotify 後生效。";
+ipad_fallback_restart = "重啟 Spotify";

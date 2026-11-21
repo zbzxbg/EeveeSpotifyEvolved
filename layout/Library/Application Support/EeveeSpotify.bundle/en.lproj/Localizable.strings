@@ -819,3 +819,8 @@ settings_search_empty = "No setting matches that.";
 log_tools_section = "Log";
 sleep_timer_shortcut_hint = "In the Apple Music style player, long-press the queue button to open this panel.";
 glass_iphone_only_footer = "The tab bar glass is measured from the iPhone tab bar, so it stays off on iPad.";
+
+// iPad 回退提示
+ipad_fallback_title = "Adjusted for iPad";
+ipad_fallback_message = "This device is an iPad. The tab bar and mini bar glass, and the artist, album and playlist page look, are laid out for the iPhone, so they were reverted to Spotify's native look. Restart Spotify to apply.";
+ipad_fallback_restart = "Restart Spotify";
