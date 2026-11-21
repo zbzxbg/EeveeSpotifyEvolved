@@ -80,7 +80,7 @@ unknown_error = "Naməlum xəta";
 /* MARK: Instrumental Titles */
 
 song_is_instrumental = "Bu mahnı instrumentaldır.";
-let_the_music_play = "Qoy musiqi davam etsin...";
+let_the_music_play = "♪";
 
 /* MARK: Liked Songs Title (must match Spotify) */
 

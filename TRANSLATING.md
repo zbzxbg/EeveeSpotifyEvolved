@@ -178,7 +178,7 @@ What it reports:
 | Untranslated | informational | Key exists in `en.lproj` but not yours — the app shows English. Keys listed in `Tools/l10n_notranslate.txt` are counted separately as "skipped" and are not asked for |
 | Extra keys | **error** | Key not in `en.lproj` — stale/renamed leftover, unreachable |
 | Duplicate keys | **error** | Same key twice in one file — the last one silently wins |
-| Verbatim English copies | warning | Redundant rows; delete them (English comes from `en.lproj`) |
+| Verbatim English copies | warning | Redundant rows; delete them (English comes from `en.lproj`). Values with no letters — a symbol like `♪` or a format string like `%@ · %@` — are exempt: there is nothing to translate |
 | Format-arg count differs from en | warning | Both styles can be correct — see rule 2 |
 | Unused keys | warning | Defined but never referenced in Swift — ask before removing |
 

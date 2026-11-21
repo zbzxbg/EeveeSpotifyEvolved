@@ -102,7 +102,7 @@ unknown_error = "خطای نامشخص";
 // Instrumental Titles
 
 song_is_instrumental = "این ترانه بی کلام است";
-let_the_music_play = "بگذار موسیقی پخش شود...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

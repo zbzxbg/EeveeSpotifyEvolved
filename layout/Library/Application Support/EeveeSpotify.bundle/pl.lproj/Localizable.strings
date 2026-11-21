@@ -116,7 +116,7 @@ unknown_error = "Nieznany błąd";
 // Instrumental Titles
 
 song_is_instrumental = "Ten utwór jest instrumentalny.";
-let_the_music_play = "Niech muzyka trwa";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

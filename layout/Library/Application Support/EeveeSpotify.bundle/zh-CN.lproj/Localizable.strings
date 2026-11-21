@@ -150,6 +150,7 @@ musixmatch_restricted_popup = "由于受到限制，该插件无法加载Musixma
 // Instrumental Titles
 
 song_is_instrumental = "此歌曲为纯音乐。";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 liked_songs = "喜欢的歌曲";

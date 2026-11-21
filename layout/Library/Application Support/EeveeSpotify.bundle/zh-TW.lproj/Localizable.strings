@@ -121,7 +121,7 @@ unknown_error = "未知錯誤";
 // 純音樂
 
 song_is_instrumental = "此歌曲為純音樂。";
-let_the_music_play = "讓音樂演奏吧...";
+let_the_music_play = "♪";
 
 // 已按讚的歌曲
 

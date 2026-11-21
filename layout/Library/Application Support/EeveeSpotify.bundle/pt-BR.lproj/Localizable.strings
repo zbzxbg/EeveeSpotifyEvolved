@@ -81,7 +81,7 @@ unknown_error = "Erro desconhecido";
 // Instrumental Titles
 
 song_is_instrumental = "Esse som é instrumental.";
-let_the_music_play = "Deixe a música tocar...";
+let_the_music_play = "♪";
 
 /* AUTO-FILLED (untranslated) — keys that exist in en.lproj but were missing in this
    locale. Values are the English originals (copied verbatim), so runtime behaviour is

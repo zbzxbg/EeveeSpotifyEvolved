@@ -103,7 +103,7 @@ unknown_error = "不明なエラーが発生しました";
 // Instrumental Titles
 
 song_is_instrumental = "この曲は歌詞がありません";
-let_the_music_play = "音楽をお楽しみください";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

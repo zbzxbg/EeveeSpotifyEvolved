@@ -104,7 +104,7 @@ unknown_error = "خطأ غير معروف";
 // Instrumental Titles
 
 song_is_instrumental = "هذه الأغنية هي عبارة عن مقطوعة موسيقية.";
-let_the_music_play = "دع الموسيقى تعزف...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

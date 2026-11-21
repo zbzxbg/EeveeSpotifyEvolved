@@ -86,7 +86,7 @@ unknown_error = "Eroare necunoscută";
 // Instrumental Titles
 
 song_is_instrumental = "Acest cântec este instrumental.";
-let_the_music_play = "Lăsați muzica să cânte...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

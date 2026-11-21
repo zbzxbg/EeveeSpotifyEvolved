@@ -18,6 +18,8 @@ Checks:
   4. Verbatim copy  — value is byte-identical to the English baseline (warning).
                       ★ 2026-10-11 新增：按上面的"单点提供"政策，这种行是**冗余**的
                       （删掉不改变任何显示），留着只会让 en 改文案时要跟着改 N 份文件。
+                      例外：值里**没有字母**的（`♪`、`%@ · %@`）不算副本 —— 它们本来
+                      就没有可翻译的内容，逐字相同是正确结果，不是冗余。
   5. Unused keys    — key defined in en.lproj but never referenced in Swift code
                       (warning; .strings values are used dynamically so review
                       each hit manually before deleting)
@@ -445,8 +447,11 @@ def main() -> int:
         extra = sorted(loc_keys - baseline_keys)
         dups = duplicate_keys(strings_path)
         # ④ 与基线逐字相同的行：按"单点提供"政策是冗余的（删掉不改变显示）。
+        #    例外同上：值里没有字母（符号 / 纯格式串）时，逐字相同就是正确结果。
         copies = sorted(
-            k for k in sorted(baseline_keys & loc_keys) if entries[k] == baseline[k]
+            k
+            for k in sorted(baseline_keys & loc_keys)
+            if entries[k] == baseline[k] and re.search(r"[A-Za-z]", baseline[k])
         )
 
         # Format-specifier mismatches for keys present in both

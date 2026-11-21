@@ -98,7 +98,7 @@ unknown_error = "Ukendt fejl";
 // Instrumental Titles
 
 song_is_instrumental = "Denne sang er instrumental.";
-let_the_music_play = "Lad musikken spille...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

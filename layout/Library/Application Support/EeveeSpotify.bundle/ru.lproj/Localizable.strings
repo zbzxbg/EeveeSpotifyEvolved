@@ -97,7 +97,7 @@ unknown_error = "Неизвестная ошибка";
 // Instrumental Titles
 
 song_is_instrumental = "Это инструментальная композиция.";
-let_the_music_play = "Пусть заиграет музыка...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

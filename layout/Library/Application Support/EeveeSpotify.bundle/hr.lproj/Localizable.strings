@@ -87,7 +87,7 @@ unknown_error = "Nepoznata pogreška";
 // Naslovi instrumentalnih pjesama
 
 song_is_instrumental = "Ova pjesma je instrumentalna.";
-let_the_music_play = "Pustite glazbu da svira...";
+let_the_music_play = "♪";
 
 // Naslov omiljenih pjesama, treba odgovarati službenoj Spotify lokalizaciji
 

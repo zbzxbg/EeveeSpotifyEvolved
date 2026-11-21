@@ -86,7 +86,7 @@ no_such_song = "Kunai Geet Paayena";
 // Instrumental Titles
 
 song_is_instrumental = "Yo geet instrumental ho.";
-let_the_music_play = "Geet bajna dinuhos...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

@@ -98,7 +98,7 @@ unknown_error = "Error desconegut";
 // Instrumental Titles
 
 song_is_instrumental = "Aquesta cançó és instrumental.";
-let_the_music_play = "Deixa que soni la música...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

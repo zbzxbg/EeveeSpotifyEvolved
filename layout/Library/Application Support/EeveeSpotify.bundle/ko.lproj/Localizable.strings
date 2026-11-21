@@ -81,7 +81,7 @@ unknown_error = "알 수 없는 오류";
 // Instrumental Titles
 
 song_is_instrumental = "이 노래는 악기전용 노래입니다.";
-let_the_music_play = "음악이 재생되게 놔두세요...";
+let_the_music_play = "♪";
 
 /* AUTO-FILLED (untranslated) — keys that exist in en.lproj but were missing in this
    locale. Values are the English originals (copied verbatim), so runtime behaviour is

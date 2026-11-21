@@ -99,7 +99,7 @@ unknown_error = "Error desconocido";
 // Instrumental Titles
 
 song_is_instrumental = "Esta canción es instrumental.";
-let_the_music_play = "Deja que la música suene...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

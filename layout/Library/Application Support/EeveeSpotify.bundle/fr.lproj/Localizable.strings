@@ -99,7 +99,7 @@ unknown_error = "Erreur inconnue";
 // Instrumental Titles
 
 song_is_instrumental = "Ce titre est instrumental.";
-let_the_music_play = "Laissez la musique jouer...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

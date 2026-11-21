@@ -111,7 +111,7 @@ unknown_error = "Bilinmeyen Hata";
 // Instrumental Titles
 
 song_is_instrumental = "Bu şarkı enstrümantaldir.";
-let_the_music_play = "Bırak müzik çalsın...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 
