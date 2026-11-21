@@ -414,6 +414,30 @@ extension LyricsDto {
             }
             return line
         }
+
+        // 官方罗马字（整行那份与逐词那份）同样归一到"第一个字母大写"。
+        //
+        // 这两份是**源自己给的**，原本只在渲染层按需大写（`LyricLinesAdapter` 的两条路
+        // 各做一次）。但渲染还有第三条路（旧 overlay、锁屏、整行静态画法），漏一处就会
+        // 露出全小写的那一行 ——「 su ki da yo …」这种：装饰 `「` 自成一组时，
+        // 只在第 0 组做大写的实现永远改不动它。这里在**落地时**统一一次，
+        // 后面不管走哪条路，拿到的都是同一份大小写（`…IfAlphabetic` 对已大写的串是恒等）。
+        if !result.officialRomanizedLines.isEmpty {
+            result.officialRomanizedLines = result.officialRomanizedLines.map { line in
+                line.isEmpty ? line : line.capitalizingFirstLetterIfAlphabetic()
+            }
+        }
+        if !result.officialRomanizedWordGroups.isEmpty {
+            result.officialRomanizedWordGroups = result.officialRomanizedWordGroups.map { group in
+                var capitalized = false
+                return group.map { word -> String in
+                    guard !capitalized else { return word }
+                    let candidate = word.capitalizingFirstLetterIfAlphabetic()
+                    if candidate.contains(where: { $0.isLetter }) { capitalized = true }
+                    return candidate
+                }
+            }
+        }
         return result
     }
 }
