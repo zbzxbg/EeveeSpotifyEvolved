@@ -5,7 +5,7 @@
 Spotify, arranged like Apple Music.
 
 [![iOS](https://img.shields.io/badge/iOS-17.4%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
-[![Spotify](https://img.shields.io/badge/Spotify-9.2.0-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
+[![Spotify](https://img.shields.io/badge/Spotify-9.2.2-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/License-GPL--3.0-2C6EDB?style=for-the-badge)](LICENSE)
 
 [Download](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases) · [Features](#features) · [Install](#install) · [Build](docs/BUILDING.md) · [Credits](#credits)
@@ -13,7 +13,7 @@ Spotify, arranged like Apple Music.
 </div>
 
 > [!NOTE]
-> Tested on Spotify 9.2.0. This repository does not do offline downloads, and does not do lossless audio. I can't maintain that feature and I'm not taking the legal risk. So not now, and not ever. If you consider it essential, look at [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) or [Taurus](https://github.com/samj-exe/taurus).
+> Tested on Spotify 9.2.2. This repository does not do offline downloads, and does not do lossless audio. I can't maintain that feature and I'm not taking the legal risk. So not now, and not ever. If you consider it essential, look at [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) or [Taurus](https://github.com/samj-exe/taurus).
 
 <p align="center">
   <img src="docs/screenshots/lock.webp" width="24%" alt="Lock screen: animated artwork in place of the still cover">
