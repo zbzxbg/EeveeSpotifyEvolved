@@ -171,6 +171,10 @@ extension NowPlayingIOS27 {
     // ⚠️ **先量到中线再藏**：量不到位置时若已经把原生字形藏掉，底排就空了。
     @discardableResult
     static func placeFooter(in page: UIView) -> Bool {
+        // Connect 长按的槽位每拍重记：这一拍找不到工具行 / 量不到中线就清空 ——
+        // 页面可能还活着，但那一格已经不在原位，旧矩形会让长按在空处弹窗。
+        // 真正有效的矩形由 `mountFooterGlyphs` 在摆完字形之后写回（同一拍内）。
+        LyricsSongSourcePrompt.setConnectTapRect(nil)
         let connect = footerControl(connectButtonIdentifier, in: page)
         let share = footerControl(NowPlayingLyricsPlate.shareButtonIdentifier, in: page)
         let queue = footerControl(queueButtonIdentifier, in: page)
@@ -475,14 +479,14 @@ extension NowPlayingIOS27 {
         }
         // 中间那颗（Connect / 输出切换，图标是同心弧）：**长按** = 这一首的歌词来源。
         //
-        // 触摸在这一格是**转发给原生控件**的（`zones` → 真实 `hitTest`），替身收不到，
-        // 所以这里只能挂到控件自己身上。短按仍是原生行为；长按认出来之后
-        // `cancelsTouchesInView` 会把那一下点击吃掉，不会"弹完窗又切设备"。
-        if let connect, let control = NowPlayingIOS27.nearestControl(connect) {
-            LyricsSongSourcePrompt.attachLongPress(to: control)
-        } else if let connect {
-            LyricsSongSourcePrompt.attachLongPress(to: connect)
-        }
+        // 这一格的短按是替身 `zones` 的**真实触摸转发**：真正接住 `UITouch` 的是
+        // `hitTest` 链上的某一层（原生 Connect 外面还包着 ViewHolder / EncoreButton），
+        // 挂在某颗控件上的手势可能根本不在那条链上 ⇒ 永远收不到。
+        // 所以挂**整页**（替身与原生键的公共祖先，任何转发路径都在它下面），
+        // 只按这一格 44pt 判定 —— 与"谁接住这一下"无关。
+        // 短按仍是原生行为；长按认出来之后 `cancelsTouchesInView` 把那一下点击吃掉，
+        // 不会"弹完窗又切设备"。矩形每拍随字形一起更新（页面重建会重新挂）。
+        LyricsSongSourcePrompt.attachLongPress(to: page, connectRect: tapRect(frames[1]))
         addZone(frames[2], target: queue, label: "queue")
         // 同一颗「队列」键**长按** = 睡眠定时器面板。短按照旧开队列。
         //
@@ -790,6 +794,10 @@ extension NowPlayingIOS27 {
     }
 
     static func clearFooterState() {
+        // 长按手势挂在**听歌页**上，不随我们的视图一起消失 —— 收尾时摘掉，
+        // 免得被复用的 cell 在原地重新弹窗（`restore` 的两条分支都会走到 `clearState`，
+        // 所以这里补上就够；页面换了由 `attachLongPress` 自己把上一页那枚摘掉）。
+        LyricsSongSourcePrompt.detachLongPress()
         footerGlyphs.removeAllObjects()
         footerRelay = nil
         lyricsEntryView = nil

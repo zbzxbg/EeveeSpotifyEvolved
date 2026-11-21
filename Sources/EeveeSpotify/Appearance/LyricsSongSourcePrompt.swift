@@ -113,32 +113,104 @@ enum LyricsSongSourcePrompt {
         }
     }
 
-    /// 给某颗控件挂"长按 → 这个弹窗"。
+    // MARK: - 长按入口（挂在听歌页上）
+    //
+    // ⚠️ **不要改回"挂到某颗控件上"**。短按那条路是替身 `zones` 的真实触摸转发：
+    // 这一下最终由 `hitTest` 链上的哪一层接住（原生 Connect 外面还包着 ViewHolder /
+    // EncoreButton）不确定，挂在别处的识别器可能根本不在那条链上 —— 表现就是手势
+    // 挂上了、却永远不识别。
+    //
+    // 现在挂**听歌页**（`placeFooter` 拿到的那个 `page`）：替身与原生键都是它的后代，
+    // 任何一条转发路径都在它下面。识别之后按 `connectTapRect` 那一格判定，
+    // 与"到底谁接住这一下"无关。
+
+    /// 当前这一页的 Connect 槽位（页面坐标）。`nil` = 这一拍没有可长按的格子。
+    fileprivate static var connectTapRect: CGRect?
+
+    /// 每一拍刷新 Connect 槽位（页面坐标）。
     ///
-    /// 幂等：页脚每次布局都会调到，同一颗控件只挂一次。`cancelsTouchesInView` 用默认的
-    /// `true` —— 长按认出来之后，那一下点击就不会再落到 Spotify 自己的 Connect 动作上。
-    static func attachLongPress(to control: UIView) {
-        guard objc_getAssociatedObject(control, &attachedKey) == nil else { return }
-        objc_setAssociatedObject(control, &attachedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    /// `placeFooter` 找不到工具行时传 `nil`：页面可能还活着，但那一格已经不在原位，
+    /// 留着旧矩形就会长按在空处弹窗。
+    static func setConnectTapRect(_ rect: CGRect?) {
+        connectTapRect = rect
+    }
+
+    /// 给听歌页挂"长按 Connect 槽位 → 这个弹窗"。
+    ///
+    /// 幂等：同一页只挂一次（关联对象记着那枚手势）。页面重建（新的 `UIView`）会重新挂；
+    /// 页面换了会把上一页那枚摘掉，别留在被回收的 cell 上。
+    ///
+    /// `cancelsTouchesInView` 保持 `true` —— 长按认出来之后，那一下点击不会再落到
+    /// Spotify 自己的 Connect 动作上（不会"弹完窗又切设备"）。
+    static func attachLongPress(to page: UIView, connectRect: CGRect?) {
+        connectTapRect = connectRect
+        guard let rect = connectRect else { return }
+        if let previous = attachedPage, previous !== page {
+            removePress(from: previous)
+        }
+        attachedPage = page
+        guard objc_getAssociatedObject(page, &attachedKey) == nil else { return }
         let press = UILongPressGestureRecognizer(
             target: Target.shared,
-            action: #selector(Target.longPressed(_:))
+            action: #selector(Target.connectLongPressed(_:))
         )
         press.minimumPressDuration = 0.45
-        control.addGestureRecognizer(press)
+        press.cancelsTouchesInView = true
+        // 只在 Connect 那一格里起手才识别（`Target.gestureRecognizerShouldBegin`）：
+        // 这道闸门必须收紧到**判决**这一步 —— 手势挂在整页上，若等识别完再按矩形过滤，
+        // 页面上任何一处长按都会让 `cancelsTouchesInView` 生效，把歌词 / 队列两颗键
+        // 以及列表的长按、拖动一起吃掉。
+        press.delegate = Target.shared
+        page.addGestureRecognizer(press)
+        objc_setAssociatedObject(page, &attachedKey, press, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         writeDebugLog(
-            "[Lyrics] long-press source prompt attached — \(NSStringFromClass(type(of: control)))"
+            "[Lyrics] long-press source prompt attached to the page — connect rect"
+                + " \(Int(rect.minX)),\(Int(rect.minY))"
+                + " \(Int(rect.width))×\(Int(rect.height)) (page coords)"
         )
     }
 
+    /// 收尾：把页面上的长按手势摘掉，并清空槽位。
+    ///
+    /// 页面（cell）会被 Spotify 复用，留着一枚识别器就会在原位重新弹窗。
+    /// 清空矩形之后，即便某条路径没走到这里（手势还挂着），也只是一次 no-op。
+    static func detachLongPress() {
+        connectTapRect = nil
+        guard let page = attachedPage else { return }
+        attachedPage = nil
+        removePress(from: page)
+    }
+
+    /// 挂着手势的那一页（弱引用：页面走了自己掉）。
+    private static weak var attachedPage: UIView?
+    /// 关联对象的 key（存的是那枚 `UILongPressGestureRecognizer`，摘的时候要拿它）。
     private static var attachedKey: UInt8 = 0
 
-    final class Target: NSObject {
+    private static func removePress(from page: UIView) {
+        let attached = objc_getAssociatedObject(page, &attachedKey)
+        guard let press = attached as? UILongPressGestureRecognizer else { return }
+        page.removeGestureRecognizer(press)
+        objc_setAssociatedObject(page, &attachedKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    final class Target: NSObject, UIGestureRecognizerDelegate {
         static let shared = Target()
 
-        @objc func longPressed(_ recognizer: UILongPressGestureRecognizer) {
+        /// 手指必须落在 Connect 槽位那一格里才识别（见 `attachLongPress` 里那段）。
+        @objc func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            // 页面已经不在窗口里（收尾 / 复用中的 cell）⇒ 不识别。
+            guard let page = recognizer.view, page.window != nil else { return false }
+            guard let rect = LyricsSongSourcePrompt.connectTapRect else { return false }
+            return rect.contains(recognizer.location(in: page))
+        }
+
+        @objc func connectLongPressed(_ recognizer: UILongPressGestureRecognizer) {
             guard recognizer.state == .began else { return }
-            writeDebugLog("[Lyrics] long press on the connect key — source prompt")
+            // 页面不在窗口里（收尾那一两拍）就不弹：复用中的 cell 上还有旧手势。
+            guard let page = recognizer.view, page.window != nil else { return }
+            guard let rect = LyricsSongSourcePrompt.connectTapRect,
+                  rect.contains(recognizer.location(in: page)) else { return }
+            writeDebugLog("[Lyrics] long press on the connect rect — source prompt")
             LyricsSongSourcePrompt.present()
         }
     }
