@@ -191,21 +191,18 @@ struct NowPlayingSettingsView: View {
         }
     }
 
-    /// 两档各自的语义（节脚第一段）。
+    /// 两档各自的语义（节脚）。
     ///
     /// 选项名只是短词（`Picker` 行尾要显示它），**长句全部放这里** ——
     /// 与「首页顶部样式」那条 footer 同一做法（那边就是被 segmented 截断才改的）。
     ///
     /// 这段不拼「包含：…」的功能名，直接读一条完整说明
     /// （`now_playing_style_description` 里的 `%@` 也一并去掉）。
+    ///
+    /// 播客不再需要单独的警告：Apple Music 式的几何只对音乐页成立，播客由
+    /// `NowPlayingPodcastFallback` 让位回 Spotify 自己的布局。
     private var styleDescriptionText: String {
-        // 两段：选项各自的语义，空一行接播客的警告。
-        // 播客那段是**临时措施**：Apple Music 式的几何是照音乐播放页算的（封面 0.58 屏、
-        // 底部栈上移 55pt），播客的控件（快退 / 快进 / 倍速）比音乐那行多，会被挤到屏幕外。
-        // 干净的解法是在入口按 `spotify:show:` / `spotify:episode:` 判断并自动退回原生渲染。
         "now_playing_style_description".localized
-            + "\n\n"
-            + "now_playing_style_podcast_warning".localized
     }
 
     /// 当场落地 / 还原。

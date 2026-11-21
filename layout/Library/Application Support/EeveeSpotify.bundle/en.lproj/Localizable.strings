@@ -733,7 +733,6 @@ now_playing_style = "Now-playing style";
 now_playing_style_spotify = "Spotify";
 now_playing_style_apple_music = "Apple Music style";
 now_playing_style_description = "Spotify = Spotify's own player layout. Its lyric preview is unmaintained, so some lyric settings are ignored there (Japanese romanisation, for example, leaves the lyrics in Japanese). Apple Music style = the player is modelled on Apple Music.";
-now_playing_style_podcast_warning = "Use Spotify for podcasts: the Apple Music-style layout is sized for the music player, and a podcast's controls get pushed off screen.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.
