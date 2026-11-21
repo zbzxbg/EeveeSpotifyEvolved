@@ -707,6 +707,7 @@ lock_screen_artwork_cache = "Downloaded artwork";
 lock_screen_artwork_cleared = "Cleared";
 lock_screen_lyrics_title = "Lock screen lyrics";
 lock_screen_lyrics_enabled = "Show lyrics on the lock screen";
+lock_screen_lyrics_word_by_word = "Word-by-word fill";
 lock_screen_lyrics_description = "Draws the line being sung on the lock screen's full-screen artwork.\n\n%@";
 lock_screen_lyrics_cache = "Rendered lyric clips";
 lock_screen_lyrics_cleared = "Cleared";

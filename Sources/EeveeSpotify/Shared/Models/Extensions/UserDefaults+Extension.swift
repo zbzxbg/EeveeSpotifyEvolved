@@ -29,6 +29,7 @@ extension UserDefaults {
     private static let lockScreenArtworkFillKey = "lockScreenAnimatedArtworkFill"
     /// 锁屏全屏封面区的逐行歌词（独立于动态封面：它自己就是一对动画键的使用者）。
     private static let lockScreenLyricsKey = "lockScreenLyrics"
+    private static let lockScreenWordByWordKey = "lockScreenWordByWord"
     /// 睡眠定时器上次选的时长（分钟）。定时器本身是运行态，不落盘。
     private static let sleepTimerMinutesKey = "sleepTimerMinutes"
     private static let hapticsEnabledKey = "hapticsEnabled"
@@ -123,6 +124,7 @@ extension UserDefaults {
         lockScreenArtworkCanvasKey,
         lockScreenArtworkFillKey,
         lockScreenLyricsKey,
+        lockScreenWordByWordKey,
         sleepTimerMinutesKey,
         hapticsEnabledKey,
         hapticsStrengthKey,
@@ -437,6 +439,18 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: lockScreenLyricsKey)
+        }
+    }
+
+    /// 锁屏歌词要不要**逐字**亮（一行编成多帧，见 `LockScreenKaraoke`）。默认开。
+    ///
+    /// 只有带词级时间轴的源会有区别；词和行文本对不上、或词太少时照样按单帧画。
+    static var lockScreenWordByWord: Bool {
+        get {
+            container.object(forKey: lockScreenWordByWordKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: lockScreenWordByWordKey)
         }
     }
 

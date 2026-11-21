@@ -98,7 +98,8 @@ enum LockScreenLyricsFetcher {
         // 所以"整首至少有一行 flipped"就是"这是一首对唱"。
         let isDuet = dto.lines.contains { $0.agent?.isFlipped == true }
 
-        var timed: [(start: Int, end: Int?, text: String, translation: String, romanization: String, flipped: Bool)] = []
+        var timed: [(start: Int, end: Int?, text: String, translation: String, romanization: String, flipped: Bool, karaoke: [LockScreenKaraokeFrame])] = []
+        let wantsKaraoke = UserDefaults.lockScreenWordByWord
         for (index, pair) in ordered.enumerated() {
             let line = pair.element
             guard let start = line.offsetMs else { continue }
@@ -110,13 +111,18 @@ enum LockScreenLyricsFetcher {
             let romanization = pair.offset < romanizations.count
                 ? normalizedRomanization(romanizations[pair.offset], text: text)
                 : ""
+            // 逐字：词级时间轴 → 帧表；词拼起来和这行字不完全一样就给空（退回单帧）。
+            let karaoke = wantsKaraoke
+                ? (LockScreenKaraoke.frames(words: line.words ?? [], lineText: text) ?? [])
+                : []
             timed.append((
                 start,
                 line.endOffsetMs,
                 text,
                 translation,
                 romanization,
-                line.agent?.isFlipped ?? false
+                line.agent?.isFlipped ?? false,
+                karaoke
             ))
         }
         // 一行也算：有些歌整首只有一句词（念白/采样），不该被当成"没词"。
@@ -136,7 +142,8 @@ enum LockScreenLyricsFetcher {
                     translation: item.translation,
                     romanization: item.romanization,
                     isDuet: isDuet,
-                    agentFlipped: item.flipped
+                    agentFlipped: item.flipped,
+                    karaoke: item.karaoke
                 )
             )
         }

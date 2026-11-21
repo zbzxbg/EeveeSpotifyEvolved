@@ -11,9 +11,9 @@ import UIKit
 /// `MPMediaItemAnimatedArtwork`（一段本地文件），没有任何可以挂子视图的时机 ——
 /// 系统在锁屏画它自己那份播放器。所以歌词只能**画进画面本身**。
 ///
-/// 一段片子只有一帧：这一行会一直显示到下一条（由调度器在换行时换文件），
-/// 所以不需要逐帧动画。单帧编码在手机上只要几十毫秒，一行一段也不至于让
-/// 锁屏黑一下。
+/// 一段片子默认只有一帧：这一行会一直显示到下一条（由调度器在换行时换文件）。
+/// 逐字那一档是例外 —— 每个词开始编一帧（`LockScreenKaraoke`），编完停在最后一帧。
+/// 单帧编码在手机上只要几十毫秒；多帧多花的那点时间由后台队列吃掉。
 enum LyricClipRenderer {
 
     struct Failure: LocalizedError {
@@ -43,6 +43,7 @@ enum LyricClipRenderer {
         isDuet: Bool = false,
         flipped: Bool = false,
         nextFlipped: Bool = false,
+        revealedCharacters: Int? = nil,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
@@ -56,13 +57,17 @@ enum LyricClipRenderer {
             isDuet: isDuet,
             flipped: flipped,
             nextFlipped: nextFlipped,
+            revealedCharacters: revealedCharacters,
             credit: credit,
             size: size
         )
     }
 
-    /// 写一段单帧短片。`seconds` 是这段片子的名义时长：系统用它算循环点，
+    /// 写一段短片。`seconds` 是这段片子的名义时长：系统用它算循环点，
     /// 真正换不换行由调度器决定，所以这里给足"到下一行"的时间就行。
+    ///
+    /// `karaoke` 非空时编**多帧**：每个词开始的那一刻一帧（已唱词亮、未唱词压暗），
+    /// 编完最后一帧就停在那里等下一行；空则退回单帧（整行一次点亮）。
     static func write(
         cover: CGImage?,
         line: String?,
@@ -72,6 +77,7 @@ enum LyricClipRenderer {
         isDuet: Bool = false,
         flipped: Bool = false,
         nextFlipped: Bool = false,
+        karaoke: [LockScreenKaraokeFrame] = [],
         credit: String,
         size: CGSize,
         seconds: Double,
@@ -83,19 +89,42 @@ enum LyricClipRenderer {
             encodeQueue.async {
                 do {
                     let backdrop = try backdrop(cover: cover, size: size)
-                    let image = try compose(
-                        backdrop: backdrop,
-                        line: line,
-                        next: next,
-                        translation: translation,
-                        romanization: romanization,
-                        isDuet: isDuet,
-                        flipped: flipped,
-                        nextFlipped: nextFlipped,
-                        credit: credit,
-                        size: size
-                    )
-                    try writeSingleFrame(image, size: size, seconds: seconds, to: destination)
+                    if karaoke.count >= 2 {
+                        var frames: [(at: Int, image: CGImage)] = []
+                        frames.reserveCapacity(karaoke.count)
+                        for frame in karaoke {
+                            let image = try compose(
+                                backdrop: backdrop,
+                                line: line,
+                                next: next,
+                                translation: translation,
+                                romanization: romanization,
+                                isDuet: isDuet,
+                                flipped: flipped,
+                                nextFlipped: nextFlipped,
+                                revealedCharacters: frame.revealedCharacters,
+                                credit: credit,
+                                size: size
+                            )
+                            frames.append((frame.offsetMs, image))
+                        }
+                        try writeFrames(frames, size: size, seconds: seconds, to: destination)
+                    } else {
+                        let image = try compose(
+                            backdrop: backdrop,
+                            line: line,
+                            next: next,
+                            translation: translation,
+                            romanization: romanization,
+                            isDuet: isDuet,
+                            flipped: flipped,
+                            nextFlipped: nextFlipped,
+                            revealedCharacters: karaoke.first?.revealedCharacters,
+                            credit: credit,
+                            size: size
+                        )
+                        try writeFrames([(0, image)], size: size, seconds: seconds, to: destination)
+                    }
                     continuation.resume()
                 } catch let error {
                     continuation.resume(throwing: error)
@@ -208,6 +237,7 @@ enum LyricClipRenderer {
         isDuet: Bool,
         flipped: Bool,
         nextFlipped: Bool,
+        revealedCharacters: Int?,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
@@ -239,6 +269,7 @@ enum LyricClipRenderer {
             isDuet: isDuet,
             flipped: flipped,
             nextFlipped: nextFlipped,
+            revealedCharacters: revealedCharacters,
             credit: credit,
             size: size,
             context: context
@@ -258,6 +289,7 @@ enum LyricClipRenderer {
         isDuet: Bool,
         flipped: Bool,
         nextFlipped: Bool,
+        revealedCharacters: Int?,
         credit: String,
         size: CGSize,
         context: CGContext
@@ -391,19 +423,33 @@ enum LyricClipRenderer {
         }
 
         let currentTop = top - romanizationHeight - romanizationGap
-        draw(
-            current,
-            fontSize: fontSize,
-            alpha: 1,
-            rect: CGRect(
-                x: columnX,
-                y: currentTop - currentHeight,
-                width: columnWidth,
-                height: currentHeight
-            ),
-            alignment: currentAlignment,
-            context: context
+        let currentRect = CGRect(
+            x: columnX,
+            y: currentTop - currentHeight,
+            width: columnWidth,
+            height: currentHeight
         )
+        if let revealedCharacters {
+            // 逐字那一帧：已唱到的那一段亮白，后面的压暗。折行/对齐不变，
+            // 所以字幕块的高度与单帧那份完全一样，行不会跳。
+            drawRevealed(
+                current,
+                revealedCharacters: revealedCharacters,
+                fontSize: fontSize,
+                rect: currentRect,
+                alignment: currentAlignment,
+                context: context
+            )
+        } else {
+            draw(
+                current,
+                fontSize: fontSize,
+                alpha: 1,
+                rect: currentRect,
+                alignment: currentAlignment,
+                context: context
+            )
+        }
 
         let translationTop = currentTop - currentHeight - translationGap - translationHeight
         if !translationText.isEmpty {
@@ -533,6 +579,94 @@ enum LyricClipRenderer {
         context.restoreGState()
     }
 
+    /// 逐字那一帧：前 `revealedCharacters` 个字符亮白，其余压暗。
+    ///
+    /// 不用"裁一块渐变盖上去"：锁屏这块画布是多行折行的文本，按 x 裁剪会把整行
+    /// 一起点亮（折行后同一行 y 上有好几个词）。按**字符区间**上色才是逐词的语义。
+    private static func drawRevealed(
+        _ text: String,
+        revealedCharacters: Int,
+        fontSize: CGFloat,
+        rect: CGRect,
+        alignment: CTTextAlignment,
+        context: CGContext
+    ) {
+        guard rect.height > 0 else { return }
+        let framesetter = revealedFramesetter(
+            for: text,
+            fontSize: fontSize,
+            revealedCharacters: revealedCharacters,
+            alignment: alignment
+        )
+
+        context.saveGState()
+        context.setShadow(
+            offset: CGSize(width: 0, height: -1),
+            blur: fontSize * 0.12,
+            color: UIColor(white: 0, alpha: 0.55).cgColor
+        )
+        let path = CGPath(rect: rect, transform: nil)
+        let frame = CTFramesetterCreateFrame(
+            framesetter,
+            CFRange(location: 0, length: 0),
+            path,
+            nil
+        )
+        CTFrameDraw(frame, context)
+        context.restoreGState()
+    }
+
+    /// 已唱到 / 还没唱到两种颜色：两段 `NSAttributedString`（CoreText 只认 CF 那套属性名）。
+    ///
+    /// 区间用 UTF-16 长度（CoreText 的 range 口径），`revealedCharacters` 是 Character 数 ——
+    /// emoji / 组合字下两者不等，所以先截前缀再取 `NSString.length`。
+    private static func revealedFramesetter(
+        for text: String,
+        fontSize: CGFloat,
+        revealedCharacters: Int,
+        alignment: CTTextAlignment
+    ) -> CTFramesetter {
+        let font = coreTextFont(fontSize)
+        var alignment = alignment
+        let paragraph: CTParagraphStyle = withUnsafePointer(to: &alignment) { pointer in
+            var setting = CTParagraphStyleSetting(
+                spec: .alignment,
+                valueSize: MemoryLayout<CTTextAlignment>.size,
+                value: UnsafeRawPointer(pointer)
+            )
+            return CTParagraphStyleCreate(&setting, 1)
+        }
+
+        let attributed = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font,
+                NSAttributedString.Key(rawValue: kCTForegroundColorAttributeName as String):
+                    UIColor.white.withAlphaComponent(unsungAlpha).cgColor,
+                NSAttributedString.Key(rawValue: kCTParagraphStyleAttributeName as String): paragraph,
+            ]
+        )
+
+        let clamped = max(0, min(revealedCharacters, text.count))
+        if clamped > 0 {
+            let prefix = String(text.prefix(clamped)) as NSString
+            if prefix.length > 0 {
+                attributed.addAttribute(
+                    NSAttributedString.Key(rawValue: kCTForegroundColorAttributeName as String),
+                    value: UIColor.white.cgColor,
+                    range: NSRange(location: 0, length: prefix.length)
+                )
+            }
+        }
+
+        return CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+    }
+
+    /// 还没唱到的那一段的不透明度：比"下一行提示"（0.42）亮一点，
+    /// 整体行仍读得出来，但一眼能看出"这句还没唱"。
+    private static let unsungAlpha: CGFloat = 0.38
+
+
     /// CoreText 要的是 `CTFont`，而 `UIFont.systemFont(...).fontName` 给出来的是**私有名**
     /// （`.SFUI-Semibold` 这种）—— `CTFontCreateWithName` 解析不了这种名字，会**静默**退到
     /// Times New Roman（拉丁）和明朝体（CJK），于是锁屏上的字既不是系统字体、也不是应用里
@@ -583,14 +717,18 @@ enum LyricClipRenderer {
 
     // MARK: - 编码
 
-    /// 单帧 H.264。`AVAssetWriter` 的最后一个 sample 时长由 `endSession` 决定，
-    /// 所以"一帧 + 指定时长"就是一段定长短片，不需要真的编 N 帧。
-    private static func writeSingleFrame(
-        _ image: CGImage,
+    /// 一段 H.264。`frames` 是「毫秒偏移 + 画面」：单帧就是 `[(0, image)]`，
+    /// 逐字则是每个词一帧。最后一个 sample 之后的画面由 `endSession` 的时长兜住 ——
+    /// 编完最后一帧就停在那一帧，等调度器换行来换片段。
+    private static func writeFrames(
+        _ frames: [(at: Int, image: CGImage)],
         size: CGSize,
         seconds: Double,
         to destination: URL
     ) throws {
+        guard !frames.isEmpty else {
+            throw Failure(reason: "no frames to encode")
+        }
         let width = Int(size.width)
         let height = Int(size.height)
         // 先写同目录下的临时 `.mp4` 再改名：`.mp4.partial` 这种后缀有可能被
@@ -638,28 +776,40 @@ enum LyricClipRenderer {
         writer.startSession(atSourceTime: .zero)
 
         do {
-            while !input.isReadyForMoreMediaData {
-                Thread.sleep(forTimeInterval: 0.002)
-                guard writer.status == .writing else {
-                    throw Failure(reason: writer.error?.localizedDescription ?? "writing stopped")
+            for (index, frame) in frames.enumerated() {
+                while !input.isReadyForMoreMediaData {
+                    Thread.sleep(forTimeInterval: 0.002)
+                    guard writer.status == .writing else {
+                        throw Failure(reason: writer.error?.localizedDescription ?? "writing stopped")
+                    }
+                }
+
+                guard let pool = adaptor.pixelBufferPool else {
+                    throw Failure(reason: "no pixel buffer pool")
+                }
+                var buffer: CVPixelBuffer?
+                let created = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &buffer)
+                guard created == kCVReturnSuccess, let buffer else {
+                    throw Failure(reason: "could not make a pixel buffer")
+                }
+                try draw(frame.image, into: buffer, size: size)
+                // 时间戳必须严格递增：同一毫秒的两帧会被 writer 拒掉。
+                let previous = index > 0 ? frames[index - 1].at : -1
+                let offset = max(frame.at, previous + 1)
+                let time = CMTime(value: Int64(max(0, offset)), timescale: 1000)
+                guard adaptor.append(buffer, withPresentationTime: time) else {
+                    throw Failure(reason: "the writer rejected frame \(index) of \(frames.count)")
                 }
             }
 
-            guard let pool = adaptor.pixelBufferPool else {
-                throw Failure(reason: "no pixel buffer pool")
-            }
-            var buffer: CVPixelBuffer?
-            let created = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &buffer)
-            guard created == kCVReturnSuccess, let buffer else {
-                throw Failure(reason: "could not make a pixel buffer")
-            }
-            try draw(image, into: buffer, size: size)
-            guard adaptor.append(buffer, withPresentationTime: .zero) else {
-                throw Failure(reason: "the writer rejected the frame")
-            }
-
             input.markAsFinished()
-            writer.endSession(atSourceTime: CMTime(seconds: max(seconds, 1), preferredTimescale: 600))
+            let lastSeconds = Double(frames[frames.count - 1].at) / 1000
+            writer.endSession(
+                atSourceTime: CMTime(
+                    seconds: max(seconds, lastSeconds + 1),
+                    preferredTimescale: 600
+                )
+            )
             let done = DispatchSemaphore(value: 0)
             writer.finishWriting { done.signal() }
             done.wait()

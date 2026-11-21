@@ -478,6 +478,16 @@ jobs:
                  -o lyrics-song-exclusions-tests
           ./lyrics-song-exclusions-tests
 
+      # 锁屏逐字的帧表：一个词一帧、时间相对行首、词拼起来必须等于这一行字
+      # （否则字符数会错位），词数边界与同一时刻的词合并。纯 Foundation。
+      - name: Lock screen word-by-word frames
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/LyricsWordDto.swift \
+                 Sources/EeveeSpotify/LockScreen/LockScreenKaraoke.swift \
+                 Tests/LockScreenKaraoke/main.swift \
+                 -o lockscreen-karaoke-tests
+          ./lockscreen-karaoke-tests
+
       # TTML 的歌手声明（`ttm:agent`）与对唱分边。行上的 `ttm:agent` 只是**引用**，
       # 名字与"个人 / 合唱"在 `<head>` 的声明表里；只有「恰好两位个人歌手、且文件里
       # 没有合唱 agent」才把第二位排到另一端。渲染侧（`AppleMusicLyricsPage`）要 SwiftUI，

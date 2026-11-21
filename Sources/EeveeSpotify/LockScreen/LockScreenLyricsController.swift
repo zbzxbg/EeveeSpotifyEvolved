@@ -503,6 +503,7 @@ final class LockScreenLyricsController {
             isDuet: texts.isDuet,
             flipped: texts.flipped,
             nextFlipped: texts.nextFlipped,
+            karaoke: texts.karaoke,
             credit: credit,
             hasCover: cover != nil,
             // 两档倍率进文件名：改了「歌词 → 文字」之后旧片段不该再被命中，
@@ -524,6 +525,7 @@ final class LockScreenLyricsController {
                     isDuet: texts.isDuet,
                     flipped: texts.flipped,
                     nextFlipped: texts.nextFlipped,
+                    revealedCharacters: texts.karaoke.first?.revealedCharacters,
                     credit: credit,
                     size: size
                 ) {
@@ -653,6 +655,7 @@ final class LockScreenLyricsController {
                     isDuet: texts.isDuet,
                     flipped: texts.flipped,
                     nextFlipped: texts.nextFlipped,
+                    revealedCharacters: texts.karaoke.first?.revealedCharacters,
                     credit: credit,
                     size: size
                 ) {
@@ -697,6 +700,7 @@ final class LockScreenLyricsController {
                         isDuet: texts.isDuet,
                         flipped: texts.flipped,
                         nextFlipped: texts.nextFlipped,
+                        karaoke: texts.karaoke,
                         credit: credit,
                         cover: cover,
                         seconds: seconds
@@ -722,6 +726,7 @@ final class LockScreenLyricsController {
         isDuet: Bool,
         flipped: Bool,
         nextFlipped: Bool,
+        karaoke: [LockScreenKaraokeFrame],
         credit: String,
         cover: CGImage?,
         seconds: Double
@@ -768,6 +773,7 @@ final class LockScreenLyricsController {
                     isDuet: isDuet,
                     flipped: flipped,
                     nextFlipped: nextFlipped,
+                    karaoke: karaoke,
                     credit: credit,
                     size: size,
                     seconds: seconds,
@@ -963,6 +969,8 @@ final class LockScreenLyricsController {
         let isDuet: Bool
         let flipped: Bool
         let nextFlipped: Bool
+        /// 逐字的帧表（空 = 单帧）。它同时进 `frameHash`：单帧与多帧是两份素材。
+        let karaoke: [LockScreenKaraokeFrame]
     }
 
     private static func texts(
@@ -978,7 +986,8 @@ final class LockScreenLyricsController {
                 romanization: nil,
                 isDuet: nextLine?.isDuet ?? false,
                 flipped: false,
-                nextFlipped: nextLine?.agentFlipped ?? false
+                nextFlipped: nextLine?.agentFlipped ?? false,
+                karaoke: []
             )
         }
         let current = location.index >= 0 && location.index < lines.count
@@ -996,7 +1005,8 @@ final class LockScreenLyricsController {
             romanization: romanization.isEmpty ? nil : romanization,
             isDuet: current?.isDuet ?? false,
             flipped: current?.agentFlipped ?? false,
-            nextFlipped: nextLine?.agentFlipped ?? false
+            nextFlipped: nextLine?.agentFlipped ?? false,
+            karaoke: current?.karaoke ?? []
         )
     }
 

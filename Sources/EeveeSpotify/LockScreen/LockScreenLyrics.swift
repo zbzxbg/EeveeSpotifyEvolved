@@ -26,7 +26,8 @@ enum LockScreenLyrics {
     /// 文件名与 `artworkID` 只由它和文案决定，不换版本就会继续复用按老画法渲好的文件。
     ///
     /// v4：开始画罗马字那一行、以及按歌手分边（对唱）；v3 及以前的片段不能再命中。
-    private static let clipFormat = "v4"
+    /// v5：逐字（一行多帧）。
+    private static let clipFormat = "v5"
 
     static var isEnabled: Bool { UserDefaults.lockScreenLyrics }
 
@@ -59,15 +60,20 @@ enum LockScreenLyrics {
         isDuet: Bool,
         flipped: Bool,
         nextFlipped: Bool,
+        karaoke: [LockScreenKaraokeFrame],
         credit: String,
         hasCover: Bool,
         textScale: Double,
         spacingScale: Double
     ) -> String {
-        FNV1a.hex(
+        // 逐字的帧表也要进哈希：同一行文字的"单帧"与"多帧"是两份不同的素材。
+        let karaokeKey = karaoke
+            .map { "\($0.offsetMs):\($0.revealedCharacters)" }
+            .joined(separator: ",")
+        return FNV1a.hex(
             "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(translation ?? "")"
                 + "|\(romanization ?? "")|\(isDuet ? "duet" : "one")\(flipped ? "R" : "L")\(nextFlipped ? "r" : "l")"
-                + "|\(credit)|\(hasCover ? "c" : "n")"
+                + "|\(karaokeKey)|\(credit)|\(hasCover ? "c" : "n")"
                 + "|\(scaleKey(textScale))|\(scaleKey(spacingScale))"
         )
     }
@@ -198,4 +204,8 @@ struct LockScreenLyricLine: Equatable {
     /// 这一行是不是**另一位歌手**唱的（`LyricAgentAlignment.flipped`）。
     /// 对唱里 true = 排右边，false = 排左边；非对唱时两边都不用。
     var agentFlipped: Bool = false
+
+    /// 逐字的帧表（空 = 这一行按单帧画）。时间相对**这一行开始**，
+    /// 由 `LockScreenKaraoke.frames` 从词级时间轴算出来 —— 词跟行文本对不上时它给空。
+    var karaoke: [LockScreenKaraokeFrame] = []
 }

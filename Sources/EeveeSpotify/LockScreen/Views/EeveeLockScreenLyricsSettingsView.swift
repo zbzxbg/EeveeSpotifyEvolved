@@ -12,9 +12,11 @@ struct EeveeLockScreenLyricsSettingsView: View {
     /// 本页拥有的键（写属性名即可 —— 本仓库的键名与属性名同名）。
     private static let ownedKeys = [
         "lockScreenLyrics",
+        "lockScreenWordByWord",
     ]
 
     @State private var lyricsEnabled = UserDefaults.lockScreenLyrics
+    @State private var wordByWord = UserDefaults.lockScreenWordByWord
     @State private var cacheBytes = LockScreenLyrics.totalBytes()
     @State private var cleared = false
 
@@ -27,6 +29,14 @@ struct EeveeLockScreenLyricsSettingsView: View {
                 Toggle("lock_screen_lyrics_enabled".localized, isOn: $lyricsEnabled)
                     .onChange(of: lyricsEnabled) { value in
                         UserDefaults.lockScreenLyrics = value
+                        LockScreenLyricsController.shared.settingsDidChange()
+                    }
+
+                // 逐字要重编这一行的片段（单帧 → 多帧），所以改完得让控制器重放当前行。
+                Toggle("lock_screen_lyrics_word_by_word".localized, isOn: $wordByWord)
+                    .disabled(!lyricsEnabled)
+                    .onChange(of: wordByWord) { value in
+                        UserDefaults.lockScreenWordByWord = value
                         LockScreenLyricsController.shared.settingsDidChange()
                     }
             }
@@ -60,6 +70,7 @@ struct EeveeLockScreenLyricsSettingsView: View {
                 keys: Self.ownedKeys,
                 afterReset: {
                     lyricsEnabled = UserDefaults.lockScreenLyrics
+                    wordByWord = UserDefaults.lockScreenWordByWord
                     LockScreenLyricsController.shared.settingsDidChange()
                 }
             )
@@ -69,6 +80,7 @@ struct EeveeLockScreenLyricsSettingsView: View {
         .onAppear {
             // 备份导入 / 别处清过缓存：进页面重新量一次大小，并把"已清除"的按钮文案复位。
             lyricsEnabled = UserDefaults.lockScreenLyrics
+            wordByWord = UserDefaults.lockScreenWordByWord
             cacheBytes = LockScreenLyrics.totalBytes()
             cleared = false
         }
