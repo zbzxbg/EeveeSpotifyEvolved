@@ -223,6 +223,18 @@ final class LyricsResponseCache {
         String(format: "%.1f", interval)
     }
 
+    /// 只读：这条 path + 签名是否已经在备忘里。
+    ///
+    /// 预取用它在开跑前判断"已经备好了、别再取一次"。**不计数、不影响调度** ——
+    /// 所以不能拿 `budgetPlan` 代替（那个会推进 attempt 计数、还会改 currentPath）。
+    func memoizedPayload(forPath path: String, signature: String) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let memo, memo.path == path, memo.signature == signature else { return nil }
+        guard Date().timeIntervalSince(memo.storedAt) < ttl else { return nil }
+        return memo.payload
+    }
+
     /// 记下这一次真正产出的 payload（**占位不要存** —— 那是「还不知道」，不是结论）。
     func store(_ payload: Data, forPath path: String, signature: String) {
         lock.lock()
