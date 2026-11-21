@@ -441,10 +441,7 @@ accent_color = "强调色";
 // ── 设置根页重排（2026-10-13）：四组的分组标题 + 每一行的副标题 ──
 // 原来的「扩展功能」页是个杂物袋（一行背后 24 个开关 + 8 个子页），已按页面拆开；
 // 每个东西搬去了哪，见 EeveeExtrasSettingsView.swift 那个墓碑注释。
-settings_group_playback = "播放与歌词";
-settings_group_appearance = "外观";
 settings_group_advanced = "进阶";
-settings_group_high = "高级";
 tabs_and_mini_bar_title = "标签栏与迷你条";
 home_and_library_title = "页面与音乐库";
 settings_sub_lyrics = "有关于歌词的设置";
@@ -472,8 +469,6 @@ settings_reset_page_done = "已重置本页 %d 项。";
 
 // ── 高级页 · 音频与手势：一页四节（音频效果 / 律动 / 节拍触感 / 头部手势）──
 // 封面律动跟着低频走；音乐触感把底鼓/军鼓变成轻触。
-audio_title = "音频与手势";
-settings_sub_audio = "均衡器、律动、节拍触感与头部手势";
 audio_rhythm_section = "律动";
 cover_pulse = "封面律动";
 cover_pulse_description = "让封面跟着低频轻微放大缩小。听歌页选择Apple Music式时生效。";
@@ -609,7 +604,6 @@ flag_note_int_needs_number = "整数开关：去「Flag覆盖」页选「写入�
 flag_note_data_saver = "省流量提示；「省流量模式」本身是ios-datasaver-automatic-impl.enabled";
 flag_note_canvas_off = "关掉听歌页里的 Canvas（封面变成静态；锁屏动态封面不受影响）";
 flag_note_snake_on = "打开它 = Spotify自己藏着的「封面贪吃蛇」彩蛋";
-maintenance_section = "设置与关于";
 backup_title = "备份与重置";
 backup_export_section = "导出";
 backup_export_footer = "只导本仓库自己的键。";
@@ -731,8 +725,6 @@ apple_music_token_invalid = "Apple Music登录令牌无效或已过期";
 apple_music_token_popup = "Apple Music官方歌词需要你自己的登录令牌：请在「设置 → 实验 → 启用Apple Music官方TTML歌词」里填入 media-user-token（浏览器：music.apple.com → 开发者工具 → 应用 → Cookie）。";
 artist_latest_release_tracks = "%d 首歌曲";
 
-lock_screen_title = "锁屏";
-settings_sub_lock_screen = "动态封面与锁屏歌词";
 lock_screen_artwork_title = "锁屏封面";
 lock_screen_artwork_enabled = "动态封面";
 lock_screen_artwork_description = "锁屏页会用一段循环短片代替静态封面。Canvas未返回时用Apple Music的官方动态封面，两者都没有时用封面本地生成一段。系统最低版本需要iOS26。";

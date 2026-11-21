@@ -446,10 +446,7 @@ accent_color = "Accent color";
 // ── Settings root re-layout (2026-10-13): four group headers + one subtitle per row ──
 // The old "Extras" page was a junk drawer (24 switches + 8 sub-pages behind one row).
 // It was split by page; see EeveeExtrasSettingsView.swift's tombstone for the mapping.
-settings_group_playback = "Playback & lyrics";
-settings_group_appearance = "Appearance";
 settings_group_advanced = "Advanced";
-settings_group_high = "Advanced features";
 tabs_and_mini_bar_title = "Tab bar & mini player";
 home_and_library_title = "Pages & library";
 settings_sub_lyrics = "Settings related to lyrics";
@@ -477,8 +474,6 @@ settings_reset_page_done = "Reset %d option(s) on this page.";
 
 // ── Advanced page · Audio & gestures: one page, four sections ──
 // Cover pulse reads the bass; beat haptics turns kick/snare hits into taps.
-audio_title = "Audio & gestures";
-settings_sub_audio = "Equalizer, pulse, beat haptics and head gestures";
 audio_rhythm_section = "Rhythm";
 cover_pulse = "Cover pulse";
 cover_pulse_description = "Scales the artwork slightly with the bass. Applies with the Apple Music now-playing style.";
@@ -611,7 +606,6 @@ flag_note_int_needs_number = "Integer flag: use “Write a number” on the Flag
 flag_note_data_saver = "Data-saver tooltip. The mode itself is ios-datasaver-automatic-impl.enabled";
 flag_note_canvas_off = "Turn off Canvas in the player (still cover art; the lock screen keeps its animated artwork)";
 flag_note_snake_on = "Turn on = the cover-art snake easter egg Spotify ships hidden";
-maintenance_section = "Settings & about";
 backup_title = "Backup & reset";
 backup_export_section = "Export";
 backup_export_footer = "Exports only this tweak's own keys.";
@@ -747,8 +741,6 @@ apple_music_token_invalid = "Apple Music sign-in token is invalid or expired";
 apple_music_token_popup = "Apple Music official lyrics need your own sign-in token. Go to Settings > Experiments > \"Apple Music official TTML lyrics\" and paste a media-user-token (browser: music.apple.com > Developer Tools > Application > Cookies).";
 artist_latest_release_tracks = "%d songs";
 
-lock_screen_title = "Lock Screen";
-settings_sub_lock_screen = "Animated artwork and lock screen lyrics";
 lock_screen_artwork_title = "Lock screen artwork";
 lock_screen_artwork_enabled = "Animated artwork";
 lock_screen_artwork_description = "Plays a looping clip in place of the still cover on the lock screen. Apple Music's editorial video is used when Canvas comes back empty; when both come back empty, a loop is rendered from the cover. Needs iOS 26 or later.";

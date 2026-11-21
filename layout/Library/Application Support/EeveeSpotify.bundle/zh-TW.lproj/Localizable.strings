@@ -304,7 +304,6 @@ flag_note_int_needs_number = "整數開關：去「Flag 覆蓋」頁選「寫入
 flag_note_data_saver = "省流量提示；「省流量模式」本身是 ios-datasaver-automatic-impl.enabled";
 flag_note_canvas_off = "關掉聽歌頁裡的 Canvas（封面變成靜態；鎖屏動態封面不受影響）";
 flag_note_snake_on = "打開它 = Spotify 自己藏著的「封面貪食蛇」彩蛋";
-maintenance_section = "設定與關於";
 backup_title = "備份與重置";
 backup_export_section = "匯出";
 backup_export_footer = "只匯**本倉庫自己的鍵**（UserDefaults.ownedKeys）—— Spotify 自己的偏好就躺在同一個 UserDefaults 裡，這裡刻意不帶出去。";
@@ -353,8 +352,6 @@ licenses_inspiration_detail = "本倉庫重用了 spoti.pw v0.21.1（GPL-3.0，�
 aggressive_marker_removal = "更積極的刪除歌詞標註術語";
 aggressive_marker_removal_description = "刪除歌詞所有被 [] 包裹的歌詞行，目前僅對 Genius 生效。它也可能誤刪整行帶方括號的真歌詞。";
 
-lock_screen_title = "鎖定畫面";
-settings_sub_lock_screen = "動態封面與鎖定畫面歌詞";
 lock_screen_artwork_title = "鎖定畫面封面";
 lock_screen_artwork_enabled = "動態封面";
 lock_screen_artwork_description = "鎖定畫面會用一段循環短片取代靜態封面。Canvas 未回傳時改用 Apple Music 的官方動態封面，兩者都沒有時用封面在本機產生一段。系統最低版本需要 iOS 26。";
@@ -383,9 +380,6 @@ sleep_timer_pick_duration = "選一個時長";
 
 // 高級頁 · 音訊與手勢：一頁四節（音訊效果 / 律動 / 節拍觸感 / 頭部手勢）
 
-settings_group_high = "高級";
-audio_title = "音訊與手勢";
-settings_sub_audio = "等化器、律動、節拍觸感與頭部手勢";
 audio_rhythm_section = "律動";
 cover_pulse = "封面律動";
 cover_pulse_description = "讓封面跟著低頻輕微放大縮小。聽歌頁選擇Apple Music式時生效。";
