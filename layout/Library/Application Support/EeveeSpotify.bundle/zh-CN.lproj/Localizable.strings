@@ -581,7 +581,6 @@ entity_page_am_header_section = "Apple Music 式页头（专辑 / 歌单 / 艺�
 entity_page_am_header = "标题 / 创建者 / Play 胶囊居中";
 am_header_play = "播放";
 artist_page_section = "艺人页";
-artist_page_description = "只影响艺人页。";
 artist_hide_listeners = "隐藏每月听众";
 artist_hide_tabs = "隐藏 Music / Video / Merch 标签栏";
 artist_bio_empty = "暂时无法直接展示艺人简介。请先滑动到页面底部，再返回点击“艺人简介”即可查看（滑动时可能稍有卡顿）。如果仍未显示艺人简介，则该艺人在Spotify未填写简介。";

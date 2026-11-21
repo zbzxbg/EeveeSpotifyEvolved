@@ -216,10 +216,7 @@ struct PagesAppearanceSettingsView: View {
             // · 标签栏默认**开**（= 保持现有观感）；关掉会在下一拍/当场把原 alpha、点击、
             // 分页滚动位置写回（`EntityPageHeaderManager.restoreArtistStrip`）。
             // · 月听众默认**关**（保留信息）；打开后下一拍页头就不再画那一行。
-            Section(
-                header: Text("artist_page_section".localized),
-                footer: Text("artist_page_description".localized)
-            ) {
+            Section(header: Text("artist_page_section".localized)) {
                 Toggle(
                     "artist_hide_listeners".localized,
                     isOn: settingsShadowBinding($shadow.artistHideListeners) { value in

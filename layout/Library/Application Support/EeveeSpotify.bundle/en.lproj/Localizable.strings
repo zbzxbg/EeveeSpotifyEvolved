@@ -583,7 +583,6 @@ entity_page_am_header_section = "Apple Music header (album, playlist & artist pa
 entity_page_am_header = "Centered title, creator and Play capsule";
 am_header_play = "Play";
 artist_page_section = "Artist page";
-artist_page_description = "These only change the artist page.";
 artist_hide_listeners = "Hide the monthly-listeners line";
 artist_hide_tabs = "Hide the Music / Video / Merch tabs";
 artist_bio_empty = "The biography cannot be shown right away. Scroll to the bottom of this page, then come back and tap “About the artist” to read it (scrolling may stutter a little). If it still doesn't appear, the artist hasn't provided a biography on Spotify.";
