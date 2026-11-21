@@ -116,7 +116,7 @@ Common issues, a longer FAQ, and why some Premium features stay locked: **[commo
   install, but they are not re-tested each release: every layer is guarded, so a class
   Spotify renamed turns that layer off instead of crashing the app.
 
-Current public release: [`v2.3.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
+Current public release: [`v2.4.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
 
 ## Credits
 
