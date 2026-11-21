@@ -499,8 +499,10 @@ enum TabBarGlassPlate {
     }
 
     /// 这一颗是不是「创建」（按类名认，见 `applyCreateTabVisibility`）。
+    ///
+    /// 系统栏那边也要用它：它没有 `IconView`，`glyphImage` 拿不到，得单独给图标、单独藏底。
     @MainActor
-    private static func isCreateTab(_ item: UIView) -> Bool {
+    static func isCreateTab(_ item: UIView) -> Bool {
         var found = false
 
         func walk(_ node: UIView, _ depth: Int) {

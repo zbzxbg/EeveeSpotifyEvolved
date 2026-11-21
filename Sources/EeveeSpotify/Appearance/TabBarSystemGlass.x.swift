@@ -223,10 +223,27 @@ enum TabBarSystemGlass {
             if index < mirroredIcons.count, mirroredIcons[index] {
                 var glyphs: [UIView] = glyphViews(in: item)
                 if let iconView = findIconView(in: item) { glyphs.append(iconView) }
+                // 「创建」是白圆 + 加号，全部拿层画出来，没有 `IconView` 可认；
+                // 系统栏已经画了一颗加号 ⇒ 把这圈白底一起按掉，否则它会从玻璃后面露出来。
+                if TabBarGlassPlate.isCreateTab(item), let background = createTabBackground(in: item) {
+                    glyphs.append(background)
+                }
                 for glyph in glyphs { hide(glyph) }
             }
             for label in labelViews(in: item) { hide(label) }
         }
+    }
+
+    /// 「创建」那颗的白圆底（拿层画的，`findIconView` 认不到）。
+    private static func createTabBackground(in item: UIView, depth: Int = 0) -> UIView? {
+        guard depth <= 4 else { return nil }
+        for sub in item.subviews {
+            if sub.backgroundColor == .white, sub.bounds.width >= 24, sub.bounds.height >= 24 {
+                return sub
+            }
+            if let found = createTabBackground(in: sub, depth: depth + 1) { return found }
+        }
+        return nil
     }
 
     private static func hide(_ view: UIView) {
@@ -609,7 +626,12 @@ enum TabBarSystemGlass {
             // 它们会把整块玻璃**三等分**。
             let muted = TabBarGlassPlate.isMutedTabItem(item)
             let title = (hidesLabels || muted) ? nil : labelText(of: item)
-            let image = muted ? nil : glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
+            var image = muted ? nil : glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
+            // 「创建」不是图标视图（白圆 + 加号都是层画的）⇒ `glyphImage` 拿不到。
+            // 系统栏统一给它一颗加号；原生那圈白底由 `hideStockContent` 按掉，避免两层叠着。
+            if !muted, TabBarGlassPlate.isCreateTab(item) {
+                image = UIImage(systemName: "plus")
+            }
             // ⚠️ `icons` / `titles` **每一格都要有**：`hideStockContent` 是按位置跟 `items` 对齐的。
             icons.append(image != nil)
             titles.append(title)
