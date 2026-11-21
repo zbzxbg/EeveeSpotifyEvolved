@@ -49,8 +49,6 @@ genius_fallback = "الاحتياطي العبقري";
 genius_fallback_description = "تحميل كلمات الأغاني من Genius إذا كانت هناك مشكلة في %@.";
 
 
-hide_lyrics_on_error = "出錯時隱藏";
-hide_lyrics_on_error_description = "出現錯誤時（不包含回退）隱藏歌詞框。";
 
 
 musixmatch_language = "لغة كلمات موسيقى ميوزكسماتش";

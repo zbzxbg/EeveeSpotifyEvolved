@@ -53,8 +53,6 @@ genius_fallback = "Fallback do Genius";
 genius_fallback_description = "Wczytuje tekst z usługi Genius, jeśli wystąpi problem z %@.";
 
 
-hide_lyrics_on_error = "Ukryj w przypadku błędu";
-hide_lyrics_on_error_description = "Usuń kartę tekstu piosenki, jeśli nie uda się jej załadować";
 
 
 musixmatch_language = "Język tekstów z Musixmatch";

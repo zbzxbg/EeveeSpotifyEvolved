@@ -48,8 +48,6 @@ genius_fallback = "Dự phòng bằng Genius";
 genius_fallback_description = "Sử dụng lời bài hát từ Genius nếu có sự cố với %@.";
 
 
-hide_lyrics_on_error = "Ẩn khi gặp lỗi";
-hide_lyrics_on_error_description = "Gỡ bỏ thành phần lời bài hát nếu lời bài hát không tải được.";
 
 
 musixmatch_language = "Ngôn ngữ lời bài hát Musixmatch";

@@ -43,8 +43,6 @@ genius_fallback = "Переключаться на Genius";
 genius_fallback_description = "Загружать тексты из Genius при возникновении проблемы с %@.";
 
 
-hide_lyrics_on_error = "Скрывать при ошибке";
-hide_lyrics_on_error_description = "Скрывать компонент текста, если не удается загрузить текст.";
 
 
 musixmatch_language = "Язык текстов Musixmatch";

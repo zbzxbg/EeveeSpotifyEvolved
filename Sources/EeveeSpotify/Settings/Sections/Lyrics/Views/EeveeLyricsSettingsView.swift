@@ -76,7 +76,6 @@ struct EeveeLyricsSettingsView: View {
                     aggressiveMarkerRemovalSection()
                 }
                 
-                hideOnErrorSection()
                 // 「补时间轴」/「补卡片元素」/「强制歌词入口」三个**排查型**开关
                 // 已挪到「调试」页（见 `EeveeDebugSettingsViewModel`）：
                 // 它们验证完就该写死或删掉，放在用户偏好旁边只会让人面对一堆不该动的东西。
@@ -278,17 +277,6 @@ struct EeveeLyricsSettingsView: View {
             .disabled(!OnDeviceLyricsTranslation.isAvailable)
         } footer: {
             Text("lyrics_auto_translate_description".localized)
-        }
-    }
-
-    @ViewBuilder private func hideOnErrorSection() -> some View {
-        Section {
-            Toggle(
-                "hide_lyrics_on_error".localized,
-                isOn: $viewModel.lyricsOptions.hideOnError
-            )
-        } footer: {
-            Text("hide_lyrics_on_error_description".localized)
         }
     }
 

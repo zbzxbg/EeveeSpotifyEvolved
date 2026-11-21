@@ -43,8 +43,6 @@ genius_fallback = "Genius fallback";
 genius_fallback_description = "Indlæs tekster fra Genius hvis der er et problem med %@.";
 
 
-hide_lyrics_on_error = "Skjul ved fejl";
-hide_lyrics_on_error_description = "Fjern sangtekstskomponenten hvis sangtekster ikke kunne indlæses.";
 
 
 musixmatch_language = "Musixmatch sprog";

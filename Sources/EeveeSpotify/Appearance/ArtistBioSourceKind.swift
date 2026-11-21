@@ -1,15 +1,14 @@
 import Foundation
 
-/// 四个选项对应 `ArtistBioSheet` 里那条取值链：
+/// 三个选项对应 `ArtistBioSheet` 里那条取值链：
 ///
 /// | 选项 | 取值 | 代价 |
 /// | `.automatic`（**默认**） | **Spotify 原生优先**（跟着 app 语言、不联网），读不到才退 Genius | 原生那份可能被截断（读的是界面上的文字） |
 /// | `.spotify` | 只用原生 | 读不到就只剩一句说明 + 维基百科链接 |
 /// | `.genius` | 只用 Genius | **英文**；卡片要署名「简介来自 Genius」 |
-/// | `.wikipedia` | 只用维基百科**首段** | **CC BY-SA** ⇒ 卡片要署名「来自维基百科 · CC BY-SA」+ 许可链接；日系独立艺人命中率低 |
 ///
-/// 为什么默认 `.automatic`：原生那份是**唯一跟着 app 语言**的（Genius 基本是英文、维基对我们常听的那批
-/// 日系独立艺人常常没有条目），而且它**不联网** ✓。
+/// 为什么默认 `.automatic`：原生那份是**唯一跟着 app 语言**的（Genius 基本是英文），
+/// 而且它**不联网** ✓。
 ///
 /// ⚠️ 与 `LyricsSource` 同一条纪律：**新分支只往末尾加**（`rawValue` 会进 UserDefaults，
 /// 改了会让已存设置错位）。
@@ -18,7 +17,6 @@ enum ArtistBioSourceKind: Int, CaseIterable, CustomStringConvertible {
     case automatic
     case spotify
     case genius
-    case wikipedia
 
     var description: String {
         switch self {
@@ -29,8 +27,6 @@ enum ArtistBioSourceKind: Int, CaseIterable, CustomStringConvertible {
             return "Spotify"
         case .genius:
             return "Genius"
-        case .wikipedia:
-            return "Wikipedia"
         }
     }
 

@@ -72,8 +72,6 @@ amll_preferred_description = "需要开启逐词歌词。优先向AMLL请求逐�
 genius_fallback = "Genius回退";
 genius_fallback_description = "如果%@未正常加载，将使用Genius加载歌词。";
 
-hide_lyrics_on_error = "隐藏歌词模块";
-hide_lyrics_on_error_description = "如果歌词加载失败，则隐藏歌词模块。";
 
 
 musixmatch_language = "Musixmatch 歌词语言";
@@ -588,14 +586,12 @@ artist_bio_from_genius = "简介来自Genius";
 artist_bio_section = "艺人介绍";
 artist_bio_source = "简介来源";
 artist_bio_source_automatic = "自动";
-artist_bio_description = "若来源选择自动，会优先选择Spotify官方艺人简介进行展示，若Spotify未返回艺人简介，回退到Genius进行展示。若来源选择Wikipedia，则只展示Wikipedia返回的内容（该来源测试中，不推荐使用）。若来源选择Genius同理，只展示Genius返回的结果。";
-artist_bio_from_wikipedia = "来自维基百科 · CC BY-SA";
+artist_bio_description = "若来源选择自动，会优先选择Spotify官方艺人简介进行展示；若Spotify未返回艺人简介，回退到Genius进行展示。若来源选择Genius，则只展示Genius返回的结果。";
 artist_bio_from_spotify = "来自Spotify";
 artist_bio_loading = "正在获取…";
 artist_bio_open_wikipedia = "在维基百科中打开";
 artist_bio_spotify_failed = "无法读取Spotify自带的简介。";
 artist_bio_genius_failed = "Genius上没有这位艺人的简介";
-artist_bio_wikipedia_failed = "维基百科没有响应（本机网络可能屏蔽了它）";
 mini_bar_round_artwork = "专辑样式改圆形";
 home_tile_tint_section = "首页小卡片";
 home_tile_tint = "卡片底色跟随封面";

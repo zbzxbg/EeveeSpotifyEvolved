@@ -43,8 +43,6 @@ genius_fallback = "Fallback amb Genius";
 genius_fallback_description = "Carrega lletres de Genius si hi ha cap problema amb %@.";
 
 
-hide_lyrics_on_error = "Oculta les lletres en cas d'error";
-hide_lyrics_on_error_description = "Oculta el component de les lletres si no es poden carregar.";
 
 
 musixmatch_language = "Idioma per les lletres de Musixmatch";

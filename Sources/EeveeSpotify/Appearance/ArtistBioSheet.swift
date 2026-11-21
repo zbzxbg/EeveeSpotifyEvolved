@@ -284,8 +284,6 @@ final class ArtistBioSheet: UIView {
             }
         case .genius:
             loadGenius(name)
-        case .wikipedia:
-            loadWikipedia(name)
         case .automatic:
             if let text {
                 show(text, credit: "artist_bio_from_spotify".localized)
@@ -298,7 +296,7 @@ final class ArtistBioSheet: UIView {
 
         // 页脚：左边一颗**维基百科链接**（只给入口、**不抄文本** ⇒ 不欠 CC BY-SA 的署名 ——
         // Spotify 自己的 About 页也是这么干的：`SPTArtistAbout:sArtistWikipediaButtonTitle`，dump:21079），
-        // 右边一句**永远显示**的来源署名/状态（以前只有成功时才显示 —— 于是四档
+        // 右边一句**永远显示**的来源署名/状态（以前只有成功时才显示 —— 于是三档
         // 在失败时长得一模一样，看不出设置有没有生效）。
         let wiki = UIButton(type: .system)
         // 它一直是个**入口按钮**，
@@ -406,7 +404,7 @@ final class ArtistBioSheet: UIView {
     }
 
     /// 维基百科那条**链接**：用**搜索页**（省掉"先找条目"这一步，同名艺人也不怕），
-    /// wiki 主机与取词那条线**共用** `ArtistBioSource.wikipediaHost`（免得两处漂）。
+    /// 主机名由 `ArtistBioSource.wikipediaHost` 按语言补全。
     private static func wikipediaURL(for name: String) -> URL? {
         guard var components = URLComponents(
             string: "https://\(ArtistBioSource.wikipediaHost())/wiki/Special:Search"
@@ -466,22 +464,6 @@ final class ArtistBioSheet: UIView {
             self.bodyView.text = bio
             self.hasBody = true
             self.setCredit("artist_bio_from_genius".localized)
-        }
-    }
-
-    /// 维基百科那条（**CC BY-SA**：要署名 + 给许可链接 —— 页脚那颗 Wikipedia 按钮就是那个链接）。
-    private func loadWikipedia(_ name: String) {
-        bodyView.text = "artist_bio_empty".localized
-        setCredit("artist_bio_loading".localized)
-        ArtistBioSource.wikipediaBio(for: name) { [weak self] bio in
-            guard let self else { return }
-            guard let bio else {
-                self.setCredit("artist_bio_wikipedia_failed".localized)
-                return
-            }
-            self.bodyView.text = bio
-            self.hasBody = true
-            self.setCredit("artist_bio_from_wikipedia".localized)
         }
     }
 

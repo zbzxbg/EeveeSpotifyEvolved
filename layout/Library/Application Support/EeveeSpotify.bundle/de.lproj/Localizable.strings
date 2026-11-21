@@ -40,8 +40,6 @@ user_token_placeholder = "Benutzertoken eingeben oder Debug-Infos einfügen";
 genius_fallback_description = "Lade Lyrics von Genius, falls ein Problem mit %@ auftritt.";
 
 
-hide_lyrics_on_error = "Bei Fehler ausblenden";
-hide_lyrics_on_error_description = "Liedtextanzeige entfernen, wenn das Laden fehlschlägt.";
 
 
 musixmatch_language = "Musixmatch-Lyricssprache";

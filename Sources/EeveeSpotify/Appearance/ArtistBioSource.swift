@@ -11,11 +11,11 @@ import UIKit
 /// · `GET /search?q=<艺人名>` —— 取 `type == artist` 且**名字对得上**的那个命中；没有就退到歌命中的主艺人；
 /// · `GET /artists/<id>` —— `response.artist.description.plain` 就是简介。
 ///
-/// ⚠️ 两点如实说：
-/// ① Genius 的艺人简介**基本是英文**（Spotify 那边是跟着 app 语言的）⇒ **只在 Spotify 读不到时才用**
+/// ⚠️ Genius 的艺人简介**基本是英文**（Spotify 那边是跟着 app 语言的）⇒ **只在 Spotify 读不到时才用**
 /// （见 `ArtistBioSheet.present`），而且要**署名**（`artist_bio_from_genius` 那一行）。
-/// ② 维基百科**不做正文**：CC BY-SA 要署名 + 许可链接，而且你听的那批日系独立艺人命中率很低
-/// ⇒ 只做成一个**链接**（`ArtistBioSheet` 底部那颗 Wikipedia 按钮）。
+///
+/// 维基百科**不做正文**：CC BY-SA 要署名 + 许可链接，而它对日系独立艺人的命中率也低 ⇒ 只做成一个
+/// **外部链接**（`ArtistBioSheet` 底部那颗 Wikipedia 按钮；`wikipediaHost()` 只服务那颗按钮）。
 /// Spotify 自己的 About 页也是这么干的：`SPTArtistAbout:sArtistWikipediaButtonTitle`（dump:21079）。
 enum ArtistBioSource {
 
@@ -30,78 +30,19 @@ enum ArtistBioSource {
         return URLSession(configuration: configuration)
     }()
 
-    /// 维基百科那条线**另开一个 session**：它的 API 要求一个**能认出调用方**的 User-Agent
-    /// （拿 Genius 的 UA 去请求既失礼、也可能被 403）✓。
-    private static let wikipediaSession: URLSession = {
-        let configuration = URLSessionConfiguration.default
-        configuration.httpAdditionalHeaders = [
-            "User-Agent": "EeveeSpotifyEvolved/1.0 (https://github.com/zbzxbg/EeveeSpotifyEvolved)",
-        ]
-        configuration.timeoutIntervalForRequest = 12
-        return URLSession(configuration: configuration)
-    }()
-
-    /// 用哪个语言的维基（按 app 语言挑 zh / ja / en，其余落 en）→ **完整的主机名**。
+    /// 用哪个语言的维基（按**系统首选语言**挑 zh / ja / en，其余落 en）→ **完整的主机名**。
     ///
-    /// ⚠️⚠️**不是，它是坏的**。
-    /// 这里原来只返回**语言码**（`"zh"`），而三处 URL 都是 `https://\(host)/…` 拼出来的
+    /// `Locale.preferredLanguages` 是系统的语言偏好列表，**不跟** Spotify 的 per-app 语言；
+    /// 要让链接跟着 app 语言走，得换成 `Bundle.main.preferredLocalizations.first`。
+    ///
+    /// ⚠️ 这里原来只返回**语言码**（`"zh"`），而 URL 是 `https://\(host)/…` 拼出来的
     /// ⇒ 拼成 `https://zh/wiki/Special:Search` —— 主机名只有一个 `zh`，DNS 都解析不了。
-    /// 也就是说：那颗「在维基百科中打开」**从来没打开过**，`.wikipedia` 那一档也**从来没取到过词**
-    /// （而且失败得无声无息，因为请求压根没发出去）。
     /// 主机名补全成 `<语言>.wikipedia.org` 才是维基。
-    ///
-    /// ⚠️ 仍然**共用同一个**判据（取词那条线与那颗按钮），免得两处漂。
     static func wikipediaHost() -> String {
         let language = String(Locale.preferredLanguages.first?.prefix(2) ?? "en").lowercased()
         return ["zh", "ja", "en"].contains(language)
             ? "\(language).wikipedia.org"
             : "en.wikipedia.org"
-    }
-
-    /// 维基百科那一版：`action=query&list=search` 找条目 → `rest_v1/page/summary` 取**首段**。
-    ///
-    /// ⚠️ 正文是 **CC BY-SA**：用了它**必须**署名 + 给许可链接（卡片右下角那行 + 那颗 Wikipedia 按钮）✓。
-    /// 也因此它只是**选项之一**（默认见 `ArtistBioSourceKind.automatic`），不是主源。
-    static func wikipediaBio(for artist: String, completion: @escaping (String?) -> Void) {
-        let name = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty,
-              var components = URLComponents(string: "https://\(wikipediaHost())/w/api.php") else {
-            DispatchQueue.main.async { completion(nil) }
-            return
-        }
-        components.queryItems = [
-            URLQueryItem(name: "action", value: "query"),
-            URLQueryItem(name: "list", value: "search"),
-            URLQueryItem(name: "srsearch", value: name),
-            URLQueryItem(name: "srlimit", value: "1"),
-            URLQueryItem(name: "format", value: "json"),
-        ]
-        guard let url = components.url else {
-            DispatchQueue.main.async { completion(nil) }
-            return
-        }
-
-        fetchJSON(url, using: wikipediaSession, tag: "wikipedia search") { search in
-            let hits = (search?["query"] as? [String: Any])?["search"] as? [[String: Any]]
-            guard let title = hits?.first?["title"] as? String,
-                  let encoded = title.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-                  let summary = URL(string: "https://\(wikipediaHost())/api/rest_v1/page/summary/\(encoded)")
-            else {
-                writeDebugLog(
-                    "[ArtistBio] wikipedia search → no article for this artist"
-                        + " (\(hits?.count ?? 0) hit(s) in the response)"
-                )
-                completion(nil)
-                return
-            }
-            writeDebugLog("[ArtistBio] wikipedia search → article \"\(title)\"")
-            fetchJSON(summary, using: wikipediaSession, tag: "wikipedia summary") { payload in
-                let extract = (payload?["extract"] as? String)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                writeDebugLog("[ArtistBio] wikipedia summary → \(extract?.count ?? 0) char")
-                completion((extract?.isEmpty ?? true) ? nil : extract)
-            }
-        }
     }
 
     /// 取这位艺人的简介（回调一律在**主线程**；取不到就是 nil）。
@@ -198,10 +139,10 @@ enum ArtistBioSource {
     ///
     /// ⚠️ 名字**不能叫 `get`** —— `swift_member_check.py` 会把这种通用名当成"不该私有的短名"，
     /// 一次能翻出 25 条报错，连别的文件的都一起。
-    /// - Parameter tag: 这一跳**是谁**（`genius search` / `genius artist 123` / `wikipedia search` …）。
+    /// - Parameter tag: 这一跳**是谁**（`genius search` / `genius artist 123`）。
     ///
-    /// 日志用 `tag` 而不是写死 "genius"：否则维基百科那条失败会打成
-    /// `genius /w/api.php → HTTP 0`，指错来源。**每一次都打**（200 也打，带字节数），
+    /// 日志用 `tag` 而不是写死 "genius"：否则别的请求失败会打成
+    /// `genius /… → HTTP 0`，指错来源。**每一次都打**（200 也打，带字节数），
     /// 失败时带上 `error.localizedDescription` —— 否则 `HTTP 0` 分不清是 DNS、超时还是 TLS。
     private static func fetchJSON(
         _ url: URL,

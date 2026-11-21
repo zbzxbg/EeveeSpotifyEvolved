@@ -71,8 +71,6 @@ amll_preferred_description = "Requires word-by-word lyrics. Word-by-word lyrics 
 genius_fallback = "Genius Fallback";
 genius_fallback_description = "If %@ fails to load, lyrics are loaded from Genius.";
 
-hide_lyrics_on_error = "Hide Lyrics Module";
-hide_lyrics_on_error_description = "Hide the lyrics module if lyrics fail to load.";
 
 
 musixmatch_language = "Musixmatch Lyrics Language";
@@ -590,14 +588,12 @@ artist_bio_from_genius = "Biography from Genius";
 artist_bio_section = "About the artist";
 artist_bio_source = "Biography source";
 artist_bio_source_automatic = "Automatic";
-artist_bio_description = "With Automatic, the biography Spotify provides is shown first; if Spotify returns none, Genius is used instead. Choosing Wikipedia shows only what Wikipedia returns (that source is still being tested and is not recommended). Choosing Genius likewise shows only what Genius returns.";
-artist_bio_from_wikipedia = "From Wikipedia · CC BY-SA";
+artist_bio_description = "With Automatic, the biography Spotify provides is shown first; if Spotify returns none, Genius is used instead. Choosing Genius shows only what Genius returns.";
 artist_bio_from_spotify = "From Spotify";
 artist_bio_loading = "Fetching...";
 artist_bio_open_wikipedia = "Open in Wikipedia";
 artist_bio_spotify_failed = "Spotify's own biography could not be read.";
 artist_bio_genius_failed = "Genius has no biography for this artist";
-artist_bio_wikipedia_failed = "Wikipedia did not answer (your network may block it)";
 mini_bar_round_artwork = "Round artwork";
 home_tile_tint_section = "Home shortcut tiles";
 home_tile_tint = "Tile color follows its cover";

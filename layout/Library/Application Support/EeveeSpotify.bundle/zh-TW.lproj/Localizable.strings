@@ -56,8 +56,6 @@ genius_fallback = "回退至 Genius";
 genius_fallback_description = "若 %@ 發生問題則回退至 Genius。";
 
 
-hide_lyrics_on_error = "出錯時隱藏";
-hide_lyrics_on_error_description = "出現錯誤時（不包含回退）隱藏歌詞框。";
 
 
 musixmatch_language = "Musixmatch 翻譯語言";

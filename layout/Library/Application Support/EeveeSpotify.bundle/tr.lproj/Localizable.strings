@@ -48,8 +48,6 @@ genius_fallback = "Genius Alternatifi";
 genius_fallback_description = "%@ ile ilgili bir sorun olduğunda şarkı sözlerini Genius'tan yükler.";
 
 
-hide_lyrics_on_error = "Hata Durumunda Gizle";
-hide_lyrics_on_error_description = "Şarkı sözleri yüklenemezse şarkı sözü bileşenini kaldırır.";
 
 
 musixmatch_language = "Musixmatch Şarkı Sözü Dili";

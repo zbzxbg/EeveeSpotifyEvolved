@@ -44,8 +44,6 @@ genius_fallback = "Genius como alternativa";
 genius_fallback_description = "Cargar letras desde Genius si hay un problema con %@.";
 
 
-hide_lyrics_on_error = "Ocultar en caso de error";
-hide_lyrics_on_error_description = "Elimina el componente de Letras si las letras fallan al cargar.";
 
 
 musixmatch_language = "Idioma de las letras de Musixmatch";

@@ -44,8 +44,6 @@ user_token_placeholder = "Inserisci il Token Utente o incolla le informazioni di
 genius_fallback_description = "Carica i testi da Genius se c'è un problema con %@.";
 
 
-hide_lyrics_on_error = "Nascondi in caso di errore";
-hide_lyrics_on_error_description = "Rimuovi il testo se il caricamento fallisce.";
 
 
 musixmatch_language = "Lingua testi Musixmatch";

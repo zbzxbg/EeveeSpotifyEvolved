@@ -51,8 +51,6 @@ genius_fallback = "جایگزین Genius";
 genius_fallback_description = "اگر در %@ مشکلی وجود داشته باشد، متن آهنگ از Genius بارگیری می‌شود.";
 
 
-hide_lyrics_on_error = "مخفی کردن هنگام خطا";
-hide_lyrics_on_error_description = "اگر بارگیری متن آهنگ با خطا مواجه شود، بخش متن آهنگ را مخفی می‌کند.";
 
 
 musixmatch_language = "زبان متن آهنگ Musixmatch";
