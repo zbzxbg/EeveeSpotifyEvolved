@@ -22,7 +22,7 @@ struct EeveeLockScreenLyricsSettingsView: View {
         List {
             Section(
                 header: Text("lock_screen_lyrics_title".localized),
-                footer: Text("lock_screen_lyrics_description".localized)
+                footer: Text("lock_screen_lyrics_description".localizeWithFormat("requires_ios26".localized))
             ) {
                 Toggle("lock_screen_lyrics_enabled".localized, isOn: $lyricsEnabled)
                     .onChange(of: lyricsEnabled) { value in

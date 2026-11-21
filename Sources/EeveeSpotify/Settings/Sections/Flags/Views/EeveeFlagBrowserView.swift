@@ -98,7 +98,7 @@ struct EeveeFlagBrowserView: View {
     private var actions: some View {
         Section {
             if RemoteFlags.needsRestart {
-                Button("flags_restart".localized, action: exitApplication)
+                Button("restart_now".localized, action: exitApplication)
             }
 
             if !overrides.isEmpty {

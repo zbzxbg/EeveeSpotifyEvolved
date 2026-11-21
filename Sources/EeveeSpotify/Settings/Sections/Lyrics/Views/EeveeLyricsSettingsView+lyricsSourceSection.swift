@@ -46,7 +46,7 @@ extension EeveeLyricsSettingsView {
     /// 后者只在"从没排过 / 点了重置"时才是实际顺序，排过之后两者会不一致
     /// （页脚写着默认序，链路却是用户那份）。
     private func lyricsSourceFooter() -> some View {
-        var text = "lyrics_source_restart_note".localized
+        var text = "lyrics_source_restart_note".localizeWithFormat("restart_is_required_description".localized)
 
         var isFirst = true
         for source in LyricsSourceOrder.current {

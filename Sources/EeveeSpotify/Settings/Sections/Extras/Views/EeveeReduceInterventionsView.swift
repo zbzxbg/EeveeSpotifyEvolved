@@ -49,7 +49,7 @@ struct EeveeReduceInterventionsView: View {
             if let master = Self.masterFlag {
                 Section(
                     header: Text("reduce_interventions_master".localized),
-                    footer: Text("reduce_interventions_master_footer".localized)
+                    footer: Text("reduce_interventions_master_footer".localizeWithFormat("restart_is_required_description".localized))
                 ) {
                     // ⚠️ 这一行的标签/说明键是**写死**的（不像其它行由 flag 名拼出来），
                     // 所以单独造一个 `Row` 传给同一个渲染函数 —— 上一版这里漏改，

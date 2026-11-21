@@ -30,7 +30,7 @@ struct EeveeLockScreenArtworkSettingsView: View {
         List {
             Section(
                 header: Text("lock_screen_artwork_title".localized),
-                footer: Text("lock_screen_artwork_description".localized)
+                footer: Text("lock_screen_artwork_description".localizeWithFormat("requires_ios26".localized))
             ) {
                 Toggle("lock_screen_artwork_enabled".localized, isOn: $artworkEnabled)
                     .onChange(of: artworkEnabled) { value in

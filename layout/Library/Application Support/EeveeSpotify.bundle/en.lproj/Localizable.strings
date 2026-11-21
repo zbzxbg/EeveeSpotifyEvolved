@@ -10,17 +10,18 @@ common_issues_tip_message = "If you are facing an issue, such as being unable to
 common_issues_tip_button = "Common Issues";
 
 reset_data = "Reset Data";
-reset_data_description = "Clear cached data and restart the app.";
+reset_data_description = "Clear cached data and restart Spotify.";
 
 checking_for_update = "Checking for Update...";
 update_available = "Update Available";
 
-restart_is_required_description = "App restart is required after changing.";
+restart_is_required_description = "Restart Spotify to apply.";
+requires_ios26 = "Requires iOS 26 or later.";
 
 // Patching
 
 do_not_patch_premium = "Do Not Patch Premium";
-patching_description = "EeveeSpotify intercepts requests to load user data, deserializes it, and modifies the parameters in real-time.\n\nIf you have an active Premium subscription, you can turn on Do Not Patch Premium. The tweak won't patch the data or restrict the use of Premium server-sided features.\n\nA restart is required after changing.";
+patching_description = "EeveeSpotify intercepts requests to load user data, deserializes it, and modifies the parameters in real-time.\n\nIf you have an active Premium subscription, you can turn on Do Not Patch Premium. The tweak won't patch the data or restrict the use of Premium server-sided features.\n\n%@";
 
 overwrite_configuration = "Overwrite Configuration";
 overwrite_configuration_description = "Replace the remote configuration with the dumped Premium one. It isn't guaranteed to work, but it can solve problems such as ads appearing. A stale configuration can also cause unexpected problems - for example some features stop working, or Spotify crashes.";
@@ -30,7 +31,7 @@ overwrite_configuration_description = "Replace the remote configuration with the
 do_not_replace_lyrics = "Disable Lyrics Replacement";
 do_not_replace_lyrics_description = "Disables the custom lyrics feature, but does not stop Spotify from returning its own lyrics.";
 lyrics_source = "Lyrics Source";
-lyrics_source_restart_note = "Switching the lyrics source requires restarting Spotify.";
+lyrics_source_restart_note = "Switching the lyrics source requires a restart.\n\n%@";
 lyrics_additional_info = "Genius, NetEase, PetitLyrics, BiniLyrics, Unison, QQ Music and KuGou match by title and artist rather than by track ID, so some songs may have display errors or fail to find lyrics.";
 petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp): Spotify's main lyrics provider in Japan. A small number of songs have irregular word-level timing.";
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org): Provides word-by-word lyrics and lyrics that some other lyrics sources do not have.";
@@ -176,8 +177,8 @@ disable_lyrics_feature_description = "Disables every feature related to custom l
 word_by_word_lyrics = "Enable Word-by-Word Lyrics";
 word_by_word_lyrics_description = "Every provider except LRCLIB and Genius offers word-by-word lyrics.";
 better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
-better_word_by_word_lyrics_description = "Just like Apple Music, requires iOS 26 at minimum.";
-better_word_by_word_lyrics_needs_ios26 = "If this option is disabled, your system is older than iOS 26 and this feature is unavailable.";
+better_word_by_word_lyrics_description = "Just like Apple Music.";
+better_word_by_word_lyrics_needs_ios26 = "This option is unavailable: your system is older than iOS 26.";
 word_by_word_lyrics_provider = "Word-by-word Lyrics provider: %@";
 lyrics_source_auto = "Auto Select";
 lyrics_source_auto_description = "Auto Select: every available provider is asked in turn, and the best lyrics for the current song are used.";
@@ -254,7 +255,7 @@ miscellaneous = "Miscellaneous";
 clean_share_links = "Clean Share Links";
 clean_share_links_description = "Removes tracking parameters from shared links.";
 block_rating_prompts = "Block Rating Prompts";
-block_rating_prompts_description = "Blocks the App Store rating dialog. A Spotify restart is required after changing.";
+block_rating_prompts_description = "Blocks the App Store rating dialog.\n\n%@";
 restart_now = "Restart Now";
 no_such_song = "No Song Found";
 musixmatch_restricted = "Restricted";
@@ -386,7 +387,7 @@ telemetry_refresh_counters = "Refresh";
 telemetry_reset_counters = "Reset counters";
 haptics_title = "Interface haptics";
 haptics_enabled = "Vibrate on player controls";
-haptics_description = "Adds haptic feedback to Spotify's player controls using the system feedback engine. A Spotify restart is required for it to take effect.";
+haptics_description = "Adds haptic feedback to Spotify's player controls using the system feedback engine.\n\n%@";
 haptics_strength = "Strength";
 haptics_test = "Test";
 haptics_surface_keywords_section = "Control name keywords";
@@ -401,7 +402,6 @@ flags_on = "On";
 flags_off = "Off";
 flags_count = "%d flags · Spotify %@";
 flags_empty = "No flags found. Restart Spotify and try again.";
-flags_restart = "Restart to apply";
 flags_reset = "Reset all changes";
 flags_rescan = "Rescan flags";
 flag_override_add_section = "Add an override";
@@ -417,7 +417,7 @@ flag_override_active_section = "Active overrides";
 flag_override_empty = "No overrides yet";
 flag_override_any_scope = "any scope";
 flag_override_clear_all = "Remove all overrides";
-flag_override_restart_hint = "Applies the next time Spotify fetches its configuration, so restart the app. To add a flag Spotify never sent, On and Off need a scope.";
+flag_override_restart_hint = "Applies the next time Spotify fetches its configuration. Restart Spotify to apply. To add a flag Spotify never sent, On and Off need a scope.";
 
 /* MARK: Known-flag catalog and view-tree dumping */
 flag_override_mode_set = "Set value";
@@ -535,7 +535,7 @@ audio_effects_preset_rock = "Rock";
 audio_effects_preset_podcast = "Podcast";
 audio_effects_preset_custom = "Custom";
 audio_effects_status_active = "Audio output is routed through the effect chain";
-audio_effects_status_restart = "Not routed yet — restart Spotify to apply";
+audio_effects_status_restart = "Not routed yet. Restart Spotify to apply.";
 audio_effects_shelves = "Tone";
 audio_effects_shelves_description = "Broad boosts for everything under 150 Hz and above 6 kHz. They stack with the 10 bands below.";
 audio_effects_low_shelf = "Bass";
@@ -643,7 +643,7 @@ backup_regenerated = "Regenerated.";
 backup_copy = "Copy to clipboard";
 backup_copied = "Copied. Paste it into Notes or send it to yourself.";
 backup_import_section = "Import";
-backup_import_footer = "Only keys this tweak owns are written; anything else in the file is ignored and counted. Restart Spotify afterwards.";
+backup_import_footer = "Only keys this tweak owns are written; anything else in the file is ignored and counted.\n\n%@";
 backup_import = "Import";
 backup_paste = "Paste from clipboard";
 backup_pasted = "Pasted. Check it, then tap Import.";
@@ -699,7 +699,7 @@ licenses_taurus_detail = "The list of lyric providers and the ask-in-order, keep
 reduce_interventions_title = "Reduce interruptions";
 reduce_interventions_master = "Turn all tips off";
 reduce_interventions_master_description = "Spotify's master switch for its tip modules.";
-reduce_interventions_master_footer = "These switches write Spotify flag overrides. Restart Spotify for them to take effect.";
+reduce_interventions_master_footer = "These switches write Spotify flag overrides.\n\n%@";
 reduce_interventions_tips_section = "One switch per tip";
 reduce_interventions_flag_account_switching_tooltip = "Account switching tip";
 reduce_interventions_flag_account_switching_tooltip_description = "The nudge that suggests switching between accounts.";
@@ -750,7 +750,7 @@ now_playing_section = "Now-playing page";
 now_playing_style = "Now-playing style";
 now_playing_style_spotify = "Spotify";
 now_playing_style_apple_music = "Apple Music style";
-now_playing_style_description = "Spotify = Spotify's own player layout. Its lyric preview is unmaintained, so some lyric settings are ignored there (Japanese romanisation, for example, leaves the lyrics in Japanese). Apple Music style = the player is modelled on Apple Music.";
+now_playing_style_description = "Spotify = Spotify's own player layout. Apple Music style = the player is modelled on Apple Music.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.
@@ -772,7 +772,7 @@ artist_latest_release_tracks = "%d songs";
 
 lock_screen_artwork_title = "Lock screen artwork";
 lock_screen_artwork_enabled = "Animated artwork";
-lock_screen_artwork_description = "Plays a looping clip in place of the still cover on the lock screen. Apple Music's editorial video is used when Canvas comes back empty; when both come back empty, a loop is rendered from the cover. Needs iOS 26 or later.";
+lock_screen_artwork_description = "Plays a looping clip in place of the still cover on the lock screen. Apple Music's editorial video is used when Canvas comes back empty; when both come back empty, a loop is rendered from the cover.\n\n%@";
 lock_screen_artwork_canvas = "Add Canvas to the lock screen artwork";
 lock_screen_artwork_canvas_description = "Uses Spotify's own Canvas clip as the animated artwork.";
 lock_screen_artwork_fill = "Render the artwork locally";
@@ -782,7 +782,7 @@ lock_screen_artwork_clear = "Clear";
 lock_screen_artwork_cleared = "Cleared";
 lock_screen_lyrics_title = "Lock screen lyrics";
 lock_screen_lyrics_enabled = "Show lyrics on the lock screen";
-lock_screen_lyrics_description = "Draws the line being sung on the lock screen's full-screen artwork. Needs iOS 26 or later.";
+lock_screen_lyrics_description = "Draws the line being sung on the lock screen's full-screen artwork.\n\n%@";
 lock_screen_lyrics_cache = "Rendered lyric clips";
 lock_screen_lyrics_clear = "Clear";
 lock_screen_lyrics_cleared = "Cleared";
@@ -865,5 +865,4 @@ glass_iphone_only_footer = "The tab bar glass is measured from the iPhone tab ba
 
 // iPad 回退提示
 ipad_fallback_title = "Adjusted for iPad";
-ipad_fallback_message = "This device is an iPad. The tab bar and mini bar glass, and the artist, album and playlist page look, are laid out for the iPhone, so they were reverted to Spotify's native look. Restart Spotify to apply.";
-ipad_fallback_restart = "Restart Spotify";
+ipad_fallback_message = "This device is an iPad. The tab bar and mini bar glass, and the artist, album and playlist page look, are laid out for the iPhone, so they were reverted to Spotify's native look.\n\n%@";

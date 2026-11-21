@@ -47,10 +47,10 @@ enum IPadFallback {
     private static func presentNotice() {
         let alert = UIAlertController(
             title: "ipad_fallback_title".localized,
-            message: "ipad_fallback_message".localized,
+            message: "ipad_fallback_message".localizeWithFormat("restart_is_required_description".localized),
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "ipad_fallback_restart".localized, style: .default) { _ in
+        alert.addAction(UIAlertAction(title: "restart_now".localized, style: .default) { _ in
             exitApplication()
         })
 

@@ -13,7 +13,7 @@ struct EeveeHapticsSettingsView: View {
 
     var body: some View {
         List {
-            Section(footer: Text("haptics_description".localized)) {
+            Section(footer: Text("haptics_description".localizeWithFormat("restart_is_required_description".localized))) {
                 Toggle(
                     "haptics_enabled".localized,
                     isOn: Binding<Bool>(

@@ -159,6 +159,7 @@ struct EeveeLyricsSettingsView: View {
 
     private func betterWordByWordLyricsFooter() -> Text {
         var text = "better_word_by_word_lyrics_description".localized
+            + "\n\n" + "requires_ios26".localized
         if !Self.supportsBetterWordByWordLyrics {
             text += "\n\n" + "better_word_by_word_lyrics_needs_ios26".localized
         }
