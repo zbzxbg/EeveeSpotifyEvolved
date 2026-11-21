@@ -92,6 +92,12 @@ enum EntityPageCurationHide {
         if labelled.count >= 2, let row = commonAncestor(of: labelled) {
             targets.append(row)
         }
+        // 同一行只认得其中两颗时（9.2.2 的「编辑 / 姓名和详情 / 排序」三颗**没有 id**，
+        // 文字也不在 `UILabel` / `accessibilityLabel` 上）⇒ 收它们**共同的那一层**：
+        // 那是 `ToolbarChipCollectionView`（414×32），一行五颗全在里面。
+        if marked.count >= 2, let row = commonAncestor(of: marked) {
+            targets.append(row)
+        }
         guard !targets.isEmpty else {
             noteEmptyPass(on: page)
             return
