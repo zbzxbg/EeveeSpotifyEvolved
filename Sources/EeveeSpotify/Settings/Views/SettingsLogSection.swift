@@ -1,11 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// 根页的「日志」一节：开启记录 / 导出 / 清除，外加导出前的脱敏开关。
+/// 根页的「日志」一节：开启记录 / 导出 / 清除。
 ///
 /// 为什么在根页：遇到问题时的第一步就是"打开记录、复现、把日志发出去"，而这三件事
 /// 原来在「调试」页里 —— 那一页是转储与探针，普通用户不该为了发日志先钻进去。
 /// 它和调试页的转储开关写的是同一个文件（`eeveespotify_debug.log`），只是入口分开。
+///
+/// 「导出前脱敏」不在这里：那是一个**隐私默认值**，跟排查开关放在一起更合适
+/// （调试页末尾，见 `EeveeDebugSettingsView`）。
 struct SettingsLogSection: View {
 
     var body: some View {
@@ -40,18 +43,6 @@ struct SettingsLogSection: View {
                 }
                 .foregroundColor(.red)
             }
-        }
-
-        // 脱敏是**导出**的隐私默认值（键不存在 ⇒ 开）：和导出按钮放在同一块里，
-        // 免得导出之后才在别处发现"原来没脱敏"。
-        Section {
-            Toggle(
-                "redact_shared_log".localized,
-                isOn: Binding<Bool>(
-                    get: { UserDefaults.redactSharedLog },
-                    set: { UserDefaults.redactSharedLog = $0 }
-                )
-            )
         }
     }
 

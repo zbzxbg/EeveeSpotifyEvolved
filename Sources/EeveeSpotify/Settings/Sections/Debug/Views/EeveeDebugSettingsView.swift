@@ -7,8 +7,9 @@ import UIKit
 /// · **只读转储**（更详细的日志记录 = 视图树 + customize 响应体）—— 不改任何行为；
 /// · **探针 / 自检 / 类转储** —— 验证完就可以关掉。
 ///
-/// 「日志工具」与「导出前脱敏」不在这一页：它们属于"遇到问题 → 记录 → 导出"的日常路径，
-/// 入口在根页（`SettingsLogSection`，紧挨重置）。两边写的是同一个调试日志。
+/// 「开启记录 / 导出 / 清除」不在这一页：它们属于"遇到问题 → 记录 → 导出"的日常路径，
+/// 入口在根页（`SettingsLogSection`，紧挨重置）。**「导出前脱敏」留在这里** ——
+/// 它是那个导出按钮的隐私默认值，和排查开关放在一起，不跟着日常入口走。
 ///
 /// 所有 UserDefaults 键**都沿用旧的**（`redactSharedLog` / `dumpViewTree` /
 /// `dumpCustomizeBody` 等）⇒ 设备上已设的值原样保留；只有合并后的 `detailed_logging`
@@ -44,10 +45,38 @@ struct EeveeDebugSettingsView: View {
             // 「转储某个类的方法/ivar」：与上面同一目的、答的是另一半问题
             // —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
             dumpClassSection()
+
+            // 「分享日志前脱敏」：导出的隐私默认值。导出按钮在根页的「日志」一节
+            // （`SettingsLogSection`），但这一条留在这里 —— 它是"把日志发出去之前先假名化"，
+            // 属于排查链的最后一环，不跟着日常入口走。
+            redactSharedLogSection()
         }
                 // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
+    }
+
+    /// 「分享日志前脱敏」。
+    ///
+    /// 默认**开**（`UserDefaults.redactSharedLog` 的 getter：键不存在 ⇒ true）：
+    /// 导出这个动作 99% 是为了把日志发给别人，而日志主体就是"你听了哪些歌"。
+    ///
+    /// 只影响**导出**的那一份（`DebugLogSanitizer.sharedLogFile(from:redact:)`，出口是根页
+    /// 「日志」一节里的导出按钮）；写入口的凭证/设备标识脱敏没有开关、也不受它控制。
+    /// 脱敏版生成失败时导出会**直接报错**，绝不回退明文（fail-closed）。
+    ///
+    /// ⚠️ 这一节不是"验证完就删"的临时件，而是**导出的隐私默认值**。它不在
+    /// `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，用 `Binding` 直接读写）。
+    @ViewBuilder private func redactSharedLogSection() -> some View {
+        Section {
+            Toggle(
+                "redact_shared_log".localized,
+                isOn: Binding<Bool>(
+                    get: { UserDefaults.redactSharedLog },
+                    set: { UserDefaults.redactSharedLog = $0 }
+                )
+            )
+        }
     }
 
     /// 顶部警示：只陈述后果，不拦操作（排查时它不该碍事）。
