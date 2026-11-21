@@ -37,6 +37,23 @@ struct AmllTtmlBackgroundVocal {
     var isBeforePrimary: Bool
 }
 
+/// TTML 里的歌手声明（`<ttm:agent xml:id="v1" type="person"><ttm:name>…`）。
+///
+/// 行上的 `ttm:agent="v1"` 只是**引用**，名字与"个人 / 合唱"在 `<head>` 里那张表里 ——
+/// 所以只读行属性的话，`AmllTtmlLine.agent` 永远只有一串 id（v1 / v2），
+/// 不知道是谁、也不知道谁跟谁对唱。
+struct AmllTtmlAgent {
+    var identifier: String
+    var displayName: String
+    var isGroup: Bool
+    /// 这一位歌手唱的行要不要排到另一端（对唱左右分边）。
+    ///
+    /// 规则与 Apple Music 一致：**恰好两位个人歌手、且文件里没有合唱 agent** 时，
+    /// 第二位（按声明顺序）排到另一端；其余情况（三位以上、或有合唱 agent）一律不翻 ——
+    /// 只有两边时"左右"才有意义，三个人的歌把后两位都推右边只会让每行都在乱跳。
+    var isFlipped: Bool
+}
+
 struct AmllTtmlLine {
     var key: String?
     /// 行级时间（毫秒），来自 <p begin>。
@@ -75,6 +92,10 @@ struct AmllTtmlResult {
     var spotifyIds: [String]
     var ncmMusicIds: [String]
     var authorLogin: String?
+    /// `<ttm:agent>` 声明表：id → 名字 / 个人还是合唱 / 是否排到另一端。
+    ///
+    /// 空表 ⇒ 这份 TTML 没有歌手声明，行上的 agent id 认不出来，对唱布置整首不做。
+    var agents: [String: AmllTtmlAgent] = [:]
 
     /// 是否含官方罗马音/音译。
     var hasRomanization: Bool {
@@ -102,6 +123,7 @@ enum AmllTtmlParser {
 
         let preferredTranslationLanguage = normalizedLanguagePreference(translationLanguage)
         let metadata = parseMetadata(in: root)
+        let agents = parseAgents(in: root)
         let sidecarTranslations = parseSidecar(named: "translation", in: root)
         let sidecarTransliterations = parseSidecar(named: "transliteration", in: root)
 
@@ -162,8 +184,64 @@ enum AmllTtmlParser {
             album: metadata.album,
             spotifyIds: metadata.spotifyIds,
             ncmMusicIds: metadata.ncmMusicIds,
-            authorLogin: metadata.authorLogin
+            authorLogin: metadata.authorLogin,
+            agents: agents
         )
+    }
+
+    // MARK: - 歌手声明（ttm:agent）
+
+    /// 解析 `<ttm:agent>` 声明表，并按**声明顺序**决定谁排到另一端。
+    ///
+    /// 读的是 `<ttm:agent xml:id="v1" type="person"><ttm:name type="full">…</ttm:name>`；
+    /// `type="group"` 是合唱（「合唱」「两人」这类），不参与左右分边。
+    ///
+    /// 判定"对唱"的门槛故意收紧到**恰好两位个人歌手、且没有合唱 agent**：
+    /// 三位以上歌手的歌里，Apple Music 也不会把第二、第三位都推右边 —— 那是合唱/群唱，
+    /// 每行乱跳比不翻更糟。没有 `type` 的声明按个人处理（AMLL 社区文件常省略）。
+    private static func parseAgents(in root: AmllTtmlNode) -> [String: AmllTtmlAgent] {
+        var declarations: [(identifier: String, name: String?, isGroup: Bool)] = []
+
+        for node in root.descendants(where: { $0.localName == "agent" }) {
+            let identifier = (node.attribute("id") ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !identifier.isEmpty,
+                  !declarations.contains(where: { $0.identifier == identifier }) else { continue }
+
+            let rawType = node.attribute("type")?.lowercased() ?? ""
+            let name = node.descendants(where: { $0.localName == "name" })
+                .first?
+                .text()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            declarations.append((
+                identifier: identifier,
+                name: (name?.isEmpty ?? true) ? nil : name,
+                isGroup: rawType == "group"
+            ))
+        }
+
+        guard !declarations.isEmpty else { return [:] }
+
+        let persons = declarations.filter { !$0.isGroup }
+        let isDuet = persons.count == 2 && !declarations.contains(where: { $0.isGroup })
+        let flippedIdentifier = isDuet ? persons[1].identifier : nil
+
+        var result: [String: AmllTtmlAgent] = [:]
+        for declaration in declarations {
+            result[declaration.identifier] = AmllTtmlAgent(
+                identifier: declaration.identifier,
+                displayName: declaration.name ?? declaration.identifier,
+                isGroup: declaration.isGroup,
+                isFlipped: declaration.identifier == flippedIdentifier
+            )
+        }
+
+        writeDebugLog(
+            "[AMLL] agent declarations: \(declarations.count) "
+                + "(person \(persons.count), group \(declarations.count - persons.count)) — "
+                + (flippedIdentifier == nil ? "single-sided layout" : "duet layout, second voice on the other side")
+        )
+        return result
     }
 
     // MARK: - 元数据

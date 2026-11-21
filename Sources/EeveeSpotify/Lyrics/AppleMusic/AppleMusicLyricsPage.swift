@@ -867,6 +867,17 @@ struct AppleMusicLyricsPage: View {
         // 对唱翻转（`.trailing` ＝ 推到另一端）也跟着一起翻对。
         let isRightToLeft = line.text.prefersRightToLeftLayout
 
+        // 对唱：另一位歌手的行排到**另一端**（Apple Music 的做法）。
+        //
+        // 判据只有一条：`alignment == .flipped` —— 那一位是谁、什么时候翻，由数据层决定
+        // （`AmllTtmlParser.parseAgents`：恰好两位个人歌手时，第二位翻）。
+        // 其它源没有 agent 信息 ⇒ 这里恒 false，行为与以前一致。
+        //
+        // 环境方向在上面按**歌词脚本**覆盖过，所以 `.trailing` 是"这一行自己的另一端"：
+        // 中文/英文歌里是右边，RTL 歌词里是左边 —— 两种情况下都翻在正确的那一侧。
+        let isFlipped = NgzhwmSettingsViewModel.lyricsDuetLayout
+            && line.agent?.alignment == .flipped
+
         SynchronizedLyricText(
             syllables: line.syllables,
             text: line.text,
@@ -883,7 +894,8 @@ struct AppleMusicLyricsPage: View {
             backgroundVocal: line.backgroundVocal,
             // 显式传真实宽度，不要再依赖 SwiftUI 推断（那正是文字溢出的原因）。
             constrainedWidth: availableWidth,
-            alignment: .leading,
+            // 对唱翻转的行用 trailing，其余保持 leading（见上面 `isFlipped`）。
+            alignment: .resolved(isFlipped: isFlipped),
             typography: typography,
             primaryColor: primaryColor,
             appliesTimingEffects: isActive,
@@ -897,12 +909,15 @@ struct AppleMusicLyricsPage: View {
         // 多出来的这一层硬宽度反而让 SwiftUI 与构建器各算一次折行。
         // 焦点态：缩放 + 透明度 + 模糊。三者都跟随 focusStrength，所以
         // 行切换时是同一条曲线，不会各走各的。
+        //
+        // 缩放锚点跟**这一行贴的那一边**走：对唱翻转的行从右边长出来，
+        // 否则焦点行会朝反方向长、看起来像被拽回中间。
         .scaleEffect(
             CGFloat(
                 Self.profile.deselectedScale
                     + (1 - Self.profile.deselectedScale) * focusStrength
             ),
-            anchor: .leading
+            anchor: isFlipped ? .trailing : .leading
         )
         .opacity(
             Self.profile.deselectedTextOpacity
@@ -923,7 +938,7 @@ struct AppleMusicLyricsPage: View {
         // 放在链条**最外层**：这样它同时盖住
         // ① 行内文字的对齐（`SynchronizedLyricText` 内部的 `.frame(alignment:)`
         // 与 `.multilineTextAlignment(alignment.textAlignment)`）；
-        // ② 上面那个 `.scaleEffect(anchor: .leading)` —— 焦点行放大时应当从
+        // ② 上面那个 `.scaleEffect(anchor:)` —— 焦点行放大时应当从
         // "这一行自己的那一侧"长出来，而不是永远从左边。
         .environment(
             \.layoutDirection,

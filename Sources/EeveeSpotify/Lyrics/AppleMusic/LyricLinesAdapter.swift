@@ -311,7 +311,15 @@ extension LyricsDto {
                 romanization: romanization,
                 romanizationSyllables: romanizationSyllables,
                 translation: Self.normalized(translationText),
-                agent: nil,
+                // 对唱：只有 TTML 源会给（`LyricsAgentDto`），别的源这里是 nil ⇒ 行为不变。
+                agent: line.agent.map {
+                    LyricAgent(
+                        identifier: $0.identifier,
+                        displayName: $0.displayName,
+                        kind: $0.isGroup ? .group : .person,
+                        alignment: $0.isFlipped ? .flipped : .normal
+                    )
+                },
                 backgroundVocal: Self.backgroundVocal(for: line)
             )
         }

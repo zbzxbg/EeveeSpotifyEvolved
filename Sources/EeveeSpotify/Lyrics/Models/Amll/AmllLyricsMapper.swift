@@ -64,12 +64,24 @@ enum AmllLyricsMapper {
 
             // 把 AMLL 自己给的**行结束时间**也带上（`<p end>`）。
             // 以前它只用来算 `lastLineEndMs` 打日志、进 DTO 就丢了。
+            //
+            // 歌手同理：行上只有 id，名字与"谁排另一边"在声明表里，这里一次解析掉，
+            // 下游（`LyricLinesAdapter`）就不用再拿整份 `AmllTtmlResult`。
+            let agent = line.agent.flatMap { parsed.agents[$0] }.map {
+                LyricsAgentDto(
+                    identifier: $0.identifier,
+                    displayName: $0.displayName,
+                    isGroup: $0.isGroup,
+                    isFlipped: $0.isFlipped
+                )
+            }
             lines.append(
                 LyricsLineDto(
                     content: trimmed,
                     offsetMs: line.offsetMs,
                     endOffsetMs: line.endMs,
-                    words: nil
+                    words: nil,
+                    agent: agent
                 )
             )
             translations.append(line.translation ?? "")

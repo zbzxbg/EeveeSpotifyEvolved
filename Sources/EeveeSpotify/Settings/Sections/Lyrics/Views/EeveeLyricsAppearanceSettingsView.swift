@@ -24,6 +24,8 @@ struct EeveeLyricsAppearanceSettingsView: View {
         List {
             lyricsTypographySection()
 
+            lyricsDuetSection()
+
             lyricsBackgroundColorSection()
 
             NonIPadSpacerView()
@@ -84,6 +86,25 @@ struct EeveeLyricsAppearanceSettingsView: View {
             Text("lyrics_typography_section".localized)
         } footer: {
             Text("lyrics_typography_description".localized)
+        }
+    }
+
+    /// 「对唱」：另一位歌手的行排到另一端。
+    ///
+    /// 为什么在「外观」里、而且只有一颗开关：它改的是**排版**（谁站哪边），不是取词行为；
+    /// 数据来自 TTML 的 `ttm:agent`（AMLL / Apple 官方 TTML 两路），别的源没有歌手信息，
+    /// 所以这一颗开关对那些源不起作用 —— 页脚把这一点写明，免得被当成"按了没反应"。
+    @ViewBuilder private func lyricsDuetSection() -> some View {
+        Section {
+            Toggle(
+                "lyrics_duet_layout".localized,
+                isOn: Binding(
+                    get: { NgzhwmSettingsViewModel.lyricsDuetLayout },
+                    set: { NgzhwmSettingsViewModel.lyricsDuetLayout = $0 }
+                )
+            )
+        } footer: {
+            Text("lyrics_duet_layout_description".localized)
         }
     }
 

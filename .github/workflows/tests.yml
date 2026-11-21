@@ -455,6 +455,24 @@ jobs:
                  -o amll-ttml-apple-tests
           ./amll-ttml-apple-tests
 
+      # TTML 的歌手声明（`ttm:agent`）与对唱分边。行上的 `ttm:agent` 只是**引用**，
+      # 名字与"个人 / 合唱"在 `<head>` 的声明表里；只有「恰好两位个人歌手、且文件里
+      # 没有合唱 agent」才把第二位排到另一端。渲染侧（`AppleMusicLyricsPage`）要 SwiftUI，
+      # 进不了这条链 —— 这里只钉数据。
+      - name: TTML agents and duet layout
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/Amll/AmllTtmlDocument.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/Amll/AmllTtmlParser.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsError.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsWordDto.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsBackgroundVocalDto.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsLineDto.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/LyricsMatch.swift \
+                 Sources/EeveeSpotify/Lyrics/Repositories/LyricsMarkers.swift \
+                 Tests/LyricsDuet/main.swift \
+                 -o lyrics-duet-tests
+          ./lyrics-duet-tests
+
       # "没词可画时写哪一句"的判定（`LyricsNoticePolicy`）。四种"没词"必须
       # 分开说 —— 混档就是用户能看见的误报（"歌词明明有、我们却说未找到"）。纯 Foundation。
       - name: Lyrics notice policy (what we say when there is nothing to draw)

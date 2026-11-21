@@ -1,5 +1,17 @@
 import Foundation
 
+/// 这一行是谁唱的（目前只有 TTML 源会给：`ttm:agent`）。
+///
+/// 与 `LyricsBackgroundVocalDto` 的区别：那个是**同一行里叠着的**副唱，这个是
+/// **这一整行的主角** —— 对唱歌里左右两边各是谁。渲染层据此把另一位歌手的行排到另一端。
+struct LyricsAgentDto {
+    var identifier: String
+    var displayName: String
+    var isGroup: Bool
+    /// 这一行要不要排到另一端（判据在解析层：恰好两位个人歌手时，第二位为 true）。
+    var isFlipped: Bool
+}
+
 struct LyricsLineDto {
     var content: String
     var offsetMs: Int?
@@ -20,6 +32,9 @@ struct LyricsLineDto {
     /// 它**不属于** `content` / `words`：那些是主词序列。副唱与主词时间重叠，
     /// 由渲染层单独画一小行，而不是顺序拼进主歌。
     var backgroundVocal: LyricsBackgroundVocalDto? = nil
+
+    /// 这一行的歌手（只有 AMLL / Apple 官方 TTML 会给；别的源一律 nil）。
+    var agent: LyricsAgentDto? = nil
 
     /// **空白行** —— 内容去掉空白就没了，而且这一行上**没有**词级数据、
     /// 也没有副唱。显示层/注入 payload 用它把这种行整行丢掉（判据**只有这一份**，
