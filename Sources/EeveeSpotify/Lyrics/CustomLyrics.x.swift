@@ -414,7 +414,12 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         options: LyricsOptions
     ) throws -> LyricsAutoSelectPick {
         let startedAt = Date()
-        let chain = LyricsAutoSelect.chain()
+        // 按歌排除源（设置 → 歌词 → 按歌排除源）：只对**自动优选**生效 ——
+        // 这条函数就是自动优选本身；用户点名选了某个源时走的是外面那条分支。
+        let chain = LyricsSongSourceExclusions.resolvedChain(
+            LyricsAutoSelect.chain(),
+            trackId: searchQuery.spotifyTrackId
+        )
         var best: LyricsAutoSelectPick?
         var firstError: Error?
 

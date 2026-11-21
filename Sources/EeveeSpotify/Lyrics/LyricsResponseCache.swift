@@ -101,7 +101,10 @@ final class LyricsResponseCache {
         // （仓库层自己的 NSCache 也把语言放进了键，见 `AmllTtmlLyricsRepository.getLyrics`）。
         // 用**生效值**（留空时是设备语言），这样"改系统语言"也算换了设置。
         let amllTranslationLanguage = UserDefaults.amllEffectiveTranslationLanguage
-        return "\(source)|\(genius)|\(amll)|\(officialTtml)|\(amllTranslationLanguage)"
+        // 按歌排除源：改过任何一条，备忘就必须失效 —— 否则改完排他、60 秒内重听同一首，
+        // 交出去的还是上一次那份 payload（看起来就是"设置没生效，要重启"）。
+        let exclusions = LyricsSongSourceExclusions.revision
+        return "\(source)|\(genius)|\(amll)|\(officialTtml)|\(amllTranslationLanguage)|ex\(exclusions)"
     }
 
     /// 这一次请求该怎么等：直接交备忘 / 短预算 / 长预算 + 第几次 + 预算秒数。

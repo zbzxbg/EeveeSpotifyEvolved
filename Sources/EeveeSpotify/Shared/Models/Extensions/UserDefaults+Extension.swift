@@ -187,6 +187,11 @@ extension UserDefaults {
         // 见 `Lyrics/LyricsTimingOffset.swift`；默认偏移已取消，每个源/曲目各存各的。
         LyricsTimingOffset.offsetsKey,
         LyricsTimingOffset.titlesKey,
+        // 「这首歌不用某些歌词源」：键由功能自己拥有，见
+        // `Lyrics/Models/Settings/LyricsSongSourceExclusions.swift`。
+        LyricsSongSourceExclusions.exclusionsKey,
+        LyricsSongSourceExclusions.titlesKey,
+        LyricsSongSourceExclusions.revisionKey,
     ]
     // 听歌页「卡片」那批（总开关 + 每张卡一个键）：键表由 `PlayerCard` / `PlayerCardsDeclutter`
     // 自己拥有 —— 加一张卡片只改那一处，这里跟着走，不会漏。

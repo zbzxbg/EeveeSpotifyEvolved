@@ -129,6 +129,15 @@ enum SettingsCatalog {
             destination: { _ in AnyView(EeveeLyricsAppearanceSettingsView()) }
         ),
         SettingsEntry(
+            id: "lyrics_song_exclusions",
+            group: .lyrics,
+            titleKey: "lyrics_song_exclusions_title",
+            iconName: "music.note.list",
+            color: .blue,
+            aliases: ["排除", "源", "按歌", "exclude", "source"],
+            destination: { _ in AnyView(EeveeLyricsSongExclusionsView()) }
+        ),
+        SettingsEntry(
             id: "imported_lyrics",
             group: .lyrics,
             titleKey: "imported_lyrics_title",

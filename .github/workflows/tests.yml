@@ -455,6 +455,19 @@ jobs:
                  -o amll-ttml-apple-tests
           ./amll-ttml-apple-tests
 
+      # 按歌排除源（`LyricsSongSourceExclusions`）：解码自愈（未知键 / 重复项 /
+      # 不能作为排除项的源）、编码往返、过滤保持链顺序、全排除时回退成原链。
+      # 纯 Foundation，不碰 UserDefaults 的读写路径（只测纯函数）。
+      - name: Per-song lyric source exclusions
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/Settings/LyricsSource.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/Settings/LyricsSourceOrder.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/Settings/LyricsSongSourceExclusions.swift \
+                 Sources/EeveeSpotify/Shared/Models/Extensions/Locale+Extension.swift \
+                 Tests/LyricsSongExclusions/main.swift \
+                 -o lyrics-song-exclusions-tests
+          ./lyrics-song-exclusions-tests
+
       # TTML 的歌手声明（`ttm:agent`）与对唱分边。行上的 `ttm:agent` 只是**引用**，
       # 名字与"个人 / 合唱"在 `<head>` 的声明表里；只有「恰好两位个人歌手、且文件里
       # 没有合唱 agent」才把第二位排到另一端。渲染侧（`AppleMusicLyricsPage`）要 SwiftUI，
