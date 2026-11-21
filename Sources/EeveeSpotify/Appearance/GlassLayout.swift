@@ -26,9 +26,10 @@ enum GlassLayout {
         isEligible && (launchTabBarSystemGlass ?? UserDefaults.tabBarSystemGlass)
     }
 
-    /// 本会话是否铺迷你条玻璃：同上。
+    /// 本会话是否铺迷你条玻璃：iPad 也铺 —— 它不需要那条 iPhone 标签栏，
+    /// 宽度在 `MiniBarGlass.capsuleWidth` 里按迷你条自己的内容算。
     static var miniBarGlassEnabled: Bool {
-        isEligible && (launchMiniBarGlass ?? UserDefaults.miniBarGlass)
+        launchMiniBarGlass ?? UserDefaults.miniBarGlass
     }
 
     /// 当前值和启动快照不一致 ⇒ 需要重启。

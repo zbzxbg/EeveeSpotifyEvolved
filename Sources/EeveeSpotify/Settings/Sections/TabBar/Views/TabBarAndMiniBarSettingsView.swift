@@ -132,13 +132,6 @@ struct TabBarAndMiniBarSettingsView: View {
                         UserDefaults.miniBarGlass = value
                     }
                 )
-                .disabled(!GlassLayout.isEligible)
-
-                if !GlassLayout.isEligible {
-                    Text("glass_iphone_only_footer".localized)
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
 
                 // （底下迷你播放器的歌曲是圆形的，不是方形的。
                 // 我记得上游有这个东西）：**上游确实有** —— `LiquidGlassOptions.roundArtwork`
