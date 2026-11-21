@@ -21,7 +21,7 @@ import EeveeSpotifyC
 enum MiniBarGlassPlate {
 
     /// 开关：设置 → EeveeSpotify → 扩展功能 → 迷你播放条 →「迷你播放条用液态玻璃」，默认开。
-    static var isEnabled: Bool { UserDefaults.miniBarGlass }
+    static var isEnabled: Bool { GlassLayout.miniBarGlassEnabled }
 
     /// 内容视图在真机树里的 id（它的类名只是裸 `UIView`，认不了类，只能认 id）。
     private static let contentIdentifier = "SPTNowPlayingBar"

@@ -355,6 +355,8 @@ struct EeveeSpotify: Tweak {
 
     init() {
         eeveeBreadcrumb("Tweak init() entered")
+        // 两条玻璃的启动快照：设置页写的是"下一份值"，本会话一律按这一次的值跑。
+        GlassLayout.captureLaunchSnapshot()
         // Reset per-launch bootstrap state; this MUST NOT persist across restarts.
         // Otherwise Spotify can get stuck on splash because bootstrap is cancelled.
         UserDefaults.hasPatchedBootstrap = false

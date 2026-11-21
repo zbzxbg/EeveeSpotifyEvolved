@@ -802,3 +802,4 @@ settings_search_placeholder = "搜索";
 settings_search_empty = "没有匹配的设置项。";
 log_tools_section = "日志";
 sleep_timer_shortcut_hint = "在 Apple Music 样式的听歌页长按播放队列，也能打开这个面板。";
+glass_iphone_only_footer = "这两条玻璃是按 iPhone 标签栏量的，iPad 上不启用。";
