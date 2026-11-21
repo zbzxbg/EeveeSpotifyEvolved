@@ -795,6 +795,7 @@ listening_stats_overview_total_time = "收听时长";
 listening_stats_overview_plays = "播放次数";
 listening_stats_overview_tracks = "曲目数";
 listening_stats_overview_artists = "艺人数";
+listening_stats_overview_since = "数据自";
 listening_stats_last_7_days = "近 7 天";
 listening_stats_top_songs = "最常听的歌";
 listening_stats_top_artists = "最常听的艺人";

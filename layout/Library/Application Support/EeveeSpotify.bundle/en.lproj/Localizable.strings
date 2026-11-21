@@ -811,6 +811,7 @@ listening_stats_overview_total_time = "Listening time";
 listening_stats_overview_plays = "Plays";
 listening_stats_overview_tracks = "Tracks";
 listening_stats_overview_artists = "Artists";
+listening_stats_overview_since = "Data since";
 listening_stats_last_7_days = "Last 7 days";
 listening_stats_top_songs = "Top songs";
 listening_stats_top_artists = "Top artists";

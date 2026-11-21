@@ -97,6 +97,13 @@ struct EeveeListeningStatsSettingsView: View {
 
     private var overviewSection: some View {
         Section {
+            // 为什么在总览最前面放这一行：30 天 / 一年 / 全部 三档在**只有最近几天数据**时
+            // 与 7 天档的数字完全一样（同一个集合），看起来就像"切换没反应"。
+            // 把库里最早的那天写出来，用户一眼就知道是"更早没有数据"，不是开关坏了。
+            if let firstDay = viewModel.firstDayKey {
+                overviewRow("listening_stats_overview_since".localized, firstDay)
+            }
+
             overviewRow("listening_stats_overview_total_time".localized, durationText(viewModel.summary.totalSeconds))
             overviewRow("listening_stats_overview_plays".localized, playsText(viewModel.summary.totalPlays))
             overviewRow("listening_stats_overview_tracks".localized, "\(viewModel.summary.uniqueTracks)")

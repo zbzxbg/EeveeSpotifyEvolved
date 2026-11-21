@@ -324,6 +324,13 @@ require(
 )
 require(importData.days[todayKey] != nil, "recent recorded days must survive pruning too")
 
+// 数据范围：设置页用它解释"30 天 / 一年 / 全部 为什么和 7 天一样"（更早没有数据）。
+require(ListeningStatsData().oldestDayKey == nil, "an empty store has no data range")
+require(
+    importData.oldestDayKey == "2016-03-04",
+    "the data range must start at the oldest bucket, not the newest"
+)
+
 // 同一个老日子，如果来自录音器而不是导入，照旧被削掉 —— 保留期没有整体放宽。
 var recordedOnly = ListeningStatsData()
 recordedOnly.add(entry("2016-03-04", "alpha1", "Alpha", "Ann", seconds: 480, plays: 2))
