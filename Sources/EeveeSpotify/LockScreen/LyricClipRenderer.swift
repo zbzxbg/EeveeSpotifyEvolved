@@ -39,6 +39,10 @@ enum LyricClipRenderer {
         line: String?,
         next: String?,
         translation: String?,
+        romanization: String? = nil,
+        isDuet: Bool = false,
+        flipped: Bool = false,
+        nextFlipped: Bool = false,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
@@ -48,6 +52,10 @@ enum LyricClipRenderer {
             line: line,
             next: next,
             translation: translation,
+            romanization: romanization,
+            isDuet: isDuet,
+            flipped: flipped,
+            nextFlipped: nextFlipped,
             credit: credit,
             size: size
         )
@@ -60,6 +68,10 @@ enum LyricClipRenderer {
         line: String?,
         next: String?,
         translation: String?,
+        romanization: String? = nil,
+        isDuet: Bool = false,
+        flipped: Bool = false,
+        nextFlipped: Bool = false,
         credit: String,
         size: CGSize,
         seconds: Double,
@@ -76,6 +88,10 @@ enum LyricClipRenderer {
                         line: line,
                         next: next,
                         translation: translation,
+                        romanization: romanization,
+                        isDuet: isDuet,
+                        flipped: flipped,
+                        nextFlipped: nextFlipped,
                         credit: credit,
                         size: size
                     )
@@ -188,6 +204,10 @@ enum LyricClipRenderer {
         line: String?,
         next: String?,
         translation: String?,
+        romanization: String?,
+        isDuet: Bool,
+        flipped: Bool,
+        nextFlipped: Bool,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
@@ -215,6 +235,10 @@ enum LyricClipRenderer {
             line: line,
             next: next,
             translation: translation,
+            romanization: romanization,
+            isDuet: isDuet,
+            flipped: flipped,
+            nextFlipped: nextFlipped,
             credit: credit,
             size: size,
             context: context
@@ -230,6 +254,10 @@ enum LyricClipRenderer {
         line: String?,
         next: String?,
         translation: String?,
+        romanization: String?,
+        isDuet: Bool,
+        flipped: Bool,
+        nextFlipped: Bool,
         credit: String,
         size: CGSize,
         context: CGContext
@@ -247,6 +275,11 @@ enum LyricClipRenderer {
         defer {
             drawCredit(credit, size: size, columnWidth: columnWidth, columnX: columnX, context: context)
         }
+
+        // 对唱：两位歌手各贴自己那一侧（第一位左、第二位右）。单嗓歌保持居中 ——
+        // 锁屏上居中才是常态，只有"换人唱"这件事值得动对齐。
+        let currentAlignment: CTTextAlignment = isDuet ? (flipped ? .right : .left) : .center
+        let nextAlignment: CTTextAlignment = isDuet ? (nextFlipped ? .right : .left) : .center
 
         // 没在唱（间奏/换行间隙）时只把下一行压暗放在中间，不留下上一句的残影。
         guard !current.isEmpty else {
@@ -268,6 +301,7 @@ enum LyricClipRenderer {
                     width: columnWidth,
                     height: height
                 ),
+                alignment: nextAlignment,
                 context: context
             )
             return
@@ -315,24 +349,63 @@ enum LyricClipRenderer {
         }
         let translationGap = translationText.isEmpty ? 0 : fontSize * 0.22 * spacingScale
 
+        // 罗马字：画在正文**上方**一小行（与歌词页同一个位置约定）。
+        // 只是辅助信息，同样给个高度上限，不让它把正文挤小。
+        let romanizationText = (romanization ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var romanizationFontSize: CGFloat = 0
+        var romanizationHeight: CGFloat = 0
+        if !romanizationText.isEmpty {
+            romanizationFontSize = max(11, fontSize * 0.48)
+            romanizationHeight = textHeight(
+                for: romanizationText,
+                fontSize: romanizationFontSize,
+                columnWidth: columnWidth
+            )
+            let budget = size.height * 0.12
+            if romanizationHeight > budget {
+                romanizationFontSize *= budget / romanizationHeight
+                romanizationHeight = budget
+            }
+        }
+        let romanizationGap = romanizationText.isEmpty ? 0 : fontSize * 0.18 * spacingScale
+
         let nextGap = following.isEmpty ? 0 : fontSize * 0.55 * spacingScale
-        let total = currentHeight + translationGap + translationHeight + nextGap + nextHeight
+        let total = romanizationHeight + romanizationGap
+            + currentHeight + translationGap + translationHeight + nextGap + nextHeight
         let top = centerY + total / 2
 
+        if !romanizationText.isEmpty {
+            draw(
+                romanizationText,
+                fontSize: romanizationFontSize,
+                alpha: 0.62,
+                rect: CGRect(
+                    x: columnX,
+                    y: top - romanizationHeight,
+                    width: columnWidth,
+                    height: romanizationHeight
+                ),
+                alignment: currentAlignment,
+                context: context
+            )
+        }
+
+        let currentTop = top - romanizationHeight - romanizationGap
         draw(
             current,
             fontSize: fontSize,
             alpha: 1,
             rect: CGRect(
                 x: columnX,
-                y: top - currentHeight,
+                y: currentTop - currentHeight,
                 width: columnWidth,
                 height: currentHeight
             ),
+            alignment: currentAlignment,
             context: context
         )
 
-        let translationTop = top - currentHeight - translationGap - translationHeight
+        let translationTop = currentTop - currentHeight - translationGap - translationHeight
         if !translationText.isEmpty {
             draw(
                 translationText,
@@ -344,6 +417,7 @@ enum LyricClipRenderer {
                     width: columnWidth,
                     height: translationHeight
                 ),
+                alignment: currentAlignment,
                 context: context
             )
         }
@@ -359,6 +433,7 @@ enum LyricClipRenderer {
                 width: columnWidth,
                 height: nextHeight
             ),
+            alignment: nextAlignment,
             context: context
         )
     }
@@ -429,10 +504,16 @@ enum LyricClipRenderer {
         fontSize: CGFloat,
         alpha: CGFloat,
         rect: CGRect,
+        alignment: CTTextAlignment = .center,
         context: CGContext
     ) {
         guard rect.height > 0 else { return }
-        let framesetter = framesetter(for: text, fontSize: fontSize, alpha: alpha)
+        let framesetter = framesetter(
+            for: text,
+            fontSize: fontSize,
+            alpha: alpha,
+            alignment: alignment
+        )
 
         context.saveGState()
         // 白字压在模糊封面上容易糊，加一点阴影把字从底里拉出来。
@@ -475,11 +556,12 @@ enum LyricClipRenderer {
     private static func framesetter(
         for text: String,
         fontSize: CGFloat,
-        alpha: CGFloat
+        alpha: CGFloat,
+        alignment: CTTextAlignment = .center
     ) -> CTFramesetter {
         let font = coreTextFont(fontSize)
         // 只有对齐方式需要非默认值：换行用默认的按词换行，行距交给系统。
-        var alignment: CTTextAlignment = .center
+        var alignment = alignment
         let paragraph: CTParagraphStyle = withUnsafePointer(to: &alignment) { pointer in
             var setting = CTParagraphStyleSetting(
                 spec: .alignment,

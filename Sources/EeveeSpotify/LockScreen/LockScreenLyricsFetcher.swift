@@ -91,8 +91,14 @@ enum LockScreenLyricsFetcher {
 
         let translationLines = dto.translation?.lines ?? []
         let showsTranslation = showsTranslation(for: source)
+        // 罗马字：与歌词页**同一份**（官方罗马字优先，否则按语言开关本地罗马化）。
+        // 它按 `lines` 下标对齐，所以下面用 `pair.offset`（= 在 `dto.lines` 里的位置）取。
+        let romanizations = dto.romanizedContentsForDisplay()
+        // 对唱：只有 TTML 源会给歌手信息（解析层只在"恰好两位个人歌手"时才置 flipped），
+        // 所以"整首至少有一行 flipped"就是"这是一首对唱"。
+        let isDuet = dto.lines.contains { $0.agent?.isFlipped == true }
 
-        var timed: [(start: Int, end: Int?, text: String, translation: String)] = []
+        var timed: [(start: Int, end: Int?, text: String, translation: String, romanization: String, flipped: Bool)] = []
         for (index, pair) in ordered.enumerated() {
             let line = pair.element
             guard let start = line.offsetMs else { continue }
@@ -101,7 +107,17 @@ enum LockScreenLyricsFetcher {
             let translation = showsTranslation && index < translationLines.count
                 ? normalizedTranslation(translationLines[index], text: text)
                 : ""
-            timed.append((start, line.endOffsetMs, text, translation))
+            let romanization = pair.offset < romanizations.count
+                ? normalizedRomanization(romanizations[pair.offset], text: text)
+                : ""
+            timed.append((
+                start,
+                line.endOffsetMs,
+                text,
+                translation,
+                romanization,
+                line.agent?.isFlipped ?? false
+            ))
         }
         // 一行也算：有些歌整首只有一句词（念白/采样），不该被当成"没词"。
         guard !timed.isEmpty else { return nil }
@@ -117,7 +133,10 @@ enum LockScreenLyricsFetcher {
                     startMs: item.start,
                     endMs: max(end, item.start),
                     text: item.text,
-                    translation: item.translation
+                    translation: item.translation,
+                    romanization: item.romanization,
+                    isDuet: isDuet,
+                    agentFlipped: item.flipped
                 )
             )
         }
@@ -145,6 +164,17 @@ enum LockScreenLyricsFetcher {
             return ""
         }
         return translation
+    }
+
+    /// 罗马字与正文完全一样时不画：英文/拉丁行的"罗马化"就是它自己，
+    /// 画上去只是一行重复（歌词页那边同一条判据，见 `LyricLinesAdapter.romanization`）。
+    private static func normalizedRomanization(_ raw: String, text: String) -> String {
+        let romanization = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !romanization.isEmpty else { return "" }
+        guard romanization.compare(text, options: .caseInsensitive) != .orderedSame else {
+            return ""
+        }
+        return romanization
     }
 
     // MARK: - 来源

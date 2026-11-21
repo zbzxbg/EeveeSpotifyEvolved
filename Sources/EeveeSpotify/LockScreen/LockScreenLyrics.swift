@@ -24,7 +24,9 @@ enum LockScreenLyrics {
 
     /// 片段**画法**的版本。画布朝向、字号这类"同一行文字但像素不同"的改动必须进哈希：
     /// 文件名与 `artworkID` 只由它和文案决定，不换版本就会继续复用按老画法渲好的文件。
-    private static let clipFormat = "v3"
+    ///
+    /// v4：开始画罗马字那一行、以及按歌手分边（对唱）；v3 及以前的片段不能再命中。
+    private static let clipFormat = "v4"
 
     static var isEnabled: Bool { UserDefaults.lockScreenLyrics }
 
@@ -53,6 +55,10 @@ enum LockScreenLyrics {
         line: String?,
         next: String?,
         translation: String?,
+        romanization: String?,
+        isDuet: Bool,
+        flipped: Bool,
+        nextFlipped: Bool,
         credit: String,
         hasCover: Bool,
         textScale: Double,
@@ -60,6 +66,7 @@ enum LockScreenLyrics {
     ) -> String {
         FNV1a.hex(
             "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(translation ?? "")"
+                + "|\(romanization ?? "")|\(isDuet ? "duet" : "one")\(flipped ? "R" : "L")\(nextFlipped ? "r" : "l")"
                 + "|\(credit)|\(hasCover ? "c" : "n")"
                 + "|\(scaleKey(textScale))|\(scaleKey(spacingScale))"
         )
@@ -177,4 +184,18 @@ struct LockScreenLyricLine: Equatable {
     /// 只在「歌词页也会显示译文」的那些来源上填（见 `LockScreenLyricsFetcher`）：
     /// 锁屏没有开关，跟着同一套判据走，两处才不会一边有一边没有。
     var translation: String = ""
+
+    /// 这一行的罗马字/音译（空串 = 没有）。画在正文**上方**一小行。
+    ///
+    /// 来源与歌词页同一条（`LyricsDto.romanizedContentsForDisplay()`：源给的官方罗马字优先，
+    /// 否则按语言开关做本地罗马化），所以两处看到的是同一份文字，不会一个有一行一个没有。
+    var romanization: String = ""
+
+    /// 这是不是一首**对唱**（整首至少有一行带了歌手信息）。单嗓歌一律居中，
+    /// 只有对唱才按歌手分左右两边。
+    var isDuet: Bool = false
+
+    /// 这一行是不是**另一位歌手**唱的（`LyricAgentAlignment.flipped`）。
+    /// 对唱里 true = 排右边，false = 排左边；非对唱时两边都不用。
+    var agentFlipped: Bool = false
 }

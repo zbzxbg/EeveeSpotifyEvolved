@@ -499,6 +499,10 @@ final class LockScreenLyricsController {
             line: texts.line,
             next: texts.next,
             translation: texts.translation,
+            romanization: texts.romanization,
+            isDuet: texts.isDuet,
+            flipped: texts.flipped,
+            nextFlipped: texts.nextFlipped,
             credit: credit,
             hasCover: cover != nil,
             // 两档倍率进文件名：改了「歌词 → 文字」之后旧片段不该再被命中，
@@ -516,6 +520,10 @@ final class LockScreenLyricsController {
                     line: texts.line,
                     next: texts.next,
                     translation: texts.translation,
+                    romanization: texts.romanization,
+                    isDuet: texts.isDuet,
+                    flipped: texts.flipped,
+                    nextFlipped: texts.nextFlipped,
                     credit: credit,
                     size: size
                 ) {
@@ -543,7 +551,7 @@ final class LockScreenLyricsController {
     private func finishInstall(
         lineKey: String,
         location: LocatedLine,
-        texts: (line: String?, next: String?, translation: String?),
+        texts: LineTexts,
         credit: String,
         frameHash: String,
         aspects: [LockScreenArtwork.Aspect],
@@ -604,7 +612,7 @@ final class LockScreenLyricsController {
         artworkID: String,
         aspect: LockScreenArtwork.Aspect,
         location: LocatedLine,
-        texts: (line: String?, next: String?, translation: String?),
+        texts: LineTexts,
         credit: String,
         frameHash: String,
         lines: [LockScreenLyricLine],
@@ -641,6 +649,10 @@ final class LockScreenLyricsController {
                     line: texts.line,
                     next: texts.next,
                     translation: texts.translation,
+                    romanization: texts.romanization,
+                    isDuet: texts.isDuet,
+                    flipped: texts.flipped,
+                    nextFlipped: texts.nextFlipped,
                     credit: credit,
                     size: size
                 ) {
@@ -681,6 +693,10 @@ final class LockScreenLyricsController {
                         line: texts.line,
                         next: texts.next,
                         translation: texts.translation,
+                        romanization: texts.romanization,
+                        isDuet: texts.isDuet,
+                        flipped: texts.flipped,
+                        nextFlipped: texts.nextFlipped,
                         credit: credit,
                         cover: cover,
                         seconds: seconds
@@ -702,6 +718,10 @@ final class LockScreenLyricsController {
         line: String?,
         next: String?,
         translation: String?,
+        romanization: String?,
+        isDuet: Bool,
+        flipped: Bool,
+        nextFlipped: Bool,
         credit: String,
         cover: CGImage?,
         seconds: Double
@@ -744,6 +764,10 @@ final class LockScreenLyricsController {
                     line: line,
                     next: next,
                     translation: translation,
+                    romanization: romanization,
+                    isDuet: isDuet,
+                    flipped: flipped,
+                    nextFlipped: nextFlipped,
                     credit: credit,
                     size: size,
                     seconds: seconds,
@@ -931,19 +955,49 @@ final class LockScreenLyricsController {
         "\(location.index)\(location.resting ? "r" : "")"
     }
 
+    private struct LineTexts {
+        let line: String?
+        let next: String?
+        let translation: String?
+        let romanization: String?
+        let isDuet: Bool
+        let flipped: Bool
+        let nextFlipped: Bool
+    }
+
     private static func texts(
         for location: LocatedLine,
         in lines: [LockScreenLyricLine]
-    ) -> (line: String?, next: String?, translation: String?) {
+    ) -> LineTexts {
         if location.resting {
-            let next = location.index + 1 < lines.count ? lines[location.index + 1].text : nil
-            return (nil, next, nil)
+            let nextLine = location.index + 1 < lines.count ? lines[location.index + 1] : nil
+            return LineTexts(
+                line: nil,
+                next: nextLine?.text,
+                translation: nil,
+                romanization: nil,
+                isDuet: nextLine?.isDuet ?? false,
+                flipped: false,
+                nextFlipped: nextLine?.agentFlipped ?? false
+            )
         }
-        let line = location.index >= 0 ? lines[location.index].text : nil
-        let next = location.index + 1 < lines.count ? lines[location.index + 1].text : nil
-        // 译文只在"这一行正在唱"时画：间奏态只留压暗的下一行，多一行译文会把那个提示挤掉。
-        let translation = location.index >= 0 ? lines[location.index].translation : ""
-        return (line, next, translation.isEmpty ? nil : translation)
+        let current = location.index >= 0 && location.index < lines.count
+            ? lines[location.index]
+            : nil
+        let nextLine = location.index + 1 < lines.count ? lines[location.index + 1] : nil
+        // 译文 / 罗马字只在"这一行正在唱"时画：间奏态只留压暗的下一行，
+        // 多一行辅助文字会把那个提示挤掉。
+        let translation = current?.translation ?? ""
+        let romanization = current?.romanization ?? ""
+        return LineTexts(
+            line: current?.text,
+            next: nextLine?.text,
+            translation: translation.isEmpty ? nil : translation,
+            romanization: romanization.isEmpty ? nil : romanization,
+            isDuet: current?.isDuet ?? false,
+            flipped: current?.agentFlipped ?? false,
+            nextFlipped: nextLine?.agentFlipped ?? false
+        )
     }
 
     /// 一段片子的名义时长。换行由定时器负责，这里只要"盖住到下一行的时间"。
