@@ -754,8 +754,9 @@ enum StreamingHistoryRecordParser {
 
     static func record(from dictionary: [String: Any]) -> StreamingHistoryRecord? {
         // 扩展历史：`Streaming_History_Audio_*.json`
-        if let text = StreamingHistoryValue.string(dictionary["ts"]),
-           let timestamp = StreamingHistoryTimestamp.seconds(from: text) {
+        let extendedTimestamp = StreamingHistoryValue.string(dictionary["ts"])
+        if !extendedTimestamp.isEmpty,
+           let timestamp = StreamingHistoryTimestamp.seconds(from: extendedTimestamp) {
             return make(
                 timestamp: timestamp,
                 track: StreamingHistoryValue.string(dictionary["master_metadata_track_name"]),
@@ -769,8 +770,9 @@ enum StreamingHistoryRecordParser {
         }
 
         // 旧格式：账户数据里的 `StreamingHistory*.json`
-        if let text = StreamingHistoryValue.string(dictionary["endTime"]),
-           let timestamp = StreamingHistoryTimestamp.seconds(from: text) {
+        let legacyTimestamp = StreamingHistoryValue.string(dictionary["endTime"])
+        if !legacyTimestamp.isEmpty,
+           let timestamp = StreamingHistoryTimestamp.seconds(from: legacyTimestamp) {
             return make(
                 timestamp: timestamp,
                 track: StreamingHistoryValue.string(dictionary["trackName"]),
