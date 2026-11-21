@@ -5,7 +5,7 @@
 Spotify, arranged like Apple Music.
 
 [![iOS](https://img.shields.io/badge/iOS-17.4%2B-000000?style=for-the-badge&logo=ios&logoColor=white)](#requirements)
-[![Spotify](https://img.shields.io/badge/Spotify-9.2.0-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
+[![Spotify](https://img.shields.io/badge/Spotify-9.2.2-1ED760?style=for-the-badge&logo=spotify&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/License-GPL--3.0-2C6EDB?style=for-the-badge)](LICENSE)
 
 [Download](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases) · [Features](#features) · [Install](#install) · [Build](docs/BUILDING.md) · [Credits](#credits)
@@ -13,7 +13,7 @@ Spotify, arranged like Apple Music.
 </div>
 
 > [!NOTE]
-> Tested on Spotify 9.2.0. This repository does not do offline downloads, and does not do lossless audio. I can't maintain that feature and I'm not taking the legal risk. So not now, and not ever. If you consider it essential, look at [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) or [Taurus](https://github.com/samj-exe/taurus).
+> Tested on Spotify 9.2.2. This repository does not do offline downloads, and does not do lossless audio. I can't maintain that feature and I'm not taking the legal risk. So not now, and not ever. If you consider it essential, look at [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) or [Taurus](https://github.com/samj-exe/taurus).
 
 <p align="center">
   <img src="docs/screenshots/lock.webp" width="24%" alt="Lock screen: animated artwork in place of the still cover">
@@ -89,7 +89,7 @@ A derivative work based on [EeveeSpotifyReincarnated](https://github.com/Sideloa
 | SideStore / AltStore / Sideloadly / free or enterprise certificate | `.ipa` (no patch) |
 | LiveContainer | `.ipa` (no patch) |
 
-Get everything from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases). Building it yourself — from your own decrypted Spotify 9.2.0 (or 9.1.88) IPA, with GitHub Actions or on a Mac — is covered in **[docs/BUILDING.md](docs/BUILDING.md)**.
+Get everything from [Releases](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases). Building it yourself — from your own decrypted Spotify IPA (9.2.2 is what releases are tested with), with GitHub Actions or on a Mac — is covered in **[docs/BUILDING.md](docs/BUILDING.md)**.
 
 > [!IMPORTANT]
 > **Jailbroken users:** the `.deb` depends on `dev.theos.orion`. Add <https://repo.theos.dev/> to your package manager first, otherwise the install fails with an unmet dependency.
@@ -112,15 +112,11 @@ Common issues, a longer FAQ, and why some Premium features stay locked: **[commo
 ## Requirements
 
 - iOS 17.4 or later (iOS 26+ recommended for the liquid-glass look)
-- Spotify 9.2.x (the baseline) or 9.1.x — current public release: [`v2.3.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
+- Spotify **9.2.2** — the build every release is tested against. Earlier 9.x builds still
+  install, but they are not re-tested each release: every layer is guarded, so a class
+  Spotify renamed turns that layer off instead of crashing the app.
 
-| Spotify | How far it has been checked |
-|---|---|
-| **9.2.0** | The baseline. Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb, premium patching included: 9.2.0 split the account configuration response in two and the patcher handles both |
-| **9.2.2** | Static check only: a symbol diff against 9.2.0 keeps the premium hook set intact; the artist bio card moved to `CreatorElements_ECMKit` and is hooked under both names. The on-device behaviour has not been re-checked |
-| **9.1.88** | Verified on iPhone 11 · iOS 27.0.1, certificate-signed (LCSign) and rootless deb. Shares the same hook set, so every hook target and UI identifier still resolves; premium patching uses the 9.1.88 configuration snapshot |
-| **9.1.94** | Static check only: every hook target, `@objc` method list and runtime UI identifier still resolves; the on-device look-and-feel has not been re-calibrated |
-| other **9.1.x / 9.2.x** | Untested, same code path |
+Current public release: [`v2.3.0`](https://github.com/zbzxbg/EeveeSpotifyEvolved/releases)
 
 ## Credits
 
