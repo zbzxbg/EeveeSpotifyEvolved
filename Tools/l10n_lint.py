@@ -45,12 +45,24 @@ Checks:
                       ⇒ `String(format:)` 读到不存在的参数）**本脚本量不出来**：那要靠调用点的实参
                       个数，这里不做（宁可漏，不误报）。
 
+  7. English-only keys — `Tools/l10n_notranslate.txt` 里列的键**不计入**未翻译数量，
+     单独报成 `skipped`。这些键刻意留在英文：值里带标识符、日志语法、示例值或许可
+     署名的散文，译了反而对不上屏幕和日志。清单**不禁止**翻译（locale 文件里有条目
+     就照常用），它只决定"贡献者默认要处理哪些"。清单中已不在 en.lproj 的条目会作为
+     stale 报出来，避免清单自己腐烂。
+
+  `--since REV` 打印 en.lproj 相对 REV 的**新增 / 删除 / 改写**键。改写那组是静默
+  腐烂的来源：英文值变了，已有译文不会跟着变，未翻译数量也不动。配合 `--locale xx`
+  还会报其中有多少条在该语种里缺失。
+
 Usage:
   python3 Tools/l10n_lint.py                 # lint all locales
   python3 Tools/l10n_lint.py --locale ko     # lint a single locale
   python3 Tools/l10n_lint.py --no-usage      # skip the Swift cross-reference
   python3 Tools/l10n_lint.py --quiet         # only print problems (exit code)
   python3 Tools/l10n_lint.py --list-untranslated   # 逐条列出未翻译的键（默认只报数量）
+  python3 Tools/l10n_lint.py --since v2.3.0  # 只关心自该版本以来 en.lproj 的变化
+  python3 Tools/l10n_lint.py --no-notranslate      # 忽略 Tools/l10n_notranslate.txt
 
 Exit code is 1 when **errors** (extra / duplicate / missing file) are found, 0 otherwise.
 Warnings (unused keys, verbatim English copies, format-arg count differences) and the
@@ -59,6 +71,7 @@ untranslated count do not fail the run.
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -67,6 +80,11 @@ BUNDLE_DIR = REPO_ROOT / "layout" / "Library" / "Application Support" / "EeveeSp
 SOURCES_DIR = REPO_ROOT / "Sources"
 
 BASELINE = "en"
+
+# Keys shipped in English on purpose. The linter subtracts them from the per-locale
+# "untranslated" count and reports them separately; the file itself states the criteria.
+# If it is missing, every baseline key counts as translatable.
+NOTRANSLATE_PATH = REPO_ROOT / "Tools" / "l10n_notranslate.txt"
 
 # One .strings entry: key = "value";  (value may contain escaped quotes)
 ENTRY_RE = re.compile(r'^\s*(?P<key>"(?:[^"\\]|\\.)*"|[\w.\-]+)\s*=\s*"(?P<value>(?:[^"\\]|\\.)*)"\s*;', re.M)
@@ -77,9 +95,8 @@ LINE_COMMENT_RE = re.compile(r"^\s*//.*$", re.M)
 FORMAT_SPEC_RE = re.compile(r"%\d+\$[@dDuUxXoOfeEgGcCsS]|%[@dDuUxXoOfeEgGcCsS]")
 
 
-def parse_strings_file(path: Path) -> dict[str, str]:
-    """Parse a .strings file into an ordered {key: value} dict."""
-    text = path.read_text(encoding="utf-8")
+def parse_strings_text(text: str) -> dict[str, str]:
+    """Parse .strings content into an ordered {key: value} dict."""
     text = COMMENT_RE.sub("", text)
     text = LINE_COMMENT_RE.sub("", text)
     entries = {}
@@ -87,6 +104,94 @@ def parse_strings_file(path: Path) -> dict[str, str]:
         key = m.group("key").strip('"')
         entries[key] = m.group("value")
     return entries
+
+
+def parse_strings_file(path: Path) -> dict[str, str]:
+    """Parse a .strings file into an ordered {key: value} dict."""
+    return parse_strings_text(path.read_text(encoding="utf-8"))
+
+
+def load_notranslate() -> set[str]:
+    """Read Tools/l10n_notranslate.txt: one key per line, `#` starts a comment."""
+    if not NOTRANSLATE_PATH.is_file():
+        return set()
+    keys = set()
+    for raw in NOTRANSLATE_PATH.read_text(encoding="utf-8").splitlines():
+        key = raw.split("#", 1)[0].strip()
+        if key:
+            keys.add(key)
+    return keys
+
+
+def git_file_at(rev: str, path: Path) -> str:
+    """Return the content of `path` at `rev`; RuntimeError when git cannot produce it."""
+    try:
+        rel = path.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        rel = path.as_posix()
+    proc = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "show", f"{rev}:{rel}"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or f"git show {rev}:{rel} failed")
+    return proc.stdout
+
+
+def report_since(rev, baseline_path, baseline, notranslate, locale_entries, locale):
+    """Print what changed in the baseline since `rev`: added / removed / rewritten keys.
+
+    The rewritten group is the one that ages silently: an existing translation keeps its
+    old wording after the English value changes, and the untranslated count does not move.
+    """
+    old = parse_strings_text(git_file_at(rev, baseline_path))
+    added = [k for k in baseline if k not in old]
+    removed = [k for k in old if k not in baseline]
+    edited = [k for k in baseline if k in old and old[k] != baseline[k]]
+    todo = [k for k in added if k not in notranslate]
+    kept_english = [k for k in added if k in notranslate]
+
+    print(f"=== changes in {BASELINE}.lproj since {rev} ===")
+    print(f"  keys now: {len(baseline)} (then: {len(old)})")
+    print(f"  added:     {len(added)} new keys")
+    print(f"  removed:   {len(removed)} keys")
+    print(
+        f"  rewritten: {len(edited)} English values changed — any existing translation "
+        "of these is now stale"
+    )
+    if todo:
+        print("  new keys worth translating:")
+        for key in todo:
+            print(f"    + {key}")
+    if kept_english:
+        print(f"  new keys that stay English ({NOTRANSLATE_PATH.name}):")
+        for key in kept_english:
+            print(f"    . {key}")
+    if edited:
+        print("  rewritten values (re-read the English, then the translation):")
+        for key in edited:
+            print(f"    ~ {key}")
+    if removed:
+        print("  removed keys (a locale entry for these can be deleted):")
+        for key in removed:
+            print(f"    - {key}")
+
+    if locale is not None:
+        if locale_entries is None:
+            print(f"  {locale}: no Localizable.strings to compare against")
+        else:
+            missing = [k for k in todo + edited if k not in locale_entries]
+            stale = [k for k in edited if k in locale_entries]
+            print(f"  in {locale}: {len(missing)} of the added/rewritten keys are missing")
+            if stale:
+                print(
+                    f"  in {locale}: {len(stale)} rewritten key(s) have a translation "
+                    "that no longer matches the English"
+                )
+    print()
 
 
 def duplicate_keys(path: Path) -> list[str]:
@@ -244,6 +349,16 @@ def main() -> int:
         action="store_true",
         help="print every untranslated key instead of just the count",
     )
+    parser.add_argument(
+        "--no-notranslate",
+        action="store_true",
+        help="ignore Tools/l10n_notranslate.txt and count every baseline key",
+    )
+    parser.add_argument(
+        "--since",
+        metavar="REV",
+        help="also report keys added/removed/rewritten in the baseline since REV",
+    )
     args = parser.parse_args()
 
     if not BUNDLE_DIR.exists():
@@ -256,6 +371,45 @@ def main() -> int:
         return 2
 
     baseline = parse_strings_file(baseline_path)
+    # 刻意留在英文的键：从待办里摘走，但仍是可用键（locale 里有条目就用条目）。
+    notranslate = set() if args.no_notranslate else load_notranslate()
+    if not args.no_notranslate:
+        stale_entries = sorted(notranslate - set(baseline))
+        if stale_entries:
+            noun = "entry" if len(stale_entries) == 1 else "entries"
+            print(
+                f"{NOTRANSLATE_PATH.name}: {len(stale_entries)} {noun} no longer in "
+                f"{BASELINE}.lproj (stale, delete them):"
+            )
+            for key in stale_entries:
+                print(f"  - {key}")
+            print()
+
+    if args.since:
+        locale_entries = None
+        if args.locale:
+            candidate = BUNDLE_DIR / f"{args.locale}.lproj" / "Localizable.strings"
+            if candidate.is_file():
+                locale_entries = parse_strings_file(candidate)
+        try:
+            report_since(
+                args.since,
+                baseline_path,
+                baseline,
+                notranslate,
+                locale_entries,
+                args.locale,
+            )
+        except RuntimeError as exc:
+            print(
+                f"error: cannot read {BASELINE}.lproj at {args.since}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        # 只问"改了什么"的时候不打印 27 个语种的整份报告。
+        if not args.locale:
+            return 0
+
     # 「能不能到达」必须拿真实键名去比前缀，所以这里就把基线键集算好。
     usage = set() if args.no_usage else reachable_keys(set(baseline))
 
@@ -284,7 +438,10 @@ def main() -> int:
         loc_keys = set(entries)
 
         # ① 未翻译：**不再是错误**（英文由 en.lproj 单点提供，缺键自动回落）。
-        untranslated = sorted(baseline_keys - loc_keys)
+        #    刻意留在英文的键（Tools/l10n_notranslate.txt）单独计数，不算贡献者的待办。
+        missing = baseline_keys - loc_keys
+        untranslated = sorted(missing - notranslate)
+        skipped = len(missing & notranslate)
         extra = sorted(loc_keys - baseline_keys)
         dups = duplicate_keys(strings_path)
         # ④ 与基线逐字相同的行：按"单点提供"政策是冗余的（删掉不改变显示）。
@@ -309,8 +466,9 @@ def main() -> int:
         print(f"=== {loc} ===")
         print(f"  total keys: {len(loc_keys)} (baseline has {len(baseline_keys)})")
         print(
-            f"  UNTRANSLATED: {len(untranslated)}"
-            " [informational — these fall back to English, nothing to fix]"
+            f"  UNTRANSLATED: {len(untranslated)} required"
+            + (f" (+{skipped} skipped by {NOTRANSLATE_PATH.name})" if skipped else "")
+            + " [informational — these fall back to English, nothing to fix]"
         )
         if untranslated and args.list_untranslated:
             for k in untranslated:
@@ -342,13 +500,21 @@ def main() -> int:
             for k in unused:
                 print(f"    - {k}")
         if not (untranslated or extra or dups or copies or fmt_bad or unused):
-            print("  OK — fully in sync")
+            if skipped:
+                print(
+                    "  OK — every translatable key is present "
+                    f"({skipped} English-only key(s) skipped)"
+                )
+            else:
+                print("  OK — fully in sync")
         print()
 
         if extra or dups:
             had_errors = True
         summary.append(
-            f"{loc}: {len(loc_keys)} keys, {len(untranslated)} untranslated, {len(extra)} extra"
+            f"{loc}: {len(loc_keys)} keys, {len(untranslated)} untranslated"
+            + (f", {skipped} English-only" if skipped else "")
+            + f", {len(extra)} extra"
             + (f", {len(dups)} duplicate" if dups else "")
             + (f", {len(fmt_bad)} format count differs (warning)" if fmt_bad else "")
         )

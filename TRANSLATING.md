@@ -60,6 +60,33 @@ Consequences:
 
 ---
 
+## What not to translate
+
+`Tools/l10n_notranslate.txt` lists the keys this project ships in English on purpose. The
+linter leaves them out of your untranslated count and reports them separately as "skipped",
+so a locale can reach zero while those keys still show English. They are not errors, and
+translating one anyway is harmless — an entry in your file wins over the English fallback;
+the list only decides what we ask contributors to do.
+
+Two groups are on it:
+
+- **Diagnostics that quote English identifiers** — `trackLogSubtitle`, `flag_note_data_saver`,
+  the haptics/telemetry keyword fields, the flag-name/scope/value placeholders. Their values
+  contain text you have to reproduce in the debug log or type into a field
+  (`ios-datasaver-automatic-impl.enabled`, `[Flags] override … N match(es)`), so a translation
+  would stop describing what is on screen.
+- **The SponsorBlock "How to use" page** (`SponsorBlockHelpView.swift`) — a 26-paragraph
+  manual for a feature ported from upstream, and the worst value per translated word in the
+  file. A wiki link is the better vehicle if it ever needs localising.
+
+Two literals are there because there is nothing to translate: `urlText` ("URL") and
+`let_the_music_play` ("♪").
+
+Adding or removing a key is a one-line change to that file. The linter reports an entry whose
+key no longer exists in `en.lproj` as stale, so the list cannot rot unnoticed.
+
+---
+
 ## The rules (enforced by the linter)
 
 ### 1. Keys are immutable
@@ -148,7 +175,7 @@ What it reports:
 
 | Check | Severity | Meaning |
 |---|---|---|
-| Untranslated | informational | Key exists in `en.lproj` but not yours — the app shows English |
+| Untranslated | informational | Key exists in `en.lproj` but not yours — the app shows English. Keys listed in `Tools/l10n_notranslate.txt` are counted separately as "skipped" and are not asked for |
 | Extra keys | **error** | Key not in `en.lproj` — stale/renamed leftover, unreachable |
 | Duplicate keys | **error** | Same key twice in one file — the last one silently wins |
 | Verbatim English copies | warning | Redundant rows; delete them (English comes from `en.lproj`) |
@@ -169,6 +196,16 @@ New strings appear whenever features are added; locales drift behind the baselin
 
 1. Run `python3 Tools/l10n_lint.py --locale xx --list-untranslated` to get the exact list of keys
    that still fall back to English (without the flag you only get the count).
+
+   If you have translated this locale before, the delta is more useful than the full list:
+
+   ```bash
+   python3 Tools/l10n_lint.py --since <the commit or release you last updated> --locale xx
+   ```
+
+   That prints only what changed in `en.lproj` since then: added keys, removed keys, and
+   rewritten English values. The rewritten ones matter most — an existing translation keeps
+   its old wording and does not show up as "untranslated" anywhere else.
 2. Find each key in `en.lproj` and add a translated entry (English rows are not copied over — see
    the fallback section above).
 3. Re-run the linter until your locale has **no errors** (warnings are fine to leave).

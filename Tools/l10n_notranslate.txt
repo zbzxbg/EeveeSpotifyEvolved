@@ -1,0 +1,65 @@
+# Strings this project ships in English on purpose.
+#
+# Tools/l10n_lint.py subtracts these keys from each locale's untranslated count, so a
+# locale can report "0 untranslated" while still showing English here. Nothing blocks
+# translation: an entry present in a locale file is used as usual, the list only decides
+# what contributors are expected to do.
+#
+# Criteria for adding a key:
+#   - the English value quotes identifiers, flag names, log syntax or example values the
+#     user has to type or match verbatim, so a translation would stop matching reality;
+#   - a ported feature's manual page, where the paragraphs buy the least value per word.
+#
+# One key per line. `#` starts a comment. Exact key names only — an entry whose key no
+# longer exists in en.lproj is reported as stale by the linter, so delete it then.
+
+# ── Diagnostics that quote English identifiers ───────────────────────────────────
+# These values contain text the user has to reproduce in the debug log or in a text
+# field: a flag identifier (ios-datasaver-automatic-impl.enabled), log syntax
+# ([Flags] override … N match(es)), SDK type and property names (URI, isPodcast), or
+# example host names. A translated copy would describe something other than what shows
+# up on screen, and the placeholders below are literal values, not prose.
+trackLogSubtitle
+apple_self_test_description
+haptics_surface_keywords_description
+haptics_surface_keywords_placeholder
+telemetry_extra_keywords_description
+telemetry_extra_keywords_placeholder
+dump_class_placeholder
+
+# ── SponsorBlock "How to use" page ───────────────────────────────────────────────
+# Everything SponsorBlockHelpView.swift renders: a six-section manual for a feature
+# ported from upstream, ~1.3k characters of the longest strings in the file. The page's
+# entry row and the feature's own labels stay translatable.
+playerGesturesTitle
+gesturesTitle1
+gesturesDeps1
+gesturesTitle2
+gesturesDeps2
+submittingTitle
+submittingSectionTitle1
+submittingSectionDeps1
+submittingSectionTitle2
+submittingSectionDeps2
+skipToastTitle
+skipToastSectionTitle1
+skipToastSectionDeps1
+skipToastSectionTitle2
+skipToastSectionDeps2
+skipToastSectionTitle3
+skipToastSectionDeps3
+managingSegmentsTitle
+managingSegmentsSectionTitle1
+managingSegmentsSectionDeps1
+managingSegmentsSectionTitle2
+managingSegmentsSectionDeps2
+categoriesTitle
+categoriesSectionTitle1
+categoriesSectionDeps1
+howToUseTitle
+
+# ── Nothing to translate ────────────────────────────────────────────────────────
+# urlText shows the label of a server-address field ("URL"); let_the_music_play is the
+# instrumental glyph (♪).
+urlText
+let_the_music_play
