@@ -449,14 +449,16 @@ extension NowPlayingIOS27 {
             // 同一颗「歌词」键**长按**开歌词偏移面板 —— 看到歌词差半拍时不用翻设置。
             // 短按仍是开/关歌词页（两个手势用 `require(toFail:)` 绑好，不会连击）。
             longPressZones.append((tapRect(frames[0]), {
-                // 长按：这一首的歌词有问题时的入口 —— 换掉这个源（不当场改全局顺序）、
-                // 或调这一首的时间轴偏移。两件事都是"这一首的词不对"，放同一个弹窗里。
-                guard let context = LyricsSongSourcePrompt.currentContext() else {
-                    writeDebugLog("[Lyrics] long press ignored — no lyrics loaded for this track yet")
+                guard let context = LyricsOffsetMenuRow.currentContext() else {
+                    writeDebugLog("[LyricsOffset] long press ignored — no track / source yet")
                     return
                 }
-                writeDebugLog("[Lyrics] long press on the lyrics key — \(context.trackId)")
-                LyricsSongSourcePrompt.present()
+                writeDebugLog("[LyricsOffset] long press on the lyrics key — \(context.trackId)")
+                LyricsOffsetPanel.present(
+                    trackId: context.trackId,
+                    source: context.source,
+                    song: context.song
+                )
             }))
         }
         // Connect 这颗 `accessibilityActivate` / `sendActions` 都不认。把它从栈里
@@ -470,6 +472,16 @@ extension NowPlayingIOS27 {
             actionZones.append((tapRect(frames[1]), {
                 NowPlayingIOS27.activateConnect(connect)
             }))
+        }
+        // 中间那颗（Connect / 输出切换，图标是同心弧）：**长按** = 这一首的歌词来源。
+        //
+        // 触摸在这一格是**转发给原生控件**的（`zones` → 真实 `hitTest`），替身收不到，
+        // 所以这里只能挂到控件自己身上。短按仍是原生行为；长按认出来之后
+        // `cancelsTouchesInView` 会把那一下点击吃掉，不会"弹完窗又切设备"。
+        if let connect, let control = NowPlayingIOS27.nearestControl(connect) {
+            LyricsSongSourcePrompt.attachLongPress(to: control)
+        } else if let connect {
+            LyricsSongSourcePrompt.attachLongPress(to: connect)
         }
         addZone(frames[2], target: queue, label: "queue")
         // 同一颗「队列」键**长按** = 睡眠定时器面板。短按照旧开队列。

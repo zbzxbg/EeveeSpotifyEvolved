@@ -1,13 +1,16 @@
 import Foundation
 import UIKit
+import ObjectiveC.runtime
 
-/// 「这首歌不要再用这个歌词源」——长按歌词键、以及播放页 `⋯` 菜单里那两行共同的入口。
+/// 「这首歌不要再用这个歌词源」——**中间那颗 Connect 键（同心弧图标）的长按**，
+/// 以及播放页 `⋯` 菜单表尾那一行，两个入口共用这一个弹窗。
+///
+/// 为什么挂在这颗键上：歌词键的长按已经是「时间轴偏移」、队列键的长按是「睡眠定时器」，
+/// 三颗键各管一件事。这颗的短按是 Spotify 自己的输出切换（我们不改它），长按空着 ——
+/// "这首的词根本不是这个源给的"正好占这个位置。
 ///
 /// 为什么是弹窗而不是一整页：这件事只有一个决定（"这个源别再管这首歌了"）。设置页那张
 /// 表负责**管理**（看已排除的歌、清空）；这里负责**当场修**，所以只给两三条动作。
-///
-/// 与「歌词偏移」的分工：偏移是"词对、时间差半拍"，排除是"词根本不对"。两者都归
-/// 同一个入口（长按歌词键），因为它们都是"这一首的歌词有问题"。
 enum LyricsSongSourcePrompt {
 
     struct Context {
@@ -107,6 +110,36 @@ enum LyricsSongSourcePrompt {
         }
         dismissible.dismiss(animated: true) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: show)
+        }
+    }
+
+    /// 给某颗控件挂"长按 → 这个弹窗"。
+    ///
+    /// 幂等：页脚每次布局都会调到，同一颗控件只挂一次。`cancelsTouchesInView` 用默认的
+    /// `true` —— 长按认出来之后，那一下点击就不会再落到 Spotify 自己的 Connect 动作上。
+    static func attachLongPress(to control: UIView) {
+        guard objc_getAssociatedObject(control, &attachedKey) == nil else { return }
+        objc_setAssociatedObject(control, &attachedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        let press = UILongPressGestureRecognizer(
+            target: Target.shared,
+            action: #selector(Target.longPressed(_:))
+        )
+        press.minimumPressDuration = 0.45
+        control.addGestureRecognizer(press)
+        writeDebugLog(
+            "[Lyrics] long-press source prompt attached — \(NSStringFromClass(type(of: control)))"
+        )
+    }
+
+    private static var attachedKey: UInt8 = 0
+
+    final class Target: NSObject {
+        static let shared = Target()
+
+        @objc func longPressed(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began else { return }
+            writeDebugLog("[Lyrics] long press on the connect key — source prompt")
+            LyricsSongSourcePrompt.present()
         }
     }
 
