@@ -131,6 +131,23 @@ jobs:
                  -o listening-stats-tests
           ./listening-stats-tests
 
+      # 「导入流媒体历史」（2.4.0 的主功能）：ZIP 中央目录 + 裸 DEFLATE + 逐条 JSON 扫描
+      # + 按本地日聚合 + 跨次去重。
+      #
+      # 这一步还有第二重意义：本机没有 Swift 工具链，这三个新写的解析层文件在打包之前
+      # **没有任何东西编译过它们** —— 这里是唯一能把它们过一遍 `swiftc` 并真跑的地方。
+      # fixture（`Tests/StreamingHistoryImport/main.swift` 里那段 base64）是 Python 的
+      # `zipfile` 生成的：一条 stored 的 PDF + 一条 deflated 的扩展历史，所以两条
+      # 解压路径都真的被走到。
+      - name: Streaming history import (zip / folder / JSON)
+        run: |
+          swiftc Tests/StreamingHistoryImport/main.swift \
+                 Sources/EeveeSpotify/Stats/ListeningStatsModel.swift \
+                 Sources/EeveeSpotify/Stats/ListeningStatsStore.swift \
+                 Sources/EeveeSpotify/Stats/StreamingHistoryImport.swift \
+                 -o streaming-history-import-tests
+          ./streaming-history-import-tests
+
       # 几何：底排 / 迷你条 / 标签栏的纯函数。七种屏幕宽度，钉住"不越界、不错位"。
       - name: Layout geometry
         run: |

@@ -68,6 +68,49 @@ final class ListeningStatsStore {
         saveLocked(data)
     }
 
+    // MARK: - 导入历史
+
+    /// 把一次「导入流媒体历史」并进来；回调在主线程，参数是这次写进去的条目数。
+    ///
+    /// 与 `persist` 走同一条串行队列：导入与录音器的增量不会互相覆盖。`prune` 在这里也跑
+    /// 一次 —— 只是 `ListeningStatsData.prune` 现在会按 `oldestImportedDay` 放行，导入的
+    /// 老日子不会被 400 天保留期削掉。
+    func importStreamingHistory(
+        _ additions: [ListeningStatsImportAddition],
+        completion: @escaping (Int) -> Void = { _ in }
+    ) {
+        guard !additions.isEmpty else {
+            DispatchQueue.main.async { completion(0) }
+            return
+        }
+
+        queue.async {
+            let count = self.importLocked(additions)
+            DispatchQueue.main.async { completion(count) }
+        }
+    }
+
+    /// 同步版本：只有测试会用到。**不要**在 `queue` 上调用。
+    @discardableResult
+    func importStreamingHistorySynchronously(_ additions: [ListeningStatsImportAddition]) -> Int {
+        queue.sync { importLocked(additions) }
+    }
+
+    private func importLocked(_ additions: [ListeningStatsImportAddition]) -> Int {
+        var data = loadLocked()
+        data.mergeImported(additions)
+        data.prune()
+        saveLocked(data)
+
+        let entries = additions.reduce(0) { $0 + $1.entries.count }
+        if entries > 0 {
+            ListeningStatsLog.write(
+                "[Stats] imported \(entries) entr(ies) from \(additions.count) source(s)"
+            )
+        }
+        return entries
+    }
+
     // MARK: - 读
 
     /// 异步读一份快照；回调在主线程。

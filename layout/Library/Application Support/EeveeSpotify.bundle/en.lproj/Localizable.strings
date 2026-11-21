@@ -797,6 +797,19 @@ listening_stats_seconds_format = "%d s";
 listening_stats_plays_format = "%d plays";
 listening_stats_combo_format = "%@ · %@";
 
+// 听歌统计：导入 Spotify 的流媒体历史
+listening_stats_import_title = "Import streaming history";
+listening_stats_import_footer = "Adds plays from a Spotify data export to this device: request Extended streaming history at spotify.com/account/privacy, then pick the .zip it gives you or a folder of the JSON files inside. Nothing is uploaded. Importing the same file again does not count it twice.";
+listening_stats_import_button = "Choose file or folder";
+listening_stats_import_result_format = "Added %@ plays from %@ files (%@)";
+listening_stats_import_nothing = "No plays found in that selection.";
+listening_stats_import_skipped_format = "%@ files were imported before and were skipped.";
+listening_stats_import_duplicate_format = "%@ duplicate plays were skipped.";
+listening_stats_import_error_zip = "%@ is not a readable zip file.";
+listening_stats_import_error_zip_unsupported = "%@ uses a zip feature this app cannot read.";
+listening_stats_import_error_file = "%@ could not be read.";
+listening_stats_import_error_none = "No history files were found in %@.";
+
 // 设置根页：分组与行
 settings_group_features = "Premium & playback";
 settings_group_lyrics = "Lyrics";

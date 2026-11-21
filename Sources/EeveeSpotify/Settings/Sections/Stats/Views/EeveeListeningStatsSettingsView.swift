@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 「听歌统计」页。
 ///
@@ -6,7 +7,7 @@ import SwiftUI
 /// 聚合在 `ListeningStatsViewModel` 里跑在后台队列上 —— 本文件只负责画。
 ///
 /// 版式与「睡眠定时器」页同一套语言：`List` + `InsetGroupedListStyle()`，说明文字全部放
-/// `footer`。唯一会弹东西的地方是「清除统计数据」的 `confirmationDialog`。
+/// `footer`。唯一会弹东西的地方是「清除统计数据」的 `confirmationDialog` 与导入选择器。
 struct EeveeListeningStatsSettingsView: View {
 
     @StateObject private var viewModel = ListeningStatsViewModel()
@@ -14,6 +15,11 @@ struct EeveeListeningStatsSettingsView: View {
     @State private var isEnabled = UserDefaults.listeningStatsEnabled
     @State private var period: ListeningStatsPeriod = .week
     @State private var isConfirmingClear = false
+
+    @State private var isPickingImport = false
+    @State private var isImporting = false
+    @State private var importMessage: String?
+    @State private var importFailed = false
 
     var body: some View {
         List {
@@ -49,6 +55,8 @@ struct EeveeListeningStatsSettingsView: View {
                 topArtistsSection
             }
 
+            importSection
+
             clearSection
         }
         .listStyle(InsetGroupedListStyle())
@@ -56,6 +64,17 @@ struct EeveeListeningStatsSettingsView: View {
             // 备份导入 / 别处改过键时，页面显示的值也跟着盘上那份走。
             isEnabled = UserDefaults.listeningStatsEnabled
             viewModel.reload(period: period)
+        }
+        .sheet(isPresented: $isPickingImport) {
+            StreamingHistoryFilePicker(
+                onPick: { urls in
+                    isPickingImport = false
+                    importStreamingHistory(urls)
+                },
+                onCancel: {
+                    isPickingImport = false
+                }
+            )
         }
         .confirmationDialog(
             "listening_stats_clear_title".localized,
@@ -253,6 +272,133 @@ struct EeveeListeningStatsSettingsView: View {
         }
     }
 
+    // MARK: - 导入历史
+
+    private var importSection: some View {
+        Section(
+            header: Text("listening_stats_import_title".localized),
+            footer: Text("listening_stats_import_footer".localized)
+        ) {
+            Button {
+                isPickingImport = true
+            } label: {
+                HStack(spacing: 8) {
+                    Label(
+                        "listening_stats_import_button".localized,
+                        systemImage: "square.and.arrow.down"
+                    )
+                    Spacer(minLength: 8)
+                    if isImporting {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isImporting)
+
+            if let importMessage {
+                Text(importMessage)
+                    .font(.footnote)
+                    .foregroundColor(importFailed ? Color.red : Color.secondary)
+            }
+        }
+    }
+
+    /// 读文件 → 解析 → 并进 store。
+    ///
+    /// 解析走全局队列（ZIP 解压 + 逐条 JSON 都在那儿），写盘仍由 store 自己的串行队列负责，
+    /// 所以导入期间录音器的增量不会丢。
+    private func importStreamingHistory(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+
+        isImporting = true
+        importMessage = nil
+        importFailed = false
+
+        let calendar = Calendar.current
+        let store = ListeningStatsStore.shared
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            // 已知来源在解析前读一次：指纹没变的文件连解析都不必重跑。
+            let known = store.loadSynchronously().importedSources ?? [:]
+            let batch = StreamingHistoryImporter.parse(urls: urls, known: known, calendar: calendar)
+
+            DispatchQueue.main.async {
+                store.importStreamingHistory(batch.additions) { entries in
+                    isImporting = false
+                    importMessage = importMessageText(for: batch)
+                    importFailed = batch.additions.isEmpty && !batch.failures.isEmpty
+                    viewModel.reload(period: period)
+
+                    writeDebugLog(
+                        "[Stats] import: files=\(batch.filesRead)"
+                            + " skipped=\(batch.filesSkipped)"
+                            + " records=\(batch.records)"
+                            + " duplicates=\(batch.duplicates)"
+                            + " entries=\(entries)"
+                            + " failures=\(batch.failures.count)"
+                    )
+                }
+            }
+        }
+    }
+
+    /// 把解析结果拼成给用户看的两三行字。**不猜**：没有条目时只说没找到/没新增。
+    private func importMessageText(for batch: StreamingHistoryImportBatch) -> String {
+        var lines: [String] = []
+
+        if !batch.additions.isEmpty, let earliest = batch.earliestDay, let latest = batch.latestDay {
+            lines.append(
+                String(
+                    format: "listening_stats_import_result_format".localized,
+                    "\(batch.plays)",
+                    "\(batch.additions.count)",
+                    "\(earliest) – \(latest)"
+                )
+            )
+        }
+
+        if batch.filesSkipped > 0 {
+            lines.append(
+                String(
+                    format: "listening_stats_import_skipped_format".localized,
+                    "\(batch.filesSkipped)"
+                )
+            )
+        }
+
+        if batch.duplicates > 0 {
+            lines.append(
+                String(
+                    format: "listening_stats_import_duplicate_format".localized,
+                    "\(batch.duplicates)"
+                )
+            )
+        }
+
+        if let failure = batch.failures.first {
+            lines.append(failureText(failure))
+        }
+
+        if lines.isEmpty {
+            lines.append("listening_stats_import_nothing".localized)
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func failureText(_ failure: StreamingHistoryFailure) -> String {
+        switch failure.kind {
+        case .unreadableArchive:
+            return String(format: "listening_stats_import_error_zip".localized, failure.name)
+        case .unsupportedArchive:
+            return String(format: "listening_stats_import_error_zip_unsupported".localized, failure.name)
+        case .unreadableFile:
+            return String(format: "listening_stats_import_error_file".localized, failure.name)
+        case .noHistoryFile:
+            return String(format: "listening_stats_import_error_none".localized, failure.name)
+        }
+    }
+
     // MARK: - 文案
 
     private func periodLabel(_ period: ListeningStatsPeriod) -> String {
@@ -351,5 +497,55 @@ private struct ListeningStatsWeekBars: View {
         let index = calendar.component(.weekday, from: date) - 1
         guard symbols.indices.contains(index) else { return "" }
         return symbols[index]
+    }
+}
+
+// MARK: - 历史文件选择器
+
+/// `UIDocumentPickerViewController` 的 SwiftUI 外壳。
+///
+/// 与「导入歌词」那个不同，这里 **`asCopy: false`**：十年的导出包可能几十 MB，先复制一份
+/// 纯属浪费 —— 解析全程都在安全作用域里读（`StreamingHistoryImporter.parse` 自己开合），
+/// 读完就结束。文件夹也算一种可选项，所以 `.folder` 也在允许的类型里。
+struct StreamingHistoryFilePicker: UIViewControllerRepresentable {
+
+    var onPick: ([URL]) -> Void
+    var onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let types: [UTType] = [.zip, .folder, .json]
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = true
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        private let parent: StreamingHistoryFilePicker
+
+        init(_ parent: StreamingHistoryFilePicker) {
+            self.parent = parent
+        }
+
+        func documentPicker(
+            _ controller: UIDocumentPickerViewController,
+            didPickDocumentsAt urls: [URL]
+        ) {
+            guard !urls.isEmpty else {
+                parent.onCancel()
+                return
+            }
+            parent.onPick(urls)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            parent.onCancel()
+        }
     }
 }

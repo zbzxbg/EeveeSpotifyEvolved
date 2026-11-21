@@ -283,7 +283,83 @@ require(pruneData.days[ancientKey] == nil, "a bucket older than the retention wi
 require(pruneData.days[edgeKey] != nil, "the oldest still-retained bucket must survive")
 require(pruneData.days[todayKey] != nil, "today's bucket must never be pruned")
 
-// MARK: - JSON 往返
+// MARK: - 导入历史：记账与保留期
+
+var importData = ListeningStatsData()
+importData.add(entry(todayKey, "t1", "Alpha", "Ann", seconds: 10, plays: 1))
+
+let importAddition = ListeningStatsImportAddition(
+    name: "Streaming_History_Audio_2015-2018_0.json",
+    fingerprint: "1048576-0123456789abcdef",
+    latestTimestamp: 1_600_000_000,
+    entries: [
+        ListeningStatsEntry(
+            dayKey: "2016-03-04",
+            trackID: "alpha1",
+            title: "Alpha",
+            artist: "Ann",
+            durationSeconds: 0,
+            artworkURL: nil,
+            seconds: 480,
+            plays: 2
+        )
+    ]
+)
+importData.mergeImported([importAddition])
+
+require(
+    importData.importedSources?[importAddition.name]?.fingerprint == importAddition.fingerprint,
+    "the imported source must be remembered (same fingerprint = do not import it twice)"
+)
+require(importData.oldestImportedDay == "2016-03-04", "the oldest imported day must be recorded")
+require(
+    importData.days["2016-03-04"]?["alpha1"]?.seconds == 480,
+    "imported entries must land in their own day bucket"
+)
+
+importData.prune(now: now, calendar: calendar)
+require(
+    importData.days["2016-03-04"] != nil,
+    "an imported day older than the retention window must survive pruning"
+)
+require(importData.days[todayKey] != nil, "recent recorded days must survive pruning too")
+
+// 同一个老日子，如果来自录音器而不是导入，照旧被削掉 —— 保留期没有整体放宽。
+var recordedOnly = ListeningStatsData()
+recordedOnly.add(entry("2016-03-04", "alpha1", "Alpha", "Ann", seconds: 480, plays: 2))
+recordedOnly.prune(now: now, calendar: calendar)
+require(recordedOnly.days.isEmpty, "a recorded day older than the window must still be pruned")
+
+// 条目为空也要记账：这些记录已经算在别的文件里了，下次不该重放这个文件。
+var emptyAdditionData = ListeningStatsData()
+emptyAdditionData.mergeImported([
+    ListeningStatsImportAddition(
+        name: "same-plays-as-another-file.json",
+        fingerprint: "1-0000000000000000",
+        latestTimestamp: 0,
+        entries: []
+    )
+])
+require(
+    emptyAdditionData.importedSources?["same-plays-as-another-file.json"] != nil,
+    "a source whose records were all deduped must still be remembered"
+)
+require(emptyAdditionData.oldestImportedDay == nil, "an empty source must not move the watermark")
+
+// MARK: - JSON 往返（含导入记账）
+
+let importPayload = try! JSONEncoder().encode(importData)
+let importDecoded = try! JSONDecoder().decode(ListeningStatsData.self, from: importPayload)
+require(importDecoded == importData, "the import bookkeeping must survive the JSON round trip")
+
+// 老版本写出来的文件里没有导入那两个键：必须照常读，不能抛。
+let legacyPayload = Data("{\"days\":{}}".utf8)
+let legacyDecoded = try! JSONDecoder().decode(ListeningStatsData.self, from: legacyPayload)
+require(legacyDecoded.importedSources == nil, "a file written before the import feature must still decode")
+require(legacyDecoded.oldestImportedDay == nil, "the import watermark must default to nil")
+require(legacyDecoded.days.isEmpty, "the legacy file's buckets must decode")
+
+// MARK: - JSON 往返（基本字段）
 
 let payload = try! JSONEncoder().encode(data)
 let decoded = try! JSONDecoder().decode(ListeningStatsData.self, from: payload)
