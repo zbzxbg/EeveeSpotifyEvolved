@@ -206,6 +206,10 @@ enum KnownFlagCatalog {
                 // 封面 / 彩蛋。
                 KnownFlag("canvas_enabled", "ios-feature-canvas", observed: "",
                           noteKey: "flag_note_canvas_off"),
+                KnownFlag("canvas_enabled_ipad", "ios-feature-canvas", observed: "",
+                          noteKey: "flag_note_canvas_off"),
+                KnownFlag("canvas_fullscreen_ipad_enabled", "ios-feature-canvas", observed: "",
+                          noteKey: "flag_note_canvas_off"),
                 KnownFlag("enabled", "ios-feature-cover-art-snake", observed: "",
                           noteKey: "flag_note_snake_on"),
 

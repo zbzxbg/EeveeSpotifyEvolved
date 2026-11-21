@@ -1057,7 +1057,7 @@ extension UserDefaults {
     /// （见 `TabBarGlassPlate.applyCreateTabVisibility`）。
     static var tabBarHideCreate: Bool {
         get {
-            container.object(forKey: tabBarHideCreateKey) as? Bool ?? true
+            container.object(forKey: tabBarHideCreateKey) as? Bool ?? false
         }
         set {
             container.set(newValue, forKey: tabBarHideCreateKey)
