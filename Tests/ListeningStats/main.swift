@@ -410,4 +410,41 @@ require(store.loadSynchronously().days.isEmpty, "clearing must empty the cached 
 
 try? FileManager.default.removeItem(at: tempDirectory)
 
+// MARK: - 柱子粒度跟着范围变
+
+var chartData = ListeningStatsData()
+chartData.add(entry(todayKey, "t1", "Alpha", "Ann", seconds: 100, plays: 1))
+chartData.add(entry(yesterdayKey, "t1", "Alpha", "Ann", seconds: 20, plays: 1))
+chartData.add(entry(fortyDaysAgoKey, "t4", "Old", "Zed", seconds: 500, plays: 1))
+
+let weekChart = chartData.buckets(for: .week, now: now, calendar: calendar)
+require(weekChart.unit == .day, "the week chart is daily")
+require(weekChart.buckets.count == 7, "the week chart has 7 bars")
+require(weekChart.buckets.last?.seconds == 100, "the last week bar is today")
+
+let monthChart = chartData.buckets(for: .month, now: now, calendar: calendar)
+require(monthChart.unit == .day, "the month chart is daily")
+require(monthChart.buckets.count == 30, "the month chart has 30 bars")
+require(monthChart.buckets.last?.seconds == 100, "the month chart also ends today")
+
+let yearChart = chartData.buckets(for: .year, now: now, calendar: calendar)
+require(yearChart.unit == .month, "the year chart is monthly")
+require(yearChart.buckets.count == 12, "the year chart has 12 bars")
+require(yearChart.buckets.last?.key == "2026-06", "the year chart ends with the current month")
+let yearSeconds = yearChart.buckets.reduce(0) { $0 + $1.seconds }
+require(yearSeconds == 620, "the year chart sums every month in the window (100 + 20 + 500)")
+
+let allChart = chartData.buckets(for: .all, now: now, calendar: calendar)
+require(allChart.unit == .year, "the all-time chart is yearly")
+require(allChart.buckets.count == 1, "one calendar year of data means a single bar")
+require(allChart.buckets.first?.key == "2026", "the all-time bar is keyed by year")
+require(allChart.buckets.first?.seconds == 620, "the all-time bar sums everything")
+
+let emptyChart = ListeningStatsData().buckets(for: .all, now: now, calendar: calendar)
+require(emptyChart.buckets.isEmpty, "no data means no all-time bars")
+
+let emptyWeek = ListeningStatsData().buckets(for: .week, now: now, calendar: calendar)
+require(emptyWeek.buckets.count == 7, "an empty week still has 7 zero bars")
+require(emptyWeek.buckets.allSatisfy { $0.seconds == 0 }, "empty bars are zero, not missing")
+
 print("Listening stats regression tests passed")

@@ -302,8 +302,26 @@ struct ListeningStatsSummary: Equatable {
 }
 
 /// 近 7 天柱状图的一根柱子。
-struct ListeningStatsDayTotal: Equatable, Identifiable {
-    /// `yyyy-MM-dd`。
+/// 柱子的粒度。
+///
+/// 为什么不是永远按天：「近一年」按天是 365 根柱子，屏幕上只会画成一整块墨；
+/// 「全部」按天更没意义。范围一变，桶就跟着变粗 —— 这是"切换要有反应"的另一半。
+enum ListeningStatsBucketUnit: Equatable {
+    case day
+    case month
+    case year
+}
+
+/// 一根柱子。`date` 是该桶的**起点**（日 / 月 / 年的第一天）。
+struct ListeningStatsBucket: Equatable, Identifiable {
+    let key: String
+    let date: Date
+    let seconds: Double
+
+    var id: String { key }
+}
+
+struct ListeningStatsDayTotal: Equatable, Identifiable {    /// `yyyy-MM-dd`。
     var dayKey: String
     /// 这一天的零点（本地时区）。视图用它取星期缩写。
     var date: Date
@@ -527,6 +545,93 @@ struct ListeningStatsData: Codable, Equatable {
         }
 
         return result
+    }
+
+    // MARK: - 柱子（粒度跟着时间范围走）
+
+    /// 当前范围对应的柱子表。
+    ///
+    /// · 近 7 天 → 7 根日柱
+    /// · 近 30 天 → 30 根日柱
+    /// · 近一年 → 12 根月柱
+    /// · 全部 → 从库里最早一年到今年，每年一根
+    ///
+    /// 空桶一律补成 0：柱子计数稳定，用户才看得出"这一档到底有没有数据"。
+    func buckets(
+        for period: ListeningStatsPeriod,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (unit: ListeningStatsBucketUnit, buckets: [ListeningStatsBucket]) {
+        switch period {
+        case .week, .month:
+            let daysBack = period.daysBack ?? 6
+            let totals = dailyTotals(daysBack: daysBack, now: now, calendar: calendar)
+            let buckets = totals.map {
+                ListeningStatsBucket(key: $0.dayKey, date: $0.date, seconds: $0.seconds)
+            }
+            return (.day, buckets)
+
+        case .year:
+            let today = calendar.startOfDay(for: now)
+            var components = calendar.dateComponents([.year, .month], from: today)
+            components.day = 1
+            guard let currentMonthStart = calendar.date(from: components) else {
+                return (.month, [])
+            }
+            var result: [ListeningStatsBucket] = []
+            result.reserveCapacity(12)
+            for offset in stride(from: 11, through: 0, by: -1) {
+                guard let date = calendar.date(
+                    byAdding: .month,
+                    value: -offset,
+                    to: currentMonthStart
+                ) else { continue }
+                let parts = calendar.dateComponents([.year, .month], from: date)
+                let key = String(format: "%04d-%02d", parts.year ?? 0, parts.month ?? 0)
+                result.append(
+                    ListeningStatsBucket(
+                        key: key,
+                        date: date,
+                        seconds: seconds(whereDayKeyHasPrefix: key)
+                    )
+                )
+            }
+            return (.month, result)
+
+        case .all:
+            guard let oldest = oldestDayKey,
+                  oldest.count >= 4,
+                  let oldestYear = Int(oldest.prefix(4)) else {
+                return (.year, [])
+            }
+            let currentYear = calendar.component(.year, from: now)
+            guard currentYear >= oldestYear else { return (.year, []) }
+            var result: [ListeningStatsBucket] = []
+            result.reserveCapacity(currentYear - oldestYear + 1)
+            for year in oldestYear...currentYear {
+                var components = DateComponents()
+                components.year = year
+                components.month = 1
+                components.day = 1
+                guard let date = calendar.date(from: components) else { continue }
+                result.append(
+                    ListeningStatsBucket(
+                        key: String(year),
+                        date: date,
+                        seconds: seconds(whereDayKeyHasPrefix: String(year))
+                    )
+                )
+            }
+            return (.year, result)
+        }
+    }
+
+    /// 键（`yyyy-MM-dd`）以某段前缀开头的那些天，合计多少秒。
+    private func seconds(whereDayKeyHasPrefix prefix: String) -> Double {
+        days.reduce(0) { total, entry in
+            guard entry.key.hasPrefix(prefix) else { return total }
+            return total + entry.value.values.reduce(0) { $0 + $1.seconds }
+        }
     }
 }
 

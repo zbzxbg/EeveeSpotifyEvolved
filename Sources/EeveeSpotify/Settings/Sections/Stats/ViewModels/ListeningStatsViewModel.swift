@@ -4,15 +4,16 @@ import Foundation
 /// 「听歌统计」页的数据侧。
 ///
 /// 只做三件事：从 store 读一份快照、在**后台队列**上算聚合、回到主线程发布。
-/// 视图的 `body` 里只读算好的 `summary` / `dailyTotals` —— 聚合不能出现在渲染路径上
+/// 视图的 `body` 里只读算好的 `summary` / `buckets` —— 聚合不能出现在渲染路径上
 /// （`days` 里的记录会随听歌不断变多，塞进 body 会让滚动掉帧）。
 final class ListeningStatsViewModel: ObservableObject {
 
     /// 当前时间范围的聚合结果。
     @Published private(set) var summary: ListeningStatsSummary = .empty
 
-    /// 近 7 天逐日总秒数（柱子）。
-    @Published private(set) var dailyTotals: [ListeningStatsDayTotal] = []
+    /// 当前时间范围的柱子。粒度随范围变：7/30 天按日、一年按月、全部按年。
+    @Published private(set) var buckets: [ListeningStatsBucket] = []
+    @Published private(set) var bucketUnit: ListeningStatsBucketUnit = .day
 
     /// 库里最早的一天（`yyyy-MM-dd`）；没有数据时为 nil。
     ///
@@ -51,13 +52,14 @@ final class ListeningStatsViewModel: ObservableObject {
         store.snapshot { [weak self] data in
             queue.async {
                 let summary = data.summary(period: period, now: now, calendar: calendar)
-                let dailyTotals = data.dailyTotals(now: now, calendar: calendar)
+                let chart = data.buckets(for: period, now: now, calendar: calendar)
                 let firstDayKey = data.oldestDayKey
 
                 DispatchQueue.main.async {
                     guard let self, self.requestGeneration == generation else { return }
                     self.summary = summary
-                    self.dailyTotals = dailyTotals
+                    self.buckets = chart.buckets
+                    self.bucketUnit = chart.unit
                     self.firstDayKey = firstDayKey
                     self.isLoading = false
                 }
@@ -70,7 +72,7 @@ final class ListeningStatsViewModel: ObservableObject {
         store.clear { [weak self] in
             guard let self else { return }
             self.summary = .empty
-            self.dailyTotals = []
+            self.buckets = []
             self.reload(period: self.period)
         }
     }

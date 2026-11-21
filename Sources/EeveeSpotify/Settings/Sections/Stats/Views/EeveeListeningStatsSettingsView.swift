@@ -121,11 +121,13 @@ struct EeveeListeningStatsSettingsView: View {
         }
     }
 
-    // MARK: - 近 7 天
+    // MARK: - 柱子（粒度随范围变）
 
+    /// 表头跟着范围变：7 天沿用原来那句（各语言都翻过），其余用范围名。
+    /// 柱子本身的粒度由 `buckets` 决定（日 / 月 / 年），两者永远一致。
     private var chartSection: some View {
-        Section(header: Text("listening_stats_last_7_days".localized)) {
-            if viewModel.dailyTotals.isEmpty {
+        Section(header: Text(chartHeaderText)) {
+            if viewModel.buckets.isEmpty {
                 if viewModel.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -134,10 +136,18 @@ struct EeveeListeningStatsSettingsView: View {
                     Color.clear.frame(height: 1)
                 }
             } else {
-                ListeningStatsWeekBars(points: viewModel.dailyTotals)
-                    .padding(.vertical, 4)
+                ListeningStatsBars(
+                    points: viewModel.buckets,
+                    unit: viewModel.bucketUnit,
+                    period: period
+                )
+                .padding(.vertical, 4)
             }
         }
+    }
+
+    private var chartHeaderText: String {
+        period == .week ? "listening_stats_last_7_days".localized : periodLabel(period)
     }
 
     // MARK: - 榜单
@@ -449,27 +459,34 @@ struct EeveeListeningStatsSettingsView: View {
     }
 }
 
-// MARK: - 近 7 天柱状图
+// MARK: - 柱子
 
-/// 7 根柱子，全部用 SwiftUI 的形状自己画。
+/// 一组柱子，全部用 SwiftUI 的形状自己画。
 ///
-/// 刻意**不用 `Charts`**：那会多一条系统框架依赖，而这里要的只是 7 个矩形和 7 个星期缩写。
-private struct ListeningStatsWeekBars: View {
+/// 刻意**不用 `Charts`**：那会多一条系统框架依赖，而这里要的只是几个矩形和它们的短标签。
+/// 粒度由 `unit` 决定：7/30 天是日柱（7 根标星期、30 根每 5 天标一个），一年是 12 根月柱，
+/// 全部是一年一根。
+private struct ListeningStatsBars: View {
 
-    let points: [ListeningStatsDayTotal]
+    let points: [ListeningStatsBucket]
+    let unit: ListeningStatsBucketUnit
+    let period: ListeningStatsPeriod
+
+    /// 30 根日柱时只标一部分：1、5、10 … 30。全标会糊成一排。
+    private var labelsEveryDay: Bool { period == .week }
 
     private var peak: Double {
         max(points.map { $0.seconds }.max() ?? 0, 1)
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
+        HStack(alignment: .bottom, spacing: unit == .day && !labelsEveryDay ? 2 : 6) {
             ForEach(points) { point in
                 VStack(spacing: 6) {
                     GeometryReader { proxy in
                         VStack(spacing: 0) {
                             Spacer(minLength: 0)
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            RoundedRectangle(cornerRadius: unit == .day && !labelsEveryDay ? 2 : 4, style: .continuous)
                                 .fill(Color.accentColor.opacity(point.seconds > 0 ? 0.85 : 0.18))
                                 .frame(
                                     height: barHeight(
@@ -481,9 +498,11 @@ private struct ListeningStatsWeekBars: View {
                     }
                     .frame(height: 84)
 
-                    Text(weekdayInitial(for: point.date))
+                    Text(label(for: point))
                         .font(.caption2)
                         .foregroundColor(point.seconds > 0 ? .primary : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -495,6 +514,28 @@ private struct ListeningStatsWeekBars: View {
     private func barHeight(seconds: Double, available: CGFloat) -> CGFloat {
         guard seconds > 0, available > 0 else { return 2 }
         return max(available * CGFloat(seconds / peak), 4)
+    }
+
+    /// 柱子下面那一行字。
+    ///
+    /// · 日柱（7 天）：星期缩写，取自 `Calendar` 自带的数组，跟着系统语言走；
+    /// · 日柱（30 天）：几号，只在 1/5/10/…/30 上标；
+    /// · 月柱：月份数字；
+    /// · 年柱：年份后两位。
+    private func label(for point: ListeningStatsBucket) -> String {
+        let calendar = Calendar.current
+        switch unit {
+        case .day:
+            if labelsEveryDay {
+                return weekdayInitial(for: point.date)
+            }
+            let day = calendar.component(.day, from: point.date)
+            return (day == 1 || day % 5 == 0) ? String(day) : ""
+        case .month:
+            return String(calendar.component(.month, from: point.date))
+        case .year:
+            return String(calendar.component(.year, from: point.date) % 100)
+        }
     }
 
     /// 星期缩写取自 `Calendar` 自带的星期名数组，跟着系统语言走，不用自己维护一套。
