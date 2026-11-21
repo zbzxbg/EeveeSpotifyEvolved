@@ -53,8 +53,6 @@ genius_fallback = "Fallback do Genius";
 genius_fallback_description = "Wczytuje tekst z usługi Genius, jeśli wystąpi problem z %@.";
 
 
-hide_lyrics_on_error = "Ukryj w przypadku błędu";
-hide_lyrics_on_error_description = "Usuń kartę tekstu piosenki, jeśli nie uda się jej załadować";
 
 
 musixmatch_language = "Język tekstów z Musixmatch";
@@ -118,7 +116,7 @@ unknown_error = "Nieznany błąd";
 // Instrumental Titles
 
 song_is_instrumental = "Ten utwór jest instrumentalny.";
-let_the_music_play = "Niech muzyka trwa";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 
@@ -168,7 +166,6 @@ showColoredOverlay = "Pokaż kolorową nakładkę na pasku postępu";
 showToast = "Pokaż powiadomienie przy pomijaniu";
 skipToast = "Przyciski akcji powiadomienia pomijania (głos / cofnij / ukryj)";
 respectManualSeek = "Szanuj ręczne przewijanie (nie pomijaj ponownie)";
-categoriesHeader = "Kategorie";
 categoriesFooter = "Wył. · Pokaż · Ręcznie · Auto. Stuknij kolorowe kółko, aby zmienić kolor.";
 
 selfpromo_category = "Niepłatna/autopromocja";

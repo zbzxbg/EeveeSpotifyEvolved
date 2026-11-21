@@ -33,7 +33,7 @@ struct NavigationSectionView: View {
             }
             
             Spacer()
-            
+
             ChevronRightView()
         }
     }

@@ -54,6 +54,17 @@ enum NowPlayingOneScreen {
     /// 合并用的占位：一次布局里几十张卡只排一枪（本仓库纪律：短促重试不叠加）。
     private static var repinScheduled = false
 
+    /// 播客：整层让位（与 `NowPlayingIOS27` / `NowPlayingPageOverlay` 同一条判据）。
+    ///
+    /// 为什么必须让：这一套是"把播放器压成一屏"——卡片被报成 0 高。音乐页的卡片是歌词 /
+    /// 相关推荐那类**装饰**；播客页的卡片是**评论、跟读文本、章节**，是内容本身。
+    /// 压掉之后播客页下半屏就是空的（真机上就是这个现象）。
+    private static var podcastBypass = false
+
+    /// 折叠钩子对**每一张卡**都会读一次 —— 这里只能是一个 bool，
+    /// 不能每张卡去问一遍播放器（`NowPlayingPodcastFallback.isActive` 要摸 URI）。
+    static var isSuspendedForPodcast: Bool { podcastBypass }
+
     /// 这颗开关由「修改Spotify听歌页布局」总开关统一写；
     /// 再叠一道 `nowPlayingLayout` 的门，是为了"总开关关掉 ⇒ 这一套一律不生效"
     /// （哪怕有外部写回 / 导入备份把那颗键写成了 true）。
@@ -74,6 +85,13 @@ enum NowPlayingOneScreen {
             restore()
             return
         }
+        // 播客页的卡片是内容（评论 / 跟读文本 / 章节），不是装饰 —— 整层让位。
+        if NowPlayingPodcastFallback.isActive {
+            standDownForPodcast()
+            return
+        }
+        resumeFromPodcastIfNeeded()
+
         guard let list = locateList(in: pageView) else { return }
         lastList = list
         pin(list)
@@ -99,6 +117,14 @@ enum NowPlayingOneScreen {
     static func reconcile() -> Bool {
         guard isEnabled else { return false }
         guard let page = lastPage, page.window != nil else { return false }
+
+        // 播客：让位（见 `podcastBypass` 的说明）。判据只看"这一页真的在窗口里"时，
+        // 不在听歌页时这条路的成本 = 两次 weak 读。
+        if NowPlayingPodcastFallback.isActive {
+            standDownForPodcast()
+            return false
+        }
+        resumeFromPodcastIfNeeded()
 
         if let list = lastList, list.window != nil {
             return pin(list)
@@ -161,6 +187,38 @@ enum NowPlayingOneScreen {
                 )
             }
         }
+    }
+
+    // MARK: - 播客让位
+
+    /// 播客：把 inset 写回、并让列表**重新问一次**每张卡的高度。
+    ///
+    /// 只写回 inset 不够：`PlayerCardCollapseHook` 已经把那些卡报成 0 高，
+    /// 布局不改就不会重新问。`invalidateLayout()` 是最小的一步 ——
+    /// 不 `reloadData`、不碰数据源（Spotify 的列表还在自己手里）。
+    private static func standDownForPodcast() {
+        guard !podcastBypass else { return }
+        podcastBypass = true
+        restore()
+        invalidateCardLayout()
+        writeDebugLog(
+            "[\(logTag)] podcast playing (\(NowPlayingPodcastFallback.debugDescription))"
+                + " — cards are Spotify's again (comments / read-along stay)"
+        )
+    }
+
+    /// 音乐回来了：清掉让位状态，下一拍由正常路径重新钉 + 折。
+    private static func resumeFromPodcastIfNeeded() {
+        guard podcastBypass else { return }
+        podcastBypass = false
+        writeDebugLog("[\(logTag)] music again — taking the cards back")
+    }
+
+    /// 让列表重新算一遍每个 cell 的高度（钩子那边已解除折叠）。
+    private static func invalidateCardLayout() {
+        guard let list = lastList else { return }
+        (list as? UICollectionView)?.collectionViewLayout.invalidateLayout()
+        list.setNeedsLayout()
     }
 
     // MARK: - 钉住

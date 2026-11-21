@@ -1,13 +1,15 @@
 import SwiftUI
 import UIKit
 
-/// 「调试」页：排查/验证型开关 + 只读转储工具 + 日志工具（见 `EeveeDebugSettingsViewModel`）。
+/// 「调试」页：排查/验证型开关 + 只读转储工具（见 `EeveeDebugSettingsViewModel`）。
 ///
-/// 现在的几行分三类：
+/// 现在的几行都是一次性的排查工具：
 /// · **只读转储**（更详细的日志记录 = 视图树 + customize 响应体）—— 不改任何行为；
-/// · **日志工具**（开启记录 / 导出 / 清除）—— 原来在根页单独一节，现在归到这里：
-///   它和上面几颗排查开关读写的是同一个调试日志；
-/// · **长期住户**：导出前脱敏，默认开。
+/// · **探针 / 自检 / 类转储** —— 验证完就可以关掉。
+///
+/// 「开启记录 / 导出 / 清除」不在这一页：它们属于"遇到问题 → 记录 → 导出"的日常路径，
+/// 入口在根页（`SettingsLogSection`，紧挨重置）。**「导出前脱敏」留在这里** ——
+/// 它是那个导出按钮的隐私默认值，和排查开关放在一起，不跟着日常入口走。
 ///
 /// 所有 UserDefaults 键**都沿用旧的**（`redactSharedLog` / `dumpViewTree` /
 /// `dumpCustomizeBody` 等）⇒ 设备上已设的值原样保留；只有合并后的 `detailed_logging`
@@ -16,7 +18,7 @@ struct EeveeDebugSettingsView: View {
     @StateObject var viewModel = EeveeDebugSettingsViewModel()
 
     /// 「转储某个类」那个输入框的内容（本页唯一一处不需要 view model 的状态，
-    /// 照 `redactSharedLogSection` 的先例直接用 `@State`）。
+    /// 照 `dumpClassSection` 自己的先例直接用 `@State`）。
     @State private var dumpClassName = ""
 
     /// 「测试 Apple Music 令牌」的结果（每步一行，失败停在那一步）。
@@ -44,16 +46,37 @@ struct EeveeDebugSettingsView: View {
             // —— 视图树给"谁在谁里面"，这个给"这个类里有什么"。
             dumpClassSection()
 
-            // 「日志工具」：开启记录 / 导出 / 清除。与上面几颗看的是同一条调试日志。
-            logToolsSection()
-
-            // 「分享日志前脱敏」：**Debug区搬进这里**。
-            // 转储是把东西写进日志，这一条是"把日志发出去之前先假名化" —— 同一条线的最后一环。
+            // 「分享日志前脱敏」：导出的隐私默认值。导出按钮在根页的「日志」一节
+            // （`SettingsLogSection`），但这一条留在这里 —— 它是"把日志发出去之前先假名化"，
+            // 属于排查链的最后一环，不跟着日常入口走。
             redactSharedLogSection()
         }
                 // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)
+    }
+
+    /// 「分享日志前脱敏」。
+    ///
+    /// 默认**开**（`UserDefaults.redactSharedLog` 的 getter：键不存在 ⇒ true）：
+    /// 导出这个动作 99% 是为了把日志发给别人，而日志主体就是"你听了哪些歌"。
+    ///
+    /// 只影响**导出**的那一份（`DebugLogSanitizer.sharedLogFile(from:redact:)`，出口是根页
+    /// 「日志」一节里的导出按钮）；写入口的凭证/设备标识脱敏没有开关、也不受它控制。
+    /// 脱敏版生成失败时导出会**直接报错**，绝不回退明文（fail-closed）。
+    ///
+    /// ⚠️ 这一节不是"验证完就删"的临时件，而是**导出的隐私默认值**。它不在
+    /// `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，用 `Binding` 直接读写）。
+    @ViewBuilder private func redactSharedLogSection() -> some View {
+        Section {
+            Toggle(
+                "redact_shared_log".localized,
+                isOn: Binding<Bool>(
+                    get: { UserDefaults.redactSharedLog },
+                    set: { UserDefaults.redactSharedLog = $0 }
+                )
+            )
+        }
     }
 
     /// 顶部警示：只陈述后果，不拦操作（排查时它不该碍事）。
@@ -136,124 +159,6 @@ struct EeveeDebugSettingsView: View {
                     .monospaced()
                     .textSelection(.enabled)
             }
-        }
-    }
-
-    /// 「日志工具」：开启记录 / 导出 / 清除。原来在根页单独一节，现在归到这里 ——
-    /// 它和上面的转储开关读写的是同一个调试日志，页脚也一起搬来。
-    ///
-    /// 不再带节标题：这一页的导航标题就是「调试」，再写一次只会重复。
-    @ViewBuilder private func logToolsSection() -> some View {
-        Section(footer: Text("enable_log_recording_description".localized)) {
-            Toggle(
-                "enable_log_recording".localized,
-                isOn: Binding<Bool>(
-                    get: { UserDefaults.enableLogRecording },
-                    set: { newValue in
-                        UserDefaults.enableLogRecording = newValue
-                        if newValue {
-                            writeDebugLog("[LOG] Log recording enabled")
-                        }
-                    }
-                )
-            )
-
-            Button(action: exportDebugLog) {
-                HStack {
-                    Image(systemName: "square.and.arrow.up")
-                    Text("export_debug_log".localized)
-                }
-            }
-
-            Button(action: clearDebugLog) {
-                HStack {
-                    Image(systemName: "trash")
-                    Text("clear_debug_log".localized)
-                }
-                .foregroundColor(.red)
-            }
-        }
-    }
-
-    /// 导出**可分享的那一份**：`redactSharedLog` 开着时是假名化后的副本，
-    /// 原文件一个字都不动（排查要用的真实曲目还留在本地）。
-    /// 凭证/设备标识那一层不在这里 —— 它在写入口就生效了，见 `DebugLogSanitizer`。
-    ///
-    /// ⚠️ 脱敏版生成失败时**绝不回退到原文件**：那正好是"以为已经脱敏、实际分享了明文"
-    /// 的场景。宁可导出失败并告诉他，也不能静默 fail-open。
-    private func exportDebugLog() {
-        let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
-        guard FileManager.default.fileExists(atPath: logPath),
-              let logData = FileManager.default.contents(atPath: logPath),
-              logData.count > 0 else {
-            PopUpHelper.showPopUp(message: "no_debug_log_found".localized, buttonText: "no_debug_log_found_ok".localized)
-            return
-        }
-
-        let logURL: URL
-        if UserDefaults.redactSharedLog {
-            guard let redacted = DebugLogSanitizer.sharedLogFile(from: logPath, redact: true) else {
-                PopUpHelper.showPopUp(
-                    message: "redact_log_failed".localized,
-                    buttonText: "redact_log_failed_ok".localized
-                )
-                return
-            }
-            logURL = redacted
-        } else {
-            logURL = DebugLogSanitizer.sharedLogFile(from: logPath, redact: false)
-                ?? URL(fileURLWithPath: logPath)
-        }
-
-        let activityVC = UIActivityViewController(activityItems: [logURL], applicationActivities: nil)
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = scene.windows.first?.rootViewController {
-            var topVC = rootVC
-            while let presented = topVC.presentedViewController { topVC = presented }
-            if let popover = activityVC.popoverPresentationController {
-                popover.sourceView = topVC.view
-                popover.sourceRect = CGRect(x: topVC.view.bounds.midX, y: topVC.view.bounds.midY, width: 0, height: 0)
-            }
-            topVC.present(activityVC, animated: true)
-        }
-    }
-
-    /// 清空调试日志：把文件换成一个空文件，再让常驻句柄重开，最后回一行日志。
-    private func clearDebugLog() {
-        let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
-        guard FileManager.default.fileExists(atPath: logPath),
-              let logData = FileManager.default.contents(atPath: logPath),
-              logData.count > 0 else {
-            PopUpHelper.showPopUp(message: "no_log_to_clear".localized, buttonText: "no_log_to_clear_ok".localized)
-            return
-        }
-        try? "".write(toFile: logPath, atomically: true, encoding: .utf8)
-        // 上面这行换掉了文件本体，常驻句柄要跟着重开，否则后面的日志写进旧 inode。
-        resetDebugLogFile()
-        writeDebugLog("Log cleared by user")
-        PopUpHelper.showPopUp(message: "debug_log_cleared".localized, buttonText: "debug_log_cleared_ok".localized)
-    }
-
-    /// 「分享日志前脱敏」。
-    ///
-    /// 默认**开**（`UserDefaults.redactSharedLog` 的 getter：键不存在 ⇒ true）：
-    /// 导出这个动作 99% 是为了把日志发给别人，而日志主体就是"你听了哪些歌"。
-    ///
-    /// 只影响**导出**的那一份（`DebugLogSanitizer.sharedLogFile(from:redact:)`，出口就是本页
-    /// 上面的导出按钮）；写入口的凭证/设备标识脱敏没有开关、也不受它控制。
-    /// 脱敏版生成失败时导出会**直接报错**，绝不回退明文（fail-closed）。
-    ///
-    /// ⚠️ 这一节不是"验证完就删"的临时件，而是**导出的隐私默认值**。它不在
-    /// `EeveeDebugSettingsViewModel` 里（沿用 `dumpClassSection` 的先例，用 `Binding` 直接读写）。
-    @ViewBuilder private func redactSharedLogSection() -> some View {
-        Section {
-            Toggle(
-                "redact_shared_log".localized,
-                isOn: Binding<Bool>(
-                    get: { UserDefaults.redactSharedLog },
-                    set: { UserDefaults.redactSharedLog = $0 }
-                )
-            )
         }
     }
 }

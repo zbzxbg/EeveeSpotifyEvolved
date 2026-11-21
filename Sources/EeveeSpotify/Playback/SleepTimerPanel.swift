@@ -38,7 +38,7 @@ struct SleepTimerPanel: View {
                             writeDebugLog("[SleepTimer] picked \(value) min from the player")
                             dismiss()
                         } label: {
-                            Text(String(format: "sleep_timer_minutes_format".localized, value))
+                            Text(String(format: "duration_minutes_format".localized, value))
                         }
                     }
                 }

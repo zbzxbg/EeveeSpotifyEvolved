@@ -23,6 +23,9 @@ import Foundation
 /// 两档**共用**的结构件（取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊）仍然看
 /// `nowPlayingAnyLayout`，不随这道选择器变化。
 ///
+/// ⚠️ 播客 / 有声书**不受这道选择影响**：Apple Music 式的几何是按音乐页算的，播客那行
+/// 控件更多 ⇒ `NowPlayingPodcastFallback` 判出来之后整层让位回 Spotify 自己的布局。
+///
 /// ## 纪律
 ///
 /// * **不新增存储键**：真值仍然只在 `nowPlayingIOS27` 上，`nowPlayingStyle` 只是推导。

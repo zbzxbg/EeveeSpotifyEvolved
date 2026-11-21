@@ -42,6 +42,9 @@ class PlayerCardCollapseHook: ClassHook<UICollectionViewCell> {
         let result = orig.preferredLayoutAttributesFittingAttributes(attributes)
 
         guard NowPlayingOneScreen.isEnabled else { return result }
+        // 播客页的卡片是内容（评论 / 跟读文本 / 章节），不是装饰 —— 这一层在播客上整层让位。
+        // 读的是一个 static bool：这个钩子每张卡每轮布局都会跑，不能在这里摸播放器。
+        guard !NowPlayingOneScreen.isSuspendedForPodcast else { return result }
         // ⚠️ hook 方法里钩到的对象是 **`self.target`**，`self` 是 hook 类自己 ——
         // 写成 `self` 会编不过（`PlayerCardCollapseHook` 不是 UIView）。
         // 仓库里既有的 hook（`DeclutterChrome` / `TabBarGlass` / `LibraryAppearance` …）

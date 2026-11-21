@@ -52,13 +52,15 @@ MERGED_INTO = {
 }
 
 # 视图里**写死**的键（不是拼出来的）
+# ⚠️ 只列视图**真的会显示**的那些：这一页的 `Section(header:)` 没有 footer，
+# 早先那版脚本要求了 `…_tips_footer` / `…_scope_*_footer` ⇒ 一跑就报缺键，
+# 而那几行在界面上根本不存在（假红比漏报更坏）。
 FIXED_KEYS = [
     "reduce_interventions_title",
     "reduce_interventions_master",
     "reduce_interventions_master_description",
     "reduce_interventions_master_footer",
     "reduce_interventions_tips_section",
-    "reduce_interventions_tips_footer",
 ]
 
 
@@ -170,7 +172,7 @@ def main() -> int:
         wanted += [f"reduce_interventions_flag_{s}", f"reduce_interventions_flag_{s}_description"]
     for scope in hint_scopes:
         seg = last_scope_segment(scope)
-        wanted += [f"reduce_interventions_scope_{seg}", f"reduce_interventions_scope_{seg}_footer"]
+        wanted += [f"reduce_interventions_scope_{seg}"]
 
     seen, ordered = set(), []
     for k in wanted:
@@ -191,11 +193,22 @@ def main() -> int:
 
     failed = False
     for key in ordered:
-        missing = [lang for lang, keys in dicts.items() if key not in keys]
-        mark = "OK      " if not missing else "MISSING "
-        if missing:
+        # en 是单点基线：缺了就是界面上露裸键名，算错。
+        # zh-CN 缺键按仓库的「en 单点提供」政策只是**回落英文**，不算错（提示一下）。
+        en_missing = key not in dicts["en"]
+        zh_missing = key not in dicts["zh-CN"]
+        if en_missing:
             failed = True
-        print(f"  {mark} {key}" + (f"   <- missing in: {','.join(missing)}" if missing else ""))
+        if en_missing:
+            mark = "MISSING "
+        elif zh_missing:
+            mark = "OK(zh?) "
+        else:
+            mark = "OK      "
+        note = "   <- missing in: " + ",".join(
+            lang for lang, missing in (("en", en_missing), ("zh-CN", zh_missing)) if missing
+        ) if (en_missing or zh_missing) else ""
+        print(f"  {mark} {key}{note}")
 
     print()
     if failed:

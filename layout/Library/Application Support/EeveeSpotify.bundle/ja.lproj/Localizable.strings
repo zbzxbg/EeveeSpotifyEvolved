@@ -44,8 +44,6 @@ genius_fallback = "Geniusを代わりに使用";
 genius_fallback_description = "%@に問題がある場合は、Geniusから歌詞を取得します。";
 
 
-hide_lyrics_on_error = "エラー発生時に歌詞を非表示";
-hide_lyrics_on_error_description = "歌詞を読み込めなかったときは非表示にします。";
 
 
 musixmatch_language = "Musixmatchの歌詞の言語";
@@ -105,7 +103,7 @@ unknown_error = "不明なエラーが発生しました";
 // Instrumental Titles
 
 song_is_instrumental = "この曲は歌詞がありません";
-let_the_music_play = "音楽をお楽しみください";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

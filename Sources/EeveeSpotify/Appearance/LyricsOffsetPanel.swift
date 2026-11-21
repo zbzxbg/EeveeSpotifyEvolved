@@ -56,8 +56,6 @@ struct LyricsOffsetPanel: View {
                     .padding(.vertical, 6)
                 } header: {
                     Text(song)
-                } footer: {
-                    Text("lyrics_offset_autosave_hint".localized)
                 }
 
                 Section {

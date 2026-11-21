@@ -27,32 +27,21 @@ struct KnownFlag: Hashable {
     /// **空串 = 只在 IPA 字面量表里见过**（见上面的说明）。
     let observedValue: String
 
-    /// 需要提醒的少数几条（l10n 键）；nil 表示名字已经够清楚。
-    let noteKey: String?
-
     init(
         _ name: String,
         _ scope: String,
         _ type: FlagValueType = .bool,
-        observed: String,
-        noteKey: String? = nil
+        observed: String
     ) {
         self.name = name
         self.scope = scope
         self.type = type
         self.observedValue = observed
-        self.noteKey = noteKey
     }
 }
 
 struct KnownFlagGroup {
     let titleKey: String
-
-    /// 分组脚注（l10n 键）：写清"这一组的证据来自哪儿"。
-    /// ⚠️ **必须带 `= nil`**：`var` 带默认值才会被成员逐一初始化器收成"可省略参数"，
-    /// 于是旧的分组还能继续用 `KnownFlagGroup(titleKey:flags:)` 这个两参写法
-    /// （`let` 带默认值会被直接排除掉，`var` 不带默认值则会变成必填）。
-    var footerKey: String? = nil
 
     var flags: [KnownFlag]
 }
@@ -69,10 +58,9 @@ enum KnownFlagCatalog {
 
     static let groups: [KnownFlagGroup] = [
         KnownFlagGroup(
-            titleKey: "flag_group_lyrics",
+            titleKey: "lyrics",
             flags: [
-                KnownFlag("is_get_lyrics_v2_enabled", "ios-feature-lyrics", observed: "true",
-                          noteKey: "flag_note_lyrics_v2"),
+                KnownFlag("is_get_lyrics_v2_enabled", "ios-feature-lyrics", observed: "true"),
                 KnownFlag("lyrics_offline_enabled", "ios-feature-lyrics", observed: "true"),
                 KnownFlag("enable_lyrics", "ios-feature-lyrics", observed: "true"),
                 KnownFlag("enable_lyrics_character_count_fix", "ios-feature-lyrics", observed: "true"),
@@ -81,8 +69,7 @@ enum KnownFlagCatalog {
                 KnownFlag("lyrics_entry_point_enabled", "ios-feature-lyrics", observed: "false"),
                 KnownFlag("is_lyrics_cover_art_refactor_enabled", "ios-nowplaying-contentlayers-impl", observed: "true"),
                 KnownFlag("lyrics_under_cover_art_enabled", "ios-nowplaying-contentlayers-impl", observed: "true"),
-                KnownFlag("lyrics_on_canvas_enabled", "ios-feature-canvas", observed: "true",
-                          noteKey: "flag_note_canvas_lyrics"),
+                KnownFlag("lyrics_on_canvas_enabled", "ios-feature-canvas", observed: "true"),
                 KnownFlag("sync_lyrics_enabled", "ios-zephyr", observed: "true"),
                 KnownFlag("enhanced_share_card_enabled", "ios-feature-lyrics", observed: "true"),
                 KnownFlag("chat_lyrics_sticker_request_enabled", "ios-campfire-properties-impl", observed: "true"),
@@ -152,8 +139,7 @@ enum KnownFlagCatalog {
             titleKey: "flag_group_interventions",
             flags: [
                 // 总闸：关掉它，下面这批提示由 Spotify 自己统一收手。
-                KnownFlag("enabled", "ios-messaging-reduceinterventions-impl", observed: "",
-                          noteKey: "flag_note_interventions_master"),
+                KnownFlag("enabled", "ios-messaging-reduceinterventions-impl", observed: ""),
 
                 KnownFlag("enable_message_account_switching_tooltip",
                           "ios-messaging-reduceinterventions-impl", observed: ""),
@@ -176,11 +162,10 @@ enum KnownFlagCatalog {
 
                 // 整数开关：现在能改（「写入数字」这一档就是为它们加的）。
                 KnownFlag("max_account_age_days", "ios-messaging-reduceinterventions-impl",
-                          .int, observed: "", noteKey: "flag_note_int_needs_number"),
+                          .int, observed: ""),
 
                 // 同一件事的其它 scope（都在 IPA 表里核过）。
-                KnownFlag("data_saver_tooltip", "ios-feature-nowplayingbar", observed: "",
-                          noteKey: "flag_note_data_saver"),
+                KnownFlag("data_saver_tooltip", "ios-feature-nowplayingbar", observed: ""),
                 KnownFlag("video_optionality_tooltips", "ios-feature-nowplayingbar", observed: ""),
                 KnownFlag("messaging_enabled", "ios-datasaver-automatic-impl", observed: ""),
                 KnownFlag("is_promo_cta_enabled",
@@ -192,7 +177,6 @@ enum KnownFlagCatalog {
 
         KnownFlagGroup(
             titleKey: "flag_group_chrome",
-            footerKey: "flag_group_chrome_footer",
             flags: [
                 // 迷你播放条/播放条上的元素（我们现在是"藏视图"，这里是"关元素"——更稳）。
                 KnownFlag("add_button", "ios-feature-nowplayingbar", observed: ""),
@@ -204,10 +188,10 @@ enum KnownFlagCatalog {
                 KnownFlag("hold_and_drag_to_resize", "ios-feature-nowplayingbar", observed: ""),
 
                 // 封面 / 彩蛋。
-                KnownFlag("canvas_enabled", "ios-feature-canvas", observed: "",
-                          noteKey: "flag_note_canvas_off"),
-                KnownFlag("enabled", "ios-feature-cover-art-snake", observed: "",
-                          noteKey: "flag_note_snake_on"),
+                KnownFlag("canvas_enabled", "ios-feature-canvas", observed: ""),
+                KnownFlag("canvas_enabled_ipad", "ios-feature-canvas", observed: ""),
+                KnownFlag("canvas_fullscreen_ipad_enabled", "ios-feature-canvas", observed: ""),
+                KnownFlag("enabled", "ios-feature-cover-art-snake", observed: ""),
 
                 // 多账号（它的"账号切换提示"背后的功能本身）。
                 KnownFlag("is_enabled", "ios-account-switching", observed: ""),
@@ -233,7 +217,6 @@ enum KnownFlagCatalog {
         // （节流秒数，属"写入数字"档，不是开关）这类。
         KnownFlagGroup(
             titleKey: "flag_group_hints",
-            footerKey: "flag_group_hints_footer",
             flags: [
                 // Spotify Connect：名字直接就叫 disable。
                 KnownFlag("disable_connect_nudges", "ios-feature-connectnotifications", observed: ""),

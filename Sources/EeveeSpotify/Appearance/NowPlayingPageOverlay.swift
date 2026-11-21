@@ -77,8 +77,12 @@ enum NowPlayingPageOverlay {
     /// 位置在传输行与工具行之间 —— 见 `ios27VolumeY`）。
     /// 「选择沉浸式的那几个按键，全部写默认开启」——
     /// 二级菜单删除，音量条不再看 `nowPlayingVolume`：任一布局开着就显示。
+    ///
+    /// 播客不算：那一页的控件行比音乐多（快退 / 快进 / 倍速），Apple Music 式的几何会被
+    /// 挤出屏幕 —— 整页由 `NowPlayingIOS27` 让位，音量行跟着一起退场。
     static var isEnabled: Bool {
-        UserDefaults.nowPlayingIOS27 || UserDefaults.nowPlayingLayout
+        guard UserDefaults.nowPlayingIOS27 || UserDefaults.nowPlayingLayout else { return false }
+        return !NowPlayingPodcastFallback.isActive
     }
 
     // MARK: - 对外入口
@@ -104,8 +108,13 @@ enum NowPlayingPageOverlay {
     /// 在听歌页时几次 frame 比较（没变就一个字节都不写）。
     @discardableResult
     static func reconcile() -> Bool {
-        guard isEnabled else { return false }
         guard let page = lastPage, page.window != nil else { return false }
+        // 播客（或开关关掉）：页面还在，但这一层要**主动撤走** —— 只 `return false`
+        // 会把上一次装的音量行留在屏幕上。`remove` 对"没装过"是空转。
+        guard isEnabled else {
+            remove(reason: NowPlayingPodcastFallback.isActive ? "podcast" : "switch off")
+            return false
+        }
 
         guard let overlay = lastOverlay, overlay.superview === page else {
             let overlay = attach(to: page)

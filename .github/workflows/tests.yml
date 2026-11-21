@@ -95,6 +95,16 @@ jobs:
         run: python3 Tools/eevee-hookfinder/orion_hook_guard.py
       - name: Guard — l10n keys
         run: python3 Tools/l10n_lint.py --quiet
+      # 设置根页的目录是唯一数据源：key 拼错不会崩，只会在界面上显示原始 key。
+      - name: Guard — settings catalog (rows, groups, keys)
+        run: python3 Scripts/check_settings_catalog.py
+      # 两页「精选 flag」的文案键是**数据驱动**的（键写在目录文件里当字符串）：
+      # `l10n_lint` 只保证它们"被引用"，保证不了"词典里有" —— 缺了就是界面上露裸键名。
+      # 「减少打扰」页那个脚本同时钉住"视图会渲染哪些组"与目录一致。
+      - name: Guard — curated flag pages l10n (features / reduce interventions)
+        run: |
+          python3 Tools/eevee-hookfinder/check_spotify_features_l10n.py
+          python3 Tools/eevee-hookfinder/check_reduce_interventions_l10n.py
       - name: Guard — missing Foundation imports (Sources + Tests)
         run: python3 Tools/eevee-hookfinder/swift_import_check.py
       # iOS 最低版本写在六处（两个 TARGET、control 的 firmware、三处 cyan -m）。
@@ -118,6 +128,16 @@ jobs:
                  -o flag-override-tests
           ./flag-override-tests
 
+      # 「Spotify 功能」页的数据层（curated flag 键）。纯 Foundation，所以能在这里真编真跑：
+      # 键必须是 `<scope>.<name>`，视图靠**第一个点**切分去写覆盖 —— 写错就是"点了没反应"
+      # （写了一条永远不会命中的覆盖，不报错）。这一层 `swiftc -parse` 与 l10n 检查都挡不住。
+      - name: Spotify features catalog
+        run: |
+          swiftc Tests/SpotifyFeatures/main.swift \
+                 Sources/EeveeSpotify/Flags/SpotifyFeaturesCatalog.swift \
+                 -o spotify-features-tests
+          ./spotify-features-tests
+
       # 听歌统计的规则层（30 秒计一次播放、一拍封顶 3 秒、拖进度条不计、日桶/聚合/剪枝）。
       # model/store 是 Foundation-only，所以这里能直接编；录音器依赖 UIKit/MediaPlayer，不在这里。
       - name: Listening stats
@@ -127,6 +147,31 @@ jobs:
                  Sources/EeveeSpotify/Stats/ListeningStatsStore.swift \
                  -o listening-stats-tests
           ./listening-stats-tests
+
+      # 「导入流媒体历史」（2.4.0 的主功能）：ZIP 中央目录 + 裸 DEFLATE + 逐条 JSON 扫描
+      # + 按本地日聚合 + 跨次去重。
+      #
+      # 这一步还有第二重意义：本机没有 Swift 工具链，这三个新写的解析层文件在打包之前
+      # **没有任何东西编译过它们** —— 这里是唯一能把它们过一遍 `swiftc` 并真跑的地方。
+      # fixture（`Tests/StreamingHistoryImport/main.swift` 里那段 base64）是 Python 的
+      # `zipfile` 生成的：一条 stored 的 PDF + 一条 deflated 的扩展历史，所以两条
+      # 解压路径都真的被走到。
+      - name: Streaming history import (zip / folder / JSON)
+        run: |
+          swiftc Tests/StreamingHistoryImport/main.swift \
+                 Sources/EeveeSpotify/Stats/ListeningStatsModel.swift \
+                 Sources/EeveeSpotify/Stats/ListeningStatsStore.swift \
+                 Sources/EeveeSpotify/Stats/StreamingHistoryImport.swift \
+                 -o streaming-history-import-tests
+          ./streaming-history-import-tests
+
+      # 几何：底排 / 迷你条 / 标签栏的纯函数。七种屏幕宽度，钉住"不越界、不错位"。
+      - name: Layout geometry
+        run: |
+          swiftc Tests/LayoutGeometry/main.swift \
+                 Sources/EeveeSpotify/Appearance/LayoutGeometry.swift \
+                 -o layout-geometry-tests
+          ./layout-geometry-tests
 
       - name: URL ad classification (existing)
         run: |

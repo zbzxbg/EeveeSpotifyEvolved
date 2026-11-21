@@ -14,8 +14,7 @@ extension UserDefaults {
         defaultValue: LyricsOptions(
             musixmatchLanguage: Locale.current.languageCode ?? "",
             lrclibUrl: LrclibLyricsRepository.originalApiUrl,
-            geniusFallback: true,
-            hideOnError: false
+            geniusFallback: true
         )
     )
     static var lyricsOptions

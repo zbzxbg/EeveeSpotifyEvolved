@@ -144,20 +144,35 @@ enum FlagOverrideStore {
     /// 「默认就想要的覆盖」只种一次：用户把它们删掉之后**不再补**，否则删了也白删。
     private static let seedMarkerKey = "flagOverridesDidSeedDefaults"
 
+    /// iPad 那一档 Canvas 单独一个标记：老用户已经种过上面那条，
+    /// 不能因为旧 marker 已置位就把这一条漏掉。
+    private static let canvasIpadSeedMarkerKey = "flagOverridesDidSeedCanvasIpad"
+
     /// 启动早期调一次（要在配置改写之前）。
     ///
-    /// 目前只有一条：关掉 `ios-feature-canvas.canvas_enabled` —— 听歌页用静态封面。
-    /// 锁屏的动态封面走的是账号属性 `canvas-disabled` + track metadata 里的 `canvas.url`，
-    /// 与这条 flag 无关，两边可以共存（真机验证过：关掉后听歌页是静态封面，锁屏仍然动）。
-    /// 想重新在听歌页看到 Canvas，来「Flag 覆盖」把这一行删掉即可。
+    /// 两条默认覆盖：
+    /// · `ios-feature-canvas.canvas_enabled` —— 听歌页用静态封面；锁屏的动态封面走的是
+    ///   账号属性 `canvas-disabled` + track metadata 里的 `canvas.url`，与这条 flag 无关，
+    ///   两边可以共存（关掉后听歌页是静态封面，锁屏仍然动）；
+    /// · `ios-feature-canvas.canvas_enabled_ipad` —— iPad 上同样默认关：整页视频更费电，
+    ///   听歌页也更容易被 Canvas 页顶掉版式。
+    ///
+    /// 想重新打开，来「Flag 覆盖」把对应那一行删掉即可。
     static func seedDefaultsIfNeeded() {
-        guard !container.bool(forKey: seedMarkerKey) else { return }
-        container.set(true, forKey: seedMarkerKey)
+        if !container.bool(forKey: seedMarkerKey) {
+            container.set(true, forKey: seedMarkerKey)
+            seed(FlagOverride(name: "canvas_enabled", scope: "ios-feature-canvas", mode: .off))
+        }
+        if !container.bool(forKey: canvasIpadSeedMarkerKey) {
+            container.set(true, forKey: canvasIpadSeedMarkerKey)
+            seed(FlagOverride(name: "canvas_enabled_ipad", scope: "ios-feature-canvas", mode: .off))
+        }
+    }
 
-        let canvasOff = FlagOverride(name: "canvas_enabled", scope: "ios-feature-canvas", mode: .off)
-        // 用户自己已经设过同名覆盖（开或关）就别动他。
-        guard !all.contains(where: { $0.id == canvasOff.id }) else { return }
-        upsert(canvasOff)
+    /// 用户自己已经设过同名覆盖（开或关）就别动他。
+    private static func seed(_ override: FlagOverride) {
+        guard !all.contains(where: { $0.id == override.id }) else { return }
+        upsert(override)
     }
 
     // MARK: - 加锁的读改写

@@ -887,6 +887,8 @@ enum SpotifyResponsePatcher {
         // 见 `ScrollsitaLyricsElementInjector.logElementManifest`。
         if ScrollsitaLyricsElementInjector.shouldHandle(url) {
             ScrollsitaLyricsElementInjector.logElementManifest(url: url, body: buffer)
+            // 同一条响应里已经能读到曲目 id：趁 Spotify 还没来要歌词内容，先把词取回来。
+            LyricsPrefetch.consider(scrollsitaURL: url)
         }
 
         // 「禁用歌词功能」时把服务端下发的「歌词卡片」元素**摘掉** —— 否则卡片照样在

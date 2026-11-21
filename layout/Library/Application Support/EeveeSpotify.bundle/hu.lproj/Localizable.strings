@@ -87,7 +87,7 @@ unknown_error = "Ismeretlen hiba";
 // Instrumental Titles
 
 song_is_instrumental = "Ez a dal instrumentális.";
-let_the_music_play = "Hadd szóljon a zene...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

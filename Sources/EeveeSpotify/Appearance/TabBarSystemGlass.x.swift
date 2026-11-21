@@ -31,7 +31,7 @@ enum TabBarSystemGlass {
     /// `TabBarContainerImpl` 的类名：它是 Spotify 那条栏的容器 VC，按类名找它。
     private static let containerClassName = "_TtC23NavigationUI_TabBarImpl19TabBarContainerImpl"
 
-    static var isEnabled: Bool { UserDefaults.tabBarSystemGlass }
+    static var isEnabled: Bool { GlassLayout.tabBarSystemGlassEnabled }
 
     // MARK: - 状态（全部挂在**别人的对象**上：关联对象 / 弱注册表）
 
@@ -50,6 +50,10 @@ enum TabBarSystemGlass {
 
     /// 系统栏量出来的高度**只量一次**：让出高度之后 `sizeThatFits` 会要得更多。
     private static var measuredGlassHeight: CGFloat = 0
+    /// 上面那个高度是**按多宽**量的：换宽度（旋转 / 分屏 / 显示缩放）就得重量，别沿用旧值。
+    private static var measuredGlassWidth: CGFloat = 0
+    /// 上一次 `place` 时那条栏的尺寸：变了就把量到的内边距一并作废。
+    private static var lastGlassSize: CGSize = .zero
 
     /// UIKit 自己留的那圈内边距（**玻璃 = 宿主 − 它**）：**量一次就冻结**，见 `place`。
     private static var glassInsets: UIEdgeInsets?
@@ -188,6 +192,8 @@ enum TabBarSystemGlass {
         }
         restoreStockContent()
         measuredGlassHeight = 0
+        measuredGlassWidth = 0
+        lastGlassSize = .zero
         glassInsets = nil
         measuredInsetsBar = nil
         glassInsetsCount = -1
@@ -217,10 +223,27 @@ enum TabBarSystemGlass {
             if index < mirroredIcons.count, mirroredIcons[index] {
                 var glyphs: [UIView] = glyphViews(in: item)
                 if let iconView = findIconView(in: item) { glyphs.append(iconView) }
+                // 「创建」是白圆 + 加号，全部拿层画出来，没有 `IconView` 可认；
+                // 系统栏已经画了一颗加号 ⇒ 把这圈白底一起按掉，否则它会从玻璃后面露出来。
+                if TabBarGlassPlate.isCreateTab(item), let background = createTabBackground(in: item) {
+                    glyphs.append(background)
+                }
                 for glyph in glyphs { hide(glyph) }
             }
             for label in labelViews(in: item) { hide(label) }
         }
+    }
+
+    /// 「创建」那颗的白圆底（拿层画的，`findIconView` 认不到）。
+    private static func createTabBackground(in item: UIView, depth: Int = 0) -> UIView? {
+        guard depth <= 4 else { return nil }
+        for sub in item.subviews {
+            if sub.backgroundColor == .white, sub.bounds.width >= 24, sub.bounds.height >= 24 {
+                return sub
+            }
+            if let found = createTabBackground(in: sub, depth: depth + 1) { return found }
+        }
+        return nil
     }
 
     private static func hide(_ view: UIView) {
@@ -471,6 +494,17 @@ enum TabBarSystemGlass {
     /// ⇒ 宿主跟着变 ⇒ 玻璃肉眼可见地忽大忽小。冻结之后：量一次 → 之后每拍只按它摆位。
     private static func place(_ systemBar: UITabBar, in bar: UIView) {
         guard let host = hostView(for: bar) else { return }
+
+        // 栏的尺寸变了（旋转 / iPad 分屏 / 显示缩放）⇒ 之前量的高度与内边距都是按旧宽度量的，
+        // 继续用会把玻璃摆到旧位置。作废重测一次即可，下一拍就收敛。
+        if lastGlassSize != bar.bounds.size {
+            lastGlassSize = bar.bounds.size
+            measuredGlassHeight = 0
+            measuredGlassWidth = 0
+            glassInsets = nil
+            measuredInsetsBar = nil
+            glassInsetsCount = -1
+        }
         let target = TabBarGlassPlate.targetCapsuleRect(in: bar) ?? bar.bounds
 
         // UIKit 这块浮岛玻璃是**按 item 宽度**撑出来的（三颗 → platter 274；四颗 → 360），
@@ -592,7 +626,12 @@ enum TabBarSystemGlass {
             // 它们会把整块玻璃**三等分**。
             let muted = TabBarGlassPlate.isMutedTabItem(item)
             let title = (hidesLabels || muted) ? nil : labelText(of: item)
-            let image = muted ? nil : glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
+            var image = muted ? nil : glyphImage(of: item)?.withRenderingMode(.alwaysTemplate)
+            // 「创建」不是图标视图（白圆 + 加号都是层画的）⇒ `glyphImage` 拿不到。
+            // 系统栏统一给它一颗加号；原生那圈白底由 `hideStockContent` 按掉，避免两层叠着。
+            if !muted, TabBarGlassPlate.isCreateTab(item) {
+                image = UIImage(systemName: "plus")
+            }
             // ⚠️ `icons` / `titles` **每一格都要有**：`hideStockContent` 是按位置跟 `items` 对齐的。
             icons.append(image != nil)
             titles.append(title)
@@ -1384,7 +1423,12 @@ enum TabBarSystemGlass {
         let height = glassHeight(systemBar, width: bar.bounds.width)
         // Spotify 的常规宽度栏是固定 76pt、不吃 inset；窄宽度时它的栏就是 49 + inset。
         let compact = container.traitCollection.horizontalSizeClass == .compact
-        let room = compact ? max(0, ceil(height - stockRowHeight - inset)) : 0
+        let room = LayoutGeometry.tabBarRoom(
+            containerHeight: height,
+            stockRowHeight: stockRowHeight,
+            bottomInset: inset,
+            compact: compact
+        )
         guard abs(extra.bottom - room) > 0.5 else { return }
 
         rememberOriginalRoom(for: container, current: extra.bottom)
@@ -1399,7 +1443,8 @@ enum TabBarSystemGlass {
     }
 
     private static func glassHeight(_ systemBar: UITabBar, width: CGFloat) -> CGFloat {
-        if measuredGlassHeight > 0 { return measuredGlassHeight }
+        if measuredGlassHeight > 0, measuredGlassWidth == width { return measuredGlassHeight }
+        measuredGlassWidth = width
         measuredGlassHeight = systemBar
             .sizeThatFits(CGSize(width: max(width, 1), height: stockRowHeight))
             .height

@@ -237,6 +237,34 @@ struct ListeningStatsEntry: Equatable {
     var plays: Int
 }
 
+// MARK: - 导入过的来源
+
+/// 一个已经导入过（或部分导入过）的历史文件。
+///
+/// 两个字段各管一件事：
+/// · `fingerprint`：文件内容（长度 + FNV-1a）。指纹相同 = 同一份文件，整份跳过 ——
+///   用户把同一个导出包再导入一遍不会翻倍。
+/// · `latestTimestamp`：这份文件已经算到哪一刻。Spotify 的导出按年份区间分文件，
+///   **当年那份会随之后的时间继续变长**，于是指纹会变；这时只补「比上次最新那条更新」的
+///   记录，重叠的部分不会被加第二次。取的是**文件里出现过的最晚时间**，不是被接收记录
+///   的最晚时间 —— 被去重丢掉的那些也必须算作已覆盖。
+struct ListeningStatsImportedSource: Codable, Equatable {
+    var fingerprint: String
+    var latestTimestamp: Double
+}
+
+/// 一次导入真正并进 store 的内容（解析层的产物）。
+///
+/// 放在 model 里是因为 `ListeningStatsData.mergeImported` 要吃它，而 model 与 store
+/// 是那个 Foundation-only 测试目标里唯一被编译的两个文件 —— 解析层（`StreamingHistoryImport`）
+/// 反过来依赖这里的数据结构，不依赖具体文件格式。
+struct ListeningStatsImportAddition: Equatable {
+    var name: String
+    var fingerprint: String
+    var latestTimestamp: Double
+    var entries: [ListeningStatsEntry]
+}
+
 // MARK: - 汇总结果
 
 struct ListeningStatsTrackStat: Equatable, Identifiable {
@@ -297,6 +325,19 @@ struct ListeningStatsData: Codable, Equatable {
 
     var days: [String: [String: ListeningStatsTrackRecord]] = [:]
 
+    /// 导入过的历史文件（文件名 → 指纹 + 已覆盖到的时间）。`nil` = 从没导入过。
+    ///
+    /// 可选是刻意的：老版本写出来的文件里没有这两个键，`decodeIfPresent` 会让它们保持 nil，
+    /// 旧数据照常读出来。
+    var importedSources: [String: ListeningStatsImportedSource]? = nil
+
+    /// 导入过的最早一天（`yyyy-MM-dd`）。`prune` 以它为下限，导入的十年历史不会被
+    /// 400 天的保留期削掉。
+    ///
+    /// 只记一个日期而不是「每一天的集合」：比它新的桶原本就在保留期内，比它旧的天只可能
+    /// 来自导入（本机录音器写不出 400 天以前的数据），所以一个下限就够，文件也不会变胖。
+    var oldestImportedDay: String? = nil
+
     init() {}
 
     // MARK: 写
@@ -331,17 +372,64 @@ struct ListeningStatsData: Codable, Equatable {
         days[entry.dayKey] = dayMap
     }
 
+    /// 把导入解析出来的条目并进来，并记下这些文件的名字、指纹与覆盖到的时间。
+    ///
+    /// 去重（同一份文件不再导入、变长的文件只补新增）在解析层完成 —— 那里才知道每条记录的
+    /// 时间戳。这里只负责「并进日桶 + 记账」。
+    mutating func mergeImported(_ additions: [ListeningStatsImportAddition]) {
+        var sources = importedSources ?? [:]
+        var oldest = oldestImportedDay
+
+        for addition in additions {
+            for entry in addition.entries {
+                add(entry)
+
+                guard entry.seconds > 0 || entry.plays > 0 else { continue }
+                if let current = oldest {
+                    if entry.dayKey < current { oldest = entry.dayKey }
+                } else {
+                    oldest = entry.dayKey
+                }
+            }
+
+            // 条目为空也要记下这个来源：一个被整份去重掉的文件（它的记录已经算在别的文件里）
+            // 如果不记账，下次导入会重新解析它，而那些记录这次已经被别的来源认领过了。
+            sources[addition.name] = ListeningStatsImportedSource(
+                fingerprint: addition.fingerprint,
+                latestTimestamp: addition.latestTimestamp
+            )
+        }
+
+        importedSources = sources.isEmpty ? nil : sources
+        oldestImportedDay = oldest
+    }
+
     /// 丢掉比 `retentionDays - 1` 天前更早的桶（写盘前调用，文件不会无限长）。
+    ///
+    /// 下限会被 `oldestImportedDay` 拉低：导入的历史是想长期保留的，不能一写盘就被削掉。
     mutating func prune(now: Date = Date(), calendar: Calendar = .current) {
-        let cutoff = ListeningStatsDayKey.cutoffKey(
+        var cutoff = ListeningStatsDayKey.cutoffKey(
             daysBack: Self.retentionDays - 1,
             now: now,
             calendar: calendar
         )
+
+        if let oldest = oldestImportedDay, oldest < cutoff {
+            cutoff = oldest
+        }
+
         days = days.filter { $0.key >= cutoff }
     }
 
     // MARK: 读
+
+    /// 库里最早的那一天（`yyyy-MM-dd`）；一条记录都没有时是 nil。
+    ///
+    /// 设置页用它回答"为什么切到 30 天 / 一年 / 全部，数字和 7 天一样" ——
+    /// 因为库里本来就只有这几天的数据。没有这一行时，用户看到的是"切换没反应"。
+    var oldestDayKey: String? {
+        days.keys.min()
+    }
 
     /// 按时间范围聚合。
     ///

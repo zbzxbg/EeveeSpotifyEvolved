@@ -14,6 +14,12 @@ final class ListeningStatsViewModel: ObservableObject {
     /// 近 7 天逐日总秒数（柱子）。
     @Published private(set) var dailyTotals: [ListeningStatsDayTotal] = []
 
+    /// 库里最早的一天（`yyyy-MM-dd`）；没有数据时为 nil。
+    ///
+    /// 页面上显示成「数据自 … 起」：30 天 / 一年 / 全部 三档在**只有最近几天数据**时
+    /// 和 7 天档的数字完全一样，没有这一行就只能靠猜。
+    @Published private(set) var firstDayKey: String?
+
     @Published private(set) var isLoading = false
 
     private let store: ListeningStatsStore
@@ -46,11 +52,13 @@ final class ListeningStatsViewModel: ObservableObject {
             queue.async {
                 let summary = data.summary(period: period, now: now, calendar: calendar)
                 let dailyTotals = data.dailyTotals(now: now, calendar: calendar)
+                let firstDayKey = data.oldestDayKey
 
                 DispatchQueue.main.async {
                     guard let self, self.requestGeneration == generation else { return }
                     self.summary = summary
                     self.dailyTotals = dailyTotals
+                    self.firstDayKey = firstDayKey
                     self.isLoading = false
                 }
             }

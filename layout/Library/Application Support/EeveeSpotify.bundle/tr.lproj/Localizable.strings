@@ -48,8 +48,6 @@ genius_fallback = "Genius Alternatifi";
 genius_fallback_description = "%@ ile ilgili bir sorun olduğunda şarkı sözlerini Genius'tan yükler.";
 
 
-hide_lyrics_on_error = "Hata Durumunda Gizle";
-hide_lyrics_on_error_description = "Şarkı sözleri yüklenemezse şarkı sözü bileşenini kaldırır.";
 
 
 musixmatch_language = "Musixmatch Şarkı Sözü Dili";
@@ -113,7 +111,7 @@ unknown_error = "Bilinmeyen Hata";
 // Instrumental Titles
 
 song_is_instrumental = "Bu şarkı enstrümantaldir.";
-let_the_music_play = "Bırak müzik çalsın...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 
@@ -138,9 +136,7 @@ debug_title = "Hata Ayıklama";
 export_debug_log = "Hata Günlüğünü Dışa Aktar";
 clear_debug_log = "Hata Günlüğünü Temizle";
 debug_log_cleared = "Hata günlüğü temizlendi.";
-debug_log_cleared_ok = "Tamam";
 no_debug_log_found = "Hata günlüğü bulunamadı. Günlük, uygulama başlatıldığında kaydetmeye başlar.";
-no_debug_log_found_ok = "Tamam";
 
 // Full reset
 resetButtonTitle = "Tam Sıfırlama";
@@ -165,7 +161,6 @@ showColoredOverlay = "İlerleme çubuğunda renkli katmanı göster";
 showToast = "Atlama sırasında bildirim göster";
 skipToast = "Atlama bildirimi eylem butonları (oy ver / geri al / gizle)";
 respectManualSeek = "Manuel sarmaya saygı duy (tekrar atlama)";
-categoriesHeader = "Kategoriler";
 categoriesFooter = "Kapalı · Göster · Manuel · Otomatik. Değiştirmek için renkli daireye dokunun.";
 
 selfpromo_category = "Ücretsiz/Kendi Tanıtımı";
@@ -180,7 +175,6 @@ exclusive_access_category = "Özel Erişim";
 action_disabled = "Kapalı";
 action_show = "Göster";
 action_manual = "Manuel";
-action_auto = "Otomatik";
 
 draftsTitle = "Raporlama ve taslaklar";
 errorNoPodcats = "Şu anda hiçbir podcast çalınmıyor.";

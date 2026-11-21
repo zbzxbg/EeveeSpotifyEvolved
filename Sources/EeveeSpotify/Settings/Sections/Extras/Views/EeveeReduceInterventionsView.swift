@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// 「减少打扰」独立页：把 Spotify 自己的**提示 / 推广 / 新功能气泡**逐条关掉。
 ///
@@ -28,17 +27,12 @@ import UIKit
 /// * 少数 flag（`observedValue` 为空 = 只在 IPA 字面量表里见过）是否被服务端采纳，
 ///   只能从 `[Flags] replacement … N match(es)` 判断。
 ///
-/// ## 二级入口：完整的 flag 清单
+/// ## 这里没有通往「Flag 覆盖」页的入口
 ///
-/// 这一页只列**目录里写好了人话文案**的那些提示。要改别的 flag（搜索、按类型编辑、
-/// 手动写入一条服务端没下发过的）走页底那一行「Flag 覆盖」——
-/// 它推的是自动扫出来的浏览器（`EeveeFlagBrowserView`），两页写同一张
-/// `FlagOverrideStore`。浏览器还要继续推「手动写入」，所以它需要导航栈：
-/// 本页自己不造栈，由根页把 `navigationController` 传进来。
+/// 这一页只列目录里写好了人话文案的提示，开关写的仍是同一张 `FlagOverrideStore`，
+/// 所以「Flag 覆盖」页里手写或手删的条目，这里也照实显示。要改别的 flag 走根设置页的
+/// 「Flag 覆盖」一行 —— 两个页面各管各的，同一个动作不在两处重复出现。
 struct EeveeReduceInterventionsView: View {
-
-    /// 从根页传进来的导航栈 —— 只用于推「Flag 覆盖」浏览器（见类型说明）。
-    let navigationController: UINavigationController
 
     /// 当前**已生效**的覆盖表（页面重进时用它反查，而不是自己记状态）。
     @State private var overrides = FlagOverrideStore.all
@@ -49,7 +43,7 @@ struct EeveeReduceInterventionsView: View {
             if let master = Self.masterFlag {
                 Section(
                     header: Text("reduce_interventions_master".localized),
-                    footer: Text("reduce_interventions_master_footer".localized)
+                    footer: Text("reduce_interventions_master_footer".localizeWithFormat("restart_is_required_description".localized))
                 ) {
                     // ⚠️ 这一行的标签/说明键是**写死**的（不像其它行由 flag 名拼出来），
                     // 所以单独造一个 `Row` 传给同一个渲染函数 —— 上一版这里漏改，
@@ -74,36 +68,10 @@ struct EeveeReduceInterventionsView: View {
                     }
                 }
             }
-
-            // ── 二级入口：完整的 flag 清单 / 手动写入
-            //
-            // 这一页只覆盖"目录里写好文案的提示"；想看全部扫出来的 flag、或手写一条
-            // 服务端没下发过的，走这一行。入口放在最后：日常用的是上面那些开关。
-            Section(footer: Text("settings_sub_flags".localized)) {
-                Button(action: pushFlagBrowser) {
-                    HStack {
-                        Image(systemName: "slider.horizontal.3")
-                        Text("flag_override_title".localized)
-                        Spacer()
-                        ChevronRightView()
-                    }
-                }
-            }
         }
                 // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .onAppear { overrides = FlagOverrideStore.all }
-    }
-
-    /// 推「Flag 覆盖」浏览器。它还要继续推「手动写入」那一页，所以必须拿到同一个导航栈；
-    /// 本页的栈由根页传进来（见类型说明）。
-    private func pushFlagBrowser() {
-        let controller = EeveeSettingsViewController(
-            navigationController.view.frame,
-            settingsView: AnyView(EeveeFlagBrowserView(navigationController: navigationController)),
-            navigationTitle: "flag_override_title".localized
-        )
-        navigationController.pushViewController(controller, animated: true)
     }
 
     // MARK: - 行模型
@@ -131,10 +99,6 @@ struct EeveeReduceInterventionsView: View {
         Toggle(isOn: binding(for: row.flag)) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.labelKey.localized)
-                // flag 名留在副标题里：这一页的价值之一就是"看得见它关的是哪条"。
-                Text("\(row.flag.scope).\(row.flag.name)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
                 Text(row.descriptionKey.localized)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -162,8 +126,8 @@ struct EeveeReduceInterventionsView: View {
 
     /// 覆盖表里的稳定 id。
     ///
-    /// ⚠️ **不能写 `flag.id`**：`KnownFlag` 只有 `name` / `scope` / `type` / `observedValue` /
-    /// `noteKey`，**没有 `id`** —— 有 `id` 的是 `FlagOverride`。
+    /// ⚠️ **不能写 `flag.id`**：`KnownFlag` 只有 `name` / `scope` / `type` / `observedValue`，
+    /// **没有 `id`** —— 有 `id` 的是 `FlagOverride`。
     /// 规则必须与 `FlagOverride.id` 那行（`scope.isEmpty ? name : "\(scope).\(name)"`）
     /// **逐字一致**，否则这一页反查不到已存在的覆盖，「Flag 覆盖」页里手写的条目会显示成"没关"。
     /// 这里 scope 恒非空（目录里每条都带 scope），但空 scope 的分支照抄，保持与那边同构。

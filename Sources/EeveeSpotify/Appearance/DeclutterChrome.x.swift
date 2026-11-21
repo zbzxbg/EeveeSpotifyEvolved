@@ -181,6 +181,16 @@ enum DeclutterChrome {
         UserDefaults.nowPlayingAnyLayout && UserDefaults.hideNowPlayingPills
     }
 
+    /// 这一拍要藏的是哪两颗 —— **播客上不藏**。
+    ///
+    /// `nowplaying-npv-musicvideos-switch` 在视频播客上就是「切换至音频」：那是**功能**，
+    /// 藏掉之后用户没法把视频切回音频（真机上丢的就是这颗）。音乐页上它才是"切到 MV"的噪音。
+    /// 写回方向（`wantVanished: false`）会顺手把之前藏掉的那颗 `alpha` 放回去，
+    /// 所以"音乐 → 播客"的转场里它会自己回来。
+    private static var hidesNowPlayingPillsNow: Bool {
+        hideNowPlayingPills && !NowPlayingPodcastFallback.isActive
+    }
+
     /// 事件 hook 用：这颗 `Primary` 按钮带着我们关心的 id 吗？
     /// 命中就记下来并**当场**处理 —— 胶囊出现的那一帧就没了，不用等 0.3s 的复查节拍。
     static func notePillIfOurs(_ view: UIView) {
@@ -193,14 +203,15 @@ enum DeclutterChrome {
         } else {
             videoPill = view
         }
-        apply(wantVanished: hideNowPlayingPills, to: view)
+        apply(wantVanished: hidesNowPlayingPillsNow, to: view)
     }
 
     /// 复查节拍那一条：把记住的那两颗重新施加一遍（Spotify 会自己把 `alpha` 写回来）。
     /// 只在开关开着、且有已记住的引用时才写；**没有引用时不走查**（走查交给事件 hook）。
     static func reconcileNowPlayingPills() {
+        let wantVanished: Bool = hidesNowPlayingPillsNow
         for view in [lyricsPill, videoPill].compactMap({ $0 }) where view.window != nil {
-            apply(wantVanished: hideNowPlayingPills, to: view)
+            apply(wantVanished: wantVanished, to: view)
         }
     }
 

@@ -44,8 +44,6 @@ genius_fallback = "Se rabattre sur Genius";
 genius_fallback_description = "Charger les paroles depuis Genius en cas de problème avec %@.";
 
 
-hide_lyrics_on_error = "Cacher en cas d'erreur";
-hide_lyrics_on_error_description = "Retirer le composant des paroles si celles-ci échouent à se charger.";
 
 
 musixmatch_language = "Langue des paroles Musixmatch";
@@ -101,7 +99,7 @@ unknown_error = "Erreur inconnue";
 // Instrumental Titles
 
 song_is_instrumental = "Ce titre est instrumental.";
-let_the_music_play = "Laissez la musique jouer...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

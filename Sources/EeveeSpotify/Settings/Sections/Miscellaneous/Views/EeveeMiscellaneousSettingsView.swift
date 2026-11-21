@@ -62,7 +62,7 @@ struct EeveeMiscellaneousSettingsView: View {
                 }
             }
 
-            Section(footer: Text("block_rating_prompts_description".localized)) {
+            Section(footer: Text("block_rating_prompts_description".localizeWithFormat("restart_is_required_description".localized))) {
                 Toggle(
                     "block_rating_prompts".localized,
                     isOn: Binding<Bool>(

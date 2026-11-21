@@ -38,8 +38,6 @@ user_token_placeholder = "User Token halnus ya Debug Info paste garnuhos";
 genius_fallback_description = "Yadi %@ ma samasya aayo bhane Genius bata lyrics load garney.";
 
 
-hide_lyrics_on_error = "Hide on Error";
-hide_lyrics_on_error_description = "Lyrics load vayena vaney Lyrics component lai hataune.";
 
 
 musixmatch_language = "Musixmatch Lyrics ko Language";
@@ -88,7 +86,7 @@ no_such_song = "Kunai Geet Paayena";
 // Instrumental Titles
 
 song_is_instrumental = "Yo geet instrumental ho.";
-let_the_music_play = "Geet bajna dinuhos...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

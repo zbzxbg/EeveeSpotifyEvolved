@@ -44,8 +44,6 @@ user_token_placeholder = "Inserisci il Token Utente o incolla le informazioni di
 genius_fallback_description = "Carica i testi da Genius se c'è un problema con %@.";
 
 
-hide_lyrics_on_error = "Nascondi in caso di errore";
-hide_lyrics_on_error_description = "Rimuovi il testo se il caricamento fallisce.";
 
 
 musixmatch_language = "Lingua testi Musixmatch";
@@ -101,7 +99,7 @@ unknown_error = "Errore sconosciuto";
 // Instrumental Titles
 
 song_is_instrumental = "Questa canzone è strumentale.";
-let_the_music_play = "Lascia che la musica suoni...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 
@@ -147,7 +145,6 @@ eevee_inline_subtitle_text = "Patch, testi, personalizzazioni ed esperimenti";
 "showToast" = "Mostra avviso quando si salta";
 "skipToast" = "Pulsanti di azione nell'avviso di salto (vota / annulla / nascondi)";
 "respectManualSeek" = "Rispetta la ricerca manuale (non saltare di nuovo)";
-"categoriesHeader" = "Categorie";
 "categoriesFooter" = "Off · Mostra · Manuale · Auto. Tocca il cerchio colorato per modificare.";
 
 "selfpromo_category" = "Autopromozione / Non pagata";

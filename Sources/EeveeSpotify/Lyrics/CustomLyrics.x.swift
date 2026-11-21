@@ -748,8 +748,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     /// · 「隐藏 Spotify 官方歌词」开关关着；
     /// · 歌词功能整体被禁用。
     ///
-    /// - Parameter note: 占位里追加的一行说明（例如"取词期间切了歌"）。失败原因能说清时传它，
-    ///   否则只写「未找到歌词」。占位的构造见 `makeUnavailableLyrics`。
+    /// - Parameter note: 占位第二行的说明（例如"取词期间切了歌"）。失败原因能说清时传它，
+    ///   否则第二行留空、只写「未找到歌词」。占位的构造见 `makeUnavailableLyrics`。
     private func unavailableLyricsPayload(original: Lyrics?, note: String? = nil) -> Lyrics? {
         // 「Apple Music 官方 TTML」是**总覆盖**实验 —— 它连"要不要顶掉官方歌词"这两个策略
         // 开关一起忽略（否则隐藏 Spotify 官方歌词时，实验取词失败会掉回
@@ -772,8 +772,10 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     /// 另一个是 URLSession 侧的"响应兜底"（见 `unavailableLyricsBytes`）。
     /// 两处必须长得一模一样，否则用户会在不同失败路径上看到不同文案。
     ///
-    /// - Parameter note: 有值时**追加一行**说明（例如"这首歌正在切换"）。
-    /// 传 nil 时只有一行"未找到歌词"（历史上是三行：通知 + 空行 + 提示行）。
+    /// - Parameter note: 有值时放在**第二行**（例如"这首歌正在切换"），没有时那一行留空。
+    ///
+    /// 这里固定三行，与纯音乐占位同一形状：那条三行是上游 `LyricsDto.toSpotifyLyricsData`
+    /// 就有的（通知 + 第二行 + 空行），两块占位在原生歌词页上占同样的高度。
     func makeUnavailableLyrics(originalColors: LyricsColors?, note: String?) -> Lyrics {
         // 占位文案要有行级时间轴。
         //
@@ -781,16 +783,15 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         // 东西 —— 没有时间轴就等于连"未找到歌词"都显示不出来，的是
         // **彻底没有歌词模块**。（真实歌词源那条合成已删除，占位这条保留。）
         // ⚠️ 提示行 `ngzhwm_lyrics_unavailable_hint`（"可以在设置里换一个歌词来源…"）
-        // 已随中文本地化一起删除 —— 占位现在只有"未找到歌词"一行（`note` 有值时追加一行）。
+        // 已随中文本地化一起删除，第二行现在只放 `note`（失败原因说得清时才有）。
         // 只删文案、留代码的话，两个 locale 都拿不到这个 key，界面会直接把 key 名当文案显示。
-        // 要把提示加回来：恢复下面那行 `LyricsLineDto(content: "…_hint".localized)`，
+        // 要把提示加回来：把那行 `LyricsLineDto(content: "…_hint".localized)` 放回第二行，
         // 并在 en / zh-CN 两个 `Localizable.strings` 里补回该 key。
         var placeholderLines = [
-            LyricsLineDto(content: "lyrics_unavailable".localized)
+            LyricsLineDto(content: "lyrics_unavailable".localized),
+            LyricsLineDto(content: note ?? ""),
+            LyricsLineDto(content: "")
         ]
-        if let note, !note.isEmpty {
-            placeholderLines.append(LyricsLineDto(content: note))
-        }
 
         // ⚠️ 这里**写死**补时间轴，不看任何开关。
         //
@@ -1071,7 +1072,10 @@ func unavailableLyricsBytes(original: Lyrics?, note: String? = nil) -> Data? {
     return data
 }
 
-func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics? = nil) throws -> Data {
+func getLyricsDataAndPlaceholderFlag(
+    _ originalPath: String,
+    originalLyrics: Lyrics? = nil
+) throws -> (data: Data, isPlaceholder: Bool) {
     writeDebugLog("[Lyrics] Request for \(originalPath)")
 
     // 署名先清空：这一次到底问过哪个源，要等 `requestSingleSource` 写回来。
@@ -1186,14 +1190,14 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
             // 在这里（挂在下面那个"放行官方歌词"的分支上就永远不会显示）。
             if let placeholder = unavailableLyricsPayload(original: originalLyrics, note: placeholderNote) {
                 writeDebugLog("[Lyrics] official lyrics hidden — serving our placeholder")
-                return try placeholder.serializedBytes()
+                return (try placeholder.serializedBytes(), true)
             }
             // 兜底：「隐藏官方歌词」关着时上面返回 nil（继续用官方歌词），但 trackMismatch /
             // noCurrentTrack 连"官方歌词属于哪一首"都不确定，同样不能空手而归。
             if lyricsError == .trackMismatch || lyricsError == .noCurrentTrack {
                 writeDebugLog("[Lyrics] \(lyricsError!) — serving fallback so the card is created")
                 if let data = unavailableLyricsBytes(original: originalLyrics, note: placeholderNote) {
-                    return data
+                    return (data, true)
                 }
             }
         }
@@ -1271,7 +1275,12 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
     // 而那份 protobuf 是**先前**构造的 —— 与 dto 分属两个时刻，正是"注解慢一拍"的老毛病。
     // 需要提供者时读 `currentLyricsProvider` / `currentLyricsDto?.providerName`。
 
-    return try lyrics.serializedBytes()
+    return (try lyrics.serializedBytes(), false)
+}
+
+/// 兼容旧调用点：只关心 payload，不关心它是不是占位。
+func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics? = nil) throws -> Data {
+    try getLyricsDataAndPlaceholderFlag(originalPath, originalLyrics: originalLyrics).data
 }
 
 /// 改完歌词偏移后，把**当前已经显示**的歌词按差值平移，并通知观察者重挂。

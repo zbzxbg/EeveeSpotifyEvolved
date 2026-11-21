@@ -21,7 +21,7 @@ import EeveeSpotifyC
 enum MiniBarGlassPlate {
 
     /// 开关：设置 → EeveeSpotify → 扩展功能 → 迷你播放条 →「迷你播放条用液态玻璃」，默认开。
-    static var isEnabled: Bool { UserDefaults.miniBarGlass }
+    static var isEnabled: Bool { GlassLayout.miniBarGlassEnabled }
 
     /// 内容视图在真机树里的 id（它的类名只是裸 `UIView`，认不了类，只能认 id）。
     private static let contentIdentifier = "SPTNowPlayingBar"
@@ -80,7 +80,7 @@ enum MiniBarGlassPlate {
 
         // ① 胶囊几何：与标签栏那条等宽（按栏宽比例）、等高（共用常量）。
         // 胶囊比内容高 4pt（上下各 2pt），与标签栏那条之间仍留出可见间隙，不粘连。
-        let width = capsuleWidth(in: host)
+        let width = capsuleWidth(in: host, content: content)
         let target = capsuleFrame(in: host, content: content, width: width)
 
         let plate: UIVisualEffectView
@@ -196,15 +196,21 @@ enum MiniBarGlassPlate {
 
     // MARK: - 几何
     //
-    // 胶囊宽度 = 标签栏那条胶囊的宽度（两条等宽）。
-    //
+    // iPhone：胶囊宽度 = 标签栏那条胶囊的宽度（两条等宽）。
     // 用"标签栏胶囊宽 ÷ 栏宽"这个比例 × 本宿主的宽来算 —— 换设备、换屏幕宽度都不会走样；
     // 标签栏还没摆过（冷启动第一帧）时退回兜底比例。上限是宿主自己的宽。
+    //
+    // iPad：没有那条 iPhone 标签栏可对齐（栏玻璃在 iPad 上不装）⇒ 玻璃贴着迷你条
+    // **自己的内容**走：内容宽 + 左右各 12，再夹在宿主宽度与 160 之间。
     @MainActor
-    private static func capsuleWidth(in host: UIView) -> CGFloat {
+    private static func capsuleWidth(in host: UIView, content: UIView) -> CGFloat {
+        if UIDevice.current.isIpad {
+            let ratio = min(1, (content.bounds.width + 24) / max(host.bounds.width, 1))
+            return LayoutGeometry.miniPlateWidth(hostWidth: host.bounds.width, usableRatio: ratio)
+        }
         let ratio = TabBarGlassPlate.capsuleWidthRatio
         let usable = (ratio > 0.4 && ratio < 1.0) ? ratio : fallbackWidthRatio
-        return min(host.bounds.width, max(160, host.bounds.width * usable))
+        return LayoutGeometry.miniPlateWidth(hostWidth: host.bounds.width, usableRatio: usable)
     }
 
     /// 内容要等比缩到多少：让它左右各留 `sideInset` 之后正好放进胶囊。

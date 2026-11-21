@@ -74,7 +74,8 @@ struct TabBarAndMiniBarSettingsView: View {
                 )
 
                 // 「有个按键在音乐库的右边，叫创建歌单。能不能不要这个功能了。
-                // 即液态玻璃只显示主页，搜索，音乐库三个按键」——**默认开**（就是他要的结果）。
+                // 即液态玻璃只显示主页，搜索，音乐库三个按键」——**默认关**：创建那颗留着，
+                // 想藏的时候自己打开（打开后下面的做法才生效）。
                 // 做法：**保住「创建」在 stack 里的槽位、只把内容藏起来**（`alpha = 0` + 点不到）
                 // ⇒ 那一块收不到点击（入口真没了），而玻璃/迷你条的**宽度不变**
                 // （用户第二条要求："关掉创建之后玻璃宽度不变"；`isHidden` 那种写法会让
@@ -101,14 +102,18 @@ struct TabBarAndMiniBarSettingsView: View {
                 Toggle(
                     "tab_bar_system_glass".localized,
                     isOn: settingsShadowBinding($shadow.tabBarSystemGlass) { value in
+                        // 只写"下一份值"：本会话要不要装玻璃由启动快照决定（见 `GlassLayout`），
+                        // 落地交给页底的「立即重启」。中途插/拆要动 Spotify 的视图树，不做。
                         UserDefaults.tabBarSystemGlass = value
-                        if value {
-                            TabBarSystemGlass.reapply()
-                        } else {
-                            TabBarSystemGlass.remove(reason: "switch off")
-                        }
                     }
                 )
+                .disabled(!GlassLayout.isEligible)
+
+                if !GlassLayout.isEligible {
+                    Text("glass_iphone_only_footer".localized)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
             }
 
             // 迷你播放条：点名要的。
@@ -124,9 +129,8 @@ struct TabBarAndMiniBarSettingsView: View {
                 Toggle(
                     "mini_bar_glass".localized,
                     isOn: settingsShadowBinding($shadow.miniBarGlass) { value in
+                        // 与标签栏那条同一套语义：只写下一次启动要用的值，本会话按启动快照跑。
                         UserDefaults.miniBarGlass = value
-                        // 迷你条的布局回合不常有：改完当场落地（撤玻璃/还原底色都在这一句里）。
-                        MiniBarGlassPlate.reconcileNow()
                     }
                 )
 
@@ -190,21 +194,22 @@ struct TabBarAndMiniBarSettingsView: View {
                 }
             }
 
-            // 两颗只在启动时读 ⇒ 当前值与启动快照不一样才显示「立即重启」。
-            RestartSection(visible: amoledTheme != Theme.launchAmoled || accentRGB != Theme.launchAccent)
+            // 两颗主题只在启动时读；两条玻璃同理（本会话按启动快照跑）⇒ 值变了就提示重启。
+            RestartSection(
+                visible: amoledTheme != Theme.launchAmoled
+                    || accentRGB != Theme.launchAccent
+                    || GlassLayout.needsRestart
+            )
 
             SettingsResetSection(
                 keys: Self.ownedKeys,
                 afterReset: {
                     shadow = Shadow()
 
-                    // 顺序有讲究：先把内容取舍跑一遍（藏/放「创建」），再按当前值落地玻璃。
+                    // 先跑内容取舍（藏/放「创建」），再让迷你条按当前设置重铺一次。
+                    // 两条玻璃本身**不在这里装/拆**：它们只由启动快照决定，
+                    // 重置把值改回默认之后，页底的「立即重启」负责落地。
                     TabBarGlassPlate.refreshCreateTabVisibility()
-                    if UserDefaults.tabBarSystemGlass {
-                        TabBarSystemGlass.reapply()
-                    } else {
-                        TabBarSystemGlass.remove(reason: "reset this page")
-                    }
                     MiniBarGlassPlate.reconcileNow()
                 }
             )

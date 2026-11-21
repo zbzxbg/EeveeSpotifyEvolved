@@ -49,8 +49,6 @@ extension NowPlayingIOS27 {
 
     /// 我们画的三颗字形：id 前缀 + 名字（从左到右）。
     static let footerGlyphIdentifierPrefix = "eevee-ios27-footer-"
-    /// AM 的三个中心 x（414×896 上量的；页面比这窄/宽时按比例换算）。
-    static let footerGlyphCentres: [CGFloat] = [86, 207, 328]
     /// 字形方框边长（AM 那颗气泡 ≈ 26pt）。
     static let footerGlyphBox: CGFloat = 26
     /// 可点区域边长。
@@ -301,20 +299,18 @@ extension NowPlayingIOS27 {
         }
 
         let box = footerGlyphBox
-        let scale = page.bounds.width / 414
+        let glyphFrames = LayoutGeometry.footerFrames(
+            containerWidth: page.bounds.width,
+            midY: midY,
+            box: box
+        )
         var changed = false
         var frames: [CGRect] = []
         let symbols = ["quote.bubble", "airplayaudio", "list.bullet"]
         let names = ["lyrics", "connect", "queue"]
 
         for (index, name) in names.enumerated() {
-            let centreX = footerGlyphCentres[index] * scale
-            let frame = CGRect(
-                x: (centreX - box / 2).rounded(),
-                y: (midY - box / 2).rounded(),
-                width: box,
-                height: box
-            )
+            let frame = glyphFrames[index]
             frames.append(frame)
 
             let identifier = footerGlyphIdentifierPrefix + name

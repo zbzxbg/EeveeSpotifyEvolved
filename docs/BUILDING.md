@@ -2,7 +2,7 @@
 
 You supply your own decrypted Spotify IPA. This repository never ships one and never says where to get one — see [LEGAL.md](LEGAL.md).
 
-Two paths: **CI** (nothing installed locally) and **a local build on macOS**. Both take a decrypted Spotify 9.2.0 (or 9.1.88) IPA and produce an unsigned `-patched.ipa` / `.ipa` to sign yourself.
+Two paths: **CI** (nothing installed locally) and **a local build on macOS**. Both take your decrypted Spotify IPA (9.2.2 is what releases are tested with) and produce an unsigned `-patched.ipa` / `.ipa` to sign yourself.
 
 ## CI (nothing installed locally)
 

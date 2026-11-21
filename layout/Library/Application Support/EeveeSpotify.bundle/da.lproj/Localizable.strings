@@ -43,8 +43,6 @@ genius_fallback = "Genius fallback";
 genius_fallback_description = "Indlæs tekster fra Genius hvis der er et problem med %@.";
 
 
-hide_lyrics_on_error = "Skjul ved fejl";
-hide_lyrics_on_error_description = "Fjern sangtekstskomponenten hvis sangtekster ikke kunne indlæses.";
 
 
 musixmatch_language = "Musixmatch sprog";
@@ -100,7 +98,7 @@ unknown_error = "Ukendt fejl";
 // Instrumental Titles
 
 song_is_instrumental = "Denne sang er instrumental.";
-let_the_music_play = "Lad musikken spille...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

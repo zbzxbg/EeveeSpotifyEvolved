@@ -13,6 +13,8 @@ extension UserDefaults {
     /// 歌词系统翻译（Apple `Translation` 框架，纯本地），见 `LyricsAutoTranslation`。
     private static let lyricsAutoTranslateKey = "lyricsAutoTranslate"
     private static let hasShownCommonIssuesTipKey = "hasShownCommonIssuesTip"
+    /// iPad 上的一次性回退跑过没有（见 `IPadFallback`）：跑过之后尊重用户后来重新打开的开关。
+    private static let ipadFallbackHandledKey = "ipadFallbackHandled"
     private static let hasPatchedBootstrapKey = "eeveeHasPatchedBootstrap"
     private static let iconNamePrettifyKey = "iconNamePrettify"
     private static let cleanShareLinksKey = "cleanShareLinks"
@@ -262,6 +264,15 @@ extension UserDefaults {
         }
         set (hasShownCommonIssuesTip) {
             container.set(hasShownCommonIssuesTip, forKey: hasShownCommonIssuesTipKey)
+        }
+    }
+
+    static var ipadFallbackHandled: Bool {
+        get {
+            container.bool(forKey: ipadFallbackHandledKey)
+        }
+        set (handled) {
+            container.set(handled, forKey: ipadFallbackHandledKey)
         }
     }
 
@@ -1057,7 +1068,7 @@ extension UserDefaults {
     /// （见 `TabBarGlassPlate.applyCreateTabVisibility`）。
     static var tabBarHideCreate: Bool {
         get {
-            container.object(forKey: tabBarHideCreateKey) as? Bool ?? true
+            container.object(forKey: tabBarHideCreateKey) as? Bool ?? false
         }
         set {
             container.set(newValue, forKey: tabBarHideCreateKey)

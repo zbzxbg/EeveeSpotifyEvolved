@@ -44,8 +44,6 @@ genius_fallback = "Переключатися на Genius";
 genius_fallback_description = "Завантажувати тексти з Genius у разі проблеми з %@.";
 
 
-hide_lyrics_on_error = "Приховати при помилці";
-hide_lyrics_on_error_description = "Видалити компонент тексту пісні, якщо не вдалося завантажити текст.";
 
 
 musixmatch_language = "Мова текстів Musixmatch";
@@ -100,7 +98,7 @@ unknown_error = "Невідома помилка";
 // Instrumental Titles
 
 song_is_instrumental = "Це інструментальна композиція.";
-let_the_music_play = "Нехай зазвучить музика...";
+let_the_music_play = "♪";
 
 // liked songs title, should match official spotify loc
 

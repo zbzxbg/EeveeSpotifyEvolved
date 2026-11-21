@@ -87,7 +87,7 @@ unknown_error = "Erro Desconhecido";
 // Instrumental Titles
 
 song_is_instrumental = "Esta faixa é instrumental.";
-let_the_music_play = "Deixa a música tocar...";
+let_the_music_play = "♪";
 
 // Título de músicas gostadas, deve corresponder à localização oficial do Spotify
 

@@ -302,7 +302,7 @@ func eeveeEnvFlag(_ name: String) -> Bool {
 // `SPTPlayerTrack` 存在。运行时探针在本机不可观测也不可控，别再走那条路。
 
 struct EeveeSpotify: Tweak {
-    static let version = "2.3.0"
+    static let version = "2.4.0"
     static let repoSlug = GeneratedConfig.repoSlug
     
     static var hookTarget: VersionHookTarget {
@@ -609,6 +609,11 @@ struct EeveeSpotify: Tweak {
         // ⚠️ 关掉它仍然是"完全不动"（内容与高度精确写回），见
         // `UserDefaults.applyTabBarSystemGlassDefaultIfNeeded` 的注释。
         UserDefaults.applyTabBarSystemGlassDefaultIfNeeded()
+        // iPad 上的一次性回退：两条玻璃都是按 iPhone 标签栏量的，回退为原生外观并告诉用户。
+        // 必须在默认值补偿之后、启动快照之前 —— 这次会话就按回退后的值走。
+        IPadFallback.applyIfNeeded()
+        // 两条玻璃的启动快照：设置页写的是"下一份值"，本会话一律按这一次的值跑。
+        GlassLayout.captureLaunchSnapshot()
         // （整合以下功能…名字为：修改Spotify听歌页布局…默认开启）：
         // 把听歌页那五件结构改动（取色底 / 隐藏播放页模块 / 隐藏官方单行歌词 /
         // 隐藏两颗胶囊 / 歌词进播放器）收进一颗总开关。每次启动都把盘上那五颗键

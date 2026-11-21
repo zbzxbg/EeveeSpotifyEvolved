@@ -110,6 +110,9 @@ enum NowPlayingIOS27 {
     /// "Canvas 页的卡藏掉了"只报一行。
     static var didLogCanvas = false
 
+    /// 播客让位状态：本层为播客整层退场时置位，回到音乐时清掉。只在翻转的那一拍打日志。
+    static var podcastBypass = false
+
     /// Spotify 那张**真正画封面**的壳（`Encore.ImageView`，366×366）。
     static weak var artworkShell: UIView?
     /// 我们自己画的那张封面 + 它的宿主（整页 cell）。
@@ -274,6 +277,11 @@ enum NowPlayingIOS27 {
             restore(reason: "switch off")
             return
         }
+        guard !NowPlayingPodcastFallback.isActive else {
+            standDownForPodcast()
+            return
+        }
+        resumeFromPodcastIfNeeded()
         guard page.bounds.width > 1, page.bounds.height > 1 else { return }
 
         _ = layout(in: page)
@@ -288,6 +296,11 @@ enum NowPlayingIOS27 {
             restore(reason: "switch off")
             return
         }
+        guard !NowPlayingPodcastFallback.isActive else {
+            standDownForPodcast()
+            return
+        }
+        resumeFromPodcastIfNeeded()
         guard let page = lastPage, page.window != nil else { return }
         _ = layout(in: page)
     }
@@ -310,12 +323,36 @@ enum NowPlayingIOS27 {
             pageMissingTicks = 0
         }
 
+        // 播客：整层让位（几何按音乐页算的，藏一两样东西救不了那行控件）。
+        // 只在**这一页真的在窗口里**时判 —— 不在听歌页时这条路仍然是一次 bool 读。
+        guard isEnabled else { return false }
+        guard let page = lastPage, page.window != nil else { return false }
+
+        if NowPlayingPodcastFallback.isActive {
+            standDownForPodcast()
+            return false
+        }
+        resumeFromPodcastIfNeeded()
+
         // 页内歌词模式**不接管整页** —— 这一层照常每拍重铺，只是 `updateArtwork` /
         // `placeTitleRow` / `updateLyricsStage` 按模式换几何，所以没有"让位/恢复"的分支。
 
-        guard isEnabled else { return false }
-        guard let page = lastPage, page.window != nil else { return false }
         return layout(in: page)
+    }
+
+    /// 播客：整层让位。**只让一次** —— `restore` 收干净之后每一拍再调都是空转。
+    private static func standDownForPodcast() {
+        guard !podcastBypass else { return }
+        podcastBypass = true
+        writeDebugLog("[\(logTag)] podcast playing (\(NowPlayingPodcastFallback.debugDescription)) — handing the page back to Spotify's own layout")
+        restore(reason: "podcast")
+    }
+
+    /// 音乐回来了：清掉让位状态，下一拍由正常路径重铺（`reconcile` / `apply`）。
+    private static func resumeFromPodcastIfNeeded() {
+        guard podcastBypass else { return }
+        podcastBypass = false
+        writeDebugLog("[\(logTag)] music again — taking the page back")
     }
 
     /// 点底排那颗歌词气泡 = **开/关页内歌词**。
