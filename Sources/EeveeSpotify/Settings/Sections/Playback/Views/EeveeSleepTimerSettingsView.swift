@@ -15,7 +15,7 @@ struct EeveeSleepTimerSettingsView: View {
             Section(footer: Text("sleep_timer_description".localized)) {
                 Picker("sleep_timer_duration".localized, selection: $minutes) {
                     ForEach(SleepTimerController.presetMinutes, id: \.self) { value in
-                        Text(String(format: "sleep_timer_minutes_format".localized, value))
+                        Text(String(format: "duration_minutes_format".localized, value))
                             .tag(value)
                     }
                 }

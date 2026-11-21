@@ -52,7 +52,7 @@ struct EeveeBlockedArtistsSettingsView: View {
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
 
-                    Button("blocked_artists_add".localized) {
+                    Button("add_button".localized) {
                         add()
                     }
                     .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

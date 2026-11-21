@@ -136,9 +136,7 @@ debug_title = "Hata Ayıklama";
 export_debug_log = "Hata Günlüğünü Dışa Aktar";
 clear_debug_log = "Hata Günlüğünü Temizle";
 debug_log_cleared = "Hata günlüğü temizlendi.";
-debug_log_cleared_ok = "Tamam";
 no_debug_log_found = "Hata günlüğü bulunamadı. Günlük, uygulama başlatıldığında kaydetmeye başlar.";
-no_debug_log_found_ok = "Tamam";
 
 // Full reset
 resetButtonTitle = "Tam Sıfırlama";
@@ -163,7 +161,6 @@ showColoredOverlay = "İlerleme çubuğunda renkli katmanı göster";
 showToast = "Atlama sırasında bildirim göster";
 skipToast = "Atlama bildirimi eylem butonları (oy ver / geri al / gizle)";
 respectManualSeek = "Manuel sarmaya saygı duy (tekrar atlama)";
-categoriesHeader = "Kategoriler";
 categoriesFooter = "Kapalı · Göster · Manuel · Otomatik. Değiştirmek için renkli daireye dokunun.";
 
 selfpromo_category = "Ücretsiz/Kendi Tanıtımı";
@@ -178,7 +175,6 @@ exclusive_access_category = "Özel Erişim";
 action_disabled = "Kapalı";
 action_show = "Göster";
 action_manual = "Manuel";
-action_auto = "Otomatik";
 
 draftsTitle = "Raporlama ve taslaklar";
 errorNoPodcats = "Şu anda hiçbir podcast çalınmıyor.";

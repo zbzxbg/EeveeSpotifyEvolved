@@ -81,7 +81,7 @@ struct EeveeListeningStatsSettingsView: View {
             isPresented: $isConfirmingClear,
             titleVisibility: .visible
         ) {
-            Button("listening_stats_clear_confirm".localized, role: .destructive) {
+            Button("clear_button".localized, role: .destructive) {
                 // 先丢掉正在攒的那一段（它可能已经排进 store 的写队列），否则清完又会被
                 // 下一次 flush 带回来一部分。下一拍会在当前位置重开会话。
                 ListeningStatsRecorder.shared.discardCurrentSession()
@@ -430,7 +430,7 @@ struct EeveeListeningStatsSettingsView: View {
             return String(format: "listening_stats_hours_format".localized, hours, minutes)
         }
         if total >= 60 {
-            return String(format: "listening_stats_minutes_format".localized, total / 60)
+            return String(format: "duration_minutes_format".localized, total / 60)
         }
         return String(format: "listening_stats_seconds_format".localized, total)
     }

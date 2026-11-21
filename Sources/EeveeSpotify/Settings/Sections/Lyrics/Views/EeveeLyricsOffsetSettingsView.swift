@@ -101,9 +101,6 @@ struct EeveeLyricsOffsetSettingsView: View {
                     } else {
                         Button("lyrics_offset_save_song".localized) { saveCurrentSong() }
                             .font(.caption)
-                        Text("lyrics_offset_autosave_hint".localized)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                 }
                 .buttonStyle(.borderless)

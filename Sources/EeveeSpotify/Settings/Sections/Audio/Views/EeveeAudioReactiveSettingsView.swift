@@ -37,10 +37,7 @@ struct EeveeAudioReactiveSettingsView: View {
             }
 
             // ── 节拍触感
-            Section(
-                header: Text("music_haptics_section".localized),
-                footer: Text("music_haptics_description".localized)
-            ) {
+            Section(footer: Text("music_haptics_description".localized)) {
                 Toggle("music_haptics".localized, isOn: $musicHaptics)
                     .onChange(of: musicHaptics) { value in
                         UserDefaults.musicHapticsEnabled = value

@@ -129,9 +129,7 @@ debug_title = "تصحيح الأخطاء (Debug)";
 export_debug_log = "تصدير سجل تصحيح الأخطاء";
 clear_debug_log = "مسح سجل تصحيح الأخطاء";
 debug_log_cleared = "تم مسح سجل تصحيح الأخطاء";
-debug_log_cleared_ok = "تمام";
 no_debug_log_found = "مفيش حاجة تتمسح، سجل تصحيح الأخطاء بيشتغل لوحده أول ما تفتح Spotify.";
-no_debug_log_found_ok = "تمام";
 
 // Full reset
 resetButtonTitle = "إعادة ضبط كاملة";
@@ -154,7 +152,6 @@ showColoredOverlay = "إظهار علامات ملونة على شريط الت�
 showToast = "إظهار إشعار عند التخطي";
 skipToast = "أفعال إشعار التخطي (تصويت/إلغاء/إخفاء)";
 respectManualSeek = "الأولوية للتقديم والتأخير اليدوي";
-categoriesHeader = "الأقسام";
 categoriesFooter = "قفل · إظهار · يدوي · تلقائي، دوس على مغير الألوان عشان تغير اللون.";
 
 sponsor_category = "إعلانات ورعاية";
@@ -170,7 +167,6 @@ exclusive_access_category = "محتوى حصري";
 action_disabled = "قفل";
 action_show = "إظهار";
 action_manual = "يدوي";
-action_auto = "تلقائي";
 
 draftsTitle = "البلاغات والمسودات";
 errorNoPodcats = "مفيش بودكاست شغال دلوقتي";

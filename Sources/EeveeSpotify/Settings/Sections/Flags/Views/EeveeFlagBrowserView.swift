@@ -24,7 +24,7 @@ import UIKit
 ///
 /// 采集是**按 Spotify 版本**做的：升级完 Spotify 之后第一次启动只记不判，20 秒后落盘。
 /// 所以刚装 / 刚升级时这一页可能是空的，footer 会写明"重启 Spotify、几秒后再进来"。
-/// 这期间**不是没辙**：下面还有一行「手动写入」进原来的编辑页（那张表与这一页同一份存储）。
+/// 这一页只显示扫到的 flag：手填那一页和「已知 Flag」目录已经删掉，不再提供第二条写入口。
 /// `FlagOverrideStore` → 以 id 为键的字典。
 ///
 /// 放在**文件级**而不是 `private static func`：`@State` 的默认值里不能写 `Self.…`
@@ -113,25 +113,7 @@ struct EeveeFlagBrowserView: View {
                 RemoteFlags.requestCapture()
                 exitApplication()
             }
-
-            // ⚠️ 这条是**本仓库的退路**，上游没有：手工写一条 flag（含"服务端从没下发过"的情况，
-            // 那种必须填 scope）。它写的是同一张表，所以两页永远一致。
-            Button(action: pushManualEditor) {
-                HStack {
-                    Image(systemName: "square.and.pencil")
-                    Text("flag_override_title".localized)
-                }
-            }
         }
-    }
-
-    private func pushManualEditor() {
-        let controller = EeveeSettingsViewController(
-            navigationController.view.frame,
-            settingsView: AnyView(EeveeFlagOverrideSettingsView(navigationController: navigationController)),
-            navigationTitle: "flag_override_title".localized
-        )
-        navigationController.pushViewController(controller, animated: true)
     }
 
     private func loadCatalogIfNeeded() {

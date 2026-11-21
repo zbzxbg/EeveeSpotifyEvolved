@@ -29,15 +29,16 @@ def parse_catalog(text: str):
         entry_id = re.search(r'id:\s*"([^"]+)"', block)
         group = re.search(r"group:\s*\.(\w+)", block)
         title = re.search(r'titleKey:\s*"([^"]+)"', block)
+        # 副标题已从根页去掉，所以是可选的；哪天加回来，缺键照样报。
         subtitle = re.search(r'subtitleKey:\s*"([^"]+)"', block)
-        if not (entry_id and group and title and subtitle):
+        if not (entry_id and group and title):
             continue
         entries.append(
             {
                 "id": entry_id.group(1),
                 "group": group.group(1),
                 "title": title.group(1),
-                "subtitle": subtitle.group(1),
+                "subtitle": subtitle.group(1) if subtitle else None,
                 "has_destination": "destination:" in block,
             }
         )
@@ -82,16 +83,12 @@ def main():
     # 搜索页与根页里直接写死、不经过目录的键。
     needed = {
         "settings_search_title",
-        "settings_search_subtitle",
         "settings_search_placeholder",
         "settings_search_empty",
-        # 行尾状态（补丁那一行用）。
-        "settings_status_on",
-        "settings_status_off",
     }
     needed.update(key for _, key in groups)
     needed.update(entry["title"] for entry in entries)
-    needed.update(entry["subtitle"] for entry in entries)
+    needed.update(entry["subtitle"] for entry in entries if entry["subtitle"])
 
     for locale in REQUIRED_LOCALES:
         path = BUNDLE / locale / "Localizable.strings"

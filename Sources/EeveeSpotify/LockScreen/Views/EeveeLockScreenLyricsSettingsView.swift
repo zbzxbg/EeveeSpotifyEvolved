@@ -46,7 +46,7 @@ struct EeveeLockScreenLyricsSettingsView: View {
                     Button(
                         cleared
                             ? "lock_screen_lyrics_cleared".localized
-                            : "lock_screen_lyrics_clear".localized
+                            : "clear_button".localized
                     ) {
                         LockScreenLyricsController.shared.purgeCache()
                         cacheBytes = LockScreenLyrics.totalBytes()

@@ -2,7 +2,8 @@ import Foundation
 
 // 「Spotify 功能」页的数据。
 //
-// 与 `KnownFlagCatalog` 的分工：那张表是「扫到的全部已知 flag」，给「Flag 覆盖」浏览器用；
+// 与 `KnownFlagCatalog` 的分工：那张表是「减少打扰」页的条目来源（扫到的已知 flag，
+// 带人话文案），这里只列 Spotify 自己那几个开关的标题与键名。
 // 这张只放**写好文案、并且在这个 Spotify 版本里确实存在**的那几条 —— 一行一个真开关，
 // 一页翻完，不用记 scope。
 //
@@ -98,7 +99,7 @@ enum SpotifyFeaturesCatalog {
             ]
         ),
         SpotifyFeatureSection(
-            titleKey: "spotify_features_section_sleep_timer",
+            titleKey: "sleep_timer_title",
             flags: [
                 SpotifyFeatureFlag(
                     key: "ios-feature-sleeptimer.enable_fade_out",

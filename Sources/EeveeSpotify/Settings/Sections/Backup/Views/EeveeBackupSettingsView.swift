@@ -61,7 +61,7 @@ struct EeveeBackupSettingsView: View {
                 exportText = SettingsBackup.exportText()
                 status = "backup_regenerated".localized
             } label: {
-                Label("backup_regenerate".localized, systemImage: "arrow.clockwise")
+                Label("regenerateButton".localized, systemImage: "arrow.clockwise")
             }
 
             Button {
@@ -85,7 +85,7 @@ struct EeveeBackupSettingsView: View {
 
     private var importSection: some View {
         Section(
-            header: Text("backup_import_section".localized),
+            header: Text("backup_import".localized),
             footer: Text("backup_import_footer".localizeWithFormat("restart_is_required_description".localized))
         ) {
             TextEditor(text: $importText)

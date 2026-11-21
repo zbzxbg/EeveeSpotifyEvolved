@@ -24,7 +24,7 @@ struct SettingsResetSection: View {
     @State private var result: String?
 
     var body: some View {
-        Section(footer: Text(result ?? "settings_reset_page_footer".localized)) {
+        Section(footer: result.map { Text($0) }) {
             Button {
                 let removed = SettingsBackup.resetToStock(keys)
                 afterReset()

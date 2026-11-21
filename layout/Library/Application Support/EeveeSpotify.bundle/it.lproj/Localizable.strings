@@ -145,7 +145,6 @@ eevee_inline_subtitle_text = "Patch, testi, personalizzazioni ed esperimenti";
 "showToast" = "Mostra avviso quando si salta";
 "skipToast" = "Pulsanti di azione nell'avviso di salto (vota / annulla / nascondi)";
 "respectManualSeek" = "Rispetta la ricerca manuale (non saltare di nuovo)";
-"categoriesHeader" = "Categorie";
 "categoriesFooter" = "Off · Mostra · Manuale · Auto. Tocca il cerchio colorato per modificare.";
 
 "selfpromo_category" = "Autopromozione / Non pagata";

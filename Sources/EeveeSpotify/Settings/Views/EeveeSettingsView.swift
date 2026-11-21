@@ -162,15 +162,15 @@ struct EeveeSettingsView: View {
                 NavigationSectionView(
                     color: .gray,
                     title: "settings_search_title".localized,
-                    imageSystemName: "magnifyingglass",
-                    subtitle: "settings_search_subtitle".localized
+                    imageSystemName: "magnifyingglass"
                 )
             }
         }
     }
 
-    /// 根页的一行：彩色图标 + 标题 + **灰色副标题** + 可选状态 + 右箭头。
+    /// 根页的一行：彩色图标 + 标题 + 右箭头。
     ///
+    /// 不画第二行小字：一行一个页面，名字就是内容；想说明什么请写在那个页里。
     /// 状态文字（补丁"已启用 / 未启用"）在渲染时求值，所以从补丁页返回后不需要
     /// 额外刷新 —— `List` 重绘时会重新读 `UserDefaults`。
     @ViewBuilder
@@ -185,9 +185,7 @@ struct EeveeSettingsView: View {
             NavigationSectionView(
                 color: entry.color,
                 title: entry.titleKey.localized,
-                imageSystemName: entry.iconName,
-                subtitle: entry.subtitleKey.localized,
-                status: entry.status?()
+                imageSystemName: entry.iconName
             )
         }
     }

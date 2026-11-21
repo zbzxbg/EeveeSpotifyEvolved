@@ -69,7 +69,7 @@ struct EeveeLockScreenArtworkSettingsView: View {
                     Button(
                         cleared
                             ? "lock_screen_artwork_cleared".localized
-                            : "lock_screen_artwork_clear".localized
+                            : "clear_button".localized
                     ) {
                         AnimatedArtworkCache.clear()
                         cacheBytes = AnimatedArtworkCache.totalBytes()

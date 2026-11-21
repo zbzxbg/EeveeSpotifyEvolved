@@ -17,7 +17,7 @@ struct SponsorBlockSettingsView: View {
                     .disabled(!options.enabled)
             }
 
-            Section(header: Text("categoriesHeader".localized),
+            Section(header: Text("categoriesTitle".localized),
                     footer: Text("categoriesFooter".localized)) {
                 ForEach(SponsorBlockOptions.allCategoryOrder, id: \.self) { key in
                     VStack(alignment: .leading, spacing: 6) {
@@ -135,7 +135,7 @@ struct SponsorBlockSettingsView: View {
             case .disabled: return "action_disabled".localized
             case .showOnly: return "action_show".localized
             case .manualSkip: return "action_manual".localized
-            case .autoSkip: return "action_auto".localized
+            case .autoSkip: return "flags_auto".localized
         }
     }
 

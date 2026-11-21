@@ -57,7 +57,7 @@ struct SettingsLogSection: View {
         guard FileManager.default.fileExists(atPath: logPath),
               let logData = FileManager.default.contents(atPath: logPath),
               logData.count > 0 else {
-            PopUpHelper.showPopUp(message: "no_debug_log_found".localized, buttonText: "no_debug_log_found_ok".localized)
+            PopUpHelper.showPopUp(message: "no_debug_log_found".localized, buttonText: "OK".localized)
             return
         }
 
@@ -66,7 +66,7 @@ struct SettingsLogSection: View {
             guard let redacted = DebugLogSanitizer.sharedLogFile(from: logPath, redact: true) else {
                 PopUpHelper.showPopUp(
                     message: "redact_log_failed".localized,
-                    buttonText: "redact_log_failed_ok".localized
+                    buttonText: "OK".localized
                 )
                 return
             }
@@ -95,13 +95,13 @@ struct SettingsLogSection: View {
         guard FileManager.default.fileExists(atPath: logPath),
               let logData = FileManager.default.contents(atPath: logPath),
               logData.count > 0 else {
-            PopUpHelper.showPopUp(message: "no_log_to_clear".localized, buttonText: "no_log_to_clear_ok".localized)
+            PopUpHelper.showPopUp(message: "no_log_to_clear".localized, buttonText: "OK".localized)
             return
         }
         try? "".write(toFile: logPath, atomically: true, encoding: .utf8)
         // 上面这行换掉了文件本体，常驻句柄要跟着重开，否则后面的日志写进旧 inode。
         resetDebugLogFile()
         writeDebugLog("Log cleared by user")
-        PopUpHelper.showPopUp(message: "debug_log_cleared".localized, buttonText: "debug_log_cleared_ok".localized)
+        PopUpHelper.showPopUp(message: "debug_log_cleared".localized, buttonText: "OK".localized)
     }
 }

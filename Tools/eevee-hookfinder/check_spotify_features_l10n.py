@@ -35,7 +35,7 @@ FIXED_KEYS = [
     "flags_auto",
     "flag_override_mode_on",
     "flag_override_mode_off",
-    "flag_override_restart_hint",
+    "restart_is_required_description",
     "spotify_features_section_content",
     "spotify_features_hide_ai_badges",
     "spotify_features_hide_ai_badges_footer",
@@ -92,8 +92,7 @@ def main() -> int:
 
     # ② 视图里写死的键，必须真的出现在视图源码里（防脚本与视图脱节）
     for key in FIXED_KEYS:
-        if key in ("flags_auto", "flag_override_mode_on", "flag_override_mode_off",
-                   "flag_override_restart_hint"):
+        if key in ("flags_auto", "flag_override_mode_on", "flag_override_mode_off"):
             continue  # 这些是「Flag 覆盖」页的公共键，不一定出现在本页源码里
         if key not in view:
             problems.append(f"{key}: 脚本要求了它，但视图里没用到 —— 脚本与视图脱节")

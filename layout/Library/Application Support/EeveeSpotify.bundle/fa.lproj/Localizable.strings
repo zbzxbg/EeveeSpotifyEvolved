@@ -127,9 +127,7 @@ debug_title = "اشکال‌زدایی";
 export_debug_log = "خروجی گرفتن از گزارش اشکال‌زدایی";
 clear_debug_log = "پاک کردن گزارش اشکال‌زدایی";
 debug_log_cleared = "گزارش اشکال‌زدایی پاک شد.";
-debug_log_cleared_ok = "باشه";
 no_debug_log_found = "هیچ گزارش اشکال‌زدایی یافت نشد. ثبت گزارش از زمان اجرای برنامه آغاز می‌شود.";
-no_debug_log_found_ok = "باشه";
 
 // Full reset
 resetButtonTitle = "بازنشانی کامل";
@@ -154,7 +152,6 @@ showColoredOverlay = "نمایش نوار رنگی روی نوار پیشرفت"
 showToast = "نمایش اعلان هنگام رد کردن";
 skipToast = "دکمه‌های اعلان رد کردن (رأی / بازگردانی / مخفی کردن)";
 respectManualSeek = "رعایت جابه‌جایی دستی (دوباره رد نکند)";
-categoriesHeader = "دسته‌بندی‌ها";
 categoriesFooter = "خاموش · نمایش · دستی · خودکار. برای تغییر رنگ، روی دایره رنگی ضربه بزنید.";
 
 sponsor_category = "اسپانسر";
@@ -170,7 +167,6 @@ exclusive_access_category = "دسترسی انحصاری";
 action_disabled = "خاموش";
 action_show = "نمایش";
 action_manual = "دستی";
-action_auto = "خودکار";
 
 draftsTitle = "گزارش‌ها و پیش‌نویس‌ها";
 errorNoPodcats = "در حال حاضر هیچ پادکستی در حال پخش نیست.";

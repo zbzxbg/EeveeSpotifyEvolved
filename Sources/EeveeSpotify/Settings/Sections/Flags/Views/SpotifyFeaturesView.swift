@@ -25,7 +25,7 @@ struct SpotifyFeaturesSettingsView: View {
     var body: some View {
         List {
             Section {
-                Text("flag_override_restart_hint".localized)
+                Text("restart_is_required_description".localized)
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -58,10 +58,10 @@ struct SpotifyFeaturesSettingsView: View {
 
     // MARK: - 一行
 
-    /// 一行：标题 + 键名（小字）+ 当前档位。点一下弹三档菜单。
+    /// 一行：标题 + 当前档位。点一下弹三档菜单。
     ///
-    /// 键名留在副标题里是有意的：这一页的价值之一是"看得见它钉的是哪条"，
-    /// 排查"点了没反应"时也直接能看出是不是服务端根本没下发这条。
+    /// 不渲染 flag 键名（`scope.name`）：它对用户不是可读信息，长 scope 还会把标题挤成两行；
+    /// 排查时看日志里的 `[Flags]` 行更准。
     private func row(_ feature: SpotifyFeatureFlag) -> some View {
         Menu {
             Button {
@@ -83,9 +83,6 @@ struct SpotifyFeaturesSettingsView: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(feature.labelKey.localized)
-                    Text(verbatim: feature.key)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
                     if let noteKey = feature.noteKey {
                         Text(noteKey.localized)
                             .font(.caption2)

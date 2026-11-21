@@ -166,7 +166,6 @@ showColoredOverlay = "Pokaż kolorową nakładkę na pasku postępu";
 showToast = "Pokaż powiadomienie przy pomijaniu";
 skipToast = "Przyciski akcji powiadomienia pomijania (głos / cofnij / ukryj)";
 respectManualSeek = "Szanuj ręczne przewijanie (nie pomijaj ponownie)";
-categoriesHeader = "Kategorie";
 categoriesFooter = "Wył. · Pokaż · Ręcznie · Auto. Stuknij kolorowe kółko, aby zmienić kolor.";
 
 selfpromo_category = "Niepłatna/autopromocja";

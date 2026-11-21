@@ -125,9 +125,7 @@ debug_title = "Depuración";
 export_debug_log = "Exportar archivo de depuración";
 clear_debug_log = "Limpiar archivo de depuración ";
 debug_log_cleared = "Archivo de depuración limpiado.";
-debug_log_cleared_ok = "Vale";
 no_debug_log_found = "No se encontró archivo de depuración. El registro comienza a grabarse cuando se inicia la aplicación.";
-no_debug_log_found_ok = "Vale";
 
 /* AUTO-FILLED (untranslated) — keys that exist in en.lproj but were missing in this
    locale. Values are the English originals (copied verbatim), so runtime behaviour is

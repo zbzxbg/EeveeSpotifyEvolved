@@ -151,7 +151,6 @@ showColoredOverlay = "Hiển thị lớp phủ màu trên thanh tiến trình";
 showToast = "Hiển thị thông báo khi bỏ qua";
 skipToast = "Các nút hành động trên thông báo bỏ qua (bình chọn / hoàn tác / ẩn)";
 respectManualSeek = "Tôn trọng việc tua thủ công (không bỏ qua lại)";
-categoriesHeader = "Các danh mục";
 categoriesFooter = "Tắt · Hiển thị · Thủ công · Tự động. Nhấn vào vòng tròn màu để thay đổi.";
 
 sponsor_category = "Nhà tài trợ";
@@ -167,7 +166,6 @@ exclusive_access_category = "Quyền truy cập độc quyền";
 action_disabled = "Tắt";
 action_show = "Hiển thị";
 action_manual = "Thủ công";
-action_auto = "Tự động";
 
 draftsTitle = "Báo cáo & bản nháp";
 errorNoPodcats = "Hiện tại không có podcast nào đang phát.";

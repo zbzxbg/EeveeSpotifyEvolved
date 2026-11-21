@@ -125,9 +125,7 @@ debug_title = "Depuració";
 export_debug_log = "Exporta l'arxiu de depuració";
 clear_debug_log = "Neteja l'arxiu de depuració";
 debug_log_cleared = "Arxiu de depuració netejat.";
-debug_log_cleared_ok = "D'acord";
 no_debug_log_found = "No s'ha trobat l'arxiu de depuració. El registre comença a gravar-se quan s'inicia l'aplicació.";
-no_debug_log_found_ok = "D'acord";
 
 /* AUTO-FILLED (untranslated) — keys that exist in en.lproj but were missing in this
    locale. Values are the English originals (copied verbatim), so runtime behaviour is
