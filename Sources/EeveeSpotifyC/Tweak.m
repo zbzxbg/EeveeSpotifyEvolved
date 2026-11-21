@@ -129,9 +129,29 @@ static void writeDebugLog(NSString *message) {
     }
 }
 
+// ── 未捕获异常：把原因落盘。
+//
+// iOS 的 .ips 只有 "abort() called"，NSException 的 name / reason 不进崩溃报告；
+// 而 Auto Layout 那类崩溃（"Unable to activate constraint ... no common ancestor"）
+// 结论全在 reason 里，光看崩溃报告的调用栈只能知道"在激活约束时挂了"。
+// 这里在 abort 之前把 name / reason / 抛出处的调用栈写进调试日志（同时进系统日志），
+// 下次崩溃就能从导出的日志里看到原因。
+static void EeveeUncaughtExceptionHandler(NSException *exception) {
+    NSString *name = exception.name ?: @"NSException";
+    NSString *reason = exception.reason ?: @"(no reason)";
+    NSString *stack = [exception.callStackSymbols componentsJoinedByString:@"\n"];
+    NSString *message = [NSString stringWithFormat:@"[UNCAUGHT] %@: %@\n%@", name, reason, stack];
+
+    NSLog(@"[EeveeSpotify] %@", message);
+    writeDebugLog(message);
+}
+
 __attribute__((constructor)) static void init() {
     @try {
         NSLog(@"[EeveeSpotify] Initializing tweak...");
+
+        // 装在 Orion 之前：tweak 初始化期间抛出的异常也要能记下原因。
+        NSSetUncaughtExceptionHandler(&EeveeUncaughtExceptionHandler);
 
         // Initialize Orion - do not remove this line.
         orion_init();
