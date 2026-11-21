@@ -27,7 +27,8 @@ enum LockScreenLyrics {
     ///
     /// v4：开始画罗马字那一行、以及按歌手分边（对唱）；v3 及以前的片段不能再命中。
     /// v5：逐字（一行多帧）。
-    private static let clipFormat = "v5"
+    /// v6：对唱叠句（两个人同时唱的那两句画进同一段片子）。
+    private static let clipFormat = "v6"
 
     static var isEnabled: Bool { UserDefaults.lockScreenLyrics }
 
@@ -61,19 +62,27 @@ enum LockScreenLyrics {
         flipped: Bool,
         nextFlipped: Bool,
         karaoke: [LockScreenKaraokeFrame],
+        companion: String?,
+        companionFlipped: Bool,
+        companionKaraoke: [LockScreenKaraokeFrame],
         credit: String,
         hasCover: Bool,
         textScale: Double,
         spacingScale: Double
     ) -> String {
         // 逐字的帧表也要进哈希：同一行文字的"单帧"与"多帧"是两份不同的素材。
+        // 对唱叠句那一半的文本/边/帧表同样进来 —— 它变了，这一段的像素就变了。
         let karaokeKey = karaoke
+            .map { "\($0.offsetMs):\($0.revealedCharacters)" }
+            .joined(separator: ",")
+        let companionKey = companionKaraoke
             .map { "\($0.offsetMs):\($0.revealedCharacters)" }
             .joined(separator: ",")
         return FNV1a.hex(
             "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(translation ?? "")"
                 + "|\(romanization ?? "")|\(isDuet ? "duet" : "one")\(flipped ? "R" : "L")\(nextFlipped ? "r" : "l")"
-                + "|\(karaokeKey)|\(credit)|\(hasCover ? "c" : "n")"
+                + "|\(karaokeKey)|\(companion ?? "")\(companionFlipped ? "R" : "L")\(companionKey)"
+                + "|\(credit)|\(hasCover ? "c" : "n")"
                 + "|\(scaleKey(textScale))|\(scaleKey(spacingScale))"
         )
     }

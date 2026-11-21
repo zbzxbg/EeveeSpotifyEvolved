@@ -12,6 +12,18 @@ struct LockScreenKaraokeFrame: Equatable {
     let revealedCharacters: Int
 }
 
+/// 对唱叠句时的一帧：当前句与同一时刻还在唱的另一位歌手那句，各自亮到第几个字符。
+///
+/// 锁屏一次只画一句会漏掉另一半：两个人同时唱时，后开始的那句一接管，先开始的那句
+/// 就从画面上消失。这一份把两张帧表按时间并起来，渲染时两句同时画、各自逐词亮。
+struct LockScreenKaraokePairFrame: Equatable {
+    let offsetMs: Int
+    /// 当前句（`LockScreenLyricsController` 选中的那一句）亮到第几个字符。
+    let lineCharacters: Int
+    /// 另一位歌手那句亮到第几个字符。
+    let companionCharacters: Int
+}
+
 enum LockScreenKaraoke {
 
     /// 一帧一个词，再多的歌也用不上；超过就退回单帧（整行点亮）。
@@ -58,5 +70,49 @@ enum LockScreenKaraoke {
             )
         }
         return frames
+    }
+
+    /// 两张帧表并成一张（对唱叠句用）。
+    ///
+    /// 时间取并集；每一句"亮到第几个字符"取该时刻之前**最近**的那一帧（还没开始就是 0）。
+    /// 两张表都必须换算到**同一个起点**之后才传进来：另一个声部往往先开口，它的帧偏移
+    /// 会是负数（这一段开始前就唱掉的词），这里会把它们算进 0 那一帧的已亮字符数。
+    ///
+    /// 任何一边少于两帧（没有真正的逐词数据）就返回 nil，调用方退回只画当前句。
+    static func combinedFrames(
+        line: [LockScreenKaraokeFrame],
+        companion: [LockScreenKaraokeFrame]
+    ) -> [LockScreenKaraokePairFrame]? {
+        guard line.count >= 2, companion.count >= 2 else { return nil }
+        let offsets = Set(
+            [0] + (line.map(\.offsetMs) + companion.map(\.offsetMs)).filter { $0 >= 0 }
+        ).sorted()
+        guard offsets.count >= 2 else { return nil }
+
+        var pair: [LockScreenKaraokePairFrame] = []
+        pair.reserveCapacity(offsets.count)
+        var lineIndex = 0
+        var companionIndex = 0
+        var lineRevealed = 0
+        var companionRevealed = 0
+        for offset in offsets {
+            while lineIndex < line.count, line[lineIndex].offsetMs <= offset {
+                lineRevealed = line[lineIndex].revealedCharacters
+                lineIndex += 1
+            }
+            while companionIndex < companion.count,
+                  companion[companionIndex].offsetMs <= offset {
+                companionRevealed = companion[companionIndex].revealedCharacters
+                companionIndex += 1
+            }
+            pair.append(
+                LockScreenKaraokePairFrame(
+                    offsetMs: offset,
+                    lineCharacters: lineRevealed,
+                    companionCharacters: companionRevealed
+                )
+            )
+        }
+        return pair
     }
 }

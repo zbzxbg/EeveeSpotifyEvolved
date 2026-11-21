@@ -44,6 +44,9 @@ enum LyricClipRenderer {
         flipped: Bool = false,
         nextFlipped: Bool = false,
         revealedCharacters: Int? = nil,
+        companion: String? = nil,
+        companionRevealedCharacters: Int? = nil,
+        companionFlipped: Bool = false,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
@@ -58,6 +61,9 @@ enum LyricClipRenderer {
             flipped: flipped,
             nextFlipped: nextFlipped,
             revealedCharacters: revealedCharacters,
+            companion: companion,
+            companionRevealedCharacters: companionRevealedCharacters,
+            companionFlipped: companionFlipped,
             credit: credit,
             size: size
         )
@@ -68,6 +74,9 @@ enum LyricClipRenderer {
     ///
     /// `karaoke` 非空时编**多帧**：每个词开始的那一刻一帧（已唱词亮、未唱词压暗），
     /// 编完最后一帧就停在那里等下一行；空则退回单帧（整行一次点亮）。
+    ///
+    /// `companionKaraoke` 非空时是**对唱叠句**：当前句和同一时刻还在唱的另一位歌手那句
+    /// 同时画进每一帧，两张帧表按时间并起来（`LockScreenKaraoke.combinedFrames`）。
     static func write(
         cover: CGImage?,
         line: String?,
@@ -78,6 +87,9 @@ enum LyricClipRenderer {
         flipped: Bool = false,
         nextFlipped: Bool = false,
         karaoke: [LockScreenKaraokeFrame] = [],
+        companion: String? = nil,
+        companionKaraoke: [LockScreenKaraokeFrame] = [],
+        companionFlipped: Bool = false,
         credit: String,
         size: CGSize,
         seconds: Double,
@@ -89,7 +101,35 @@ enum LyricClipRenderer {
             encodeQueue.async {
                 do {
                     let backdrop = try backdrop(cover: cover, size: size)
-                    if karaoke.count >= 2 {
+                    let pair = pairFrames(
+                        line: karaoke,
+                        companion: companionKaraoke,
+                        companionText: companion
+                    )
+                    if let pair, pair.count >= 2 {
+                        var frames: [(at: Int, image: CGImage)] = []
+                        frames.reserveCapacity(pair.count)
+                        for frame in pair {
+                            let image = try compose(
+                                backdrop: backdrop,
+                                line: line,
+                                next: next,
+                                translation: translation,
+                                romanization: romanization,
+                                isDuet: isDuet,
+                                flipped: flipped,
+                                nextFlipped: nextFlipped,
+                                revealedCharacters: frame.lineCharacters,
+                                companion: companion,
+                                companionRevealedCharacters: frame.companionCharacters,
+                                companionFlipped: companionFlipped,
+                                credit: credit,
+                                size: size
+                            )
+                            frames.append((frame.offsetMs, image))
+                        }
+                        try writeFrames(frames, size: size, seconds: seconds, to: destination)
+                    } else if karaoke.count >= 2 {
                         var frames: [(at: Int, image: CGImage)] = []
                         frames.reserveCapacity(karaoke.count)
                         for frame in karaoke {
@@ -103,6 +143,9 @@ enum LyricClipRenderer {
                                 flipped: flipped,
                                 nextFlipped: nextFlipped,
                                 revealedCharacters: frame.revealedCharacters,
+                                companion: companion,
+                                companionRevealedCharacters: nil,
+                                companionFlipped: companionFlipped,
                                 credit: credit,
                                 size: size
                             )
@@ -120,6 +163,9 @@ enum LyricClipRenderer {
                             flipped: flipped,
                             nextFlipped: nextFlipped,
                             revealedCharacters: karaoke.first?.revealedCharacters,
+                            companion: companion,
+                            companionRevealedCharacters: nil,
+                            companionFlipped: companionFlipped,
                             credit: credit,
                             size: size
                         )
@@ -131,6 +177,17 @@ enum LyricClipRenderer {
                 }
             }
         }
+    }
+
+    /// 对唱叠句的合并帧表：两边都得有真正的逐词帧表，`companion` 也得有文本。
+    private static func pairFrames(
+        line: [LockScreenKaraokeFrame],
+        companion: [LockScreenKaraokeFrame],
+        companionText: String?
+    ) -> [LockScreenKaraokePairFrame]? {
+        guard let text = companionText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        return LockScreenKaraoke.combinedFrames(line: line, companion: companion)
     }
 
     private static let encodeQueue = DispatchQueue(
@@ -228,6 +285,9 @@ enum LyricClipRenderer {
 
     /// 在当前行下面再画一行压暗的"下一行"，这是锁屏歌词最有用的那点上下文：
     /// 只看一句不知道唱到哪，看到下一句就知道还有多久换行。
+    ///
+    /// `companion` 非空时换成**对唱叠句**画法：当前句和另一位歌手那句同时画、各自逐词亮，
+    /// 不再画"下一行"（那一格让给另一位歌手）。
     private static func compose(
         backdrop: CGImage,
         line: String?,
@@ -238,6 +298,9 @@ enum LyricClipRenderer {
         flipped: Bool,
         nextFlipped: Bool,
         revealedCharacters: Int?,
+        companion: String?,
+        companionRevealedCharacters: Int?,
+        companionFlipped: Bool,
         credit: String,
         size: CGSize
     ) throws -> CGImage {
@@ -270,6 +333,9 @@ enum LyricClipRenderer {
             flipped: flipped,
             nextFlipped: nextFlipped,
             revealedCharacters: revealedCharacters,
+            companion: companion,
+            companionRevealedCharacters: companionRevealedCharacters,
+            companionFlipped: companionFlipped,
             credit: credit,
             size: size,
             context: context
@@ -290,6 +356,9 @@ enum LyricClipRenderer {
         flipped: Bool,
         nextFlipped: Bool,
         revealedCharacters: Int?,
+        companion: String?,
+        companionRevealedCharacters: Int?,
+        companionFlipped: Bool,
         credit: String,
         size: CGSize,
         context: CGContext
@@ -312,6 +381,27 @@ enum LyricClipRenderer {
         // 锁屏上居中才是常态，只有"换人唱"这件事值得动对齐。
         let currentAlignment: CTTextAlignment = isDuet ? (flipped ? .right : .left) : .center
         let nextAlignment: CTTextAlignment = isDuet ? (nextFlipped ? .right : .left) : .center
+
+        // 对唱叠句：同一时刻两位歌手都在唱。两句都画出来（各自逐词亮），
+        // "下一行"那一格让给它 —— 否则后开始的那句一接管，先开始的那句就从画面上消失。
+        let companionText = (companion ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !companionText.isEmpty, isDuet, !current.isEmpty {
+            drawDuetPair(
+                current: current,
+                companion: companionText,
+                translation: translation ?? "",
+                currentAlignment: currentAlignment,
+                companionAlignment: companionFlipped ? .right : .left,
+                currentRevealed: revealedCharacters,
+                companionRevealed: companionRevealedCharacters,
+                size: size,
+                columnWidth: columnWidth,
+                columnX: columnX,
+                centerY: centerY,
+                context: context
+            )
+            return
+        }
 
         // 没在唱（间奏/换行间隙）时只把下一行压暗放在中间，不留下上一句的残影。
         guard !current.isEmpty else {
@@ -482,6 +572,176 @@ enum LyricClipRenderer {
             alignment: nextAlignment,
             context: context
         )
+    }
+
+    /// 对唱叠句那一档：同一时刻还在唱的另一句（先开口的）在上、当前句在下。
+    ///
+    /// 上下顺序按**开口先后**（另一位总是先开始，见 controller 的 `companionLine`）：
+    /// 这样一句唱完、下一句开始时，先开口那句不会在上下之间跳，只有新的那句在下方出现/消失。
+    /// 两句各自按自己的边对齐、各自逐词亮；这一档不画罗马字（四行会挤，而且它是辅助信息），
+    /// 译文只画当前句的。总和超过画面 90% 时整体按比例缩一次。
+    private static func drawDuetPair(
+        current: String,
+        companion: String,
+        translation: String,
+        currentAlignment: CTTextAlignment,
+        companionAlignment: CTTextAlignment,
+        currentRevealed: Int?,
+        companionRevealed: Int?,
+        size: CGSize,
+        columnWidth: CGFloat,
+        columnX: CGFloat,
+        centerY: CGFloat,
+        context: CGContext
+    ) {
+        let translationText = translation.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var currentFontSize = fittedFontSize(
+            for: current,
+            size: size,
+            columnWidth: columnWidth,
+            start: size.width * 0.075 * textScale,
+            maxHeight: size.height * 0.32
+        )
+        var companionFontSize = fittedFontSize(
+            for: companion,
+            size: size,
+            columnWidth: columnWidth,
+            start: currentFontSize,
+            maxHeight: size.height * 0.30
+        )
+        var translationFontSize: CGFloat = 0
+        if !translationText.isEmpty {
+            translationFontSize = max(12, currentFontSize * 0.5)
+        }
+
+        struct Metrics {
+            let current: CGFloat
+            let companion: CGFloat
+            let translation: CGFloat
+            let currentGap: CGFloat
+            let translationGap: CGFloat
+            let total: CGFloat
+        }
+
+        func metrics() -> Metrics {
+            let currentHeight = textHeight(
+                for: current,
+                fontSize: currentFontSize,
+                columnWidth: columnWidth
+            )
+            let companionHeight = textHeight(
+                for: companion,
+                fontSize: companionFontSize,
+                columnWidth: columnWidth
+            )
+            let translationHeight = translationText.isEmpty
+                ? 0
+                : textHeight(
+                    for: translationText,
+                    fontSize: translationFontSize,
+                    columnWidth: columnWidth
+                )
+            let currentGap = currentFontSize * 0.16 * spacingScale
+            let translationGap = translationText.isEmpty
+                ? 0
+                : currentFontSize * 0.22 * spacingScale
+            let total = companionHeight + currentGap + currentHeight
+                + translationGap + translationHeight
+            return Metrics(
+                current: currentHeight,
+                companion: companionHeight,
+                translation: translationHeight,
+                currentGap: currentGap,
+                translationGap: translationGap,
+                total: total
+            )
+        }
+
+        var m = metrics()
+        let limit = size.height * 0.9
+        if m.total > limit, m.total > 0 {
+            let factor = limit / m.total
+            currentFontSize *= factor
+            companionFontSize *= factor
+            translationFontSize *= factor
+            m = metrics()
+        }
+        guard m.total > 0 else { return }
+
+        var cursor = centerY + m.total / 2
+
+        // 先开口的那句（`companion`）在上。
+        let companionRect = CGRect(
+            x: columnX,
+            y: cursor - m.companion,
+            width: columnWidth,
+            height: m.companion
+        )
+        if let companionRevealed {
+            drawRevealed(
+                companion,
+                revealedCharacters: companionRevealed,
+                fontSize: companionFontSize,
+                rect: companionRect,
+                alignment: companionAlignment,
+                context: context
+            )
+        } else {
+            draw(
+                companion,
+                fontSize: companionFontSize,
+                alpha: 1,
+                rect: companionRect,
+                alignment: companionAlignment,
+                context: context
+            )
+        }
+        cursor -= m.companion + m.currentGap
+
+        // 当前句在下。
+        let currentRect = CGRect(
+            x: columnX,
+            y: cursor - m.current,
+            width: columnWidth,
+            height: m.current
+        )
+        if let currentRevealed {
+            drawRevealed(
+                current,
+                revealedCharacters: currentRevealed,
+                fontSize: currentFontSize,
+                rect: currentRect,
+                alignment: currentAlignment,
+                context: context
+            )
+        } else {
+            draw(
+                current,
+                fontSize: currentFontSize,
+                alpha: 1,
+                rect: currentRect,
+                alignment: currentAlignment,
+                context: context
+            )
+        }
+        cursor -= m.current + m.translationGap
+
+        if m.translation > 0 {
+            draw(
+                translationText,
+                fontSize: translationFontSize,
+                alpha: 0.78,
+                rect: CGRect(
+                    x: columnX,
+                    y: cursor - m.translation,
+                    width: columnWidth,
+                    height: m.translation
+                ),
+                alignment: currentAlignment,
+                context: context
+            )
+        }
     }
 
     /// 底沿一行小字：歌词来源。锁屏是唯一没有页内署名的地方，这一行保证"谁的词"始终可见。

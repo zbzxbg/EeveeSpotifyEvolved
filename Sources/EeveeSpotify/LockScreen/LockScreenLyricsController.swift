@@ -338,7 +338,8 @@ final class LockScreenLyricsController {
             lineKey: lineKey,
             location: location,
             lines: currentLines,
-            trackKey: key
+            trackKey: key,
+            positionMs: positionMs
         )
         refreshTimer()
     }
@@ -637,7 +638,8 @@ final class LockScreenLyricsController {
         lineKey: String,
         location: LocatedLine,
         lines: [LockScreenLyricLine],
-        trackKey: String
+        trackKey: String,
+        positionMs: Int
     ) {
         let supported = MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys
         guard !supported.isEmpty else { return }
@@ -654,7 +656,7 @@ final class LockScreenLyricsController {
 
         let cover = currentCover()
         let credit = currentCredit()
-        let texts = Self.texts(for: location, in: lines)
+        let texts = Self.texts(for: location, in: lines, at: positionMs)
         let frameHash = LockScreenLyrics.frameHash(
             line: texts.line,
             next: texts.next,
@@ -664,6 +666,9 @@ final class LockScreenLyricsController {
             flipped: texts.flipped,
             nextFlipped: texts.nextFlipped,
             karaoke: texts.karaoke,
+            companion: texts.companion,
+            companionFlipped: texts.companionFlipped,
+            companionKaraoke: texts.companionKaraoke,
             credit: credit,
             hasCover: cover != nil,
             // 两档倍率进文件名：改了「歌词 → 文字」之后旧片段不该再被命中，
@@ -686,6 +691,9 @@ final class LockScreenLyricsController {
                     flipped: texts.flipped,
                     nextFlipped: texts.nextFlipped,
                     revealedCharacters: texts.karaoke.first?.revealedCharacters,
+                    companion: texts.companion,
+                    companionRevealedCharacters: texts.companionStartCharacters,
+                    companionFlipped: texts.companionFlipped,
                     credit: credit,
                     size: size
                 ) {
@@ -765,6 +773,7 @@ final class LockScreenLyricsController {
         writeDebugLog(
             "[\(LockScreenLyrics.logTag)] line \(location.index)\(location.resting ? " (resting)" : "")"
                 + " — installing \(prepared.count) artwork key(s)"
+                + (texts.companion == nil ? "" : " (duet pair)")
         )
         LockScreenArtworkInjector.republishForLockScreen()
     }
@@ -816,6 +825,9 @@ final class LockScreenLyricsController {
                     flipped: texts.flipped,
                     nextFlipped: texts.nextFlipped,
                     revealedCharacters: texts.karaoke.first?.revealedCharacters,
+                    companion: texts.companion,
+                    companionRevealedCharacters: texts.companionStartCharacters,
+                    companionFlipped: texts.companionFlipped,
                     credit: credit,
                     size: size
                 ) {
@@ -861,6 +873,9 @@ final class LockScreenLyricsController {
                         flipped: texts.flipped,
                         nextFlipped: texts.nextFlipped,
                         karaoke: texts.karaoke,
+                        companion: texts.companion,
+                        companionKaraoke: texts.companionKaraoke,
+                        companionFlipped: texts.companionFlipped,
                         credit: credit,
                         cover: cover,
                         seconds: seconds
@@ -887,6 +902,9 @@ final class LockScreenLyricsController {
         flipped: Bool,
         nextFlipped: Bool,
         karaoke: [LockScreenKaraokeFrame],
+        companion: String?,
+        companionKaraoke: [LockScreenKaraokeFrame],
+        companionFlipped: Bool,
         credit: String,
         cover: CGImage?,
         seconds: Double
@@ -934,6 +952,9 @@ final class LockScreenLyricsController {
                     flipped: flipped,
                     nextFlipped: nextFlipped,
                     karaoke: karaoke,
+                    companion: companion,
+                    companionKaraoke: companionKaraoke,
+                    companionFlipped: companionFlipped,
                     credit: credit,
                     size: size,
                     seconds: seconds,
@@ -1132,11 +1153,20 @@ final class LockScreenLyricsController {
         let nextFlipped: Bool
         /// 逐字的帧表（空 = 单帧）。它同时进 `frameHash`：单帧与多帧是两份素材。
         let karaoke: [LockScreenKaraokeFrame]
+        /// 同一时刻还在唱的另一位歌手那句（对唱叠句）。空 = 这一屏只有一个声部。
+        let companion: String?
+        let companionFlipped: Bool
+        /// 那一位的帧表，已经换算到**当前这一行开始**的时间轴（可能带负偏移）。
+        let companionKaraoke: [LockScreenKaraokeFrame]
+        /// 那一位在**这一段片子的第 0 帧**亮到第几个字符（静帧预览用）。
+        /// `nil` = 没有另一位歌手（或它还没开始唱）。
+        let companionStartCharacters: Int?
     }
 
     private static func texts(
         for location: LocatedLine,
-        in lines: [LockScreenLyricLine]
+        in lines: [LockScreenLyricLine],
+        at positionMs: Int
     ) -> LineTexts {
         if location.resting {
             let nextLine = location.index + 1 < lines.count ? lines[location.index + 1] : nil
@@ -1148,7 +1178,11 @@ final class LockScreenLyricsController {
                 isDuet: nextLine?.isDuet ?? false,
                 flipped: false,
                 nextFlipped: nextLine?.agentFlipped ?? false,
-                karaoke: []
+                karaoke: [],
+                companion: nil,
+                companionFlipped: false,
+                companionKaraoke: [],
+                companionStartCharacters: nil
             )
         }
         let current = location.index >= 0 && location.index < lines.count
@@ -1159,6 +1193,12 @@ final class LockScreenLyricsController {
         // 多一行辅助文字会把那个提示挤掉。
         let translation = current?.translation ?? ""
         let romanization = current?.romanization ?? ""
+        let companion = companionLine(for: location, at: positionMs, in: lines)
+        let companionKaraoke = shiftedCompanionKaraoke(companion, current: current)
+        // 静帧要跟视频第 0 帧一致：另一位往往先开口，取"这一段开始那一刻"已经亮到的字符数。
+        let companionStart = companion == nil
+            ? nil
+            : (companionKaraoke.last(where: { $0.offsetMs <= 0 })?.revealedCharacters ?? 0)
         return LineTexts(
             line: current?.text,
             next: nextLine?.text,
@@ -1167,8 +1207,54 @@ final class LockScreenLyricsController {
             isDuet: current?.isDuet ?? false,
             flipped: current?.agentFlipped ?? false,
             nextFlipped: nextLine?.agentFlipped ?? false,
-            karaoke: current?.karaoke ?? []
+            karaoke: current?.karaoke ?? [],
+            companion: companion?.text,
+            companionFlipped: companion?.agentFlipped ?? false,
+            companionKaraoke: companionKaraoke,
+            companionStartCharacters: companionStart
         )
+    }
+
+    /// 同一时刻还在唱的另一位歌手那句。
+    ///
+    /// 判据：对唱、歌手不同、这一句**还没唱完**（`positionMs < endMs`）、两边都有逐字帧；
+    /// 多条同时成立时取**最晚开始**的那一条。没有帧的那一位挤进这一屏只会整行一次亮，
+    /// 反而把当前句挤小，所以直接不画。
+    private static func companionLine(
+        for location: LocatedLine,
+        at positionMs: Int,
+        in lines: [LockScreenLyricLine]
+    ) -> LockScreenLyricLine? {
+        guard location.index >= 0, location.index < lines.count else { return nil }
+        let current = lines[location.index]
+        guard current.isDuet, !current.karaoke.isEmpty else { return nil }
+        var best: LockScreenLyricLine?
+        for (offset, line) in lines.enumerated() where offset != location.index {
+            guard line.isDuet,
+                  line.agentFlipped != current.agentFlipped,
+                  !line.karaoke.isEmpty,
+                  line.startMs <= positionMs,
+                  positionMs < line.endMs else { continue }
+            if let best, line.startMs <= best.startMs { continue }
+            best = line
+        }
+        return best
+    }
+
+    /// 另一个声部的帧表换算到当前行的起点上：它往往先开口，偏移会是负数；
+    /// `LockScreenKaraoke.combinedFrames` 会把负数那一段算进 0 那一帧的已亮字符数。
+    private static func shiftedCompanionKaraoke(
+        _ companion: LockScreenLyricLine?,
+        current: LockScreenLyricLine?
+    ) -> [LockScreenKaraokeFrame] {
+        guard let companion, let current else { return [] }
+        let delta = companion.startMs - current.startMs
+        return companion.karaoke.map {
+            LockScreenKaraokeFrame(
+                offsetMs: $0.offsetMs + delta,
+                revealedCharacters: $0.revealedCharacters
+            )
+        }
     }
 
     /// 一段片子的名义时长。换行由定时器负责，这里只要"盖住到下一行的时间"。

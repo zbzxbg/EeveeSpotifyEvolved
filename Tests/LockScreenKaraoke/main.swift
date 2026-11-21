@@ -140,6 +140,55 @@ if let repeatedFrames = LockScreenKaraoke.frames(words: repeated, lineText: "abc
     print("  FAIL repeated start times should still produce frames")
 }
 
+// MARK: - ⑤ 对唱叠句：两张帧表并成一张
+
+let lineTable = [
+    LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: 2),
+    LockScreenKaraokeFrame(offsetMs: 400, revealedCharacters: 5),
+    LockScreenKaraokeFrame(offsetMs: 1_200, revealedCharacters: 6),
+]
+// 另一位歌手先开口：换算到当前句起点之后偏移是负的。
+let companionTable = [
+    LockScreenKaraokeFrame(offsetMs: -300, revealedCharacters: 1),
+    LockScreenKaraokeFrame(offsetMs: 100, revealedCharacters: 4),
+    LockScreenKaraokeFrame(offsetMs: 800, revealedCharacters: 6),
+]
+
+if let pair = LockScreenKaraoke.combinedFrames(line: lineTable, companion: companionTable) {
+    requireEqual(pair.count, 5, "the pair table is the union of both timelines")
+    requireEqual(pair[0].offsetMs, 0, "the pair table starts at zero")
+    requireEqual(pair[0].lineCharacters, 2, "the current line keeps its first frame at zero")
+    requireEqual(
+        pair[0].companionCharacters,
+        1,
+        "words the companion sang before this line started count as revealed at zero"
+    )
+    requireEqual(pair[1].offsetMs, 100, "the companion's later frame stays in the union")
+    requireEqual(pair[1].lineCharacters, 2, "the current line is unchanged at the companion's offset")
+    requireEqual(pair[1].companionCharacters, 4, "the companion reveals its second word")
+    requireEqual(pair[2].offsetMs, 400, "the current line's second frame is kept")
+    requireEqual(pair[2].lineCharacters, 5, "the current line accumulates its characters")
+    requireEqual(pair[3].offsetMs, 800, "the companion's last frame is kept")
+    requireEqual(pair[3].companionCharacters, 6, "the companion is fully revealed")
+    requireEqual(pair[4].offsetMs, 1_200, "the last offset comes from the current line")
+    requireEqual(pair[4].lineCharacters, 6, "the current line is fully revealed at the end")
+} else {
+    failures += 1
+    print("  FAIL two frame tables should merge into one pair table")
+}
+
+require(
+    LockScreenKaraoke.combinedFrames(
+        line: lineTable,
+        companion: [LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: 1)]
+    ) == nil,
+    "a companion without word-by-word frames does not produce a pair table"
+)
+require(
+    LockScreenKaraoke.combinedFrames(line: [], companion: companionTable) == nil,
+    "an empty current line does not produce a pair table"
+)
+
 if failures == 0 {
     print("LockScreenKaraoke: all assertions passed")
 } else {
