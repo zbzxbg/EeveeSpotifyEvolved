@@ -408,6 +408,7 @@ spotify_features_title = "Spotify features";
 spotify_features_section_playback = "Playback";
 spotify_features_section_library = "Your Library";
 spotify_features_section_lockscreen = "Lock screen";
+spotify_features_section_sleep_timer = "Sleep timer";
 spotify_features_section_home = "Home";
 spotify_features_section_other = "Other";
 spotify_features_section_content = "Content";

@@ -405,6 +405,7 @@ spotify_features_title = "Spotify 功能";
 spotify_features_section_playback = "播放";
 spotify_features_section_library = "音乐库";
 spotify_features_section_lockscreen = "锁屏";
+spotify_features_section_sleep_timer = "睡眠定时器";
 spotify_features_section_home = "首页";
 spotify_features_section_other = "其他";
 spotify_features_section_content = "内容";

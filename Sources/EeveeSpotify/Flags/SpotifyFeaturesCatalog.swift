@@ -99,7 +99,7 @@ enum SpotifyFeaturesCatalog {
             ]
         ),
         SpotifyFeatureSection(
-            titleKey: "sleep_timer_title",
+            titleKey: "spotify_features_section_sleep_timer",
             flags: [
                 SpotifyFeatureFlag(
                     key: "ios-feature-sleeptimer.enable_fade_out",
