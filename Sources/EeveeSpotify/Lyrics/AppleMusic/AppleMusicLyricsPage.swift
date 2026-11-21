@@ -233,6 +233,10 @@ struct AppleMusicLyricsPage: View {
     /// 预览现在也有 `headerContent`，走的是按壳占位算的 `fadeMaskStops`。
     var footerHeight: CGFloat = 116
 
+    /// 歌词提供者那一行（钉在控件栏上方）占的高度：13pt 一行 + 与控件之间的 8pt + 余量。
+    /// 它要进 `scrollInsets.bottom`，否则滚到底时最后一句会压在这行字上。
+    var providerCreditHeight: CGFloat = 30
+
     /// 是否启用"划动时收起壳"（收起即「全屏歌词」）。
     ///
     /// 只有全屏要这个行为；内嵌预览是一张小卡片，收起壳只会剩一片空白，
@@ -387,6 +391,10 @@ struct AppleMusicLyricsPage: View {
             // 顶部 = 标题(15pt 一行) + 歌手(12pt 一行) + 间距 ≈ 40，再留 22 呼吸
             // 底部 = 进度条(11) + 时间行(11+3) + 间距(12) + 三键(56) ≈ 100，再留 16
             // 这两块**不参与滚动**，所以它们的高度必须在这里一次性让出来。
+            //
+            // 歌词提供者那一行现在**钉在控件栏上方**（不再挂在列表末尾 —— 翻到最后才
+            // 看得到就等于没有），所以它的高度也要一起让出来，否则最后一句会压在那行字上。
+            let showsPinnedCredit = showsProviderFooter && !displayedProviderCredit.isEmpty
             let safeArea = geometry.safeAreaInsets
             let scrollInsets = EdgeInsets(
                 top: (headerContent == nil
@@ -395,7 +403,8 @@ struct AppleMusicLyricsPage: View {
                 leading: contentInsets.leading,
                 bottom: (footerContent == nil
                     ? contentInsets.bottom
-                    : safeArea.bottom + footerHeight) + contentInsets.bottom,
+                    : safeArea.bottom + footerHeight) + contentInsets.bottom
+                    + (showsPinnedCredit ? providerCreditHeight : 0),
                 trailing: contentInsets.trailing
             )
 
@@ -442,17 +451,8 @@ struct AppleMusicLyricsPage: View {
                                 .id(line.id)
                             }
 
-                            // 歌词提供者页脚。
-                            //
-                            // 放在列表末尾（与旧 overlay、Spotify 原生一致）：用户往下翻
-                            // 才看到，不翻就看不到。**不参与卡拉OK** —— 它不挂 renderer、
-                            // 不挂焦点、不模糊、不填充，因为
-                            // 1. 它不是"唱出来的内容"，不该有时间轴；
-                            // 2. 一旦走焦点逻辑，非焦点行的 0.175 透明度 + 3.5pt 模糊
-                            // 会把它糊得不可读。
-                            if showsProviderFooter, !displayedProviderCredit.isEmpty {
-                                providerFooter
-                            }
+                            // 歌词提供者那一行**不在这里**：它钉在控件栏上方
+                            // （见下面壳里那段），列表末尾只留歌词。
                         }
                         .padding(.top, scrollInsets.top)
                         .padding(.bottom, scrollInsets.bottom)
@@ -591,6 +591,18 @@ struct AppleMusicLyricsPage: View {
                             .padding(.top, safeArea.top + headerTopInset)
                     }
                     Spacer(minLength: 0)
+                    // 歌词提供者：钉在控件栏正上方，跟壳一起淡出。
+                    //
+                    // 以前它挂在滚动列表末尾（"与旧 overlay 一致，翻到最后才看得到"），
+                    // 实际效果是**几乎没人看到** —— 全屏歌词页没人会滚过最后一句。挪到这里
+                    // 之后它一直在：`scrollInsets.bottom` 同时为它让出高度，最后一句不会压上来。
+                    if showsProviderFooter, !displayedProviderCredit.isEmpty {
+                        HStack(spacing: 0) {
+                            providerFooter
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, scrollInsets.leading)
+                    }
                     if let footerContent {
                         footerContent
                             .padding(.bottom, max(safeArea.bottom, 8))
@@ -763,7 +775,9 @@ struct AppleMusicLyricsPage: View {
             .font(.system(size: 13))
             .foregroundStyle(primaryColor.opacity(0.35))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 24)
+            // 钉在控件栏正上方，与控件之间留一条窄缝即可 —— 24pt 是它还挂在列表末尾时的
+            // 段间距，挪到这里会把它推到歌词里。
+            .padding(.top, 8)
             // 整行可点：`Text` 默认只有字形区域命中，13pt 的字很难戳中。
             .contentShape(Rectangle())
             .onTapGesture {
