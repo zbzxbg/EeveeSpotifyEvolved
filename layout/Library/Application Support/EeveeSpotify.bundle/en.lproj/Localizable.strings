@@ -21,7 +21,7 @@ requires_ios26 = "Requires iOS 26 or later.";
 // Patching
 
 do_not_patch_premium = "Do Not Patch Premium";
-patching_description = "EeveeSpotify intercepts requests to load user data, deserializes it, and modifies the parameters in real-time.\n\nIf you have an active Premium subscription, you can turn on Do Not Patch Premium. The tweak won't patch the data or restrict the use of Premium server-sided features.\n\n%@";
+patching_description = "EeveeSpotify intercepts requests to load user data, deserializes it, and modifies the parameters in real-time.\n\nIf you have an active Premium subscription, you can turn on Do Not Patch Premium. The tweak won't patch the data or restrict the use of Premium server-sided features. %@";
 
 overwrite_configuration = "Overwrite Configuration";
 overwrite_configuration_description = "Replace the remote configuration with the dumped Premium one. It isn't guaranteed to work, but it can solve problems such as ads appearing. A stale configuration can also cause unexpected problems - for example some features stop working, or Spotify crashes.";
@@ -174,7 +174,7 @@ payment_notice = "EeveeSpotify applies patches to unlock certain Premium feature
 disable_lyrics_feature = "Disable Lyrics Feature";
 disable_lyrics_feature_description = "Disables every feature related to custom lyrics, and prevents Spotify from returning its built-in lyrics.";
 word_by_word_lyrics = "Enable Word-by-Word Lyrics";
-word_by_word_lyrics_description = "Every provider except LRCLIB and Genius offers word-by-word lyrics.";
+word_by_word_lyrics_description = "Every lyrics source except LRCLIB and Genius offers word-by-word lyrics (when the song has them).";
 better_word_by_word_lyrics = "Better Word-by-Word Lyrics";
 better_word_by_word_lyrics_description = "Just like Apple Music. Requires iOS 26 or later.";
 better_word_by_word_lyrics_needs_ios26 = "This option is unavailable: your system is older than iOS 26.";
@@ -260,7 +260,7 @@ miscellaneous = "Miscellaneous";
 clean_share_links = "Clean Share Links";
 clean_share_links_description = "Removes tracking parameters from shared links.";
 block_rating_prompts = "Block Rating Prompts";
-block_rating_prompts_description = "Blocks the App Store rating dialog.\n\n%@";
+block_rating_prompts_description = "Blocks the App Store rating dialog. %@";
 restart_now = "Restart Now";
 no_such_song = "No Song Found";
 musixmatch_restricted = "Restricted";
@@ -390,7 +390,7 @@ telemetry_refresh_counters = "Refresh";
 telemetry_reset_counters = "Reset counters";
 haptics_title = "Interface haptics";
 haptics_enabled = "Vibrate on player controls";
-haptics_description = "Adds haptic feedback to Spotify's player controls using the system feedback engine.\n\n%@";
+haptics_description = "Adds haptic feedback to Spotify's player controls using the system feedback engine. %@";
 haptics_strength = "Strength";
 haptics_test = "Test";
 haptics_surface_keywords_section = "Control name keywords";
@@ -594,7 +594,7 @@ backup_export_footer = "Exports only this tweak's own keys.";
 backup_regenerated = "Regenerated.";
 backup_copy = "Copy to clipboard";
 backup_copied = "Copied. Paste it into Notes or send it to yourself.";
-backup_import_footer = "Only keys this tweak owns are written; anything else in the file is ignored and counted.\n\n%@";
+backup_import_footer = "Only keys this tweak owns are written; anything else in the file is ignored and counted. %@";
 backup_import = "Import";
 backup_paste = "Paste from clipboard";
 backup_pasted = "Pasted. Check it, then tap Import.";
@@ -629,7 +629,7 @@ updates_error_status = "The GitHub API answered HTTP %d.";
 reduce_interventions_title = "Reduce interruptions";
 reduce_interventions_master = "Turn all tips off";
 reduce_interventions_master_description = "Spotify's master switch for its tip modules.";
-reduce_interventions_master_footer = "These switches write Spotify flag overrides.\n\n%@";
+reduce_interventions_master_footer = "These switches write Spotify flag overrides. %@";
 reduce_interventions_tips_section = "One switch per tip";
 reduce_interventions_flag_account_switching_tooltip = "Account switching tip";
 reduce_interventions_flag_account_switching_tooltip_description = "The nudge that suggests switching between accounts.";
@@ -782,7 +782,7 @@ glass_iphone_only_footer = "The tab bar glass is measured from the iPhone tab ba
 
 // iPad 回退提示
 ipad_fallback_title = "Adjusted for iPad";
-ipad_fallback_message = "This device is an iPad. The tab bar and mini bar glass, and the artist, album and playlist page look, are laid out for the iPhone, so they were reverted to Spotify's native look.\n\n%@";
+ipad_fallback_message = "This device is an iPad. The tab bar and mini bar glass, and the artist, album and playlist page look, are laid out for the iPhone, so they were reverted to Spotify's native look. %@";
 
 /* MARK: Shared labels */
 

@@ -18,7 +18,7 @@ restart_is_required_description = "Bu dəyişikliyin qüvvəyə minməsi üçün
 /* MARK: Patching */
 
 do_not_patch_premium = "Premium üçün yamaq tətbiq etmə";
-patching_description = "EeveeSpotify istifadəçi məlumatlarını saxlayır, onları de-serializasiya edir və real vaxtda parametrləri dəyişir.\n\nƏgər aktiv Premium abunəliyiniz varsa, bu seçim aktiv olduqda Premium parametrlərinə dəyişiklik edilməyəcək və beləliklə heç bir funksiya pozulmayacaq.\n\n%@";
+patching_description = "EeveeSpotify istifadəçi məlumatlarını saxlayır, onları de-serializasiya edir və real vaxtda parametrləri dəyişir.\n\nƏgər aktiv Premium abunəliyiniz varsa, bu seçim aktiv olduqda Premium parametrlərinə dəyişiklik edilməyəcək və beləliklə heç bir funksiya pozulmayacaq. %@";
 
 overwrite_configuration = "Konfiqurasiyanı dəyiş";
 overwrite_configuration_description = "Uzaqdan alınmış konfiqurasiyanı Premium konfiqurasiya ilə əvəz edir. Bu parametrlər əsasən interfeys və istifadəçi təcrübəsi ilə bağlıdır və istifadə üçün faydalı olsa da, bəzi problemlərə yol aça bilər.";

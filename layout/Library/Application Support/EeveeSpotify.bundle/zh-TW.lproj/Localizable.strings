@@ -299,7 +299,7 @@ backup_export_footer = "只匯**本倉庫自己的鍵**（UserDefaults.ownedKeys
 backup_regenerated = "已重新產生。";
 backup_copy = "複製到剪貼簿";
 backup_copied = "已複製。貼進備忘錄、或發給自己都行。";
-backup_import_footer = "只寫本倉庫自己的鍵；檔案裡其它鍵一律忽略並計數。\n\n%@";
+backup_import_footer = "只寫本倉庫自己的鍵；檔案裡其它鍵一律忽略並計數。%@";
 backup_import = "匯入";
 backup_paste = "從剪貼簿貼上";
 backup_pasted = "已貼上，檢查一下再點「匯入」。";
@@ -406,4 +406,4 @@ glass_iphone_only_footer = "標籤欄玻璃是按 iPhone 標籤欄量的，iPad 
 
 // iPad 回退提示
 ipad_fallback_title = "已為 iPad 調整";
-ipad_fallback_message = "偵測到目前裝置是 iPad。標籤欄與迷你條的玻璃，以及藝人 / 專輯 / 歌單頁面的外觀改動，都是按 iPhone 的尺寸做的，已回退為 Spotify 原生外觀。\n\n%@";
+ipad_fallback_message = "偵測到目前裝置是 iPad。標籤欄與迷你條的玻璃，以及藝人 / 專輯 / 歌單頁面的外觀改動，都是按 iPhone 的尺寸做的，已回退為 Spotify 原生外觀。%@";

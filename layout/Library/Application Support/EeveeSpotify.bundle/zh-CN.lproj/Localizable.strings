@@ -21,7 +21,7 @@ requires_ios26 = "系统最低需要 iOS 26。";
 // Patching
 
 do_not_patch_premium = "不启用 Premium 补丁";
-patching_description = "拦截加载用户数据的请求，对其进行反序列化，并实时修改参数。\n\n如果您拥有真实有效的 Premium 订阅，则可以启用“不启用 Premium 补丁”。该插件不会修补数据或限制 Premium 服务器端功能的使用。\n\n%@";
+patching_description = "拦截加载用户数据的请求，对其进行反序列化，并实时修改参数。\n\n如果您拥有真实有效的 Premium 订阅，则可以启用“不启用 Premium 补丁”。该插件不会修补数据或限制 Premium 服务器端功能的使用。%@";
 
 overwrite_configuration = "覆盖配置";
 overwrite_configuration_description = "用转存的 Premium 配置替换远程配置。虽然不保证一定有效，但可以解决出现广告之类的问题。配置过时也可能导致意料之外的问题，例如部分功能无法使用、Spotify 闪退等。";
@@ -33,7 +33,7 @@ do_not_replace_lyrics_description = "禁用自定义歌词功能，但不会阻�
 lyrics_source = "歌词来源";
 lyrics_source_restart_note = "切换歌词来源后需重启 Spotify。";
 lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ Music和KuGou都是按歌名与歌手搜索(不是按曲目ID精确匹配)，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
-petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp)：Spotify在日本地区的主要歌词提供商。但一小部分歌曲存在逐词时间轴不规范的情况。";
+petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp)：Spotify 在日本地区的主要歌词来源。但一小部分歌曲存在逐词时间轴不规范的情况。";
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org)：提供逐词歌词及部分其他歌词来源没有的歌词。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
 spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
@@ -58,7 +58,7 @@ qqmusic_description = "[QQ Music](https://y.qq.com)：华语歌曲主力，提�
 kugou_description = "[KuGou](https://www.kugou.com)：华语歌曲主力，提供逐词歌词和逐词日语罗马字。";
 genius_description = "[Genius](https://genius.com)：歌词覆盖面最广，但歌词没有时间轴。";
 lrclib_description = "[LRCLIB](https://lrclib.net)：最开放的服务，提供逐行歌词。但它缺少很多歌曲的歌词。";
-musixmatch_description = "[Musixmatch](https://www.musixmatch.com)：Spotify官方歌词提供商之一。为很多歌曲提供带时间轴的歌词，但需要用户令牌才能使用。";
+musixmatch_description = "[Musixmatch](https://www.musixmatch.com)：Spotify 官方歌词来源之一。为很多歌曲提供带时间轴的歌词，但需要用户令牌才能使用。";
 
 musixmatch_user_token = "Musixmatch 用户令牌";
 user_token_placeholder = "输入用户令牌或粘贴调试信息";
@@ -174,7 +174,7 @@ payment_notice = "EeveeSpotify 已应用补丁来解锁部分高级功能，免�
 disable_lyrics_feature = "禁用歌词功能";
 disable_lyrics_feature_description = "禁用有关于自定义歌词的所有功能，还会阻止Spotify返回其自带的歌词。";
 word_by_word_lyrics = "开启逐词歌词";
-word_by_word_lyrics_description = "除了LRCLIB和Genius，其余歌词提供商均提供逐词歌词。";
+word_by_word_lyrics_description = "除了LRCLIB和Genius，其余歌词来源均提供逐词歌词（如果这首歌有逐词的话）。";
 better_word_by_word_lyrics = "更好的逐词歌词";
 better_word_by_word_lyrics_description = "像 Apple Music 那样。系统版本最低需要 iOS 26。";
 better_word_by_word_lyrics_needs_ios26 = "此选项不可用：你的系统版本低于 iOS 26。";
@@ -256,7 +256,7 @@ miscellaneous = "杂项设定";
 clean_share_links = "移除追踪参数"; 
 clean_share_links_description = "清除网址追踪码";
 block_rating_prompts = "阻止评分提示";
-block_rating_prompts_description = "拦截 App Store 的系统评分弹窗。\n\n%@";
+block_rating_prompts_description = "拦截 App Store 的系统评分弹窗。%@";
 restart_now = "立即重启";
 no_such_song = "未找到歌曲";
 musixmatch_restricted = "受限制";
@@ -389,7 +389,7 @@ telemetry_refresh_counters = "刷新";
 telemetry_reset_counters = "清零计数";
 haptics_title = "界面触感";
 haptics_enabled = "播放器控件震动";
-haptics_description = "用系统反馈引擎给 Spotify 播放器控件加震动。\n\n%@";
+haptics_description = "用系统反馈引擎给 Spotify 播放器控件加震动。%@";
 haptics_strength = "震动强度";
 haptics_test = "尝试一下？";
 haptics_surface_keywords_section = "控件类名关键词";
@@ -593,7 +593,7 @@ backup_export_footer = "只导本仓库自己的键。";
 backup_regenerated = "已重新生成。";
 backup_copy = "复制到剪贴板";
 backup_copied = "已复制。贴进备忘录、或发给自己都行。";
-backup_import_footer = "只写本仓库自己的键；文件里其它键一律忽略并计数。\n\n%@";
+backup_import_footer = "只写本仓库自己的键；文件里其它键一律忽略并计数。%@";
 backup_import = "导入";
 backup_paste = "从剪贴板粘贴";
 backup_pasted = "已粘贴，检查一下再点「导入」。";
@@ -628,7 +628,7 @@ updates_error_status = "GitHub接口回了HTTP %d。";
 reduce_interventions_title = "减少打扰";
 reduce_interventions_master = "一键关掉全部提示";
 reduce_interventions_master_description = "关闭Spotify提示模块的总开关。";
-reduce_interventions_master_footer = "这些开关写的是 Spotify Flag 覆盖。\n\n%@";
+reduce_interventions_master_footer = "这些开关写的是 Spotify Flag 覆盖。%@";
 reduce_interventions_tips_section = "逐条关闭";
 reduce_interventions_flag_account_switching_tooltip = "账号切换提示";
 reduce_interventions_flag_account_switching_tooltip_description = "建议你切换账号的那个气泡。";
@@ -767,7 +767,7 @@ glass_iphone_only_footer = "标签栏玻璃是按 iPhone 标签栏量的，iPad 
 
 // iPad 回退提示
 ipad_fallback_title = "已为 iPad 调整";
-ipad_fallback_message = "检测到当前设备是 iPad。标签栏与迷你条的玻璃，以及艺人 / 专辑 / 歌单页面的外观改动，都是按 iPhone 的尺寸做的，已回退为 Spotify 原生外观。\n\n%@";
+ipad_fallback_message = "检测到当前设备是 iPad。标签栏与迷你条的玻璃，以及艺人 / 专辑 / 歌单页面的外观改动，都是按 iPhone 的尺寸做的，已回退为 Spotify 原生外观。%@";
 
 /* MARK: 共用标签 */
 
