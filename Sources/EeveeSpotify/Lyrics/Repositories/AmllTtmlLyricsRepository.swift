@@ -81,7 +81,9 @@ class AmllTtmlLyricsRepository: LyricsRepository {
         // `UserDefaults.amllEffectiveTranslationLanguage`）。
         // ⚠️ 必须进缓存键：同一首歌换语言时，命中旧缓存就会一直显示旧语言那一轨。
         let preferredTranslationLanguage = UserDefaults.amllEffectiveTranslationLanguage
-        let cacheKey = "\(trackId)|\(preferredTranslationLanguage)" as NSString
+        // 模糊开关也要进键：关掉之后，之前按模糊搜到的那一份不该再从缓存里被端出来。
+        let fuzzyEnabled = UserDefaults.experimentsOptions.amllFuzzySearch ? "1" : "0"
+        let cacheKey = "\(trackId)|\(preferredTranslationLanguage)|fuzzy\(fuzzyEnabled)" as NSString
         if let cached = lyricsCache.object(forKey: cacheKey) {
             writeDebugLog("[AMLL] cache hit for \(trackId)")
             return cached.dto

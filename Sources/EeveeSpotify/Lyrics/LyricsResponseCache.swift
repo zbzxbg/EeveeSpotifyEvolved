@@ -104,7 +104,26 @@ final class LyricsResponseCache {
         // 按歌排除源：改过任何一条，备忘就必须失效 —— 否则改完排他、60 秒内重听同一首，
         // 交出去的还是上一次那份 payload（看起来就是"设置没生效，要重启"）。
         let exclusions = LyricsSongSourceExclusions.revision
-        return "\(source)|\(genius)|\(amll)|\(officialTtml)|\(amllTranslationLanguage)|ex\(exclusions)"
+        // 下面这些**都会改变最终选哪个源**，因此也会改变 payload：
+        // · 模糊搜索：决定 AMLL 是否还能按歌名猜；
+        // · 排序：链路顺序变了，同档的"先到先用"就会换人；
+        // · 逐词开关 / 译文可见性 / 罗马字开关：决定 wantedTier 与 wantedFacets。
+        // 少任何一项，改完设置后 60 秒内重听同一首都会拿回旧 payload。
+        let fuzzy = UserDefaults.experimentsOptions.amllFuzzySearch ? "1" : "0"
+        let order = LyricsSourceOrder.current
+            .compactMap(\.orderKey)
+            .joined(separator: ",")
+        let wordByWord = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled ? "1" : "0"
+        let hideTranslation = NgzhwmSettingsViewModel.isHideLyricsTranslationEnabled ? "1" : "0"
+        let defaults = UserDefaults.standard
+        let romanization = [
+            defaults.bool(forKey: "ngzhwm_japaneseRomanization") ? "1" : "0",
+            defaults.bool(forKey: "ngzhwm_chineseRomanization") ? "1" : "0",
+            defaults.bool(forKey: "ngzhwm_koreanRomanization") ? "1" : "0",
+        ].joined()
+        return "\(source)|\(genius)|\(amll)|\(officialTtml)|\(amllTranslationLanguage)"
+            + "|ex\(exclusions)|fuzzy\(fuzzy)|order[\(order)]"
+            + "|word\(wordByWord)|hideTr\(hideTranslation)|romaji\(romanization)"
     }
 
     /// 这一次请求该怎么等：直接交备忘 / 短预算 / 长预算 + 第几次 + 预算秒数。
