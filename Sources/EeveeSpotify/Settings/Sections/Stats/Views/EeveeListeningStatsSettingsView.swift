@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 /// 「听歌统计」页。
@@ -16,7 +17,6 @@ struct EeveeListeningStatsSettingsView: View {
     @State private var period: ListeningStatsPeriod = .week
     @State private var isConfirmingClear = false
 
-    @State private var isPickingImport = false
     @State private var isImporting = false
     @State private var importMessage: String?
     @State private var importFailed = false
@@ -64,17 +64,6 @@ struct EeveeListeningStatsSettingsView: View {
             // 备份导入 / 别处改过键时，页面显示的值也跟着盘上那份走。
             isEnabled = UserDefaults.listeningStatsEnabled
             viewModel.reload(period: period)
-        }
-        .sheet(isPresented: $isPickingImport) {
-            StreamingHistoryFilePicker(
-                onPick: { urls in
-                    isPickingImport = false
-                    importStreamingHistory(urls)
-                },
-                onCancel: {
-                    isPickingImport = false
-                }
-            )
         }
         .confirmationDialog(
             "listening_stats_clear_title".localized,
@@ -297,7 +286,9 @@ struct EeveeListeningStatsSettingsView: View {
             footer: Text("listening_stats_import_footer".localized)
         ) {
             Button {
-                isPickingImport = true
+                StreamingHistoryFilePickerPresenter.present { urls in
+                    importStreamingHistory(urls)
+                }
             } label: {
                 HStack(spacing: 8) {
                     Label(
@@ -328,8 +319,11 @@ struct EeveeListeningStatsSettingsView: View {
         guard !urls.isEmpty else { return }
 
         isImporting = true
-        importMessage = nil
+        importMessage = "listening_stats_importing".localized
         importFailed = false
+        writeDebugLog(
+            "[Stats] import start — \(urls.map(\.lastPathComponent).joined(separator: ", "))"
+        )
 
         let calendar = Calendar.current
         let store = ListeningStatsStore.shared
@@ -550,35 +544,67 @@ private struct ListeningStatsBars: View {
 
 // MARK: - 历史文件选择器
 
-/// `UIDocumentPickerViewController` 的 SwiftUI 外壳。
+/// 直接从**最上层 VC** 弹 `UIDocumentPickerViewController`。
 ///
-/// 与「导入歌词」那个不同，这里 **`asCopy: false`**：十年的导出包可能几十 MB，先复制一份
-/// 纯属浪费 —— 解析全程都在安全作用域里读（`StreamingHistoryImporter.parse` 自己开合），
-/// 读完就结束。文件夹也算一种可选项，所以 `.folder` 也在允许的类型里。
-struct StreamingHistoryFilePicker: UIViewControllerRepresentable {
+/// 为什么不用 SwiftUI `.sheet` 再包一层 `UIViewControllerRepresentable`：设置页本身就在
+/// Spotify 的一个 sheet 里，而文档选择器是系统的**远程 VC** —— 把它塞进另一层 sheet 的
+/// hosting controller 当子 VC 时，点「打开 / 确定」可能根本不回调 delegate，手指按下去
+/// 没有任何反应。这里与偏移面板、艺人简介同一套 present 方式：从窗口根往下一层层取到
+/// 最上面那个 VC，由它 present。
+///
+/// `asCopy: false`：十年导出包可能几十 MB，先复制一份纯属浪费；解析全程在安全作用域里读
+/// （`StreamingHistoryImporter.parse` 自己开合）。文件夹也算一种可选项，所以 `.folder`
+/// 也在允许的类型里。
+enum StreamingHistoryFilePickerPresenter {
 
-    var onPick: ([URL]) -> Void
-    var onCancel: () -> Void
+    /// 选择器的 delegate 是 weak：present 期间必须有人强引用它。
+    private static var activeCoordinator: Coordinator?
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
+    static func present(
+        onPick: @escaping ([URL]) -> Void,
+        onCancel: @escaping () -> Void = {}
+    ) {
+        guard let window = EntityPageAppearance.frontWindow(),
+              var host = window.rootViewController else {
+            writeDebugLog("[Stats] import picker skipped — no front window")
+            return
+        }
+        while let presented = host.presentedViewController, !presented.isBeingDismissed {
+            host = presented
+        }
 
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let types: [UTType] = [.zip, .folder, .json]
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
-        picker.delegate = context.coordinator
         picker.allowsMultipleSelection = true
-        return picker
+
+        let coordinator = Coordinator(
+            onPick: { urls in
+                activeCoordinator = nil
+                let names = urls.map(\.lastPathComponent).joined(separator: ", ")
+                writeDebugLog("[Stats] import picker picked \(urls.count) item(s): \(names)")
+                onPick(urls)
+            },
+            onCancel: {
+                activeCoordinator = nil
+                writeDebugLog("[Stats] import picker cancelled")
+                onCancel()
+            }
+        )
+        activeCoordinator = coordinator
+        picker.delegate = coordinator
+        host.present(picker, animated: true)
+        writeDebugLog(
+            "[Stats] import picker presented from \(NSStringFromClass(type(of: host)))"
+        )
     }
 
-    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
-
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        private let parent: StreamingHistoryFilePicker
+        private let pick: ([URL]) -> Void
+        private let cancel: () -> Void
 
-        init(_ parent: StreamingHistoryFilePicker) {
-            self.parent = parent
+        init(onPick: @escaping ([URL]) -> Void, onCancel: @escaping () -> Void) {
+            self.pick = onPick
+            self.cancel = onCancel
         }
 
         func documentPicker(
@@ -586,14 +612,14 @@ struct StreamingHistoryFilePicker: UIViewControllerRepresentable {
             didPickDocumentsAt urls: [URL]
         ) {
             guard !urls.isEmpty else {
-                parent.onCancel()
+                cancel()
                 return
             }
-            parent.onPick(urls)
+            pick(urls)
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            parent.onCancel()
+            cancel()
         }
     }
 }

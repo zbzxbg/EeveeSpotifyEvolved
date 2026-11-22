@@ -1,4 +1,4 @@
-/* MARK: Settings */
+﻿/* MARK: Settings */
 
 patching = "补丁";
 lyrics = "歌词";
@@ -740,6 +740,7 @@ listening_stats_combo_format = "%@ · %@";
 listening_stats_import_title = "导入流媒体历史";
 listening_stats_import_footer = "把 Spotify 数据导出里的播放记录加进这台设备：在 spotify.com/account/privacy 申请「扩展流媒体历史」，然后选中它给的 .zip，或者选中里面那个放 JSON 的文件夹。全程不上传。同一个文件导入两次不会重复计数。";
 listening_stats_import_button = "选择文件或文件夹";
+listening_stats_importing = "正在导入…";
 listening_stats_import_result_format = "已加入 %@ 次播放，来自 %@ 个文件（%@）";
 listening_stats_import_nothing = "这个选择里没有找到播放记录。";
 listening_stats_import_skipped_format = "有 %@ 个文件之前导入过，已跳过。";

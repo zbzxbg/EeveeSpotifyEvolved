@@ -1,4 +1,4 @@
-/* MARK: Settings */
+﻿/* MARK: Settings */
 
 patching = "Patching";
 lyrics = "Lyrics";
@@ -755,6 +755,7 @@ listening_stats_combo_format = "%@ · %@";
 listening_stats_import_title = "Import streaming history";
 listening_stats_import_footer = "Adds plays from a Spotify data export to this device: request Extended streaming history at spotify.com/account/privacy, then pick the .zip it gives you or a folder of the JSON files inside. Nothing is uploaded. Importing the same file again does not count it twice.";
 listening_stats_import_button = "Choose file or folder";
+listening_stats_importing = "Importing…";
 listening_stats_import_result_format = "Added %@ plays from %@ files (%@)";
 listening_stats_import_nothing = "No plays found in that selection.";
 listening_stats_import_skipped_format = "%@ files were imported before and were skipped.";
