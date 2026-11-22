@@ -111,9 +111,10 @@ class AmllTtmlLyricsRepository: LyricsRepository {
             writeDebugLog("[AMLL] exact lookup failed (\(exactError)) — fuzzy search is ON, searching by name")
 
             let hits = (try? fuzzySearchCandidates(for: query)) ?? []
-            var picked: AmllSongItem?
+            var picked: (item: AmllSongItem, verified: Bool)?
             for hit in hits {
-                guard durationMatches(hit, trackMs: query.durationMs) else {
+                let check = durationCheck(hit, trackMs: query.durationMs)
+                if check == .mismatch {
                     writeDebugLog(
                         "[AMLL] fuzzy candidate id=\(hit.id) is a different arrangement"
                             + " (duration gate) — trying the next one"
@@ -121,26 +122,31 @@ class AmllTtmlLyricsRepository: LyricsRepository {
                     continue
                 }
                 if let fetched = try? fetchLyricsItem(id: hit.id) {
-                    picked = fetched
+                    picked = (fetched, check == .matches)
                     break
                 }
             }
-            guard let item = picked else {
+            guard let picked else {
                 writeDebugLog("[AMLL] fuzzy search produced no usable candidate — noSuchSong")
                 throw exactError
             }
 
             // ⚠️ 模糊命中是**按名字**认的 ⇒ 身份复核要关掉（那个文件当然不带本曲的 spotifyId）。
-            // 换来的是 `fuzzySearchCandidates` 的打分闸门与 `durationMatches` 的版本闸门：
+            // 换来的是 `fuzzySearchCandidates` 的打分闸门与 `durationCheck` 的版本闸门：
             // 歌名对不上、或者时长对不上（另一个编曲）就根本不会被选中。
             var dto = try makeDto(
-                item: item,
+                item: picked.item,
                 trackId: trackId,
                 enforceIdentity: false,
                 translationLanguage: preferredTranslationLanguage
             )
-            // 这份是"猜的"：自动优选/锁屏取词据此把它排在"对上的"后面（见 `LyricsDto.isFuzzyMatch`）。
-            dto.isFuzzyMatch = true
+            // 时长闸门**查到并对上**的，不再是"猜的"：它是按曲目时长验证过的同一版本，
+            // 自动优选里与"源自己的曲目 id 命中"同档。只有查不到时长（没有 ncm id /
+            // 网络失败）的模糊命中才保留"猜的"标记（见 `LyricsDto.isFuzzyMatch`）。
+            dto.isFuzzyMatch = !picked.verified
+            if picked.verified {
+                writeDebugLog("[AMLL] fuzzy hit verified by duration — treating it as an exact match")
+            }
             lyricsCache.setObject(CachedLyrics(dto: dto), forKey: cacheKey)
             return dto
         }
@@ -525,6 +531,16 @@ class AmllTtmlLyricsRepository: LyricsRepository {
         return ranked
     }
 
+    /// 模糊命中的版本校验结果。
+    private enum DurationCheck {
+        /// 查到了时长，且和本曲在容差内。
+        case matches
+        /// 查到了时长，但对不上 —— 另一个编曲/版本。
+        case mismatch
+        /// 查不到（没有网易云 id / 网络失败）：不拦，但也不能当成"验证过".
+        case unknown
+    }
+
     /// 模糊命中要不要因为"版本对不上"被丢掉。
     ///
     /// AMLL 的搜索接口不返回时长，TTML 的 `<body dur>` 又只是"最后一句歌词的时间戳"
@@ -533,19 +549,19 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     /// （与 `KuGouLyricsRepository` 挑条目的 `lengthSlackMs` 同一把尺子）。
     /// 对不上 = 另一个编曲/版本，宁可不给词也不要把时间轴对不上的词套上去。
     ///
-    /// 查不到时长（没有网易云 id / 网络失败）时**不拦**：宁可保留现在的"按名字猜"，
-    /// 也不要因为一个可选校验把本来能用的模糊命中全部挡掉。
-    private func durationMatches(_ item: AmllSearchItem, trackMs: Int?) -> Bool {
+    /// 查不到时长时返回 `.unknown`：**不拦**（宁可保留"按名字猜"），同时保留
+    /// `isFuzzyMatch = true` —— 它只是没被验证过，不该和验证过的命中同档。
+    private func durationCheck(_ item: AmllSearchItem, trackMs: Int?) -> DurationCheck {
         guard let trackMs, trackMs > 0,
-              let songId = item.ncmMusicIds?.first, !songId.isEmpty else { return true }
-        guard let remoteMs = NeteaseSongDuration.durationMs(forSongId: songId) else { return true }
+              let songId = item.ncmMusicIds?.first, !songId.isEmpty else { return .unknown }
+        guard let remoteMs = NeteaseSongDuration.durationMs(forSongId: songId) else { return .unknown }
         let matches = abs(remoteMs - trackMs) <= Self.fuzzyDurationSlackMs
         if !matches {
             writeDebugLog(
                 "[AMLL] duration \(remoteMs)ms vs track \(trackMs)ms — this entry is another version"
             )
         }
-        return matches
+        return matches ? .matches : .mismatch
     }
 
     /// 归一化：小写 + 只留字母与数字（丢掉空格、标点、全角符号）。

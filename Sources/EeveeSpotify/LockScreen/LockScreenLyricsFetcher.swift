@@ -13,7 +13,7 @@ import Foundation
 /// 开着时：先收一份行级的当**兜底**，再为**词级时间轴**继续问后面的源 —— 档次判据复用
 /// 页内自动优选那一份（`LyricsAutoSelect.tier(of:)`），多花的时间也复用同一条预算
 /// （`LyricsAutoSelect.upgradeBudget` / `fuzzyVerificationBudget`），不另立一套。
-/// 「猜的」那一份（AMLL 模糊命中）同样只当兜底：同名可能是另一个编曲（打上花火），
+/// 「猜的」那一份（AMLL 模糊命中）同样只当兜底：同名可能是另一个编曲，
 /// 继续问到"对上的"那一份为止。
 enum LockScreenLyricsFetcher {
 
@@ -138,8 +138,7 @@ enum LockScreenLyricsFetcher {
                 }
 
                 // 模糊命中（按名字猜的）先当兜底：它比行级好（能逐字），但同名可能是
-                // 另一个编曲（打上花火：4:49 对唱版 vs 4:19 独唱版），继续问后面有没有
-                // 用真实曲目 id / 时长闸门命中的那一份。
+                // 另一个编曲，继续问后面有没有用真实曲目 id / 时长闸门命中的那一份。
                 if fallback == nil || (wordTimed && !fallbackIsWord) {
                     let result = Result(lines: lines, source: source)
                     fallback = result

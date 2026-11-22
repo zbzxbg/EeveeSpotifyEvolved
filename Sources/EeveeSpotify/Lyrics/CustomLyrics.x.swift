@@ -538,6 +538,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                         writeDebugLog(
                             "[Lyrics] auto select: AMLL is preferred — stopping the chain"
                                 + " (\(dto.lines.count) word-timed line(s))"
+                                + " [\(LyricsAutoSelect.coverageLog(for: dto, source: source))]"
                         )
                         return pick
                     }
@@ -545,6 +546,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                     writeDebugLog(
                         "[Lyrics] auto select: \(source.description) returned \(dto.lines.count) line(s),"
                             + " \(tier.logName) — \(better ? "kept" : "not better than what we already have")"
+                            + " [\(LyricsAutoSelect.coverageLog(for: dto, source: source))]"
                     )
                     if better { best = pick }
                 }
