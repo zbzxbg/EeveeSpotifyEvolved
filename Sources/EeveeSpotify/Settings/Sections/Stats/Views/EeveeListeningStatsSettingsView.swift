@@ -333,6 +333,15 @@ struct EeveeListeningStatsSettingsView: View {
             let known = store.loadSynchronously().importedSources ?? [:]
             let batch = StreamingHistoryImporter.parse(urls: urls, known: known, calendar: calendar)
 
+            // `asCopy: true` 让系统先把文件导进 App 的临时目录（iCloud 里的也会先下载），
+            // 解析完就没用了 —— 十年的导出包几十 MB，留着只会把空间慢慢吃光。
+            // 只删临时目录里的副本：万一某个系统版本把副本放去了别处，宁可留着也
+            // 不能误删用户自己的文件。
+            let temporaryRoot = FileManager.default.temporaryDirectory.standardizedFileURL.path
+            for url in urls where url.standardizedFileURL.path.hasPrefix(temporaryRoot) {
+                try? FileManager.default.removeItem(at: url)
+            }
+
             DispatchQueue.main.async {
                 store.importStreamingHistory(batch.additions) { entries in
                     isImporting = false
@@ -552,9 +561,11 @@ private struct ListeningStatsBars: View {
 /// 没有任何反应。这里与偏移面板、艺人简介同一套 present 方式：从窗口根往下一层层取到
 /// 最上面那个 VC，由它 present。
 ///
-/// `asCopy: false`：十年导出包可能几十 MB，先复制一份纯属浪费；解析全程在安全作用域里读
-/// （`StreamingHistoryImporter.parse` 自己开合）。文件夹也算一种可选项，所以 `.folder`
-/// 也在允许的类型里。
+/// `asCopy: true`：`asCopy: false` 时，选中的文件如果还在 iCloud 里（没下载到本机），
+/// 点「打开」可能两个 delegate 回调都不来（选中与取消都没有）—— 手指按下去没有任何反应，
+/// 最后只能自己点左上角取消。交给系统先导出/下载一份到 App 容器，回调一定会来；
+/// 代价是几十 MB 的副本，导入完成后由 `importStreamingHistory` 删掉。文件夹也算一种
+/// 可选项，所以 `.folder` 也在允许的类型里。
 enum StreamingHistoryFilePickerPresenter {
 
     /// 选择器的 delegate 是 weak：present 期间必须有人强引用它。
@@ -574,7 +585,7 @@ enum StreamingHistoryFilePickerPresenter {
         }
 
         let types: [UTType] = [.zip, .folder, .json]
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
         picker.allowsMultipleSelection = true
 
         let coordinator = Coordinator(
