@@ -61,8 +61,18 @@ struct AppleMusicLyricsMotionProfile: Equatable, Sendable {
         lineSpacing: 25,
         backgroundVocalsTopSpacing: 15,
         backgroundVocalsDeselectedScale: 0.9,
-        backgroundVocalsFontCoefficient: 0.63,
-        translationBackgroundVocalsFontCoefficient: 0.36,
+        // 副唱与副唱的译文都按**主歌的比例**放大过一档（0.63 / 0.36 → 0.82 / 0.68）。
+        //
+        // MeloX 反推的那组值在整屏 36pt 的画布上还说得过去，但本项目的 `.player` 档主歌
+        // 只有 22pt ⇒ 副唱 22×0.63×0.9 ≈ **12.5pt**、副唱的译文 17×0.36×0.9 ≈ **5.5pt**，
+        // 后者小到读不出字。王心凌「爱你」那种一唱一答（主歌 + 王少伟回应的
+        // `(Yo, yo, yo, yo)`）里，回应的那两行要看得清才成立。
+        //
+        // 0.82 让副唱明显小于主歌（视觉层级还在）、又比译文大（≈16.8pt）；
+        // 译文用 0.68 ≈ 0.82 × (17/22)，也就是"副唱那一层里，译文与正文的比例"与主层一致，
+        // 不再额外压一档。
+        backgroundVocalsFontCoefficient: 0.82,
+        translationBackgroundVocalsFontCoefficient: 0.68,
         transliterationBackgroundVocalsFontCoefficient: 0.27,
         cascadeDelay: 0.05,
         deselectedScale: 0.98,

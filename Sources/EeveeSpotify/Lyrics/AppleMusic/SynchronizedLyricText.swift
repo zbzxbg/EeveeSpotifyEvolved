@@ -69,8 +69,8 @@ struct SynchronizedLyricText: View {
     let appliesTimingEffects: Bool
     /// 是否显示副唱（背景人声）。
     ///
-    /// 内嵌「预览歌词」传 false：预览只有约 200pt 高、主字号 19pt，
-    /// 副唱按 0.63 系数缩到约 12pt 基本看不清，还白占一行高度。
+    /// 内嵌「预览歌词」传 false：预览只有约 200pt 高、主字号 20pt，
+    /// 副唱按 0.82 系数也有 16pt，还要再占一行高度 ⇒ 卡片里放不下（全屏页才展示这一层）。
     /// 只让全屏页承担这个信息层级。
     let showsBackgroundVocals: Bool
     /// 是否显示行译文。
@@ -188,8 +188,9 @@ struct SynchronizedLyricText: View {
     //
     // 副唱行：同一个渲染器、更小的字号、更弱的视觉权重。
     //
-    // 参数取自 Apple Music 26.6（`AppleMusicLyricsMotionProfile`）：
-    // 字号 ×0.63、非播放行再 ×0.9、与主歌的间距 15pt。
+    // 参数取自 Apple Music 26.6（`AppleMusicLyricsMotionProfile`），但**系数是本项目调过的**：
+    // 字号 ×0.82（MeloX 原值 0.63 在 22pt 的 `.player` 档只剩 12.5pt，读不清）、
+    // 非播放行再 ×0.9、与主歌的间距 15pt。副唱的译文用 ×0.68（原值 0.36 ⇒ 5.5pt，更小）。
     // 时间轴是它**自己的**（与主词重叠），所以填充动画也是独立走的。
     @ViewBuilder
     private func backgroundVocalRow(
