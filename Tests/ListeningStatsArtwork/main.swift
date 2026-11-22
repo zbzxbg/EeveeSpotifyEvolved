@@ -11,7 +11,9 @@ import Foundation
 //    拿去查（拿歌名去搜会把别的版本的封面贴上来，比没有封面更糟）；
 // ② **JSON 里 `null` 的容错** —— `GET /v1/tracks?ids=` 对查不到的 id 回 `null`，整份
 //    `tracks` 数组里就夹着 `null`。若整份转成 `[[String: Any]]` 会**整批失败**（一个
-//    查不到的 id 就让同一批 50 首全没有封面）。
+//    查不到的 id 就让同一批 50 首全没有封面）；
+// ③ **oEmbed 兜底** —— Web API 在真机上整体 404 时，封面只剩 `open.spotify.com/oembed`
+//    这一条路：地址拼错、或把空 `thumbnail_url` 当封面，就是"永远没有封面"。
 //
 // 跑法（CI 里就是这条）：
 //   swiftc Sources/EeveeSpotify/Stats/ListeningStatsModel.swift \
@@ -120,6 +122,43 @@ let episodes = ListeningStatsArtwork.artworkURLs(in: Data(episodesJSON.utf8))
 require(
     episodes["3uLU6hMCjMI75M1A2tKUQE"] == "https://i.scdn.co/image/ep300",
     "an episode's own `images` are read (same picking rule)"
+)
+
+// MARK: - 4. oEmbed：不需要令牌的兜底
+
+// 真机上见过 api.spotify.com 对所有 /v1/* 回 404，而 open.spotify.com 的 oEmbed 是 200。
+// 这条路只依赖 id，所以地址拼错就是"永远没有封面"。
+let trackEmbed = ListeningStatsArtwork.oEmbedRequestURL(for: trackID, episode: false)
+require(
+    trackEmbed?.host == "open.spotify.com" && trackEmbed?.path == "/oembed",
+    "oEmbed lives at open.spotify.com/oembed"
+)
+require(
+    (trackEmbed?.query?.removingPercentEncoding ?? "").contains("/track/" + trackID),
+    "the url parameter points at the track page, got \(trackEmbed?.absoluteString ?? "-")"
+)
+let episodeEmbed = ListeningStatsArtwork.oEmbedRequestURL(for: trackID, episode: true)
+require(
+    (episodeEmbed?.query?.removingPercentEncoding ?? "").contains("/episode/" + trackID),
+    "the episode variant points at the episode page"
+)
+
+// `thumbnail_url` 只收 http(s) 的，别把空串/相对路径当封面。
+private let oEmbedJSON = """
+{"thumbnail_url":"https://image-cdn-ak.spotifycdn.com/image/ab67616d00001e02abc","title":"X"}
+"""
+require(
+    ListeningStatsArtwork.thumbnailURL(in: Data(oEmbedJSON.utf8))
+        == "https://image-cdn-ak.spotifycdn.com/image/ab67616d00001e02abc",
+    "the oEmbed thumbnail is taken as-is"
+)
+require(
+    ListeningStatsArtwork.thumbnailURL(in: Data("{\"thumbnail_url\":\"\"}".utf8)) == nil,
+    "an empty thumbnail is not a cover"
+)
+require(
+    ListeningStatsArtwork.thumbnailURL(in: Data("{\"title\":\"X\"}".utf8)) == nil,
+    "no thumbnail_url, no cover"
 )
 
 print("Listening stats artwork tests passed")

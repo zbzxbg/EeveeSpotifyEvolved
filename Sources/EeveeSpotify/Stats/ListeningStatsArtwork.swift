@@ -8,13 +8,18 @@ import Foundation
 // 没有歌曲封面"）。
 //
 // 本机正在播放的那一首有 `SPTPlayerTrack.metadata()` 可读封面（`LyricsArtworkResolver`）；
-// 导入的歌没有播放上下文 ⇒ 只能问 Web API。
+// 导入的歌没有播放上下文 ⇒ 只能按曲目 id 问接口。
 //
-// 数据线：`GET https://api.spotify.com/v1/tracks?ids=…`（一次最多 50 个），Bearer token 由
-// **调用方**传进来（页面侧给 `spotifyAccessTokenSnapshot()`，那是 `DataLoaderServiceHooks`
-// 抓下来的那一个），与 `ArtistReleasesFromSpotify`（艺人页「最新发布」）走同一条线。
-// 曲目接口里封面在 `album.images`；播客/单集在 `/v1/tracks` 里查不到，缺失的那批再按
-// `/v1/episodes?ids=` 问一遍（那一层的 `images` 直接挂在条目上）。
+// 数据线有两条：
+//
+// 1. **Web API**：`GET https://api.spotify.com/v1/tracks?ids=…`（一次最多 50 个），Bearer
+//    token 由**调用方**传进来（页面侧给 `spotifyAccessTokenSnapshot()`，那是
+//    `DataLoaderServiceHooks` 抓下来的那一个）。曲目接口里封面在 `album.images`；
+//    播客/单集在 `/v1/tracks` 里查不到，缺失的那批再按 `/v1/episodes?ids=` 问一遍。
+// 2. **oEmbed**（兜底，**不需要令牌**）：`GET https://open.spotify.com/oembed?url=…`。
+//    有的设备/账号组合上 `api.spotify.com` 对所有 `/v1/*` 都回 404（同一台机器上
+//    open.spotify.com 却是 200），只靠第 1 条就会永远没有封面。oEmbed 按曲目/单集 id
+//    回一张 300px 封面（`thumbnail_url`）。第一次 Web API 失败后整场会话不再试它。
 //
 // 本文件刻意做成 **Foundation-only**（令牌由参数进、日志走 `ListeningStatsLog`）：
 // 本机没有 Swift 工具链，只有这样才能进 `tests.yml` 的 CI 步骤被 `swiftc` 真编一遍
@@ -43,6 +48,10 @@ enum ListeningStatsArtwork {
     /// 一次 Web API 调用最多带多少个 id（接口硬上限 50）。
     private static let batchLimit = 50
 
+    /// 每一批 oEmbed 最多花多久（整体窗口，不是单个请求）。oEmbed 是一条 id 一次请求，
+    /// 十条全走完通常 3~5 秒；窗口到点就交已经拿到的那些，剩下的下次再试。
+    private static let oEmbedBudget: TimeInterval = 12
+
     /// 所有缓存读写都在这一条私有串行队列上（`URLSession` 会阻塞它，但它不影响别的队列）。
     private static let queue = DispatchQueue(
         label: "com.eevee.listening-stats.artwork",
@@ -51,6 +60,10 @@ enum ListeningStatsArtwork {
 
     private static var cache: [String: String] = [:]
     private static var didLoadCache = false
+    /// Web API 在这台设备上还能用吗。第一次拿到非 200 就置 false（见 `resolve`）。
+    private static var webApiUsable = true
+    /// 「没抓到令牌」只提示一次，别每次翻页都写一行。
+    private static var didLogMissingToken = false
 
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -116,35 +129,69 @@ enum ListeningStatsArtwork {
                 pending.append((key: key, spotifyID: id))
             }
 
-            if !pending.isEmpty, usableToken == nil {
-                ListeningStatsLog.write(
-                    "[Stats] artwork — no Spotify token yet, \(pending.count) cover(s) postponed"
-                )
-            }
-
-            if !pending.isEmpty, let usableToken {
+            if !pending.isEmpty {
                 let ids = pending.map(\.spotifyID)
-                let tracksResult = request(path: "/v1/tracks", ids: ids, token: usableToken)
-                var urls = tracksResult.urls
-                // 播客单集在 `/v1/tracks` 里查不到（返回 null）⇒ 缺的那批再问一遍单集接口。
-                var authoritative = tracksResult.authoritative
-                let missing = ids.filter { urls[$0] == nil }
-                if !missing.isEmpty {
-                    let episodesResult = request(
-                        path: "/v1/episodes",
-                        ids: missing,
-                        token: usableToken
+                var urls: [String: String] = [:]
+                /// 已证实"这条 id 没有封面"：oEmbed 的曲目与单集两种 kind 都 404。
+                /// 只有它们才写负缓存；Web API 的 null 不算证据（见下面那段说明）。
+                var absent = Set<String>()
+                var webHits = 0
+
+                if let usableToken, webApiUsable {
+                    let tracksResult = request(path: "/v1/tracks", ids: ids, token: usableToken)
+                    urls.merge(tracksResult.urls) { first, _ in first }
+                    let missing = ids.filter { urls[$0] == nil }
+                    if !missing.isEmpty {
+                        // 播客单集在 `/v1/tracks` 里查不到（返回 null）⇒ 缺的那批再问一遍。
+                        let episodesResult = request(
+                            path: "/v1/episodes",
+                            ids: missing,
+                            token: usableToken
+                        )
+                        urls.merge(episodesResult.urls) { first, _ in first }
+                    }
+                    if !tracksResult.authoritative {
+                        // 这台设备/这份令牌上 Web API 整体不通（真机上见过 404）：
+                        // 之后整场会话别再白花这两次请求，直接走 oEmbed。
+                        webApiUsable = false
+                        ListeningStatsLog.write(
+                            "[Stats] artwork — the web API is not answering, falling back to oEmbed"
+                        )
+                    }
+                    webHits = urls.count
+                } else if usableToken == nil, !didLogMissingToken {
+                    didLogMissingToken = true
+                    ListeningStatsLog.write(
+                        "[Stats] artwork — no Spotify token yet, going straight to oEmbed"
                     )
-                    urls.merge(episodesResult.urls) { first, _ in first }
-                    // 两个接口**都**答了 200 才敢说"确实没有封面"。
-                    authoritative = authoritative && episodesResult.authoritative
+                }
+
+                // oEmbed 不需要令牌：Web API 不通（或没令牌）时它就是唯一能拿到封面的路。
+                //
+                // ⚠️ **Web API 没给出封面的那几条，也要再问一次 oEmbed**：它整体 404 时
+                // 自然没图；就算它答了 200，也可能因为市场不匹配把条目回成 null —— 那都
+                // 不等于"这首歌没有封面"。只有 oEmbed 的两种 kind 都 404 才写负缓存。
+                let missingCover = ids.filter { urls[$0] == nil }
+                var oEmbedHits = 0
+                if !missingCover.isEmpty {
+                    let deadline = Date().addingTimeInterval(oEmbedBudget)
+                    for id in missingCover {
+                        guard Date() < deadline else { break }
+                        let result = oEmbedArtwork(for: id)
+                        if let url = result.url {
+                            urls[id] = url
+                            oEmbedHits += 1
+                        } else if result.absent {
+                            absent.insert(id)
+                        }
+                    }
                 }
 
                 for entry in pending {
                     if let url = urls[entry.spotifyID] {
                         cache[entry.key] = url
                         resolved[entry.key] = url
-                    } else if authoritative {
+                    } else if absent.contains(entry.spotifyID) {
                         cache[entry.key] = ""
                     }
                 }
@@ -152,12 +199,12 @@ enum ListeningStatsArtwork {
                 if resolved.isEmpty {
                     ListeningStatsLog.write(
                         "[Stats] artwork — no cover for \(pending.count)/\(unique.count) track(s)"
-                            + " (Web API \(tracksResult.authoritative ? "answered" : "failed"))"
+                            + " (web API \(webHits), oEmbed \(oEmbedHits))"
                     )
                 } else {
                     ListeningStatsLog.write(
                         "[Stats] artwork — resolved \(resolved.count)/\(unique.count) cover(s)"
-                            + " via the Web API"
+                            + " (web API \(webHits), oEmbed \(oEmbedHits))"
                     )
                 }
             }
@@ -195,18 +242,86 @@ enum ListeningStatsArtwork {
         return value
     }
 
+    // MARK: - oEmbed（不需要令牌的兜底）
+    //
+    // 为什么需要它：有的设备/令牌组合上 `api.spotify.com` 对所有 `/v1/*` 都回 404
+    // （同一台机器上 `open.spotify.com` 的 oEmbed 却是 200）。oEmbed 按曲目/单集 id
+    // 回一张 300px 封面，不需要令牌、也不需要 client id。
+    //
+    // 代价是"一条 id 一次请求"（Web API 是 50 个一批），所以只在 Web API 拿不到的那批上跑，
+    // 并且整批共用一个 `oEmbedBudget` 窗口。
+
+    /// oEmbed 的请求地址。`episode` 只影响 URL 里那段路径。
+    static func oEmbedRequestURL(for trackID: String, episode: Bool) -> URL? {
+        var components = URLComponents(string: "https://open.spotify.com/oembed")
+        components?.queryItems = [
+            URLQueryItem(
+                name: "url",
+                value: "https://open.spotify.com/\(episode ? "episode" : "track")/\(trackID)"
+            ),
+        ]
+        return components?.url
+    }
+
+    /// 一条 id 的 oEmbed 结果。
+    ///
+    /// · `url` 非空 = 拿到封面；
+    /// · `absent == true` = 曲目与单集**两种 kind 都答 404**（这条 id 确实没有可画的图）；
+    /// · 两者都空 = 这次没问到（网络 / 5xx）⇒ 不写负缓存，下次再试。
+    private static func oEmbedArtwork(for trackID: String) -> (url: String?, absent: Bool) {
+        var notFound = 0
+        var failures = 0
+
+        // 曲目在前、单集在后：库里绝大多数是曲目，单集只在曲目 404 时多花一次请求。
+        for isEpisode in [false, true] {
+            guard let url = oEmbedRequestURL(for: trackID, episode: isEpisode) else {
+                failures += 1
+                continue
+            }
+            let (status, data) = fetchJSON(url: url, token: nil, timeout: 5)
+            if status == 200 {
+                if let data, let thumbnail = thumbnailURL(in: data) {
+                    return (thumbnail, false)
+                }
+                // 200 却没有 `thumbnail_url`：这一种 kind 没有图，换下一种。
+                notFound += 1
+                continue
+            }
+            if status == 404 {
+                notFound += 1
+            } else {
+                failures += 1
+            }
+        }
+
+        // 两种 kind 都明确 404、且没有任何一次网络失败，才敢说"这条 id 没有封面"。
+        return (nil, notFound == 2 && failures == 0)
+    }
+
+    /// oEmbed 回包里的 `thumbnail_url`（`image-cdn-ak.spotifycdn.com` 那一档 300px 封面）。
+    static func thumbnailURL(in data: Data) -> String? {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let raw = root["thumbnail_url"] as? String else { return nil }
+
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), url.scheme?.hasPrefix("http") == true else {
+            return nil
+        }
+        return trimmed
+    }
+
     // MARK: - HTTP
 
     private struct BatchResult {
         var urls: [String: String]
-        /// `true` = 服务器答了 200（那么"没给封面"就是事实，可以写负缓存）。
+        /// `true` = 服务器答了 200。只用来判断"这条数据线还通不通"（见 `resolve` 里的
+        /// `webApiUsable`）；负缓存不看它 —— 那由 oEmbed 的 404 决定。
         var authoritative: Bool
     }
 
     /// 一次批量请求（调用方已经按 `batchLimit` 切好、也确认过令牌非空）。
     ///
-    /// 失败一律返回空结果且 `authoritative == false` —— 那只是这次没问到，
-    /// 不能当成"这首歌没有封面"。
+    /// 失败一律返回空结果且 `authoritative == false` —— 那只是这次没问到。
     private static func request(path: String, ids: [String], token: String) -> BatchResult {
         guard !ids.isEmpty else { return BatchResult(urls: [:], authoritative: true) }
 
@@ -235,7 +350,9 @@ enum ListeningStatsArtwork {
 
             let (status, data) = fetchJSON(url: url, token: token)
             guard status == 200, let data else {
-                ListeningStatsLog.write("[Stats] artwork — \(path) answered \(status)")
+                ListeningStatsLog.write(
+                    "[Stats] artwork — \(path) answered \(status)\(bodyHint(data))"
+                )
                 authoritative = false
                 continue
             }
@@ -245,7 +362,27 @@ enum ListeningStatsArtwork {
         return BatchResult(urls: urls, authoritative: authoritative)
     }
 
+    /// 失败时把回包的头一段带进日志。
+    ///
+    /// 4xx/5xx 的**谁答的**比状态码更重要：Spotify 的 JSON 说"令牌无效"和中间设备返回一页
+    /// HTML 是两件完全不同的事，而状态码可能都是 404。回包里没有令牌，可以原样记。
+    private static func bodyHint(_ data: Data?) -> String {
+        guard let data, !data.isEmpty,
+              let text = String(data: data.prefix(160), encoding: .utf8) else {
+            return ""
+        }
+        let flat = text
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return flat.isEmpty ? "" : " — \(flat)"
+    }
+
     /// 同步 GET（只在这条私有串行队列上调用）。
+    ///
+    /// - Parameter token: 非空时才带 `Authorization`。oEmbed 那条路传 nil —— **绝不能**
+    ///   把 Spotify 的令牌发给 `open.spotify.com` 之外的任何主机，oEmbed 也不需要它。
+    /// - Parameter timeout: 单次请求的等待上限（秒）。
     ///
     /// 为什么敢阻塞：这条队列只做封面补全，阻塞它不影响 UI / 录音器 / store；
     /// 而信号来自 `URLSession` 自己的回调线程，不存在互相等待。
@@ -253,11 +390,17 @@ enum ListeningStatsArtwork {
     /// ⚠️ 函数名**不要**叫 `get`：`swift_member_check.py` 会把「只以 private 形式声明过的
     /// 名字」当成跨文件的裸引用去查，而 `get` 还是计算属性的访问器关键字 ⇒ 一个 `private
     /// static func get` 能让它把全仓 31 处 `get {` 全报成错（踩过一次）。
-    private static func fetchJSON(url: URL, token: String) -> (status: Int, data: Data?) {
+    private static func fetchJSON(
+        url: URL,
+        token: String?,
+        timeout: TimeInterval = 10
+    ) -> (status: Int, data: Data?) {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 10
-        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = timeout
+        if let token, !token.isEmpty {
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let semaphore = DispatchSemaphore(value: 0)
@@ -266,14 +409,15 @@ enum ListeningStatsArtwork {
 
         session.dataTask(with: request) { data, response, error in
             status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if error == nil, status == 200 {
+            if error == nil {
+                // 非 200 也把回包留下：失败日志要能看出是谁答的（见 `bodyHint`）。
                 payload = data
             }
             semaphore.signal()
         }.resume()
 
-        // 比 URLSession 自己的超时（10s）多留一点：等不到就按失败处理，绝不堵死队列。
-        _ = semaphore.wait(timeout: .now() + 15)
+        // 比 URLSession 自己的超时多留一点：等不到就按失败处理，绝不堵死队列。
+        _ = semaphore.wait(timeout: .now() + timeout + 5)
         return (status, payload)
     }
 
