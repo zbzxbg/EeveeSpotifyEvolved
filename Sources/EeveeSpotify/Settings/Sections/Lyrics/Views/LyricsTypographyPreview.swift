@@ -16,22 +16,30 @@ struct LyricsTypographyPreview: View {
     /// 当前两档倍率套上全屏分档之后的排版。由设置页传进来，滑一下就会重算。
     let typography: LyricsTypographyScale
 
-    /// 预览用的三句样例：一句英文长句（会折行）、一句**罗马音 + 原文 + 译文**都在的日文，
-    /// 一句英文短句。中间那句就是焦点行，三种文字层的大小关系一眼看得全。
+    /// 预览用的三句样例，取《アルビレオ》里连续的三句（每句都是**罗马音 + 原文 + 译文**
+    /// 三层都在，和真实歌词行的层次一样），第二句是焦点行。
+    ///
+    /// 三句都用日文：以前前后两句是英文样例，混在正文上下会把"正在看的是哪一句"搅乱。
+    /// 前后两句也不能省 —— 焦点行在中间，它们同时演示了「行距」那一档（块与块之间的
+    /// 间距）和焦点行的前后两句如何变淡；只剩一句时，行距滑块在预览里就看不出效果。
     private static let lines: [LyricLine] = [
         LyricLine(
             time: 0,
-            text: "I'm tryna put you in the worst mood"
+            text: "心が余った言い訳を",
+            romanization: "Ko ko ro ga a ma 't ta i i wa ke wo",
+            translation: "心中多余的借口"
         ),
         LyricLine(
             time: 6,
             text: "君は藍に浮かんだアルビレオ",
-            romanization: "Ki mi wa a i ni u ka n da a ru bi re o",
+            romanization: "Ki mi ha a i ni u ka n da a ru bi re o",
             translation: "你就是浮现在蔚蓝中的天鹅座β"
         ),
         LyricLine(
             time: 12,
-            text: "And I'll be right here waiting"
+            text: "この心を奪ったまま",
+            romanization: "Ko no ko ko ro wo u ba 't ta ma ma",
+            translation: "已将我的心完全占据"
         )
     ]
 
