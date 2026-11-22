@@ -111,6 +111,54 @@ final class ListeningStatsStore {
         return entries
     }
 
+    // MARK: - 封面补全
+
+    /// 把事后补到的封面写回所有日桶（按曲目 id 匹配），然后落盘。
+    ///
+    /// 为什么要单独一个入口：导入的流媒体历史只有曲目 id，封面是之后问 Web API 补的
+    /// （见 `ListeningStatsArtwork`）。这里只**补空**，绝不覆盖已有值 —— 本机录的那一份
+    /// 是从播放器 metadata 读出来的，比这个更准。
+    ///
+    /// 回调在主线程，参数是被补到封面的记录条数。
+    func backfillArtwork(
+        _ urls: [String: String],
+        completion: @escaping (Int) -> Void = { _ in }
+    ) {
+        let usable = urls.filter { !$0.value.isEmpty }
+        guard !usable.isEmpty else {
+            DispatchQueue.main.async { completion(0) }
+            return
+        }
+
+        queue.async {
+            var data = self.loadLocked()
+            // 先把键拷一份：下面的赋值会改 `days` 的值（COW 下安全，但明写更稳）。
+            let dayKeys = Array(data.days.keys)
+            var updated = 0
+
+            for (trackID, url) in usable {
+                for dayKey in dayKeys {
+                    guard var record = data.days[dayKey]?[trackID] else { continue }
+                    let current = record.artworkURL?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard current == nil || current?.isEmpty == true else { continue }
+                    record.artworkURL = url
+                    data.days[dayKey]?[trackID] = record
+                    updated += 1
+                }
+            }
+
+            if updated > 0 {
+                // 不 `prune`：导入的老日子本来就该按 `oldestImportedDay` 留着。
+                self.saveLocked(data)
+                ListeningStatsLog.write(
+                    "[Stats] backfilled artwork for \(updated) record(s)"
+                )
+            }
+            DispatchQueue.main.async { completion(updated) }
+        }
+    }
+
     // MARK: - 读
 
     /// 异步读一份快照；回调在主线程。
