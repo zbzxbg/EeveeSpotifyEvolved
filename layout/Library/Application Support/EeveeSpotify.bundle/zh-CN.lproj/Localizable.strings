@@ -1,4 +1,4 @@
-﻿/* MARK: Settings */
+/* MARK: Settings */
 
 patching = "补丁";
 lyrics = "歌词";
@@ -33,21 +33,21 @@ do_not_replace_lyrics_description = "禁用自定义歌词功能，但不会阻�
 lyrics_source = "歌词来源";
 lyrics_source_restart_note = "切换歌词来源后需重启 Spotify。";
 lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ Music和KuGou都是按歌名与歌手搜索(不是按曲目ID精确匹配)，所以部分歌曲可能会出现歌词显示错误或搜索不到歌词的情况。";
-petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp)：Spotify 在日本地区的主要歌词来源。但一小部分歌曲存在逐词时间轴不规范的情况。";
+petitlyrics_description = "[PetitLyrics](https://petitlyrics.com)：Spotify 在日本地区的主要歌词来源。但一小部分歌曲存在逐词时间轴不规范的情况。";
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org)：提供逐词歌词及部分其他歌词来源没有的歌词。";
 spicylyrics_api_key = "Spicy Lyrics API 密钥";
-spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥（sl_pk_…）";
+spicylyrics_api_key_placeholder = "填入 Spicy 客户端密钥(sl_pk_…)";
 spicylyrics_api_key_description = "不内置默认密钥：在这里填入你自己的密钥才能使用 Spicy Lyrics。留空则回退到下一个歌词来源。密钥获取方法：在 Spicy Lyrics 上同意用户协议，按「Add」，复制它给出的客户端密钥即可。";
 // 上面那段说明里**必须原样出现**这句话 —— 设置页会按这个字符串在译文里找到那一段并贴上链接。
 spicylyrics_key_link = "在 Spicy Lyrics 上添加本应用";
 spicylyrics_key_invalid = "Spicy Lyrics 密钥被拒绝";
 spicylyrics_key_missing = "未填写 Spicy Lyrics 密钥";
 spicylyrics_key_invalid_popup = "Spicy Lyrics 拒绝了这个 API 密钥。请到「设置 → 歌词」填入有效的客户端密钥 —— 本应用不内置密钥，没填之前会跳过该源、改用 Musixmatch 取词。";
-// Spicy Lyrics 的条款（§6）要求：歌词在屏幕上时，署名也得在屏幕上。下面两条进
-// `SpicyLyricsRepository.providerCredit()` 拼出来的那一串（provider + 社区贡献者）。
+// Spicy Lyrics 的条款(§6)要求：歌词在屏幕上时，署名也得在屏幕上。下面两条进
+// `SpicyLyricsRepository.providerCredit()` 拼出来的那一串(provider + 社区贡献者)。
 lyrics_made_by = "制作者";
 lyrics_uploaded_by = "上传者";
-// ★ 2026-10-24：页内歌词署名第二行用（目前只有网易云的 transUser 会给翻译者）。
+// ★ 2026-10-24：页内歌词署名第二行用(目前只有网易云的 transUser 会给翻译者)。
 lyrics_translated_by = "翻译者";
 lyrics_source_unknown = "来源未知";
 netease_description = "[NetEase](https://music.163.com)：华语歌曲主力，提供逐词歌词。";
@@ -76,7 +76,7 @@ genius_fallback_description = "如果%@未正常加载，将使用Genius加载�
 
 
 musixmatch_language = "Musixmatch 歌词语言";
-musixmatch_language_description = "可以输入两个字母的Musixmatch语言代码，并查看歌词翻译（如果有歌词翻译的话）。";
+musixmatch_language_description = "可以输入两个字母的Musixmatch语言代码，并查看歌词翻译(如果有歌词翻译的话)。";
 
 
 // UI
@@ -109,7 +109,7 @@ imported_lyrics_enabled_description = "文件与当前歌曲匹配时，这一�
 imported_lyrics_files = "文件";
 imported_lyrics_import = "导入歌词文件";
 imported_lyrics_empty = "还没有导入文件。";
-imported_lyrics_formats_description = "支持 LRC、SPL、YRC、Lyricify Syllable（.lys）、Lyricify Lines（.lyl）与 TTML。QRC 与 KRC 是加密格式，SRT / ASS 是字幕格式——请先转成 LRC。如果整首歌词稳定地偏早或偏晚，用播放页「歌词偏移」调；偏移按曲目保存。";
+imported_lyrics_formats_description = "支持 LRC、SPL、YRC、Lyricify Syllable(.lys)、Lyricify Lines(.lyl)与 TTML。QRC 与 KRC 是加密格式，SRT / ASS 是字幕格式——请先转成 LRC。如果整首歌词稳定地偏早或偏晚，用播放页「歌词偏移」调；偏移按曲目保存。";
 imported_lyrics_import_failed = "导入失败：文件读不出来。";
 experiments_page_warning = "请注意：以下功能可能未经测试。如果你愿意为我测试的话，也可以打开它们测试一下，这些功能不会导致插件崩溃。";
 
@@ -117,7 +117,7 @@ show_instagram_destination = "显示Instagram分享目标";
 show_instagram_destination_description = "始终把Instagram作为分享目标。%@";
 
 amll_fuzzy_search = "AMLL 模糊搜索";
-amll_fuzzy_search_description = "只在会向 AMLL 取词时生效：歌词来源选 AMLL、自动优选，或开启了「AMLL 优先」。AMLL 的歌词搜索会从精确搜索改为模糊搜索。";
+amll_fuzzy_search_description = "需要歌词来源选择 AMLL、自动优选，或开启了「AMLL 优先」。AMLL 的歌词搜索会从精确搜索改为模糊搜索。";
 
 pseudo_word_by_word_lyrics = "启用伪逐字";
 pseudo_word_by_word_lyrics_description = "估算行级歌词时间轴，并补充成逐词歌词，但字级精度可能欠佳。";
@@ -145,7 +145,7 @@ could_not_share_popup = "无法分享到所选目标或LiveContainer，URL已复
 
 
 musixmatch_unauthorized_popup = "由于未授权错误，该插件无法从Musixmatch加载歌词。请检查或更新Musixmatch令牌。如果使用iPad，则应从iPad版Musixmatch应用中获取令牌。";
-musixmatch_restricted_popup = "由于受到限制，该插件无法加载Musixmatch的歌词。这可能是由于美国IP地址导致的版权问题，因此如果在美国，则应更改地址（例如使用VPN）。";
+musixmatch_restricted_popup = "由于受到限制，该插件无法加载Musixmatch的歌词。这可能是由于美国IP地址导致的版权问题，因此如果在美国，则应更改地址(例如使用VPN)。";
 
 // Instrumental Titles
 
@@ -174,7 +174,7 @@ payment_notice = "EeveeSpotify 已应用补丁来解锁部分高级功能，免�
 disable_lyrics_feature = "禁用歌词功能";
 disable_lyrics_feature_description = "禁用有关于自定义歌词的所有功能，还会阻止Spotify返回其自带的歌词。";
 word_by_word_lyrics = "开启逐词歌词";
-word_by_word_lyrics_description = "除了LRCLIB和Genius，其余歌词来源均提供逐词歌词（如果这首歌有逐词的话）。";
+word_by_word_lyrics_description = "除了LRCLIB和Genius，其余歌词来源均提供逐词歌词(如果这首歌有逐词的话)。";
 better_word_by_word_lyrics = "更好的逐词歌词";
 better_word_by_word_lyrics_description = "像 Apple Music 那样。系统版本最低需要 iOS 26。";
 better_word_by_word_lyrics_needs_ios26 = "此选项不可用：你的系统版本低于 iOS 26。";
@@ -189,7 +189,7 @@ lyrics_timing_word = "逐字";
 lyrics_timing_line = "逐行";
 lyrics_timing_plain = "纯文本";
 lyrics_hide_translation = "不展示部分歌词源的翻译";
-lyrics_hide_translation_description = "如果此选项是默认开启状态，那你大概率用不上部分歌词源的翻译。这些歌词源包括AMLL，NetEase，QQ Music，KuGou。";
+lyrics_hide_translation_description = "如果此选项是默认开启状态，则说明部分歌词来源的歌词翻译对你可能没用。这些歌词源包括AMLL、NetEase、QQ Music和KuGou。这些歌词来源的翻译只有简体中文。";
 lyrics_auto_translate = "本机歌词翻译";
 lyrics_auto_translate_description = "歌词源没有给出译文时，用 iOS 自带翻译框架翻译当前歌词行，翻译质量可能欠佳。系统最低需要 iOS 26，并先在「设置 → App → 翻译 → 语言」里下好语言。";
 lyrics_typography_section = "文字";
@@ -214,7 +214,7 @@ lyrics_source_menu_row = "这首歌的歌词来源";
 lyrics_duet_layout_description = "另一位歌手唱的行排到另一侧，与 Apple Music 的做法一致。只有 AMLL 与 Apple 官方 TTML 的歌词带歌手信息，其它源上这颗开关不起作用。";
 lyrics_offset_current_song = "当前歌曲";
 lyrics_offset_clear_all = "清除全部歌词偏移";
-lyrics_offset_description = "对所有歌词源生效（Genius除外）。正数表示歌词延后显示。";
+lyrics_offset_description = "对所有歌词源生效(Genius除外)。正数表示歌词延后显示。";
 lyrics_offset_title = "歌词偏移";
 lyrics_offset_reset = "重置这一首";
 lyrics_offset_done = "完成";
@@ -224,7 +224,7 @@ lyrics_offset_player_hint = "歌词偏移可在听歌页样式选择Apple Music�
 lyrics_offset_saved = "已保存的歌词偏移";
 lyrics_offset_search = "搜索歌名、歌手、歌词来源或曲目 id";
 lyrics_offset_no_matches = "没有匹配的条目";
-lyrics_offset_saved_count = "已保存 %d 条（按歌曲 + 歌词来源分开存）";
+lyrics_offset_saved_count = "已保存 %d 条(按歌曲 + 歌词来源分开存)";
 lyrics_offset_unknown_song = "未知歌曲";
 lyrics_offset_delete_entry = "删除这条偏移";
 lyrics_offset_save_song = "保存这条偏移";
@@ -281,8 +281,8 @@ categoryOneFooter = "跳过社区标记的播客片段。";
 enableSponsorblock = "启用SponsorBlock";
 showColoredOverlay = "在进度条上显示彩色覆盖";
 showToast = "跳过时显示提示";
-skipToast = "跳过提示操作按钮（投票 / 撤销 / 隐藏）";
-respectManualSeek = "尊重手动跳转（不要重复跳过）";
+skipToast = "跳过提示操作按钮(投票 / 撤销 / 隐藏)";
+respectManualSeek = "尊重手动跳转(不要重复跳过)";
 categoriesFooter = "关闭 · 显示 · 手动 · 自动。点击色块可修改颜色。";
 sponsor_category = "广告";
 selfpromo_category = "无偿/自我推广";
@@ -302,7 +302,7 @@ markSegment = "为当前节目标记片段";
 advancedTitle = "高级";
 howToUseTitle = "使用方法";
 creditsTitle = "致谢";
-creditsSubtitle = "片段数据来自SponsorBlock社区（sponsor.ajay.app）。集成移植自Spot-SponsorBlock的Spot-SponsorBlock-Extension。";
+creditsSubtitle = "片段数据来自SponsorBlock社区(sponsor.ajay.app)。集成移植自Spot-SponsorBlock的Spot-SponsorBlock-Extension。";
 linkButtonTitle = "Spot-SponsorBlock-Extension 在GitHub上";
 sponsorblock_reports_title = "SponsorBlock上报";
 sponsorblockIDTitle = "你的SponsorBlock ID";
@@ -312,7 +312,7 @@ user_id_copied = "已复制用户ID";
 regenerateButton = "重新生成";
 draftsTitleSB = "草稿";
 draftsEmpty = "暂无草稿。长按播客进度条以开始标记片段。";
-hidden_locally_header = "本机隐藏（%@）";
+hidden_locally_header = "本机隐藏(%@)";
 hiddenFooter = "此处的片段不会在本机自动跳过，它们仍然存在于SponsorBlock服务器上。";
 hiddenSegmentsEmpty = "暂无隐藏片段。";
 unhideButton = "取消隐藏";
@@ -327,22 +327,22 @@ editSubmit = "编辑/提交";
 discardButton = "丢弃";
 skipBehaviourTitle = "跳过行为";
 autoSkipSubmissionsTitle = "自动跳过我自己提交的内容";
-logOnlyToggle = "仅记录日志（不实际跳转）";
+logOnlyToggle = "仅记录日志(不实际跳转)";
 serverHeader = "服务器";
 tuningTitle = "微调";
 minSegmentDuration = "最短片段时长：%.1f 秒";
 toastDuration = "提示时长：%.1f 秒";
-trackLogSubtitle = "在每首新曲目时，将播客曲目元数据（URI、isPodcast、isVideo 等）转储到调试日志中。仅当 SponsorBlock 未按预期检测到播客时启用。";
+trackLogSubtitle = "在每首新曲目时，将播客曲目元数据(URI、isPodcast、isVideo 等)转储到调试日志中。仅当 SponsorBlock 未按预期检测到播客时启用。";
 trackLogToggle = "诊断曲目日志";
 resetButtonTrackLog = "重置…";
 resetTitle = "重置哪些内容？";
-allResetSB = "全部（以上所有内容）";
+allResetSB = "全部(以上所有内容)";
 regenerateIDSB = "重新生成用户ID";
-localSubmissionsSB = "我的本地提交（%@）";
-votedRecordsSB = "投票记录（%@）";
-hiddenSegmentsSB = "隐藏片段（%@）";
-draftsCountSB = "草稿（%@）";
-settingsResetSB = "设置（开关 + 分类 + 颜色）";
+localSubmissionsSB = "我的本地提交(%@)";
+votedRecordsSB = "投票记录(%@)";
+hiddenSegmentsSB = "隐藏片段(%@)";
+draftsCountSB = "草稿(%@)";
+settingsResetSB = "设置(开关 + 分类 + 颜色)";
 playerGesturesTitle = "播放器上的手势";
 gesturesTitle1 = "长按进度条";
 gesturesDeps1 = "标记片段的起点。在片段末端再次长按以设置结束点并打开提交表单。";
@@ -364,7 +364,7 @@ managingSegmentsTitle = "管理片段";
 managingSegmentsSectionTitle1 = "管理片段…";
 managingSegmentsSectionDeps1 = "长按进度条 → “管理片段” 列出当前节目的所有片段。可投票、隐藏、更改分类，或点击某行以跳转播放。";
 managingSegmentsSectionTitle2 = "上报与草稿";
-managingSegmentsSectionDeps2 = "设置 → “上报与草稿” 中存放你未完成的草稿（未提交的标记）和隐藏的片段。草稿会在应用重启后保留。";
+managingSegmentsSectionDeps2 = "设置 → “上报与草稿” 中存放你未完成的草稿(未提交的标记)和隐藏的片段。草稿会在应用重启后保留。";
 categoriesTitle = "分类";
 categoriesSectionTitle1 = "按分类设置操作";
 categoriesSectionDeps1 = "关闭 = 忽略。显示 = 仅在进度条上标记。手动 = 跳过前询问。自动 = 静默跳过。";
@@ -379,9 +379,9 @@ privacy_title = "隐私与上报";
 privacy_telemetry_section = "上报";
 block_telemetry = "拦截上报";
 block_telemetry_description = "在请求真正发出之前取消Spotify的客户端日志与上报，并把回复一并丢弃。「只观察」开启时，不拦截日志与上报，只把端点写进日志。";
-telemetry_observe_only = "只观察不拦截（只记日志）";
+telemetry_observe_only = "只观察不拦截(只记日志)";
 telemetry_extra_keywords_section = "额外要拦的主机或路径";
-telemetry_extra_keywords_description = "用逗号分隔。先打开「只观察不拦截」测试，再从调试日志里把真正的上报端点抄到这里（例如spclient.wg.spotify.com/event）。";
+telemetry_extra_keywords_description = "用逗号分隔。先打开「只观察不拦截」测试，再从调试日志里把真正的上报端点抄到这里(例如spclient.wg.spotify.com/event)。";
 telemetry_extra_keywords_placeholder = "例如spclient.wg.spotify.com/event";
 telemetry_stats_section = "本次启动";
 telemetry_blocked_endpoints = "已取消的上报请求";
@@ -393,7 +393,7 @@ haptics_description = "用系统反馈引擎给 Spotify 播放器控件加震动
 haptics_strength = "震动强度";
 haptics_test = "尝试一下？";
 haptics_surface_keywords_section = "控件类名关键词";
-haptics_surface_keywords_description = "用逗号分隔，匹配控件自身及其祖先的类名、以及accessibility标识。如果不震动，打开下面的记录开关（并打开日志记录），从日志里把真实类名抄进来。";
+haptics_surface_keywords_description = "用逗号分隔，匹配控件自身及其祖先的类名、以及accessibility标识。如果不震动，打开下面的记录开关(并打开日志记录)，从日志里把真实类名抄进来。";
 haptics_log_controls = "记录被点控件的类名";
 flag_override_title = "Flag覆盖";
 flags_search = "搜索Flag";
@@ -448,27 +448,27 @@ audio_tap_probe = "音频输出探针";
 
 /* MARK: 外观 */
 theme_section = "主题";
-amoled = "纯黑（AMOLED）";
+amoled = "纯黑(AMOLED)";
 accent_color = "强调色";
 
 
-// ── 设置根页重排（2026-10-13）：四组的分组标题 + 每一行的副标题 ──
-// 原来的「扩展功能」页是个杂物袋（一行背后 24 个开关 + 8 个子页），已按页面拆开；
+// ── 设置根页重排(2026-10-13)：四组的分组标题 + 每一行的副标题 ──
+// 原来的「扩展功能」页是个杂物袋(一行背后 24 个开关 + 8 个子页)，已按页面拆开；
 // 每个东西搬去了哪，见 EeveeExtrasSettingsView.swift 那个墓碑注释。
 settings_group_advanced = "进阶";
 tabs_and_mini_bar_title = "标签栏与迷你条";
 home_and_library_title = "页面与音乐库";
-// 「重置本页」——从旧「扩展」页拆出来的每一页页脚都有一颗（见 SettingsResetSection）。
+// 「重置本页」——从旧「扩展」页拆出来的每一页页脚都有一颗(见 SettingsResetSection)。
 settings_reset_page = "重置本页";
 settings_reset_page_done = "已重置本页 %d 项。";
 
-// ── 高级页 · 音频与手势：一页四节（音频效果 / 律动 / 节拍触感 / 头部手势）──
+// ── 高级页 · 音频与手势：一页四节(音频效果 / 律动 / 节拍触感 / 头部手势)──
 // 封面律动跟着低频走；音乐触感把底鼓/军鼓变成轻触。
 audio_rhythm_section = "律动";
 cover_pulse = "封面律动";
 cover_pulse_description = "让封面跟着低频轻微放大缩小。听歌页选择Apple Music式时生效。";
 music_haptics = "音乐触感";
-music_haptics_description = "把底鼓和军鼓变成轻触。强度越高越费电，连续触发 30 秒后会自动降档（Taptic Engine 长时间高频会变钝、发热）。需要 App 在前台。";
+music_haptics_description = "把底鼓和军鼓变成轻触。强度越高越费电，连续触发 30 秒后会自动降档(Taptic Engine 长时间高频会变钝、发热)。需要 App 在前台。";
 music_haptics_strength = "强度";
 music_haptics_strength_low = "低";
 music_haptics_strength_medium = "中";
@@ -481,7 +481,7 @@ head_gestures_description = "点一下头切下一首，摇一下头切上一首
 head_gestures_motion_available = "头部姿态数据可用";
 head_gestures_motion_unavailable = "没有头部姿态数据 —— 请连接 AirPods Pro / Max";
 
-// ── 高级页 · 音频效果（十段 EQ + 前置增益）──
+// ── 高级页 · 音频效果(十段 EQ + 前置增益)──
 audio_effects_title = "音频效果";
 audio_effects_enabled = "启用音频效果";
 audio_effects_description = "均衡器、音色架、压缩器与耳机交叉馈送串成一条链。";
@@ -517,7 +517,7 @@ hide_player_cards = "隐藏全部卡片";
 player_card_lyricsCard = "歌词卡片";
 player_card_aboutArtist = "了解艺人";
 player_card_relatedVideos = "相关视频";
-player_card_songDNA = "歌曲DNA（SongDNA）";
+player_card_songDNA = "歌曲DNA(SongDNA)";
 player_card_liveEvents = "现场演出";
 player_card_exploreArtist = "观看流";
 player_card_releaseCountdown = "发行倒计时";
@@ -538,7 +538,7 @@ blocked_artists_add_placeholder = "艺人名";
 blocked_artists_add_footer = "按Spotify里显示的名字填；匹配不区分大小写，大小写不同的同一条不会重复添加。";
 blocked_artists_clear_all = "清空名单";
 
-/* MARK: 听歌页外观（样品） */
+/* MARK: 听歌页外观(样品) */
 library_section = "音乐库";
 tab_bar_glass_section = "标签栏";
 tab_bar_system_glass = "标签栏用液态玻璃";
@@ -561,13 +561,13 @@ playlist_single_cover_description = "替换Spotify四合一的歌单封面展示
 entity_page_section = "专辑 / 歌单 / 艺人页";
 entity_page_dissolve = "替换Spotify的官方歌曲底色";
 entity_page_hide_chrome = "隐藏Spotify的若干按键";
-entity_page_am_header_section = "Apple Music 式页头（专辑 / 歌单 / 艺人页）";
+entity_page_am_header_section = "Apple Music 式页头(专辑 / 歌单 / 艺人页)";
 entity_page_am_header = "标题 / 创建者 / Play 胶囊居中";
 am_header_play = "播放";
 artist_page_section = "艺人页";
 artist_hide_listeners = "隐藏每月听众";
 artist_hide_tabs = "隐藏 Music / Video / Merch 标签栏";
-artist_bio_empty = "暂时无法直接展示艺人简介。请先滑动到页面底部，再返回点击“艺人简介”即可查看（滑动时可能稍有卡顿）。如果仍未显示艺人简介，则该艺人在Spotify未填写简介。";
+artist_bio_empty = "暂时无法直接展示艺人简介。请先滑动到页面底部，再返回点击“艺人简介”即可查看(滑动时可能稍有卡顿)。如果仍未显示艺人简介，则该艺人在Spotify未填写简介。";
 artist_bio_from_genius = "简介来自Genius";
 artist_bio_section = "艺人介绍";
 artist_bio_source = "简介来源";
@@ -614,15 +614,15 @@ updates_empty = "没有取到release。";
 updates_prerelease = "预发布";
 updates_open = "在 GitHub 上打开";
 updates_retry = "重试";
-updates_error_rate_limit = "GitHub的接口额度用完了。未登录时每小时60次、按出口IP算（运营商大内网是很多人共用）。过一会儿再试。";
-updates_error_rate_limit_reset = "GitHub的接口额度用完了。未登录时每小时60次、按出口IP算（运营商大内网是很多人共用）。大约 %d 分钟后恢复。";
-updates_error_not_found = "找不到这个仓库（GitHub 接口回了404）。仓库可能已改名或转为私有，也可能是你的网络拦了GitHub。";
+updates_error_rate_limit = "GitHub的接口额度用完了。未登录时每小时60次、按出口IP算(运营商大内网是很多人共用)。过一会儿再试。";
+updates_error_rate_limit_reset = "GitHub的接口额度用完了。未登录时每小时60次、按出口IP算(运营商大内网是很多人共用)。大约 %d 分钟后恢复。";
+updates_error_not_found = "找不到这个仓库(GitHub 接口回了404)。仓库可能已改名或转为私有，也可能是你的网络拦了GitHub。";
 updates_error_network = "连不上GitHub，检查网络后重试。";
 updates_error_format = "GitHub返回的数据这一页读不出来：";
 updates_error_status = "GitHub接口回了HTTP %d。";
 
-// ── 减少打扰（2026-10-03）──────────────────────────────────────────────────────
-// 这些开关写的是 Spotify 的 **flag 覆盖**（`ios-messaging-reduceinterventions-impl` 那批），
+// ── 减少打扰(2026-10-03)──────────────────────────────────────────────────────
+// 这些开关写的是 Spotify 的 **flag 覆盖**(`ios-messaging-reduceinterventions-impl` 那批)，
 // 远端配置按会话下发一次，所以页脚必须写明"要重启 Spotify"。
 // 键名跟着它所控制的那条 flag 走，对照 `KnownFlagCatalog`。
 reduce_interventions_title = "减少打扰";
@@ -635,7 +635,7 @@ reduce_interventions_flag_account_switching_tooltip_description = "建议你切�
 reduce_interventions_flag_your_library_ai_playlist_creation_tooltip = "AI 创建歌单提示";
 reduce_interventions_flag_your_library_ai_playlist_creation_tooltip_description = "音乐库里「用 AI 创建歌单」的提示。";
 reduce_interventions_flag_live_events_concert_notifications_tooltip = "演唱会 / 现场活动提示";
-reduce_interventions_flag_live_events_concert_notifications_tooltip_description = "演唱会通知与现场活动横幅（含场馆名那一行）。";
+reduce_interventions_flag_live_events_concert_notifications_tooltip_description = "演唱会通知与现场活动横幅(含场馆名那一行)。";
 reduce_interventions_flag_puffin_nudge_end_optimization = "Puffin 推广气泡";
 reduce_interventions_flag_puffin_nudge_end_optimization_description = "Spotify的Puffin实验的推广气泡。";
 reduce_interventions_flag_smart_shuffle_helper_tooltip = "智能随机说明";
@@ -645,15 +645,15 @@ reduce_interventions_flag_watch_feed_entity_explorer_tooltip_description = "指�
 reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell = "免费档播放页推广";
 reduce_interventions_flag_reinvent_free_n_p_v_suggestions_upsell_description = "播放页上推免费用户升级Premium的那张建议卡。";
 
-// ── 减少打扰 · 第二批（2026-10-03）────────────────────────────────────────────
+// ── 减少打扰 · 第二批(2026-10-03)────────────────────────────────────────────
 // 这些提示散在**别的 scope**，键名形状是
-// `reduce_interventions_flag_<scope 末段>_<flag 名>`（只按 flag 名拼会撞车）。
+// `reduce_interventions_flag_<scope 末段>_<flag 名>`(只按 flag 名拼会撞车)。
 reduce_interventions_flag_connectnotifications_disable_connect_nudges = "Connect提示";
 reduce_interventions_flag_connectnotifications_disable_connect_nudges_description = "关于Spotify Connect与已连接设备的提示。";
 reduce_interventions_flag_sleeptimer_nudge_on_audiobooks = "有声书的睡眠定时器提示";
 reduce_interventions_flag_sleeptimer_nudge_on_audiobooks_description = "放有声书时推荐睡眠定时器的那个提示。";
 reduce_interventions_flag_predictability_is_smart_control_nudge_enabled = "智能控制提示";
-reduce_interventions_flag_predictability_is_smart_control_nudge_enabled_description = "设备预测那套实验里的提示（「去哪儿播」那类）。";
+reduce_interventions_flag_predictability_is_smart_control_nudge_enabled_description = "设备预测那套实验里的提示(「去哪儿播」那类)。";
 reduce_interventions_flag_yourlibaryx_enable_euterpe_tooltip = "音乐库气泡提示";
 reduce_interventions_flag_yourlibaryx_enable_euterpe_tooltip_description = "音乐库里的Euterpe气泡提示。";
 reduce_interventions_flag_yourlibaryx_show_new_episodes_offboarding_card = "音乐库的「新单集」卡";
@@ -670,19 +670,19 @@ now_playing_style = "听歌页样式";
 now_playing_style_spotify = "Spotify原生";
 now_playing_style_apple_music = "Apple Music式";
 now_playing_style_description = "若选择 Spotify 原生，则保留 Spotify 自己的听歌页版式；若选择 Apple Music 式，则听歌页仿照 Apple Music。";
-// ── 听歌页「一屏」（2026-10-03）────────────────────────────────────────────
-// 把播放器下面的卡片全折起来 + 列表钉在它的顶部（kumone / Music app 那种"一屏一首歌"）。
-// 思路与算法借自 spoti.pw v0.21.1（GPL-3.0），见
+// ── 听歌页「一屏」(2026-10-03)────────────────────────────────────────────
+// 把播放器下面的卡片全折起来 + 列表钉在它的顶部(kumone / Music app 那种"一屏一首歌")。
+// 思路与算法借自 spoti.pw v0.21.1(GPL-3.0)，见
 // Sources/EeveeSpotify/Appearance/NowPlayingOneScreen.swift。
 apple_music_official_ttml = "启用Apple Music官方TTML歌词";
 apple_music_official_ttml_description = "可能会忽略部分有关于歌词的设置。";
-apple_music_official_ttml_token = "Apple Music 登录令牌（media-user-token）";
+apple_music_official_ttml_token = "Apple Music 登录令牌(media-user-token)";
 apple_music_official_ttml_token_placeholder = "粘贴media-user-token";
-apple_music_official_ttml_token_hint = "苹果没有公开的歌词接口：搜索只需要网页令牌（本功能会自动抓取），但取歌词必须有你自己的Apple Music登录态。获取方法：浏览器登录 music.apple.com → 开发者工具 → 应用 → Cookie → https://music.apple.com → 复制 media-user-token 的值。需要有效的 Apple Music 账号，没有账号时这一源拿不到任何歌词。";
+apple_music_official_ttml_token_hint = "苹果没有公开的歌词接口：搜索只需要网页令牌(本功能会自动抓取)，但取歌词必须有你自己的Apple Music登录态。获取方法：浏览器登录 music.apple.com → 开发者工具 → 应用 → Cookie → https://music.apple.com → 复制 media-user-token 的值。需要有效的 Apple Music 账号，没有账号时这一源拿不到任何歌词。";
 apple_music_official_ttml_token_missing_inline = "未填写令牌 —— 这个源拿不到歌词。";
 apple_music_token_missing = "未填写Apple Music登录令牌";
 apple_music_token_invalid = "Apple Music登录令牌无效或已过期";
-apple_music_token_popup = "Apple Music官方歌词需要你自己的登录令牌：请在「设置 → 实验 → 启用Apple Music官方TTML歌词」里填入 media-user-token（浏览器：music.apple.com → 开发者工具 → 应用 → Cookie）。";
+apple_music_token_popup = "Apple Music官方歌词需要你自己的登录令牌：请在「设置 → 实验 → 启用Apple Music官方TTML歌词」里填入 media-user-token(浏览器：music.apple.com → 开发者工具 → 应用 → Cookie)。";
 artist_latest_release_tracks = "%d 首歌曲";
 
 lock_screen_artwork_title = "锁屏封面";
@@ -712,7 +712,7 @@ sleep_timer_pick_duration = "选一个时长";
 
 listening_stats_title = "听歌统计";
 listening_stats_enabled = "记录播放";
-listening_stats_enabled_footer = "只记录在这台设备上。一首歌累计播放 30 秒算一次播放；不足 30 秒的时长也会保留。开启之前的历史不存在。";
+listening_stats_enabled_footer = "只记录在本机。一首歌累计播放 30 秒算一次播放；不足 30 秒的时长也会保留。";
 listening_stats_period = "时间范围";
 listening_stats_period_week = "近 7 天";
 listening_stats_period_month = "近 30 天";
@@ -738,17 +738,17 @@ listening_stats_combo_format = "%@ · %@";
 
 // 听歌统计：导入 Spotify 的流媒体历史
 listening_stats_import_title = "导入流媒体历史";
-listening_stats_import_footer = "把 Spotify 数据导出里的播放记录加进这台设备：在 spotify.com/account/privacy 申请「扩展流媒体历史」，然后选中它给的 .zip，或者选中里面那个放 JSON 的文件夹。全程不上传。同一个文件导入两次不会重复计数。";
+listening_stats_import_footer = "把 Spotify 数据导出里的播放记录加进这台设备：在 spotify.com/account/privacy 申请「扩展流媒体历史」，导入zip压缩包即可。";
 listening_stats_import_button = "选择文件或文件夹";
 listening_stats_importing = "正在导入…";
-listening_stats_import_result_format = "已加入 %@ 次播放，来自 %@ 个文件（%@）";
+listening_stats_import_result_format = "已加入 %@ 次播放，来自 %@ 个文件(%@)";
 listening_stats_import_nothing = "这个选择里没有找到播放记录。";
 listening_stats_import_skipped_format = "有 %@ 个文件之前导入过，已跳过。";
 listening_stats_import_duplicate_format = "跳过了 %@ 条重复记录。";
 listening_stats_import_error_zip = "%@ 不是可读的 zip 文件。";
-listening_stats_import_error_zip_unsupported = "%@ 用了这个应用读不了的 zip 特性。";
-listening_stats_import_error_file = "%@ 读不出来。";
-listening_stats_import_error_none = "在 %@ 里没有找到历史文件。";
+listening_stats_import_error_zip_unsupported = "%@ 用了Spotify读不了的 zip 特性。";
+listening_stats_import_error_file = "%@ 无法读取。";
+listening_stats_import_error_none = "在 %@ 里未找到历史文件。";
 
 // 设置根页：分组与行
 settings_group_features = "Premium 与播放";
