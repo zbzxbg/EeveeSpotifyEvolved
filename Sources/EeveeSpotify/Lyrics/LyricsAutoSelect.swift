@@ -295,10 +295,15 @@ enum LyricsAutoSelect {
         return clampedCoverage(filled, of: dto.lines.count)
     }
 
-    /// 官方逐词罗马字覆盖：长度对得上，且那一行按"组数 == 词数"挂上了。
+    /// 官方逐词罗马字覆盖：按"这一行有没有逐词组"计，不是按"每个词都有组"计。
+    ///
+    /// AMLL 的逐词组是从整行 x-roman 切出来的：一个分词覆盖多个音节时，文本挂在**第一个**
+    /// 音节的组上，其余组是空串（拼起来仍等于官方整行）。按非空组数算会把这种行严重低估。
     static func wordLevelRomanizationCoverage(_ dto: LyricsDto) -> Double {
         guard dto.officialRomanizedWordGroups.count == dto.lines.count else { return 0 }
-        let filled = dto.officialRomanizedWordGroups.filter { !$0.isEmpty }.count
+        let filled = dto.officialRomanizedWordGroups.filter { groups in
+            groups.contains { !$0.isEmpty }
+        }.count
         return clampedCoverage(filled, of: dto.lines.count)
     }
 

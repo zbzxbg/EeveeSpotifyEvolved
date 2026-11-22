@@ -165,6 +165,49 @@ enum AmllLyricsMapper {
             )
         }
 
+        // ── 逐词罗马字（AMLL 的 x-roman 是整行，这里按原文分词切回逐词组）
+        //
+        // 只在官方罗马字**已经收下**、并且这一行有词级时间轴时做：切出来的组文本仍用
+        // 官方那份，时间用词的起止；渲染层因此能像 KRC 那样逐词点亮，而不是整行静态。
+        // 切不准（本地分词与官方字母对不上）就留空，显示层退回静态画法 —— 不影响正文。
+        var derivedWordRomanizations: [[String]] = []
+        if !officialRomanizedLines.isEmpty, officialRomanizedLines.count == lines.count {
+            var groupsByLine = Array(repeating: [String](), count: lines.count)
+            var derivedCount = 0
+            let isJapaneseLine = languageCode == "ja"
+            for index in lines.indices {
+                guard let words = lines[index].words, !words.isEmpty,
+                      !officialRomanizedLines[index].isEmpty else { continue }
+                let chunks: [AmllRomanizationWords.Chunk]
+                if isJapaneseLine {
+                    chunks = lines[index].content.japaneseRomajiChunks().map { chunk in
+                        AmllRomanizationWords.Chunk(
+                            range: NSRange(
+                                location: Int(chunk.range.location),
+                                length: Int(chunk.range.length)
+                            ),
+                            romaji: chunk.romaji
+                        )
+                    }
+                } else {
+                    chunks = []
+                }
+                guard let groups = AmllRomanizationWords.groups(
+                    officialLine: officialRomanizedLines[index],
+                    words: words,
+                    chunks: chunks
+                ) else { continue }
+                groupsByLine[index] = groups
+                derivedCount += 1
+            }
+            if derivedCount > 0 {
+                derivedWordRomanizations = groupsByLine
+                writeDebugLog(
+                    "[\(logTag)] derived word-level romanization for \(derivedCount)/\(lines.count) line(s)"
+                )
+            }
+        }
+
         // ── 翻译层
         // 必须与主歌词行数完全一致（渲染层按行索引取），因此每行都占位（无翻译填空串）。
         // 官方罗马音只进 `officialRomanizedLines`，不碰 `lines`（行数与顺序都不变）⇒ 翻译索引依然有效。
@@ -206,6 +249,7 @@ enum AmllLyricsMapper {
             translation: translation,
             languageCode: languageCode,
             officialRomanizedLines: officialRomanizedLines,
+            officialRomanizedWordGroups: derivedWordRomanizations,
             providerCredit: credit
         )
     }

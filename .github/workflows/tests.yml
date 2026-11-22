@@ -465,6 +465,17 @@ jobs:
                  -o amll-ttml-apple-tests
           ./amll-ttml-apple-tests
 
+      # AMLL 的 x-roman 是整行一条；这里把"整行 → 逐词组"的切分逻辑（`AmllRomanizationWords`）
+      # 真编真跑：分词字母与官方整行一致时按分词切、文本仍用官方那份；对不上就返回 nil
+      # （渲染层保持静态）。纯 Foundation，能进这条链。
+      - name: AMLL line romanization → word groups
+        run: |
+          swiftc Sources/EeveeSpotify/Lyrics/Models/LyricsWordDto.swift \
+                 Sources/EeveeSpotify/Lyrics/Models/Amll/AmllRomanizationWords.swift \
+                 Tests/AmllRomanizationWords/main.swift \
+                 -o amll-romanization-words-tests
+          ./amll-romanization-words-tests
+
       # 按歌排除源（`LyricsSongSourceExclusions`）：解码自愈（未知键 / 重复项 /
       # 不能作为排除项的源）、编码往返、过滤保持链顺序、全排除时回退成原链。
       # 纯 Foundation，不碰 UserDefaults 的读写路径（只测纯函数）。
