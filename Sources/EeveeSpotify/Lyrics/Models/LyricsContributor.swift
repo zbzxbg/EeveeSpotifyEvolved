@@ -19,7 +19,7 @@ struct LyricsContributor: Equatable {
     enum Role: String {
         case uploader
         case maker
-        /// 翻译者（目前只有网易云的 `transUser.nickname` 会给）。
+        /// 翻译者（目前网易云的 `transUser.nickname` 与酷狗的 `transname` 会给）。
         case translator
 
         /// l10n 键（与上游同名）。要显示的中文/英文在 `LyricsContributor+Display.swift`。

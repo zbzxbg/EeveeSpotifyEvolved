@@ -51,7 +51,7 @@ enum LyricsTimingTier: Int, Comparable {
 /// "这块可见内容覆盖了这一行的多少比例"：
 /// · 译文 / 官方整行罗马字 / 官方逐词罗马字 —— 画在正文下面/上面的那几行字；
 /// · 对唱分边（`agent`）—— 左右两边的排版结构（目前只有 TTML 源有）；
-/// · 副唱（`backgroundVocal`）—— 主词上方/下方那一小行（目前只有 AMLL 有）。
+/// · 副唱（`backgroundVocal`）—— 主词上方/下方那一小行（只有 TTML 源会给）。
 ///
 /// 权重都是 1：它们各自是一块独立的可见内容，没有证据说哪一块更重要。结构面是
 /// **present-only**（不进 `wantedFacets`）：只给"这一份真的带了"的源加分，从不为它
@@ -316,7 +316,7 @@ enum LyricsAutoSelect {
         return clampedCoverage(filled, of: dto.lines.count)
     }
 
-    /// 副唱：带一条非空副唱的行占比。目前只有 AMLL 会给这一列。
+    /// 副唱：带一条非空副唱的行占比。只有 TTML 源会给这一列。
     static func backgroundVocalCoverage(_ dto: LyricsDto) -> Double {
         guard !dto.lines.isEmpty else { return 0 }
         let filled = dto.lines.filter { line in
