@@ -9,10 +9,16 @@ import Foundation
 // 比这更短的间隙连"点亮 → 退出"两个阶段都放不下，硬放只会看到点闪一下；
 // `normalizedInferredThreshold` 再把外部给的阈值夹到这条下界之上。
 // ② **`contentEndTime` 估算** ——「这一句唱到什么时候」：
-// 作者标注的 `duration` 与最后一个音节的结束时间取**大者**；
+// 作者标注的 `duration`、最后一个音节的结束时间、以及**副唱（`ttm:role="x-bg"`）的尾巴**
+// 三者取**大者**；
 // 只有行级时间的来源（`.lineSynchronized`）退回 `LyricVocalDurationEstimator`，
 // 而且**不得超过**该行的显示时长 —— 下一行的起点就是人声尾部的上限，
 // 否则估出来的尾巴会把整段间隙吃掉，间奏就永远判不出来。
+//
+// ⚠️ 副唱这一项必须算进来 —— Apple Music / AMLL 的副歌常常是
+// 「一句主词 + 一小段 (Ha-ha-ha-ha) 副唱」，副唱正好唱到下一句开口。只看主词的话，
+// 这类行每一条都会凭空多出一段 4.0~4.4s 的"间隙"（够过 4s 阈值 ⇒ 多画一条呼吸点），
+// 而实际听到的是"中间一直在唱 ha-ha、根本没有间奏"。
 // ③ **policy 过滤** —— `.preciseTiming` 只认作者时间轴；`.automatic(threshold)`
 // 把推断出来的 LRC 间隙也算进来（阈值先过一遍 `normalizedInferredThreshold`）。
 //
@@ -20,8 +26,10 @@ import Foundation
 // 它是纯函数，**不含时钟** —— 时钟由调用方给（本项目 = `AppleMusicLyricsPage` 宿主里
 // 那条已经过真机验证的 CADisplayLink，见那个文件顶部"为什么不用 TimelineView"）。
 //
-// ⚠️ 与 MeloX 的差别只有措辞级：去掉 `nonisolated`（本仓库其余移植件也没用）、
-// 注释改中文、`switch` 统一写成显式 `return`。阈值、判据、顺序一律照抄。
+// ⚠️ 与 MeloX 的差别：措辞级（去掉 `nonisolated`、注释改中文、`switch` 显式 `return`）
+// 之外还有**一处判据** —— `contentEndTime` 把副唱（`x-bg`）的尾巴也算成"这一句还在唱"
+// （见文件头 ②）。MeloX 只认主词序列，那在"副唱接在行尾"的 TTML 上会把副唱当成静音。
+// 阈值、其余判据与顺序照抄。
 
 enum LyricInterludeTimeline {
 
@@ -273,7 +281,39 @@ enum LyricInterludeTimeline {
             .filter(\.isFinite)
             .max()
 
-        // 两者取大者：有的来源只给行 duration，有的只给逐字/逐音节时间，谁都可能更长。
+        // 副唱（AMLL / Apple TTML 的 `x-bg`）是这一行"同时/紧接着"唱出来的内容，
+        // 却不在 `syllables` 里（那一份的口径是主词拼接 == 正文）⇒ 必须单独算进来，
+        // 否则它整段被当成静音（见文件头 ② 的 Starboy 说明）。
+        let backgroundEndTime = backgroundVocalEndTime(for: lyric.backgroundVocal)
+
+        // 几者取大者：有的来源只给行 duration，有的只给逐字/逐音节时间，
+        // 有的把副唱尾巴挂在行尾，谁都可能更长。
+        return [durationEndTime, syllableEndTime, backgroundEndTime]
+            .compactMap { $0 }
+            .max()
+    }
+
+    /// 副唱唱到什么时候。
+    ///
+    /// 与主歌词同一把尺子：`time + duration` 与最后一个音节的结束时间取大者。
+    /// 副唱可以**零时长**（括号这类标记），也可以是"行首之前就开始"的应答
+    /// （`position == .beforePrimary`），所以只认结束时间、不看它落在哪里。
+    private static func backgroundVocalEndTime(
+        for background: LyricBackgroundVocal?
+    ) -> TimeInterval? {
+        guard let background else { return nil }
+
+        let durationEndTime = background.duration.flatMap {
+            duration -> TimeInterval? in
+            guard duration.isFinite, duration > 0 else { return nil }
+            return background.time + duration
+        }
+        let syllableEndTime = background.syllables
+            .lazy
+            .map(\.endTime)
+            .filter(\.isFinite)
+            .max()
+
         return [durationEndTime, syllableEndTime]
             .compactMap { $0 }
             .max()

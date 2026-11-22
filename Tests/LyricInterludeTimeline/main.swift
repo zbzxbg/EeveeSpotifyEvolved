@@ -252,6 +252,85 @@ require(
     "a 3.0s authored breath clears the clamped 2.8s minimum"
 )
 
+// ★★ 2026-11-22（日志里的 Starboy：`11 interlude(s) in 65 line(s)`，gaps 全是 4.0~4.4s）：
+//    **副唱（`ttm:role="x-bg"`）也是这一行的内容**。
+//
+//    AMLL 的 `(Ha-ha-ha-ha-ha …)` 挂在 `backgroundVocal` 上、**不进**主词序列
+//    （主词序列的不变量是"拼起来 == 正文"），而 `.precise` 行的 `duration` 又只算到
+//    最后一个**主词**音节 ⇒ 只看主词时副唱那 4 秒被当成静音，于是每一条带 x-bg 的副歌行
+//    都凭空多出一条呼吸点。用户听到的是"这一行和下一行只隔两三秒，这不算间奏吧"。
+//
+//    形状照真 TTML 抄：主词 10→12，副唱 12.2→16.2，下一句正好在 16.2 开口。
+let withBackground = LyricLine(
+    id: "bg:0",
+    time: 10,
+    duration: 2,
+    timingKind: .precise,
+    text: "Look what you've done",
+    syllables: [
+        LyricSyllable(text: "Look", startTime: 10, endTime: 11),
+        LyricSyllable(text: " done", startTime: 11, endTime: 12),
+    ],
+    backgroundVocal: LyricBackgroundVocal(
+        time: 12.2,
+        duration: 4,
+        text: "(ha-ha-ha-ha)",
+        syllables: [
+            LyricSyllable(text: "(ha-", startTime: 12.2, endTime: 14),
+            LyricSyllable(text: "ha)", startTime: 14, endTime: 16.2),
+        ],
+        translation: nil,
+        position: .afterPrimary
+    )
+)
+let afterBackground = LyricLine(
+    id: "bg:1",
+    time: 16.2,
+    duration: 2,
+    timingKind: .precise,
+    text: "next",
+    syllables: [
+        LyricSyllable(text: "next", startTime: 16.2, endTime: 17.5),
+    ]
+)
+let backgroundCandidates = LyricInterludeTimeline.candidates(
+    in: [withBackground, afterBackground]
+)
+require(
+    backgroundCandidates.count == 1,
+    "只有 0→10s 的前奏：副唱一直唱到下一句开口 ⇒ 中间没有间隙，got \(backgroundCandidates.count)"
+)
+require(backgroundCandidates[0].isPrelude, "剩下的那条只能是前奏")
+require(
+    LyricInterludeTimeline.interludes(
+        in: [withBackground, afterBackground],
+        detectionPolicy: .automatic(minimumInferredGapDuration: 4)
+    ).count == 1,
+    "副唱那 4 秒曾被当成静音 ⇒ 逐字来源凭空多出一条 4.2s 的呼吸点"
+)
+
+// 反证：把副唱摘掉，同一个时间轴确实会判出一条 4.2s 的间隙 —— 那正是旧行为。
+let withoutBackground = LyricLine(
+    id: "bg:0-no-bg",
+    time: 10,
+    duration: 2,
+    timingKind: .precise,
+    text: "Look what you've done",
+    syllables: [
+        LyricSyllable(text: "Look", startTime: 10, endTime: 11),
+        LyricSyllable(text: " done", startTime: 11, endTime: 12),
+    ]
+)
+let noBackgroundCandidates = LyricInterludeTimeline.candidates(
+    in: [withoutBackground, afterBackground]
+)
+require(noBackgroundCandidates.count == 2, "没有副唱时这里是一条真空档")
+requireClose(
+    noBackgroundCandidates[1].gapDuration,
+    4.2,
+    "16.2 − 12 = 4.2：旧行为产生的那类假间隙"
+)
+
 // MARK: - 6. 这一拍该显示什么：三个阶段必须无缝衔接
 
 let motion = AppleMusicInterludeMotionProfile.iOS26_6.timing(for: interlude)
