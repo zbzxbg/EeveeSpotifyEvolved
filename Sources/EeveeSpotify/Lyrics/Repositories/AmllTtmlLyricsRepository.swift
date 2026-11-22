@@ -532,7 +532,7 @@ class AmllTtmlLyricsRepository: LyricsRepository {
     }
 
     /// 模糊命中的版本校验结果。
-    private enum DurationCheck {
+    private enum DurationCheck: Equatable {
         /// 查到了时长，且和本曲在容差内。
         case matches
         /// 查到了时长，但对不上 —— 另一个编曲/版本。
