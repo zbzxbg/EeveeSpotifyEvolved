@@ -12,7 +12,9 @@ import Foundation
 /// 锁屏「逐字」关着时：谁先给出**行级时间轴**就用谁（一次都不多问）。
 /// 开着时：先收一份行级的当**兜底**，再为**词级时间轴**继续问后面的源 —— 档次判据复用
 /// 页内自动优选那一份（`LyricsAutoSelect.tier(of:)`），多花的时间也复用同一条预算
-/// （`LyricsAutoSelect.upgradeBudget`），不另立一套。
+/// （`LyricsAutoSelect.upgradeBudget` / `fuzzyVerificationBudget`），不另立一套。
+/// 「猜的」那一份（AMLL 模糊命中）同样只当兜底：同名可能是另一个编曲（打上花火），
+/// 继续问到"对上的"那一份为止。
 enum LockScreenLyricsFetcher {
 
     struct Result {
@@ -53,6 +55,8 @@ enum LockScreenLyricsFetcher {
         let wantsWordTiming = UserDefaults.lockScreenWordByWord
         // 手里第一份可用的行级结果。逐字开着时它不一定是最终结果 —— 只是兜底。
         var fallback: Result?
+        // 兜底是不是已经带逐字帧（模糊命中也可能带）。
+        var fallbackIsWord = false
         // 兜底到手之后最多再问多久。起点是**兜底到手**那一刻，不是整次取词的起点：
         // 这里的每个源都是同步请求，没法像 `LyricsAutoSelect.autoSelectLyrics` 那样
         // 按剩余预算给单源夹超时 —— 从起跑算窗口的话，一个慢源就能在问到任何能出
@@ -110,11 +114,13 @@ enum LockScreenLyricsFetcher {
                 }
 
                 let coverage = coverageLogSuffix(for: lines)
-                // 「升级完成」要同时满足两条：dto 确实到了词级档（`tier(of:)`，与页内
-                // auto-select 同一判据），且转换后的行真的带上了帧（词拼起来等于行文本，
-                // 见 `LockScreenKaraoke.frames`）。只有前一条时整首仍是单帧。
-                if LyricsAutoSelect.tier(of: dto) == .word,
-                   wordByWordLineCount(in: lines) > 0 {
+                // 「升级完成」要同时满足三条：dto 确实到了词级档（`tier(of:)`，与页内
+                // auto-select 同一判据）、转换后的行真的带上了帧（词拼起来等于行文本，
+                // 见 `LockScreenKaraoke.frames`）、而且这一份不是**猜的**。
+                // 只有前两条时整首仍然是单帧；只有第三条命中时是同名不同编曲。
+                let wordTimed = LyricsAutoSelect.tier(of: dto) == .word
+                    && wordByWordLineCount(in: lines) > 0
+                if wordTimed, !dto.isFuzzyMatch {
                     writeDebugLog(
                         "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"
                             + " \(source.description) — \(took(started))\(coverage)"
@@ -122,14 +128,23 @@ enum LockScreenLyricsFetcher {
                     return Result(lines: lines, source: source)
                 }
 
-                if fallback == nil {
+                // 模糊命中（按名字猜的）先当兜底：它比行级好（能逐字），但同名可能是
+                // 另一个编曲（打上花火：4:49 对唱版 vs 4:19 独唱版），继续问后面有没有
+                // 用真实曲目 id / 时长闸门命中的那一份。
+                if fallback == nil || (wordTimed && !fallbackIsWord) {
                     let result = Result(lines: lines, source: source)
                     fallback = result
-                    upgradeDeadline = Date().addingTimeInterval(LyricsAutoSelect.upgradeBudget)
+                    fallbackIsWord = wordTimed
+                    let budget = dto.isFuzzyMatch
+                        ? LyricsAutoSelect.fuzzyVerificationBudget
+                        : LyricsAutoSelect.upgradeBudget
+                    upgradeDeadline = Date().addingTimeInterval(budget)
                     writeDebugLog(
                         "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"
                             + " \(source.description) — \(took(started))\(coverage)"
-                            + " — line-timed fallback, still asking for word-by-word"
+                            + (wordTimed
+                                ? " — fuzzy word-by-word fallback, still asking for a verified source"
+                                : " — line-timed fallback, still asking for word-by-word")
                     )
                     // 先让锁屏有字：整条链找逐字可能要好几秒（见函数头注）。
                     onFallback?(result)
@@ -150,7 +165,9 @@ enum LockScreenLyricsFetcher {
             writeDebugLog(
                 "[\(LockScreenLyrics.logTag)] kept \(fallback.lines.count) line(s) from"
                     + " \(fallback.source.description)\(coverageLogSuffix(for: fallback.lines))"
-                    + " — no word-by-word data, single-frame lines"
+                    + (fallbackIsWord
+                        ? " — only a fuzzy word-by-word match, no verified source answered"
+                        : " — no word-by-word data, single-frame lines")
             )
         }
         return fallback

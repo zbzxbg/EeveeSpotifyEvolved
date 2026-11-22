@@ -79,6 +79,13 @@ struct LyricsDto {
     /// `providedBy`，那一行点不动）；这个数组给**我们自己画的页面**用，
     /// 条款 §6 要求"用 contributor 的 `url` 当链接目标"就靠它。
     var providerContributors: [LyricsContributor] = []
+
+    /// 这一份是**按歌名/歌手猜**出来的（AMLL 的模糊搜索），不是源用它自己的曲目 id 精确命中。
+    ///
+    /// 自动优选据此把"猜的"排在"对上的"后面：同档、同质量面时，另一个源用真实曲目 id
+    /// 命中的那一份应当赢。典型现场是「打上花火」：Spotify 播的是 4:19 的独唱版，
+    /// 而 AMLL 库里只有 4:49 的对唱版 —— 按歌名猜中的那一份时间轴和声部都对不上。
+    var isFuzzyMatch: Bool = false
     
     func toSpotifyLyricsData(
         source: String,

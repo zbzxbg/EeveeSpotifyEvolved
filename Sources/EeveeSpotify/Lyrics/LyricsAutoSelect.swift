@@ -2,13 +2,15 @@ import Foundation
 
 // MARK: - 自动优选（auto select）
 //
-// 排序依据两层，顺序不可颠倒：
+// 排序依据三层，顺序不可颠倒：
 //
 // 1. **时间轴档次**（逐字 > 逐行 > 纯文本）永远先比。判据复用渲染层那两个
 //    `hasUsableWordLevelData` / `hasUsableLineLevelData`（`WordByWordLyricsFacts.swift`），
 //    口径只有一份 —— 否则会出现「优选认为是逐字、渲染层认为不是」。
-// 2. **同档质量面**（`LyricsAutoSelectFacets`）：有没有译文、有没有官方罗马字、罗马字
-//    是不是逐词的。同档里只认严格更多，一样多时按链路顺序。
+// 2. **置信度**：同档里"对上的"（源用真实曲目 id / 时长闸门命中）赢过"猜的"
+//    （AMLL 模糊搜索按歌名选中，见 `LyricsDto.isFuzzyMatch`）。
+// 3. **同档质量面**（`LyricsAutoSelectFacets`）：有没有译文、有没有官方罗马字、罗马字
+//    是不是逐词的。同档同置信度里只认严格更多，一样多时按链路顺序。
 //
 // 链路顺序由用户自己排（`LyricsSourceOrder`），只决定「先问谁」，不决定「谁赢」。
 //
@@ -81,6 +83,10 @@ struct LyricsAutoSelectPick {
     /// 用计算属性、不做存储字段：它就是 dto + 设置开关的函数，没有"到达时才知道"的信息；
     /// 这样 `CustomLyrics` 里那几个构造点一个都不用改。
     var facets: LyricsAutoSelectFacets { LyricsAutoSelect.facets(of: dto, source: source) }
+
+    /// 这一份是"猜的"（模糊搜索按名字选中）还是"对上的"（源用真实曲目 id / 时长闸门命中）。
+    /// 同档、同质量面时，"对上的"赢 —— 按名字猜中的那一份可能是另一个编曲。
+    var isFuzzyMatch: Bool { dto.isFuzzyMatch }
 }
 
 enum LyricsAutoSelect {
@@ -104,6 +110,13 @@ enum LyricsAutoSelect {
     /// 同档质量面也复用这一个窗口（不新加预算）：拿到"想要的那一档"但质量面还缺时，
     /// 最多等到这里为止 —— 到点就交手里那份，与逐行升级逐字共用同一条线。
     static let upgradeBudget: TimeInterval = 4
+
+    /// 手里只有一份**模糊命中**时，还愿意为"对上的那一份"多等多久。
+    ///
+    /// 这条是 `upgradeBudget` 之外**唯一**新增的窗口，只对模糊命中生效：按名字猜中的
+    /// 那一份可能是另一个编曲（[打上花火] 的 4:19 独唱版 vs 4:49 对唱版），值得再问
+    /// 一两个源换一份用真实曲目 id / 时长闸门命中的。没开模糊搜索时这个窗口不存在。
+    static let fuzzyVerificationBudget: TimeInterval = 8
 
     /// 整条链路的上限。Spotify 那次 `color-lyrics` 请求的预算是 18 秒
     /// （`LyricsResponseCache.firstAttemptBudget`），这里留 2 秒余量给序列化与投递。
@@ -256,32 +269,38 @@ enum LyricsAutoSelect {
 
     /// 候选比手里那份更好吗？
     ///
-    /// **先比时间轴档次**（逐字赢逐行、逐行赢纯文本，与质量面无关）；
-    /// 同档才比质量面，而且**必须严格更多** —— 一样多时保持"先到先用"，
-    /// 链路顺序就是同档的优先级。
+    /// 顺序：**时间轴档次**（逐字赢逐行、逐行赢纯文本）→ **置信度**（对上的赢猜的）→
+    /// 同档质量面。质量面**必须严格更多** —— 一样多时保持"先到先用"，链路顺序就是
+    /// 同档的优先级。
+    ///
+    /// 置信度只放在"同档"里比：逐行的"对上的"不会顶掉逐字的"猜的"（那一刻仍然只有
+    /// 逐字能给出逐词渲染）；但同样是逐字时，用真实曲目 id 命中的那一份必须赢过
+    /// 按歌名猜中的那一份。
     static func isBetter(_ candidate: LyricsAutoSelectPick, than current: LyricsAutoSelectPick?) -> Bool {
         logFacetsOnce(for: candidate.dto, source: candidate.source)
         guard let current else { return true }
         if candidate.tier != current.tier { return candidate.tier > current.tier }
+        if candidate.isFuzzyMatch != current.isFuzzyMatch { return !candidate.isFuzzyMatch }
         return candidate.facets.score > current.facets.score
     }
 
     /// 可以收工了吗。
     ///
-    /// 四条停止条件，按"越早越省时间"排：
+    /// 五条停止条件，按"越早越省时间"排：
     /// 1. 手里已经是「想要的那一档」，且质量面**齐了** → 停（同档后面不可能更好）；
     ///    质量面没齐、且还在 `upgradeBudget` 之内 → 继续问；
-    /// 2. 手里是逐行、而链路上**再没有能出逐字的源** → 停（没必要为纯文本白等）；
-    /// 3. 手里是逐行、为升级已经等满 `upgradeBudget` → 停；
-    /// 4. 整条链路 `totalBudget` 到点 → 停。
+    /// 2. 手里那一份是**模糊命中**（按歌名猜的）→ 还有能出逐字的源就继续问到
+    ///    `fuzzyVerificationBudget`：同档的"对上的"比"猜的"优先，值得多问一两个源；
+    /// 3. 手里是逐行、而链路上**再没有能出逐字的源** → 停（没必要为纯文本白等）；
+    /// 4. 手里是逐行、为升级已经等满 `upgradeBudget` → 停；
+    /// 5. 整条链路 `totalBudget` 到点 → 停。
     ///
-    /// ⚠️ 第 2、3 条**只对逐行生效**。手里还是纯文本时必须一路问到 `totalBudget` ——
+    /// ⚠️ 第 3、4 条**只对逐行生效**。手里还是纯文本时必须一路问到 `totalBudget` ——
     /// 否则「先答上来的是纯文本、后面才有带时间轴的源」这个正是要修的场景会被提前掐掉。
     ///
-    /// ⚠️ 第 1 条的后半句是质量面唯一的"多等"来源：它**不新加任何长度**，
-    /// 用的还是 `upgradeBudget`；质量面齐了的答案与改动前**同时**停（一个字节都不多等）。
-    /// 这个窗口与「逐行升级逐字」共用同一个起点：**请求开始**（`elapsed` 由调用方从链路
-    /// 起跑算起），不是"拿到答案之后再等 4 秒" —— 链路前面连问几个慢源时它可能已经过去。
+    /// ⚠️ 第 2 条是唯一在 `upgradeBudget` 之外新加的窗口，只对模糊命中生效（没开模糊
+    /// 搜索时它根本走不到）。它不改变"质量面齐了就停"的老行为 —— 只让"猜的"多等一会儿。
+    /// 窗口起点仍是**请求开始**（`elapsed` 由调用方从链路起跑算起）。
     ///
     /// ⚠️ 这里刻意**不**用 `remaining` 去判"还有没有源能补这个面"：调用方传进来的
     /// `remaining` 是 `chain.dropFirst(index + 1)`，**不含即将要问的那一个源**
@@ -295,6 +314,10 @@ enum LyricsAutoSelect {
         guard let best else { return elapsed >= totalBudget }
 
         if best.tier >= wantedTier {
+            // 猜中的那一份还值得再等一份"对上的"：即使质量面齐了也继续问。
+            if best.isFuzzyMatch, remaining.contains(where: \.canProduceWordTiming) {
+                return elapsed >= fuzzyVerificationBudget
+            }
             return missingFacets(of: best.dto).isEmpty || elapsed >= upgradeBudget
         }
 
@@ -308,7 +331,13 @@ enum LyricsAutoSelect {
     /// 这个源这一次最多等多久（调用方还要再和剩余总预算取小）。
     static func timeout(for source: LyricsSource) -> TimeInterval {
         switch source {
-        case .lrclib, .amllTtml, .spicy:
+        case .amllTtml:
+            // 模糊搜索那条路最多三个请求（搜索 → 取词 → 版本校验），3 秒不够。
+            // 精确那条路仍然按快源算。
+            return UserDefaults.experimentsOptions.amllFuzzySearch
+                ? slowSourceTimeout
+                : fastSourceTimeout
+        case .lrclib, .spicy:
             return fastSourceTimeout
         case .musixmatch, .petit, .netease, .genius, .appleMusicOfficialTtml,
              .bini, .unison, .qqMusic, .kugou:

@@ -457,7 +457,11 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                 LyricsAutoSelect.timeout(for: source),
                 LyricsAutoSelect.totalBudget - elapsed
             )
-            if let best, best.tier == .line, LyricsAutoSelect.wantsWordTiming {
+            if let best, best.isFuzzyMatch, LyricsAutoSelect.wantsWordTiming {
+                // 手里是"猜的"：给后面某个"对上的"留出 `fuzzyVerificationBudget` 的窗口。
+                // 不夹这一下，窗口过后起跑的那个源照样会跑满自己的单源超时（3~5 秒）。
+                timeout = min(timeout, LyricsAutoSelect.fuzzyVerificationBudget - elapsed)
+            } else if let best, best.tier == .line, LyricsAutoSelect.wantsWordTiming {
                 timeout = min(timeout, LyricsAutoSelect.upgradeBudget - elapsed)
             } else if let best,
                       best.tier >= LyricsAutoSelect.wantedTier,
