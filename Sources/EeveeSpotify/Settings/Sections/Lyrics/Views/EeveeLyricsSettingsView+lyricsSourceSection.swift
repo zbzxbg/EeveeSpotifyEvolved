@@ -46,7 +46,9 @@ extension EeveeLyricsSettingsView {
     /// 后者只在"从没排过 / 点了重置"时才是实际顺序，排过之后两者会不一致
     /// （页脚写着默认序，链路却是用户那份）。
     private func lyricsSourceFooter() -> some View {
-        var text = "lyrics_source_restart_note".localizeWithFormat("restart_is_required_description".localized)
+        // 这一句本身就是完整的一句（"切换歌词来源后需重启 Spotify。"），不再用
+        // `restart_is_required_description` 拼第二段 —— 那样会读成"要重启。"＋"重启 Spotify 后生效。"
+        var text = "lyrics_source_restart_note".localized
 
         var isFirst = true
         for source in LyricsSourceOrder.current {

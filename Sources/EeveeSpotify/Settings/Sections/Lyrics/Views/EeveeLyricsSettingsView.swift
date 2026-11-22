@@ -158,8 +158,9 @@ struct EeveeLyricsSettingsView: View {
     }
 
     private func betterWordByWordLyricsFooter() -> Text {
+        // 系统要求写在 `_description` 里（"像 Apple Music 那样。系统版本最低需要 iOS 26。"）：
+        // 两段拼起来时它会单独占一行，读起来像两条独立说明，其实后一句只是前一句的门槛。
         var text = "better_word_by_word_lyrics_description".localized
-            + "\n\n" + "requires_ios26".localized
         if !Self.supportsBetterWordByWordLyrics {
             text += "\n\n" + "better_word_by_word_lyrics_needs_ios26".localized
         }
