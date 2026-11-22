@@ -112,6 +112,47 @@ enum LockScreenKaraoke {
         frames.append(frame)
     }
 
+    /// 这一行唱到 `offsetMs`（相对行首）时已经亮到第几个字符。
+    ///
+    /// 系统来要视频的时机不由我们决定：锁屏重新亮起、暂停后恢复、切回锁屏都会再要一次，
+    /// 而那时这一行往往已经唱到中间了。用它把"第 0 帧"换算成"现在这一刻"。
+    static func revealedCharacters(
+        atMs offsetMs: Int,
+        in frames: [LockScreenKaraokeFrame]
+    ) -> Int {
+        var revealed = 0
+        for frame in frames where frame.offsetMs <= offsetMs {
+            revealed = frame.revealedCharacters
+        }
+        return revealed
+    }
+
+    /// 把整行的帧表挪到"从 `offsetMs` 开始唱"：第 0 帧 = 已经亮到的字符，后面的帧按剩余
+    /// 时间平移。`nil` = 这一行已经唱完（调用方改成单帧：整行亮着，不要从第一个字重播）。
+    static func rebased(
+        _ frames: [LockScreenKaraokeFrame],
+        fromMs offsetMs: Int
+    ) -> [LockScreenKaraokeFrame]? {
+        guard frames.count >= 2, offsetMs > 0 else { return frames }
+        let remaining = frames
+            .filter { $0.offsetMs > offsetMs }
+            .map {
+                LockScreenKaraokeFrame(
+                    offsetMs: $0.offsetMs - offsetMs,
+                    revealedCharacters: $0.revealedCharacters
+                )
+            }
+        guard !remaining.isEmpty else { return nil }
+        let revealed = revealedCharacters(atMs: offsetMs, in: frames)
+        return [LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: revealed)] + remaining
+    }
+
+    /// 停住的那一帧。单帧 = 这一段片子不会自己再亮 —— 暂停和"本行已经唱完"用它替换动画，
+    /// 否则系统会把整段循环播放，逐词又从第一个字亮一遍。
+    static func frozen(revealedCharacters: Int) -> [LockScreenKaraokeFrame] {
+        [LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: max(0, revealedCharacters))]
+    }
+
     /// 两张帧表并成一张（对唱叠句用）。
     ///
     /// 时间取并集；每一句"亮到第几个字符"取该时刻之前**最近**的那一帧（还没开始就是 0）。

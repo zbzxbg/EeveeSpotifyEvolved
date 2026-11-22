@@ -65,12 +65,20 @@ enum LockScreenLyrics {
         companion: String?,
         companionFlipped: Bool,
         companionKaraoke: [LockScreenKaraokeFrame],
+        frozen: Bool = false,
+        /// 装这一份时这一行已经唱到第几毫秒（相对行首）。只按一秒分桶。
+        ///
+        /// 为什么它也要进哈希：暂停后再恢复时，同一行会以新的"现在唱到哪"重装一次；
+        /// 不换 ID 的话系统会命中暂停前那份视频，从第一个字重新播。
+        startOffsetMs: Int = 0,
         credit: String,
         hasCover: Bool,
         textScale: Double,
         spacingScale: Double
     ) -> String {
         // 逐字的帧表也要进哈希：同一行文字的"单帧"与"多帧"是两份不同的素材。
+        // "冻结"（暂停 / 本行唱完）同样是另一份素材 —— 换 ID 系统才会把动画停掉；
+        // 恢复播放时再换回动画那一份，系统才会重新要视频（不会复用暂停前那段从头播）。
         // 对唱叠句那一半的文本/边/帧表同样进来 —— 它变了，这一段的像素就变了。
         let karaokeKey = karaoke
             .map { "\($0.offsetMs):\($0.revealedCharacters)" }
@@ -82,6 +90,7 @@ enum LockScreenLyrics {
             "\(clipFormat)|\(line ?? "")|\(next ?? "")|\(translation ?? "")"
                 + "|\(romanization ?? "")|\(isDuet ? "duet" : "one")\(flipped ? "R" : "L")\(nextFlipped ? "r" : "l")"
                 + "|\(karaokeKey)|\(companion ?? "")\(companionFlipped ? "R" : "L")\(companionKey)"
+                + "|\(frozen ? "frozen" : "animated")\(max(0, startOffsetMs) / 1000)"
                 + "|\(credit)|\(hasCover ? "c" : "n")"
                 + "|\(scaleKey(textScale))|\(scaleKey(spacingScale))"
         )

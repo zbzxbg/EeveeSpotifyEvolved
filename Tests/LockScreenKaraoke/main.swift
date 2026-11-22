@@ -224,6 +224,70 @@ if let wholeFrames = LockScreenKaraoke.frames(words: wholeWords, lineText: "Take
     print("  FAIL whole-word sources should still produce frames")
 }
 
+// MARK: - ⑦ 回锁屏/暂停恢复：把帧表挪到"现在唱到哪"
+
+let fullTable = [
+    LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: 2),
+    LockScreenKaraokeFrame(offsetMs: 400, revealedCharacters: 5),
+    LockScreenKaraokeFrame(offsetMs: 1_200, revealedCharacters: 6),
+]
+
+requireEqual(
+    LockScreenKaraoke.revealedCharacters(atMs: 0, in: fullTable),
+    2,
+    "at the line start the first word is already lit"
+)
+requireEqual(
+    LockScreenKaraoke.revealedCharacters(atMs: 399, in: fullTable),
+    2,
+    "just before the second word only the first one is lit"
+)
+requireEqual(
+    LockScreenKaraoke.revealedCharacters(atMs: 400, in: fullTable),
+    5,
+    "the word lights up exactly at its own start"
+)
+requireEqual(
+    LockScreenKaraoke.revealedCharacters(atMs: 9_999, in: fullTable),
+    6,
+    "after the last word the whole line stays lit"
+)
+
+if let rebased = LockScreenKaraoke.rebased(fullTable, fromMs: 500) {
+    requireEqual(
+        rebased,
+        [
+            LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: 5),
+            LockScreenKaraokeFrame(offsetMs: 700, revealedCharacters: 6),
+        ],
+        "a clip requested mid-line starts at the word that is already lit"
+    )
+} else {
+    failures += 1
+    print("  FAIL a mid-line rebase should produce frames, not nil")
+}
+
+require(
+    LockScreenKaraoke.rebased(fullTable, fromMs: 1_200) == nil,
+    "a clip requested after the last word is a frozen frame, not a replay from the first character"
+)
+if let untouched = LockScreenKaraoke.rebased(fullTable, fromMs: 0) {
+    requireEqual(untouched, fullTable, "a clip requested at the line start keeps the original table")
+} else {
+    failures += 1
+    print("  FAIL a clip requested at the line start must keep the original table")
+}
+requireEqual(
+    LockScreenKaraoke.frozen(revealedCharacters: 3),
+    [LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: 3)],
+    "a frozen frame is a single frame so the system cannot loop the highlight"
+)
+requireEqual(
+    LockScreenKaraoke.frozen(revealedCharacters: -1),
+    [LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: 0)],
+    "a negative reveal count clamps to zero"
+)
+
 if failures == 0 {
     print("LockScreenKaraoke: all assertions passed")
 } else {

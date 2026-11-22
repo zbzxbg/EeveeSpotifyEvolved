@@ -59,6 +59,11 @@ final class LockScreenLyricsController {
     private let previews = NSCache<NSString, UIImage>()
     private var clipTasks: [String: Task<URL?, Never>] = [:]
 
+    /// 小于这个位移就照整行帧表播：刚换行时那点差别看不出来，重排反而要重编一段。
+    private static let rebaseThresholdMs = 600
+    /// 重排后的片段按 0.5 秒分桶缓存：同一行回锁屏几次不必每次重编。
+    private static let rebaseBucketMs = 500
+
     // MARK: - 主线程状态
 
     private var timer: DispatchSourceTimer?
@@ -82,6 +87,15 @@ final class LockScreenLyricsController {
         }
         previews.countLimit = 8
         lastEnabled = LockScreenLyrics.isEnabled
+        // 解锁/回到前台：锁屏期间系统会把定时器压住，行可能已经换过了。
+        // 主动补一拍把状态拉回来（同一行不动）；视频那边另有一层按当前进度重排。
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.tick()
+        }
         // 这里**不注册 `UserDefaults.didChangeNotification` 观察者**：Spotify 写默认值的
         // 频率很高，每条通知都跑一次我们的回调（再读一次默认值）没有必要，也不会让开关
         // 变化更及时 —— 下一次 now-playing 写入（`inject`）本来就会重读开关。设置页的
@@ -208,6 +222,10 @@ final class LockScreenLyricsController {
             startTimer()
         } else {
             stopTimer()
+            // 暂停：定时器停了，但**已经装出去的那段动画不会跟着停** —— 系统会把它当
+            // 循环素材继续播。派一拍把当前行换成单帧（见 `tick` 的 `frozen`）；
+            // 走异步是为了断开 `tick` 末尾再调 `refreshTimer` 的同步递归。
+            DispatchQueue.main.async { [weak self] in self?.tick() }
         }
     }
 
@@ -272,13 +290,9 @@ final class LockScreenLyricsController {
             return
         }
         let rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 1
-        guard rate > 0 else {
-            // 暂停：锁屏停在最后那一行，不起新素材。
-            stopTimer()
-            return
-        }
-
-        let elapsed = reported.doubleValue + rate * (CFAbsoluteTimeGetCurrent() - at)
+        let paused = rate <= 0
+        // 暂停时 now-playing 里的进度就是"停在哪"，不能再按 rate × Δ 往前推。
+        let elapsed = reported.doubleValue + (paused ? 0 : rate * (CFAbsoluteTimeGetCurrent() - at))
         let artist = info[MPMediaItemPropertyArtist] as? String ?? ""
         let duration = (info[MPMediaItemPropertyPlaybackDuration] as? NSNumber)?.doubleValue ?? 0
         let key = LockScreenLyrics.trackKey(title: title, artist: artist, duration: duration)
@@ -319,29 +333,49 @@ final class LockScreenLyricsController {
             lock.unlock()
         }
 
-        guard ready, !currentLines.isEmpty else { return }
+        guard ready, !currentLines.isEmpty else {
+            if paused { stopTimer() }
+            return
+        }
 
         // 页内那份 dto 可能这时才落地，而且只有它可能带词级时间轴。转换放后台队列，
         // 成功时清掉 `preparedLineKey`，下一拍按新帧表重装当前行（见 `finishUpgrade`）。
         upgradeLinesFromLoadedDto(replacing: currentLines, key: key)
 
         let positionMs = Int((elapsed * 1000).rounded())
-        guard let location = Self.locate(in: currentLines, positionMs: positionMs) else { return }
-        let lineKey = Self.lineKey(for: location)
+        guard let location = Self.locate(in: currentLines, positionMs: positionMs) else {
+            if paused { stopTimer() }
+            return
+        }
+
+        // 暂停 / 本行已经唱完：换成单帧，动画停住（见 `shouldFreeze`）。
+        let frozen = Self.shouldFreeze(
+            location: location,
+            lines: currentLines,
+            positionMs: positionMs,
+            paused: paused
+        )
+        let lineKey = Self.lineKey(for: location, frozen: frozen, positionMs: positionMs)
 
         lock.lock()
         let shown = preparedLineKey
         lock.unlock()
-        guard shown != lineKey else { return }
+        if shown != lineKey {
+            install(
+                lineKey: lineKey,
+                location: location,
+                lines: currentLines,
+                trackKey: key,
+                positionMs: positionMs,
+                frozen: frozen
+            )
+        }
 
-        install(
-            lineKey: lineKey,
-            location: location,
-            lines: currentLines,
-            trackKey: key,
-            positionMs: positionMs
-        )
-        refreshTimer()
+        if paused {
+            stopTimer()
+        } else {
+            refreshTimer()
+        }
     }
 
     @discardableResult
@@ -639,7 +673,8 @@ final class LockScreenLyricsController {
         location: LocatedLine,
         lines: [LockScreenLyricLine],
         trackKey: String,
-        positionMs: Int
+        positionMs: Int,
+        frozen: Bool
     ) {
         let supported = MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys
         guard !supported.isEmpty else { return }
@@ -656,7 +691,26 @@ final class LockScreenLyricsController {
 
         let cover = currentCover()
         let credit = currentCredit()
-        let texts = Self.texts(for: location, in: lines, at: positionMs)
+        var texts = Self.texts(for: location, in: lines, at: positionMs)
+
+        let currentLine: LockScreenLyricLine? = {
+            guard location.index >= 0, location.index < lines.count else { return nil }
+            return lines[location.index]
+        }()
+        // 冻结 = 单帧：只把"已经亮到的那几个字符"交给渲染层，之后的字不再自己亮。
+        // 这一行没有逐词帧时无可冻结（单帧本来就不会动），照旧画。
+        let frozenRevealed: Int? = {
+            guard frozen, let currentLine, !currentLine.karaoke.isEmpty else { return nil }
+            return LockScreenKaraoke.revealedCharacters(
+                atMs: max(0, positionMs - currentLine.startMs),
+                in: currentLine.karaoke
+            )
+        }()
+        if let frozenRevealed {
+            texts.karaoke = LockScreenKaraoke.frozen(revealedCharacters: frozenRevealed)
+        }
+        let lineOffsetMs = currentLine.map { max(0, positionMs - $0.startMs) } ?? 0
+
         let frameHash = LockScreenLyrics.frameHash(
             line: texts.line,
             next: texts.next,
@@ -669,6 +723,8 @@ final class LockScreenLyricsController {
             companion: texts.companion,
             companionFlipped: texts.companionFlipped,
             companionKaraoke: texts.companionKaraoke,
+            frozen: frozenRevealed != nil,
+            startOffsetMs: lineOffsetMs,
             credit: credit,
             hasCover: cover != nil,
             // 两档倍率进文件名：改了「歌词 → 文字」之后旧片段不该再被命中，
@@ -676,6 +732,10 @@ final class LockScreenLyricsController {
             textScale: NgzhwmSettingsViewModel.lyricsTextScale,
             spacingScale: NgzhwmSettingsViewModel.lyricsLineSpacingScale
         )
+        // 视频请求时用的是**这一行要画的**帧表：系统来要时这首歌往往已经唱到这一行中间，
+        // 按那一刻重排（见 `framesForNow`）。冻结那一份本身就是单帧，不需要重排。
+        let lineStartMs = currentLine?.startMs
+        let lineEndMs = currentLine?.endMs
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var rendered: [LockScreenArtwork.Aspect: UIImage] = [:]
@@ -705,6 +765,9 @@ final class LockScreenLyricsController {
                     lineKey: lineKey,
                     location: location,
                     texts: texts,
+                    frozen: frozenRevealed != nil,
+                    lineStartMs: lineStartMs,
+                    lineEndMs: lineEndMs,
                     credit: credit,
                     frameHash: frameHash,
                     aspects: aspects,
@@ -722,6 +785,9 @@ final class LockScreenLyricsController {
         lineKey: String,
         location: LocatedLine,
         texts: LineTexts,
+        frozen: Bool,
+        lineStartMs: Int?,
+        lineEndMs: Int?,
         credit: String,
         frameHash: String,
         aspects: [LockScreenArtwork.Aspect],
@@ -755,6 +821,10 @@ final class LockScreenLyricsController {
                 aspect: aspect,
                 location: location,
                 texts: texts,
+                frozen: frozen,
+                lineKey: lineKey,
+                lineStartMs: lineStartMs,
+                lineEndMs: lineEndMs,
                 credit: credit,
                 frameHash: frameHash,
                 lines: lines,
@@ -773,9 +843,102 @@ final class LockScreenLyricsController {
         writeDebugLog(
             "[\(LockScreenLyrics.logTag)] line \(location.index)\(location.resting ? " (resting)" : "")"
                 + " — installing \(prepared.count) artwork key(s)"
+                + (frozen ? " (frozen)" : "")
                 + (texts.companion == nil ? "" : " (duet pair)")
         )
         LockScreenArtworkInjector.republishForLockScreen()
+        prewarmNextLine(
+            after: location,
+            lines: lines,
+            trackKey: trackKey,
+            lineKey: lineKey,
+            credit: credit,
+            cover: cover,
+            frozen: frozen
+        )
+    }
+
+    /// 预编**下一行**。
+    ///
+    /// 系统来要视频的时刻不可控，但当前这一行一装上去它马上就会来要 —— 等它要完再排
+    /// 下一行，换行那一刻就能直接命中缓存，不用等编码（编码是串行的，现编一段要
+    /// 几百毫秒到一两秒，逐词就会显晚）。暂停时不排：白烧 CPU，恢复播放时会重新装。
+    ///
+    /// 这是纯优化：帧表/哈希与将来 `install` 算出来的不一致时，只是缓存没命中，不影响正确性。
+    @available(iOS 26.0, *)
+    private func prewarmNextLine(
+        after location: LocatedLine,
+        lines: [LockScreenLyricLine],
+        trackKey: String,
+        lineKey: String,
+        credit: String,
+        cover: CGImage?,
+        frozen: Bool
+    ) {
+        guard !frozen else { return }
+        let nextIndex = location.index + 1
+        guard nextIndex >= 0, nextIndex < lines.count else { return }
+        let next = LocatedLine(index: nextIndex, resting: false)
+        let positionMs = lines[nextIndex].startMs
+        let texts = Self.texts(for: next, in: lines, at: positionMs)
+        let frameHash = LockScreenLyrics.frameHash(
+            line: texts.line,
+            next: texts.next,
+            translation: texts.translation,
+            romanization: texts.romanization,
+            isDuet: texts.isDuet,
+            flipped: texts.flipped,
+            nextFlipped: texts.nextFlipped,
+            karaoke: texts.karaoke,
+            companion: texts.companion,
+            companionFlipped: texts.companionFlipped,
+            companionKaraoke: texts.companionKaraoke,
+            frozen: false,
+            startOffsetMs: 0,
+            credit: credit,
+            hasCover: cover != nil,
+            textScale: NgzhwmSettingsViewModel.lyricsTextScale,
+            spacingScale: NgzhwmSettingsViewModel.lyricsLineSpacingScale
+        )
+        let seconds = Self.clipSeconds(for: next, in: lines)
+        let aspects = LockScreenArtwork.Aspect.allCases.filter {
+            MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys.contains(Self.nowPlayingKey(for: $0))
+        }
+        guard !aspects.isEmpty else { return }
+
+        // 1 秒后再排：让系统先把当前这一行要走的编码跑完（编码队列是串行的）。
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let stillHere = self.trackKey == trackKey && self.preparedLineKey == lineKey
+            self.lock.unlock()
+            guard stillHere, (self.playbackSnapshot()?.rate ?? 0) > 0 else { return }
+            for aspect in aspects {
+                Task {
+                    _ = await self.clipURL(
+                        trackKey: trackKey,
+                        lineIndex: nextIndex,
+                        resting: false,
+                        aspect: aspect,
+                        frameHash: frameHash,
+                        line: texts.line,
+                        next: texts.next,
+                        translation: texts.translation,
+                        romanization: texts.romanization,
+                        isDuet: texts.isDuet,
+                        flipped: texts.flipped,
+                        nextFlipped: texts.nextFlipped,
+                        karaoke: texts.karaoke,
+                        companion: texts.companion,
+                        companionKaraoke: texts.companionKaraoke,
+                        companionFlipped: texts.companionFlipped,
+                        credit: credit,
+                        cover: cover,
+                        seconds: seconds
+                    )
+                }
+            }
+        }
     }
 
     @available(iOS 26.0, *)
@@ -784,6 +947,10 @@ final class LockScreenLyricsController {
         aspect: LockScreenArtwork.Aspect,
         location: LocatedLine,
         texts: LineTexts,
+        frozen: Bool,
+        lineKey: String,
+        lineStartMs: Int?,
+        lineEndMs: Int?,
         credit: String,
         frameHash: String,
         lines: [LockScreenLyricLine],
@@ -792,7 +959,6 @@ final class LockScreenLyricsController {
     ) -> MPMediaItemAnimatedArtwork {
         let seconds = Self.clipSeconds(for: location, in: lines)
         let size = LyricClipRenderer.clipSize(for: aspect)
-        let lineKey = Self.lineKey(for: location)
 
         return MPMediaItemAnimatedArtwork(
             artworkID: artworkID,
@@ -859,12 +1025,23 @@ final class LockScreenLyricsController {
                         completion(nil)
                         return
                     }
+                    // 系统真正开始播这段片子的时刻不是"装上去"的时刻：回锁屏、暂停后恢复
+                    // 都可能晚好几秒才来要视频。帧表按**现在唱到哪**重排，逐词才跟得住；
+                    // 暂停 / 本行唱完则只交一帧，免得系统循环播放又把词亮一遍。
+                    let clip = self.framesForNow(
+                        frames: texts.karaoke,
+                        companionFrames: texts.companionKaraoke,
+                        frozen: frozen,
+                        lineStartMs: lineStartMs,
+                        lineEndMs: lineEndMs,
+                        fallbackSeconds: seconds
+                    )
                     let file = await self.clipURL(
                         trackKey: trackKey,
                         lineIndex: location.index,
                         resting: location.resting,
                         aspect: aspect,
-                        frameHash: frameHash,
+                        frameHash: clip.hashSuffix.isEmpty ? frameHash : frameHash + clip.hashSuffix,
                         line: texts.line,
                         next: texts.next,
                         translation: texts.translation,
@@ -872,17 +1049,112 @@ final class LockScreenLyricsController {
                         isDuet: texts.isDuet,
                         flipped: texts.flipped,
                         nextFlipped: texts.nextFlipped,
-                        karaoke: texts.karaoke,
+                        karaoke: clip.frames,
                         companion: texts.companion,
-                        companionKaraoke: texts.companionKaraoke,
+                        companionKaraoke: clip.companionFrames,
                         companionFlipped: texts.companionFlipped,
                         credit: credit,
                         cover: cover,
-                        seconds: seconds
+                        seconds: clip.seconds
                     )
                     completion(file)
                 }
             }
+        )
+    }
+
+    // MARK: - 按「现在唱到哪」取帧
+
+    /// 一段片子的帧表 + 它相对整行帧表的位移。
+    private struct ClipFrames {
+        var frames: [LockScreenKaraokeFrame]
+        var companionFrames: [LockScreenKaraokeFrame]
+        /// 帧表被重排过时的文件名后缀。空 = 直接用装上去时那份（从行首开始唱）。
+        var hashSuffix: String
+        var seconds: Double
+    }
+
+    /// 请求视频那一刻的播放位置（毫秒）与速率。
+    private func playbackSnapshot() -> (positionMs: Int, rate: Double)? {
+        lock.lock()
+        let info = self.info
+        let at = self.infoAt
+        lock.unlock()
+        guard let info,
+              let reported = info[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber else {
+            return nil
+        }
+        let rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 1
+        let elapsed = reported.doubleValue + (rate <= 0 ? 0 : rate * (CFAbsoluteTimeGetCurrent() - at))
+        return (Int((elapsed * 1000).rounded()), rate)
+    }
+
+    /// 系统来要视频时该交给它哪一帧表。
+    ///
+    /// - 刚换行、系统马上来要：保持整行帧表。从 0 开始正好对上，不必重编。
+    /// - 已经唱到这一行中间（回锁屏 / 暂停后恢复 / 定时器被系统压住）：把帧表挪到
+    ///   "现在唱到哪"，第 0 帧就是正在唱的那个字 —— 否则系统会从第一个字重播。
+    /// - 暂停 / 本行已经唱完：单帧。系统把短片当循环素材，多帧会一直亮下去。
+    /// - 对唱那一半的帧表跟着做同一个位移（两者的时间轴都相对当前行起点）。
+    private func framesForNow(
+        frames: [LockScreenKaraokeFrame],
+        companionFrames: [LockScreenKaraokeFrame],
+        frozen: Bool,
+        lineStartMs: Int?,
+        lineEndMs: Int?,
+        fallbackSeconds: Double
+    ) -> ClipFrames {
+        let unchanged = ClipFrames(
+            frames: frames,
+            companionFrames: companionFrames,
+            hashSuffix: "",
+            seconds: fallbackSeconds
+        )
+        guard !frozen, frames.count >= 2, let lineStartMs, let snapshot = playbackSnapshot() else {
+            return unchanged
+        }
+
+        let offset = max(0, snapshot.positionMs - lineStartMs)
+        let bucket = offset / Self.rebaseBucketMs
+        if snapshot.rate <= 0 {
+            let revealed = LockScreenKaraoke.revealedCharacters(atMs: offset, in: frames)
+            return ClipFrames(
+                frames: LockScreenKaraoke.frozen(revealedCharacters: revealed),
+                companionFrames: [],
+                hashSuffix: "-paused\(bucket)",
+                seconds: 20
+            )
+        }
+        if let lineEndMs, lineStartMs + offset >= lineEndMs {
+            return ClipFrames(
+                frames: LockScreenKaraoke.frozen(
+                    revealedCharacters: frames.last?.revealedCharacters ?? 0
+                ),
+                companionFrames: [],
+                hashSuffix: "-end",
+                seconds: 20
+            )
+        }
+        guard offset > Self.rebaseThresholdMs,
+              let rebased = LockScreenKaraoke.rebased(frames, fromMs: offset) else {
+            return unchanged
+        }
+
+        // 剩下还要唱多久决定这段片子的名义时长（系统拿它算循环点）。
+        let remaining = lineEndMs.map { Double(max(0, $0 - lineStartMs - offset)) / 1000 }
+            ?? fallbackSeconds
+        let seconds = min(
+            max(remaining + 2, LockScreenLyrics.shortestClipSeconds),
+            LockScreenLyrics.longestClipSeconds
+        )
+        let rebasedCompanion = companionFrames.isEmpty
+            ? []
+            : (LockScreenKaraoke.rebased(companionFrames, fromMs: offset) ?? [])
+        return ClipFrames(
+            frames: rebased,
+            companionFrames: rebasedCompanion,
+            hashSuffix: "-at\(bucket)",
+            seconds: seconds
         )
     }
 
@@ -937,6 +1209,7 @@ final class LockScreenLyricsController {
                 + "\(resting ? "r" : "") \(aspect.rawValue) \(String(format: "%.1f", seconds))s"
         )
         let task = Task<URL?, Never> {
+            let encodeStarted = Date()
             do {
                 try FileManager.default.createDirectory(
                     at: directory,
@@ -959,6 +1232,14 @@ final class LockScreenLyricsController {
                     size: size,
                     seconds: seconds,
                     to: file
+                )
+                // 编码耗时是"系统要视频 → 真正能播"之间那段延迟的唯一证据，
+                // 也是判断"逐词慢半拍"到底慢在重排还是慢在编码的依据。
+                writeDebugLog(
+                    "[\(LockScreenLyrics.logTag)] clip encoded — line \(lineIndex)"
+                        + "\(resting ? "r" : "") \(aspect.rawValue)"
+                        + " \(karaoke.count) frame(s) in"
+                        + " \(String(format: "%.2f", Date().timeIntervalSince(encodeStarted)))s"
                 )
                 return file
             } catch {
@@ -1139,25 +1420,61 @@ final class LockScreenLyricsController {
         return LocatedLine(index: index, resting: resting)
     }
 
-    private static func lineKey(for location: LocatedLine) -> String {
+    /// 暂停、或者这一句已经唱完：这一段要换成单帧（动画停住）。
+    ///
+    /// 判据必须比"行变了"更细 —— 系统把一段视频当循环素材，播完会从头再放；
+    /// 不换单帧就会看到"暂停后逐词还在亮"和"这一句唱完又从第一个字亮一遍"。
+    /// 对唱里另一位还在唱时**不冻**：那一半的逐词还要继续走。
+    private static func shouldFreeze(
+        location: LocatedLine,
+        lines: [LockScreenLyricLine],
+        positionMs: Int,
+        paused: Bool
+    ) -> Bool {
+        guard !location.resting, location.index >= 0, location.index < lines.count else {
+            return false
+        }
+        let line = lines[location.index]
+        // 这一行本来就没有逐词帧：单帧不会自己变，冻结没有意义（也省一次重装）。
+        guard !line.karaoke.isEmpty else { return false }
+        if paused { return true }
+        guard positionMs >= line.endMs else { return false }
+        // 已经亮到整行才算唱完。只亮到一半就 end 的数据不冻，免得吞掉最后一个词。
+        let revealed = LockScreenKaraoke.revealedCharacters(
+            atMs: max(0, positionMs - line.startMs),
+            in: line.karaoke
+        )
+        guard revealed >= line.text.count else { return false }
+        if let companion = companionLine(for: location, at: positionMs, in: lines),
+           positionMs < companion.endMs {
+            return false
+        }
+        return true
+    }
+
+    /// 同一行有三种形态：正在唱 / 冻结（暂停或唱完）/ 间奏。三者是**不同的素材**，
+    /// 所以 key 里都要有 —— 否则"暂停"不会触发重装，"恢复"也不会。
+    /// 冻结再带上 0.5 秒分桶的位置：暂停中拖进度条时要按新位置重画那一帧。
+    private static func lineKey(for location: LocatedLine, frozen: Bool, positionMs: Int) -> String {
         "\(location.index)\(location.resting ? "r" : "")"
+            + (frozen ? "f\(max(0, positionMs) / 500)" : "")
     }
 
     private struct LineTexts {
-        let line: String?
-        let next: String?
-        let translation: String?
-        let romanization: String?
-        let isDuet: Bool
-        let flipped: Bool
-        let nextFlipped: Bool
+        var line: String?
+        var next: String?
+        var translation: String?
+        var romanization: String?
+        var isDuet: Bool
+        var flipped: Bool
+        var nextFlipped: Bool
         /// 逐字的帧表（空 = 单帧）。它同时进 `frameHash`：单帧与多帧是两份素材。
-        let karaoke: [LockScreenKaraokeFrame]
+        var karaoke: [LockScreenKaraokeFrame]
         /// 同一时刻还在唱的另一位歌手那句（对唱叠句）。空 = 这一屏只有一个声部。
-        let companion: String?
-        let companionFlipped: Bool
+        var companion: String?
+        var companionFlipped: Bool
         /// 那一位的帧表，已经换算到**当前这一行开始**的时间轴（可能带负偏移）。
-        let companionKaraoke: [LockScreenKaraokeFrame]
+        var companionKaraoke: [LockScreenKaraokeFrame]
         /// 那一位在**这一段片子的第 0 帧**亮到第几个字符（静帧预览用）。
         /// `nil` = 没有另一位歌手（或它还没开始唱）。
         let companionStartCharacters: Int?
