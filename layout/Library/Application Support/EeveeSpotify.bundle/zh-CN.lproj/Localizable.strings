@@ -230,7 +230,6 @@ lyrics_offset_delete_entry = "删除这条偏移";
 lyrics_offset_save_song = "保存这条偏移";
 lyrics_offset_saved_empty = "还没有保存过歌词偏移。";
 lyrics_offset_saved_only_current = "当前播放这条的偏移已保存在上面一节；其它保存过的条目会列在这里。";
-romanization_description = "单独设置每种语言的歌词是否罗马化。";
 chinese_romanization = "中文歌词罗马化";
 japanese_romanization = "日语歌词罗马化";
 korean_romanization = "韩语歌词罗马化";
@@ -738,7 +737,7 @@ listening_stats_combo_format = "%@ · %@";
 
 // 听歌统计：导入 Spotify 的流媒体历史
 listening_stats_import_title = "导入流媒体历史";
-listening_stats_import_footer = "把 Spotify 数据导出里的播放记录加进这台设备：在 spotify.com/account/privacy 申请「扩展流媒体历史」，导入zip压缩包即可。";
+listening_stats_import_footer = "把 Spotify 数据导出里的播放记录加进这台设备：在 [spotify.com/account/privacy](https://www.spotify.com/account/privacy) 申请「扩展流媒体历史」，导入zip压缩包即可。";
 listening_stats_import_button = "选择文件或文件夹";
 listening_stats_importing = "正在导入…";
 listening_stats_import_result_format = "已加入 %@ 次播放，来自 %@ 个文件(%@)";

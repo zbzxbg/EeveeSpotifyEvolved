@@ -41,13 +41,13 @@ do_not_replace_lyrics = "使用原生歌詞";
 lyrics_source = "歌詞來源";
 lyrics_source_restart_note = "切換歌詞來源後需重新啟動 Spotify。";
 lyrics_additional_info = "Genius、NetEase、PetitLyrics、BiniLyrics、Unison、QQ Music 和 KuGou 都是按歌名與歌手搜尋（不是按曲目 ID 精確比對），所以部分歌曲可能會出現歌詞顯示錯誤或搜尋不到歌詞的情況。";
-petitlyrics_description = "PetitLyrics：Spotify 在日本地區的主要歌詞提供商。但少數歌曲的逐詞時間軸不規範。";
+petitlyrics_description = "PetitLyrics：Spotify 在日本地區的主要歌詞來源。但少數歌曲的逐詞時間軸不規範。";
 netease_description = "NetEase：華語歌曲主力，提供逐詞歌詞。";
 unison_description = "Unison：開源群眾外包歌詞資料庫。提供 TTML 歌詞。詳細介紹請前往 [unison.boidu.dev](https://unison.boidu.dev) 查看。";
 qqmusic_description = "QQ Music：華語歌曲主力，提供逐詞歌詞和逐詞日語羅馬字。";
 kugou_description = "KuGou：華語歌曲主力，提供逐詞歌詞和逐詞日語羅馬字。";
 lrclib_description = "LRCLIB：最開放的服務，提供逐行歌詞。但它缺少很多歌曲的歌詞。";
-musixmatch_description = "Musixmatch：Spotify 官方歌詞提供商之一。為很多歌曲提供帶時間軸的歌詞，但需要使用者權杖才能使用。";
+musixmatch_description = "Musixmatch：Spotify 官方歌詞來源之一。為很多歌曲提供帶時間軸的歌詞，但需要使用者權杖才能使用。";
 
 musixmatch_user_token = "Musixmatch 使用者權杖";
 user_token_placeholder = "在此輸入 Musixmatch 使用者權杖或貼上除錯資訊";
@@ -407,3 +407,9 @@ glass_iphone_only_footer = "標籤欄玻璃是按 iPhone 標籤欄量的，iPad 
 // iPad 回退提示
 ipad_fallback_title = "已為 iPad 調整";
 ipad_fallback_message = "偵測到目前裝置是 iPad。標籤欄與迷你條的玻璃，以及藝人 / 專輯 / 歌單頁面的外觀改動，都是按 iPhone 的尺寸做的，已回退為 Spotify 原生外觀。%@";
+
+// 歌詞設定 / 聽歌統計（與 en、zh-CN 同步）
+
+word_by_word_lyrics_description = "除了 LRCLIB 和 Genius，其餘歌詞來源均提供逐詞歌詞（如果這首歌有逐詞的話）。";
+better_word_by_word_lyrics_description = "像 Apple Music 那樣。系統版本最低需要 iOS 26。";
+listening_stats_import_footer = "把 Spotify 資料匯出裡的播放記錄加進這台裝置：在 [spotify.com/account/privacy](https://www.spotify.com/account/privacy) 申請「擴充串流歷史」，然後選取它給的 .zip，或選取裡面那個放 JSON 的資料夾。全程不上傳。同一個檔案匯入兩次不會重複計數。";

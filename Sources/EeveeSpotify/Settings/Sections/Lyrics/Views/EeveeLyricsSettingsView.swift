@@ -254,9 +254,8 @@ struct EeveeLyricsSettingsView: View {
     }
     
     @ViewBuilder private func romanizationSection() -> some View {
-        Section(
-            footer: Text("romanization_description".localized)
-        ) {
+        // 三颗开关的标题本身就是"中文 / 日语 / 韩语罗马化"，不需要再加一句"分别设置每种语言"。
+        Section {
             Toggle("chinese_romanization".localized, isOn: $viewModel.chineseRomanization)
             Toggle("japanese_romanization".localized, isOn: $viewModel.japaneseRomanization)
             Toggle("korean_romanization".localized, isOn: $viewModel.koreanRomanization)

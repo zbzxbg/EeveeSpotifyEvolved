@@ -1,4 +1,4 @@
-﻿/* MARK: Settings */
+/* MARK: Settings */
 
 patching = "Patching";
 lyrics = "Lyrics";
@@ -33,7 +33,7 @@ do_not_replace_lyrics_description = "Disables the custom lyrics feature, but doe
 lyrics_source = "Lyrics Source";
 lyrics_source_restart_note = "Switching the lyrics source requires restarting Spotify.";
 lyrics_additional_info = "Genius, NetEase, PetitLyrics, BiniLyrics, Unison, QQ Music and KuGou match by title and artist rather than by track ID, so some songs may have display errors or fail to find lyrics.";
-petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp): Spotify's main lyrics provider in Japan. A small number of songs have irregular word-level timing.";
+petitlyrics_description = "[PetitLyrics](https://petitlyrics.jp): Spotify's main lyrics source in Japan. A small number of songs have irregular word-level timing.";
 spicylyrics_description = "[Spicy Lyrics](https://spicylyrics.org): Provides word-by-word lyrics and lyrics that some other lyrics sources do not have.";
 spicylyrics_api_key = "Spicy Lyrics API Key";
 spicylyrics_api_key_placeholder = "Enter a Spicy client key (sl_pk_...)";
@@ -58,7 +58,7 @@ qqmusic_description = "[QQ Music](https://y.qq.com): A major catalogue for Chine
 kugou_description = "[KuGou](https://www.kugou.com): A major catalogue for Chinese songs, with word-by-word lyrics and word-level Japanese romaji.";
 genius_description = "[Genius](https://genius.com): Offers the widest song coverage, but the lyrics are not time-synced.";
 lrclib_description = "[LRCLIB](https://lrclib.net): The most open service, offering line-synced lyrics. However, it lacks lyrics for many songs.";
-musixmatch_description = "[Musixmatch](https://www.musixmatch.com): One of Spotify's official lyrics providers. Provides time-synced lyrics for many songs, but you'll need a user token to use this source.";
+musixmatch_description = "[Musixmatch](https://www.musixmatch.com): One of Spotify's official lyrics sources. Provides time-synced lyrics for many songs, but you'll need a user token to use this source.";
 
 musixmatch_user_token = "Musixmatch User Token";
 user_token_placeholder = "Enter User Token or Paste Debug Info";
@@ -230,7 +230,6 @@ lyrics_offset_delete_entry = "Delete this offset";
 lyrics_offset_save_song = "Save this offset";
 lyrics_offset_saved_empty = "No saved lyrics offsets yet.";
 lyrics_offset_saved_only_current = "The current entry's offset is saved in the section above; other saved entries will be listed here.";
-romanization_description = "Configure romanization separately for each language.";
 chinese_romanization = "Romanize Chinese Lyrics";
 japanese_romanization = "Romanize Japanese Lyrics";
 korean_romanization = "Romanize Korean Lyrics";
@@ -753,7 +752,7 @@ listening_stats_combo_format = "%@ · %@";
 
 // 听歌统计：导入 Spotify 的流媒体历史
 listening_stats_import_title = "Import streaming history";
-listening_stats_import_footer = "Adds plays from a Spotify data export to this device: request Extended streaming history at spotify.com/account/privacy, then pick the .zip it gives you or a folder of the JSON files inside. Nothing is uploaded. Importing the same file again does not count it twice.";
+listening_stats_import_footer = "Adds plays from a Spotify data export to this device: request Extended streaming history at [spotify.com/account/privacy](https://www.spotify.com/account/privacy), then pick the .zip it gives you or a folder of the JSON files inside. Nothing is uploaded. Importing the same file again does not count it twice.";
 listening_stats_import_button = "Choose file or folder";
 listening_stats_importing = "Importing…";
 listening_stats_import_result_format = "Added %@ plays from %@ files (%@)";

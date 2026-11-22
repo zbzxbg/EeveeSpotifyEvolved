@@ -254,7 +254,11 @@ struct EeveeListeningStatsSettingsView: View {
     private var importSection: some View {
         Section(
             header: Text("listening_stats_import_title".localized),
-            footer: Text("listening_stats_import_footer".localized)
+            // 页脚里的「申请扩展流媒体历史」要能直接点开：文案写成 markdown 链接
+            // （`[spotify.com/account/privacy](https://www.spotify.com/account/privacy)`），
+            // 这里按 markdown 解析成 `AttributedString` —— `Text(String)` **不解析** markdown，
+            // 那样只会把方括号和括号原样画出来。
+            footer: Text(Self.markdownFooter("listening_stats_import_footer".localized))
         ) {
             Button {
                 StreamingHistoryFilePickerPresenter.present { urls in
@@ -280,6 +284,18 @@ struct EeveeListeningStatsSettingsView: View {
                     .foregroundColor(importFailed ? Color.red : Color.secondary)
             }
         }
+    }
+
+    /// 把页脚文案当 markdown 解析（只解析行内语法，保留空白）。
+    ///
+    /// 解析失败退回纯文本 —— 一个链接不值得让整块页脚消失。与歌词来源页脚（
+    /// `EeveeLyricsSettingsView+lyricsSourceSection`）用的是同一套解析选项。
+    private static func markdownFooter(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace
+        )
+        return (try? AttributedString(markdown: text, options: options))
+            ?? AttributedString(text)
     }
 
     /// 读文件 → 解析 → 并进 store。
