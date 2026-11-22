@@ -33,9 +33,6 @@ final class ListeningStatsRecorder {
     /// 「一首长歌/单曲循环一直不停」时的整份 JSON 重写频率；写盘次数少一半以上。
     private static let flushThreshold: Double = 120
 
-    /// 一次会话最多为封面读几次 metadata（换歌瞬间常常还读不到）。
-    private static let maxArtworkAttempts = 3
-
     private let store: ListeningStatsStore
     private let queue = DispatchQueue(label: "com.eevee.listening-stats.recorder", qos: .utility)
     private var timer: DispatchSourceTimer?
@@ -49,10 +46,6 @@ final class ListeningStatsRecorder {
         var title: String
         var artist: String
         var durationSeconds: Int
-        var artworkURL: String?
-        /// 封面取过几次。换歌那一拍 metadata 常常还没就绪，所以要允许隔几拍重试；
-        /// 但最多 `maxArtworkAttempts` 次（它是主线程上的 metadata 读取，别每拍都做）。
-        var artworkAttempts = 0
 
         var counter = ListeningStatsPlayCounter()
 
@@ -208,13 +201,6 @@ final class ListeningStatsRecorder {
             return
         }
 
-        if current.artworkURL == nil,
-           current.artworkAttempts < Self.maxArtworkAttempts,
-           let track {
-            current.artworkURL = LyricsArtworkResolver.artworkURL(for: track)?.absoluteString
-            current.artworkAttempts += 1
-        }
-
         let position = Self.playbackPosition(
             elapsed: nowPlaying?[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber
         )
@@ -265,8 +251,7 @@ final class ListeningStatsRecorder {
             trackID: info.trackID,
             title: info.title,
             artist: info.artist,
-            durationSeconds: info.durationSeconds,
-            artworkURL: nil
+            durationSeconds: info.durationSeconds
         )
         session.lastTickAt = now
         self.session = session
@@ -304,7 +289,6 @@ final class ListeningStatsRecorder {
                     title: session.title,
                     artist: session.artist,
                     durationSeconds: session.durationSeconds,
-                    artworkURL: session.artworkURL,
                     seconds: seconds,
                     plays: plays
                 )

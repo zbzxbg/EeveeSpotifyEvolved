@@ -23,8 +23,7 @@ private func entry(
     _ artist: String,
     seconds: Double,
     plays: Int,
-    durationSeconds: Int = 200,
-    artworkURL: String? = nil
+    durationSeconds: Int = 200
 ) -> ListeningStatsEntry {
     ListeningStatsEntry(
         dayKey: dayKey,
@@ -32,7 +31,6 @@ private func entry(
         title: title,
         artist: artist,
         durationSeconds: durationSeconds,
-        artworkURL: artworkURL,
         seconds: seconds,
         plays: plays
     )
@@ -210,7 +208,7 @@ let fortyDaysAgo = calendar.date(byAdding: .day, value: -40, to: now)!
 let fortyDaysAgoKey = ListeningStatsDayKey.key(for: fortyDaysAgo, calendar: calendar)
 
 var data = ListeningStatsData()
-data.add(entry(todayKey, "t1", "Alpha", "Ann", seconds: 100, plays: 2, artworkURL: "https://example.com/alpha.jpg"))
+data.add(entry(todayKey, "t1", "Alpha", "Ann", seconds: 100, plays: 2))
 data.add(entry(todayKey, "t2", "Beta", "Bob", seconds: 50, plays: 0))
 data.add(entry(yesterdayKey, "t1", "Alpha", "Ann", seconds: 20, plays: 1))
 data.add(entry(yesterdayKey, "t3", "Gamma", "Ann", seconds: 10, plays: 0))
@@ -299,7 +297,6 @@ let importAddition = ListeningStatsImportAddition(
             title: "Alpha",
             artist: "Ann",
             durationSeconds: 0,
-            artworkURL: nil,
             seconds: 480,
             plays: 2
         )
@@ -376,8 +373,8 @@ require(
     "seconds must survive the JSON round trip"
 )
 require(
-    decoded.days[todayKey]?["t1"]?.artworkURL == "https://example.com/alpha.jpg",
-    "the artwork URL must survive the JSON round trip"
+    decoded.days[todayKey]?["t1"]?.title == "Alpha",
+    "the title must survive the JSON round trip"
 )
 
 // MARK: - 磁盘（注入临时目录，绝不碰 App 容器）

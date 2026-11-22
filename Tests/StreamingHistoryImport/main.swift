@@ -306,7 +306,6 @@ plainData.add(
         title: "Alpha",
         artist: "Ann",
         durationSeconds: 0,
-        artworkURL: nil,
         seconds: 10,
         plays: 0
     )

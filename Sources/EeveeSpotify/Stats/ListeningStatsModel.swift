@@ -217,7 +217,6 @@ struct ListeningStatsTrackRecord: Codable, Equatable {
     var title: String
     var artist: String
     var durationSeconds: Int
-    var artworkURL: String?
     var seconds: Double
     var plays: Int
 }
@@ -232,7 +231,6 @@ struct ListeningStatsEntry: Equatable {
     var title: String
     var artist: String
     var durationSeconds: Int
-    var artworkURL: String?
     var seconds: Double
     var plays: Int
 }
@@ -272,7 +270,6 @@ struct ListeningStatsTrackStat: Equatable, Identifiable {
     var title: String
     var artist: String
     var durationSeconds: Int
-    var artworkURL: String?
     var seconds: Double
     var plays: Int
 
@@ -360,7 +357,7 @@ struct ListeningStatsData: Codable, Equatable {
 
     // MARK: 写
 
-    /// 把一次增量并进对应的日桶。标题 / 艺人 / 封面只会被**补全**，不会被后写的空值冲掉。
+    /// 把一次增量并进对应的日桶。标题 / 艺人只会被**补全**，不会被后写的空值冲掉。
     mutating func add(_ entry: ListeningStatsEntry) {
         let seconds = max(0, entry.seconds)
         let plays = max(0, entry.plays)
@@ -371,7 +368,6 @@ struct ListeningStatsData: Codable, Equatable {
             title: entry.title,
             artist: entry.artist,
             durationSeconds: entry.durationSeconds,
-            artworkURL: entry.artworkURL,
             seconds: 0,
             plays: 0
         )
@@ -379,9 +375,6 @@ struct ListeningStatsData: Codable, Equatable {
         if record.title.isEmpty { record.title = entry.title }
         if record.artist.isEmpty { record.artist = entry.artist }
         if record.durationSeconds <= 0 { record.durationSeconds = entry.durationSeconds }
-        if record.artworkURL == nil, let url = entry.artworkURL, !url.isEmpty {
-            record.artworkURL = url
-        }
 
         record.seconds += seconds
         record.plays += plays
@@ -478,7 +471,6 @@ struct ListeningStatsData: Codable, Equatable {
                     title: record.title,
                     artist: record.artist,
                     durationSeconds: record.durationSeconds,
-                    artworkURL: record.artworkURL,
                     seconds: 0,
                     plays: 0
                 )
@@ -486,7 +478,6 @@ struct ListeningStatsData: Codable, Equatable {
                 stat.plays += record.plays
                 if stat.title.isEmpty { stat.title = record.title }
                 if stat.artist.isEmpty { stat.artist = record.artist }
-                if stat.artworkURL == nil { stat.artworkURL = record.artworkURL }
                 if stat.durationSeconds <= 0 { stat.durationSeconds = record.durationSeconds }
                 tracks[trackID] = stat
 

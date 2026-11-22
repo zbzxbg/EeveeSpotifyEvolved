@@ -1018,7 +1018,6 @@ struct StreamingHistoryAccumulator {
                         title: track.title,
                         artist: track.artist,
                         durationSeconds: 0,
-                        artworkURL: nil,
                         seconds: track.seconds,
                         plays: track.plays
                     )

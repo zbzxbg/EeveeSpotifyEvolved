@@ -160,7 +160,6 @@ struct EeveeListeningStatsSettingsView: View {
     private func songRow(_ stat: ListeningStatsTrackStat) -> some View {
         HStack(spacing: 10) {
             rankText(trackRank(stat.trackID))
-            artworkView(stat.artworkURL)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(stat.title.isEmpty ? "—" : stat.title)
@@ -219,34 +218,6 @@ struct EeveeListeningStatsSettingsView: View {
 
     private func artistRank(_ name: String) -> Int {
         (viewModel.summary.topArtists.firstIndex { $0.name == name } ?? 0) + 1
-    }
-
-    @ViewBuilder
-    private func artworkView(_ urlString: String?) -> some View {
-        if let urlString, !urlString.isEmpty, let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    artworkPlaceholder
-                }
-            }
-            .frame(width: 44, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        } else {
-            artworkPlaceholder
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-    }
-
-    private var artworkPlaceholder: some View {
-        ZStack {
-            Color.secondary.opacity(0.15)
-            Image(systemName: "music.note")
-                .font(.system(size: 18))
-                .foregroundColor(.secondary)
-        }
     }
 
     // MARK: - 空状态 / 清除

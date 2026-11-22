@@ -165,19 +165,6 @@ jobs:
                  -o streaming-history-import-tests
           ./streaming-history-import-tests
 
-      # 导入的历史没有封面（导出包里只有曲目 id）—— 补封面那层是 `ListeningStatsArtwork`。
-      # 它刻意做成 Foundation-only（令牌由调用方传入、日志走 `ListeningStatsLog`），
-      # 所以能在这里真编真跑：一边钉「哪些 id 能拿去问 Web API」（`fnv1a:` 兜底 id /
-      # 本地文件 / 长度不对的值一律不查），一边钉「`tracks` 数组里夹着 `null` 时整批不回空」
-      # —— 后者是真接口的形状，写错就是"一个查不到的 id 让同一批 50 首全都没封面"。
-      - name: Listening stats artwork (id → cover URL)
-        run: |
-          swiftc Sources/EeveeSpotify/Stats/ListeningStatsModel.swift \
-                 Sources/EeveeSpotify/Stats/ListeningStatsArtwork.swift \
-                 Tests/ListeningStatsArtwork/main.swift \
-                 -o listening-stats-artwork-tests
-          ./listening-stats-artwork-tests
-
       # 几何：底排 / 迷你条 / 标签栏的纯函数。七种屏幕宽度，钉住"不越界、不错位"。
       - name: Layout geometry
         run: |
