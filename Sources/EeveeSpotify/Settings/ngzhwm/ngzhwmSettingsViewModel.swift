@@ -27,10 +27,13 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 「歌词 → 文字」两档倍率：字号 / 行距。默认 1.0（等于各档量出来的原值）。
     static let lyricsTextScaleKey = "ngzhwm_lyricsTextScale"
     static let lyricsLineSpacingScaleKey = "ngzhwm_lyricsLineSpacingScale"
-    /// 「对唱布局」：两位歌手的行分到左右两侧。默认开。
-    ///
-    /// ⚠️ 新键，不带 `ngzhwm_` 前缀（那个前缀是早期键的历史包袱）。
-    static let lyricsDuetLayoutKey = "lyricsDuetLayout"
+    // 已删除一个 key：`lyricsDuetLayout` ——「对唱布局」。
+    //
+    // 为什么删：分边只对带 `ttm:agent` 的 TTML 源有意义（AMLL / Apple 官方 TTML），
+    // 其它源上没有歌手信息、这颗开关本来就不起作用；而数据里真有两边时，"谁站哪边"
+    // 就是歌词本身的一部分（Apple Music 也没有这个开关）。现在改成**有数据就分边**，
+    // 不再让用户为一件没得选的事按一次。Toggle、页脚、getter 与 l10n 一起摘掉。
+    // 旧设备上残留的键不再被读、也不会被清（留着无害）。
     /// 「AMLL 优先」的 UserDefaults 键。
     ///
     /// ⚠️**恢复**：曾因用户一句"感觉没什么用"把整条链删掉
@@ -248,16 +251,6 @@ class NgzhwmSettingsViewModel: ObservableObject {
     /// 行距倍率（0.7…1.5）。只作用于块间距与折行间距，见 `LyricsTypographyScale.applyingUserScale`。
     static var lyricsLineSpacingScale: Double {
         double(forKey: lyricsLineSpacingScaleKey, defaultValue: 1, range: 0.7...1.5)
-    }
-
-    /// 对唱布局：另一位歌手的行排到另一端（更靠近封面/对侧的那一边）。
-    ///
-    /// 数据只来自 TTML（`ttm:agent`），所以只有走 AMLL / Apple 官方 TTML 的歌会有区别；
-    /// 其它源没有歌手信息 ⇒ 这个开关对它们不起作用（不是 bug）。
-    /// 默认开：与 Apple Music 的做法一致；只有两边时"谁在唱"本来就是这首歌的主要信息。
-    static var lyricsDuetLayout: Bool {
-        get { bool(forKey: lyricsDuetLayoutKey, defaultValue: true) }
-        set { UserDefaults.standard.set(newValue, forKey: lyricsDuetLayoutKey) }
     }
 
     /// 是否在模糊封面之上再叠一层系统材质压色带。

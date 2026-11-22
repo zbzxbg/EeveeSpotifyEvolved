@@ -979,13 +979,15 @@ struct AppleMusicLyricsPage: View {
         }
     }
 
-    /// 对唱歌手名要不要画：对唱分边开着、这首歌确实是两个人、且至少有一个名字不是 id。
+    /// 对唱歌手名要不要画：这首歌确实是两个人、且至少有一个名字不是 id。
     ///
     /// 名字来自 TTML 的 `<ttm:name>`。AMLL 里不少文件只声明 `v1` / `v2` 而不给名字；
     /// 那种情况下 `displayName` 就是 id，画出来只会多一行 "v1"，所以这里把它挡掉。
+    ///
+    /// 以前还要求「对唱布局」开关开着；那颗开关已经删掉（见 `NgzhwmSettingsViewModel`
+    /// 顶部那段墓碑），现在有对唱数据就显示。
     private var showsDuetAgentNames: Bool {
-        guard NgzhwmSettingsViewModel.lyricsDuetLayout,
-              LyricVocalistsType.resolve(in: lines) == .duet else { return false }
+        guard LyricVocalistsType.resolve(in: lines) == .duet else { return false }
         return lines.contains { line in
             Self.displayableAgentName(line.agent) != nil
         }
@@ -1044,10 +1046,12 @@ struct AppleMusicLyricsPage: View {
         // （`AmllTtmlParser.parseAgents`：恰好两位个人歌手时，第二位翻）。
         // 其它源没有 agent 信息 ⇒ 这里恒 false，行为与以前一致。
         //
+        // 以前这里还要乘上「对唱布局」开关；开关已删（见 `NgzhwmSettingsViewModel`
+        // 顶部那段墓碑），有数据就分边，Apple Music 本身也没有这个开关。
+        //
         // 环境方向在上面按**歌词脚本**覆盖过，所以 `.trailing` 是"这一行自己的另一端"：
         // 中文/英文歌里是右边，RTL 歌词里是左边 —— 两种情况下都翻在正确的那一侧。
-        let isFlipped = NgzhwmSettingsViewModel.lyricsDuetLayout
-            && line.agent?.alignment == .flipped
+        let isFlipped = line.agent?.alignment == .flipped
         // 对唱歌手名（Apple Music 的 duet 标签）。没有可显示的名字时是 nil，行高不变。
         let agentName = showsAgentNames ? Self.displayableAgentName(line.agent) : nil
 
