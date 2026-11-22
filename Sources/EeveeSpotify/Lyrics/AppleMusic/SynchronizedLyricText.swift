@@ -31,6 +31,11 @@ struct SynchronizedLyricText: View {
     let focusStrength: Double
     /// 行译文（可选），显示在原文下方。
     let translation: String?
+    /// 对唱歌手名（可选），显示在罗马字/正文上方的一小行。
+    ///
+    /// 数据来自 `LyricAgent.displayName`（AMLL 的 `<ttm:name>`）；`AppleMusicLyricsPage`
+    /// 只在**确实是两个人**、且名字不是 `v1`/`v2` 这种 id 时才传进来。
+    let agentName: String?
     /// 罗马字 / 音译（可选），显示在原文**上方**。
     ///
     /// 「罗马字在歌词上方，翻译在下方」。数据来自 `LyricLine.romanization`
@@ -81,6 +86,7 @@ struct SynchronizedLyricText: View {
         isFocused: Bool,
         focusStrength: Double,
         translation: String? = nil,
+        agentName: String? = nil,
         romanization: String? = nil,
         romanizationSyllables: [LyricSyllable] = [],
         backgroundVocal: LyricBackgroundVocal? = nil,
@@ -99,6 +105,7 @@ struct SynchronizedLyricText: View {
         self.isFocused = isFocused
         self.focusStrength = focusStrength
         self.translation = translation
+        self.agentName = agentName
         self.romanization = romanization
         self.romanizationSyllables = romanizationSyllables
         self.backgroundVocal = backgroundVocal
@@ -131,6 +138,11 @@ struct SynchronizedLyricText: View {
             alignment: alignment.stackAlignment,
             spacing: 0
         ) {
+            // 对唱歌手名：一行小字，贴在这一行自己的边上（与正文同一侧）。
+            if let agentName, !agentName.isEmpty {
+                agentNameText(agentName)
+            }
+
             // 「**罗马字在歌词上方**」（翻译在下方 —— 那一行本来就在下面）。
             //
             // 排版是我定的（用户把大小交给我）：
@@ -290,6 +302,31 @@ struct SynchronizedLyricText: View {
             lineFinishProgressAnimationDuration: profile.lineFinishProgressAnimationDuration,
             liftMode: .character
         )
+    }
+
+    // MARK: 对唱歌手名
+    //
+    // Apple Music 的 duet 行会在正文上方标一个很小的歌手名。这里用同一套"跟随焦点"
+    // 的透明度公式，字号取正文的 42%（比罗马字/译文再小一档），贴在这一行自己的边上。
+    private func agentNameText(_ name: String) -> some View {
+        Text(name)
+            .font(.system(size: max(11, fontSize * 0.42), weight: .semibold))
+            .foregroundStyle(
+                primaryColor.opacity(
+                    (
+                        Self.profile.deselectedTextOpacity
+                            + (Self.profile.selectedTextOpacity
+                                - Self.profile.deselectedTextOpacity)
+                                * clamped(focusStrength)
+                    ) * 0.8
+                )
+            )
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(
+                maxWidth: .infinity,
+                alignment: alignment.frameAlignment
+            )
     }
 
     // MARK: 罗马字（主歌词**上方**那一行）

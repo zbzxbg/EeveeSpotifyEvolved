@@ -464,6 +464,7 @@ struct AppleMusicLyricsPage: View {
                                             abs(pair.offset - $0)
                                         },
                                         availableWidth: availableWidth,
+                                        showsAgentNames: showsDuetAgentNames,
                                         proxy: proxy
                                     )
                                 }
@@ -979,12 +980,37 @@ struct AppleMusicLyricsPage: View {
     }
 
     @ViewBuilder
+    /// 对唱歌手名要不要画：对唱分边开着、这首歌确实是两个人、且至少有一个名字不是 id。
+    ///
+    /// 名字来自 TTML 的 `<ttm:name>`。AMLL 里不少文件只声明 `v1` / `v2` 而不给名字；
+    /// 那种情况下 `displayName` 就是 id，画出来只会多一行 "v1"，所以这里把它挡掉。
+    private var showsDuetAgentNames: Bool {
+        guard NgzhwmSettingsViewModel.lyricsDuetLayout,
+              LyricVocalistsType.resolve(in: lines) == .duet else { return false }
+        return lines.contains { line in
+            Self.displayableAgentName(line.agent) != nil
+        }
+    }
+
+    /// 只把"像人名"的 agent 名交出去；空名、等于 id、`v1` / `agent1` 这类占位符一律不画。
+    private static func displayableAgentName(_ agent: LyricAgent?) -> String? {
+        guard let agent, agent.kind == .person else { return nil }
+        let name = agent.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              name.caseInsensitiveCompare(agent.identifier) != .orderedSame,
+              name.range(of: #"^v\d+$"#, options: [.regularExpression, .caseInsensitive]) == nil,
+              name.range(of: #"^agent\d+$"#, options: [.regularExpression, .caseInsensitive]) == nil
+        else { return nil }
+        return name
+    }
+
     private func row(
         for line: LyricLine,
         position: LyricPlaybackPosition,
         focusedLyricID: LyricLine.ID?,
         focusDistance: Int?,
         availableWidth: CGFloat,
+        showsAgentNames: Bool,
         proxy: ScrollViewProxy
     ) -> some View {
         // 焦点行不再直接比 `position.highlightedLyricID` ——
@@ -1022,6 +1048,8 @@ struct AppleMusicLyricsPage: View {
         // 中文/英文歌里是右边，RTL 歌词里是左边 —— 两种情况下都翻在正确的那一侧。
         let isFlipped = NgzhwmSettingsViewModel.lyricsDuetLayout
             && line.agent?.alignment == .flipped
+        // 对唱歌手名（Apple Music 的 duet 标签）。没有可显示的名字时是 nil，行高不变。
+        let agentName = showsAgentNames ? Self.displayableAgentName(line.agent) : nil
 
         SynchronizedLyricText(
             syllables: line.syllables,
@@ -1030,6 +1058,7 @@ struct AppleMusicLyricsPage: View {
             isFocused: isFocused,
             focusStrength: focusStrength,
             translation: line.translation,
+            agentName: agentName,
             // 罗马字接上 —— 渲染层把它画在主歌词**上方**。
             // 数据由 `LyricLinesAdapter` 用仓库既有罗马化管线填好（逐语言开关已过滤，
             // 与原文相同的行是 nil）。
