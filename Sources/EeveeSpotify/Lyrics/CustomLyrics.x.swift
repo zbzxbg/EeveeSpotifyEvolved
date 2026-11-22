@@ -524,6 +524,23 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
                         tier: tier,
                         elapsed: Date().timeIntervalSince(startedAt)
                     )
+                    // 「AMLL 优先」在自动优选里也要生效：AMLL 交出逐字歌词就收工，不再和
+                    // 后面的同档质量面比较。用户显式说"先信 AMLL"，就不该被"酷狗有逐词
+                    // 罗马字"这种质量面翻掉 —— 这个开关默认是开的。
+                    // 只对"AMLL 是第一个给出逐字的源"生效：用户若把别的源排在前面、且它
+                    // 已经给出逐字，就尊重顺序，交给质量面比较。
+                    let noWordLevelYet = best.map { $0.tier < .word } ?? true
+                    if source == .amllTtml,
+                       tier == .word,
+                       noWordLevelYet,
+                       LyricsAutoSelect.prefersAmll,
+                       LyricsAutoSelect.wantsWordTiming {
+                        writeDebugLog(
+                            "[Lyrics] auto select: AMLL is preferred — stopping the chain"
+                                + " (\(dto.lines.count) word-timed line(s))"
+                        )
+                        return pick
+                    }
                     let better = LyricsAutoSelect.isBetter(pick, than: best)
                     writeDebugLog(
                         "[Lyrics] auto select: \(source.description) returned \(dto.lines.count) line(s),"

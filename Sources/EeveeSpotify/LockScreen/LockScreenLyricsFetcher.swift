@@ -120,6 +120,15 @@ enum LockScreenLyricsFetcher {
                 // 只有前两条时整首仍然是单帧；只有第三条命中时是同名不同编曲。
                 let wordTimed = LyricsAutoSelect.tier(of: dto) == .word
                     && wordByWordLineCount(in: lines) > 0
+                // 「AMLL 优先」对锁屏同样生效：AMLL 交出逐字就收工，不再问后面的源。
+                if wordTimed, LyricsAutoSelect.prefersAmll, source == .amllTtml {
+                    writeDebugLog(
+                        "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"
+                            + " \(source.description) — \(took(started))\(coverage)"
+                            + " — AMLL is preferred, stopping here"
+                    )
+                    return Result(lines: lines, source: source)
+                }
                 if wordTimed, !dto.isFuzzyMatch {
                     writeDebugLog(
                         "[\(LockScreenLyrics.logTag)] \(lines.count) line(s) from"

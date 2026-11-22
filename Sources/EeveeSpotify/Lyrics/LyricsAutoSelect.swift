@@ -136,6 +136,16 @@ enum LyricsAutoSelect {
         NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
     }
 
+    /// 「AMLL 优先」：AMLL 交出逐字歌词就收工，不再让后面的"同档质量面"把它换掉。
+    ///
+    /// 这个开关的语义是"先信 AMLL 的逐词歌词"，不是"参与打分"。默认开着，而来源选择器
+    /// 默认是自动优选 —— 如果只在单源模式里生效，默认组合下这个开关等于不存在：同档的
+    /// 酷狗会靠"逐词罗马字"这一项把 AMLL 换掉。自动优选与锁屏取词共用这一条判断，
+    /// 各自的"逐词开关"由调用方叠加。
+    static var prefersAmll: Bool {
+        NgzhwmSettingsViewModel.isAmllPreferred
+    }
+
     /// 这一份 dto 算哪一档。空行不在这里判（空行由调用方当成"没答上来"处理）。
     static func tier(of dto: LyricsDto) -> LyricsTimingTier {
         if hasUsableWordLevelData(dto) { return .word }
