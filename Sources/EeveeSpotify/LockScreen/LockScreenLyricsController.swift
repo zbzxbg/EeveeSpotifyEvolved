@@ -89,7 +89,7 @@ final class LockScreenLyricsController {
         lastEnabled = LockScreenLyrics.isEnabled
         // 解锁/回到前台：锁屏期间系统会把定时器压住，行可能已经换过了。
         // 主动补一拍把状态拉回来（同一行不动）；视频那边另有一层按当前进度重排。
-        NotificationCenter.default.addObserver(
+        _ = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main

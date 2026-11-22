@@ -287,6 +287,15 @@ requireEqual(
     [LockScreenKaraokeFrame(offsetMs: 0, revealedCharacters: 0)],
     "a negative reveal count clamps to zero"
 )
+if let alreadyFrozen = LockScreenKaraoke.rebased(
+    LockScreenKaraoke.frozen(revealedCharacters: 2),
+    fromMs: 900
+) {
+    requireEqual(alreadyFrozen.count, 1, "a single-frame table is already frozen and stays as is")
+} else {
+    failures += 1
+    print("  FAIL a frozen single frame must not be dropped by a rebase")
+}
 
 if failures == 0 {
     print("LockScreenKaraoke: all assertions passed")
