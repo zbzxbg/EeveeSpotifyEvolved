@@ -979,7 +979,6 @@ struct AppleMusicLyricsPage: View {
         }
     }
 
-    @ViewBuilder
     /// 对唱歌手名要不要画：对唱分边开着、这首歌确实是两个人、且至少有一个名字不是 id。
     ///
     /// 名字来自 TTML 的 `<ttm:name>`。AMLL 里不少文件只声明 `v1` / `v2` 而不给名字；
@@ -1004,6 +1003,7 @@ struct AppleMusicLyricsPage: View {
         return name
     }
 
+    @ViewBuilder
     private func row(
         for line: LyricLine,
         position: LyricPlaybackPosition,
