@@ -10,7 +10,8 @@ import Foundation
 ///
 /// 数据来源三条，按顺序问：
 /// 1. **Canvas** —— Spotify 自己给这首歌的循环短片。读 track metadata 里的 `canvas.url`
-///    （账号属性 `canvas-disabled` 被我们压成 false 后，播放核心才会把它填进来）。
+///    （账号属性 `canvas-disabled` 被我们压成 false 后，播放核心才会把它填进来）；
+///    metadata 没填时再用账号 token 查一次 `canvaz-cache`（见 `SpotifyCanvasCache`）。
 ///    播放页那一层 Canvas 由 `NowPlayingIOS27` 用静态封面盖住，锁屏这段短片不受影响。
 /// 2. **Apple Music editorial video** —— 用 Apple Music 网页播放器的 developer token
 ///    查目录（不需要用户登录），取 `editorialVideo` 里对应画幅的那段 HLS。

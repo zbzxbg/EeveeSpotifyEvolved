@@ -601,15 +601,26 @@ final class LockScreenArtworkResolver {
         deadline: Date
     ) async -> Sources {
         var canvas: AnimatedArtworkAsset?
+        var canvasTrackURI: String?
 
         if LockScreenArtwork.wantsCanvas {
-            if let metadata = await currentMetadata() {
-                if matches(metadata: metadata, title: title, artist: artist) {
-                    canvas = CanvasArtworkSource.asset(metadata: metadata)
+            if let snapshot = await currentTrackSnapshot() {
+                if matches(metadata: snapshot.metadata, title: title, artist: artist) {
+                    canvas = CanvasArtworkSource.asset(metadata: snapshot.metadata)
+                    // metadata 没给 `canvas.url` 时再问一次 canvaz-cache（Taurus 那条路）。
+                    if canvas == nil { canvasTrackURI = snapshot.uri }
                 }
             } else {
                 reportNoMetadataOnce()
             }
+        }
+
+        if canvas == nil, let uri = canvasTrackURI, Date() < deadline {
+            canvas = await SpotifyCanvasCache.asset(
+                trackURI: uri,
+                session: session,
+                deadline: deadline
+            )
         }
 
         let apple = await AppleMusicArtworkSource.assets(
@@ -629,13 +640,27 @@ final class LockScreenArtworkResolver {
         return Sources(canvas: canvas, apple: apple)
     }
 
-    private func currentMetadata() async -> [String: String]? {
-        await MainActor.run { () -> [String: String]? in
+    /// 播放器当前这一首的元数据 + 曲目 URI，**在同一次主线程快照里取**。
+    ///
+    /// 分开取会串歌：metadata 还是 A，曲目 URI 已经变成 B，canvaz-cache 就会拿 B 的
+    /// canvas 去配 A 的封面。URI 不是 `spotify:track:`（播客/本地文件）时留 nil，
+    /// metadata 那条路照样可用。
+    private struct TrackSnapshot {
+        let metadata: [String: String]
+        let uri: String?
+    }
+
+    private func currentTrackSnapshot() async -> TrackSnapshot? {
+        await MainActor.run { () -> TrackSnapshot? in
             guard let track = statefulPlayer?.currentTrack()
                 ?? nowPlayingScrollViewController?.loadedTrack else {
                 return nil
             }
-            return track.metadata()
+            let identifier = track.trackIdentifier
+            return TrackSnapshot(
+                metadata: track.metadata(),
+                uri: identifier.hasPrefix("spotify:track:") ? identifier : nil
+            )
         }
     }
 

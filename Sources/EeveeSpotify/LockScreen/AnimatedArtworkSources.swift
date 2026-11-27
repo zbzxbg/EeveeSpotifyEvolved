@@ -35,6 +35,9 @@ struct AppleMusicEditorialAssets {
 /// 播放核心才会把它填进来；见 `DynamicPremium` 的 `modifyAttributes`）。播放页那一层
 /// Canvas 由 `NowPlayingIOS27` 用静态封面盖住，锁屏这段短片不受影响。
 ///
+/// metadata 没填 `canvas.url` 时，`LockScreenArtworkResolver` 会再用账号 token 查一次
+/// `SpotifyCanvasCache`（canvaz-cache）—— 见 `SpotifyCanvasCache.swift` 文件头。
+///
 /// `canvas.type` 决定这是不是一段视频：IMAGE / GIF 类型的 Canvas 交给系统的播放器会
 /// 立刻失败，所以这里先按类型挡掉，别让下载去浪费时间。
 enum CanvasArtworkSource {
