@@ -1010,6 +1010,26 @@ struct AppleMusicLyricsPage: View {
         return name
     }
 
+    /// 这一行要画的歌手名。
+    ///
+    /// 竖屏每句都画；横屏右栏只有 366pt 高，同一位歌手连着唱时只留第一句 —— 每句都带
+    /// 一行 11pt 的标签会白吃掉一整块高度，Apple Music 自己也是按「换人」分组而不是每句都写。
+    /// 换人与否只看 `identifier`：同一位歌手的 `displayName` 可能逐行不同写法，但 id 稳定。
+    private func duetAgentName(
+        for line: LyricLine,
+        showsAgentNames: Bool,
+        previousAgent: LyricAgent?
+    ) -> String? {
+        guard showsAgentNames, let name = Self.displayableAgentName(line.agent) else { return nil }
+        if lyricsUsesLandscapeDensity,
+           let previousAgent,
+           let agent = line.agent,
+           previousAgent.identifier == agent.identifier {
+            return nil
+        }
+        return name
+    }
+
     @ViewBuilder
     private func row(
         for line: LyricLine,
@@ -1059,13 +1079,15 @@ struct AppleMusicLyricsPage: View {
         // 中文/英文歌里是右边，RTL 歌词里是左边 —— 两种情况下都翻在正确的那一侧。
         let isFlipped = line.agent?.alignment == .flipped
         // 对唱歌手名（Apple Music 的 duet 标签）。没有可显示的名字时是 nil，行高不变。
-        // 横屏右栏只有 366pt 高：同一位歌手连续唱的时候名字只留第一句，
-        // 每句都带一行 11pt 的标签会白吃掉一整块的高度。
-        var agentName = showsAgentNames ? Self.displayableAgentName(line.agent) : nil
-        if lyricsUsesLandscapeDensity, let previousAgent,
-           let agent = line.agent, previousAgent.identifier == agent.identifier {
-            agentName = nil
-        }
+        //
+        // 只能在这里一次求值、交给 `duetAgentName`：`row` 是 `@ViewBuilder`，正文里
+        // 写 `var` + 后面的 `if … { agentName = nil }` 会被当成一个 `()` 类型的视图
+        // 元素（`type '()' cannot conform to 'View'`）。
+        let agentName = duetAgentName(
+            for: line,
+            showsAgentNames: showsAgentNames,
+            previousAgent: previousAgent
+        )
 
         SynchronizedLyricText(
             syllables: line.syllables,
