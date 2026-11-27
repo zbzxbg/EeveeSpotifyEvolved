@@ -522,8 +522,19 @@ extension LyricsDto {
     ///   就已经变成罗马字，效果是「直接替换原日文」而不是「原文上面一行罗马字」；
     /// · 喂给 Spotify 原生那页的 payload（`toSpotifyLyricsData`）同样**不**罗马化。
     func romanizedForWordByWordIfEnabled() -> LyricsDto {
-        guard NgzhwmSettingsViewModel.isWordByWordLyricsEnabled,
-              romanization == .canBeRomanized else { return self }
+        // `.original` 才是"确定不需要罗马化"。`.romanized` 只表示**源说它有官方罗马字**，
+        // 不代表 `officialRomanizedLines` 里真的有 —— Spicy Lyrics 给了
+        // `HasTransliterations` / 逐音节 `TransliteratedText`，但解析时没有把转写文本
+        // 存进 dto；Musixmatch 也可能只覆盖一部分行。那些行（或整首）仍然要靠本地管线，
+        // 所以这里不能再按 `.canBeRomanized` 卡死（否则显示层一行罗马字都没有）。
+        // 逐词开关：AM 那套页面由「更好的逐词歌词」开门，老 overlay 由「逐词歌词」开门；
+        // 任一开着都可能用到这一行，不能只看老开关。
+        guard NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
+                || NgzhwmSettingsViewModel.isBetterWordByWordLyricsEnabled else {
+            writeDebugLog("[Romanization] skipped — word-by-word lyrics are off")
+            return self
+        }
+        guard romanization != .original else { return self }
 
         // ── 首字母大写：**先做，且与罗马化开关无关**
         //
@@ -555,15 +566,24 @@ extension LyricsDto {
         let isJapanese: Bool
         switch language {
         case .japanese:
-            guard UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization") else { return result }
+            guard UserDefaults.standard.bool(forKey: "ngzhwm_japaneseRomanization") else {
+                writeDebugLog("[Romanization] ja \(result.lines.count) line(s) — the Japanese switch is off")
+                return result
+            }
             romanize = { $0.toJapaneseRomaji() }
             isJapanese = true
         case .simplifiedChinese, .traditionalChinese:
-            guard UserDefaults.standard.bool(forKey: "ngzhwm_chineseRomanization") else { return result }
+            guard UserDefaults.standard.bool(forKey: "ngzhwm_chineseRomanization") else {
+                writeDebugLog("[Romanization] zh \(result.lines.count) line(s) — the Chinese switch is off")
+                return result
+            }
             romanize = { $0.toChinesePinyin() }
             isJapanese = false
         case .korean:
-            guard UserDefaults.standard.bool(forKey: "ngzhwm_koreanRomanization") else { return result }
+            guard UserDefaults.standard.bool(forKey: "ngzhwm_koreanRomanization") else {
+                writeDebugLog("[Romanization] ko \(result.lines.count) line(s) — the Korean switch is off")
+                return result
+            }
             romanize = { $0.toKoreanRomaja() }
             isJapanese = false
         default:
@@ -598,6 +618,9 @@ extension LyricsDto {
                     : LyricsWordDto(text: " " + word.text, startMs: word.startMs, endMs: word.endMs)
             }
         }
+        writeDebugLog(
+            "[Romanization] \(language.rawValue) \(result.lines.count) line(s) — local conversion"
+        )
         return result
     }
 

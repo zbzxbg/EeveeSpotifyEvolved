@@ -284,7 +284,7 @@ class SpicyLyricsRepository: LyricsRepository {
         let preserveWords = NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
 
         var lines        = [LyricsLineDto]()
-        var hasRomanized = root["HasTransliterations"]?.boolValue ?? false
+        var hasTransliterations = root["HasTransliterations"]?.boolValue ?? false
         var droppedInterludes = 0
 
         for entry in content {
@@ -300,7 +300,7 @@ class SpicyLyricsRepository: LyricsRepository {
                 lineText = SpicySyllableText.joined(syllables)
                 words = preserveWords ? SpicySyllableText.words(syllables) : nil
                 if syllables.contains(where: { ($0["TransliteratedText"]?.stringValue ?? "").isEmpty == false }) {
-                    hasRomanized = true
+                    hasTransliterations = true
                 }
             } else if let text = lead["Text"]?.stringValue {
                 lineText = text
@@ -316,7 +316,7 @@ class SpicyLyricsRepository: LyricsRepository {
                 continue
             }
 
-            if (lead["TransliteratedText"]?.stringValue ?? "").isEmpty == false { hasRomanized = true }
+            if (lead["TransliteratedText"]?.stringValue ?? "").isEmpty == false { hasTransliterations = true }
 
             let offsetMs = lead["StartTime"]?.doubleValue.map { Int($0 * 1000) }
             lines.append(LyricsLineDto(content: lineText, offsetMs: offsetMs, words: words))
@@ -324,9 +324,15 @@ class SpicyLyricsRepository: LyricsRepository {
 
         logDroppedInterludes(droppedInterludes, kept: lines.count, shape: "Syllable")
 
-        let romanization: LyricsRomanizationStatus = hasRomanized
-            ? .romanized
-            : (lines.map(\.content).canBeRomanized ? .canBeRomanized : .original)
+        // 解析层只把 `TransliteratedText` 当"有没有转写"的标记，**没有**把转写文本存进
+        // `officialRomanizedLines`。以前据此标 `.romanized`，显示层会以为官方罗马字已经在
+        // dto 里、跳过本地转换 ⇒ 屏幕上反而一行罗马字都没有。如实标 `.canBeRomanized`，
+        // 交给本地管线（与网易逐字那条路一致）。
+        if hasTransliterations {
+            writeDebugLog("[SpicyLyrics] transliterations present but not stored — romanizing locally")
+        }
+        let romanization: LyricsRomanizationStatus = lines.map(\.content).canBeRomanized
+            ? .canBeRomanized : .original
 
         return LyricsDto(lines: lines, timeSynced: true, romanization: romanization)
     }
@@ -337,7 +343,7 @@ class SpicyLyricsRepository: LyricsRepository {
         guard let content = root["Content"]?.arrayValue else { return emptyDto() }
 
         var lines        = [LyricsLineDto]()
-        let hasRomanized = root["HasTransliterations"]?.boolValue ?? false
+        let hasTransliterations = root["HasTransliterations"]?.boolValue ?? false
         var droppedInterludes = 0
 
         for entry in content {
@@ -355,9 +361,13 @@ class SpicyLyricsRepository: LyricsRepository {
 
         logDroppedInterludes(droppedInterludes, kept: lines.count, shape: "Line")
 
-        let romanization: LyricsRomanizationStatus = hasRomanized
-            ? .romanized
-            : (lines.map(\.content).canBeRomanized ? .canBeRomanized : .original)
+        // 同 `parseSyllableLyrics`：转写文本没有存进 dto，不能标 `.romanized`
+        // （标了显示层就会跳过本地转换，屏幕上反而没有罗马字）。
+        if hasTransliterations {
+            writeDebugLog("[SpicyLyrics] transliterations present but not stored — romanizing locally")
+        }
+        let romanization: LyricsRomanizationStatus = lines.map(\.content).canBeRomanized
+            ? .canBeRomanized : .original
 
         return LyricsDto(lines: lines, timeSynced: true, romanization: romanization)
     }
