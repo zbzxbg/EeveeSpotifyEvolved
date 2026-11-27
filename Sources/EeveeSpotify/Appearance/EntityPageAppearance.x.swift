@@ -52,11 +52,8 @@ enum EntityPageAppearance {
     private static let fieldBleed: CGFloat = 600
     // ⚠️ 老键 `fieldColorEnd`（"取色底占页面高度的比例"，0.58）**已删** —— 艺人页的收口归 pw 的
     // `blackFrom` / `blackTo`，专辑/歌单页那一支是平色，两页都不再用它。
-    // 满幅照片**整幅上移**的比例（图高的 5%~7%，的差是 25pt / 414pt ≈ 6%）。
-    //
-    // 「AM 是图片顶部对齐、铺满到状态栏下面，主体落在上半部分……
-    // Spotify 的图偏下」⇒ 整体上移，裁掉的是照片顶部那条空白。照片因此不再和名字抢版面。
-    private static let heroRiseRatio: CGFloat = 0.06
+    // 满幅照片**不再整幅上移**：顶边就落在 y = 0（理由见 `frame` 那一段 —— 上移会把画面
+    // 最上面那一截（封面上的字、艺人头顶）永远推出屏幕，而状态栏 / 灵动岛本来就压着顶部）。
     /// **化开的起点改成绑"图自己的高度"**。
     ///
     /// 旧几何：`solidUntil = 名字上沿 − 30% × 页头高` = `347 − 156` = **191pt**，
@@ -1152,13 +1149,16 @@ enum EntityPageAppearance {
         // 缓冲（只有专辑页要，见 `wantsTopInset`）：把图从状态栏下面开始画。
         // 这条**恒 false**（图照旧铺到顶）。算式留着，将来真要翻回"把图往下挪"时不用重推。
         let topInset = wantsTopInset ? page.safeAreaInsets.top : 0
-        // **整幅上移**（`frame.y` 取负）—— AM 的照片主体落在上半部分，
-        // 我们原来顶对齐、主体偏下。
-        // 裁掉的是照片顶部那条空白；下面 mask 的落点按同一偏移换算（见 `imageHeight` 那一段）。
-        let rise = fillsHost ? round(height * heroRiseRatio) : 0
+        // **顶边落在 y = 0，不做"整幅上移"**。
+        //
+        // 上移哪怕只有图高的 6%（414pt 宽时 ≈ 25pt），也会把画面顶部那一截永远推出屏幕：
+        // 专辑封面左上角那一行字、艺人的头顶都在那截里，而状态栏 / 灵动岛本来就压着顶部
+        // ⇒ 两头一起把最上面的内容吃掉。AM 自己的出血封面顶边就落在 0：状态栏压在图上，
+        // 图本身不再上移。要让"主体落在上半部分"只能靠构图与裁切（`meltStartRatio` 那类），
+        // 不能靠把整幅图推出屏幕。
         let frame = CGRect(
             x: 0,
-            y: topInset - rise,
+            y: topInset,
             width: host.bounds.width,
             height: max(minHeroHeight, round(height) - topInset)
         )
