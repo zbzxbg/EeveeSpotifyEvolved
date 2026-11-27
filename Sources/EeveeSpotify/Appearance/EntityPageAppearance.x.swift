@@ -1215,6 +1215,22 @@ enum EntityPageAppearance {
             meltEnd = imageHeight
         }
         applyDissolveMask(to: view, solidUntil: meltStart, goneAt: meltEnd)
+
+        // **艺人页**：同一位置再叠一层动图（AM 的 `motionArtist*`，见 `ArtistMotionArtwork`）。
+        // 它盖在这张照片上、用同一条化开 mask —— 所以解析成功时是"照片换成动的"，
+        // 失败 / 还没下来时照片照旧，什么都不用回滚。专辑 / 歌单页不挂（封面是卡片，播动图会喧宾夺主）。
+        if target.kind == .artist {
+            ArtistMotionArtwork.attach(
+                name: EntityPageHeaderManager.currentArtistName,
+                host: host,
+                frame: frame,
+                maskStart: meltStart,
+                maskEnd: meltEnd
+            )
+        } else {
+            // 从艺人页翻到专辑 / 歌单页：停止解码，但保留解析结果（翻回来不用重下）。
+            ArtistMotionArtwork.pause()
+        }
         // 一页一条：化开收在哪一段（页头可见区里的位置）。
         if !didReportMelt {
             didReportMelt = true
@@ -1652,6 +1668,8 @@ enum EntityPageAppearance {
         }
         sharpHero?.removeFromSuperview()
         sharpHero = nil
+        // 艺人页那层动图跟着一起撤：它的 frame / mask 都是照这张照片算的。
+        ArtistMotionArtwork.detach()
     }
 
     /// 封面元素里那张真图。
