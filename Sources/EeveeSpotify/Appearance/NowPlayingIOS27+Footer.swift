@@ -206,7 +206,10 @@ extension NowPlayingIOS27 {
         // 既不碰音量行（813 起）、也不碰队列的**字形墨迹**（836 起）——
         // 就是 AM / MeloX 那种"小图标压在队列右上"的样子。
         // 只挪**我们自己画的**三颗与替身，原生那三颗一个字都不动（它们本来就被藏了字形）。
-        let glyphMidY = rowMidY + footerRowYOffset
+        // 横屏两栏：这一行就在左栏里，跟着那一坨走 —— 再往下 64 就出屏了。
+        let glyphMidY = NowPlayingIOS27.landscapeLayout(in: page) != nil
+            ? rowMidY
+            : rowMidY + footerRowYOffset
         if mountFooterGlyphs(in: page, midY: glyphMidY, connect: connect, share: share, queue: queue) {
             changed = true
         }
@@ -303,8 +306,11 @@ extension NowPlayingIOS27 {
         }
 
         let box = footerGlyphBox
+        // 横屏两栏：三颗只占左栏（按左栏宽算比例、再整体挪过去）；竖屏照旧铺满页面宽。
+        let landscape = NowPlayingIOS27.landscapeLayout(in: page)
         let glyphFrames = LayoutGeometry.footerFrames(
-            containerWidth: page.bounds.width,
+            containerWidth: landscape?.column.width ?? page.bounds.width,
+            originX: landscape?.column.minX ?? 0,
             midY: midY,
             box: box
         )

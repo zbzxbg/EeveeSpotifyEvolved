@@ -94,4 +94,77 @@ require(near(LayoutGeometry.tabBarRoom(containerHeight: 96.4, stockRowHeight: 49
 require(near(LayoutGeometry.tabBarRoom(containerHeight: 96, stockRowHeight: 49, bottomInset: 34, compact: false), 0), "regular width should not make room")
 require(near(LayoutGeometry.tabBarRoom(containerHeight: 20, stockRowHeight: 49, bottomInset: 34, compact: true), 0), "room should not go negative")
 
+// ── 底排三颗在横屏左栏里（位置相对左栏，再整体挪过去）
+for size in sizes {
+    let columnX: CGFloat = 28
+    let columnWidth: CGFloat = 302
+    let frames = LayoutGeometry.footerFrames(
+        containerWidth: columnWidth,
+        originX: columnX,
+        midY: glyphMidY,
+        box: glyphBox
+    )
+    require(frames.count == 3, "\(size.name): lateral footer needs three frames")
+    for frame in frames {
+        require(frame.minX >= columnX - tolerance, "\(size.name): lateral glyph before the column")
+        require(frame.maxX <= columnX + columnWidth + tolerance, "\(size.name): lateral glyph past the column")
+    }
+    // 不给 originX 时行为与旧实现逐字一致。
+    let legacy = LayoutGeometry.footerFrames(containerWidth: columnWidth, midY: glyphMidY, box: glyphBox)
+    require(near(legacy[0].minX, (LayoutGeometry.footerCentres(containerWidth: columnWidth)[0] - glyphBox / 2).rounded()),
+            "\(size.name): default origin changed the legacy frame")
+}
+
+// ── 横屏两栏：封面 / 控件在左栏，歌词在右栏，谁都不出页面
+private struct LandscapeSize {
+    let name: String
+    let width: CGFloat
+    let height: CGFloat
+}
+
+private let landscapeSizes: [LandscapeSize] = [
+    LandscapeSize(name: "iPhone 8", width: 667, height: 375),
+    LandscapeSize(name: "iPhone mini", width: 812, height: 375),
+    LandscapeSize(name: "iPhone regular", width: 852, height: 393),
+    LandscapeSize(name: "iPhone Pro Max", width: 932, height: 430),
+    LandscapeSize(name: "iPhone XR", width: 896, height: 414),
+]
+
+for size in landscapeSizes {
+    let leftInset: CGFloat = 28
+    let topInset: CGFloat = 16
+    let bottomInset: CGFloat = 18
+    let rightInset: CGFloat = 28
+    let layout = LayoutGeometry.landscapeColumns(
+        size: CGSize(width: size.width, height: size.height),
+        leftInset: leftInset,
+        topInset: topInset,
+        bottomInset: bottomInset,
+        rightInset: rightInset
+    )
+
+    require(layout.column.minX >= leftInset - tolerance, "\(size.name): column before the left inset")
+    require(layout.column.maxX <= size.width - rightInset + tolerance, "\(size.name): column past the right inset")
+    require(layout.column.width >= LayoutGeometry.landscapeColumnMinWidth - tolerance,
+            "\(size.name): column narrower than the minimum")
+    require(layout.column.height > 0, "\(size.name): column has no height")
+
+    require(layout.cover.minX >= layout.column.minX - tolerance, "\(size.name): cover before the column")
+    require(layout.cover.maxX <= layout.column.maxX + tolerance, "\(size.name): cover wider than the column")
+    require(layout.cover.maxY <= layout.column.maxY + tolerance, "\(size.name): cover taller than the column")
+    require(near(layout.cover.width, layout.cover.height), "\(size.name): cover is not a square")
+
+    require(layout.lyrics.minX >= layout.column.maxX + LayoutGeometry.landscapeColumnGap - tolerance,
+            "\(size.name): lyrics overlap the column")
+    require(layout.lyrics.maxX <= size.width - rightInset + tolerance, "\(size.name): lyrics past the right inset")
+    require(layout.lyrics.width > layout.cover.width, "\(size.name): lyrics column narrower than the cover")
+    require(layout.lyrics.height > 0, "\(size.name): lyrics has no height")
+
+    // 封面下面必须还放得下那几行（进度 / 传输）：封面高度不超过可用高度的一半。
+    let usable = size.height - topInset - bottomInset
+    require(layout.cover.height <= usable * 0.5 + tolerance, "\(size.name): cover eats the control rows")
+}
+
 print("OK: \(sizes.count) screen sizes, footer / mini bar / tab bar geometry")
+print("OK: \(landscapeSizes.count) landscape sizes, two-column geometry")
+

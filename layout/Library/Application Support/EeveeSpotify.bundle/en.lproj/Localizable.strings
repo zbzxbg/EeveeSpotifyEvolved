@@ -683,7 +683,7 @@ now_playing_style_description = "Spotify = Spotify's own player layout. Apple Mu
 // the whole page (cover as a thumbnail); the shape follows pw 1.1.0's "Landscape lyrics".
 now_playing_landscape_section = "Landscape";
 now_playing_landscape = "Landscape lyrics";
-now_playing_landscape_footer = "Turn the phone sideways and the lyrics take the page, with the cover as a thumbnail. Nothing turns while Portrait Orientation Lock is on.";
+now_playing_landscape_footer = "Turn the phone sideways: the cover, title, progress and transport sit in the left column, and the lyrics fill the right one. Nothing turns while Portrait Orientation Lock is on.";
 // ★ 2026-10-22: the five structural changes above are integrated into this one master
 // switch (it is the top row of this page and defaults to on). Its second line lists the
 // five names below, so those translations stay the single source of truth.

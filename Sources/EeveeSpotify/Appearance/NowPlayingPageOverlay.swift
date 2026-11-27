@@ -196,6 +196,14 @@ enum NowPlayingPageOverlay {
             changed = true
         }
         layoutVolumeRow(in: overlay, frame: target)
+        // 横屏两栏：整行藏起来（零框已经把它挪没了，`isHidden` 是第二道）。
+        if let row = overlay.subviews.first(where: { $0.accessibilityIdentifier == volumeRowIdentifier }) {
+            let hidden = volumeHiddenInLandscape(page)
+            if row.isHidden != hidden {
+                row.isHidden = hidden
+                changed = true
+            }
+        }
         // 把"唯一吃触摸的范围"告诉覆盖层（见 `NowPlayingOverlayView`）——
         // 不更新它，音量条就还是没有触摸（这一层只在那一行里放行）。
         if let interactive = overlay as? NowPlayingOverlayView {
@@ -395,8 +403,22 @@ enum NowPlayingPageOverlay {
         }
     }
 
+    /// 这一页是不是"横屏两栏"（音频行在那一版没有位置）。
+    ///
+    /// 本文件不是 `@MainActor`，读不了 `NowPlayingIOS27` 的静态方法 ⇒ 按同样的三个条件
+    /// 就地判一次（开关 + 横屏 + 手机宽度）。
+    private static func volumeHiddenInLandscape(_ page: UIView) -> Bool {
+        UserDefaults.nowPlayingIOS27
+            && UserDefaults.nowPlayingLandscapeLyrics
+            && page.bounds.width > page.bounds.height + 1
+            && page.bounds.width <= 960
+    }
+
     /// 音量条放哪：**锚点下面**；锚点不在（或空间不够）就贴安全区底。
     private static func volumeFrame(in page: UIView, overlay: UIView) -> CGRect {
+        // 横屏两栏没有这一行：左栏已经被封面 / 标题 / 进度 / 传输占满，右栏是歌词。
+        // 返回零框 + 下面把行藏起来（`interactiveFrame` 归零 ⇒ 也不吃触摸）。
+        if volumeHiddenInLandscape(page) { return .zero }
         let width = max(120, page.bounds.width - volumeRowInset * 2)
         let x = (page.bounds.width - width) / 2
 

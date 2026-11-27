@@ -462,6 +462,9 @@ enum NowPlayingIOS27 {
     ///
     /// 它插在 `artworkView` **下面**、field **上面**：缩略图永远在最前，化开的只是"原来那张大图"。
     private static func beginLyricsDissolve(entering: Bool, in page: UIView) {
+        // 横屏两栏没有"整幅封面化开"这一段：封面本来就在左栏方框里，再铺一张整幅
+        // 会横跨两栏闪一下。
+        guard landscapeLayout(in: page) == nil else { return }
         guard let host = artworkHost, let art = artworkView, let image = art.image else { return }
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil
@@ -620,6 +623,205 @@ enum NowPlayingIOS27 {
         isLandscapePage(page) ? 0 : bottomStackYOffset
     }
 
+    // MARK: - 横屏两栏的落地
+    //
+    // 横屏这一页按两栏排（pw 的横屏播放页那种）：
+    //
+    //   ┌──────────── 左栏 ────────────┐ ┌──────────── 右栏 ────────────┐
+    //   │ 封面（方块）                  │ │ 歌词铺满                      │
+    //   │ 歌名 / 艺人                   │ │                              │
+    //   │ ── 进度条 ──                  │ │                              │
+    //   │ 随机 上一首 播放 下一首        │ │                              │
+    //   └──────────────────────────────┘ └──────────────────────────────┘
+    //
+    // **不新建控件**：Spotify 那几件（标题 / 进度 / 传输 / 工具行）全在
+    // `npv.bottomStackView` 里 —— 把那一坨收窄到左栏宽、整块挪到封面下面；
+    // 它是 `UIStackView`，宽度一变 arranged view 自己就重排，进度条与传输行跟着缩进左栏。
+    // 封面与歌词再由我们的两层按两栏几何摆。
+    //
+    // ⚠️ 宽度写 `bounds.size.width` + `center`，**不加约束**：Spotify 的布局回合会重算约束
+    // 体系，而这一层每 0.3s 一拍（`DeclutterChrome` 的节拍）会把值写回去。离开横屏 / 收尾
+    // 时按记下的原值写回。
+    //
+    // 只认**手机横屏**（≤960pt 宽）：iPad 上 Spotify 自己就是横屏版式，不该套这一套。
+
+    /// 两栏几何（页面坐标）+ 那一坨该落在哪。
+    struct LandscapeLayout {
+        var column: CGRect
+        var cover: CGRect
+        var lyrics: CGRect
+        /// 那一坨**未变换**时的左边（页面坐标）—— 收窄时左边缘留在原处，内容线才和封面对齐。
+        var stackLeft: CGFloat
+        /// 那一坨内容到它自己左右边缘的距离（竖屏量到的是 24）。
+        var stackInset: CGFloat
+    }
+
+    private static weak var landscapePage: UIView?
+    private static weak var landscapeStack: UIView?
+    private static var landscapeBounds: CGRect = .zero
+    private static var landscapeLayoutCache: LandscapeLayout?
+    private static var didLogLandscapeLayout = false
+
+    private static weak var landscapeNarrowedStack: UIView?
+    private static var landscapeStackOriginalWidth: CGFloat?
+    private static var landscapeStackOriginalCenterX: CGFloat?
+
+    /// 这一页现在是不是"横屏两栏"。
+    static func isLandscapeTwoColumn(_ page: UIView) -> Bool {
+        isLandscapePage(page) && page.bounds.width <= 960
+    }
+
+    /// 横屏两栏的几何；竖屏 / 认不出那一坨时 nil。
+    ///
+    /// 一拍之内会被封面 / 标题 / 歌词 / 工具行各问一次 ⇒ 按「页面 + 尺寸 + 那一坨」缓存，
+    /// 只有换页 / 旋转 / 那一坨被 Spotify 换掉才重算（`npv.bottomStackView` 的 BFS 不便宜）。
+    static func landscapeLayout(in page: UIView) -> LandscapeLayout? {
+        guard isLandscapeTwoColumn(page) else {
+            clearLandscapeLayout()
+            return nil
+        }
+        guard let stack = bottomStackView(in: page) else { return nil }
+        if landscapePage === page, landscapeStack === stack,
+           landscapeBounds.equalTo(page.bounds), let cached = landscapeLayoutCache {
+            return cached
+        }
+        let stackRect = NowPlayingLyricsPlate.untransformed(stack, in: page)
+        guard stackRect.width > 1, stackRect.height > 1 else { return nil }
+        let inset = measureLandscapeInset(in: page, stackRect: stackRect)
+        let columns = LayoutGeometry.landscapeColumns(
+            size: page.bounds.size,
+            // 左栏左线 = 那一坨的内容左线（竖屏是 28：与进度条 / 标题同一条线）。
+            leftInset: max(8, stackRect.minX + inset),
+            topInset: max(16, page.safeAreaInsets.top + 8),
+            bottomInset: max(12, page.safeAreaInsets.bottom + 6),
+            rightInset: max(24, page.safeAreaInsets.right + 8)
+        )
+        let layout = LandscapeLayout(
+            column: columns.column,
+            cover: columns.cover,
+            lyrics: columns.lyrics,
+            stackLeft: stackRect.minX,
+            stackInset: inset
+        )
+        landscapePage = page
+        landscapeStack = stack
+        landscapeBounds = page.bounds
+        landscapeLayoutCache = layout
+        return layout
+    }
+
+    /// 那一坨的内容内边距：进度条左边线减那一坨的左边线（竖屏 28−4 = 24）。
+    private static func measureLandscapeInset(in page: UIView, stackRect: CGRect) -> CGFloat {
+        if let progress = progressUnit(in: page) {
+            let rect = progress.convert(progress.bounds, to: page)
+            let inset = rect.minX - stackRect.minX
+            if inset > 0, inset < 60 { return inset }
+        }
+        return 24
+    }
+
+    private static func clearLandscapeLayout() {
+        landscapePage = nil
+        landscapeStack = nil
+        landscapeBounds = .zero
+        landscapeLayoutCache = nil
+    }
+
+    /// 收窄那一坨、挪到封面下面。返回这一拍有没有写东西。
+    @discardableResult
+    private static func placeLandscapeStack(
+        _ stack: UIView,
+        base: CGAffineTransform,
+        layout: LandscapeLayout,
+        in page: UIView
+    ) -> Bool {
+        var changed = false
+        if landscapeNarrowedStack !== stack {
+            // 换了一坨（换页 / 换歌）：先把上一坨写回原样，再记下这一坨的原值。
+            restoreLandscapeStackIfNeeded()
+            landscapeNarrowedStack = stack
+            landscapeStackOriginalWidth = stack.bounds.width
+            landscapeStackOriginalCenterX = stack.center.x
+        }
+
+        let width = max(120, layout.column.width + layout.stackInset * 2)
+        if abs(stack.bounds.width - width) > 0.5 {
+            stack.bounds.size.width = width
+            changed = true
+        }
+        if let superview = stack.superview {
+            let leftInSuperview = superview.convert(
+                CGPoint(x: layout.stackLeft, y: 0),
+                from: page
+            ).x
+            let currentLeft = stack.center.x - stack.bounds.width / 2
+            if abs(currentLeft - leftInSuperview) > 0.5 {
+                stack.center = CGPoint(
+                    x: leftInSuperview + stack.bounds.width / 2,
+                    y: stack.center.y
+                )
+                changed = true
+            }
+        }
+
+        // 竖直：整块落到封面下面。`untransformed` 得到的是**没有我们这条 transform** 的位置，
+        // 再补回 `base` 自带的那点位移 —— 否则每次写 transform 都会把自己叠一次。
+        let rawTop = NowPlayingLyricsPlate.untransformed(stack, in: page).minY
+        let baseTop = rawTop + base.ty
+        let safeBottom = page.bounds.height - max(12, page.safeAreaInsets.bottom + 6)
+        var dy = (layout.cover.maxY + 14) - baseTop
+        if baseTop + stack.bounds.height + dy > safeBottom {
+            dy = max(0, safeBottom - stack.bounds.height - baseTop)
+        }
+        let wanted = base.concatenating(CGAffineTransform(translationX: 0, y: dy))
+        if stack.transform != wanted {
+            stack.transform = wanted
+            changed = true
+        }
+        if changed {
+            // 宽度刚变 ⇒ 让栈当场重排（进度条 / 传输行要跟着缩），后面几件量位置才量得对。
+            stack.layoutIfNeeded()
+            NowPlayingPageOverlay.reapply()
+        }
+        logLandscapeLayoutOnce(layout, stack: stack, in: page)
+        return changed
+    }
+
+    private static func logLandscapeLayoutOnce(
+        _ layout: LandscapeLayout,
+        stack: UIView,
+        in page: UIView
+    ) {
+        guard !didLogLandscapeLayout else { return }
+        didLogLandscapeLayout = true
+        let rect = NowPlayingLyricsPlate.untransformed(stack, in: page)
+        let placed = stack.convert(stack.bounds, to: page)
+        writeDebugLog(
+            "[\(logTag)] landscape two columns — page \(Int(page.bounds.width))×\(Int(page.bounds.height))"
+                + ", column \(Int(layout.column.minX)),\(Int(layout.column.minY))"
+                + " \(Int(layout.column.width))×\(Int(layout.column.height))"
+                + ", cover \(Int(layout.cover.width))"
+                + ", lyrics \(Int(layout.lyrics.minX))…\(Int(layout.lyrics.maxX))"
+                + "; stack \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
+                + " → \(Int(layout.column.width + layout.stackInset * 2)) wide"
+                + ", placed \(Int(placed.minX)),\(Int(placed.minY))"
+        )
+    }
+
+    /// 把那一坨的宽度 / 横位写回原样（转回竖屏、离开页面、关开关时）。
+    private static func restoreLandscapeStackIfNeeded() {
+        guard let stack = landscapeNarrowedStack else { return }
+        if let width = landscapeStackOriginalWidth, abs(stack.bounds.width - width) > 0.5 {
+            stack.bounds.size.width = width
+        }
+        if let centerX = landscapeStackOriginalCenterX, abs(stack.center.x - centerX) > 0.5 {
+            stack.center = CGPoint(x: centerX, y: stack.center.y)
+        }
+        landscapeNarrowedStack = nil
+        landscapeStackOriginalWidth = nil
+        landscapeStackOriginalCenterX = nil
+    }
+
     // MARK: - 布局
 
     @discardableResult
@@ -721,6 +923,11 @@ enum NowPlayingIOS27 {
     /// 抽出来是因为「歌词区左下角那行来源」也要贴同一个底边（`placeLyricsCredit`），
     /// 两处各算一份的话改一个数就会错位。
     private static func lyricsStageFrame(in page: UIView) -> CGRect? {
+        // 横屏两栏：歌词就是**右栏那一整块**，不再从缩略图与进度条之间挤。
+        if let layout = landscapeLayout(in: page) {
+            guard layout.lyrics.width > 80, layout.lyrics.height > 80 else { return nil }
+            return layout.lyrics
+        }
         // 进度条也必须找**当前可见页**那一份 —— pager 里相邻页的副本在 y≈-413，
         // 用它算出来的高度是负数 ⇒ `guard bottom - top > 80` 永远不过，歌词容器就永远不铺。
         // 见 `progressUnit(in:)`。
@@ -1058,7 +1265,7 @@ enum NowPlayingIOS27 {
             imageView.frame = wanted
             changed = true
         }
-        if applyArtworkMode(to: imageView) { changed = true }
+        if applyArtworkMode(to: imageView, in: page) { changed = true }
         // 动效封面（见 `NowPlayingMotionArtwork`）：同一张封面上再铺一层短片。
         // ⚠️ 必须排在 frame / 形状之后 —— 它跟着 `imageView.bounds` 走，先铺就会慢一拍。
         syncMotionArtwork(on: imageView)
@@ -1111,18 +1318,24 @@ enum NowPlayingIOS27 {
     /// 抽出来的理由：`updateArtwork`（有壳）和 `syncArtworkFrameWithoutShell`（没壳）
     /// 必须**用同一份几何**，否则"有壳时缩、没壳时停在上一帧"这种半成品又会回来。
     private static func artworkFrame(in page: UIView, host: UIView) -> CGRect {
+        // 横屏两栏：封面是左栏顶部那个方块（见 `landscapeLayout`）。
+        if let layout = landscapeLayout(in: page) {
+            return host.convert(layout.cover, from: page)
+        }
         if lyricsModeActive {
             return host.convert(lyricsThumbFrame(in: page), from: page)
         }
         return fullBleedArtworkFrame(in: page, host: host)
     }
 
-    /// 让一张**已经画出来的**封面服从当前模式：满幅 ⇄ 64pt 缩略图，
+    /// 让一张**已经画出来的**封面服从当前模式：满幅 ⇄ 方块缩略图，
     /// 连同圆角 / 裁剪 / 下沿淡出 mask 一起换（三样必须同进同退）。
     @discardableResult
-    private static func applyArtworkMode(to imageView: UIImageView) -> Bool {
+    private static func applyArtworkMode(to imageView: UIImageView, in page: UIView) -> Bool {
+        // 横屏两栏的封面也是方块那一档（圆角 + 裁剪，不铺满）。
+        let compact = lyricsModeActive || landscapeLayout(in: page) != nil
         var changed = false
-        if lyricsModeActive {
+        if compact {
             if imageView.layer.cornerRadius != Self.lyricsThumbCorner {
                 imageView.layer.cornerRadius = Self.lyricsThumbCorner
                 imageView.layer.cornerCurve = .continuous
@@ -1243,7 +1456,7 @@ enum NowPlayingIOS27 {
                 )
             }
         }
-        if applyArtworkMode(to: view) { changed = true }
+        if applyArtworkMode(to: view, in: page) { changed = true }
         // 这一拍没认出封面壳、只有记下来的宿主 —— 动效封面照旧跟着摆（幂等）。
         syncMotionArtwork(on: view)
         return changed
@@ -1622,8 +1835,16 @@ enum NowPlayingIOS27 {
             bottomStackBase = (key, base)
         }
 
-        // 横屏不收这 -55pt：414pt 高的屏上底排本来就贴着底，再抬就压进歌词区
-        // （见 `bottomStackOffset(in:)`）。竖屏的值不变。
+        // 横屏两栏：这一坨收窄到左栏、整块挪到封面下面（见 `placeLandscapeStack`）。
+        if let layout = landscapeLayout(in: page) {
+            return placeLandscapeStack(stack, base: base, layout: layout, in: page)
+        }
+        // 转回竖屏 / 关掉横屏：把收窄过的宽度与横位写回原样，再按竖屏的偏移抬。
+        restoreLandscapeStackIfNeeded()
+        clearLandscapeLayout()
+
+        // 横屏（未开两栏那一档）不收这 -55pt：414pt 高的屏上底排本来就贴着底，
+        // 再抬就压进歌词区（见 `bottomStackOffset(in:)`）。竖屏的值不变。
         let offset = bottomStackOffset(in: page)
         let wanted = base.concatenating(
             CGAffineTransform(translationX: 0, y: offset)
@@ -1656,8 +1877,10 @@ enum NowPlayingIOS27 {
         while !queue.isEmpty, visited < 3000 {
             let view = queue.removeFirst()
             visited += 1
+            // 横屏两栏会把这一坨收窄到左栏（中线落在页宽 ≈ 21%）—— 默认的 20% 闸门
+            // 正好贴着那条线，这里按"中线还在页面横向范围内"认（离屏 pager 副本在 ±页宽 外）。
             if view.accessibilityIdentifier == NowPlayingLyricsPlate.bottomStackIdentifier,
-               isControlOnPage(view, in: page) {
+               isControlOnPage(view, in: page, horizontalMargin: 0) {
                 return view
             }
             queue.append(contentsOf: view.subviews)
@@ -1698,6 +1921,14 @@ enum NowPlayingIOS27 {
             titleRowBaseRect = (key, natural)
         }
         guard natural.width > 1, natural.height > 1 else { return false }
+
+        // 横屏两栏：标题就留在**左栏那一坨里的原生位置**（封面下面第一行），
+        // 只把竖屏 / 歌词模式留下的位移还回去 —— 再按缩略图挪就叠到封面上了。
+        if landscapeLayout(in: page) != nil {
+            guard row.transform != base else { return false }
+            row.transform = base
+            return true
+        }
 
         let dx: CGFloat
         let dy: CGFloat
@@ -2266,6 +2497,10 @@ enum NowPlayingIOS27 {
         }
         didLogRestore = true
 
+        // 横屏收窄过的那一坨：宽度 / 横位写回原样（transform 由下面那段统一还原）。
+        restoreLandscapeStackIfNeeded()
+        clearLandscapeLayout()
+
         revealShells()
         revealChrome()
         // 藏掉的原生字形（循环 / 工具行三颗）—— 与 `revealChrome` 同一套写法，只是目标另一组。
@@ -2293,6 +2528,9 @@ enum NowPlayingIOS27 {
 
     private static func clearState() {
         lyricsModeActive = false
+        restoreLandscapeStackIfNeeded()
+        clearLandscapeLayout()
+        didLogLandscapeLayout = false
         // 动效封面：连素材与解析结果一起收（这一页的账本本来就是"清干净"，见文件头）。
         NowPlayingMotionArtwork.detach()
         lyricsDissolveView?.removeFromSuperview()
@@ -2430,6 +2668,12 @@ enum NowPlayingIOS27 {
         guard let row = titleRow, row.window != nil else { return false }
         let rect = row.convert(row.bounds, to: page)
         guard rect.width > 1, rect.height > 1 else { return false }
+        // 横屏两栏：标题**不**贴缩略图，就留在左栏那一坨里 —— 只要它真的落在左栏内
+        // 就算到位（歌词容器在右栏，不会盖住它）。
+        if let layout = landscapeLayout(in: page) {
+            return rect.minX >= layout.column.minX - 40
+                && rect.midX < layout.column.maxX + 8
+        }
         let thumb = lyricsThumbFrame(in: page)
         // 中线在缩略图上下各 16pt 以内，且**没有**还停在原生 y（两者差 300+pt 一眼能分开）。
         return abs(rect.midY - thumb.midY) < 16
