@@ -920,6 +920,39 @@ enum NowPlayingIOS27 {
         landscapeStackOriginalCenterX = nil
     }
 
+    /// 横屏两栏里那颗「收藏 ✓」没有位置：原生把它浮在**内容右上**，横过来正好落在歌词栏里。
+    /// 只藏 `alpha` 并记原值（收藏本身还在 ⋯ 菜单里），转回竖屏 / 收尾写回。
+    private static weak var landscapeLikeButton: UIView?
+    private static var landscapeLikeButtonAlpha: CGFloat?
+
+    private static func hideLandscapeFloatingChrome(in page: UIView) {
+        // 认下来的那一颗还在 ⇒ 不再整页 BFS（这条每 0.3s 一拍）。
+        if let existing = landscapeLikeButton, existing.window != nil,
+           isControlOnPage(existing, in: page, requireAlpha: false, horizontalMargin: 0) {
+            if existing.alpha != 0 { existing.alpha = 0 }
+            return
+        }
+        guard let like = visibleView(identifier: "Components.UI.AddToButton", in: page) else {
+            restoreLandscapeFloatingChrome()
+            return
+        }
+        if landscapeLikeButton !== like {
+            restoreLandscapeFloatingChrome()
+            landscapeLikeButton = like
+            landscapeLikeButtonAlpha = like.alpha > 0.01 ? like.alpha : 1
+        }
+        if like.alpha != 0 { like.alpha = 0 }
+    }
+
+    private static func restoreLandscapeFloatingChrome() {
+        if let like = landscapeLikeButton, let alpha = landscapeLikeButtonAlpha,
+           like.alpha != alpha {
+            like.alpha = alpha
+        }
+        landscapeLikeButton = nil
+        landscapeLikeButtonAlpha = nil
+    }
+
     // MARK: - 布局
 
     @discardableResult
@@ -1935,10 +1968,12 @@ enum NowPlayingIOS27 {
 
         // 横屏两栏：这一坨收窄到左栏、整块挪到封面下面（见 `placeLandscapeStack`）。
         if let layout = landscapeLayout(in: page) {
+            hideLandscapeFloatingChrome(in: page)
             return placeLandscapeStack(stack, base: base, layout: layout, in: page)
         }
         // 转回竖屏 / 关掉横屏：把收窄过的宽度与横位写回原样，再按竖屏的偏移抬。
         restoreLandscapeStackIfNeeded()
+        restoreLandscapeFloatingChrome()
         clearLandscapeLayout()
 
         // 横屏（未开两栏那一档）不收这 -55pt：414pt 高的屏上底排本来就贴着底，
@@ -2597,6 +2632,7 @@ enum NowPlayingIOS27 {
 
         // 横屏收窄过的那一坨：宽度 / 横位写回原样（transform 由下面那段统一还原）。
         restoreLandscapeStackIfNeeded()
+        restoreLandscapeFloatingChrome()
         clearLandscapeLayout()
 
         revealShells()
@@ -2627,6 +2663,7 @@ enum NowPlayingIOS27 {
     private static func clearState() {
         lyricsModeActive = false
         restoreLandscapeStackIfNeeded()
+        restoreLandscapeFloatingChrome()
         clearLandscapeLayout()
         didLogLandscapeLayout = false
         // 动效封面：连素材与解析结果一起收（这一页的账本本来就是"清干净"，见文件头）。
