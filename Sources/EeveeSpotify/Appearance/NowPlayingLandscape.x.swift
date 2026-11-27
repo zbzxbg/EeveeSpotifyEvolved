@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Orion
+import ObjectiveC.runtime
 
 // 横屏听歌页。
 //
@@ -113,6 +114,133 @@ enum NowPlayingLandscape {
         if mask.contains(.landscapeLeft) { parts.append("landscapeLeft") }
         if mask.contains(.landscapeRight) { parts.append("landscapeRight") }
         return parts.isEmpty ? "none" : parts.joined(separator: "+")
+    }
+
+    // MARK: - VC 那一层（真正拦横屏的地方）
+
+    /// 这一层 VC 该不该放宽朝向。
+    ///
+    /// 只认"视图里真的托着听歌页"的那几层（听歌页自己的 VC 与它的容器）：盖在上面的
+    /// sheet / 设置页 / 别的标签页一律原样返回，否则整个 App 都能转。
+    static func widens(_ controller: UIViewController) -> Bool {
+        guard isEnabled else { return false }
+        return onMainThreadValue(false) {
+            guard let page = NowPlayingIOS27.lastPage, page.window != nil else { return false }
+            guard let host = controller.viewIfLoaded else { return false }
+            return host === page || page.isDescendant(of: host)
+        }
+    }
+
+    private static var loggedControllerWidened: Bool?
+
+    static func noteControllerMask(
+        _ type: AnyClass,
+        original: UIInterfaceOrientationMask,
+        widened: UIInterfaceOrientationMask
+    ) {
+        let isWidened = widened != original
+        guard loggedControllerWidened != isWidened else { return }
+        loggedControllerWidened = isWidened
+        writeDebugLog(
+            "[\(logTag)] view controller mask \(describe(original)) → \(describe(widened))"
+                + " (\(NSStringFromClass(type)))"
+        )
+    }
+
+    /// 第一次真的被问"这一层能不能转"时，把整条 VC 链打一遍（那一刻听歌页确实在屏上）。
+    private static var didProbeChain = false
+
+    static func noteChainProbeOnce() {
+        guard !didProbeChain else { return }
+        didProbeChain = true
+        probeOrientationChain("first query with the player on screen")
+    }
+
+    /// 一次性诊断：从根 VC 走到最上层，逐层打"允许什么朝向 / 能不能转 / 是不是自己实现的"。
+    ///
+    /// 为什么需要：`supportedInterfaceOrientations` 是**子类实现优先**的（与
+    /// `EntityPageStatusBar.x.swift` 里那条教训同一个机制）⇒ 挂在 `UIViewController` 上的
+    /// swizzle 会被"自己实现了它"的容器 VC 整个挡住。不把这串链打出来就只能猜是谁在拦。
+    static func probeOrientationChain(_ reason: String) {
+        onMainThreadSync {
+            guard let window = currentKeyWindow() else {
+                writeDebugLog("[\(logTag)] orientation chain (\(reason)) — no key window")
+                return
+            }
+            let maskSelector = #selector(getter: UIViewController.supportedInterfaceOrientations)
+            let rotateSelector = #selector(getter: UIViewController.shouldAutorotate)
+            var controller = window.rootViewController
+            var depth = 0
+            while let current = controller, depth < 8 {
+                let type = type(of: current)
+                writeDebugLog(
+                    "[\(logTag)] chain[\(depth)] \(NSStringFromClass(type))"
+                        + " mask=\(describe(current.supportedInterfaceOrientations))"
+                        + " autorotate=\(current.shouldAutorotate)"
+                        + " ownMask=\(implementsItself(type, maskSelector))"
+                        + " ownAutorotate=\(implementsItself(type, rotateSelector))"
+                )
+                controller = current.presentedViewController
+                    ?? (current as? UINavigationController)?.topViewController
+                    ?? (current as? UITabBarController)?.selectedViewController
+                depth += 1
+            }
+        }
+    }
+
+    private static func currentKeyWindow() -> UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+    }
+
+    /// 这个类**自己**实现了这个方法吗（而不是从 `UIViewController` 继承来的）。
+    ///
+    /// 与 `EntityPageStatusBar.ownsStatusBarStyle` 同一个手法（那个只问状态栏那一个选择器）；
+    /// 这里要问两个选择器，所以写成带参的。
+    private static func implementsItself(_ type: AnyClass, _ selector: Selector) -> Bool {
+        var count: UInt32 = 0
+        guard let methods = class_copyMethodList(type, &count) else { return false }
+        defer { free(methods) }
+        for index in 0..<Int(count) where method_getName(methods[index]) == selector {
+            return true
+        }
+        return false
+    }
+}
+
+/// **VC 那一层的闸门** —— 真机上拦横屏的是它，不是 App delegate。
+///
+/// App delegate 的遮罩本来就含横屏（`allButUpsideDown` = 竖屏 + 左右横屏），所以"放宽
+/// delegate"在真机上经常是空转；而 UIKit 的判据是
+/// **app delegate 遮罩 ∩ 顶层 VC 的 `supportedInterfaceOrientations`** ⇒ 后者返回竖屏时，
+/// 设备横过来屏幕一动不动。这里按"这一层托着听歌页、且开关打开"放宽，别的一律 `orig`。
+///
+/// ⚠️ `supportedInterfaceOrientations` 是子类实现优先的：如果 Spotify 的容器 VC 自己实现了，
+/// 这个 `UIViewController` 级的 swizzle 会被挡住（见 `EntityPageStatusBar.x.swift` 里同样的
+/// 教训）。真遇到那种情况，`probeOrientationChain` 打出的 `[Landscape] chain[…]` 会直接
+/// 点出是哪一层、以及它是不是自己实现的。
+class PlayerOrientationHook: ClassHook<UIViewController> {
+    typealias Group = NowPlayingLandscapeGroup
+    static let targetName = "UIViewController"
+
+    func supportedInterfaceOrientations() -> UIInterfaceOrientationMask {
+        let original = orig.supportedInterfaceOrientations()
+        guard NowPlayingLandscape.widens(target) else { return original }
+        NowPlayingLandscape.noteChainProbeOnce()
+        let widened = original.union(.landscape)
+        NowPlayingLandscape.noteControllerMask(
+            type(of: target),
+            original: original,
+            widened: widened
+        )
+        return widened
+    }
+
+    func shouldAutorotate() -> Bool {
+        if NowPlayingLandscape.widens(target) { return true }
+        return orig.shouldAutorotate()
     }
 }
 
