@@ -121,10 +121,27 @@ struct AppleMusicLyricsOverlayView: View {
         if showsPreviewHeader {
             return .preview
         }
-        return .player.applyingUserScale(
+        // 播放器这一档：竖屏是 `.player`；横屏两栏的右栏又宽又矮，换 `.landscape`
+        // （字号与块距一起小一档，AMLL 那种多子行的歌词才塞得下，见那个常量的说明）。
+        // 只有"主词之外还有子行"的歌词才收：纯主词的歌在横屏按小字号排反而显得字太小。
+        let base: LyricsTypographyScale =
+            (lyricsUsesLandscapeDensity && Self.hasSupplementalRows(in: lines))
+            ? .landscape
+            : .player
+        return base.applyingUserScale(
             text: NgzhwmSettingsViewModel.lyricsTextScale,
             spacing: NgzhwmSettingsViewModel.lyricsLineSpacingScale
         )
+    }
+
+    /// 这一首有没有"主词之外"的子行（译文 / 罗马字 / 副唱）。
+    private static func hasSupplementalRows(in lines: [LyricLine]) -> Bool {
+        lines.contains { line in
+            if let translation = line.translation, !translation.isEmpty { return true }
+            if let romanization = line.romanization, !romanization.isEmpty { return true }
+            if let vocal = line.backgroundVocal, !vocal.text.isEmpty { return true }
+            return false
+        }
     }
 
     /// **译文要不要画** —— 尊重"歌词页面"里的那套选择。
@@ -200,7 +217,7 @@ struct AppleMusicLyricsOverlayView: View {
                         // （`legacyFadeStops` 的 `fadeTopRatio = 0.08`，容器 378pt ⇒ 约 30pt）
                         // 会把第一行压暗。原来有标题栏时内容从 45pt 开始、正好在淡出带之下 ——
                         // 这里留 24pt（加上 `scrollInsets` 里那次同样的加法 ⇒ 实际 48pt）保持同样的"干净起点"。
-                        top: showsProviderFooter ? 8 : (showsPreviewHeader ? 6 : 24),
+                        top: showsProviderFooter ? 8 : (showsPreviewHeader ? 6 : (lyricsUsesLandscapeDensity ? 12 : 24)),
                         leading: sideInset,
                         // **底边距也要分档** —— 三档共用 120 是错的。
                         //
@@ -225,7 +242,7 @@ struct AppleMusicLyricsOverlayView: View {
                         // ⚠️ 预览那一档的 **120 一个字都不改**：卡片只有 320pt、歌词常常只有三四行，
                         // 那 120 是**为了让内容比视口高**（否则 `scrollTo(anchor: .center)`
                         // 无从生效、当前行居不了中）—— 理由见上面 `top:` 那段；全屏的 46 同样不动。
-                        bottom: showsProviderFooter ? 46 : (showsPreviewHeader ? 120 : 24),
+                        bottom: showsProviderFooter ? 46 : (showsPreviewHeader ? 120 : (lyricsUsesLandscapeDensity ? 12 : 24)),
                         trailing: sideInset
                     ),
                     // 分档按「是不是全屏」决定：

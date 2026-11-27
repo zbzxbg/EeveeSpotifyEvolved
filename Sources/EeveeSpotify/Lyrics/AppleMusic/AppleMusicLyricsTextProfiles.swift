@@ -140,6 +140,23 @@ struct LyricsTypographyScale {
         supplementalSpacing: 3
     )
 
+    /// 横屏两栏的右栏：**又宽又矮**（896×414 上是 ≈497×366）。
+    ///
+    /// 同一句在横屏里更宽（不太折行），但一屏能容纳的块数由**高度**决定：
+    /// AMLL 那种「对唱 + 歌手名 + 副唱 + 译文 + 罗马字」一行能长出三四条子行，
+    /// 按 `.player` 的 22 / 17 排，一屏只剩两块多一点 —— 现在的行还没唱完就滑走了。
+    ///
+    /// 所以横屏单独一档：正文 18、补充 13、块距 13。块距来自 `AppleMusicLyricsPage`
+    /// 的 `typography.lineSpacing + max(lineSpacing*0.6, 4)`，一起跟着缩，不会只缩字不缩间距。
+    /// 用户那两档倍率照旧乘在上面（`applyingUserScale`），放大字号的人不会被这一档锁死。
+    static let landscape = Self(
+        primaryFontSize: 18,
+        supplementalFontSize: 13,
+        lineSpacing: 13,
+        wrappedLineSpacing: 4,
+        supplementalSpacing: 3
+    )
+
     /// 按系数派生一档，用于副唱（背景人声）这种"同一行里更小的一层"。
     ///
     /// 行距**不缩放**：它是绝对值（pt），跟着字号等比缩会算出 4~5pt 这种
@@ -174,3 +191,12 @@ struct LyricsTypographyScale {
         )
     }
 }
+
+/// 播放器里的歌词现在是不是**横屏右栏**那一档（要换 `.landscape` 排版）。
+///
+/// 为什么用全局而不是参数：`AppleMusicLyricsOverlayView.pageTypography` 在 SwiftUI 的
+/// `body` 里按需读，而宿主 `update` 在"布局参数没变"时会提前 return —— 推入的参数会停在
+/// 旧值（`provider` 那个坑同源）。`body` 每帧都会重新求值（时间轴时钟），读全局天然最新。
+///
+/// 由 `NowPlayingIOS27` 每一拍写入（它是唯一知道"这一页现在是横屏两栏"的地方）。
+var lyricsUsesLandscapeDensity = false
