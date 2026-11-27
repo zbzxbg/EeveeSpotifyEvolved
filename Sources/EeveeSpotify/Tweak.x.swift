@@ -463,6 +463,10 @@ struct EeveeSpotify: Tweak {
         // 做法照 spoti.pw v0.21.1 的 `PlayerControls.x`（GPL-3.0），见 `NowPlayingControlsPlate` 文件头。
         activateNowPlayingControls()
 
+        // 横屏听歌页的方向闸门（放宽窗口遮罩 + 转过来之后进整页歌词）。
+        // 目标类缺失只记一行 —— 这个功能整体不生效，App 照常竖屏跑。
+        activateNowPlayingLandscape()
+
         // 换歌那一瞬间的"大封面闪一下"—— **事件驱动**地按住封面。
         // 那条每 0.3s 的复查节拍永远追不上"新封面刚建好"的那一帧（见 `CoverFlashGuard.x.swift`）。
         activateCoverFlashGuard()

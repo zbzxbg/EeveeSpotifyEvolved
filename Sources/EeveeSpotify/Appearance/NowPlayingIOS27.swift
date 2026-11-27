@@ -360,7 +360,13 @@ enum NowPlayingIOS27 {
     /// 只做三件事：封面缩成 64pt 缩略图、标题行挪到缩略图右边、歌词铺在中间；
     /// 底部按钮（进度/传输/音量/三颗字形）全部保持 iOS 27 的样子。
     static func toggleLyricsMode(in page: UIView) {
-        setLyricsMode(!lyricsModeActive, in: page)
+        let next = !lyricsModeActive
+        // 横屏下用户自己关掉的歌词模式要**认**：不然下一拍 `syncLandscapeMode` 又把它打开，
+        // 开关看起来像坏了。转过竖屏这个记性就清掉。
+        if isLandscapePage(page) {
+            landscapeLyricsOffByUser = !next
+        }
+        setLyricsMode(next, in: page)
     }
 
     static func setLyricsMode(_ on: Bool, in page: UIView) {
@@ -554,11 +560,70 @@ enum NowPlayingIOS27 {
         return false
     }
 
+    // MARK: - 横屏
+    //
+    // 「横屏听歌页」（设置 → 听歌页 → 横屏歌词）落地的那一半：方向遮罩由
+    // `NowPlayingLandscape.x.swift` 放宽，这里只负责**转过来之后怎么排**。
+    //
+    // 只做两件事，别的都交给既有的歌词模式：
+    // 1. 横着就进"页内歌词"（封面缩成缩略图、歌词铺满），转回竖屏时**只收自己开的那次**；
+    // 2. 底排的 -55pt 抬升在横屏下收回去（414pt 高的屏上再抬 55 就把底排顶进歌词里）。
+    //
+    // 为什么不上"封面在左、歌词在右"的两栏：那要重排 Spotify 自己的标题行 / 进度 /
+    // 传输行（它们是原生视图，横向位置是 `placeFooter` 按 414 宽写死的 86/207/328），
+    // 这一版先不碰 —— 横屏拿到的是"整页歌词"，与 pw 设置里那句 "full-screen lyrics" 一致。
+
+    static func isLandscapePage(_ page: UIView) -> Bool {
+        page.bounds.width > page.bounds.height + 1
+    }
+
+    /// 横屏自动进歌词模式这件事**只收自己开的**：用户在竖屏下自己开的歌词模式，
+    /// 转回竖屏后不能替他关掉。
+    private static var lyricsModeOpenedByLandscape = false
+
+    /// 用户在横屏下**亲手关掉**过歌词模式 —— 这一轮横屏里不再自动打开（转回竖屏后清掉）。
+    private static var landscapeLyricsOffByUser = false
+
+    private static func syncLandscapeMode(in page: UIView) {
+        guard NowPlayingLandscape.isEnabled else {
+            if lyricsModeOpenedByLandscape {
+                lyricsModeOpenedByLandscape = false
+                setLyricsMode(false, in: page)
+            }
+            landscapeLyricsOffByUser = false
+            return
+        }
+
+        let landscape = isLandscapePage(page)
+        if !landscape {
+            landscapeLyricsOffByUser = false
+        }
+
+        if landscape, !lyricsModeActive, !landscapeLyricsOffByUser {
+            lyricsModeOpenedByLandscape = true
+            writeDebugLog("[\(logTag)] landscape — lyrics mode on for the rotated page")
+            setLyricsMode(true, in: page)
+        } else if !landscape, lyricsModeOpenedByLandscape, lyricsModeActive {
+            lyricsModeOpenedByLandscape = false
+            writeDebugLog("[\(logTag)] portrait again — lyrics mode off")
+            setLyricsMode(false, in: page)
+        }
+    }
+
+    /// 底排上移多少：竖屏 -55（见 `bottomStackYOffset`），横屏 0。
+    static func bottomStackOffset(in page: UIView) -> CGFloat {
+        isLandscapePage(page) ? 0 : bottomStackYOffset
+    }
+
     // MARK: - 布局
 
     @discardableResult
     private static func layout(in page: UIView) -> Bool {
         var changed = false
+        // 横屏：整页的宽高已经调过来了 ⇒ 先进"页内歌词"，后面的每一拍都按新模式摆。
+        // 必须排在 `placeBottomStack` 之前：底排的偏移量在横屏下要收回去（见
+        // `bottomStackOffset(in:)`），晚一步就会先按 -55pt 摆一次再改回来。
+        syncLandscapeMode(in: page)
         // 封面壳还没认出来时也要让"元数据封面"开始加载（它不依赖壳）。
         if let trackId = NowPlayingLyricsPlate.currentTrackId() {
             refreshMetadataArtwork(trackId: trackId)
@@ -1535,8 +1600,11 @@ enum NowPlayingIOS27 {
             bottomStackBase = (key, base)
         }
 
+        // 横屏不收这 -55pt：414pt 高的屏上底排本来就贴着底，再抬就压进歌词区
+        // （见 `bottomStackOffset(in:)`）。竖屏的值不变。
+        let offset = bottomStackOffset(in: page)
         let wanted = base.concatenating(
-            CGAffineTransform(translationX: 0, y: bottomStackYOffset)
+            CGAffineTransform(translationX: 0, y: offset)
         )
         guard stack.transform != wanted else { return false }
         stack.transform = wanted
@@ -1551,7 +1619,7 @@ enum NowPlayingIOS27 {
             let rect = stack.convert(stack.bounds, to: page)
             let title = titleRowView(in: page).map { $0.convert($0.bounds, to: page) }
             writeDebugLog(
-                "[\(logTag)] bottom stack lifted \(Int(bottomStackYOffset))pt —"
+                "[\(logTag)] bottom stack lifted \(Int(offset))pt —"
                     + " \(Int(rect.minY))…\(Int(rect.maxY))"
                     + (title.map { ", title row y \(Int($0.minY))" } ?? "")
             )
@@ -2145,6 +2213,12 @@ enum NowPlayingIOS27 {
     //
     // 关开关 / 离开页面：把写过的每一处写回去，拆掉我们自己的视图。
     static func restore(reason: String) {
+        // 离开听歌页就把方向遮罩收回去 —— 否则 App 会在别处也能横过来（那几个页面
+        // 是按竖屏排的）。只在这一层"真的收尾"时问一次，代价是一次方法调用。
+        if lyricsModeOpenedByLandscape {
+            lyricsModeOpenedByLandscape = false
+        }
+        NowPlayingLandscape.refreshOrientation()
         // 页内歌词先收（它不参与 `hadState` 的账，但必须先拆掉容器与化开层）。
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil

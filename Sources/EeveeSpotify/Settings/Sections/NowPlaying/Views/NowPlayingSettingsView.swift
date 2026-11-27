@@ -30,6 +30,8 @@ struct NowPlayingSettingsView: View {
         /// （「修改Spotify听歌页布局」+「iOS 27 听歌页」）。取值仍由那两个键推出，
         /// 见 `NowPlayingStyle` 的文件头。
         var style = UserDefaults.nowPlayingStyle
+        /// 横屏歌词（只在 AM 布局下显示）。见 `NowPlayingLandscape`。
+        var landscapeLyrics = UserDefaults.nowPlayingLandscapeLyrics
         // ── 清爽：不属于总开关，各占一行 ──
         var hideMiniPlayerBar = UserDefaults.hideMiniPlayerBar
         /// 从「首页与音乐库」搬来（传输条上那两颗按钮，见 declutter 那一节）。
@@ -82,6 +84,26 @@ struct NowPlayingSettingsView: View {
                 // （下拉关闭是经过列表那一层接管的，那个属性是链条的一环）。
                 // 列表拖拽时剩下的那点橡皮筋是"一屏"**无法消除**的残留 ——
                 // 要碰它就得先有办法自己接管关闭手势。理由写在 `NowPlayingOneScreen` 文件头。
+            }
+
+            // 横屏歌词 —— 只在 AM 布局下有意义：那一版是我们自己排的（`NowPlayingIOS27`），
+            // 横过来能重排成"整页歌词"；旧那版是 Spotify 原生版式，转了只是被拉长的竖屏。
+            if shadow.style == .appleMusic {
+                Section(
+                    header: Text("now_playing_landscape_section".localized),
+                    footer: Text("now_playing_landscape_footer".localized)
+                ) {
+                    Toggle(
+                        "now_playing_landscape".localized,
+                        isOn: settingsShadowBinding($shadow.landscapeLyrics) { value in
+                            UserDefaults.nowPlayingLandscapeLyrics = value
+                            // 开关一动就要让 UIKit 重新问方向：打开时立刻能横过来，
+                            // 关掉时（若正横着）当场转回去。
+                            NowPlayingLandscape.refreshOrientation()
+                            NowPlayingIOS27.reapply()
+                        }
+                    )
+                }
             }
 
             Section {

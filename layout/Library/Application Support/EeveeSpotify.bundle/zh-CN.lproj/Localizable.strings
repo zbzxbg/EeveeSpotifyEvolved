@@ -667,6 +667,10 @@ now_playing_style = "听歌页样式";
 now_playing_style_spotify = "Spotify原生";
 now_playing_style_apple_music = "Apple Music式";
 now_playing_style_description = "若选择 Spotify 原生，则保留 Spotify 自己的听歌页版式；若选择 Apple Music 式，则听歌页仿照 Apple Music。";
+// 横屏歌词（2026-11-27）：Spotify 本身只认竖屏，遮罩在 NowPlayingLandscape.x.swift 里放宽。
+now_playing_landscape_section = "横屏";
+now_playing_landscape = "横屏歌词";
+now_playing_landscape_footer = "把手机横过来，歌词铺满整页、封面缩成缩略图。竖屏方向锁定开着时不会转动。";
 // ── 听歌页「一屏」(2026-10-03)────────────────────────────────────────────
 // 把播放器下面的卡片全折起来 + 列表钉在它的顶部(kumone / Music app 那种"一屏一首歌")。
 // 思路与算法借自 spoti.pw v0.21.1(GPL-3.0)，见

@@ -77,6 +77,11 @@ extension UserDefaults {
     private static let nowPlayingLayoutKey = "nowPlayingLayout"
     /// 「iOS 27 听歌页」：满屏封面那一版布局，见 `NowPlayingIOS27`。
     private static let nowPlayingIOS27Key = "nowPlayingIOS27"
+    /// 「横屏歌词」：横过来把歌词铺满整页（封面缩成缩略图），见 `NowPlayingLandscape`。
+    ///
+    /// 只在 AM 布局（`nowPlayingIOS27`）下有意义 —— 那一版是我们自己排的；旧那版是
+    /// Spotify 原生版式，转过去只是一张被拉长的竖屏。
+    private static let nowPlayingLandscapeLyricsKey = "nowPlayingLandscapeLyrics"
     /// 「听歌页整页取色底」：把整页底色换成封面取色渐变，见 `nowPlayingBackdrop`。
     private static let nowPlayingBackdropKey = "nowPlayingBackdrop"
     private static let nowPlayingOneScreenKey = "nowPlayingOneScreen"
@@ -1224,8 +1229,20 @@ extension UserDefaults {
         }
     }
 
-    /// 「听歌页任一 AM 布局」= 旧总开关 **或** iOS 27 版。
+    /// 「横屏歌词」：横过来把歌词铺满整页（封面缩成缩略图、底部控件不收抬升）。
     ///
+    /// 默认关。只在 AM 布局（`nowPlayingIOS27`）下生效 —— 旧那版是 Spotify 原生版式，
+    /// 转过去只会得到一张被拉长的竖屏。方向的闸门见 `NowPlayingLandscape.x.swift`。
+    static var nowPlayingLandscapeLyrics: Bool {
+        get {
+            container.object(forKey: nowPlayingLandscapeLyricsKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: nowPlayingLandscapeLyricsKey)
+        }
+    }
+
+    /// 「听歌页任一 AM 布局」= 旧总开关 **或** iOS 27 版。
     /// 取色底 / 一屏 / 隐藏官方单行歌词 / 两颗胶囊这四件是**两版布局都需要**的，
     /// 所以它们的门写成 `nowPlayingAnyLayout && <子键>` —— 以后再加第三版布局时只需要改这一处。
     static var nowPlayingAnyLayout: Bool { nowPlayingLayout || nowPlayingIOS27 }
