@@ -222,6 +222,21 @@ enum EntityMotionArtwork {
             player.play()
         }
         player.play()
+
+        // **静态照片要让位**。
+        //
+        // 动图这一层自己带着那条"下沿化开"的 mask，也就是说它是**半透明**的；底下那张静态
+        // 照片如果还亮着，化开那一段就会看到两张不同的画面叠在一起（动图是舞蹈、照片是艺人
+        // 肖像时最明显）—— 观感就是"换成动图了，原图还在"。
+        //
+        // 但也不能建好就藏：`AVPlayerLayer` 在解出第一帧之前是空的，那几拍藏掉照片会露底。
+        // 所以挂在 item 的 `status` 上，`readyToPlay` 之后再藏。
+        statusObservation?.invalidate()
+        statusObservation = item.observe(\.status, options: [.new, .initial]) { item, _ in
+            guard item.status == .readyToPlay else { return }
+            DispatchQueue.main.async { hideStill(photo) }
+        }
+
         writeDebugLog("[\(logTag)] playing \(video.lastPathComponent) in \(type(of: host))")
         return view
     }
@@ -233,10 +248,34 @@ enum EntityMotionArtwork {
             NotificationCenter.default.removeObserver(observer)
             loopObserver = nil
         }
+        statusObservation?.invalidate()
+        statusObservation = nil
         player?.pause()
         player = nil
         playerView?.removeFromSuperview()
         playerView = nil
+        // 动图走了，静态照片必须回来（否则这一页就只剩底色）。
+        showStill()
+    }
+
+    // MARK: - 静态照片的让位 / 回来
+
+    /// 现在被我们藏起来的那张照片（弱引用：页面走了就自动松手）。
+    private static weak var hiddenStill: UIView?
+    /// 第一帧就绪的观察（`AVPlayerItem.status`）。
+    private static var statusObservation: NSKeyValueObservation?
+
+    private static func hideStill(_ photo: UIView) {
+        if let previous = hiddenStill, previous !== photo {
+            previous.isHidden = false
+        }
+        hiddenStill = photo
+        if !photo.isHidden { photo.isHidden = true }
+    }
+
+    private static func showStill() {
+        hiddenStill?.isHidden = false
+        hiddenStill = nil
     }
 
     // MARK: - 解析
