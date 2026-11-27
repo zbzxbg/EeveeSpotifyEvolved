@@ -113,6 +113,9 @@ enum EntityMotionArtwork {
     // MainActor 再写。
 
     private static var subjectBeingResolved: Subject?
+    /// 还没被认下的新主体 + 它连着被读到几拍（见 `attach` 里那段"划动会读错页头文字"）。
+    private static var pendingSubject: Subject?
+    private static var pendingTicks = 0
     private static var readyVideo: URL?
     private static var failedSubjects: Set<String> = []
     private static var resolveTask: Task<Void, Never>?
@@ -149,12 +152,31 @@ enum EntityMotionArtwork {
         let identity = subject.identity
 
         if subjectBeingResolved != subject {
+            // 页头文字在划动时会短暂读错：标题行滑出屏幕后，`albumTexts` 会退回"字号最大的
+            // 那个标签"，读出来的可能根本不是专辑名。一读错就换主体，会把正在播的动图拆掉、
+            // 重跑一次目录查询 —— 屏幕上就是"一动就退回静态"。所以新主体要**连续两拍**都读到
+            // 同一个才认：真换页只多等半拍，误读一次都不会生效。
+            if subjectBeingResolved != nil {
+                if pendingSubject == subject {
+                    pendingTicks += 1
+                } else {
+                    pendingSubject = subject
+                    pendingTicks = 1
+                }
+                guard pendingTicks >= 2 else { return }
+            }
+            pendingSubject = nil
+            pendingTicks = 0
             // 换页 / 换主体：先把上一位的拆掉，再解析这一位（同一个主体只解析一次）。
+            writeDebugLog("[\(logTag)] subject → \(identity)")
             teardownPlayer()
             readyVideo = nil
             subjectBeingResolved = subject
             guard !failedSubjects.contains(identity) else { return }
             startResolve(subject: subject)
+        } else {
+            pendingSubject = nil
+            pendingTicks = 0
         }
 
         guard let video = readyVideo else { return }
@@ -163,6 +185,11 @@ enum EntityMotionArtwork {
         }
         if view.frame != frame { view.frame = frame }
         view.applyMask(solidUntil: maskStart, goneAt: maskEnd)
+        // 已经解出第一帧就把静态照片按住。划动时页头会重排，照片可能是**新的一张**视图
+        // （不在 `hideStill` 的账上）—— 不补这一下，化开那一段又会双影。
+        if player?.currentItem?.status == .readyToPlay {
+            hideStill(photo)
+        }
         if let player, player.timeControlStatus != .playing, view.window != nil {
             player.play()
         }
@@ -173,11 +200,13 @@ enum EntityMotionArtwork {
         player?.pause()
     }
 
-    /// 真的离开实体页（`EntityPageAppearance` 收尾时调）：连视图一起摘掉。
+    /// 真的离开实体页（`EntityPageAppearance` 收尾时调）：把播放层摘掉。
+    ///
+    /// **解析结果留着**：`readyVideo` 只是一个本地文件 URL，`subjectBeingResolved` 只是一个
+    /// 主体标识。留着它们，翻回同一页能立刻挂上；否则每次进页都要重跑一遍目录查询 ——
+    /// 页头重排时也会走到这里，那几拍就是"一动就退回静态"的来源。
     static func detach() {
         teardownPlayer()
-        readyVideo = nil
-        subjectBeingResolved = nil
     }
 
     // MARK: - 播放层
@@ -188,7 +217,18 @@ enum EntityMotionArtwork {
         frame: CGRect,
         video: URL
     ) -> EntityMotionLayerView? {
-        if let playerView, playerView.superview === host, player != nil {
+        // 已经有播放层：**换宿主就搬过去，不重建**。
+        //
+        // 划动时 Spotify 会重排页头 —— 宿主、照片都可能是新视图。重建播放层要从"解第一帧"
+        // 重来一遍，那几拍就是静态照片；而带 `AVPlayerLayer` 的视图换个父视图不掉帧。
+        if let playerView, player != nil {
+            let mine = host.subviews.firstIndex(of: playerView)
+            let theirs = host.subviews.firstIndex(of: photo)
+            let needsMove = playerView.superview !== host
+                || (mine != nil && theirs != nil && mine! < theirs!)
+            if needsMove {
+                host.insertSubview(playerView, aboveSubview: photo)
+            }
             return playerView
         }
         teardownPlayer()
