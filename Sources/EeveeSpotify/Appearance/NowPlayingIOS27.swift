@@ -1054,6 +1054,9 @@ enum NowPlayingIOS27 {
             changed = true
         }
         if applyArtworkMode(to: imageView) { changed = true }
+        // 动效封面（见 `NowPlayingMotionArtwork`）：同一张封面上再铺一层短片。
+        // ⚠️ 必须排在 frame / 形状之后 —— 它跟着 `imageView.bounds` 走，先铺就会慢一拍。
+        syncMotionArtwork(on: imageView)
         // 一次性诊断：封面到底被放在哪、宿主多大 —— 用来区分是宿主坐标还是帧子算错。
         if !didLogArtworkFrame {
             didLogArtworkFrame = true
@@ -1067,6 +1070,18 @@ enum NowPlayingIOS27 {
         // 我们的封面在原生那张**上面**（同一个 cell 里），原生那张必须按下去。
         hideShell(shell)
         return changed
+    }
+
+    /// 动效封面：把这一首的 Apple 短片铺在**同一张**封面上（见 `NowPlayingMotionArtwork`）。
+    ///
+    /// 每拍调、幂等：换歌才换素材，其余时候只是一次字符串比较 + 一次 `play()` 检查。
+    /// 页内歌词的 64pt 缩略图**不播**（AM 那里也是静帧，而且 64pt 播一段 1080p 短片纯属浪费）。
+    private static func syncMotionArtwork(on imageView: UIImageView) {
+        NowPlayingMotionArtwork.attach(
+            to: imageView,
+            track: NowPlayingMotionArtwork.currentTrack(),
+            expanded: !lyricsModeActive
+        )
     }
 
     /// **满幅**那张封面的 frame（页面坐标 → 宿主坐标）：宽 = 页宽、高 = 页高的 58%
@@ -1224,6 +1239,8 @@ enum NowPlayingIOS27 {
             }
         }
         if applyArtworkMode(to: view) { changed = true }
+        // 这一拍没认出封面壳、只有记下来的宿主 —— 动效封面照旧跟着摆（幂等）。
+        syncMotionArtwork(on: view)
         return changed
     }
 
@@ -2271,6 +2288,8 @@ enum NowPlayingIOS27 {
 
     private static func clearState() {
         lyricsModeActive = false
+        // 动效封面：连素材与解析结果一起收（这一页的账本本来就是"清干净"，见文件头）。
+        NowPlayingMotionArtwork.detach()
         lyricsDissolveView?.removeFromSuperview()
         lyricsDissolveView = nil
         canvasCell = nil
@@ -2346,6 +2365,9 @@ enum NowPlayingIOS27 {
     }
 
     private static func teardownArtwork() {
+        // 动效封面挂在封面这一张上 ⇒ 封面一走就停解码（否则那张短片会在看不见的地方一直播）。
+        // **不 `detach`**：换壳 / 换宿主之后下一拍还要用同一份文件，清掉就要重新解析。
+        NowPlayingMotionArtwork.pause()
         artworkView?.layer.mask = nil
         artworkView?.layer.setAffineTransform(.identity)
         artworkView?.removeFromSuperview()
