@@ -185,9 +185,12 @@ enum EntityMotionArtwork {
         }
         if view.frame != frame { view.frame = frame }
         view.applyMask(solidUntil: maskStart, goneAt: maskEnd)
+        keepVisible(view)
         // 已经解出第一帧就把静态照片按住。划动时页头会重排，照片可能是**新的一张**视图
         // （不在 `hideStill` 的账上）—— 不补这一下，化开那一段又会双影。
-        if player?.currentItem?.status == .readyToPlay {
+        // 只在播放层真的在窗口上时按：不在窗口上的那几拍没有任何东西在画（`keepVisible`
+        // 刚把照片放回来），一按就又成空底色。
+        if view.window != nil, player?.currentItem?.status == .readyToPlay {
             hideStill(photo)
         }
         if let player, player.timeControlStatus != .playing, view.window != nil {
@@ -236,6 +239,12 @@ enum EntityMotionArtwork {
         let view = EntityMotionLayerView(frame: frame)
         view.isUserInteractionEnabled = false
         view.backgroundColor = .clear
+        // **必须带 `eevee-` 前缀**。页头那一趟（`concealAlbumChrome` / `blankArtistChrome`）
+        // 会把宿主里所有"不认识"的子视图当 Spotify 自己的 chrome 藏掉（`eeveeConceal` 直接
+        // 写 `layer.isHidden = true`）；视频层贴着照片插在同一个宿主里、又没有 id 时就会被它
+        // 整支藏掉。而静态照片这时候已经被 `hideStill` 按住 ⇒ 屏幕上是"封面整块没了"。
+        // `isOurs` 按这个前缀放行，另外那两条路也各留了一道按类的判据。
+        view.accessibilityIdentifier = "eevee-entity-motion"
         // **紧贴照片上面**插进去：照片在宿主里的位置由 Spotify 自己决定（专辑页是头容器的
         // index 0、歌单页是 wash plane 里），按固定 index 猜就会压到别的层上或漏在它下面。
         // 贴照片上面则"最坏也只是和照片同层"：页头文字 / 按钮这些本来就在照片之上，照旧在上。
@@ -274,7 +283,12 @@ enum EntityMotionArtwork {
         statusObservation?.invalidate()
         statusObservation = item.observe(\.status, options: [.new, .initial]) { item, _ in
             guard item.status == .readyToPlay else { return }
-            DispatchQueue.main.async { hideStill(photo) }
+            DispatchQueue.main.async {
+                // 页面已经在退场（视频层没挂上窗口）就别再按住照片：那一拍按住以后
+                // 没有谁再把它放回来，用户看到的就是"离开页面时封面闪没了"。
+                guard playerView?.window != nil else { return }
+                hideStill(photo)
+            }
         }
 
         writeDebugLog("[\(logTag)] playing \(video.lastPathComponent) in \(type(of: host))")
@@ -316,6 +330,30 @@ enum EntityMotionArtwork {
     private static func showStill() {
         hiddenStill?.isHidden = false
         hiddenStill = nil
+    }
+
+    /// 每拍把播放层"没被谁藏掉"这件事重新申明一遍。
+    ///
+    /// 页头那一趟（`concealAlbumChrome` / `blankArtistChrome`）会把宿主里不认识的子视图
+    /// 当 Spotify 的 chrome 藏掉 —— 视频层贴着照片插在同一个宿主里，靠 `eevee-` 前缀
+    /// + `isOurs` 的按类判据才不被认领。这里再兜一道：万一哪天又有一条新路径把它藏了，
+    /// 下一拍就写回来，而不是让封面空着。**只碰 `layer.isHidden`**：
+    /// `layer.mask` 是我们的化开渐变，动它等于把边缘重新画一条。
+    private static var unconcealLogCount = 0
+
+    private static func keepVisible(_ view: EntityMotionLayerView) {
+        let wasHidden = view.layer.isHidden
+        if wasHidden { view.layer.isHidden = false }
+        if view.isUserInteractionEnabled { view.isUserInteractionEnabled = false }
+        if wasHidden, unconcealLogCount < 3 {
+            unconcealLogCount += 1
+            writeDebugLog("[\(logTag)] the header pass had hidden the motion layer — shown again")
+        }
+        // 播放层不在窗口上（宿主正被换掉 / 页头在重排），或者这一条 item 根本放不出来：
+        // 这一拍什么都画不出来，静态照片必须回来垫着 —— 否则那段过渡就是一块空底色。
+        if view.window == nil || player?.currentItem?.status == .failed {
+            showStill()
+        }
     }
 
     // MARK: - 解析

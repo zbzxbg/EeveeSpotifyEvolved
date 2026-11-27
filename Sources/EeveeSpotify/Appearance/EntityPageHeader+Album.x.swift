@@ -216,8 +216,14 @@ extension EntityPageHeaderManager {
     /// —— 那两条路每拍都在藏"头里除了页头以外的一切"。
     ///
     /// 判据用前缀之后，以后再往 Spotify 的树里插自己的视图，不用回来补这一行。
+    ///
+    /// 动效头图那一层**还按类兜一道**：页头重排时它会搬来搬去，万一某次搬动发生在
+    /// id 写上去之前（或者将来那条路自己造了别的播放层），按类认也不会把它当原生
+    /// chrome 藏掉（`eeveeConceal` 会把 `layer.isHidden` 写成 true，视频层一藏、
+    /// 静态照片又已经被按住，整块封面就是空的）。
     static func isOurs(_ view: UIView) -> Bool {
-        (view.accessibilityIdentifier ?? "").hasPrefix("eevee-")
+        if view is EntityMotionLayerView { return true }
+        return (view.accessibilityIdentifier ?? "").hasPrefix("eevee-")
     }
 
     /// 藏掉专辑页头里 Spotify 自己画的东西，**绕开封面那一支**。
