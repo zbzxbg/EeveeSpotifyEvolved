@@ -1027,7 +1027,7 @@ enum EntityPageAppearance {
             // · `ensureSharpHero`（宿主认出来之后，藏 + 铺同一拍）；
             // · `layoutPass`（每帧补的那道保险，判据是 `sharpHero.image != nil`）。
             guard let source = fullbleedPictureImage() ?? coverImage(in: cover) else { return }
-            ensureSharpHero(cover: cover, source: source, page: target.page)
+            ensureSharpHero(cover: cover, source: source, page: target.page, kind: target.kind)
             return
         }
 
@@ -1059,7 +1059,12 @@ enum EntityPageAppearance {
     ///
     /// ⚠️ `_backgroundViewContainer` 里那些 wash 的 `GradientView` 必须**一起藏掉**：pw 的 issue #53
     /// 就是"wash 的 alpha 被抬高之后，不透明的一层把整张图整个盖住"。
-    private static func ensureSharpHero(cover: UIView, source: UIImage, page: UIView) {
+    private static func ensureSharpHero(
+        cover: UIView,
+        source: UIImage,
+        page: UIView,
+        kind: PageKind
+    ) {
         // **宿主分两种** ——
         // · 歌单页：Spotify 画页面颜色 wash 的那块 plane（pw 的 `PlaylistHeader.x` 做法）；
         // · 专辑页：**头自己**（pw 的 `AlbumHeader.x` 逐字：`[header insertSubview:hero atIndex:0]`）。
@@ -1220,7 +1225,9 @@ enum EntityPageAppearance {
         // `EntityMotionArtwork`）。它盖在这张照片上、用同一条化开 mask —— 所以解析成功时
         // 是"照片换成动的"，失败 / 还没下来时照片照旧，什么都不用回滚。
         // 歌单页不挂（那里的头图是四宫格拼出来的，播动图会喧宾夺主）。
-        switch target.kind {
+        // 这一页是哪种实体由调用方（`ensureHero(on:sharpCover:)`）传进来：本函数的作用域里
+        // 只有 cover / source / page，没有 `target`。
+        switch kind {
         case .artist:
             EntityMotionArtwork.attach(
                 subject: .artist(name: EntityPageHeaderManager.currentArtistName),

@@ -31,9 +31,15 @@ enum NowPlayingLandscape {
     }
 
     /// 听歌页在屏上 —— 只有这时才放宽遮罩。
+    ///
+    /// `NowPlayingIOS27` 是 `@MainActor` 的，而这一层是**非隔离**的（朝向钩子必须非隔离，
+    /// 见 `LyricsChromeVisibility.swift` 文件头）⇒ 读它的 `lastPage` 要用 `onMainThreadValue`
+    /// 把"就在主线程"显式表达出来。UIKit 只在主线程问朝向，所以不会走到 `false` 那一支。
     static var isPlayerOnScreen: Bool {
-        guard let page = NowPlayingIOS27.lastPage else { return false }
-        return page.window != nil
+        onMainThreadValue(false) {
+            guard let page = NowPlayingIOS27.lastPage else { return false }
+            return page.window != nil
+        }
     }
 
     /// 把窗口遮罩并上横屏（不该放宽时原样返回）。
@@ -54,26 +60,31 @@ enum NowPlayingLandscape {
     }
 
     /// 问方向时**该问谁**：听歌页在屏上就问它自己那一层 VC，否则问最顶上的。
+    ///
+    /// 整段都要摸 UIKit（还要读 `NowPlayingIOS27.lastPage`）⇒ 同一条纪律，走 `onMainThreadValue`；
+    /// 不在主线程时返回 nil（`refreshOrientation` 就什么都不做，下一次调用会补上）。
     static func orientationViewController() -> UIViewController? {
-        if let page = NowPlayingIOS27.lastPage {
-            var responder: UIResponder? = page
-            while let current = responder, !(current is UIViewController) {
-                responder = current.next
+        onMainThreadValue(nil as UIViewController?) {
+            if let page = NowPlayingIOS27.lastPage {
+                var responder: UIResponder? = page
+                while let current = responder, !(current is UIViewController) {
+                    responder = current.next
+                }
+                if let pageViewController = responder as? UIViewController {
+                    return pageViewController
+                }
             }
-            if let pageViewController = responder as? UIViewController {
-                return pageViewController
-            }
-        }
 
-        let keyWindow = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first { $0.isKeyWindow }
-        var controller = keyWindow?.rootViewController
-        while let presented = controller?.presentedViewController {
-            controller = presented
+            let keyWindow = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .first { $0.isKeyWindow }
+            var controller = keyWindow?.rootViewController
+            while let presented = controller?.presentedViewController {
+                controller = presented
+            }
+            return controller
         }
-        return controller
     }
 
     // MARK: - 日志

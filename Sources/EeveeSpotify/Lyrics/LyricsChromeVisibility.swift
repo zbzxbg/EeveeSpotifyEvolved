@@ -32,3 +32,12 @@ func onMainThreadSync(_ body: @escaping @MainActor () -> Void) {
     }
 }
 
+/// 与 `onMainThreadSync` 同一件事，区别是**要拿回一个值**（"听歌页还在不在屏上"这种判据）。
+///
+/// 只在**已经是主线程**时同步算完返回；不在主线程就返回 `fallback`。用它的地方都是
+/// "要不要放宽遮罩 / 该问哪个 VC"，异步补算没有意义 —— 宁可这一拍按"不生效"处理。
+func onMainThreadValue<T>(_ fallback: T, _ body: @MainActor () -> T) -> T {
+    guard Thread.isMainThread else { return fallback }
+    return MainActor.assumeIsolated(body)
+}
+
