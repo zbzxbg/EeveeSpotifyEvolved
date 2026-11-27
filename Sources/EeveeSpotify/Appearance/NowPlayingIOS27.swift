@@ -666,6 +666,13 @@ enum NowPlayingIOS27 {
     private static var landscapeStackOriginalWidth: CGFloat?
     private static var landscapeStackOriginalCenterX: CGFloat?
 
+    /// 横向几何"约束接管"的账：压低过优先级的原生约束、我们自己挂的两条。
+    private static weak var landscapePinnedStack: UIView?
+    private static var landscapePinnedWidth: CGFloat = 0
+    private static var landscapePinnedLeft: CGFloat = 0
+    private static var landscapeLoweredConstraints: [(constraint: NSLayoutConstraint, priority: UILayoutPriority)] = []
+    private static var landscapeOwnConstraints: [NSLayoutConstraint] = []
+
     /// 这一页现在是不是"横屏两栏"。
     static func isLandscapeTwoColumn(_ page: UIView) -> Bool {
         isLandscapePage(page) && page.bounds.width <= 960
@@ -745,6 +752,9 @@ enum NowPlayingIOS27 {
         }
 
         let width = max(120, layout.column.width + layout.stackInset * 2)
+        // 先把宽度 / 左线交给约束（见 `pinLandscapeStackWidth`）：只写 `bounds` 的话
+        // 活不过一次自动布局 —— 进度时间每秒都在改字，那一串布局回合会把宽度解回去。
+        pinLandscapeStackWidth(stack, width: width, left: layout.stackLeft, in: page)
         if abs(stack.bounds.width - width) > 0.5 {
             stack.bounds.size.width = width
             changed = true
@@ -808,8 +818,94 @@ enum NowPlayingIOS27 {
         )
     }
 
+    /// 把那一坨的宽度与左线**交给约束**。
+    ///
+    /// 为什么不能只写 `bounds`：Spotify 的进度时间每秒都在改字，一次布局回合就会按原来的
+    /// 约束把 `npv.bottomStackView` 的宽度解回横屏原生值 ⇒ 左栏每秒"呼吸"一次。
+    /// 这里把**只与它自己横向几何有关**的那几条原生约束压低到 998（不删、竖向一条不碰），
+    /// 再挂上我们的 `leading` + `width`（999）；收尾时按原优先级写回、拆掉我们的两条。
+    ///
+    /// 找不到任何横向约束（帧布局）就不接管 —— 那时 `bounds` 写入本来就能留住。
+    private static func pinLandscapeStackWidth(
+        _ stack: UIView,
+        width: CGFloat,
+        left: CGFloat,
+        in page: UIView
+    ) {
+        guard let superview = stack.superview, superview.bounds.minX == 0 else { return }
+
+        let horizontal: [NSLayoutConstraint.Attribute] = [
+            .leading, .trailing, .centerX, .centerXWithinMargins,
+            .leadingMargin, .trailingMargin, .width,
+        ]
+        func lower(_ constraints: [NSLayoutConstraint]) {
+            for constraint in constraints {
+                let involves = (constraint.firstItem as? UIView) === stack
+                    || (constraint.secondItem as? UIView) === stack
+                guard involves else { continue }
+                guard horizontal.contains(constraint.firstAttribute)
+                    || horizontal.contains(constraint.secondAttribute) else { continue }
+                guard constraint.priority > UILayoutPriority(998) else { continue }
+                guard !landscapeLoweredConstraints.contains(where: { $0.constraint === constraint })
+                else { continue }
+                landscapeLoweredConstraints.append((constraint, constraint.priority))
+                constraint.priority = UILayoutPriority(998)
+            }
+        }
+        func lowerAroundStack() {
+            lower(stack.constraints)
+            var node: UIView? = superview
+            var levels = 0
+            while let current = node, levels < 4 {
+                lower(current.constraints)
+                node = current.superview
+                levels += 1
+            }
+        }
+
+        if landscapePinnedStack === stack,
+           abs(landscapePinnedWidth - width) < 0.5,
+           abs(landscapePinnedLeft - left) < 0.5 {
+            // 已经接管：只补扫这一拍新出现的横向约束（换页 / 换歌时 Spotify 会重建一批）。
+            lowerAroundStack()
+            return
+        }
+        unpinLandscapeStackWidth()
+        lowerAroundStack()
+        guard !landscapeLoweredConstraints.isEmpty else { return }
+
+        let leftInSuperview = superview.convert(CGPoint(x: left, y: 0), from: page).x
+        let leading = stack.leadingAnchor.constraint(
+            equalTo: superview.leadingAnchor,
+            constant: leftInSuperview
+        )
+        leading.priority = UILayoutPriority(999)
+        let widthPin = stack.widthAnchor.constraint(equalToConstant: width)
+        widthPin.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([leading, widthPin])
+        landscapeOwnConstraints = [leading, widthPin]
+        landscapePinnedStack = stack
+        landscapePinnedWidth = width
+        landscapePinnedLeft = left
+    }
+
+    private static func unpinLandscapeStackWidth() {
+        for constraint in landscapeOwnConstraints where constraint.isActive {
+            constraint.isActive = false
+        }
+        landscapeOwnConstraints = []
+        for entry in landscapeLoweredConstraints where entry.constraint.priority != entry.priority {
+            entry.constraint.priority = entry.priority
+        }
+        landscapeLoweredConstraints = []
+        landscapePinnedStack = nil
+        landscapePinnedWidth = 0
+        landscapePinnedLeft = 0
+    }
+
     /// 把那一坨的宽度 / 横位写回原样（转回竖屏、离开页面、关开关时）。
     private static func restoreLandscapeStackIfNeeded() {
+        unpinLandscapeStackWidth()
         guard let stack = landscapeNarrowedStack else { return }
         if let width = landscapeStackOriginalWidth, abs(stack.bounds.width - width) > 0.5 {
             stack.bounds.size.width = width
