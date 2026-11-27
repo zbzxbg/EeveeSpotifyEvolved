@@ -499,6 +499,17 @@ jobs:
                  -o lockscreen-karaoke-tests
           ./lockscreen-karaoke-tests
 
+      # 锁屏动效封面：按专辑找 Apple 的 editorialVideo 时，"这张专辑是不是这一首的"必须
+      # 判得住 —— 2026-11-27 现场：`REVIVE`（NXRTHSTXR）的锁屏放的是 IVE《REVIVE+》的画面，
+      # 因为当时的比较是"归一化后互相包含"，而 `revive` ⊂ `revive+`、艺人一个字没看。
+      # 这里钉住专辑名（相等，不是包含）与艺人（至少一个词相同）两条判据。纯 Foundation。
+      - name: Lock screen artwork album match
+        run: |
+          swiftc Sources/EeveeSpotify/LockScreen/LockArtworkMatch.swift \
+                 Tests/LockArtMatch/main.swift \
+                 -o lock-art-match-tests
+          ./lock-art-match-tests
+
       # TTML 的歌手声明（`ttm:agent`）与对唱分边。行上的 `ttm:agent` 只是**引用**，
       # 名字与"个人 / 合唱"在 `<head>` 的声明表里；只有「恰好两位个人歌手、且文件里
       # 没有合唱 agent」才把第二位排到另一端。渲染侧（`AppleMusicLyricsPage`）要 SwiftUI，

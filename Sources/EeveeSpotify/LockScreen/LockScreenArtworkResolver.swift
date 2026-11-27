@@ -277,6 +277,7 @@ final class LockScreenArtworkResolver {
             title: title,
             artist: artist,
             album: album,
+            duration: duration,
             deadline: min(deadline, Date().addingTimeInterval(12))
         )
         guard isCurrent(stamp), !Task.isCancelled else { return nil }
@@ -535,9 +536,12 @@ final class LockScreenArtworkResolver {
         title: String,
         artist: String,
         album: String,
+        duration: Double,
         deadline: Date
     ) async -> Sources {
-        let key = "\(title)|\(artist)|\(album)"
+        // 时长进 key：宽松匹配那条现在要拿时长去核对专辑曲目，同一首不同版本
+        // （Live / Remaster / Slowed）不该共用一份解析结果。
+        let key = "\(title)|\(artist)|\(album)|\(Int(duration.rounded()))"
 
         lock.lock()
         if let cached = sources[key] {
@@ -558,6 +562,7 @@ final class LockScreenArtworkResolver {
                 title: title,
                 artist: artist,
                 album: album,
+                duration: duration,
                 deadline: deadline
             )
         }
@@ -598,6 +603,7 @@ final class LockScreenArtworkResolver {
         title: String,
         artist: String,
         album: String,
+        duration: Double,
         deadline: Date
     ) async -> Sources {
         var canvas: AnimatedArtworkAsset?
@@ -627,6 +633,7 @@ final class LockScreenArtworkResolver {
             title: title,
             artist: artist,
             album: album,
+            duration: duration,
             session: session,
             deadline: deadline
         )

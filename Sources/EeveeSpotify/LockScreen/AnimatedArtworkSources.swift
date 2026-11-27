@@ -67,12 +67,16 @@ enum CanvasArtworkSource {
 /// 只用到网页播放器的 developer token —— 目录搜索不需要用户登录，所以这条源对
 /// 没填 `media-user-token` 的人也能用。
 ///
-/// 关键事实：`editorialVideo` 挂在**专辑**上，不挂在歌曲上。所以先按"艺人 + 专辑"搜专辑
-/// （一次请求就能带 `extend=editorialVideo`）；搜不到再退回"按曲名搜歌 → 取所属专辑"。
+/// 关键事实：`editorialVideo` 挂在**专辑**上，不挂在歌曲上。所以顺序是：
+/// ① 按「艺人 + 专辑」搜专辑（一次请求就带 `extend=editorialVideo`）；
+/// ② 搜歌（带艺人）→ 取所属专辑 → 查 editorialVideo；
+/// ③ 只按专辑名搜（跨文字写法兜底，必须过"名等 / 艺人交集 / 曲目时长"三道校验）；
+/// ④ 回退店面再来一次 ①。
 /// 单曲（`- Single`）通常没有动态封面，只有正式专辑才有 —— 拿不到就返回空。
 ///
-/// 两个补命中的口子：店面先用设备 region，失败再试一个回退店面（日文歌 jp，其余 us）；
-/// 专辑名强匹配时允许一次**不带艺人**的搜索（跨文字写法时带艺人的那条会被过滤掉）。
+/// ⚠️ ③ 曾经排在 ② 前面，而且只比专辑名、完全不看艺人 —— 结果是 `REVIVE`
+/// （NXRTHSTXR）放上了 IVE《REVIVE+》的动态封面（2026-11-27）。宽松匹配宁可返回空，
+/// 也不能把别人的封面放上锁屏。
 enum AppleMusicArtworkSource {
 
     private static let apiBase = "https://amp-api.music.apple.com"
@@ -88,6 +92,7 @@ enum AppleMusicArtworkSource {
         title: String,
         artist: String,
         album: String,
+        duration: Double,
         session: URLSession,
         deadline: Date
     ) async -> AppleMusicEditorialAssets {
@@ -100,62 +105,55 @@ enum AppleMusicArtworkSource {
         let storefronts = storefrontCandidates(title: title, artist: artist)
         let primary = storefronts[0]
 
-        // ① 首选店面：先按"艺人 + 专辑"搜；专辑名强匹配时再允许一次不带艺人的宽松搜索
-        //    （Spotify 显示罗马字、Apple Music 用原生写法时，带艺人那条会被自己的过滤掉）。
+        // ① 首选店面：按「艺人 + 专辑」搜，两条都强匹配 —— 最精确的一条。
         if let direct = await albumSearch(
             storefront: primary,
             title: title,
             artist: artist,
             album: album,
+            duration: duration,
             requireArtist: true,
             token: token,
-            session: session
+            session: session,
+            deadline: deadline
         ) {
             return direct
         }
 
+        // ② 首选店面：搜歌 → 取所属专辑 → 查 editorialVideo。
+        //
+        // 排在"只按专辑名"的宽松搜索**前面**：搜歌带着艺人，精度比只按专辑名搜高得多
+        // （宽松那条靠名字，同名专辑就会串台）。
+        if Date() < deadline,
+           let bySong = await viaSong(
+               storefront: primary,
+               title: title,
+               artist: artist,
+               token: token,
+               session: session,
+               deadline: deadline
+           ) {
+            return bySong
+        }
+
+        // ③ 最后才试宽松搜索：跨文字写法（Spotify 罗马字、Apple 原生写法）时它才有用，
+        //    而且必须过 albumSearch 里那三道校验，否则宁可没有动效也不能放别人的封面。
         if !album.isEmpty, Date() < deadline,
            let loose = await albumSearch(
                storefront: primary,
                title: title,
                artist: artist,
                album: album,
+               duration: duration,
                requireArtist: false,
                token: token,
-               session: session
+               session: session,
+               deadline: deadline
            ) {
             return loose
         }
 
-        // ② 首选店面：搜歌 → 取所属专辑 → 查 editorialVideo。
-        guard Date() < deadline else { return .empty }
-        if let songID = await songID(
-            storefront: primary,
-            title: title,
-            artist: artist,
-            token: token,
-            session: session
-        ) {
-            guard Date() < deadline else { return .empty }
-            for albumID in await albumIDs(
-                storefront: primary,
-                songID: songID,
-                token: token,
-                session: session
-            ) {
-                guard Date() < deadline else { return .empty }
-                if let editorial = await editorialVideo(
-                    storefront: primary,
-                    albumID: albumID,
-                    token: token,
-                    session: session
-                ) {
-                    return editorial
-                }
-            }
-        }
-
-        // ③ 回退店面：只做一次专辑搜索，别把预算花在第二家店的完整链路上。
+        // ④ 回退店面：只做一次专辑搜索，别把预算花在第二家店的完整链路上。
         for storefront in storefronts.dropFirst() {
             guard Date() < deadline else { return .empty }
             if let direct = await albumSearch(
@@ -163,15 +161,66 @@ enum AppleMusicArtworkSource {
                 title: title,
                 artist: artist,
                 album: album,
+                duration: duration,
                 requireArtist: true,
                 token: token,
-                session: session
+                session: session,
+                deadline: deadline
             ) {
                 return direct
             }
         }
 
         return .empty
+    }
+
+    /// ② 搜歌（带艺人）→ 取所属专辑 → 查 editorialVideo。
+    ///
+    /// 这条路不按专辑名猜：`songID` 要求曲名与艺人都对得上，之后拿到的专辑 id 是 Apple 自己
+    /// 认的所属专辑，所以不需要再校验。
+    private static func viaSong(
+        storefront: String,
+        title: String,
+        artist: String,
+        token: String,
+        session: URLSession,
+        deadline: Date
+    ) async -> AppleMusicEditorialAssets? {
+        guard Date() < deadline,
+              let matchedSongID = await songID(
+                  storefront: storefront,
+                  title: title,
+                  artist: artist,
+                  token: token,
+                  session: session
+              ) else {
+            return nil
+        }
+
+        for albumID in await albumIDs(
+            storefront: storefront,
+            songID: matchedSongID,
+            token: token,
+            session: session
+        ) {
+            guard Date() < deadline else { return nil }
+            if let editorial = await editorialVideo(
+                storefront: storefront,
+                albumID: albumID,
+                token: token,
+                session: session
+            ) {
+                noteMatch(
+                    name: "",
+                    artist: artist,
+                    albumID: albumID,
+                    route: "via song \(matchedSongID)"
+                )
+                return editorial
+            }
+        }
+
+        return nil
     }
 
     /// 要查哪些店面：设备 region 优先，再给一个**只查一次**的回退。
@@ -197,14 +246,18 @@ enum AppleMusicArtworkSource {
 
     // MARK: - ① 按专辑搜（首选）
 
+    /// 按专辑名搜。`requireArtist: true` 是精确那条（艺人与专辑名都要对得上）；
+    /// `false` 是最后兜底的宽松那条，它**必须**过三道校验才允许认领一张专辑的 editorialVideo。
     private static func albumSearch(
         storefront: String,
         title: String,
         artist: String,
         album: String,
+        duration: Double,
         requireArtist: Bool,
         token: String,
-        session: URLSession
+        session: URLSession,
+        deadline: Date
     ) async -> AppleMusicEditorialAssets? {
         var components = URLComponents(string: "\(apiBase)/v1/catalog/\(storefront)/search")
         let term: String
@@ -233,17 +286,31 @@ enum AppleMusicArtworkSource {
         for item in items {
             guard let attributes = item["attributes"] as? [String: Any] else { continue }
 
+            let name = attributes["name"] as? String ?? ""
+            let artistName = attributes["artistName"] as? String ?? ""
+            let albumID = item["id"] as? String ?? ""
+
             if requireArtist {
-                let artistName = attributes["artistName"] as? String ?? ""
                 guard artist.isEmpty || artistName.isEmpty
                     || LockScreenArtwork.looksLikeSameSong(artistName, artist) else {
                     continue
                 }
-            }
-
-            if !album.isEmpty {
-                let name = attributes["name"] as? String ?? ""
-                guard name.isEmpty || LockScreenArtwork.looksLikeSameSong(name, album) else {
+                if !album.isEmpty, !name.isEmpty,
+                   !LockScreenArtwork.looksLikeSameSong(name, album) {
+                    continue
+                }
+            } else {
+                // 宽松那条没有艺人维度，同名专辑就会串台（IVE《REVIVE+》被认成
+                // NXRTHSTXR《REVIVE》的专辑，2026-11-27 实测），所以三道都要过：
+                // ① 专辑名**相等**（不是包含，`REVIVE+` ≠ `REVIVE`）；
+                // ② 艺人至少有一个词相同；
+                // ③ 专辑里真有同名、同时长的曲目。
+                guard LockArtworkMatch.sameAlbumName(name, album),
+                      !name.isEmpty else {
+                    continue
+                }
+                guard artist.isEmpty
+                    || LockArtworkMatch.sharesArtistName(artistName, artist) else {
                     continue
                 }
             }
@@ -252,10 +319,91 @@ enum AppleMusicArtworkSource {
                   let assets = buildAssets(in: editorial) else {
                 continue
             }
+
+            if !requireArtist {
+                guard !albumID.isEmpty, Date() < deadline,
+                      await albumCarriesOurTrack(
+                          storefront: storefront,
+                          albumID: albumID,
+                          title: title,
+                          duration: duration,
+                          token: token,
+                          session: session
+                      ) else {
+                    continue
+                }
+            }
+
+            noteMatch(
+                name: name,
+                artist: artistName,
+                albumID: albumID,
+                route: requireArtist ? "album search" : "loose album search"
+            )
             return assets
         }
 
         return nil
+    }
+
+    /// 宽松匹配的第三道闸：这张专辑里真的有"同名 + 同时长"的曲目。
+    ///
+    /// 名字能对上、艺人也能对上一半的时候，时长是唯一能把"同名不同歌"分开的字段：
+    /// Spotify 的 `duration` 与 Apple 的 `durationInMillis` 通常差 1 秒以内，给 2.5 秒余量。
+    private static func albumCarriesOurTrack(
+        storefront: String,
+        albumID: String,
+        title: String,
+        duration: Double,
+        token: String,
+        session: URLSession
+    ) async -> Bool {
+        guard let url = URL(
+            string: "\(apiBase)/v1/catalog/\(storefront)/albums/\(albumID)?include=tracks"
+        ), let root = await json(url, token: token, session: session),
+           let items = root["data"] as? [[String: Any]],
+           let relationships = items.first?["relationships"] as? [String: Any],
+           let tracks = relationships["tracks"] as? [String: Any],
+           let data = tracks["data"] as? [[String: Any]] else {
+            return false
+        }
+
+        for track in data {
+            guard let attributes = track["attributes"] as? [String: Any],
+                  let name = attributes["name"] as? String,
+                  LockScreenArtwork.looksLikeSameSong(name, title) else {
+                continue
+            }
+            guard duration > 0 else { return true }
+
+            let millis = (attributes["durationInMillis"] as? NSNumber)?.doubleValue
+                ?? (attributes["durationInMillis"] as? Double)
+            guard let millis, millis > 0 else {
+                // 这条曲目没给时长：名字对上就认，别把整条路堵死（罕见）。
+                return true
+            }
+            if abs(millis / 1000 - duration) <= 2.5 { return true }
+        }
+
+        return false
+    }
+
+    /// 匹配成功那一下写一行：哪张专辑、谁唱的、从哪条路来的。
+    ///
+    /// 这行是**必须**的 —— 上一版只打 `apple square yes / tall yes`，结果锁屏上放着
+    /// IVE 的封面也查不出来，只能反查 Apple 目录才对上。
+    private static func noteMatch(
+        name: String,
+        artist: String,
+        albumID: String,
+        route: String
+    ) {
+        var detail = route
+        if !name.isEmpty { detail += " \"\(name)\"" }
+        if !artist.isEmpty { detail += " by \"\(artist)\"" }
+        writeDebugLog(
+            "[\(LockScreenArtwork.logTag)] appleMusic matched — \(detail) (album \(albumID))"
+        )
     }
 
     // MARK: - ② 搜歌

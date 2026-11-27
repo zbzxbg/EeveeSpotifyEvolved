@@ -23,13 +23,17 @@ enum AnimatedArtworkCache {
     /// 一首歌 + 时长 + 一个画幅 = 一条缓存。时长进 key 是为了把同名不同版本（Live /
     /// Remaster）分开；不含来源：同一首歌的 Canvas 和 Apple Music 短片都满足"锁屏上
     /// 动起来"，谁先拿到就用谁，没必要各存一份。
+    ///
+    /// `v2`：key 里带一个 schema 版本。上一版"只按专辑名"的宽松匹配会把同名专辑的动态
+    /// 封面缓存到这首歌名下（IVE《REVIVE+》被配给 NXRTHSTXR《REVIVE》，2026-11-27），
+    /// 不改 key 的话那批错片会一直命中缓存，改了匹配逻辑也换不掉。
     static func key(
         title: String,
         artist: String,
         duration: Double,
         aspect: LockScreenArtwork.Aspect
     ) -> String {
-        let seed = "\(title)|\(artist)|\(Int(duration.rounded()))|\(aspect.cacheKeySuffix)"
+        let seed = "v2|\(title)|\(artist)|\(Int(duration.rounded()))|\(aspect.cacheKeySuffix)"
         return FNV1a.hex(seed)
     }
 
