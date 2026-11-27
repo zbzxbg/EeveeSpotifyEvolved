@@ -212,6 +212,22 @@ enum LockScreenArtworkInjector {
             }
             guard supported.contains(key) else { continue }
 
+            // 系统来要素材之前先把这一首的短片做出来，见 `LockScreenArtworkResolver.warm`。
+            //
+            // ⚠️ 放在"artwork 对象有没有变"之前：同一个对象缓存下来之后，下面的
+            // `existing === expected` 会让这一拍提前 continue，预热就再也不会被叫到 ——
+            // 而一次早到的"临时失败"（metadata 没就绪 / token / 超时）正需要过一阵重试。
+            // `warm` 自己按 120 秒节流，所以这里每拍调也只会偶尔真的排一个 Task。
+            resolver.warm(
+                identifier: identifier,
+                title: title,
+                artist: artist,
+                album: album,
+                duration: duration,
+                aspect: aspect,
+                still: still
+            )
+
             let expected = artwork(
                 identifier: identifier,
                 aspect: aspect,
@@ -228,16 +244,6 @@ enum LockScreenArtworkInjector {
             }
             output[key] = expected
             changed = true
-            // 系统来要素材之前先把这一首的短片做出来，见 `LockScreenArtworkResolver.warm`。
-            resolver.warm(
-                identifier: identifier,
-                title: title,
-                artist: artist,
-                album: album,
-                duration: duration,
-                aspect: aspect,
-                still: still
-            )
         }
 
         guard changed else {

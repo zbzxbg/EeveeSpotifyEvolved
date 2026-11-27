@@ -67,6 +67,9 @@ enum CanvasArtworkSource {
 /// 关键事实：`editorialVideo` 挂在**专辑**上，不挂在歌曲上。所以先按"艺人 + 专辑"搜专辑
 /// （一次请求就能带 `extend=editorialVideo`）；搜不到再退回"按曲名搜歌 → 取所属专辑"。
 /// 单曲（`- Single`）通常没有动态封面，只有正式专辑才有 —— 拿不到就返回空。
+///
+/// 两个补命中的口子：店面先用设备 region，失败再试一个回退店面（日文歌 jp，其余 us）；
+/// 专辑名强匹配时允许一次**不带艺人**的搜索（跨文字写法时带艺人的那条会被过滤掉）。
 enum AppleMusicArtworkSource {
 
     private static let apiBase = "https://amp-api.music.apple.com"
@@ -91,49 +94,102 @@ enum AppleMusicArtworkSource {
             return .empty
         }
 
-        let storefront = Locale.current.region?.identifier.lowercased() ?? "us"
+        let storefronts = storefrontCandidates(title: title, artist: artist)
+        let primary = storefronts[0]
 
+        // ① 首选店面：先按"艺人 + 专辑"搜；专辑名强匹配时再允许一次不带艺人的宽松搜索
+        //    （Spotify 显示罗马字、Apple Music 用原生写法时，带艺人那条会被自己的过滤掉）。
         if let direct = await albumSearch(
-            storefront: storefront,
+            storefront: primary,
             title: title,
             artist: artist,
             album: album,
+            requireArtist: true,
             token: token,
             session: session
         ) {
             return direct
         }
-        guard Date() < deadline else { return .empty }
 
-        guard let songID = await songID(
-            storefront: storefront,
+        if !album.isEmpty, Date() < deadline,
+           let loose = await albumSearch(
+               storefront: primary,
+               title: title,
+               artist: artist,
+               album: album,
+               requireArtist: false,
+               token: token,
+               session: session
+           ) {
+            return loose
+        }
+
+        // ② 首选店面：搜歌 → 取所属专辑 → 查 editorialVideo。
+        guard Date() < deadline else { return .empty }
+        if let songID = await songID(
+            storefront: primary,
             title: title,
             artist: artist,
             token: token,
             session: session
-        ) else {
-            return .empty
-        }
-        guard Date() < deadline else { return .empty }
-
-        for albumID in await albumIDs(
-            storefront: storefront,
-            songID: songID,
-            token: token,
-            session: session
         ) {
             guard Date() < deadline else { return .empty }
-            if let editorial = await editorialVideo(
-                storefront: storefront,
-                albumID: albumID,
+            for albumID in await albumIDs(
+                storefront: primary,
+                songID: songID,
                 token: token,
                 session: session
             ) {
-                return editorial
+                guard Date() < deadline else { return .empty }
+                if let editorial = await editorialVideo(
+                    storefront: primary,
+                    albumID: albumID,
+                    token: token,
+                    session: session
+                ) {
+                    return editorial
+                }
+            }
+        }
+
+        // ③ 回退店面：只做一次专辑搜索，别把预算花在第二家店的完整链路上。
+        for storefront in storefronts.dropFirst() {
+            guard Date() < deadline else { return .empty }
+            if let direct = await albumSearch(
+                storefront: storefront,
+                title: title,
+                artist: artist,
+                album: album,
+                requireArtist: true,
+                token: token,
+                session: session
+            ) {
+                return direct
             }
         }
 
         return .empty
+    }
+
+    /// 要查哪些店面：设备 region 优先，再给一个**只查一次**的回退。
+    ///
+    /// 为什么需要：`editorialVideo` 跟着目录条目走，不同店面的同一张专辑不一定都带；
+    /// 日文歌在 cn/us 店里查不到时，jp 店往往有。只回退一个，别让失败路径把 12 秒预算吃光。
+    private static func storefrontCandidates(title: String, artist: String) -> [String] {
+        let primary = Locale.current.region?.identifier.lowercased() ?? "us"
+        let preferred = containsKana(title) || containsKana(artist) ? "jp" : "us"
+        return preferred == primary ? [primary] : [primary, preferred]
+    }
+
+    private static func containsKana(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3040...0x30FF, 0x31F0...0x31FF, 0xFF66...0xFF9D:
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     // MARK: - ① 按专辑搜（首选）
@@ -143,11 +199,19 @@ enum AppleMusicArtworkSource {
         title: String,
         artist: String,
         album: String,
+        requireArtist: Bool,
         token: String,
         session: URLSession
     ) async -> AppleMusicEditorialAssets? {
         var components = URLComponents(string: "\(apiBase)/v1/catalog/\(storefront)/search")
-        let term = album.isEmpty ? "\(title) \(artist)" : "\(artist) \(album)"
+        let term: String
+        if album.isEmpty {
+            term = artist.isEmpty ? title : "\(title) \(artist)"
+        } else if requireArtist, !artist.isEmpty {
+            term = "\(artist) \(album)"
+        } else {
+            term = album
+        }
         components?.queryItems = [
             URLQueryItem(name: "term", value: term),
             URLQueryItem(name: "types", value: "albums"),
@@ -166,10 +230,12 @@ enum AppleMusicArtworkSource {
         for item in items {
             guard let attributes = item["attributes"] as? [String: Any] else { continue }
 
-            let artistName = attributes["artistName"] as? String ?? ""
-            guard artist.isEmpty || artistName.isEmpty
-                || LockScreenArtwork.looksLikeSameSong(artistName, artist) else {
-                continue
+            if requireArtist {
+                let artistName = attributes["artistName"] as? String ?? ""
+                guard artist.isEmpty || artistName.isEmpty
+                    || LockScreenArtwork.looksLikeSameSong(artistName, artist) else {
+                    continue
+                }
             }
 
             if !album.isEmpty {
@@ -305,7 +371,9 @@ enum AppleMusicArtworkSource {
         session: URLSession
     ) async -> [String: Any]? {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 8
+        // 单请求压到 4 秒：目录查询整段只有 12 秒，宁可让一步失败也别让一个慢请求
+        // 把后面的歌曲搜索/回退店面全吃掉。
+        request.timeoutInterval = 4
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("https://music.apple.com", forHTTPHeaderField: "Origin")

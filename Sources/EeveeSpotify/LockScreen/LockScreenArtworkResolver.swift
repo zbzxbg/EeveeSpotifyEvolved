@@ -38,14 +38,25 @@ final class LockScreenArtworkResolver {
 
     private let session: URLSession
     private let lock = NSLock()
-    private var sources: [String: Sources] = [:]
+    /// 一首歌的目录查询结果。
+    ///
+    /// `retryAfter` 只在**什么也没找到**时才有值：那种"空"可能只是 metadata 还没就绪、
+    /// token 没拿到或网络超时，不能按歌缓存到本次运行结束（否则这首歌之后再出现的锁屏
+    /// 都不会再试）。确定找到了东西就永久缓存。
+    private struct CachedSources {
+        let value: Sources
+        let retryAfter: Date?
+    }
+    private static let transientMissRetryInterval: TimeInterval = 120
+    private var sources: [String: CachedSources] = [:]
     private var resolving: [String: Task<Sources, Never>] = [:]
     private var running: [String: Task<URL?, Never>] = [:]
     private var runningTokens: [String: UUID] = [:]
     private var reportedMisses = Set<String>()
-    /// 已经排过预热的 key。`videoFileURL` 自己做单飞，这里只是为了别每写一次 now-playing
-    /// 就 spawn 一个 Task。
-    private var warmed = Set<String>()
+    /// 已经排过预热的 key → 上一次排的时间。`videoFileURL` 自己做单飞，这里只是为了别每写
+    /// 一次 now-playing 就 spawn 一个 Task；但**空结果**要允许过一阵再预热一次（与
+    /// `transientMissRetryInterval` 同一个间隔），否则一次早到的失败会让这首歌永远不再试。
+    private var warmed: [String: Date] = [:]
     private var reportedNoMetadata = false
     private var lastNowPlaying = ""
     private var generation: UInt64 = 0
@@ -214,10 +225,14 @@ final class LockScreenArtworkResolver {
             aspect: aspect
         )
         lock.lock()
-        let first = warmed.insert(key).inserted
+        let now = Date()
+        let last = warmed[key]
+        let shouldWarm = last == nil
+            || now.timeIntervalSince(last!) >= Self.transientMissRetryInterval
+        if shouldWarm { warmed[key] = now }
         if warmed.count > 64 { warmed.removeAll() }
         lock.unlock()
-        guard first else { return }
+        guard shouldWarm else { return }
 
         writeDebugLog(
             "[\(LockScreenArtwork.logTag)] warming — \(aspect.rawValue), \"\(title)\""
@@ -255,13 +270,14 @@ final class LockScreenArtworkResolver {
         let deadline = Date().addingTimeInterval(22)
         guard isCurrent(stamp) else { return nil }
 
-        // 目录查询（Apple Music 两次搜索 + 一次专辑详情）单独压一个更短的预算：
+        // 目录查询（Apple Music 专辑搜索 / 歌曲搜索 / 专辑详情）单独压一个上限：
         // 它一道超时就把后面本地 Fill 的时间也吃掉，用户看到的就是"什么都没有"。
+        // 12 秒给 Apple Music 的几步串行请求留出余量；Fill 还有约 10 秒可跑。
         let resolved = await resolveSources(
             title: title,
             artist: artist,
             album: album,
-            deadline: min(deadline, Date().addingTimeInterval(8))
+            deadline: min(deadline, Date().addingTimeInterval(12))
         )
         guard isCurrent(stamp), !Task.isCancelled else { return nil }
 
@@ -525,8 +541,12 @@ final class LockScreenArtworkResolver {
 
         lock.lock()
         if let cached = sources[key] {
-            lock.unlock()
-            return cached
+            if let retryAfter = cached.retryAfter, Date() >= retryAfter {
+                sources[key] = nil
+            } else {
+                lock.unlock()
+                return cached.value
+            }
         }
         if let task = resolving[key] {
             lock.unlock()
@@ -546,13 +566,30 @@ final class LockScreenArtworkResolver {
 
         let value = await task.value
 
+        // 空结果只当"临时失败"缓存：两分钟内不再问，之后允许重试。
+        // 真找到了（Canvas / Apple Music 任一画幅）就按歌永久缓存。
+        let found = value.canvas != nil
+            || value.apple.square != nil
+            || value.apple.tall != nil
         lock.lock()
         resolving[key] = nil
-        sources[key] = value
+        sources[key] = CachedSources(
+            value: value,
+            retryAfter: found
+                ? nil
+                : Date().addingTimeInterval(Self.transientMissRetryInterval)
+        )
         if sources.count > 48 {
             sources.removeAll()
         }
         lock.unlock()
+
+        if !found {
+            writeDebugLog(
+                "[\(LockScreenArtwork.logTag)] sources miss for \"\(title)\" —"
+                    + " retrying in \(Int(Self.transientMissRetryInterval))s"
+            )
+        }
 
         return value
     }
