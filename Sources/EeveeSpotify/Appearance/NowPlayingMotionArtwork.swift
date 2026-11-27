@@ -208,8 +208,8 @@ enum NowPlayingMotionArtwork {
         view.playerLayer.videoGravity = .resizeAspectFill
         self.player = player
 
-        if let loopObserver {
-            NotificationCenter.default.removeObserver(loopObserver)
+        if let previous = loopObserver {
+            NotificationCenter.default.removeObserver(previous)
         }
         loopObserver = NotificationCenter.default.addObserver(
             forName: AVPlayerItem.didPlayToEndTimeNotification,
@@ -232,8 +232,10 @@ enum NowPlayingMotionArtwork {
     }
 
     private static func teardownPlayer() {
-        if let loopObserver {
-            NotificationCenter.default.removeObserver(loopObserver)
+        // 绑到新名字：`if let loopObserver` 会在分支里遮住这个静态属性，
+        // 下面那句赋值就成了给 let 赋值。
+        if let observer = loopObserver {
+            NotificationCenter.default.removeObserver(observer)
             loopObserver = nil
         }
         player?.pause()
