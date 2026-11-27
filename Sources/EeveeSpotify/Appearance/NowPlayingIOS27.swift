@@ -594,6 +594,11 @@ enum NowPlayingIOS27 {
             return
         }
 
+        // 方向那半先在 VC 上落地：只放宽 App delegate / `UIViewController` 那两层的话，
+        // Spotify 的容器 VC 自己实现的 `supportedInterfaceOrientations` 会把它们整个挡住，
+        // 设备横过来屏幕一动不动（见 `installGatesIfNeeded`）。
+        NowPlayingLandscape.installGatesIfNeeded(for: page)
+
         let landscape = isLandscapePage(page)
         if !landscape {
             landscapeLyricsOffByUser = false

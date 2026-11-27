@@ -55,37 +55,41 @@ enum NowPlayingLandscape {
     /// 用 iOS 16 的 `setNeedsUpdateOfSupportedInterfaceOrientations` —— 老的
     /// `attemptRotationToDeviceOrientation` 已经废弃。竖屏锁定开着时这一步不会转，
     /// 锁在系统那边，不是我们该绕的。
+    ///
+    /// 一次问**整条链**（听歌页自己的 VC + 窗口根 VC + 最上层那个）：UIKit 的判定是
+    /// 根 VC 与最上层 VC 的遮罩求交，只通知其中一层时另一层仍然按旧值回话。
     static func refreshOrientation() {
-        guard let vc = orientationViewController() else { return }
-        vc.setNeedsUpdateOfSupportedInterfaceOrientations()
+        onMainThreadSync {
+            var targets: [UIViewController] = []
+            func add(_ controller: UIViewController?) {
+                guard let controller, !targets.contains(where: { $0 === controller }) else { return }
+                targets.append(controller)
+            }
+            if let page = NowPlayingIOS27.lastPage {
+                add(controller(hosting: page))
+            }
+            // 听歌页可能被放在自己那个窗口里 ⇒ 优先问它所在窗口的根 VC，而不是"当前 key window"。
+            let window = NowPlayingIOS27.lastPage?.window ?? currentKeyWindow()
+            if let root = window?.rootViewController {
+                add(root)
+                var top: UIViewController? = root
+                while let presented = top?.presentedViewController { top = presented }
+                add(top)
+            }
+            for controller in targets {
+                controller.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+        }
     }
 
-    /// 问方向时**该问谁**：听歌页在屏上就问它自己那一层 VC，否则问最顶上的。
-    ///
-    /// 整段都要摸 UIKit（还要读 `NowPlayingIOS27.lastPage`）⇒ 同一条纪律，走 `onMainThreadValue`；
-    /// 不在主线程时返回 nil（`refreshOrientation` 就什么都不做，下一次调用会补上）。
-    static func orientationViewController() -> UIViewController? {
-        onMainThreadValue(nil as UIViewController?) {
-            if let page = NowPlayingIOS27.lastPage {
-                var responder: UIResponder? = page
-                while let current = responder, !(current is UIViewController) {
-                    responder = current.next
-                }
-                if let pageViewController = responder as? UIViewController {
-                    return pageViewController
-                }
-            }
-
-            let keyWindow = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap(\.windows)
-                .first { $0.isKeyWindow }
-            var controller = keyWindow?.rootViewController
-            while let presented = controller?.presentedViewController {
-                controller = presented
-            }
-            return controller
+    /// `view` 所在的那个 VC（沿 responder 链往上找第一个）。
+    private static func controller(hosting view: UIView) -> UIViewController? {
+        var responder: UIResponder? = view
+        while let current = responder {
+            if let controller = current as? UIViewController { return controller }
+            responder = current.next
         }
+        return nil
     }
 
     // MARK: - 日志
@@ -122,12 +126,27 @@ enum NowPlayingLandscape {
     ///
     /// 只认"视图里真的托着听歌页"的那几层（听歌页自己的 VC 与它的容器）：盖在上面的
     /// sheet / 设置页 / 别的标签页一律原样返回，否则整个 App 都能转。
+    ///
+    /// 两处都查：**视图树**（听歌页是我们插在某一层 VC 的视图里）与**presented 链**
+    /// （听歌页若被 present 出来，它的视图不挂在 root 的视图树里，但方向那次询问会落到
+    /// root 上 —— 只查视图树的话 root 一句 portrait 就把整条链挡住）。
     static func widens(_ controller: UIViewController) -> Bool {
         guard isEnabled else { return false }
         return onMainThreadValue(false) {
             guard let page = NowPlayingIOS27.lastPage, page.window != nil else { return false }
             guard let host = controller.viewIfLoaded else { return false }
-            return host === page || page.isDescendant(of: host)
+            if host === page || page.isDescendant(of: host) { return true }
+            var presented = controller.presentedViewController
+            var depth = 0
+            while let current = presented, depth < 8 {
+                if let view = current.viewIfLoaded,
+                   view === page || page.isDescendant(of: view) {
+                    return true
+                }
+                presented = current.presentedViewController
+                depth += 1
+            }
+            return false
         }
     }
 
@@ -207,6 +226,174 @@ enum NowPlayingLandscape {
             return true
         }
         return false
+    }
+
+    // MARK: - 真正拦住横屏的那个类（不是 UIViewController）
+    //
+    // `PlayerOrientationHook` 挂在 `UIViewController` 上，而 `supportedInterfaceOrientations`
+    // 是**子类实现优先**的：Spotify 的容器 VC（真机那条链是
+    // `ContainerUI_RootUIInternalImpl.RootViewController` →
+    // `Navigation_PageAPIIntegrationImpl.MusicAppPageHostingViewController` →
+    // `Tome_PageRuntime.PageHostingViewController`）自己实现了它 ⇒ UIKit 问的是子类，
+    // 父类上的 swizzle 一次都不会被调用，遮罩永远不放宽，设备横过来屏幕一动不动。
+    //
+    // 所以听歌页在屏上的第一拍：顺着 responder 链 + 窗口的 VC 树，找出**真正实现这两条
+    // 方法的那个类**（子类没实现就往上找实现它的祖先），把方法换掉（每个类只换一次），
+    // 再叫 UIKit 重新问一遍方向。判据仍走 `widens(_:)` ⇒ 只有"视图里真的托着听歌页"的
+    // 那几层放宽，设置页 / sheet / 别的标签页一个都不动。
+    private static var gatedOwnerClasses: [String: Set<ObjectIdentifier>] = [:]
+    private static weak var gatedPage: UIView?
+
+    /// 听歌页在屏上时调（每拍都行：认下的那一页存在就直接返回）。
+    static func installGatesIfNeeded(for page: UIView) {
+        guard isEnabled, Thread.isMainThread else { return }
+        if gatedPage === page { return }
+        gatedPage = page
+
+        let controllers = controllers(hosting: page)
+        logControllers(controllers)
+        let maskSelector = #selector(getter: UIViewController.supportedInterfaceOrientations)
+        let rotateSelector = #selector(getter: UIViewController.shouldAutorotate)
+        var installed: [String] = []
+        for controller in controllers {
+            let type = type(of: controller)
+            if hookOwner(of: type, selector: maskSelector) {
+                installed.append(NSStringFromClass(type) + ".supportedInterfaceOrientations")
+            }
+            if hookOwner(of: type, selector: rotateSelector) {
+                installed.append(NSStringFromClass(type) + ".shouldAutorotate")
+            }
+        }
+        writeDebugLog(
+            "[\(logTag)] orientation gates — " + (
+                installed.isEmpty
+                    ? "nothing new to hook (already in place, or only the UIViewController-level hook applies)"
+                    : installed.joined(separator: ", ")
+            )
+        )
+        // 布局回合里同步叫 UIKit 重排方向会跟这一拍打架 ⇒ 挪到下一轮 runloop。
+        DispatchQueue.main.async { refreshOrientation() }
+    }
+
+    /// 听歌页这条 VC 链：responder 链 → parent 链 → 窗口里的整棵 VC 树（去重）。
+    private static func controllers(hosting page: UIView) -> [UIViewController] {
+        var found: [UIViewController] = []
+        var seen: Set<ObjectIdentifier> = []
+
+        func add(_ controller: UIViewController?) {
+            guard let controller else { return }
+            let key = ObjectIdentifier(controller)
+            guard !seen.contains(key) else { return }
+            seen.insert(key)
+            found.append(controller)
+        }
+
+        var responder: UIResponder? = page
+        var levels = 0
+        while let current = responder, levels < 16 {
+            if let controller = current as? UIViewController { add(controller) }
+            responder = current.next
+            levels += 1
+        }
+        let hostingController = found.first
+        var parent = hostingController?.parent
+        while let current = parent {
+            add(current)
+            parent = current.parent
+        }
+        if let root = page.window?.rootViewController {
+            var queue: [UIViewController] = [root]
+            var visited = 0
+            while !queue.isEmpty, visited < 64 {
+                let controller = queue.removeFirst()
+                visited += 1
+                add(controller)
+                queue.append(contentsOf: controller.children)
+                if let presented = controller.presentedViewController { queue.append(presented) }
+            }
+        }
+        return found
+    }
+
+    /// 链上每一层：现在回什么遮罩 / 要不要转 / 这两条是不是**它自己**实现的。
+    /// 一次性断言（最多三份日志）：下次"转了没反应"时，直接看是哪一层把遮罩压成竖屏。
+    private static var controllerLogCount = 0
+
+    private static func logControllers(_ controllers: [UIViewController]) {
+        guard controllerLogCount < 3 else { return }
+        controllerLogCount += 1
+        let maskSelector = #selector(getter: UIViewController.supportedInterfaceOrientations)
+        let rotateSelector = #selector(getter: UIViewController.shouldAutorotate)
+        for (depth, controller) in controllers.enumerated() {
+            // 只问**已经加载过视图**的：有的容器 VC 会在自己的 `supportedInterfaceOrientations`
+            // 里读 `self.view`，问一个还没上屏的 VC 等于顺手把它整棵视图建出来。
+            guard controller.isViewLoaded else { continue }
+            let type = type(of: controller)
+            writeDebugLog(
+                "[\(logTag)] chain[\(depth)] \(NSStringFromClass(type))"
+                    + " mask=\(describe(controller.supportedInterfaceOrientations))"
+                    + " autorotate=\(controller.shouldAutorotate)"
+                    + " ownMask=\(implementsItself(type, maskSelector))"
+                    + " ownAutorotate=\(implementsItself(type, rotateSelector))"
+            )
+        }
+    }
+
+    /// 把 `selector` 换到**真正实现它的那个类**上（子类优先；`UIViewController` 那层跳过 ——
+    /// 已经由 `PlayerOrientationHook` 换过）。
+    private static func hookOwner(of type: AnyClass, selector: Selector) -> Bool {
+        var current: AnyClass? = type
+        while let cls = current {
+            // `UIViewController` 那一层已经由 `PlayerOrientationHook` 换过 —— 别再套一层。
+            if ObjectIdentifier(cls) == ObjectIdentifier(UIViewController.self) { return false }
+            if implementsItself(cls, selector) {
+                return replaceImplementation(of: cls, selector: selector)
+            }
+            current = class_getSuperclass(cls)
+        }
+        return false
+    }
+
+    /// 换掉一个类的实现（每个类 + 选择器只换一次）。返回"这次真的换了"。
+    private static func replaceImplementation(of cls: AnyClass, selector: Selector) -> Bool {
+        let key = NSStringFromSelector(selector)
+        var hooked = gatedOwnerClasses[key] ?? []
+        let identifier = ObjectIdentifier(cls)
+        guard !hooked.contains(identifier),
+              let method = class_getInstanceMethod(cls, selector) else { return false }
+
+        let original = method_getImplementation(method)
+        let replacement: IMP
+        if selector == #selector(getter: UIViewController.supportedInterfaceOrientations) {
+            let call = unsafeBitCast(
+                original,
+                to: (@convention(c) (AnyObject, Selector) -> UInt).self
+            )
+            let block: @convention(block) (AnyObject) -> UInt = { object in
+                let mask = call(object, selector)
+                guard let controller = object as? UIViewController,
+                      NowPlayingLandscape.widens(controller) else { return mask }
+                return mask | UIInterfaceOrientationMask.landscape.rawValue
+            }
+            replacement = imp_implementationWithBlock(block)
+        } else {
+            let call = unsafeBitCast(
+                original,
+                to: (@convention(c) (AnyObject, Selector) -> Bool).self
+            )
+            let block: @convention(block) (AnyObject) -> Bool = { object in
+                guard let controller = object as? UIViewController,
+                      NowPlayingLandscape.widens(controller) else {
+                    return call(object, selector)
+                }
+                return true
+            }
+            replacement = imp_implementationWithBlock(block)
+        }
+        method_setImplementation(method, replacement)
+        hooked.insert(identifier)
+        gatedOwnerClasses[key] = hooked
+        return true
     }
 }
 
