@@ -101,11 +101,10 @@ struct EeveeLyricsSettingsView: View {
             
             NonIPadSpacerView()
         }
-        // ⚠️ 不要加 `.onReceive(viewModel.musixmatchTokenInputAlertPublisher)`，
-        // 用 `showAnonymousTokenOption` 决定弹窗里要不要显示「请求匿名令牌」。
-        // 那个 publisher 全工程没有任何一处 `send`（死订阅），而匿名令牌选项本身
-        // 也已整体移除 —— 两个一起去掉。
-        // 手动填令牌的弹窗保留，改由下面这个绑定在"选中 Musixmatch 那一刻"调用。
+        // 令牌这一块**没有弹窗**：手填输入框就在来源选择器下面
+        // （`musixmatchTokenField`），没填或不合法时那一栏自带「请求匿名令牌」按钮。
+        // 早先那套 `musixmatchTokenInputAlertPublisher`（全工程无人 `send` 的死订阅）
+        // 与"选中 Musixmatch 那一刻弹窗"都已删除，别照旧注释再把它接回来。
         // inset-grouped（胶囊卡片）—— 为什么、怎么做的见 `EeveeSettingsView` 顶部那段
         .listStyle(InsetGroupedListStyle())
         .animation(.default, value: viewModel.animationValues)

@@ -270,9 +270,13 @@ final class LockScreenArtworkResolver {
         let deadline = Date().addingTimeInterval(22)
         guard isCurrent(stamp) else { return nil }
 
-        // 目录查询（Apple Music 专辑搜索 / 歌曲搜索 / 专辑详情）单独压一个上限：
-        // 它一道超时就把后面本地 Fill 的时间也吃掉，用户看到的就是"什么都没有"。
-        // 12 秒给 Apple Music 的几步串行请求留出余量；Fill 还有约 10 秒可跑。
+        // 目录查询（Apple Music 专辑搜索 / 歌曲搜索 / 专辑详情 / 宽松匹配的曲目核对）
+        // 单独压一个上限：它一道超时就把后面本地 Fill 的时间也吃掉，用户看到的就是
+        // "什么都没有"。
+        //
+        // ⚠️ 最坏情况下这条链是 7 个请求（①专辑搜索 → ②搜歌+专辑+详情 → ③专辑搜索+
+        // 曲目核对 → ④回退店面），单请求另有 4 秒上限，所以**真正兜底的是这个 12 秒**：
+        // 到点就停。12 秒之后还剩约 10 秒给本地 Fill 和转码，别按"几步"估预算。
         let resolved = await resolveSources(
             title: title,
             artist: artist,

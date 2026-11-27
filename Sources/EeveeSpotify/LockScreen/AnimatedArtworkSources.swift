@@ -244,7 +244,7 @@ enum AppleMusicArtworkSource {
         }
     }
 
-    // MARK: - ① 按专辑搜（首选）
+    // MARK: - 按专辑名搜（① / ③ / ④ 共用）
 
     /// 按专辑名搜。`requireArtist: true` 是精确那条（艺人与专辑名都要对得上）；
     /// `false` 是最后兜底的宽松那条，它**必须**过三道校验才允许认领一张专辑的 editorialVideo。
