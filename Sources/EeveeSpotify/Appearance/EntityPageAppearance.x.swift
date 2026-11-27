@@ -1216,20 +1216,36 @@ enum EntityPageAppearance {
         }
         applyDissolveMask(to: view, solidUntil: meltStart, goneAt: meltEnd)
 
-        // **艺人页**：同一位置再叠一层动图（AM 的 `motionArtist*`，见 `ArtistMotionArtwork`）。
-        // 它盖在这张照片上、用同一条化开 mask —— 所以解析成功时是"照片换成动的"，
-        // 失败 / 还没下来时照片照旧，什么都不用回滚。专辑 / 歌单页不挂（封面是卡片，播动图会喧宾夺主）。
-        if target.kind == .artist {
-            ArtistMotionArtwork.attach(
-                name: EntityPageHeaderManager.currentArtistName,
+        // **动效头图**：艺人页用 AM 的 `motionArtist*`，专辑页用 `motionDetail*`（见
+        // `EntityMotionArtwork`）。它盖在这张照片上、用同一条化开 mask —— 所以解析成功时
+        // 是"照片换成动的"，失败 / 还没下来时照片照旧，什么都不用回滚。
+        // 歌单页不挂（那里的头图是四宫格拼出来的，播动图会喧宾夺主）。
+        switch target.kind {
+        case .artist:
+            EntityMotionArtwork.attach(
+                subject: .artist(name: EntityPageHeaderManager.currentArtistName),
                 host: host,
+                photo: view,
                 frame: frame,
                 maskStart: meltStart,
                 maskEnd: meltEnd
             )
-        } else {
-            // 从艺人页翻到专辑 / 歌单页：停止解码，但保留解析结果（翻回来不用重下）。
-            ArtistMotionArtwork.pause()
+        case .album:
+            // 专辑名 / 艺人名直接读页头那两行（`TitleRow` / `ParentRow`）—— **不依赖 AM 页头开没开**：
+            // 满幅照片与动效头图跟着「Melox 风页面」走，AM 页头是另一颗开关。
+            // 文字还没读到的那几拍 `Subject.isUsable` 会挡住，下一拍有了再解析。
+            let texts = EntityPageHeaderManager.albumTexts(in: host)
+            EntityMotionArtwork.attach(
+                subject: .album(name: texts.title, artist: texts.creator),
+                host: host,
+                photo: view,
+                frame: frame,
+                maskStart: meltStart,
+                maskEnd: meltEnd
+            )
+        case .playlist:
+            // 从艺人 / 专辑页翻到歌单页：停止解码，但保留解析结果（翻回来不用重下）。
+            EntityMotionArtwork.pause()
         }
         // 一页一条：化开收在哪一段（页头可见区里的位置）。
         if !didReportMelt {
@@ -1668,8 +1684,8 @@ enum EntityPageAppearance {
         }
         sharpHero?.removeFromSuperview()
         sharpHero = nil
-        // 艺人页那层动图跟着一起撤：它的 frame / mask 都是照这张照片算的。
-        ArtistMotionArtwork.detach()
+        // 实体页那层动图跟着一起撤：它的 frame / mask 都是照这张照片算的。
+        EntityMotionArtwork.detach()
     }
 
     /// 封面元素里那张真图。
