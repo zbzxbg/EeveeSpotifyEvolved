@@ -695,19 +695,21 @@ enum NowPlayingIOS27 {
         let stackRect = NowPlayingLyricsPlate.untransformed(stack, in: page)
         guard stackRect.width > 1, stackRect.height > 1 else { return nil }
         let inset = measureLandscapeInset(in: page, stackRect: stackRect)
+        // 内容左线：那一坨自己的内容线，但**不能落进安全区**（横屏时刘海 / 圆角在左右两侧）。
+        // 左线一挪，那一坨也跟着挪同样的量 —— 封面与进度条才在同一条线上。
+        let contentX = max(stackRect.minX + inset, page.safeAreaInsets.left + 12)
         let columns = LayoutGeometry.landscapeColumns(
             size: page.bounds.size,
-            // 左栏左线 = 那一坨的内容左线（竖屏是 28：与进度条 / 标题同一条线）。
-            leftInset: max(8, stackRect.minX + inset),
+            leftInset: contentX,
             topInset: max(16, page.safeAreaInsets.top + 8),
             bottomInset: max(12, page.safeAreaInsets.bottom + 6),
-            rightInset: max(24, page.safeAreaInsets.right + 8)
+            rightInset: max(24, page.safeAreaInsets.right + 12)
         )
         let layout = LandscapeLayout(
             column: columns.column,
             cover: columns.cover,
             lyrics: columns.lyrics,
-            stackLeft: stackRect.minX,
+            stackLeft: contentX - inset,
             stackInset: inset
         )
         landscapePage = page
