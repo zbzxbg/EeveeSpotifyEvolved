@@ -24,9 +24,8 @@ Spotify, arranged like Apple Music.
   <sub>Animated lock screen · Apple Music–style player · word-by-word lyrics with romanization and translation</sub>
 </p>
 <p align="center">
-  <img src="docs/screenshots/album.webp" width="18%" alt="Apple Music–style album page with a blurred backdrop">
-  <img src="docs/screenshots/artist.webp" width="18%" alt="Apple Music–style artist page">
-  <img src="docs/screenshots/home.webp" width="18%" alt="Home, with the liquid-glass tab bar">
+  <img src="docs/screenshots/album.webp" width="24%" alt="Apple Music–style album page with a blurred backdrop">
+  <img src="docs/screenshots/artist.webp" width="24%" alt="Apple Music–style artist page">
 </p>
 
 A derivative work based on [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) and [EeveeSpotify-ng](https://github.com/zbzxbg/EeveeSpotify-ng).
