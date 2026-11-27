@@ -458,6 +458,11 @@ struct AppleMusicLyricsPage: View {
                                     )
                                     row(
                                         for: line,
+                                        // 上一句是谁唱的：横屏右栏很矮，同一位歌手连着唱时
+                                        // 名字只出一次（Apple Music 也是按"换人"分组，不是每句都写）。
+                                        previousAgent: pair.offset > 0
+                                            ? lines[pair.offset - 1].agent
+                                            : nil,
                                         position: position,
                                         focusedLyricID: focusedLyricID,
                                         focusDistance: focusedLineIndex.map {
@@ -1008,6 +1013,7 @@ struct AppleMusicLyricsPage: View {
     @ViewBuilder
     private func row(
         for line: LyricLine,
+        previousAgent: LyricAgent?,
         position: LyricPlaybackPosition,
         focusedLyricID: LyricLine.ID?,
         focusDistance: Int?,
@@ -1053,7 +1059,13 @@ struct AppleMusicLyricsPage: View {
         // 中文/英文歌里是右边，RTL 歌词里是左边 —— 两种情况下都翻在正确的那一侧。
         let isFlipped = line.agent?.alignment == .flipped
         // 对唱歌手名（Apple Music 的 duet 标签）。没有可显示的名字时是 nil，行高不变。
-        let agentName = showsAgentNames ? Self.displayableAgentName(line.agent) : nil
+        // 横屏右栏只有 366pt 高：同一位歌手连续唱的时候名字只留第一句，
+        // 每句都带一行 11pt 的标签会白吃掉一整块的高度。
+        var agentName = showsAgentNames ? Self.displayableAgentName(line.agent) : nil
+        if lyricsUsesLandscapeDensity, let previousAgent,
+           let agent = line.agent, previousAgent.identifier == agent.identifier {
+            agentName = nil
+        }
 
         SynchronizedLyricText(
             syllables: line.syllables,
