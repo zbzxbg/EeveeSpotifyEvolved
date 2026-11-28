@@ -678,6 +678,8 @@ enum NowPlayingIOS27 {
     private static weak var landscapeStack: UIView?
     private static var landscapeBounds: CGRect = .zero
     private static var landscapeLayoutCache: LandscapeLayout?
+    /// 算这份几何时"底部那一行"占了多少（缓存判据之一）。
+    private static var landscapeLayoutBottomRow: CGFloat = 0
     /// 算这份几何时那一坨**看得见的部分**有多高。换歌 / 打开歌词 / 折掉工具行都会让它变
     /// （高度一变，封面就得跟着缩或长），所以它也是缓存的判据之一。
     private static var landscapeContentHeight: CGFloat = 0
@@ -716,14 +718,24 @@ enum NowPlayingIOS27 {
         // 立刻把缓存作废：高度一变，封面就得跟着缩。
         let stackRect = NowPlayingLyricsPlate.untransformed(stack, in: page)
         guard stackRect.width > 1, stackRect.height > 1 else { return nil }
-        let contentHeight = measureLandscapeContentHeight(in: page, stack: stack, stackRect: stackRect)
+        // 三行已经搬出来了（见 `placeLandscapeRows`）⇒ 它们的合计高度才是"封面下面那一坨"；
+        // 还没搬的时候退回量底排本身。
+        let contentHeight = landscapeRowsContentHeight > 1
+            ? landscapeRowsContentHeight
+            : measureLandscapeContentHeight(in: page, stack: stack, stackRect: stackRect)
+        // 传输行搬到了页面底部 ⇒ 可用高还要让开它。
+        let bottomRowHeight = landscapeTransportFrame.map { $0.height + 16 } ?? 0
         if landscapePage === page, landscapeStack === stack,
            landscapeBounds.equalTo(page.bounds),
            abs(landscapeContentHeight - contentHeight) <= 0.5,
+           abs(landscapeLayoutBottomRow - bottomRowHeight) <= 0.5,
            let cached = landscapeLayoutCache {
             return cached
         }
-        let inset = measureLandscapeInset(in: page, stackRect: stackRect)
+        // 搬出来之后行内的内边距是我们自己给的（24）；还没搬时按原生量。
+        let inset: CGFloat = landscapeRowsContentHeight > 1
+            ? 24
+            : measureLandscapeInset(in: page, stackRect: stackRect)
         // 内容左线：**贴着安全区**（横屏时刘海 / 圆角在左右两侧），不再跟 Spotify 自己那套
         // 横屏摆位走 —— 那一坨在 96、内容线 120，比安全区（48）多出 70pt，整个左栏被推到
         // 屏幕中间，右边那半截全是空的。
@@ -733,7 +745,7 @@ enum NowPlayingIOS27 {
             size: page.bounds.size,
             leftInset: contentX,
             topInset: max(16, page.safeAreaInsets.top + 8),
-            bottomInset: max(12, page.safeAreaInsets.bottom + 6),
+            bottomInset: max(12, page.safeAreaInsets.bottom + 6) + bottomRowHeight,
             rightInset: max(24, page.safeAreaInsets.right + 12),
             // 封面下面那一坨的真实高度：封面只能占"剩下的"那块，否则标题会压在封面上。
             stackHeight: contentHeight,
@@ -751,6 +763,7 @@ enum NowPlayingIOS27 {
         landscapeStack = stack
         landscapeBounds = page.bounds
         landscapeContentHeight = contentHeight
+        landscapeLayoutBottomRow = bottomRowHeight
         landscapeLayoutCache = layout
         return layout
     }
@@ -818,6 +831,7 @@ enum NowPlayingIOS27 {
         landscapeStack = nil
         landscapeBounds = .zero
         landscapeContentHeight = 0
+        landscapeLayoutBottomRow = 0
         landscapeLayoutCache = nil
     }
 
@@ -1094,6 +1108,13 @@ enum NowPlayingIOS27 {
         // ⚠️ 顺序不能动：`placeBottomStack` 的 -55pt 是 `placeTitleRow` 量自然位置的
         // 前提（标题行就长在这个 stack 里）。
         if placeBottomStack(in: page) { changed = true }
+        // 横屏：把歌名 / 进度 / 传输三行从底排搬出来自己摆（底排那个盒子是定值，改不动）。
+        // ⚠️ 必须排在 `placeTitleRow` / `placeProgress` 之前：它们要按"行在页面上"来量。
+        if let layout = landscapeLayout(in: page) {
+            if placeLandscapeRows(in: page, layout: layout) { changed = true }
+        } else {
+            restoreLandscapeRows()
+        }
         if placeTitleRow(in: page) { changed = true }
         // Canvas 页自带的歌词卡 / 页顶歌名压在我们的版式上，每拍按下去。
         if placeCanvasChrome(in: page) { changed = true }
@@ -1181,7 +1202,12 @@ enum NowPlayingIOS27 {
         // 横屏两栏：歌词就是**右栏那一整块**，不再从缩略图与进度条之间挤。
         if let layout = landscapeLayout(in: page) {
             guard layout.lyrics.width > 80, layout.lyrics.height > 80 else { return nil }
-            return layout.lyrics
+            var frame = layout.lyrics
+            // 传输行搬到页面底部之后，歌词不再铺到它下面（那一块留给按钮与来源）。
+            if let row = landscapeTransportFrame, row.minY - 12 > frame.minY + 80 {
+                frame.size.height = row.minY - 12 - frame.minY
+            }
+            return frame
         }
         // 进度条也必须找**当前可见页**那一份 —— pager 里相邻页的副本在 y≈-413，
         // 用它算出来的高度是负数 ⇒ `guard bottom - top > 80` 永远不过，歌词容器就永远不铺。
@@ -2207,7 +2233,7 @@ enum NowPlayingIOS27 {
     }
 
     /// 当前页**可见**的底排（跳过 pager 里相邻页的离屏副本）。
-    private static func bottomStackView(in page: UIView) -> UIView? {
+    static func bottomStackView(in page: UIView) -> UIView? {
         var queue: [UIView] = [page]
         var visited = 0
         while !queue.isEmpty, visited < 3000 {
@@ -2594,16 +2620,40 @@ enum NowPlayingIOS27 {
             view = fresh
         }
 
-        // 位置：**歌词区左下角**、贴着歌词块的下沿（进度条上沿之上）。
-        // 宽 300 是有意的：再往右就压到收藏键（348…396）。
-        let stage = lyricsStageFrame(in: page) ?? lyricsStageFrameFallback(in: page)
+        // 竖屏：**歌词区左下角**、贴着歌词块的下沿（进度条上沿之上）；宽 300 是有意的，
+        // 再往右就压到收藏键（348…396）。
+        // 横屏：和底部那行播放键**平排**（同一条中线），靠歌词栏右端。
         let height: CGFloat = 38
-        let frame = CGRect(
-            x: stage.minX + 2,
-            y: stage.maxY - height - 4,
-            width: min(max(0, stage.width - 4), 300),
-            height: height
-        )
+        let frame: CGRect
+        if let layout = landscapeLayout(in: page), let row = landscapeTransportFrame {
+            let right = min(layout.lyrics.maxX, page.bounds.width - page.safeAreaInsets.right - 8)
+            let beside = right - (row.maxX + 20)
+            if beside >= 120 {
+                let width = min(300, beside)
+                frame = CGRect(
+                    x: (right - width).rounded(),
+                    y: (row.midY - height / 2).rounded(),
+                    width: width,
+                    height: height
+                )
+            } else {
+                let width = min(300, max(160, right - layout.lyrics.minX))
+                frame = CGRect(
+                    x: (right - width).rounded(),
+                    y: (row.minY - height - 6).rounded(),
+                    width: width,
+                    height: height
+                )
+            }
+        } else {
+            let stage = lyricsStageFrame(in: page) ?? lyricsStageFrameFallback(in: page)
+            frame = CGRect(
+                x: stage.minX + 2,
+                y: stage.maxY - height - 4,
+                width: min(max(0, stage.width - 4), 300),
+                height: height
+            )
+        }
         var changed = false
         if view.frame != frame {
             view.frame = frame
@@ -2886,6 +2936,7 @@ enum NowPlayingIOS27 {
         teardownArtwork()
         teardownProgress()
         teardownTransport()
+        restoreLandscapeRows()
         teardownFooter()
 
         writeDebugLog("[\(logTag)] restored (\(reason)) — native cover, title row and our views are back")
@@ -3011,7 +3062,7 @@ enum NowPlayingIOS27 {
     ///
     /// 不能先找 `listIdentifier` 的第一份 list 再在它里面找 label —— pager 里相邻页的 list
     /// 会先被撞上（标题 y = -443）。直接全页 BFS 所有 label，挑**祖父在当前页可见范围**的那一个。
-    private static func titleRowView(in page: UIView) -> UIView? {
+    static func titleRowView(in page: UIView) -> UIView? {
         var queue: [UIView] = [page]
         var visited = 0
         while !queue.isEmpty, visited < 3000 {

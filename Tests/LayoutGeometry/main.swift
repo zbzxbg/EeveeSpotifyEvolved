@@ -202,11 +202,13 @@ for size in landscapeSizes {
     )
     require(folded.cover.width > full.cover.width,
             "\(size.name): folding the tool row did not grow the cover")
-    // 栏宽是**独立的**：进度行有 ≈272pt 的固有宽度，栏不能跟着封面缩。
-    require(near(folded.column.width, full.column.width),
-            "\(size.name): the column moved when the row folded")
+    // 栏宽**跟着封面**（横屏那一坨已经由 `placeLandscapeRows` 接管）。
     require(folded.column.width >= folded.cover.width - tolerance,
             "\(size.name): the column is narrower than the cover")
+    let expectedColumn = min(max(folded.cover.width, LayoutGeometry.landscapeColumnMinWidth),
+                             LayoutGeometry.landscapeColumnMaxWidth)
+    require(near(folded.column.width, expectedColumn),
+            "\(size.name): the column does not follow the cover")
     let budget = size.height - topInset - bottomInset - foldedStackHeight - LayoutGeometry.landscapeCoverStackGap
     let expected = min(max(budget, LayoutGeometry.landscapeMinCoverSide),
                        LayoutGeometry.landscapeCoverMaxSide)
@@ -220,22 +222,24 @@ for size in landscapeSizes {
             "\(size.name): the column gave up its width to the cover")
 }
 
-// ── 那一坨变矮之后（只剩歌名 + 进度）：封面吃满高度预算
+// ── 横屏真正的那一版：左栏只剩歌名 + 进度（≈103pt），传输行搬到页码底部（预留 64+16）
 //
-// 栏宽**不跟着封面变**：Spotify 的进度行有 ≈272pt 固有宽度，栏窄了时间标签会跑进歌词里。
+// 这一版要的就是「封面 = 播放条」：栏宽跟着封面，歌词紧贴封面右沿。
 for size in landscapeSizes {
     let layout = LayoutGeometry.landscapeColumns(
         size: CGSize(width: size.width, height: size.height),
-        leftInset: 64, topInset: 16, bottomInset: 27, rightInset: 60,
-        stackHeight: 100, lyricsMaxWidth: 440
+        leftInset: 64, topInset: 16, bottomInset: 27 + 80, rightInset: 60,
+        stackHeight: 103, lyricsMaxWidth: 440
     )
-    let budget = size.height - 16 - 27 - 100 - LayoutGeometry.landscapeCoverStackGap
+    let budget = size.height - 16 - 107 - 103 - LayoutGeometry.landscapeCoverStackGap
     let expected = min(max(budget, LayoutGeometry.landscapeMinCoverSide),
                        LayoutGeometry.landscapeCoverMaxSide)
     require(near(layout.cover.width, expected),
             "\(size.name): the cover does not take the height budget")
-    require(layout.column.width >= LayoutGeometry.landscapeColumnMinWidth - tolerance,
-            "\(size.name): the column gave up the progress row's width")
+    require(layout.column.width >= layout.cover.width - tolerance,
+            "\(size.name): the column is narrower than the cover")
+    require(abs(layout.column.width - layout.cover.width) <= 20 + tolerance,
+            "\(size.name): the bar and the cover are not the same width")
     require(layout.lyrics.minX >= layout.column.maxX + LayoutGeometry.landscapeColumnGap - tolerance,
             "\(size.name): lyrics overlap the column")
 }
