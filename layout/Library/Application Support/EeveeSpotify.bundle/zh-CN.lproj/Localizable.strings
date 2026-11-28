@@ -506,6 +506,11 @@ audio_effects_crossfeed_low = "弱";
 audio_effects_crossfeed_medium = "中";
 audio_effects_crossfeed_high = "强";
 audio_effects_presets_description = "预设只改十段与前置增益。";
+audio_effects_autoeq = "耳机校正";
+audio_effects_autoeq_footer = "导入 AutoEq 为这副耳机生成的 ParametricEQ 文件。装上之后它会取代上面的架式与十段。";
+audio_effects_autoeq_import = "导入 AutoEq 文件";
+audio_effects_autoeq_remove = "移除校正";
+audio_effects_autoeq_error = "这个文件里没有可读的 AutoEq 滤波器。";
 
 
 hide_mini_player_bar = "隐藏迷你播放条";

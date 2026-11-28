@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// 「音频效果」页：插入在 Spotify 音源单元与输出单元之间的那条链。
 ///
@@ -21,6 +22,8 @@ struct EeveeAudioEffectsSettingsView: View {
         "dspHighShelfDb",
         "dspCompanderAmount",
         "dspCrossfeedLevel",
+        "dspAutoEqText",
+        "dspAutoEqName",
     ]
 
     /// 「自己调过」不是 `AudioDSPPreset` 的档位，但选择器要能显示它。
@@ -35,6 +38,9 @@ struct EeveeAudioEffectsSettingsView: View {
     @State private var compander = UserDefaults.dspCompanderAmount
     @State private var crossfeed = UserDefaults.dspCrossfeedLevel
     @State private var insertActive = AudioDSP.isInsertActive
+    @State private var autoEqName = UserDefaults.dspAutoEqName
+    @State private var isImportingAutoEq = false
+    @State private var autoEqFailed = false
 
     var body: some View {
         List {
@@ -138,6 +144,32 @@ struct EeveeAudioEffectsSettingsView: View {
                 }
             }
 
+            Section(
+                header: Text("audio_effects_autoeq".localized),
+                footer: Text("audio_effects_autoeq_footer".localized)
+            ) {
+                if let autoEqName {
+                    Text(verbatim: autoEqName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Button("audio_effects_autoeq_remove".localized, role: .destructive) {
+                        AudioDSPAutoEq.removeProfile()
+                        self.autoEqName = nil
+                        autoEqFailed = false
+                    }
+                } else {
+                    Button("audio_effects_autoeq_import".localized) {
+                        isImportingAutoEq = true
+                    }
+                }
+
+                if autoEqFailed {
+                    Text("audio_effects_autoeq_error".localized)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             SettingsResetSection(
                 keys: Self.ownedKeys,
                 afterReset: {
@@ -149,12 +181,39 @@ struct EeveeAudioEffectsSettingsView: View {
         }
         // inset-grouped（胶囊卡片）—— 与设置里其它页一致。
         .listStyle(InsetGroupedListStyle())
+        .fileImporter(
+            isPresented: $isImportingAutoEq,
+            allowedContentTypes: [.plainText, .text],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first { importAutoEq(from: url) }
+            case .failure:
+                autoEqFailed = true
+            }
+        }
         .onAppear {
             // 备份导入 / 别处改过键时，显示与运行态都对齐一次。
             refreshShadowFromDefaults()
             AudioDSP.syncWithSettings()
             insertActive = AudioDSP.isInsertActive
         }
+    }
+
+    /// 读一份 AutoEq 文本（或任意 `.txt`）并接到链上；失败只留一行提示，不改现有档。
+    private func importAutoEq(from url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+        }
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            autoEqFailed = true
+            return
+        }
+        let imported = AudioDSPAutoEq.importProfile(text: text, name: url.lastPathComponent)
+        autoEqName = UserDefaults.dspAutoEqName
+        autoEqFailed = !imported
     }
 
     // MARK: - 行
@@ -256,5 +315,7 @@ struct EeveeAudioEffectsSettingsView: View {
         highShelf = UserDefaults.dspHighShelfDb
         compander = UserDefaults.dspCompanderAmount
         crossfeed = UserDefaults.dspCrossfeedLevel
+        autoEqName = UserDefaults.dspAutoEqName
+        autoEqFailed = false
     }
 }

@@ -161,6 +161,7 @@ enum AudioDSP {
             // 钩子只在有消费者时才装；DSP 打开时也要算一个消费者。
             AudioTapService.ensureInstalled()
         }
+        AudioDSPAutoEq.restoreStoredProfile()
         reloadParameters()
         startTickerIfNeeded()
     }

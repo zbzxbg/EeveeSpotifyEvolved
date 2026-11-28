@@ -508,6 +508,11 @@ audio_effects_crossfeed_low = "Low";
 audio_effects_crossfeed_medium = "Medium";
 audio_effects_crossfeed_high = "High";
 audio_effects_presets_description = "Presets set the 10 bands and the preamp only.";
+audio_effects_autoeq = "Headphone correction";
+audio_effects_autoeq_footer = "Import AutoEq's ParametricEQ file for your headphones. While one is installed it replaces the tone shelves and the 10 bands.";
+audio_effects_autoeq_import = "Import AutoEq file";
+audio_effects_autoeq_remove = "Remove correction";
+audio_effects_autoeq_error = "That file has no readable AutoEq filters.";
 
 
 hide_mini_player_bar = "Hide the mini player bar";

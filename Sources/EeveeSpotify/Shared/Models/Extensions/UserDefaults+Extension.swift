@@ -54,6 +54,9 @@ extension UserDefaults {
     private static let dspHighShelfDbKey = "dspHighShelfDb"
     private static let dspCompanderAmountKey = "dspCompanderAmount"
     private static let dspCrossfeedLevelKey = "dspCrossfeedLevel"
+    /// 导入的 AutoEq 参数均衡档：文本原样存，启动时重新解析（见 `AudioDSPAutoEq`）。
+    private static let dspAutoEqTextKey = "dspAutoEqText"
+    private static let dspAutoEqNameKey = "dspAutoEqName"
     private static let dumpViewTreeKey = "dumpViewTree"
     /// 「更详细的日志记录」的总键：合并「转储视图树」与「转储 customize 响应体」两颗旧开关。
     private static let detailedLoggingKey = "detailedLogging"
@@ -148,6 +151,8 @@ extension UserDefaults {
         dspHighShelfDbKey,
         dspCompanderAmountKey,
         dspCrossfeedLevelKey,
+        dspAutoEqTextKey,
+        dspAutoEqNameKey,
         dumpViewTreeKey,
         detailedLoggingKey,
         hideMiniPlayerBarKey,
@@ -672,6 +677,38 @@ extension UserDefaults {
                 min(max(newValue, 0), AudioDSPCrossfeed.levelCount - 1),
                 forKey: dspCrossfeedLevelKey
             )
+        }
+    }
+
+    /// 导入的 AutoEq `ParametricEQ.txt` 原文；空 = 没装。
+    ///
+    /// 存原文而不是解析结果：解析规则以后会改，存原文能用新规则重读；真读不出来就当没装。
+    static var dspAutoEqText: String? {
+        get {
+            let value = container.string(forKey: dspAutoEqTextKey)
+            return value?.isEmpty == false ? value : nil
+        }
+        set {
+            if let newValue, !newValue.isEmpty {
+                container.set(newValue, forKey: dspAutoEqTextKey)
+            } else {
+                container.removeObject(forKey: dspAutoEqTextKey)
+            }
+        }
+    }
+
+    /// 导入时用的文件名（或粘贴时给的标题），只用来在设置页显示。
+    static var dspAutoEqName: String? {
+        get {
+            let value = container.string(forKey: dspAutoEqNameKey)
+            return value?.isEmpty == false ? value : nil
+        }
+        set {
+            if let newValue, !newValue.isEmpty {
+                container.set(newValue, forKey: dspAutoEqNameKey)
+            } else {
+                container.removeObject(forKey: dspAutoEqNameKey)
+            }
         }
     }
 
