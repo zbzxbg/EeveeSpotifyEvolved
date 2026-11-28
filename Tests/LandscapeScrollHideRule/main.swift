@@ -43,11 +43,11 @@ require(
 // MARK: - 纯文本：必须"内容真的滚了"
 
 require(
-    LandscapeScrollHideRule.shouldHide(isStatic: true, dragDistance: 30, contentOffsetDelta: 0),
+    !LandscapeScrollHideRule.shouldHide(isStatic: true, dragDistance: 30, contentOffsetDelta: 0),
     "plain lyrics must not hide when nothing scrolled (the text fits)"
 )
 require(
-    LandscapeScrollHideRule.shouldHide(isStatic: true, dragDistance: -30, contentOffsetDelta: 0),
+    !LandscapeScrollHideRule.shouldHide(isStatic: true, dragDistance: -30, contentOffsetDelta: 0),
     "plain lyrics still fit when dragging the other way"
 )
 require(
