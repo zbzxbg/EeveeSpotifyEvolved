@@ -55,24 +55,30 @@ enum NowPlayingIOS27 {
     /// ⚠️ 只有**这一层** transform；量位置的地方必须用 `convert`（带 transform），不能用
     /// `untransformed`，否则字形/音量行会留在原位。
     static let bottomStackYOffset: CGFloat = -55
-    /// 压黑渐变：从页面 55% 起渐到纯黑（pw 的 `kBlackFrom` 就是 0.55）。
+    /// 压黑渐变的**起点**（占页面高的比例）。
     ///
     /// 起点必须落在封面下沿（0.58）**之前**：否则封面下沿与这行歌名（y≈545）之间那一条
     /// 完全没有压暗，浅色封面上就是一条亮灰/亮蓝的带（"渐变遮不住封面底部"）。
-    static let blackFromRatio: CGFloat = 0.55
-    /// 压黑渐变终点的**不透明度**。
+    static let blackFromRatio: CGFloat = 0.50
+    /// 渐变中段（页面高的比例）与它的黑度：到这里是"暗"，再往下才到黑。
+    static let blackMidRatio: CGFloat = 0.78
+    static let blackMidAlpha: CGFloat = 0.45
+    /// 渐变**底部**的黑度。
     ///
-    /// 背景里铺了封面的模糊延续，这条纱只负责压暗。AM 那块是"暗下去"不是"灰掉" ——
-    /// 它先把封面过饱和再压暗；这里取 0.50，让封面的颜色仍透一点出来。
-    static let blackScrimAlpha: CGFloat = 0.50
-    /// 字段颜色的两条上限（pw 原值：饱和度 0.55、线性亮度 0.07 ⇒ sRGB ≈ 0.29）。
+    /// AM 那块底下几乎是黑的。只压到 0.50 时，亮封面会在下半屏留下一片发灰的中间调 ——
+    /// 白字要靠"再补一层可读性黑纱"硬顶，看起来就是"灰扑扑的渐变"。
+    static let blackScrimAlpha: CGFloat = 0.92
+    /// 字段色：饱和度封顶（pw 的 0.55）与**线性亮度**上限（pw 的 0.07，这里放宽到 0.10）。
     ///
-    /// pw 这两条是为整块纯色底定的；我们底下还铺了封面模糊图，颜色不需要压那么死，
-    /// 放宽到 0.90 / 0.38，再叠一个 `fieldSaturationBoost`（见 `fieldColour`）。
-    static let maxFieldSaturation: CGFloat = 0.90
-    static let maxFieldBrightness: CGFloat = 0.38
-    /// 平均色 → 字段色时的饱和度倍率（AM 的渐变会刻意过饱和专辑图）。
-    static let fieldSaturationBoost: CGFloat = 1.45
+    /// 这两条是"白字读得清"的全部保证，也是"看起来像 AM"的关键：先按**主色**取色，
+    /// 再把线性亮度压到上限以下 —— 直接在 sRGB 数值上乘会偏亮，那正是发灰的来源。
+    static let fieldSaturationCap: CGFloat = 0.55
+    static let fieldLuminanceCeiling: CGFloat = 0.10
+    /// 模糊底上盖多少"压暗过的主色"（0 = 只看模糊图，1 = 只用纯色）。
+    ///
+    /// 0.45 是"还看得出是这张封面，但亮度已经被收进那一档"的位置；调大更接近 AM 的纯色感，
+    /// 调小更接近"糊图"。
+    static let backdropTintAlpha: CGFloat = 0.45
     /// 模糊底"白到白字读不清"的那条线：封面的平均亮度超过它，就在模糊底上再压一层黑。
     ///
     /// 模糊底是**整张封面**铺满整页，字段色只在它下面 —— 白封面时中间那块（曲名、
@@ -80,7 +86,10 @@ enum NowPlayingIOS27 {
     /// 暗封面完全不加（观感与不压时一模一样）。
     static let readableBackdropBrightness: CGFloat = 0.38
     /// 可读性压黑的上限（白封面的极端情况）。
-    static let maxReadabilityScrimAlpha: CGFloat = 0.68
+    ///
+    /// 模糊底已经用压暗过的主色统一过（`backdropTintAlpha`），这一层只做兜底 —— 上限
+    /// 比"没有主色那一版"低，否则两处叠加会把整页压成灰。
+    static let maxReadabilityScrimAlpha: CGFloat = 0.45
     /// 顶部导航那三件的 id。
     ///
     /// · `now-playing-minimize-button` —— 左上那颗向下箭头（48×48，`Tertiary`）；
@@ -1950,9 +1959,11 @@ enum NowPlayingIOS27 {
         black.accessibilityIdentifier = "eevee-ios27-black"
         let blackGradient = CAGradientLayer()
         blackGradient.name = "eevee-ios27-black-gradient"
-        // ⚠️ 终点不再是不透明黑：模糊底要透出来（AM 那块是"暗下去"而不是"黑掉"）。
+        // 终点**接近全黑**（不是 50%）：AM 底下几乎是黑的，只压一半会留下发灰的中间调。
+        // 三段：保色 → 暗 → 黑，中段给"快到底"留出过渡，色带也更不容易看出来。
         blackGradient.colors = [
             UIColor.clear.cgColor,
+            UIColor.black.withAlphaComponent(blackMidAlpha).cgColor,
             UIColor.black.withAlphaComponent(blackScrimAlpha).cgColor,
         ]
         black.layer.addSublayer(blackGradient)
@@ -2006,7 +2017,11 @@ enum NowPlayingIOS27 {
                 gradient.frame = black.bounds
                 changed = true
             }
-            let locations = [NSNumber(value: Double(blackFromRatio)), NSNumber(value: 1)]
+            let locations = [
+                NSNumber(value: Double(blackFromRatio)),
+                NSNumber(value: Double(blackMidRatio)),
+                NSNumber(value: 1),
+            ]
             if (gradient.locations as? [NSNumber]) != locations {
                 gradient.locations = locations
                 changed = true
@@ -2037,6 +2052,17 @@ enum NowPlayingIOS27 {
         let colour = fieldColour(from: image)
         lastFieldImage = image
         lastFieldTrackId = NowPlayingLyricsPlate.currentTrackId() ?? ""
+        // 一次换歌一行：我们的主色 vs Spotify 自己算的那一版（`backgroundViewModel.color`）。
+        // 两边差得远时说明取色路径该换（Spotify 那版跟着它的渐变稿，通常更"高档"）。
+        if let spotify = backgroundViewModel?.color() {
+            writeDebugLog(
+                "[\(logTag)] field colour #\(colourHex(colour)) (dominant,"
+                    + " linear luminance ≤ \(String(format: "%.2f", fieldLuminanceCeiling)))"
+                    + " — spotify's #\(colourHex(spotify))"
+            )
+        } else {
+            writeDebugLog("[\(logTag)] field colour #\(colourHex(colour)) (dominant; no spotify colour)")
+        }
         // 模糊底是整张封面铺满整页 ⇒ 白封面时白字（曲名 / 歌词 / 控件）读不清，补一层黑。
         let readability = readabilityScrimAlpha(for: image)
         if abs(readability - lastReadabilityScrim) > 0.04 {
@@ -2049,7 +2075,7 @@ enum NowPlayingIOS27 {
         // 模糊底：同一张源图只算一次（换歌才重做）。
         if lastBackdropSource !== image {
             lastBackdropSource = image
-            lastBackdropImage = backdrop(from: image)
+            lastBackdropImage = backdrop(from: image, tint: colour)
         }
         // ⚠️ 必须**显式**标成 ` -> Void`。
         //
@@ -2083,11 +2109,17 @@ enum NowPlayingIOS27 {
         return UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation)
     }
 
-    /// 把封面做成"颜色的延续"：缩到 48pt 宽 → 高斯模糊 → 返回那张小图（屏幕上 `aspectFill` 铺满）。
+    /// 把封面做成"颜色的延续"：缩到 48pt 宽 → 高斯模糊 → 用**压暗过的主色**统一一遍 —— 返回那张小图
+    /// （屏幕上 `aspectFill` 铺满）。
     ///
     /// 为什么这么小：这块只负责"下半屏整片是同一种颜色"，任何可辨认的细节都会被读成"糊了"。
     /// 按"封面下沿裁一条 + 固定 28pt 半径"做的话，半径相对小图过大，会糊成灰块。
-    private static func backdrop(from image: UIImage) -> UIImage? {
+    ///
+    /// 为什么要铺主色：模糊图本身保留了封面的亮度 —— 亮封面（白墙、雪景、浅粉人物照）糊完
+    /// 还是一整片亮灰，白字压上去只能靠黑纱硬顶，看起来就是"发灰的渐变"。AM 的底其实是
+    /// **这一首的主色**压暗之后的一块；这里用 `backdropTintAlpha` 把它盖到模糊图上，
+    /// 既保住色相、又把亮度收进"白字读得清"的那一档。
+    private static func backdrop(from image: UIImage, tint: UIColor) -> UIImage? {
         guard let cgImage = image.cgImage else { return nil }
         let input = CIImage(cgImage: cgImage)
         let extent = input.extent
@@ -2102,39 +2134,174 @@ enum NowPlayingIOS27 {
 
         // Apple Music 的渐变不是"平均色 + 黑纱"，而是把**专辑图本身**多层扭曲 + 模糊，
         // 并**刻意过饱和**（社区逆向：Mac/网页版会把封面 oversaturate 再叠 4 份）。
-        // 我们没有 Metal shader，近似做法是：模糊之后再过一遍 `CIColorControls`
-        // （饱和度 ×1.45 / 对比 ×1.05）⇒ 同一张模糊底，颜色更透、不再灰。
+        // 我们没有 Metal shader，近似做法是：模糊之后过一遍 `CIColorControls`
+        // （饱和度 ×1.25 / 对比 ×1.05）⇒ 同一张模糊底，颜色更透、不再灰。
         let graded: CIImage
         if let controls = CIFilter(name: "CIColorControls") {
             controls.setValue(blurred, forKey: kCIInputImageKey)
-            controls.setValue(1.45, forKey: kCIInputSaturationKey)
+            controls.setValue(1.25, forKey: kCIInputSaturationKey)
             controls.setValue(1.05, forKey: kCIInputContrastKey)
-            controls.setValue(0.02, forKey: kCIInputBrightnessKey)
+            controls.setValue(0, forKey: kCIInputBrightnessKey)
             graded = controls.outputImage?.cropped(to: small.extent) ?? blurred
         } else {
             graded = blurred
         }
 
+        // 把压暗过的主色盖上去：亮封面糊完是一整片亮灰，只有这一层能把亮度收进那一档，
+        // 同时让"底色"和"封面"是同一个色相（不然接缝处一眼就看得出是两张图）。
+        let tinted: CIImage
+        if let solid = CIFilter(name: "CIConstantColorGenerator") {
+            solid.setValue(
+                CIColor(color: tint.withAlphaComponent(backdropTintAlpha)),
+                forKey: kCIInputColorKey
+            )
+            if let layer = solid.outputImage?.cropped(to: small.extent),
+               let over = CIFilter(name: "CISourceOverCompositing") {
+                over.setValue(layer, forKey: kCIInputImageKey)
+                over.setValue(graded, forKey: kCIInputBackgroundImageKey)
+                tinted = over.outputImage?.cropped(to: small.extent) ?? graded
+            } else {
+                tinted = graded
+            }
+        } else {
+            tinted = graded
+        }
+
         let context = CIContext(options: [.useSoftwareRenderer: false])
-        guard let cg = context.createCGImage(graded, from: small.extent) else { return nil }
+        guard let cg = context.createCGImage(tinted, from: small.extent) else { return nil }
         return UIImage(cgImage: cg)
     }
 
-    /// 从封面取"字段色"：**整张图的平均色**，再拉高饱和度、压到白字读得清的亮度。
+    /// 从封面取"字段色"：**主色（鲜艳色）→ 线性空间压暗**。
     ///
-    /// 取**整张图**的平均色而不是封面下沿 30%：很多封面下沿是白色/灰色（人物脚下、
-    /// 唱片行、留白），算出来就是一块灰底，和上半张彩色的封面完全不搭。
-    /// AM 的底色也来自整张图的平均/主色并刻意过饱和 ⇒ 整图平均 + ×1.45。
+    /// 为什么不是整图平均色：平均色是算术均值，低饱和的封面（雪景、白墙、灰天空）算出来
+    /// 接近中性灰，再怎么乘饱和度也补不回一个"平均里本来就没有"的色相 ⇒ 整页灰蒙蒙。
+    /// pw 的 `SGRPalette` 用的是**主色**：RGB 每通道 3 位分箱（512 格），按"覆盖率 × 饱和度"
+    /// 打分取最高那一格 —— 这里就是那一套，另加一个亮度因子避免从整片黑里挑出一颗彩点。
+    ///
+    /// 压暗在线性空间里做（先解 gamma）：直接在 sRGB 数值上乘会偏亮，看起来还是发灰。
     private static func fieldColour(from image: UIImage) -> UIColor {
-        guard let average = averageColour(of: image) else { return .black }
-        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0
-        average.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
-        let boosted = min(maxFieldSaturation, saturation * fieldSaturationBoost)
-        return UIColor(
+        guard let dominant = dominantColour(of: image) else { return .black }
+        return linearFieldColour(dominant)
+    }
+
+    /// 主色：缩到 32×32 读像素，按 3 位分箱打分（覆盖率 × 饱和度，再乘一点亮度权重）。
+    private static func dominantColour(of image: UIImage) -> UIColor? {
+        guard let cgImage = image.cgImage else { return nil }
+        let side = 32
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.interpolationQuality = .low
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+
+        let binCount = 512
+        var counts = [Int](repeating: 0, count: binCount)
+        var sums = [Int](repeating: 0, count: binCount * 3)
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            let red = Int(pixels[index])
+            let green = Int(pixels[index + 1])
+            let blue = Int(pixels[index + 2])
+            let bin = ((red >> 5) << 6) | ((green >> 5) << 3) | (blue >> 5)
+            counts[bin] += 1
+            sums[bin * 3] += red
+            sums[bin * 3 + 1] += green
+            sums[bin * 3 + 2] += blue
+        }
+
+        var bestScore: CGFloat = -1
+        var bestColour: UIColor?
+        for bin in 0..<binCount where counts[bin] > 0 {
+            let count = counts[bin]
+            let divisor = CGFloat(count) * 255
+            let red = CGFloat(sums[bin * 3]) / divisor
+            let green = CGFloat(sums[bin * 3 + 1]) / divisor
+            let blue = CGFloat(sums[bin * 3 + 2]) / divisor
+            let colour = UIColor(red: red, green: green, blue: blue, alpha: 1)
+            var hue: CGFloat = 0
+            var saturation: CGFloat = 0
+            var brightness: CGFloat = 0
+            colour.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+            let coverage = CGFloat(count) / CGFloat(side * side)
+            let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+            let score = coverage * (0.15 + saturation) * (0.25 + luminance)
+            if score > bestScore {
+                bestScore = score
+                bestColour = colour
+            }
+        }
+        return bestColour
+    }
+
+    /// 主色 → 字段色：饱和度封顶，线性亮度压到 `fieldLuminanceCeiling` 以下。
+    ///
+    /// 与艺人页那份 `fieldColourFor` 同一套算式（pw 的 `SGRPalette`）；两处都只做"取色之后
+    /// 怎么压暗"这一件事，所以算法一变要两边一起改。
+    private static func linearFieldColour(_ colour: UIColor) -> UIColor {
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 1
+        guard colour.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        else { return UIColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1) }
+        let capped = UIColor(
             hue: hue,
-            saturation: boosted,
-            brightness: min(max(brightness, 0.10), maxFieldBrightness),
+            saturation: min(saturation, fieldSaturationCap),
+            brightness: brightness,
             alpha: 1
+        )
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        guard capped.getRed(&red, green: &green, blue: &blue, alpha: nil) else { return capped }
+
+        var linearRed = linearised(red)
+        var linearGreen = linearised(green)
+        var linearBlue = linearised(blue)
+        let luminance = 0.2126 * linearRed + 0.7152 * linearGreen + 0.0722 * linearBlue
+        if luminance > fieldLuminanceCeiling {
+            let scale = fieldLuminanceCeiling / luminance
+            linearRed *= scale
+            linearGreen *= scale
+            linearBlue *= scale
+        }
+        return UIColor(
+            red: encoded(linearRed),
+            green: encoded(linearGreen),
+            blue: encoded(linearBlue),
+            alpha: 1
+        )
+    }
+
+    /// sRGB 编码值 → 线性（pw 的 `toLinear`）。
+    private static func linearised(_ component: CGFloat) -> CGFloat {
+        component <= 0.04045 ? component / 12.92 : pow((component + 0.055) / 1.055, 2.4)
+    }
+
+    /// 线性 → sRGB 编码值（pw 的 `toEncoded`）。
+    private static func encoded(_ component: CGFloat) -> CGFloat {
+        component <= 0.0031308 ? component * 12.92 : 1.055 * pow(component, 1 / 2.4) - 0.055
+    }
+
+    /// 日志用：`#RRGGBB`。
+    private static func colourHex(_ colour: UIColor) -> String {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 1
+        guard colour.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return "??????" }
+        return String(
+            format: "%02X%02X%02X",
+            Int((red * 255).rounded()),
+            Int((green * 255).rounded()),
+            Int((blue * 255).rounded())
         )
     }
 
