@@ -682,8 +682,7 @@ struct AudioDSPDeviceProfile: Codable, Equatable {
     var highShelfDb: Double
     var balance: Double
     var companderAmount: Double
-    /// 旧存档里没有这一项，解码成 
-il 时按 0.5（原来的 3 ms / 120 ms）走。
+    /// 旧存档里没有这一项，解码成 nil 时按 0.5（原来的 3 ms / 120 ms）走。
     var companderSpeed: Double? = nil
     var crossfeedLevel: Int
 }
