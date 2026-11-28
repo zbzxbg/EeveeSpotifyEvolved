@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -21,6 +22,7 @@ struct EeveeAudioEffectsSettingsView: View {
         "dspLowShelfDb",
         "dspHighShelfDb",
         "dspCompanderAmount",
+        "dspCompanderSpeed",
         "dspCrossfeedLevel",
         "dspBalance",
         "dspDeviceProfilesEnabled",
@@ -39,6 +41,7 @@ struct EeveeAudioEffectsSettingsView: View {
     @State private var lowShelf = UserDefaults.dspLowShelfDb
     @State private var highShelf = UserDefaults.dspHighShelfDb
     @State private var compander = UserDefaults.dspCompanderAmount
+    @State private var companderSpeed = UserDefaults.dspCompanderSpeed
     @State private var crossfeed = UserDefaults.dspCrossfeedLevel
     @State private var balance = UserDefaults.dspBalance
     @State private var perDevice = UserDefaults.dspDeviceProfilesEnabled
@@ -114,6 +117,23 @@ struct EeveeAudioEffectsSettingsView: View {
                         .monospacedDigit()
                         .foregroundColor(.secondary)
                         .frame(width: 46, alignment: .trailing)
+                }
+
+                HStack(spacing: 10) {
+                    Text("audio_effects_compander_speed".localized)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(width: 56, alignment: .leading)
+                    Slider(value: $companderSpeed, in: 0...1, step: 0.05)
+                        .onChange(of: companderSpeed) { value in
+                            UserDefaults.dspCompanderSpeed = value
+                            AudioDSP.reloadParameters()
+                        }
+                    Text(verbatim: speedLabel(companderSpeed))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundColor(.secondary)
+                        .frame(width: 64, alignment: .trailing)
                 }
             }
 
@@ -246,6 +266,13 @@ struct EeveeAudioEffectsSettingsView: View {
         }
     }
 
+    /// 压缩器速度那格：直接显示换算出来的攻击/释放时间，比 0…100% 更好判断。
+    private func speedLabel(_ value: Double) -> String {
+        let attack = 3 * pow(6, 0.5 - value)
+        let release = 120 * pow(4, 0.5 - value)
+        return String(format: "%.0f/%.0f ms", attack, release)
+    }
+
     /// 平衡滑杆右侧那格：居中显示 `C`，两侧显示百分比（`L 40%` / `R 25%`）。
     private func balanceLabel(_ value: Double) -> String {
         let magnitude = Int((abs(value) * 100).rounded())
@@ -366,6 +393,7 @@ struct EeveeAudioEffectsSettingsView: View {
         lowShelf = UserDefaults.dspLowShelfDb
         highShelf = UserDefaults.dspHighShelfDb
         compander = UserDefaults.dspCompanderAmount
+        companderSpeed = UserDefaults.dspCompanderSpeed
         crossfeed = UserDefaults.dspCrossfeedLevel
         balance = UserDefaults.dspBalance
         perDevice = UserDefaults.dspDeviceProfilesEnabled

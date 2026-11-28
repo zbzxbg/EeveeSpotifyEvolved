@@ -469,7 +469,12 @@ enum AudioDSPCompander {
     }
 
     /// `amount`：0 = 直通，1 = 最重（阈值 -24 dB、4:1）。
+    /// `speed`：0.5 = 3 ms / 120 ms（原来的固定值），越小越慢、越大越快。
     static func parameters(amount: Double, sampleRate: Double) -> Parameters {
+        parameters(amount: amount, speed: 0.5, sampleRate: sampleRate)
+    }
+
+    static func parameters(amount: Double, speed: Double, sampleRate: Double) -> Parameters {
         let clamped = min(max(amount, 0), 1)
         guard clamped > 0.001, sampleRate > 0 else { return .bypass }
 
@@ -477,8 +482,10 @@ enum AudioDSPCompander {
         let ratio = 1 + 3 * clamped
         // 补偿一半的压缩量：压满时仍能听出"更紧"，而不是整体变小。
         let makeup = -threshold * (1 - 1 / ratio) * 0.5
-        let attackSeconds = 0.003
-        let releaseSeconds = 0.120
+        // 0.5 正好落在原来的 3 ms / 120 ms 上：老设置不动、听感不变。
+        let speedClamped = min(max(speed, 0), 1)
+        let attackSeconds = 0.003 * pow(6.0, 0.5 - speedClamped)
+        let releaseSeconds = 0.120 * pow(4.0, 0.5 - speedClamped)
         return Parameters(
             thresholdDb: threshold,
             ratio: ratio,
@@ -675,6 +682,9 @@ struct AudioDSPDeviceProfile: Codable, Equatable {
     var highShelfDb: Double
     var balance: Double
     var companderAmount: Double
+    /// 旧存档里没有这一项，解码成 
+il 时按 0.5（原来的 3 ms / 120 ms）走。
+    var companderSpeed: Double? = nil
     var crossfeedLevel: Int
 }
 

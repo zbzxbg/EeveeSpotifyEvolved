@@ -53,6 +53,8 @@ extension UserDefaults {
     private static let dspLowShelfDbKey = "dspLowShelfDb"
     private static let dspHighShelfDbKey = "dspHighShelfDb"
     private static let dspCompanderAmountKey = "dspCompanderAmount"
+    /// 压缩器速度（0…1，0.5 = 3 ms / 120 ms）。
+    private static let dspCompanderSpeedKey = "dspCompanderSpeed"
     private static let dspCrossfeedLevelKey = "dspCrossfeedLevel"
     /// 导入的 AutoEq 参数均衡档：文本原样存，启动时重新解析（见 `AudioDSPAutoEq`）。
     /// 按输出设备分开存的效果设置（JSON）与它的开关。
@@ -155,6 +157,7 @@ extension UserDefaults {
         dspLowShelfDbKey,
         dspHighShelfDbKey,
         dspCompanderAmountKey,
+        dspCompanderSpeedKey,
         dspCrossfeedLevelKey,
         dspBalanceKey,
         dspDeviceProfilesEnabledKey,
@@ -671,6 +674,17 @@ extension UserDefaults {
         }
         set {
             container.set(min(max(newValue, 0), 1), forKey: dspCompanderAmountKey)
+        }
+    }
+
+    /// 压缩器速度：0 = 最慢（7 ms / 240 ms），0.5 = 3 ms / 120 ms，1 = 最快（1.2 ms / 60 ms）。
+    static var dspCompanderSpeed: Double {
+        get {
+            let raw = container.object(forKey: dspCompanderSpeedKey) as? Double ?? 0.5
+            return min(max(raw, 0), 1)
+        }
+        set {
+            container.set(min(max(newValue, 0), 1), forKey: dspCompanderSpeedKey)
         }
     }
 

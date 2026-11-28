@@ -58,6 +58,8 @@ enum AudioDSP {
     private static var customChain: AudioDSPFilterChain?
     private static var chainCount = 0
     private static var companderAmount = 0.0
+    /// 压缩器的速度（0…1，0.5 = 原来的 3 ms / 120 ms）。
+    private static var companderSpeed = 0.5
     private static var crossfeedLevel = 0
     /// 左右平衡（−1…1，0 居中），只在 render 侧换成两路增益。
     private static var balance = 0.0
@@ -183,6 +185,7 @@ enum AudioDSP {
         let lowShelf = UserDefaults.dspLowShelfDb
         let highShelf = UserDefaults.dspHighShelfDb
         let compander = UserDefaults.dspCompanderAmount
+        let newCompanderSpeed = UserDefaults.dspCompanderSpeed
         let crossfeed = UserDefaults.dspCrossfeedLevel
         let newBalance = UserDefaults.dspBalance
         let newEnabled = UserDefaults.dspEnabled
@@ -206,6 +209,7 @@ enum AudioDSP {
         let chainPreamp = customChain?.preampLinear ?? 1
         preampLinear = pow(10, preampDb / 20) * chainPreamp
         companderAmount = compander
+        companderSpeed = min(max(newCompanderSpeed, 0), 1)
         balance = min(max(newBalance, -1), 1)
         if sampleRate > 0 {
             recomputeCoefficientsLocked()
@@ -325,7 +329,7 @@ enum AudioDSP {
             coefficients[base + 4] = c.a2
         }
 
-        companderParameters = AudioDSPCompander.parameters(amount: companderAmount, sampleRate: sampleRate)
+        companderParameters = AudioDSPCompander.parameters(amount: companderAmount, speed: companderSpeed, sampleRate: sampleRate)
         crossfeedSettings = AudioDSPCrossfeed.settings(level: crossfeedLevel, sampleRate: sampleRate)
         limiterRelease = AudioDSPLimiter.releaseCoefficient(sampleRate: sampleRate)
     }

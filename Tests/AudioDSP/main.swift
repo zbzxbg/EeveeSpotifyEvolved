@@ -518,6 +518,39 @@ let decodedProfile = encodedProfile.flatMap {
 }
 require(decodedProfile == sampleProfile, "a per-device profile survives a JSON round trip")
 
+// 加 `companderSpeed` 之前的存档还要能读：缺这一项就当 0.5（原来的 3 ms / 120 ms）。
+let legacyProfileJSON = """
+{"bandGainsDb":[1,2],"lowShelfDb":3,"highShelfDb":-3,"balance":0.5,
+ "companderAmount":0.4,"crossfeedLevel":1}
+"""
+let legacyProfile = try? JSONDecoder().decode(
+    AudioDSPDeviceProfile.self,
+    from: Data(legacyProfileJSON.utf8)
+)
+require(legacyProfile != nil && legacyProfile?.companderSpeed == nil,
+        "a profile saved before the speed field existed still decodes")
+
+// MARK: - 压缩器速度
+
+let defaultSpeed = AudioDSPCompander.parameters(amount: 0.6, speed: 0.5, sampleRate: sampleRate)
+require(abs(defaultSpeed.attackCoefficient - exp(-1 / (sampleRate * 0.003))) < 1e-12,
+        "speed 0.5 keeps the original 3 ms attack")
+require(abs(defaultSpeed.releaseCoefficient - exp(-1 / (sampleRate * 0.120))) < 1e-12,
+        "speed 0.5 keeps the original 120 ms release")
+require(AudioDSPCompander.parameters(amount: 0.6, sampleRate: sampleRate) == defaultSpeed,
+        "the two-argument call still means speed 0.5")
+
+let fastCompander = AudioDSPCompander.parameters(amount: 0.6, speed: 1, sampleRate: sampleRate)
+let slowCompander = AudioDSPCompander.parameters(amount: 0.6, speed: 0, sampleRate: sampleRate)
+require(fastCompander.attackCoefficient < defaultSpeed.attackCoefficient,
+        "a faster compressor attacks in fewer samples")
+require(fastCompander.releaseCoefficient < defaultSpeed.releaseCoefficient,
+        "a faster compressor releases in fewer samples")
+require(slowCompander.attackCoefficient > defaultSpeed.attackCoefficient,
+        "a slower compressor attacks in more samples")
+require(slowCompander.thresholdDb == defaultSpeed.thresholdDb,
+        "speed leaves the level thresholds alone")
+
 // MARK: - 结果
 
 if failures > 0 {

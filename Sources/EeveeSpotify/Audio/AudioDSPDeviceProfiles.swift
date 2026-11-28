@@ -53,6 +53,7 @@ enum AudioDSPDeviceProfiles {
             highShelfDb: UserDefaults.dspHighShelfDb,
             balance: UserDefaults.dspBalance,
             companderAmount: UserDefaults.dspCompanderAmount,
+            companderSpeed: UserDefaults.dspCompanderSpeed,
             crossfeedLevel: UserDefaults.dspCrossfeedLevel
         )
         save(profiles)
@@ -67,6 +68,7 @@ enum AudioDSPDeviceProfiles {
         UserDefaults.dspHighShelfDb = profile.highShelfDb
         UserDefaults.dspBalance = profile.balance
         UserDefaults.dspCompanderAmount = profile.companderAmount
+        UserDefaults.dspCompanderSpeed = profile.companderSpeed ?? 0.5
         UserDefaults.dspCrossfeedLevel = profile.crossfeedLevel
         AudioDSP.reloadParameters()
         return true
