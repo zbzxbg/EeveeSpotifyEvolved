@@ -8,7 +8,7 @@ import Foundation
 // <p begin/end itunes:key> → LyricsLineDto（offsetMs = p.begin，行级时间以此为准）
 // <p> 内有序的计时 <span> → LyricsWordDto（startMs/endMs）
 // <p> 内 span 之间的空白文本节点 → 并入前一个词的 text（承载英文词间空格）
-// <p> 内其它文本 → 同样作为一个词（无时间）
+// <p> 内其它正文 → 完整保留；计时词无法覆盖正文时整行退回行级
 // ttm:role="x-translation" → 抽走，成为 LyricsTranslationDto.lines[行索引]
 // ttm:role="x-roman" → 抽走，成为行级官方罗马音
 // ttm:role="x-bg" → 抽成**独立的背景人声子树**（见下）
@@ -61,7 +61,7 @@ struct AmllTtmlLine {
     var endMs: Int?
     /// 主词（含空白词），排除 x-translation / x-roman / x-bg。
     var syllables: [AmllTtmlSyllable]
-    /// 纯文本（无计时 span 时的兜底）。
+    /// 独立提取的完整主词正文，是计时词覆盖校验与行级降级的基准。
     var plainText: String
     var translation: String?
     var translationLanguage: String?
@@ -70,10 +70,9 @@ struct AmllTtmlLine {
     var backgroundVocal: AmllTtmlBackgroundVocal?
     var agent: String?
 
-    /// 主词拼出的行文本（已 trim）。
+    /// 完整主词正文（已 trim），不能由可能不完整的计时词反推。
     var primaryText: String {
-        let joined = syllables.isEmpty ? plainText : syllables.map(\.text).joined()
-        return joined.trimmingCharacters(in: .whitespacesAndNewlines)
+        plainText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -153,9 +152,10 @@ enum AmllTtmlParser {
                 transliterations: sidecarTransliterations,
                 translationLanguage: preferredTranslationLanguage
             ) else { continue }
-            // 空行（含只有背景人声/翻译的行）与结构标注行不要。
-            guard !line.primaryText.isEmpty else { continue }
-            guard !LyricsMarkerFilter.isNonLyricLine(line.primaryText) else { continue }
+            // 纯副唱行也要保留，与 mapper 的保留规则一致。
+            guard !line.primaryText.isEmpty || line.backgroundVocal != nil else { continue }
+            if !line.primaryText.isEmpty,
+               LyricsMarkerFilter.isNonLyricLine(line.primaryText) { continue }
             parsed.append(line)
         }
         if skippedTrackParagraphs > 0 {
@@ -303,9 +303,10 @@ enum AmllTtmlParser {
             for textNode in container.descendants(where: { $0.localName == "text" }) {
                 guard let key = textNode.attribute("for") else { continue }
                 let syllables = parseTimedSpans(in: textNode)
-                let raw = syllables.isEmpty
-                    ? textNode.text(excludingRoles: ["x-bg"])
-                    : syllables.map(\.text).joined()
+                let raw = textNode.text(
+                    excludingRoles: ["x-bg"],
+                    ignoringFormattingWhitespace: !syllables.isEmpty
+                )
                 let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { continue }
                 result[key, default: []].append(
@@ -333,35 +334,56 @@ enum AmllTtmlParser {
         transliterations: [String: [(language: String?, text: String)]],
         translationLanguage: String?
     ) -> AmllTtmlLine? {
-        let syllables = parseTimedSpans(in: node)
+        var syllables = parseTimedSpans(in: node)
+        let backgroundVocal = parseBackgroundVocal(in: node, translationLanguage: translationLanguage)
 
         let paragraphBegin = parseTimeMs(node.attribute("begin"))
         let paragraphEnd = parseTimeMs(node.attribute("end"))
+        // 显式给出的非法行时间不能伪装成“缺失”并从词级时间兜底。
+        if node.attribute("begin") != nil, paragraphBegin == nil {
+            writeDebugLog("[AMLL] dropped line with unparsable begin")
+            return nil
+        }
+        if node.attribute("end") != nil, paragraphEnd == nil {
+            writeDebugLog("[AMLL] dropped line with unparsable end")
+            return nil
+        }
 
-        // 行级时间：`<p begin>` 优先；缺失时退回**第一个计时 span** 的 begin。
+        // 行级时间：`<p begin>` 优先；缺失时取主词最早 begin，纯副唱行取副唱时间。
         //
         // （Apple Music 官方 TTML 那条线）：Apple 的 `syllable-lyrics` 里
         // `<p>` **有时不带 begin/end**，时间只挂在 span 上（`dropcreations/Manzana...`
         // 的转换器就是被迫从首个/末个 span 反推行时间的）。以前的硬判据是
         // `guard let startMs = parseTimeMs(node.attribute("begin"))` ⇒ 那种文件会被
         // **整首丢光**（"没有 <p> 能解析" → noSuchSong），表现为"实验打开了却永远没词"。
-        let startMs = paragraphBegin ?? syllables.first?.startMs
+        let startMs = paragraphBegin ?? syllables.map(\.startMs).min()
+            ?? backgroundVocal?.syllables.map(\.startMs).min()
         guard let startMs else { return nil }
 
         // ⚠️ `end` 的回退**只在 `<p>` 完全没有行级时间时**才做：带 `<p begin>` 的文件
         // （AMLL 与绝大多数老文件）行为保持**逐字不变** —— 它们本来就没有 end 的那些行
         // 仍然没有 end，不会因为这次改动突然多出一个"行尾"。
         let endMs = paragraphEnd
-            ?? (paragraphBegin == nil ? syllables.last?.endMs : nil)
+            ?? (paragraphBegin == nil
+                ? (syllables.map(\.endMs).max() ?? backgroundVocal?.syllables.map(\.endMs).max())
+                : nil)
 
         if let endMs, endMs < startMs {
             writeDebugLog("[AMLL] dropped line with end < begin (\(startMs)ms > \(endMs)ms)")
             return nil
         }
 
-        let plainText = node
-            .text(excludingRoles: ["x-translation", "x-roman", "x-bg"])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let plainText = node.text(
+            excludingRoles: ["x-translation", "x-roman", "x-bg"],
+            ignoringFormattingWhitespace: !syllables.isEmpty
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 用独立提取的完整正文校验计时覆盖；缺字时保留整行，退回行级。
+        if !syllables.isEmpty,
+           syllables.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines) != plainText {
+            writeDebugLog("[AMLL] incomplete timed text — keeping full text with line-level timing")
+            syllables.removeAll()
+        }
 
         let key = node.attribute("key")
 
@@ -384,8 +406,6 @@ enum AmllTtmlParser {
             includeNested: false
         )
         let sidecarRomanization = key.flatMap { preferredTrack(in: transliterations[$0] ?? []) }
-
-        let backgroundVocal = parseBackgroundVocal(in: node, translationLanguage: translationLanguage)
 
         let translationLanguage = inlineTranslation?.language ?? sidecarTranslation?.language
 
@@ -413,6 +433,20 @@ enum AmllTtmlParser {
 
         for index in contents.indices {
             guard case .child(let span) = contents[index], span.localName == "span" else { continue }
+            // 角色与注音过滤必须先于 ruby 特判，辅助轨不能混入主词。
+            guard !span.hasRole("x-translation"), !span.hasRole("x-roman"), !span.hasRole("x-bg"),
+                  !AmllTtmlNode.rubyAnnotationStyles.contains(span.rubyStyle ?? "") else { continue }
+
+            // 无计时包装节点：递归收集计时叶子，保留包装节点之后的词间空格。
+            if span.rubyStyle != "container",
+               span.attribute("begin") == nil, span.attribute("end") == nil {
+                var nested = parseTimedSpans(in: span)
+                if !nested.isEmpty {
+                    nested[nested.count - 1].text += trailingSeparator(after: index, in: contents)
+                }
+                result.append(contentsOf: nested)
+                continue
+            }
 
             // **ruby 注音容器**（`tts:ruby="container"`）单独处理 ——
             // 它的正文（base）与注音都不带 begin/end，时间只挂在 `tts:ruby="text"` 上。
@@ -425,14 +459,14 @@ enum AmllTtmlParser {
                 continue
             }
 
-            guard !span.hasRole("x-translation"),
-                  !span.hasRole("x-roman"),
-                  !span.hasRole("x-bg"),
-                  let startMs = parseTimeMs(span.attribute("begin")),
+            guard let startMs = parseTimeMs(span.attribute("begin")),
                   let endMs = parseTimeMs(span.attribute("end")),
                   endMs >= startMs else { continue }
 
-            var text = span.text(excludingRoles: ["x-translation", "x-roman", "x-bg"])
+            var text = span.text(
+                excludingRoles: ["x-translation", "x-roman", "x-bg"],
+                ignoringFormattingWhitespace: true
+            )
 
             // 紧随其后的纯空白文本节点 → 并入本词（换行不算词间空格）。
             text += trailingSeparator(after: index, in: contents)
@@ -473,7 +507,10 @@ enum AmllTtmlParser {
     /// 会把注音一起拼进来 ⇒ 所しょ詮せん这种正文混读音。
     private static func rubySyllable(in container: AmllTtmlNode) -> AmllTtmlSyllable? {
         // `text` 已经跳过 `textContainer` / `text` ⇒ 这里拿到的就是 base 的正文。
-        let text = container.text().trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = container.text(
+            excludingRoles: ["x-translation", "x-roman", "x-bg"],
+            ignoringFormattingWhitespace: true
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
 
         var startMs = parseTimeMs(container.attribute("begin"))
@@ -504,11 +541,33 @@ enum AmllTtmlParser {
         }
         guard let first = entries.first else { return nil }
 
-        let syllables = entries.flatMap { parseTimedSpans(in: $0.node) }
-        let rawText = syllables.isEmpty
-            ? entries.map { $0.node.text(excludingRoles: ["x-translation", "x-roman"]) }.joined()
-            : syllables.map(\.text).joined()
-        guard let text = normalized(rawText) else { return nil }
+        // 每段副唱独立校验完整正文。容器自己计时或子词覆盖不全时，
+        // 用容器/行时间保留整段，不可仅输出那些恰好带时间的字。
+        let syllables = entries.flatMap { entry -> [AmllTtmlSyllable] in
+            let child = entry.node
+            // 明确非法的副唱容器时间不可退回父行而伪装成有效时间。
+            if child.attribute("begin") != nil, parseTimeMs(child.attribute("begin")) == nil { return [] }
+            if child.attribute("end") != nil, parseTimeMs(child.attribute("end")) == nil { return [] }
+            let timed = parseTimedSpans(in: child)
+            let text = child.text(
+                excludingRoles: ["x-translation", "x-roman"],
+                ignoringFormattingWhitespace: true
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return [] }
+            if !timed.isEmpty,
+               timed.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines) == text {
+                return timed
+            }
+            // 时间回退顺序：容器自己 → 子词的实际区间 → 整行。整行拿到最后，
+            // 否则一段有自己时间的副唱会从行首就开始亮。
+            let start = parseTimeMs(child.attribute("begin"))
+                ?? timed.map(\.startMs).min() ?? parseTimeMs(node.attribute("begin"))
+            let end = parseTimeMs(child.attribute("end"))
+                ?? timed.map(\.endMs).max() ?? parseTimeMs(node.attribute("end"))
+            guard let start, let end, end >= start else { return [] }
+            return [AmllTtmlSyllable(text: text, startMs: start, endMs: end)]
+        }
+        guard let text = normalized(syllables.map(\.text).joined()) else { return nil }
 
         // 背景人声内部的翻译（只在 <p> 直接子级没有翻译时才会被用到，这里先存下）。
         let translation = entries
@@ -629,32 +688,50 @@ enum AmllTtmlParser {
     // `1:02:03.456` —— HH:MM:SS.fff
     // `12.345` —— 裸秒数
     // 统一走 Double 再 rounded，避免 Float 精度把 34.010 算成 34009。
+    // 非负、有限，且毫秒值必须能装入 Spotify payload 的 Int32；其它 TTML 时间格式安全拒绝。
     static func parseTimeMs(_ raw: String?) -> Int? {
         guard let raw else { return nil }
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
 
+        // 只接受非负十进制，拒绝 NaN/Infinity、指数和不支持的帧/时钟格式。
+        func decimal(_ raw: Substring) -> Double? {
+            guard !raw.isEmpty,
+                  raw.contains(where: { $0 >= "0" && $0 <= "9" }),
+                  raw.allSatisfy({ ($0 >= "0" && $0 <= "9") || $0 == "." }),
+                  let number = Double(raw), number.isFinite, number >= 0 else { return nil }
+            return number
+        }
+        func milliseconds(_ value: Double) -> Int? {
+            let rounded = value.rounded()
+            // 最终 Spotify payload 使用 Int32；解析阶段就限制，避免后续窄化转换 trap。
+            guard rounded.isFinite, rounded >= 0, rounded <= Double(Int32.max) else { return nil }
+            return Int(rounded)
+        }
+
         if value.hasSuffix("ms") {
-            guard let ms = Double(value.dropLast(2)) else { return nil }
-            return Int(ms.rounded())
+            guard let ms = decimal(value.dropLast(2)) else { return nil }
+            return milliseconds(ms)
         }
         if value.hasSuffix("s") {
-            guard let seconds = Double(value.dropLast()) else { return nil }
-            return Int((seconds * 1000).rounded())
+            guard let seconds = decimal(value.dropLast()) else { return nil }
+            return milliseconds(seconds * 1000)
         }
 
-        let parts = value.split(separator: ":")
-        guard !parts.isEmpty else { return nil }
-
+        let parts = value.split(separator: ":", omittingEmptySubsequences: false)
         if parts.count == 1 {
-            guard let seconds = Double(parts[0]) else { return nil }
-            return Int((seconds * 1000).rounded())
+            guard let seconds = decimal(parts[0]) else { return nil }
+            return milliseconds(seconds * 1000)
         }
-
-        guard let seconds = Double(parts[parts.count - 1]),
-              let minutes = Double(parts[parts.count - 2]) else { return nil }
-        let hours = parts.count >= 3 ? (Double(parts[parts.count - 3]) ?? 0) : 0
-
-        return Int(((hours * 3600 + minutes * 60 + seconds) * 1000).rounded())
+        guard parts.count == 2 || parts.count == 3,
+              parts.dropLast().allSatisfy({ !$0.isEmpty && $0.allSatisfy({ $0 >= "0" && $0 <= "9" }) }),
+              let seconds = decimal(parts[parts.count - 1]), seconds < 60,
+              let minutes = decimal(parts[parts.count - 2]) else { return nil }
+        var hours = 0.0
+        if parts.count == 3 {
+            guard minutes < 60, let parsedHours = decimal(parts[0]) else { return nil }
+            hours = parsedHours
+        }
+        return milliseconds((hours * 3600 + minutes * 60 + seconds) * 1000)
     }
 }

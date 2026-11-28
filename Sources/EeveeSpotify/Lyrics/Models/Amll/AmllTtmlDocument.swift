@@ -102,19 +102,28 @@ final class AmllTtmlNode {
     /// （`rubyAnnotationNames` / `rubyAnnotationStyles`）。不跳它们，正文会被拼成 `漢かん`
     /// —— 那一行就会多出读音，逐词 span 里的读音也会一起进词条（高亮的字范围跟着偏）。
     ///
-    /// ⚠️ ruby 的后果只是**正文多出读音**，不是"降级为逐行"：`AmllLyricsMapper.wordTokens`
-    /// 拿 `line.primaryText` 当期望值，而 `primaryText` 本身就是 `syllables` 的拼接
-    /// （`syllables.isEmpty ? plainText : joined`）⇒ 两者恒等，那条 guard 在 AMLL 这条路上
-    /// 根本不会触发。
-    /// 测试：`Tests/AmllTtmlRuby`（CI）。
-    func text(excludingRoles excludedRoles: Set<String> = []) -> String {
+    /// 计时正文可忽略元素之间的纯空白文本节点（换行、缩进，或不止一个空格），
+    /// 与词间空白处理保持一致。行级纯文本默认保留原有空白；**单个空格**始终保留 ——
+    /// 那是真正的词间分隔，不是排版。
+    func text(
+        excludingRoles excludedRoles: Set<String> = [],
+        ignoringFormattingWhitespace: Bool = false
+    ) -> String {
         if excludedRoles.contains(where: hasRole) { return "" }
         if AmllTtmlNode.rubyAnnotationNames.contains(localName) { return "" }
         if let rubyStyle, AmllTtmlNode.rubyAnnotationStyles.contains(rubyStyle) { return "" }
         return contents.map { content in
             switch content {
-            case .text(let text): return text
-            case .child(let child): return child.text(excludingRoles: excludedRoles)
+            case .text(let text):
+                if ignoringFormattingWhitespace, text.allSatisfy(\.isWhitespace), text != " " {
+                    return ""
+                }
+                return text
+            case .child(let child):
+                return child.text(
+                    excludingRoles: excludedRoles,
+                    ignoringFormattingWhitespace: ignoringFormattingWhitespace
+                )
             }
         }.joined()
     }
@@ -162,6 +171,10 @@ private final class AmllTtmlDocumentBuilder: NSObject, XMLParserDelegate {
         } else {
             node.contents.append(.text(string))
         }
+    }
+
+    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
+        self.parser(parser, foundCharacters: String(decoding: CDATABlock, as: UTF8.self))
     }
 
     func parser(

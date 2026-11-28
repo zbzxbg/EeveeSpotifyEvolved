@@ -1,15 +1,23 @@
 import Foundation
 
-// MARK: - AMLL TTML 的 ruby 注音不能被当成歌词
+// MARK: - AMLL TTML 的 ruby 注音与实际 parser → mapper 回归
 //
 // 跑法（CI 里就是这条，见 `.github/workflows/tests.yml`）：
 //   swiftc Sources/EeveeSpotify/Lyrics/Models/Amll/AmllTtmlDocument.swift \
 //          Sources/EeveeSpotify/Lyrics/Models/Amll/AmllTtmlParser.swift \
+//          Sources/EeveeSpotify/Lyrics/Models/Amll/AmllLyricsMapper.swift \
+//          Sources/EeveeSpotify/Lyrics/Models/Amll/AmllRomanizationWords.swift \
 //          Sources/EeveeSpotify/Lyrics/Models/LyricsError.swift \
 //          Sources/EeveeSpotify/Lyrics/Models/LyricsWordDto.swift \
 //          Sources/EeveeSpotify/Lyrics/Models/LyricsBackgroundVocalDto.swift \
+//          Sources/EeveeSpotify/Lyrics/Models/LyricsLineDto.swift \
+//          Sources/EeveeSpotify/Lyrics/Models/LyricsTranslationDto.swift \
+//          Sources/EeveeSpotify/Lyrics/Models/LyricsRomanizationStatus.swift \
+//          Sources/EeveeSpotify/Lyrics/Models/LyricsMatch.swift \
 //          Sources/EeveeSpotify/Lyrics/Repositories/LyricsMarkers.swift \
-//          Tests/AmllTtmlRuby/main.swift -o amll-ttml-ruby-tests
+//          Tests/AmllTtmlRuby/main.swift \
+//          -o amll-ttml-ruby-tests
+//   ./amll-ttml-ruby-tests
 //
 // 两种写法都要成立（细节见 `MEMORY_2026-10-16_EeveeSpotify-ng_AMLL-TTML-Gaps.md` §一·③）：
 //
@@ -30,10 +38,32 @@ import Foundation
 //
 // 顺带钉住"没有注音的行一个字节都不变"，免得跳过注音的判据写宽了、把正常文本也吃掉。
 
+// 以下仅是其它平台依赖的测试外壳：实际 LyricsDto.swift 带 NaturalLanguage / Spotify
+// 及显示层依赖，无法独立编译。保留 mapper 所需成员及其原始初始化顺序，不模拟映射逻辑。
+// parser、mapper、LyricsLineDto / Word / BackgroundVocal / Translation、罗马化状态与
+// AmllRomanizationWords 均编译生产文件；本地语言识别/日文分词不在这组断言的覆盖范围内。
+struct LyricsDto {
+    var lines: [LyricsLineDto]
+    var timeSynced: Bool
+    var romanization: LyricsRomanizationStatus
+    var translation: LyricsTranslationDto? = nil
+    var languageCode: String? = nil
+    var officialRomanizedLines: [String] = []
+    var officialRomanizedWordGroups: [[String]] = []
+    var providerCredit: String = ""
+}
+
 func writeDebugLog(_ message: String) {}
+
+extension Array where Element == String {
+    var romanizationLanguageCode: String? { nil }
+    var canBeRomanized: Bool { false }
+}
 
 extension String {
     var localized: String { self }
+
+    func japaneseRomajiChunks() -> [(range: NSRange, romaji: String)] { [] }
 }
 
 var failures = 0
@@ -101,6 +131,14 @@ do {
             requireEqual(line.syllables[1].endMs, 21000, "tts:ruby — second syllable ends at the second annotation")
         }
     }
+
+    let dto = AmllLyricsMapper.makeDto(parsed)
+    requireEqual(dto.lines.count, 1, "tts:ruby — 实际 mapper 保留该行")
+    if dto.lines.count == 1 {
+        requireEqual(dto.lines[0].content, "所詮", "tts:ruby — DTO 正文没有注音")
+        requireEqual(dto.lines[0].words?.count ?? 0, 2, "tts:ruby — DTO 保留两个计时词")
+        requireEqual(dto.lines[0].words?.map(\.text).joined() ?? "", "所詮", "tts:ruby — DTO 词与正文一致")
+    }
 } catch {
     failures += 1
     print("  FAIL tts:ruby parsing threw \(error)")
@@ -125,6 +163,13 @@ do {
     if parsed.lines.count == 1 {
         requireEqual(parsed.lines[0].primaryText, "愛", "untimed ruby — the base text is kept")
         requireEqual(parsed.lines[0].syllables.count, 0, "untimed ruby — no syllable without a timestamp")
+    }
+
+    let dto = AmllLyricsMapper.makeDto(parsed)
+    requireEqual(dto.lines.count, 1, "untimed ruby — 实际 mapper 保留该行")
+    if dto.lines.count == 1 {
+        requireEqual(dto.lines[0].content, "愛", "untimed ruby — DTO 保留完整正文")
+        require(dto.lines[0].words == nil, "untimed ruby — DTO 没有伪造逐词数据")
     }
 } catch {
     failures += 1
@@ -163,6 +208,14 @@ do {
         let withoutRuby = parsed.lines[1]
         requireEqual(withoutRuby.primaryText, "読みなし", "a line without ruby is untouched")
     }
+
+    let dto = AmllLyricsMapper.makeDto(parsed)
+    requireEqual(dto.lines.count, 2, "html ruby — 实际 mapper 保留两行")
+    if dto.lines.count == 2 {
+        requireEqual(dto.lines[0].content, "漢字", "html ruby — DTO 正文没有 rt 注音")
+        requireEqual(dto.lines[0].words?.count ?? 0, 2, "html ruby — DTO 的逐词高亮数据仍保留")
+        requireEqual(dto.lines[1].content, "読みなし", "html ruby — 普通行经过 mapper 后仍不变")
+    }
 } catch {
     failures += 1
     print("  FAIL html ruby parsing threw \(error)")
@@ -192,6 +245,129 @@ requireEqual(
     "",
     "bg dto — translation defaults to nil when absent"
 )
+
+// MARK: - ④ 实际 parser → mapper：完整正文、副唱与并行数组对齐
+
+// 四行中恰好两行有两个主词，满足 mapper 的 50% 逐词覆盖率闸门。
+// 这样混合正文的 words == nil 是该行覆盖不完整造成的，不是整首降级掩盖了错误。
+let mapperTtml = """
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xml:lang="en">
+  <body>
+    <div>
+      <p begin="1s" end="4s">I <span begin="1.5s" end="2s">love</span>... you!<span ttm:role="x-translation" xml:lang="zh-Hans">我爱……你！</span></p>
+      <p begin="5s" end="7s"><span ttm:role="x-bg"><span begin="5.1s" end="6s">Only </span><span begin="6s" end="6.9s">harmony</span><span ttm:role="x-translation">只有和声</span></span><span ttm:role="x-translation" xml:lang="zh-Hans">副唱行译文</span></p>
+      <p begin="8s" end="10s"><span begin="8s" end="9s">Hello</span> <span begin="9s" end="10s">world</span><span ttm:role="x-bg" begin="8.25s" end="9.5s">Ooh!<span ttm:role="x-translation">哦！</span></span><span ttm:role="x-translation" xml:lang="zh-Hans">你好世界</span></p>
+      <p begin="11s" end="13s"><span begin="11s" end="12s">Good</span> <span begin="12s" end="13s">night</span></p>
+    </div>
+  </body>
+</tt>
+"""
+
+do {
+    var parsed = try AmllTtmlParser.parse(mapperTtml)
+    requireEqual(parsed.lines.count, 4, "parser→mapper — 四行都被解析，包括纯副唱")
+    if parsed.lines.count == 4 {
+        requireEqual(parsed.lines[0].plainText, "I love... you!", "混合正文 — parser 保留首尾未计时文本与标点")
+        requireEqual(parsed.lines[0].primaryText, "I love... you!", "混合正文 — primaryText 使用完整正文")
+        requireEqual(parsed.lines[0].syllables.count, 0, "混合正文 — 不完整的计时音节被清空")
+        requireEqual(parsed.lines[1].primaryText, "", "纯副唱 — parser 主正文为空")
+        requireEqual(parsed.lines[1].syllables.count, 0, "纯副唱 — 副唱音节不混入主词")
+        requireEqual(parsed.lines[1].backgroundVocal?.text ?? "", "Only harmony", "纯副唱 — parser 保留副唱")
+        requireEqual(parsed.lines[2].syllables.count, 2, "普通两词 — parser 保留 Hello world 逐词")
+        requireEqual(parsed.lines[2].backgroundVocal?.syllables.count ?? 0, 1, "副唱容器计时 — parser 形成单 token")
+    }
+
+    let dto = AmllLyricsMapper.makeDto(parsed)
+    requireEqual(dto.lines.count, 4, "parser→mapper — DTO 仍有四行，纯副唱未丢弃")
+    require(dto.timeSynced, "parser→mapper — DTO 保持同步歌词")
+    require(dto.translation?.lines == ["我爱……你！", "副唱行译文", "你好世界", ""], "parser→mapper — 译文按行对齐，缺译文留空")
+    requireEqual(dto.translation?.languageCode ?? "", "zh", "parser→mapper — 使用真实译文 DTO 保存语言")
+    if dto.lines.count == 4 {
+        requireEqual(dto.lines[0].content, "I love... you!", "混合正文 — mapper 完整保留 I、love、尾文与标点")
+        require(dto.lines[0].words == nil, "混合正文 — mapper 仅放弃不完整逐词数据")
+        require(dto.lines[0].backgroundVocal == nil, "混合正文 — 没有其它行的副唱")
+
+        let pureBackground = dto.lines[1]
+        requireEqual(pureBackground.content, "", "纯副唱 — DTO 主正文仍为空")
+        require(pureBackground.words == nil, "纯副唱 — DTO 不生成主词")
+        requireEqual(pureBackground.backgroundVocal?.text ?? "", "Only harmony", "纯副唱 — DTO 副唱完整保留")
+        requireEqual(pureBackground.backgroundVocal?.syllables.count ?? 0, 2, "纯副唱 — DTO 副唱保留两个计时词")
+        requireEqual(pureBackground.backgroundVocal?.translation ?? "", "只有和声", "纯副唱 — 自己的译文与主行译文分开")
+        require(!pureBackground.isBlankForDisplay, "纯副唱 — 真实 LyricsLineDto 不把它视为空行")
+
+        let ordinary = dto.lines[2]
+        requireEqual(ordinary.content, "Hello world", "普通两词 — mapper 不改变正文与词间空格")
+        requireEqual(ordinary.words?.count ?? 0, 2, "普通两词 — DTO 仍有逐词数据，覆盖率闸门确实打开")
+        require(ordinary.words?.map(\.text) == ["Hello ", "world"], "普通两词 — DTO 词拼回完整正文")
+        require(ordinary.words?.map(\.startMs) == [8000, 9000], "普通两词 — 开始时间保持不变")
+        require(ordinary.words?.map(\.endMs) == [9000, 10000], "普通两词 — 结束时间保持不变")
+        requireEqual(ordinary.backgroundVocal?.text ?? "", "Ooh!", "副唱容器计时 — DTO 保留正文")
+        requireEqual(ordinary.backgroundVocal?.syllables.count ?? 0, 1, "副唱容器计时 — DTO 保留单 token")
+        require(ordinary.backgroundVocal?.syllables.first?.startMs == 8250, "副唱容器计时 — 使用自己的 begin 而非主行时间")
+        require(ordinary.backgroundVocal?.syllables.first?.endMs == 9500, "副唱容器计时 — 使用自己的 end 而非主行时间")
+        requireEqual(ordinary.backgroundVocal?.translation ?? "", "哦！", "副唱容器计时 — 自己的译文保留")
+        requireEqual(dto.lines[3].words?.count ?? 0, 2, "普通第二行 — 逐词数据保留，保证 50% 覆盖率")
+        require(dto.lines[3].backgroundVocal == nil, "普通第二行 — 副唱保持 nil")
+    }
+
+    // parser 会先剔除空行，故手工插入中间结构来实际触发 mapper 的 skip 分支。
+    parsed.lines.insert(
+        AmllTtmlLine(
+            key: nil,
+            offsetMs: 0,
+            endMs: 500,
+            syllables: [],
+            plainText: " \n ",
+            translation: "被跳过的行不应占译文位置",
+            translationLanguage: "zh-Hans",
+            romanization: nil,
+            backgroundVocal: nil,
+            agent: nil
+        ),
+        at: 0
+    )
+    let afterBlank = AmllLyricsMapper.makeDto(parsed)
+    requireEqual(afterBlank.lines.count, 4, "首空行 — mapper 确实跳过手工插入的空行")
+    require(afterBlank.lines.map(\.content) == dto.lines.map(\.content), "首空行 — 主正文顺序不变")
+    require(afterBlank.lines.map(\.offsetMs) == dto.lines.map(\.offsetMs), "首空行 — 行开始时间不串位")
+    require(afterBlank.lines.map(\.endOffsetMs) == dto.lines.map(\.endOffsetMs), "首空行 — 行结束时间不串位")
+    require(afterBlank.lines.map { $0.words?.map(\.text) } == dto.lines.map { $0.words?.map(\.text) }, "首空行 — words 的内容与 nil 占位不串位")
+    require(afterBlank.lines.map { $0.words?.map(\.startMs) } == dto.lines.map { $0.words?.map(\.startMs) }, "首空行 — words 开始时间不串位")
+    require(afterBlank.lines.map { $0.words?.map(\.endMs) } == dto.lines.map { $0.words?.map(\.endMs) }, "首空行 — words 结束时间不串位")
+    require(afterBlank.lines.map { $0.backgroundVocal?.text } == dto.lines.map { $0.backgroundVocal?.text }, "首空行 — 副唱内容与 nil 占位不串位")
+    require(afterBlank.lines.map { $0.backgroundVocal?.syllables.map(\.startMs) } == dto.lines.map { $0.backgroundVocal?.syllables.map(\.startMs) }, "首空行 — 副唱开始时间不串位")
+    require(afterBlank.lines.map { $0.backgroundVocal?.syllables.map(\.endMs) } == dto.lines.map { $0.backgroundVocal?.syllables.map(\.endMs) }, "首空行 — 副唱结束时间不串位")
+    require(afterBlank.lines.map { $0.backgroundVocal?.translation } == dto.lines.map { $0.backgroundVocal?.translation }, "首空行 — 副唱自己的译文不串位")
+    require(afterBlank.lines.map { $0.backgroundVocal?.isBeforePrimary } == dto.lines.map { $0.backgroundVocal?.isBeforePrimary }, "首空行 — 副唱位置不串位")
+    require(afterBlank.translation?.lines == dto.translation?.lines, "首空行 — 译文与缺失占位不串位")
+    require(afterBlank.translation?.languageCode == dto.translation?.languageCode, "首空行 — 译文语言不变")
+} catch {
+    failures += 1
+    print("  FAIL parser→mapper — 解析抛错 \(error)")
+}
+
+// MARK: - ⑤ 副唱的时间回退：子词区间优先于整行
+
+// 副唱段自己没有 begin/end、子词只覆盖了前半句：合成的那一个 token 必须落在
+// 子词的实际区间上，而不是被整行的 10s–20s 接管（那会让它从行首就开始亮）。
+let backgroundTimingTtml = """
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+  <body><div>
+    <p begin="10s" end="20s"><span begin="10s" end="20s">Line</span><span ttm:role="x-bg"><span begin="12s" end="13s">Oh</span> and more</span></p>
+  </div></body>
+</tt>
+"""
+do {
+    let parsed = try AmllTtmlParser.parse(backgroundTimingTtml)
+    let background = parsed.lines.first?.backgroundVocal
+    requireEqual(background?.syllables.count ?? 0, 1, "副唱回退 — 子词覆盖不全时合成一个 token")
+    requireEqual(background?.text ?? "", "Oh and more", "副唱回退 — 正文完整保留")
+    requireEqual(background?.syllables.first?.startMs ?? -1, 12_000, "副唱回退 — 用子词开始而不是行首")
+    requireEqual(background?.syllables.first?.endMs ?? -1, 13_000, "副唱回退 — 用子词结束而不是行尾")
+} catch {
+    failures += 1
+    print("  FAIL 副唱回退 — 解析抛错 \(error)")
+}
 
 if failures == 0 {
     print("AmllTtmlRuby: all assertions passed")

@@ -7,7 +7,7 @@ import Foundation
 // LyricsWordByWord 的渲染是「把 words 拼成显示文本 + 按 range 上色」，
 // 一旦两者不一致，高亮会整行错位（看起来像「逐词数据质量差」，其实是映射 bug）。
 // 因此 x-translation / x-roman 这类 span 在解析阶段就已被抽走，绝不留在词序列里；
-// 并且行 content 不是取自解析结果，而是**由词序列反推**，从构造上保证两者一致。
+// 完整正文由解析层独立提取；词序列覆盖不完整时只丢弃词级数据，绝不删减正文。
 //
 // ── 逐词覆盖率
 // 渲染层的 hasUsableWordLevel 阈值是「≥50% 的行有 ≥2 个词」。低于阈值时保留行级时间轴、
@@ -57,8 +57,7 @@ enum AmllLyricsMapper {
             // 主词与副唱都空的行才丢弃 —— 只有副唱的行要保留，
             // 否则会丢掉"纯副唱"那几行的内容。
             guard !trimmed.isEmpty || background != nil else {
-                wordLines.append(nil)
-                backgroundVocals.append(nil)
+                // 被丢弃的行不占任何并行数组的位置，避免后续词/副唱错配。
                 continue
             }
 
@@ -96,7 +95,7 @@ enum AmllLyricsMapper {
             return LyricsDto(lines: [], timeSynced: true, romanization: .original)
         }
 
-        // 背景人声与 words 一样，只有整体判定为「逐词可用」时才挂上去。
+        // 背景人声独立保留，不受主词的逐词覆盖率影响。
         for index in lines.indices {
             lines[index].backgroundVocal = backgroundVocals[index]
         }
