@@ -573,6 +573,8 @@ final class LandscapePageMarqueeView: UIView {
         didSet {
             guard text != oldValue else { return }
             label.text = text
+            // 换歌就从头读：不这么做的话，新名字会接在上一首滚到一半的位置起步。
+            stopScrolling()
             setNeedsLayout()
         }
     }
