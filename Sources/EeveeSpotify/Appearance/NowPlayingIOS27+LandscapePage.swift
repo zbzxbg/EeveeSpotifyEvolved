@@ -16,6 +16,9 @@
 // 歌词再挪位置。右栏口径：右沿落在右上那颗 ⋯ 与它下面三颗字形之内侧，宽度封顶
 // `landscapeLyricsMaxWidth`（多出来的宽度**放到左边**，不往中间挤）。
 //
+// 手指在歌词上滑动时，这一列（歌名 / 艺人 / 进度 / 传输）一起淡出，停手 1.6s 再淡回 ——
+// 判据只能是**手势**：歌词每帧自动滚，按 `contentOffset` 判会永远收着。
+//
 // 开关 `landscapePageEnabled`：关掉退回旧的两栏路径（`placeLandscapeStack` + `LandscapeRows`），
 // 便于并排对比两版。日志 tag：`[iOS27]`，一次性一行 `landscape page — …`。
 import Foundation
@@ -124,6 +127,97 @@ extension NowPlayingIOS27 {
         WordByWordPositionResolver.shared.currentPositionSeconds()
     }
 
+    // MARK: - 滚动歌词时收控件
+    //
+    // 手指在歌词上滑动 ⇒ 歌名 / 艺人 / 控件带一起淡出，停手 `restoreDelay` 之后再淡回来。
+    // 这样歌词滚动时屏幕上只剩封面与词，和 Chroma 横屏歌词页那一条一致。
+    //
+    // 判据**只能用手势**，不能看 `contentOffset`：歌词是每帧自动滚的（逐词跟唱），
+    // 偏移量一直在变 ⇒ 按偏移判会永远收着。这里把观察者**挂到宿主自己那条 pan 上**
+    // （`addTarget`），不新建手势、不抢 delegate，滚动手感一点不变。
+
+    static let landscapeControlsFadeDuration: TimeInterval = 0.18
+    static let landscapeControlsRestoreDelay: TimeInterval = 1.6
+    static let landscapeScrollWatcher = LandscapeScrollWatcher()
+    static weak var landscapeWatchedScrollView: UIScrollView?
+    static var landscapeControlsHidden = false
+    static var landscapeControlsRestoreWork: DispatchWorkItem?
+
+    /// 挂观察者（只在宿主换了一条滚动视图时重挂）。
+    private static func attachLandscapeScrollWatcher() {
+        guard let container = NowPlayingLyricsPlate.lastContainer else { return }
+        if let watched = landscapeWatchedScrollView, watched.window != nil,
+           watched.isDescendant(of: container) {
+            return
+        }
+        guard let scroll = firstScrollView(in: container) else { return }
+        landscapeScrollWatcher.didBegin = { noteLandscapeScrollBegan() }
+        landscapeScrollWatcher.didEnd = { noteLandscapeScrollEnded() }
+        scroll.panGestureRecognizer.addTarget(
+            landscapeScrollWatcher,
+            action: #selector(LandscapeScrollWatcher.handlePan(_:))
+        )
+        landscapeWatchedScrollView = scroll
+    }
+
+    private static func firstScrollView(in root: UIView) -> UIScrollView? {
+        var queue: [UIView] = [root]
+        var visited = 0
+        while !queue.isEmpty, visited < 400 {
+            let node = queue.removeFirst()
+            visited += 1
+            if let scroll = node as? UIScrollView { return scroll }
+            queue.append(contentsOf: node.subviews)
+        }
+        return nil
+    }
+
+    private static func noteLandscapeScrollBegan() {
+        landscapeControlsRestoreWork?.cancel()
+        landscapeControlsRestoreWork = nil
+        applyLandscapeControlsHidden(true)
+    }
+
+    private static func noteLandscapeScrollEnded() {
+        landscapeControlsRestoreWork?.cancel()
+        let work = DispatchWorkItem { applyLandscapeControlsHidden(false) }
+        landscapeControlsRestoreWork = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + landscapeControlsRestoreDelay,
+            execute: work
+        )
+    }
+
+    private static func applyLandscapeControlsHidden(_ hidden: Bool) {
+        guard hidden != landscapeControlsHidden else { return }
+        landscapeControlsHidden = hidden
+        setLandscapePageChromeAlpha(hidden ? 0 : 1, animated: true)
+        if let view = landscapePageView {
+            let wantedHits: [CGRect] = hidden ? [] : [view.controlsRect].compactMap { $0 }
+            view.hitRects = wantedHits
+        }
+    }
+
+    /// 顶上那一列（歌名 / 艺人 / 控件）的透明度；`animated` 只在手势那两下用。
+    private static func setLandscapePageChromeAlpha(_ alpha: CGFloat, animated: Bool) {
+        var views: [UIView] = []
+        if let title = landscapePageTitle { views.append(title) }
+        if let artist = landscapePageArtist { views.append(artist) }
+        if let controls = landscapePageControls?.view { views.append(controls) }
+        guard !views.isEmpty, views.contains(where: { $0.alpha != alpha }) else { return }
+        if animated {
+            UIView.animate(
+                withDuration: landscapeControlsFadeDuration,
+                delay: 0,
+                options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]
+            ) {
+                for view in views { view.alpha = alpha }
+            }
+        } else {
+            for view in views { view.alpha = alpha }
+        }
+    }
+
     // MARK: - 每拍入口
 
     /// 把这一屏摆好；不在横屏 / 开关关着时收走。
@@ -159,10 +253,15 @@ extension NowPlayingIOS27 {
             controls.view.frame = geometry.controls
             changed = true
         }
-        // 只有控件那一条吃触摸，其余全部放行给 Spotify 自己的手势。
-        if view.hitRects != [geometry.controls] {
-            view.hitRects = [geometry.controls]
+        // 滚动歌词时这一列是收起来的：每拍只保证 alpha / 命中区与状态一致，不重复做动画。
+        view.controlsRect = geometry.controls
+        setLandscapePageChromeAlpha(landscapeControlsHidden ? 0 : 1, animated: false)
+        let wantedHits: [CGRect] = landscapeControlsHidden ? [] : [geometry.controls]
+        if view.hitRects != wantedHits {
+            view.hitRects = wantedHits
         }
+        // 歌词容器是这一拍稍后才挂的 ⇒ 观察者在下一拍才会挂上，够了。
+        attachLandscapeScrollWatcher()
         // 位置 / 时长 / 是否在播：这一拍先刷一次（进度条就按这一拍的节拍走）。
         landscapePageProjection.refresh()
 
@@ -189,6 +288,17 @@ extension NowPlayingIOS27 {
 
     /// 把这一屏收走（回竖屏 / 关页面）。原生那一坨按原值放回来。
     static func clearLandscapePage() {
+        // 滚动词收控件那条：停掉待办的淡入、把观察者从宿主的手势上摘掉。
+        landscapeControlsRestoreWork?.cancel()
+        landscapeControlsRestoreWork = nil
+        landscapeControlsHidden = false
+        if let scroll = landscapeWatchedScrollView {
+            scroll.panGestureRecognizer.removeTarget(
+                landscapeScrollWatcher,
+                action: #selector(LandscapeScrollWatcher.handlePan(_:))
+            )
+        }
+        landscapeWatchedScrollView = nil
         if landscapePageControls != nil {
             landscapePageControls?.view.removeFromSuperview()
             landscapePageControls = nil
@@ -227,6 +337,8 @@ extension NowPlayingIOS27 {
     /// 自建页的承载层：透明、**只在 `hitRects` 里吃触摸**，其余放行。
     final class LandscapePageView: UIView {
         var hitRects: [CGRect] = []
+        /// 控件那一条（滚动歌词收起来时 `hitRects` 清空，放回来时恢复成它）。
+        var controlsRect: CGRect?
 
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
             for rect in hitRects where rect.contains(point) { return true }
@@ -343,6 +455,29 @@ extension NowPlayingIOS27 {
 
     private static func landscapeRectText(_ rect: CGRect) -> String {
         "\(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
+    }
+}
+
+// MARK: - 滚动手势观察者
+//
+// 只挂到歌词宿主自己那条 `UIPanGestureRecognizer` 上（`addTarget`）：不新建手势、不抢 delegate，
+// 所以滚动手感、惯性与"点某一行跳播"全都不变。它在手势结束时就回来，不需要自己判静止。
+
+/// 歌词滚动的手势观察者：`began` / `changed` 报开始，`ended` / `cancelled` / `failed` 报结束。
+final class LandscapeScrollWatcher: NSObject {
+
+    var didBegin: (() -> Void)?
+    var didEnd: (() -> Void)?
+
+    @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .began, .changed:
+            didBegin?()
+        case .ended, .cancelled, .failed:
+            didEnd?()
+        default:
+            break
+        }
     }
 }
 
