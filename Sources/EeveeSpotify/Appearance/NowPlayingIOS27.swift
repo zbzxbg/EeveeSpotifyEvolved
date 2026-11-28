@@ -1546,9 +1546,9 @@ enum NowPlayingIOS27 {
         if compact {
             // 圆角按**边长**取：横屏那个方块比竖屏的 64pt 缩略图大得多，写死 8pt 会让它
             // 看起来像没切角（8pt 在 127pt 上是 6%，在 64pt 上是 12.5%）。
-            let radius = landscape.map {
-                LayoutGeometry.artworkCornerRadius(side: imageView.bounds.width)
-            } ?? Self.lyricsThumbCorner
+            let radius = landscape != nil
+                ? LayoutGeometry.artworkCornerRadius(side: imageView.bounds.width)
+                : Self.lyricsThumbCorner
             if imageView.layer.cornerRadius != radius {
                 imageView.layer.cornerRadius = radius
                 changed = true
