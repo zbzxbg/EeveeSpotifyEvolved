@@ -181,3 +181,19 @@ for size in landscapeSizes {
 print("OK: \(sizes.count) screen sizes, footer / mini bar / tab bar geometry")
 print("OK: \(landscapeSizes.count) landscape sizes, two-column geometry")
 
+// ── 封面圆角：跟边长走，夹在 10…16，取到 0.5pt
+require(near(LayoutGeometry.artworkCornerRadius(side: 0), 0), "a zero side has no corner")
+require(near(LayoutGeometry.artworkCornerRadius(side: 64), 10), "a thumbnail-sized side hits the floor")
+require(near(LayoutGeometry.artworkCornerRadius(side: 127), 10), "127pt hits the 10pt floor")
+require(near(LayoutGeometry.artworkCornerRadius(side: 179), 10.5), "179pt is 6% of its side")
+require(near(LayoutGeometry.artworkCornerRadius(side: 262), 15.5), "262pt is 6% of its side")
+require(near(LayoutGeometry.artworkCornerRadius(side: 400), 16), "a huge side hits the 16pt cap")
+var previousRadius: CGFloat = 0
+for side in [32, 40, 64, 100, 127, 150, 179, 200, 262, 300, 400] {
+    let radius = LayoutGeometry.artworkCornerRadius(side: CGFloat(side))
+    require(radius >= previousRadius, "corner radius is not monotonic at \(side)pt")
+    require(near(radius * 2, (radius * 2).rounded()), "corner radius is not a multiple of 0.5 at \(side)pt")
+    previousRadius = radius
+}
+print("OK: cover corner radius follows the side")
+

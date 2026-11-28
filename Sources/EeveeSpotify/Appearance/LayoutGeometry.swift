@@ -193,4 +193,20 @@ enum LayoutGeometry {
         )
         return LandscapeColumns(column: column, cover: cover, lyrics: lyrics)
     }
+
+    // MARK: - 封面圆角
+    //
+    // 按**边长**取，不写死：竖屏歌词那张 64pt 缩略图有自己的 8pt（12.5% 的比例，
+    // 那一档看着正圆），而横屏左栏的封面是一百多 pt 的方块 —— 同一个 8pt 只占 6%，
+    // 看上去像根本没切过角。
+
+    /// 封面圆角：边长的 6%，夹在 10…16，取到 0.5pt 的整数倍。
+    ///
+    /// 6% 这个比例是照横屏播放页上那种"看得出是圆角、但不像卡片"的量感定的
+    /// （≈180pt 的封面配 ≈11pt 的角）。取整到 0.5pt 是让 2x / 3x 屏的边缘都落在整像素上。
+    static func artworkCornerRadius(side: CGFloat) -> CGFloat {
+        guard side > 1 else { return 0 }
+        let wanted = min(16, max(10, side * 0.06))
+        return (wanted * 2).rounded() / 2
+    }
 }

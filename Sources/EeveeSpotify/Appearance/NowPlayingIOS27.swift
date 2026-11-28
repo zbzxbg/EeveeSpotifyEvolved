@@ -193,6 +193,8 @@ enum NowPlayingIOS27 {
 
     static var didLogArtwork = false
     static var didLogArtworkFrame = false
+    /// 封面圆角跟边长走之后，实际落点（边长 / 半径 / 曲线）报一次。
+    static var didLogCoverCorner = false
     static var didLogField = false
     static var didLogTitle = false
     /// 横屏里"标题行被放回原生位置"只报一行。
@@ -1536,14 +1538,28 @@ enum NowPlayingIOS27 {
     @discardableResult
     private static func applyArtworkMode(to imageView: UIImageView, in page: UIView) -> Bool {
         // 横屏两栏的封面也是方块那一档（圆角 + 裁剪，不铺满）。
-        let compact = lyricsModeActive || landscapeLayout(in: page) != nil
+        let landscape = landscapeLayout(in: page)
+        let compact = lyricsModeActive || landscape != nil
         var changed = false
         if compact {
-            if imageView.layer.cornerRadius != Self.lyricsThumbCorner {
-                imageView.layer.cornerRadius = Self.lyricsThumbCorner
+            // 圆角按**边长**取：横屏那个方块比竖屏的 64pt 缩略图大得多，写死 8pt 会让它
+            // 看起来像没切角（8pt 在 127pt 上是 6%，在 64pt 上是 12.5%）。
+            let radius = landscape.map {
+                LayoutGeometry.artworkCornerRadius(side: imageView.bounds.width)
+            } ?? Self.lyricsThumbCorner
+            if imageView.layer.cornerRadius != radius {
+                imageView.layer.cornerRadius = radius
+                changed = true
+            }
+            if imageView.layer.cornerCurve != .continuous {
                 imageView.layer.cornerCurve = .continuous
                 changed = true
             }
+            noteCoverCornerOnce(
+                side: imageView.bounds.width,
+                radius: radius,
+                landscape: landscape != nil
+            )
             if !imageView.clipsToBounds {
                 imageView.clipsToBounds = true
                 changed = true
@@ -1569,6 +1585,17 @@ enum NowPlayingIOS27 {
             if applyArtworkFadeMask(to: imageView) { changed = true }
         }
         return changed
+    }
+
+    /// 只报一次：封面实际的形状参数（半径跟着边长走，一行就能对上落点）。
+    private static func noteCoverCornerOnce(side: CGFloat, radius: CGFloat, landscape: Bool) {
+        guard !didLogCoverCorner, side > 1 else { return }
+        didLogCoverCorner = true
+        writeDebugLog(
+            "[\(logTag)] cover corner — \(Int(side.rounded()))pt square,"
+                + " r=\(String(format: "%.1f", radius)) continuous curve"
+                + (landscape ? " (landscape column)" : " (lyrics thumbnail)")
+        )
     }
 
     // MARK: - 音频律动（`AudioReactiveEngine` 每 30Hz 调一次）
