@@ -223,9 +223,30 @@ enum AmllLyricsMapper {
         let backgroundCount = lines.reduce(into: 0) { total, line in
             if line.backgroundVocal != nil { total += 1 }
         }
+        // `<p end>` 的规模：这一首有多少行带作者行尾、行尾比最后一个词晚多少、两句之间最大空档。
+        // 只进日志（排查"这一首会不会走到 `<p end>` 那条路"时看它）。
+        let authoredEndCount = lines.reduce(into: 0) { total, line in
+            if line.endOffsetMs != nil { total += 1 }
+        }
+        let maxTailMs = lines.compactMap { line -> Int? in
+            guard let end = line.endOffsetMs,
+                  let words = line.words,
+                  let lastWordEnd = words.compactMap(\.endMs).max() else { return nil }
+            return end - lastWordEnd
+        }.max() ?? 0
+        var maxGapMs = 0
+        for index in lines.indices.dropLast() {
+            let current = lines[index]
+            let next = lines[lines.index(after: index)]
+            guard let end = current.endOffsetMs, let nextStart = next.offsetMs else { continue }
+            maxGapMs = max(maxGapMs, nextStart - end)
+        }
         writeDebugLog(
             "[\(logTag)] mapped \(lines.count) line(s), translation=\(translation == nil ? "none" : "yes"),"
-                + " bg=\(backgroundCount), romanization=\(romanization)"
+                + " bg=\(backgroundCount), romanization=\(romanization),"
+                + " p-end=\(authoredEndCount)/\(lines.count)"
+                + " (tail \(String(format: "%.1fs", Double(maxTailMs) / 1000)),"
+                + " gap \(String(format: "%.1fs", Double(maxGapMs) / 1000)))"
         )
 
         // ── 署名
