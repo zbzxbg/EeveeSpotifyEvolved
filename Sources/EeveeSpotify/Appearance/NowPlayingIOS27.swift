@@ -1092,6 +1092,8 @@ enum NowPlayingIOS27 {
     @discardableResult
     private static func layout(in page: UIView) -> Bool {
         var changed = false
+        // 只读探针：这一次进播放页把队列模型的入口/元素字段问一遍（日志记录关着时零动作）。
+        QueueModelProbe.probePlayerIfNeeded()
         // 横屏：整页的宽高已经调过来了 ⇒ 先进"页内歌词"，后面的每一拍都按新模式摆。
         // 必须排在 `placeBottomStack` 之前：底排的偏移量在横屏下要收回去（见
         // `bottomStackOffset(in:)`），晚一步就会先按 -55pt 摆一次再改回来。

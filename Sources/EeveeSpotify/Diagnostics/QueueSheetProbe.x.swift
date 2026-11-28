@@ -33,6 +33,9 @@ class QueueViewControllerProbeHook: ClassHook<UIViewController> {
         orig.viewDidAppear(animated)
         guard let view = target.viewIfLoaded else { return }
         ViewTreeDumper.setPage(view)
+        // 队列页自己的**方法表**：跳到某一首 / 移除 / 重排的 selector 只能从这里读出来
+        // （视图树只给类名与 frame）。只读，且只在「启用日志记录」时才有输出。
+        ClassDumper.dump("queueVC", target)
         writeDebugLog("[QueueProbe] queue sheet registered for the tree dump")
     }
 
