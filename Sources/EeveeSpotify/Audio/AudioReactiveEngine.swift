@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import QuartzCore
 import UIKit
@@ -85,7 +86,24 @@ final class AudioReactiveEngine: NSObject {
                 "[\(AudioFeatures.logTag)] ticker on — cover pulse=\(UserDefaults.coverPulseEnabled)"
                     + " haptics=\(UserDefaults.musicHapticsEnabled)"
             )
+            logAudioRoute()
         }
+    }
+
+    /// 一条一次：当前输出路由与系统报的延迟。有线 / 蓝牙的听感延迟差一个数量级，
+    /// 诊断"触感偏早还是偏晚"时不能只靠猜。
+    private static func logAudioRoute() {
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs
+        let route = outputs.isEmpty
+            ? "none"
+            : outputs.map { $0.portType.rawValue }.joined(separator: ",")
+        writeDebugLog(
+            "[\(AudioFeatures.logTag)] route — \(route)"
+                + " outputLatency=\(String(format: "%.4f", session.outputLatency))"
+                + " ioBuffer=\(String(format: "%.4f", session.ioBufferDuration))"
+                + " sampleRate=\(Int(session.sampleRate))"
+        )
     }
 
     private func stop() {
@@ -125,6 +143,7 @@ final class AudioReactiveEngine: NSObject {
                     + " low=\(String(format: "%.3f", snapshot.low))"
                     + " rms=\(String(format: "%.3f", snapshot.rms))"
                     + " peak=\(String(format: "%.3f", snapshot.peak))"
+                    + " blk=\(snapshot.blockFrames)"
             )
         } else if !fresh, !didLogAudio, !didLogSilence, now - startedAt > 6 {
             didLogSilence = true

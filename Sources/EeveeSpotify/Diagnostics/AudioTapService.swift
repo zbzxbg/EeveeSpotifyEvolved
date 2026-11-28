@@ -234,7 +234,8 @@ private func audioServiceRenderCallback(
         actionFlags: actionFlags,
         busNumber: busNumber,
         numberFrames: numberFrames,
-        ioData: ioData
+        ioData: ioData,
+        timeStamp: timeStamp
     )
     return noErr
 }

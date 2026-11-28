@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import QuartzCore
 
@@ -31,7 +32,12 @@ enum MusicHaptics {
     private static var lastTriggerAt: CFTimeInterval = 0
     private static var windowStartedAt: CFTimeInterval = 0
     private static var windowTriggers = 0
-    private static var didLogFirstTrigger = false
+    /// 被 90ms 地板挡掉的命中数（从上次真的打出去算起）—— 诊断用。
+    private static var suppressedSinceLastTap = 0
+    /// 逐次诊断日志的预算：一次长歌最多这么多行，别把日志刷爆。
+    private static let tapLogBudget = 900
+    private static var loggedTaps = 0
+    private static var didLogBudget = false
 
     /// 用户选的强度档 1…3（默认中档 2）。
     static var strength: Int {
@@ -59,7 +65,9 @@ enum MusicHaptics {
         lastTriggerAt = 0
         windowStartedAt = 0
         windowTriggers = 0
-        didLogFirstTrigger = false
+        suppressedSinceLastTap = 0
+        loggedTaps = 0
+        didLogBudget = false
     }
 
     /// 一拍：有新的 kick / snare 就按闸门决定要不要打一下。
@@ -75,6 +83,9 @@ enum MusicHaptics {
         }
         let newKicks = snapshot.kickCount > lastKickCount
         let newSnares = snapshot.snareCount > lastSnareCount
+        // 差值不是布尔：一 tick 里可能塌缩掉好几次命中，诊断要看得见这个数。
+        let kickDelta = snapshot.kickCount - lastKickCount
+        let snareDelta = snapshot.snareCount - lastSnareCount
         lastKickCount = snapshot.kickCount
         lastSnareCount = snapshot.snareCount
 
@@ -88,7 +99,10 @@ enum MusicHaptics {
         if windowTriggers == 0 { windowStartedAt = now }
         let degraded = now - windowStartedAt > degradeAfter
         let gap = degraded ? degradedGap : minimumGap
-        guard now - lastTriggerAt >= gap else { return }
+        guard now - lastTriggerAt >= gap else {
+            suppressedSinceLastTap += 1
+            return
+        }
 
         let level = intensity * (degraded ? 0.7 : 1)
         if newKicks {
@@ -97,16 +111,64 @@ enum MusicHaptics {
             // snare 比 kick 更短更脆：同一档强度再压一点，否则听起来像两个底鼓。
             HapticFeedback.musicSnare(intensity: level * 0.8)
         }
+        let previousTriggerAt = lastTriggerAt
         lastTriggerAt = now
         windowTriggers += 1
-        if !didLogFirstTrigger {
-            didLogFirstTrigger = true
+        logTap(
+            kind: newKicks ? "kick" : "snare",
+            snapshot: snapshot,
+            now: now,
+            gap: previousTriggerAt > 0 ? now - previousTriggerAt : nil,
+            newKicks: kickDelta,
+            newSnares: snareDelta,
+            degraded: degraded
+        )
+        suppressedSinceLastTap = 0
+    }
+
+    /// 每真打一次写一行。
+    ///
+    /// 这一行同时回答三件事：
+    /// · `age` —— 这一块 PCM 的 host time 到现在（主线程这一拍）过了多久。**这就是
+    ///   "分析 → 打出去"那一段的全部延迟**，正数意味着块已经开始播、我们晚了；
+    /// · `new=k+s` —— 这一拍里新增了几次 kick / snare（>1 说明被塌缩成一下）；
+    /// · `skip` —— 从上次真打到现在，被 90ms 地板挡掉了多少次。
+    private static func logTap(
+        kind: String,
+        snapshot: AudioFeatures.Snapshot,
+        now: CFTimeInterval,
+        gap: CFTimeInterval?,
+        newKicks: UInt64,
+        newSnares: UInt64,
+        degraded: Bool
+    ) {
+        guard loggedTaps < tapLogBudget else {
+            guard !didLogBudget else { return }
+            didLogBudget = true
             writeDebugLog(
-                "[\(logTag)] first \(newKicks ? "kick" : "snare") tap — strength \(strength)"
-                    + " low=\(String(format: "%.3f", snapshot.low))"
-                    + " high=\(String(format: "%.3f", snapshot.high))"
-                    + " rms=\(String(format: "%.3f", snapshot.rms))"
+                "[\(logTag)] tap diag — \(tapLogBudget) line(s) written; further taps are not logged"
             )
+            return
         }
+        loggedTaps += 1
+
+        let age: String
+        if snapshot.blockHostTime != 0 {
+            // `mHostTime` 是 mach 绝对时钟，和 `CACurrentMediaTime()` 同一个时基。
+            // `AVAudioTime.seconds(forHostTime:)` 是公开 API；CoreAudio 那两个
+            // `Audio…HostTime` 函数在 iOS 上会被当成私有符号。
+            let blockSeconds = AVAudioTime.seconds(forHostTime: snapshot.blockHostTime)
+            age = String(format: "%+.3f", now - blockSeconds)
+        } else {
+            age = "?"
+        }
+        let gapText = gap.map { String(format: "%.3f", $0) } ?? "first"
+        writeDebugLog(
+            "[\(logTag)] tap \(kind) s=\(strength)" + (degraded ? " degraded" : "")
+                + " gap=\(gapText) age=\(age) blk=\(snapshot.blockFrames)"
+                + " new=\(newKicks)+\(newSnares) skip=\(suppressedSinceLastTap)"
+                + " low=\(String(format: "%.3f", snapshot.low))"
+                + " high=\(String(format: "%.3f", snapshot.high))"
+        )
     }
 }

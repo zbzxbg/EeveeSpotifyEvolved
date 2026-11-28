@@ -32,6 +32,11 @@ enum AudioFeatures {
         /// 累计回调数：没变说明音频停了（暂停 / 切歌 / 后台），消费方据此把包络放回 0，
         /// 而不是停在最后一拍的能量上。
         var callbacks: UInt64 = 0
+        /// 这一拍读到的块大小（帧）。诊断用：块大小决定"命中落在块内"的不确定度。
+        var blockFrames: UInt32 = 0
+        /// 这一拍那块 PCM 的 host time（mach 绝对时钟，0 = 回调没给）。
+        /// 主线程拿它和 `CACurrentMediaTime()` 一比，就知道"这块什么时候开始播"。
+        var blockHostTime: UInt64 = 0
         /// 当前音频格式能不能读（只支持 float32）。false 时上面那些值恒为 0。
         var isSupported = false
     }
@@ -108,6 +113,8 @@ enum AudioFeatures {
     private static var kickCount: UInt64 = 0
     private static var snareCount: UInt64 = 0
     private static var callbacks: UInt64 = 0
+    private static var blockFrames: UInt32 = 0
+    private static var blockHostTime: UInt64 = 0
 
     private static var low: Float = 0
     private static var high: Float = 0
@@ -131,6 +138,8 @@ enum AudioFeatures {
             lowSlow = 0
             highSlow = 0
             blocksSeen = 0
+            blockFrames = 0
+            blockHostTime = 0
         }
         os_unfair_lock_unlock(lock)
     }
@@ -146,6 +155,8 @@ enum AudioFeatures {
             kickCount: kickCount,
             snareCount: snareCount,
             callbacks: callbacks,
+            blockFrames: blockFrames,
+            blockHostTime: blockHostTime,
             isSupported: isSupported
         )
         os_unfair_lock_unlock(lock)
@@ -202,7 +213,8 @@ enum AudioFeatures {
         actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
         busNumber: UInt32,
         numberFrames: UInt32,
-        ioData: UnsafeMutablePointer<AudioBufferList>?
+        ioData: UnsafeMutablePointer<AudioBufferList>?,
+        timeStamp: UnsafePointer<AudioTimeStamp>? = nil
     ) -> OSStatus {
         guard actionFlags.pointee.contains(AudioUnitRenderActionFlags.unitRenderAction_PostRender) else {
             return noErr
@@ -293,6 +305,9 @@ enum AudioFeatures {
         // 只有真的读到帧才记一拍：`callbacks` 是消费方判"有没有新数据"的唯一依据，
         // 空块也加会让引擎把上一块的电平当成新的一拍。
         callbacks &+= 1
+        // 诊断用：块大小 + 这一块 PCM 的呈现时刻。两个都是整数写，render 线程不加活。
+        blockFrames = numberFrames
+        blockHostTime = timeStamp?.pointee.mHostTime ?? 0
 
         let count = Double(readFrames)
         let lowRms = (sumLow / count).squareRoot()
