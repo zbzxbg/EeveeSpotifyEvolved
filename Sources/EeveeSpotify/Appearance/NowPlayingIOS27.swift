@@ -747,45 +747,27 @@ enum NowPlayingIOS27 {
         return layout
     }
 
-    /// 那一坨（歌名 / 进度 / 传输）**看得见的部分**有多高：传输行的下沿减那一坨的上沿。
+    /// 那一坨里**还看得见的那几行**合起来有多高：最上面那行的上沿 → 最下面那行的下沿。
     ///
     /// 不能用 `stack.bounds.height`：底排的盒子比它装的东西高（Spotify 自己定的高度），
     /// 工具行折起来之后盒子也不缩 ⇒ 用盒子高度算，封面永远停在"下面空了一大块"的尺寸上。
     ///
-    /// 两端都取 `convert`（带我们的 transform）⇒ 那一坨被整体挪动时差值不变。
-    /// 量不到传输行（还没建出来）就退回盒子高度。
+    /// 量的是**栈里没被折起来的那些行**，所以折掉一行、或者把某一行搬出左栏之后，
+    /// 这个数立刻变小，封面跟着长。认不出任何一行（还没建出来）就退回盒子高度。
     private static func measureLandscapeContentHeight(
         in page: UIView,
         stack: UIView,
         stackRect: CGRect
     ) -> CGFloat {
         let top = stack.convert(stack.bounds, to: page).minY
-        guard let bottom = transportRowBottom(in: page), bottom > top + 80 else {
-            return stackRect.height
+        var bottom: CGFloat = 0
+        for row in stack.subviews where !row.isHidden && row.alpha > 0.01 {
+            let rect = row.convert(row.bounds, to: page)
+            guard rect.width > 1, rect.height > 1 else { continue }
+            bottom = max(bottom, rect.maxY)
         }
+        guard bottom > top + 40 else { return stackRect.height }
         return (bottom - top).rounded()
-    }
-
-    /// 传输行的下沿（页面坐标）。认下来那颗播放键就记着，换页 / 换歌后自己掉。
-    private static weak var landscapePlayButton: UIView?
-
-    private static func transportRowBottom(in page: UIView) -> CGFloat? {
-        let button: UIView?
-        if let cached = landscapePlayButton, cached.window != nil,
-           isControlOnPage(cached, in: page, requireAlpha: false, horizontalMargin: 0) {
-            button = cached
-        } else {
-            button = visibleView(
-                identifier: NowPlayingLyricsPlate.playButtonIdentifier,
-                in: page,
-                requireAlpha: false,
-                horizontalMargin: 0
-            )
-            landscapePlayButton = button
-        }
-        guard let button else { return nil }
-        let rect = button.convert(button.bounds, to: page)
-        return rect.height > 1 ? rect.maxY : nil
     }
 
     /// 右栏的右沿再让出右上角那颗 ⋯（48×48，贴着安全区右边）。
