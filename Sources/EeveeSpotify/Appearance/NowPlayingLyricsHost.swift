@@ -222,6 +222,9 @@ final class NowPlayingLyricsHost {
         shared.tickHandler = { @MainActor [weak self] ms in
             self?.tick(seconds: ms / 1000)
         }
+        shared.tickHandlerIsVisible = { @MainActor [weak self] in
+            WordByWordPlaybackClock.canRender(self?.hostingController?.view)
+        }
         shared.start()
         usingPerFrameClock = true
         writeDebugLog("[\(NowPlayingLyricsPlate.logTag)] word-by-word lyrics are now driven per frame (shared CADisplayLink)")

@@ -513,6 +513,9 @@ final class WordByWordHost {
             }
             // 新层由主时钟驱动，旧 overlay 的回调必须清掉，否则两边同时渲染。
             WordByWordPlaybackClock.shared.onChange = nil
+            WordByWordPlaybackClock.shared.tickHandlerIsVisible = { @MainActor in
+                WordByWordPlaybackClock.canRender(AppleMusicLyricsOverlayHost.shared.overlayView)
+            }
             WordByWordPlaybackClock.shared.tickHandler = { @MainActor ms in
                 AppleMusicLyricsOverlayHost.shared.tick(ms: ms)
             }
@@ -636,6 +639,9 @@ final class WordByWordHost {
             overlayView?.setCurrentTime(ms)
         }
         WordByWordPlaybackClock.shared.tickHandler = nil
+        WordByWordPlaybackClock.shared.onChangeIsVisible = { @MainActor [weak overlayView] in
+            WordByWordPlaybackClock.canRender(overlayView)
+        }
         WordByWordPlaybackClock.shared.start()
         writeDebugLog(
             "[WordByWord] legacy overlay attached — host=\(NSStringFromClass(type(of: view)))"

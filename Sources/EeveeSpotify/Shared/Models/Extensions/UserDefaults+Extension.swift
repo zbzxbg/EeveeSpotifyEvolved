@@ -1056,6 +1056,7 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: blockedArtistsEnabledKey)
+            BlockedArtistSkip.settingsDidChange()
         }
     }
 
@@ -1067,6 +1068,7 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: blockedArtistsKey)
+            BlockedArtistSkip.settingsDidChange()
         }
     }
 

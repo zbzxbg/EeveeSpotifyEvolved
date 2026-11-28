@@ -166,6 +166,7 @@ enum MusicHaptics {
         gap: CFTimeInterval?,
         degraded: Bool
     ) {
+        guard UserDefaults.enableLogRecording else { return }
         guard loggedTaps < tapLogBudget else {
             guard !didLogBudget else { return }
             didLogBudget = true

@@ -43,12 +43,25 @@ enum BlockedArtistSkip {
     private static var didWarnMissingPlayer = false
 
     static func start() {
-        guard timer == nil else { return }
+        settingsDidChange()
+    }
 
-        let timer = Timer(timeInterval: interval, repeats: true) { _ in tick() }
-        timer.tolerance = 0.3
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+    static func settingsDidChange() {
+        onMainThreadSync {
+            guard BlockedArtists.isEnabled, BlockedArtists.count > 0 else {
+                timer?.invalidate()
+                timer = nil
+                lastSeenTrackID = nil
+                consecutiveSkips = 0
+                return
+            }
+            // Keep background polling: track changes have no independent reliable callback.
+            guard timer == nil else { return }
+            let timer = Timer(timeInterval: interval, repeats: true) { _ in tick() }
+            timer.tolerance = 0.3
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
+        }
     }
 
     private static func tick() {

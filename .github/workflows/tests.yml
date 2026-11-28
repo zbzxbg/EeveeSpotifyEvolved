@@ -605,6 +605,14 @@ jobs:
       - name: Resolve-configuration snapshot
         run: python3 Tests/ResolveConfigurationSnapshot/test.py
 
+      # 耗电回归（纯源码级，不需要工具链）：锁屏片段编码的取消 / 令牌，以及各轮询器
+      # 在空闲、后台、页面不在时是否真的会停。它们不替代真机测试，只把"该停的定时器会停"
+      # 钉在源码结构上，免得下一次改动把某个 0.25s 节拍又无条件跑起来。
+      - name: Power — polling lifecycle and lock-screen cancellation
+        run: |
+          python3 Tests/LockScreenPower/test.py
+          python3 Tests/PowerPolling/check_polling_lifecycle.py
+
       # 真机日志分诊工具（`Tools/log_triage.py`）。B 组那几件（§3 歌单页搜索条 /
       # §4 折叠 / §12 关于艺人 / §16 间奏 / §17 阈值 / §18 NetEase / §23+§30 折行与 AMLL）
       # 全都等同一份日志；那个脚本把"该看什么"写成程序（只读、不联网、不进构建产物）。

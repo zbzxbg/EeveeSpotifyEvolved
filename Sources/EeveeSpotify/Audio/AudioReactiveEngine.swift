@@ -10,8 +10,8 @@ import UIKit
 /// · 这里**在主线程**按 30Hz 读快照 → 一条包络（attack 快、release 慢）→ 分发给
 ///   `CoverPulse`（封面律动）与 `MusicHaptics`（音乐触感）。
 ///
-/// 为什么用 CADisplayLink 而不是 GCD 定时器：App 进后台时它自然停，不必自己判前后台；
-/// 30Hz 也不是每帧，`preferredFrameRateRange` 直接把刷新率压下来省电。
+/// 前台用 CADisplayLink 对齐显示刷新；失去活跃状态时同时停止时钟与 PCM 分析，
+/// 避免后台音频仍在播放时继续计算没有消费方的特征。
 final class AudioReactiveEngine: NSObject {
 
     static let shared = AudioReactiveEngine()
@@ -31,6 +31,8 @@ final class AudioReactiveEngine: NSObject {
     private static let envelopeFloor: Double = 0.02
 
     private var displayLink: CADisplayLink?
+    private var lifecycleObservers: [NSObjectProtocol] = []
+    private var applicationIsActive = false
     private var lastCallbacks: UInt64 = 0
     private var lastTickAt: CFTimeInterval = 0
     private var startedAt: CFTimeInterval = 0
@@ -55,7 +57,8 @@ final class AudioReactiveEngine: NSObject {
             DispatchQueue.main.async { [weak self] in self?.refresh() }
             return
         }
-        if Self.isWanted {
+        observeLifecycleIfNeeded()
+        if Self.isWanted, applicationIsActive {
             AudioTapService.ensureInstalled()
             AudioFeatures.setActive(true)
             start()
@@ -63,6 +66,28 @@ final class AudioReactiveEngine: NSObject {
             AudioFeatures.setActive(false)
             stop()
         }
+    }
+
+    private func observeLifecycleIfNeeded() {
+        guard lifecycleObservers.isEmpty else { return }
+        applicationIsActive = UIApplication.shared.applicationState == .active
+        let center = NotificationCenter.default
+        for notification in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
+            lifecycleObservers.append(center.addObserver(
+                forName: notification, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let self else { return }
+                self.applicationIsActive = false
+                self.refresh()
+            })
+        }
+        lifecycleObservers.append(center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.applicationIsActive = true
+            self.refresh()
+        })
     }
 
     private var isRunning: Bool { displayLink != nil }

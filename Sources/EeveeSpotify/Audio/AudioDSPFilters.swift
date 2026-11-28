@@ -17,6 +17,11 @@ struct BiquadCoefficients: Equatable {
 
     var isBypass: Bool { self == BiquadCoefficients.bypass }
 
+    /// Exact identity coefficients alone are insufficient: residual delay state must drain first.
+    func canSkip(leftZ1: Double, leftZ2: Double, rightZ1: Double, rightZ2: Double) -> Bool {
+        isBypass && leftZ1 == 0 && leftZ2 == 0 && rightZ1 == 0 && rightZ2 == 0
+    }
+
     /// RBJ Audio EQ Cookbook 的 peaking EQ。
     ///
     /// - Parameters:

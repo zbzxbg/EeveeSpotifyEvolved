@@ -91,15 +91,14 @@ enum InlineLyricsHostLocator {
     static func scheduleLookup(from root: UIViewController?) {
         guard let root else { return }
         Watchdog.shared.root = root
-        // 让布局先跑一拍，VC 层级与视图都在位了再找。
-        DispatchQueue.main.async { lookup(from: root) }
-        startWatchdog()
+        observeApplicationLifecycle()
+        // Defer until layout and coalesce with any pending lyrics update.
+        lyricsDidChange()
     }
 
     /// NPV 页面消失时调用：停掉看门狗（页面都不在了，再查也没有意义）。
     static func stopLookup() {
-        Watchdog.shared.timer?.cancel()
-        Watchdog.shared.timer = nil
+        stopWatchdog()
         Watchdog.shared.root = nil
     }
 
@@ -109,7 +108,50 @@ enum InlineLyricsHostLocator {
     /// 以及关闭全屏回到内嵌时（`WordByWordHost.reattachToInline` 找不到宿主）。
     /// 这两刻正是"卡片刚刚出现/重建"的时刻，等下一个 1.5s 心跳就慢了。
     static func retryLookupIfNeeded() {
+        observeApplicationLifecycle()
+        guard hasWatchdogWork, resolvedRoot() != nil else {
+            stopWatchdog()
+            return
+        }
+        startWatchdog()
         tick()
+    }
+
+    static func lyricsDidChange() {
+        onMainThreadSync {
+            guard !Watchdog.shared.refreshPending else { return }
+            Watchdog.shared.refreshPending = true
+            DispatchQueue.main.async {
+                Watchdog.shared.refreshPending = false
+                // Version changes may precede the renderer's own synchronous update.
+                // Only a registered page needs a watchdog; retryLookup retains its fallback.
+                guard Watchdog.shared.root != nil else { return }
+                startWatchdog()
+                tick()
+            }
+        }
+    }
+
+    private static func observeApplicationLifecycle() {
+        guard !Watchdog.shared.observingLifecycle else { return }
+        Watchdog.shared.observingLifecycle = true
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { _ in stopWatchdog() }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { _ in lyricsDidChange() }
+    }
+
+    private static func stopWatchdog() {
+        Watchdog.shared.timer?.cancel()
+        Watchdog.shared.timer = nil
+    }
+
+    private static var hasWatchdogWork: Bool {
+        UIApplication.shared.applicationState == .active
+            && NgzhwmSettingsViewModel.isWordByWordLyricsEnabled
+            && hasUsableWordLevelData(currentLyricsDto)
     }
 
     // MARK: 看门狗
@@ -122,6 +164,8 @@ enum InlineLyricsHostLocator {
         static let shared = Watchdog()
         weak var root: UIViewController?
         var timer: DispatchSourceTimer?
+        var observingLifecycle = false
+        var refreshPending = false
     }
 
     /// 为什么要**定时重查**而不是只查一次：
@@ -133,6 +177,10 @@ enum InlineLyricsHostLocator {
     /// 3. 逐词数据、开关状态都可能晚于宿主出现。
     /// 三条在真机上都表现为"预览里的逐词歌词时有时无"，只有持续盯着才能自愈。
     private static func startWatchdog() {
+        guard hasWatchdogWork else {
+            stopWatchdog()
+            return
+        }
         guard Watchdog.shared.timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
@@ -149,7 +197,10 @@ enum InlineLyricsHostLocator {
     private static func tick() {
         onMainThreadSync {
             // 先做便宜的判据，最后才去找宿主（找宿主可能要遍历整棵视图树）。
-            guard NgzhwmSettingsViewModel.isWordByWordLyricsEnabled else { return }
+            guard hasWatchdogWork else {
+                stopWatchdog()
+                return
+            }
             // 没有**可用的逐词数据**时查了也挂不上（`attach` 会直接返回）——
             // 这条判据必须与 `attach` 用的是同一个函数，省掉一次白遍历。
             //
@@ -169,9 +220,11 @@ enum InlineLyricsHostLocator {
             // 页面不在窗口里（正在播放页被关掉 / 还没上来）→ 这一轮什么都不做。
             // 没有这道闸门时，宿主查找会在离屏的视图树上"成功地"挂上一层，
             // 然后每 1.5s 重挂一次 —— 白耗电，而且会污染 `lastPreviewContentView`。
-            guard let root = resolvedRoot(), root.isViewLoaded, root.view.window != nil else {
+            guard let root = resolvedRoot() else {
+                stopWatchdog()
                 return
             }
+            guard root.isViewLoaded, root.view.window != nil else { return }
             lookup(from: root)
         }
     }

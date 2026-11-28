@@ -23,7 +23,7 @@ final class SponsorBlockSkipper {
             let serverOnly = self.currentSegments.filter { !SponsorBlockLocalSegment.isLocalUUID($0.uuid) }
             self.currentSegments = self.mergeWithLocal(serverSegs: serverOnly, episodeID: episodeID)
             self.broadcastSegments()
-            if self.lastIsPlaying, !self.currentSegments.isEmpty { self.startPolling() }
+            self.refreshPolling()
         }
     }
 
@@ -48,6 +48,8 @@ final class SponsorBlockSkipper {
     private var currentEpisodeID: String?
     private var currentSegments: [SponsorBlockSegment] = []
     private var fetchInFlight = false
+    // Local preload is not evidence that the current episode's server fetch ran.
+    private var needsServerFetch = false
     private var emptyEpisodeIDs: Set<String> = []
     private var lastSeekMonotonicMs: UInt64 = 0
     private var probedURIs: Set<String> = []
@@ -114,8 +116,8 @@ final class SponsorBlockSkipper {
 
     func processStateChange(player: AnyObject, state: AnyObject) {
         let options = UserDefaults.sponsorBlockOptions
-        guard options.enabled else { return }
-
+        // Keep the callback-driven snapshot current while disabled, so re-enabling
+        // never needs a polling timer or a speculative player read to resume.
         let trackObj = state.value(forKey: "track") as AnyObject?
         let isPodcastFlag = safeBool(trackObj, "isPodcast") ?? false
         let isVideoFlag   = safeBool(trackObj, "isVideo") ?? false
@@ -148,6 +150,7 @@ final class SponsorBlockSkipper {
                     writeDebugLog("[SB] track changed away (isPodcastFlag=\(isPodcastFlag ? "Y" : "N") isVideoFlag=\(isVideoFlag ? "Y" : "N") uri=\(uriString.isEmpty ? "<nil>" : uriString)) — clearing")
                     self.currentEpisodeID = nil
                     self.currentSegments = []
+                    self.needsServerFetch = false
                     self.dismissedUUIDs.removeAll()
                     self.promptedUUIDs.removeAll()
                     self.lastDuration = 0
@@ -229,6 +232,7 @@ final class SponsorBlockSkipper {
 
             if episodeID != self.currentEpisodeID {
                 self.currentEpisodeID = episodeID
+                self.needsServerFetch = true
                 self.currentSegments = self.mergeWithLocal(serverSegs: [], episodeID: episodeID)
                 self.dismissedUUIDs.removeAll()
                 self.promptedUUIDs.removeAll()
@@ -245,11 +249,7 @@ final class SponsorBlockSkipper {
                 self.fetchSegments(for: episodeID, options: options)
             }
 
-            if isPlaying && !self.currentSegments.isEmpty {
-                self.startPolling()
-            } else {
-                self.stopPolling()
-            }
+            self.refreshPolling()
 
             if classification != "stale",
                !(classification == "manualSeek" && options.respectManualSeek) {
@@ -258,16 +258,55 @@ final class SponsorBlockSkipper {
         }
     }
 
+    func settingsDidChange() {
+        queue.async {
+            let options = UserDefaults.sponsorBlockOptions
+            if options.enabled, let episodeID = self.currentEpisodeID,
+               self.needsServerFetch, !self.emptyEpisodeIDs.contains(episodeID) {
+                self.fetchSegments(for: episodeID, options: options)
+            }
+            self.refreshPolling()
+        }
+    }
+
+    private func hasPollingWork(options: SponsorBlockOptions) -> Bool {
+        guard options.enabled, lastIsPlaying, currentEpisodeID != nil else { return false }
+        // Keep all eligible segments regardless of playhead, dismissal or hidden state:
+        // manual seeks and Undo can make them relevant again during playback.
+        return currentSegments.contains { seg in
+            guard seg.isSkip, seg.duration >= options.minSegmentDuration else { return false }
+            let action = options.action(for: seg.category)
+            guard action == .autoSkip || action == .manualSkip else { return false }
+            return !SponsorBlockLocalSegment.isLocalUUID(seg.uuid) || options.autoSkipMySubmissions
+        }
+    }
+
+    private func refreshPolling() {
+        if hasPollingWork(options: UserDefaults.sponsorBlockOptions) {
+            startPolling()
+        } else {
+            stopPolling()
+        }
+    }
+
     private func startPolling() {
+        guard hasPollingWork(options: UserDefaults.sponsorBlockOptions) else {
+            stopPolling()
+            return
+        }
         if pollTimer != nil { return }
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now() + .milliseconds(250), repeating: .milliseconds(250))
         t.setEventHandler { [weak self] in
             guard let self else { return }
-            guard self.lastIsPlaying else { return }
+            let options = UserDefaults.sponsorBlockOptions
+            guard options.enabled, self.lastIsPlaying else {
+                self.stopPolling()
+                return
+            }
             let elapsed = self.uptimeSec() - self.lastPositionStamp
             let est = self.lastPosition + elapsed * self.lastPlaybackSpeed
-            self.checkAndSkip(reportedPosition: est, options: UserDefaults.sponsorBlockOptions)
+            self.checkAndSkip(reportedPosition: est, options: options)
         }
         t.resume()
         pollTimer = t
@@ -283,6 +322,7 @@ final class SponsorBlockSkipper {
     }
 
     private func checkAndSkip(reportedPosition pos: Double, options: SponsorBlockOptions) {
+        guard options.enabled, UserDefaults.sponsorBlockOptions.enabled else { return }
         guard !currentSegments.isEmpty else { return }
         // Safety guard: never seek if we are not on an episode track.
         guard currentEpisodeID != nil else { return }
@@ -384,14 +424,15 @@ final class SponsorBlockSkipper {
     }
 
     private func fetchSegments(for episodeID: String, options: SponsorBlockOptions) {
-        guard !fetchInFlight else { return }
+        guard options.enabled, UserDefaults.sponsorBlockOptions.enabled, !fetchInFlight else { return }
         fetchInFlight = true
+        needsServerFetch = false
         writeDebugLog("[SB] fetching segments for \(episodeID)")
         SponsorBlockAPI.fetchSegments(episodeID: episodeID, options: options) { [weak self] result in
             guard let self else { return }
             self.queue.async {
-                self.fetchInFlight = false
                 if episodeID != self.currentEpisodeID { return }
+                self.fetchInFlight = false
                 switch result {
                 case .success(let segs):
                     let merged = self.mergeWithLocal(serverSegs: segs, episodeID: episodeID)
@@ -416,7 +457,7 @@ final class SponsorBlockSkipper {
                                 writeDebugLog("[SB] already inside \(seg.category) \(fmt(seg.start))..\(fmt(seg.end)) at load — dismissed")
                             }
                         }
-                        if self.lastIsPlaying { self.startPolling() }
+                        self.refreshPolling()
                     }
                 case .failure(let err):
                     writeDebugLog("[SB] fetch failed: \(err); using local only")
@@ -424,7 +465,7 @@ final class SponsorBlockSkipper {
                     if !merged.isEmpty {
                         self.currentSegments = merged
                         self.broadcastSegments()
-                        if self.lastIsPlaying { self.startPolling() }
+                        self.refreshPolling()
                     }
                 }
             }

@@ -37,6 +37,51 @@ require(BiquadCoefficients.bypass.isBypass, "the bypass coefficients are the ide
 require(BiquadCoefficients.peaking(frequency: 1000, gainDb: 0, q: 1.41, sampleRate: sampleRate).isBypass,
         "0 dB designs the identity, not a near-identity")
 
+// MARK: - Identity-stage pruning
+
+let zeroStateCanSkip = BiquadCoefficients.bypass.canSkip(
+    leftZ1: 0, leftZ2: 0, rightZ1: 0, rightZ2: 0)
+require(zeroStateCanSkip, "exact identity with empty stereo state can skip processing")
+for state in [(1e-16, 0.0, 0.0, 0.0), (0.0, 1e-16, 0.0, 0.0),
+              (0.0, 0.0, 1e-16, 0.0), (0.0, 0.0, 0.0, 1e-16)] {
+    require(!BiquadCoefficients.bypass.canSkip(
+        leftZ1: state.0, leftZ2: state.1, rightZ1: state.2, rightZ2: state.3),
+        "identity stage preserves residual state in either channel")
+}
+var nearIdentity = BiquadCoefficients.bypass
+nearIdentity.b0 += 1e-12
+require(!nearIdentity.canSkip(leftZ1: 0, leftZ2: 0, rightZ1: 0, rightZ2: 0),
+        "near-identity during smoothing must still run")
+require(!BiquadCoefficients.bypass.canSkip(leftZ1: .nan, leftZ2: 0, rightZ1: 0, rightZ2: 0),
+        "non-finite state is not silently skipped")
+
+var referenceStages = [BiquadState(), BiquadState(), BiquadState(), BiquadState()]
+var prunedStages = referenceStages
+var pruningMatches = true
+for block in 0..<6 {
+    let active = BiquadCoefficients.peaking(frequency: 1000, gainDb: block < 3 ? 6 : -3,
+                                           q: 1.41, sampleRate: sampleRate)
+    let stages: [BiquadCoefficients] = [.bypass, active, .bypass,
+                                       block == 2 ? active : .bypass]
+    let selected = stages.indices.filter { index in
+        !stages[index].canSkip(leftZ1: prunedStages[index].z1,
+                              leftZ2: prunedStages[index].z2, rightZ1: 0, rightZ2: 0)
+    }
+    for sample in 0..<128 {
+        let input = sin(Double(block * 128 + sample) * 0.17) * 0.5
+        var reference = input
+        var pruned = input
+        for index in stages.indices {
+            reference = referenceStages[index].process(reference, stages[index])
+        }
+        for index in selected {
+            pruned = prunedStages[index].process(pruned, stages[index])
+        }
+        if abs(reference - pruned) > 1e-12 { pruningMatches = false }
+    }
+}
+require(pruningMatches, "block selection preserves mixed-chain output and residual identity tails")
+
 // MARK: - 系数：有限、稳定
 
 var coefficientsFinite = true

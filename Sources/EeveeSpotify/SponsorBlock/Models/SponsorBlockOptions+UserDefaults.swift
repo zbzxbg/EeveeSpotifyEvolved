@@ -19,5 +19,13 @@ extension UserDefaults {
             autoSkipMySubmissions: true
         )
     )
-    static var sponsorBlockOptions
+    private static var storedSponsorBlockOptions
+
+    static var sponsorBlockOptions: SponsorBlockOptions {
+        get { storedSponsorBlockOptions }
+        set {
+            storedSponsorBlockOptions = newValue
+            SponsorBlockSkipper.shared.settingsDidChange()
+        }
+    }
 }

@@ -6,7 +6,9 @@ import ObjectiveC
 import SwiftUI
 
 var currentLyricsDto: LyricsDto?
-var currentLyricsVersion: Int = 0
+var currentLyricsVersion: Int = 0 {
+    didSet { InlineLyricsHostLocator.lyricsDidChange() }
+}
 
 /// `currentLyricsDto` 里**已经加进去**的歌词时间轴偏移（毫秒）。
 ///

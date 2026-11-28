@@ -50,8 +50,9 @@ final class SleepTimerController {
         lock.unlock()
         previous?.cancel()
 
-        // 0.5 秒一拍：到点误差不会超过半秒，而每拍只读一个时间差，开销可以忽略。
-        timer.schedule(deadline: .now() + 0.5, repeating: 0.5, leeway: .milliseconds(200))
+        // A wall-clock one-shot preserves the absolute deadline without countdown wakeups.
+        // The UI reads `remaining` directly; background playback still reaches this deadline.
+        timer.schedule(wallDeadline: .now() + TimeInterval(minutes) * 60, leeway: .milliseconds(200))
         timer.setEventHandler { [weak self] in self?.tick(token: token) }
         timer.resume()
 
@@ -76,8 +77,13 @@ final class SleepTimerController {
             return
         }
         let left = deadline.timeIntervalSinceNow
+        if left > 0 {
+            // Re-arm if the wall clock moved backward before delivery.
+            source?.schedule(wallDeadline: .now() + left, leeway: .milliseconds(200))
+            lock.unlock()
+            return
+        }
         lock.unlock()
-        guard left <= 0 else { return }
 
         lock.lock()
         guard token == generation else {

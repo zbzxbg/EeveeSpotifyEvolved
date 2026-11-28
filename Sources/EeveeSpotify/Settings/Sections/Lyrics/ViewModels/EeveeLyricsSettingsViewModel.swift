@@ -24,6 +24,7 @@ class EeveeLyricsSettingsViewModel: ObservableObject {
                 wordByWordLyrics,
                 forKey: NgzhwmSettingsViewModel.wordByWordLyricsKey
             )
+            InlineLyricsHostLocator.lyricsDidChange()
         }
     }
     

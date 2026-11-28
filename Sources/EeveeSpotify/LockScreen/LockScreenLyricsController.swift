@@ -57,7 +57,15 @@ final class LockScreenLyricsController {
     private var preparedTrackKey = ""
 
     private let previews = NSCache<NSString, UIImage>()
-    private var clipTasks: [String: Task<URL?, Never>] = [:]
+    private struct ClipTask {
+        let token: UUID
+        let lineIndex: Int
+        let task: Task<URL?, Never>
+    }
+    private var clipTasks: [String: ClipTask] = [:]
+    private var artworkRevision: UInt64 = 0
+    private var installToken = UUID()
+    private var installedLineIndex = -2
 
     /// 小于这个位移就照整行帧表播：刚换行时那点差别看不出来，重排反而要重编一段。
     private static let rebaseThresholdMs = 600
@@ -67,6 +75,8 @@ final class LockScreenLyricsController {
     // MARK: - 主线程状态
 
     private var timer: DispatchSourceTimer?
+    private var timerIntervalMs = 0
+    private var metadataTickPending = false
     private var lastEnabled = false
     /// 有东西装着（行/artwork 或定时器）。注入器在开关关着时每写一次 now-playing 都会
     /// 调 `noteDisabled()`；靠它把"其实已经什么都不做"的那种调用挡在外面。
@@ -138,6 +148,9 @@ final class LockScreenLyricsController {
         guard LockScreenLyrics.isEnabled else { return }
         lock.lock()
         preparedLineKey = ""
+        installToken = UUID()
+        artworkRevision &+= 1
+        cancelClipTasksLocked()
         lock.unlock()
         refreshTimer()
         writeDebugLog("[\(LockScreenLyrics.logTag)] typography changed — rebuilding the current line")
@@ -179,7 +192,13 @@ final class LockScreenLyricsController {
         active = true
         lock.unlock()
 
-        onMain { [weak self] in self?.refreshTimer() }
+        onMain { [weak self] in
+            guard let self else { return }
+            // Only idle polling needs an immediate metadata-driven wake. Active lyrics
+            // retain their 250ms cadence; defer the wake to avoid injector reentrancy.
+            if self.timerIntervalMs != 250 { self.scheduleMetadataTick() }
+            self.refreshTimer()
+        }
     }
 
     /// 封面静帧（注入器已经从系统字典或元数据里拿到了）。第一行的预览/短片用它铺底。
@@ -213,19 +232,36 @@ final class LockScreenLyricsController {
         }
     }
 
+    private func scheduleMetadataTick() {
+        guard !metadataTickPending else { return }
+        metadataTickPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.metadataTickPending = false
+            self.tick()
+        }
+    }
+
     private func refreshTimer() {
         guard LockScreenLyrics.isEnabled else {
             stopTimer()
             return
         }
-        if currentRate() > 0 {
-            startTimer()
+        lock.lock()
+        let hasLines = !lines.isEmpty
+        let settledWithoutLyrics = linesFetched && !hasLines && !waitingForPlayer && !fetchInFlight
+        let retryIntervalMs = waitingForPlayer ? 5000 : 1000
+        lock.unlock()
+        if settledWithoutLyrics {
+            stopTimer()
+        } else if currentRate() > 0 {
+            startTimer(intervalMs: hasLines ? 250 : retryIntervalMs)
         } else {
             stopTimer()
             // 暂停：定时器停了，但**已经装出去的那段动画不会跟着停** —— 系统会把它当
             // 循环素材继续播。派一拍把当前行换成单帧（见 `tick` 的 `frozen`）；
             // 走异步是为了断开 `tick` 末尾再调 `refreshTimer` 的同步递归。
-            DispatchQueue.main.async { [weak self] in self?.tick() }
+            scheduleMetadataTick()
         }
     }
 
@@ -237,25 +273,30 @@ final class LockScreenLyricsController {
         return (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 1
     }
 
-    private func startTimer() {
-        guard timer == nil else { return }
-        let source = DispatchSource.makeTimerSource(queue: .main)
+    private func startTimer(intervalMs: Int) {
+        guard timer == nil || timerIntervalMs != intervalMs else { return }
+        let source = timer ?? DispatchSource.makeTimerSource(queue: .main)
+        let isNew = timer == nil
         // 250ms：换行感知的上限。leeway 压小 —— 锁屏时系统会合并定时器，
         // 合并得太狠会让两句之间明显慢半拍。
         source.schedule(
-            deadline: .now() + .milliseconds(250),
-            repeating: .milliseconds(250),
-            leeway: .milliseconds(50)
+            deadline: .now() + .milliseconds(intervalMs),
+            repeating: .milliseconds(intervalMs),
+            leeway: .milliseconds(intervalMs == 250 ? 50 : 200)
         )
-        source.setEventHandler { [weak self] in self?.tick() }
-        source.resume()
+        if isNew {
+            source.setEventHandler { [weak self] in self?.tick() }
+            source.resume()
+        }
         timer = source
+        timerIntervalMs = intervalMs
     }
 
     private func stopTimer() {
         guard let timer else { return }
         timer.cancel()
         self.timer = nil
+        timerIntervalMs = 0
     }
 
     // MARK: - 每一拍
@@ -334,7 +375,7 @@ final class LockScreenLyricsController {
         }
 
         guard ready, !currentLines.isEmpty else {
-            if paused { stopTimer() }
+            if paused { stopTimer() } else { refreshTimer() }
             return
         }
 
@@ -382,6 +423,9 @@ final class LockScreenLyricsController {
     private func beginTrack(key: String, title: String) -> Bool {
         lock.lock()
         let isNewTrack = trackKey != key
+        installToken = UUID()
+        artworkRevision &+= 1
+        cancelClipTasksLocked()
         if isNewTrack {
             playerRetryDeadline = CFAbsoluteTimeGetCurrent() + 15
         }
@@ -545,6 +589,9 @@ final class LockScreenLyricsController {
         // 下一拍按新帧表重装（`tick` 的判据只有行号，不比对内容）。
         if lines != previous {
             preparedLineKey = ""
+            installToken = UUID()
+            artworkRevision &+= 1
+            cancelClipTasksLocked()
         }
         linesFetched = true
         fetchInFlight = false
@@ -650,6 +697,9 @@ final class LockScreenLyricsController {
         // 只清标记：下一拍会按新帧表重装。不清 `prepared` —— 系统可能还在取那份素材
         // （同 `typographyDidChange`）。
         preparedLineKey = ""
+        installToken = UUID()
+        artworkRevision &+= 1
+        cancelClipTasksLocked()
         lock.unlock()
 
         let provider = providerName.isEmpty ? "currentLyricsDto" : providerName
@@ -685,8 +735,16 @@ final class LockScreenLyricsController {
 
         // 先把这一行占住，定时器就不会重复发起。预览在后台画：锁屏正在画那一屏，
         // 一次模糊 + 两次文字排版堵在主线程上会有肉眼可见的卡顿。
+        let isPlaying = (playbackSnapshot()?.rate ?? 0) > 0
         lock.lock()
         preparedLineKey = lineKey
+        installedLineIndex = location.index
+        let token = UUID()
+        installToken = token
+        let revision = artworkRevision
+        // Keep the active line and its prewarmed successor; seeked-away work is expendable.
+        cancelClipTasksLocked(keeping: isPlaying
+            ? [location.index, location.index + 1] : [location.index])
         lock.unlock()
 
         let cover = currentCover()
@@ -740,6 +798,18 @@ final class LockScreenLyricsController {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var rendered: [LockScreenArtwork.Aspect: UIImage] = [:]
             for aspect in aspects {
+                guard let self, self.isInstallCurrent(token) else { return }
+                let artworkID = LockScreenLyrics.artworkID(
+                    trackKey: trackKey,
+                    lineIndex: location.index,
+                    resting: location.resting,
+                    aspect: aspect,
+                    frameHash: frameHash
+                )
+                if let cached = self.previewImage(for: artworkID) {
+                    rendered[aspect] = cached
+                    continue
+                }
                 let size = LyricClipRenderer.clipSize(for: aspect)
                 if let image = try? LyricClipRenderer.stillImage(
                     cover: cover,
@@ -762,6 +832,8 @@ final class LockScreenLyricsController {
             }
             DispatchQueue.main.async {
                 self?.finishInstall(
+                    token: token,
+                    revision: revision,
                     lineKey: lineKey,
                     location: location,
                     texts: texts,
@@ -782,6 +854,8 @@ final class LockScreenLyricsController {
 
     @available(iOS 26.0, *)
     private func finishInstall(
+        token: UUID,
+        revision: UInt64,
         lineKey: String,
         location: LocatedLine,
         texts: LineTexts,
@@ -800,6 +874,7 @@ final class LockScreenLyricsController {
         guard LockScreenLyrics.isEnabled else { return }
         lock.lock()
         let stillCurrent = trackKey == self.trackKey && preparedLineKey == lineKey
+            && installToken == token && artworkRevision == revision
         lock.unlock()
         guard stillCurrent else { return }
 
@@ -818,6 +893,7 @@ final class LockScreenLyricsController {
             }
             prepared[key] = artwork(
                 artworkID: artworkID,
+                revision: revision,
                 aspect: aspect,
                 location: location,
                 texts: texts,
@@ -836,6 +912,10 @@ final class LockScreenLyricsController {
         guard !prepared.isEmpty else { return }
 
         lock.lock()
+        guard installToken == token, artworkRevision == revision, self.trackKey == trackKey else {
+            lock.unlock()
+            return
+        }
         self.prepared = prepared
         preparedTrackKey = trackKey
         lock.unlock()
@@ -848,6 +928,8 @@ final class LockScreenLyricsController {
         )
         LockScreenArtworkInjector.republishForLockScreen()
         prewarmNextLine(
+            token: token,
+            revision: revision,
             after: location,
             lines: lines,
             trackKey: trackKey,
@@ -867,6 +949,8 @@ final class LockScreenLyricsController {
     /// 这是纯优化：帧表/哈希与将来 `install` 算出来的不一致时，只是缓存没命中，不影响正确性。
     @available(iOS 26.0, *)
     private func prewarmNextLine(
+        token: UUID,
+        revision: UInt64,
         after location: LocatedLine,
         lines: [LockScreenLyricLine],
         trackKey: String,
@@ -909,14 +993,15 @@ final class LockScreenLyricsController {
         // 1 秒后再排：让系统先把当前这一行要走的编码跑完（编码队列是串行的）。
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let self else { return }
-            self.lock.lock()
-            let stillHere = self.trackKey == trackKey && self.preparedLineKey == lineKey
-            self.lock.unlock()
-            guard stillHere, (self.playbackSnapshot()?.rate ?? 0) > 0 else { return }
+            guard self.isInstallCurrent(token),
+                  (self.playbackSnapshot()?.rate ?? 0) > 0 else { return }
             for aspect in aspects {
                 Task {
+                    guard self.isInstallCurrent(token),
+                          (self.playbackSnapshot()?.rate ?? 0) > 0 else { return }
                     _ = await self.clipURL(
                         trackKey: trackKey,
+                        revision: revision,
                         lineIndex: nextIndex,
                         resting: false,
                         aspect: aspect,
@@ -944,6 +1029,7 @@ final class LockScreenLyricsController {
     @available(iOS 26.0, *)
     private func artwork(
         artworkID: String,
+        revision: UInt64,
         aspect: LockScreenArtwork.Aspect,
         location: LocatedLine,
         texts: LineTexts,
@@ -1021,7 +1107,7 @@ final class LockScreenLyricsController {
                         return
                     }
                     // 这一行已经不是当前行了（用户拖了进度/切了歌）：不要再花时间编码。
-                    guard self.isLineCurrent(trackKey: trackKey, lineKey: lineKey) else {
+                    guard self.isLineCurrent(trackKey: trackKey, lineKey: lineKey, revision: revision) else {
                         completion(nil)
                         return
                     }
@@ -1038,6 +1124,7 @@ final class LockScreenLyricsController {
                     )
                     let file = await self.clipURL(
                         trackKey: trackKey,
+                        revision: revision,
                         lineIndex: location.index,
                         resting: location.resting,
                         aspect: aspect,
@@ -1057,7 +1144,10 @@ final class LockScreenLyricsController {
                         cover: cover,
                         seconds: clip.seconds
                     )
-                    completion(file)
+                    let stillCurrent = self.isLineCurrent(
+                        trackKey: trackKey, lineKey: lineKey, revision: revision
+                    )
+                    completion(stillCurrent ? file : nil)
                 }
             }
         )
@@ -1162,6 +1252,7 @@ final class LockScreenLyricsController {
     @available(iOS 26.0, *)
     private func clipURL(
         trackKey: String,
+        revision: UInt64,
         lineIndex: Int,
         resting: Bool,
         aspect: LockScreenArtwork.Aspect,
@@ -1190,18 +1281,30 @@ final class LockScreenLyricsController {
                 frameHash: frameHash
             )
         )
+        lock.lock()
+        guard self.trackKey == trackKey, artworkRevision == revision,
+              lineIndex == installedLineIndex || lineIndex == installedLineIndex + 1 else {
+            lock.unlock()
+            return nil
+        }
+        if let running = clipTasks[file.path] {
+            lock.unlock()
+            let result = await running.task.value
+            lock.lock()
+            let stillCurrent = self.trackKey == trackKey && artworkRevision == revision
+            lock.unlock()
+            return stillCurrent ? result : nil
+        }
+        // Serialize the cache check with task registration so a completed writer cannot be
+        // missed between an optimistic file check and the single-flight lookup.
         if FileManager.default.fileExists(atPath: file.path) {
+            lock.unlock()
             writeDebugLog(
                 "[\(LockScreenLyrics.logTag)] clip reused — \(file.lastPathComponent)"
             )
             return file
         }
-
-        lock.lock()
-        if let running = clipTasks[file.path] {
-            lock.unlock()
-            return await running.value
-        }
+        let token = UUID()
         let size = LyricClipRenderer.clipSize(for: aspect)
         // 编码一条要多久、每段名义时长是多少 —— 决定"按行切片"能不能对得上时间轴。
         writeDebugLog(
@@ -1211,6 +1314,7 @@ final class LockScreenLyricsController {
         let task = Task<URL?, Never> {
             let encodeStarted = Date()
             do {
+                try Task.checkCancellation()
                 try FileManager.default.createDirectory(
                     at: directory,
                     withIntermediateDirectories: true
@@ -1242,6 +1346,8 @@ final class LockScreenLyricsController {
                         + " \(String(format: "%.2f", Date().timeIntervalSince(encodeStarted)))s"
                 )
                 return file
+            } catch is CancellationError {
+                return nil
             } catch {
                 writeDebugLog(
                     "[\(LockScreenLyrics.logTag)] clip failed — \(error.localizedDescription)"
@@ -1249,17 +1355,35 @@ final class LockScreenLyricsController {
                 return nil
             }
         }
-        clipTasks[file.path] = task
+        clipTasks[file.path] = ClipTask(token: token, lineIndex: lineIndex, task: task)
         lock.unlock()
 
         let result = await task.value
         lock.lock()
-        clipTasks[file.path] = nil
+        if clipTasks[file.path]?.token == token {
+            clipTasks[file.path] = nil
+        }
+        let stillCurrent = self.trackKey == trackKey && artworkRevision == revision
         lock.unlock()
-        return result
+        return stillCurrent ? result : nil
     }
 
     // MARK: - 状态
+
+    /// Caller holds lock; cancel marks tasks without waiting for the encoding queue.
+    private func cancelClipTasksLocked(keeping lineIndices: Set<Int> = []) {
+        let obsolete = clipTasks.filter { !lineIndices.contains($0.value.lineIndex) }
+        for (path, entry) in obsolete {
+            entry.task.cancel()
+            clipTasks[path] = nil
+        }
+    }
+
+    private func isInstallCurrent(_ token: UUID) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return installToken == token
+    }
 
     private func currentCover() -> CGImage? {
         lock.lock()
@@ -1274,10 +1398,10 @@ final class LockScreenLyricsController {
     }
 
     /// 系统可能在我们已经换行/切歌之后才来要上一行的视频：那时不要再花时间编码。
-    private func isLineCurrent(trackKey: String, lineKey: String) -> Bool {
+    private func isLineCurrent(trackKey: String, lineKey: String, revision: UInt64) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return self.trackKey == trackKey && preparedLineKey == lineKey
+        return self.trackKey == trackKey && preparedLineKey == lineKey && artworkRevision == revision
     }
 
     /// 设置页的"清除"：连当前这首一起清，同时把这行已经装出去的 artwork 撤掉，
@@ -1287,7 +1411,9 @@ final class LockScreenLyricsController {
         prepared = [:]
         preparedLineKey = ""
         preparedTrackKey = ""
-        clipTasks.removeAll()
+        installToken = UUID()
+        artworkRevision &+= 1
+        cancelClipTasksLocked()
         lock.unlock()
 
         previews.removeAllObjects()
@@ -1320,7 +1446,9 @@ final class LockScreenLyricsController {
         prepared = [:]
         preparedLineKey = ""
         preparedTrackKey = ""
-        clipTasks.removeAll()
+        installToken = UUID()
+        artworkRevision &+= 1
+        cancelClipTasksLocked()
         generation &+= 1
         lock.unlock()
 

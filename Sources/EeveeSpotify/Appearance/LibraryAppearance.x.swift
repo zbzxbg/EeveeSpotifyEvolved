@@ -14,7 +14,7 @@ import ObjectiveC.runtime
 /// 为什么必须"复查"，不能只靠 `layoutSubviews`：
 /// 1. 不是每次变更都会再走一遍 layout —— 改完那一次之后页面上再也没有布局回合，后续的覆盖没人纠正；
 /// 2. Spotify 的界面是 Encore 的 element 系统（`ElementView` + binder 驱动），binder 在数据更新时会**把属性写回去**。
-/// 解法照本仓库既有的 `DeclutterChrome.reconcile`：常驻节拍复查（定时器 + 前台 + 布局里顺手叫一次），只是复查内容换成资料库这几项。
+/// 解法照本仓库既有的 `DeclutterChrome.reconcile`：前台且页面在窗口里时节拍复查，布局和回到前台时立即补齐资料库这几项。
 ///
 /// 三条纪律：
 /// 1. **全程在开关后面**，关掉完全还原（改过的值全部记下来写回）；
@@ -70,7 +70,12 @@ enum LibraryAppearance {
         } else if currentRoot == nil {
             currentRoot = root
         }
-        startReconcileTimer()
+        installReconcileDrivers()
+        if currentRoot?.window == nil {
+            stopReconcileTimer()
+        } else {
+            startReconcileTimer()
+        }
     }
 
     private static weak var currentRoot: UIView?
@@ -501,19 +506,58 @@ enum LibraryAppearance {
     // MARK: 复查节拍
 
     private static var reconcileTimer: Timer?
+    private static var lifecycleObservers: [NSObjectProtocol] = []
+    private static var reconcileSuspended = false
 
-    private static func startReconcileTimer() {
-        guard reconcileTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
-            // Timer 的回调在 main runloop 上；`reconcile` 是 @MainActor，
-            // 这里用仓库既有的 `onMainThreadSync` 表达这件事（不自己写 assumeIsolated）。
+    @MainActor
+    private static func installReconcileDrivers() {
+        guard lifecycleObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        lifecycleObservers.append(center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
             onMainThreadSync {
-                LibraryAppearance.reconcile()
+                reconcileSuspended = false
+                startReconcileTimer()
+                reconcile(force: true)
+            }
+        })
+        for notification in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
+            lifecycleObservers.append(center.addObserver(forName: notification, object: nil, queue: .main) { _ in
+                onMainThreadSync {
+                    reconcileSuspended = true
+                    stopReconcileTimer()
+                }
+            })
+        }
+    }
+
+    @MainActor
+    private static func stopReconcileTimer() {
+        reconcileTimer?.invalidate()
+        reconcileTimer = nil
+    }
+
+    @MainActor
+    private static func startReconcileTimer() {
+        guard !reconcileSuspended, UIApplication.shared.applicationState == .active,
+              currentRoot?.window != nil, reconcileTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
+            onMainThreadSync {
+                // Window detachment is a definite offscreen signal; do not guess visibility
+                // from geometry or presentation state. Page notes restart the timer on return.
+                guard !reconcileSuspended, UIApplication.shared.applicationState == .active,
+                      currentRoot?.window != nil else {
+                    stopReconcileTimer()
+                    return
+                }
+                reconcile()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         reconcileTimer = timer
-        writeDebugLog("[Library] reconcile timer started (0.5s) - this is what makes the changes stick, not optional")
     }
 
     // MARK: 还原
@@ -566,6 +610,17 @@ enum LibraryAppearance {
 class LibraryAppearanceHook: ClassHook<UIView> {
     typealias Group = LibraryAppearanceGroup
     static let targetName = "YourLibrary_YourLibraryXImpl.YourLibraryView"
+
+    func didMoveToWindow() {
+        orig.didMoveToWindow()
+        let view = self.target
+        onMainThreadSync {
+            LibraryAppearance.note(view)
+            if view.window != nil {
+                LibraryAppearance.reconcile(force: true)
+            }
+        }
+    }
 
     func layoutSubviews() {
         orig.layoutSubviews()

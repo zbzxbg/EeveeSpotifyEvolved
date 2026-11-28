@@ -70,6 +70,7 @@ enum AudioTapProbe {
         UserDefaults.container.set(enabled, forKey: defaultsKey)
         if enabled { AudioTapService.ensureInstalled() }
         setActive(enabled)
+        startTimerIfNeeded()
     }
 
     /// 安装完成后由 `AudioTapService` 调一次：把 `active` 对齐到开关的当前值。
@@ -77,6 +78,7 @@ enum AudioTapProbe {
     /// 不能反过来让安装那边直接写死一个值 —— 装 hook 是异步的，那段时间里开关可能已经被关掉。
     static func syncActiveWithSetting() {
         setActive(isEnabled)
+        startTimerIfNeeded()
     }
 
     private static func setActive(_ value: Bool) {
@@ -85,11 +87,20 @@ enum AudioTapProbe {
         os_unfair_lock_unlock(lock)
     }
 
-    /// 2 秒一拍的日志定时器。只在安装成功后起一次；开关关着时 `tick` 只做一次 bool 读。
+    /// Timer ownership stays on the main queue, including asynchronous hook-install completion.
     static func startTimerIfNeeded() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { startTimerIfNeeded() }
+            return
+        }
+        guard isEnabled else {
+            timer?.cancel()
+            timer = nil
+            return
+        }
         guard timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + 2, repeating: 2)
+        timer.schedule(deadline: .now() + 2, repeating: 2, leeway: .milliseconds(200))
         timer.setEventHandler { tick() }
         timer.resume()
         self.timer = timer
@@ -259,9 +270,11 @@ enum AudioTapProbe {
     private static func tick() {
         guard isEnabled else {
             setActive(false)
+            startTimerIfNeeded()
             return
         }
         setActive(true)
+        guard UserDefaults.enableLogRecording else { return }
 
         os_unfair_lock_lock(lock)
         let snapshot = (callbacks, frames, lastRMS, lastPeak, lastChannels, lastBytes, lastBus, streamFormat)

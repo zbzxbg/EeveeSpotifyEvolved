@@ -118,8 +118,19 @@ enum SettingsBackup {
         // 歌词偏移在内存里有一份索引（`LyricsTimingOffset`）—— 批量写入绕过了它，
         // 这里让它作废，下一次取词重新解码。
         LyricsTimingOffset.invalidateCache()
+        refreshFeatureTimers()
 
         return Result(applied: applied, skipped: skipped, message: "ok")
+    }
+
+    private static func refreshFeatureTimers() {
+        // Batch writes bypass typed setters; reconcile once after the complete snapshot.
+        onMainThreadSync {
+            BlockedArtistSkip.settingsDidChange()
+            SponsorBlockSkipper.shared.settingsDidChange()
+            InlineLyricsHostLocator.lyricsDidChange()
+            ListeningStatsRecorder.shared.settingsDidChange()
+        }
     }
 
     // MARK: - 重置
@@ -134,7 +145,10 @@ enum SettingsBackup {
             removed += 1
         }
 
-        if removed > 0 { LyricsTimingOffset.invalidateCache() }
+        if removed > 0 {
+            LyricsTimingOffset.invalidateCache()
+            refreshFeatureTimers()
+        }
         return removed
     }
 
@@ -157,7 +171,10 @@ enum SettingsBackup {
             removed += 1
         }
 
-        if removed > 0 { LyricsTimingOffset.invalidateCache() }
+        if removed > 0 {
+            LyricsTimingOffset.invalidateCache()
+            refreshFeatureTimers()
+        }
         return removed
     }
 }

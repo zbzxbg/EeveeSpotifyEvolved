@@ -97,42 +97,74 @@ enum LyricClipRenderer {
     ) async throws {
         // 编码会阻塞（等 `isReadyForMoreMediaData`、等 `finishWriting`），
         // 放到自己的串行队列，别占着 Swift 并发的协作线程。
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            encodeQueue.async {
-                do {
-                    let backdrop = try backdrop(cover: cover, size: size)
-                    let pair = pairFrames(
-                        line: karaoke,
-                        companion: companionKaraoke,
-                        companionText: companion
-                    )
-                    if let pair, pair.count >= 2 {
-                        var frames: [(at: Int, image: CGImage)] = []
-                        frames.reserveCapacity(pair.count)
-                        for frame in pair {
-                            let image = try compose(
-                                backdrop: backdrop,
-                                line: line,
-                                next: next,
-                                translation: translation,
-                                romanization: romanization,
-                                isDuet: isDuet,
-                                flipped: flipped,
-                                nextFlipped: nextFlipped,
-                                revealedCharacters: frame.lineCharacters,
-                                companion: companion,
-                                companionRevealedCharacters: frame.companionCharacters,
-                                companionFlipped: companionFlipped,
-                                credit: credit,
-                                size: size
+        let cancellation = EncodingCancellation()
+        try await withTaskCancellationHandler(operation: {
+            try Task.checkCancellation()
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                encodeQueue.async {
+                    do {
+                        try cancellation.check()
+                        let backdrop = try backdrop(cover: cover, size: size)
+                        let pair = pairFrames(
+                            line: karaoke,
+                            companion: companionKaraoke,
+                            companionText: companion
+                        )
+                        if let pair, pair.count >= 2 {
+                            var frames: [(at: Int, image: CGImage)] = []
+                            frames.reserveCapacity(pair.count)
+                            for frame in pair {
+                                try cancellation.check()
+                                let image = try compose(
+                                    backdrop: backdrop,
+                                    line: line,
+                                    next: next,
+                                    translation: translation,
+                                    romanization: romanization,
+                                    isDuet: isDuet,
+                                    flipped: flipped,
+                                    nextFlipped: nextFlipped,
+                                    revealedCharacters: frame.lineCharacters,
+                                    companion: companion,
+                                    companionRevealedCharacters: frame.companionCharacters,
+                                    companionFlipped: companionFlipped,
+                                    credit: credit,
+                                    size: size
+                                )
+                                frames.append((frame.offsetMs, image))
+                            }
+                            try writeFrames(
+                                frames, size: size, seconds: seconds,
+                                to: destination, cancellation: cancellation
                             )
-                            frames.append((frame.offsetMs, image))
-                        }
-                        try writeFrames(frames, size: size, seconds: seconds, to: destination)
-                    } else if karaoke.count >= 2 {
-                        var frames: [(at: Int, image: CGImage)] = []
-                        frames.reserveCapacity(karaoke.count)
-                        for frame in karaoke {
+                        } else if karaoke.count >= 2 {
+                            var frames: [(at: Int, image: CGImage)] = []
+                            frames.reserveCapacity(karaoke.count)
+                            for frame in karaoke {
+                                try cancellation.check()
+                                let image = try compose(
+                                    backdrop: backdrop,
+                                    line: line,
+                                    next: next,
+                                    translation: translation,
+                                    romanization: romanization,
+                                    isDuet: isDuet,
+                                    flipped: flipped,
+                                    nextFlipped: nextFlipped,
+                                    revealedCharacters: frame.revealedCharacters,
+                                    companion: companion,
+                                    companionRevealedCharacters: nil,
+                                    companionFlipped: companionFlipped,
+                                    credit: credit,
+                                    size: size
+                                )
+                                frames.append((frame.offsetMs, image))
+                            }
+                            try writeFrames(
+                                frames, size: size, seconds: seconds,
+                                to: destination, cancellation: cancellation
+                            )
+                        } else {
                             let image = try compose(
                                 backdrop: backdrop,
                                 line: line,
@@ -142,40 +174,52 @@ enum LyricClipRenderer {
                                 isDuet: isDuet,
                                 flipped: flipped,
                                 nextFlipped: nextFlipped,
-                                revealedCharacters: frame.revealedCharacters,
+                                revealedCharacters: karaoke.first?.revealedCharacters,
                                 companion: companion,
                                 companionRevealedCharacters: nil,
                                 companionFlipped: companionFlipped,
                                 credit: credit,
                                 size: size
                             )
-                            frames.append((frame.offsetMs, image))
+                            try writeFrames(
+                                [(0, image)], size: size, seconds: seconds,
+                                to: destination, cancellation: cancellation
+                            )
                         }
-                        try writeFrames(frames, size: size, seconds: seconds, to: destination)
-                    } else {
-                        let image = try compose(
-                            backdrop: backdrop,
-                            line: line,
-                            next: next,
-                            translation: translation,
-                            romanization: romanization,
-                            isDuet: isDuet,
-                            flipped: flipped,
-                            nextFlipped: nextFlipped,
-                            revealedCharacters: karaoke.first?.revealedCharacters,
-                            companion: companion,
-                            companionRevealedCharacters: nil,
-                            companionFlipped: companionFlipped,
-                            credit: credit,
-                            size: size
-                        )
-                        try writeFrames([(0, image)], size: size, seconds: seconds, to: destination)
+                        continuation.resume()
+                    } catch let error {
+                        continuation.resume(throwing: error)
                     }
-                    continuation.resume()
-                } catch let error {
-                    continuation.resume(throwing: error)
                 }
             }
+        }, onCancel: {
+            cancellation.cancel()
+        })
+    }
+
+    /// Cancellation crosses the DispatchQueue boundary without accessing Task state there.
+    private final class EncodingCancellation: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            lock.unlock()
+        }
+
+        func check() throws {
+            lock.lock()
+            let cancelled = self.cancelled
+            lock.unlock()
+            if cancelled { throw CancellationError() }
+        }
+
+        func publish(_ work: () throws -> Void) throws {
+            lock.lock()
+            defer { lock.unlock() }
+            if cancelled { throw CancellationError() }
+            try work()
         }
     }
 
@@ -984,8 +1028,10 @@ enum LyricClipRenderer {
         _ frames: [(at: Int, image: CGImage)],
         size: CGSize,
         seconds: Double,
-        to destination: URL
+        to destination: URL,
+        cancellation: EncodingCancellation
     ) throws {
+        try cancellation.check()
         guard !frames.isEmpty else {
             throw Failure(reason: "no frames to encode")
         }
@@ -995,8 +1041,7 @@ enum LyricClipRenderer {
         // AVFoundation 按扩展名校验挡下来（那样每段都静默失败，只剩预览图）。
         let folder = destination.deletingLastPathComponent()
         let partial = folder.appendingPathComponent("writing-\(UUID().uuidString).mp4")
-        try? FileManager.default.removeItem(at: partial)
-        try? FileManager.default.removeItem(at: destination)
+        defer { try? FileManager.default.removeItem(at: partial) }
 
         guard let writer = try? AVAssetWriter(outputURL: partial, fileType: .mp4) else {
             throw Failure(reason: "could not create the writer")
@@ -1037,7 +1082,9 @@ enum LyricClipRenderer {
 
         do {
             for (index, frame) in frames.enumerated() {
+                try cancellation.check()
                 while !input.isReadyForMoreMediaData {
+                    try cancellation.check()
                     Thread.sleep(forTimeInterval: 0.002)
                     guard writer.status == .writing else {
                         throw Failure(reason: writer.error?.localizedDescription ?? "writing stopped")
@@ -1062,6 +1109,7 @@ enum LyricClipRenderer {
                 }
             }
 
+            try cancellation.check()
             input.markAsFinished()
             let lastSeconds = Double(frames[frames.count - 1].at) / 1000
             writer.endSession(
@@ -1072,7 +1120,10 @@ enum LyricClipRenderer {
             )
             let done = DispatchSemaphore(value: 0)
             writer.finishWriting { done.signal() }
-            done.wait()
+            while done.wait(timeout: .now() + .milliseconds(50)) == .timedOut {
+                try cancellation.check()
+            }
+            try cancellation.check()
             guard writer.status == .completed else {
                 throw Failure(reason: writer.error?.localizedDescription ?? "finishWriting failed")
             }
@@ -1082,8 +1133,12 @@ enum LyricClipRenderer {
             throw error
         }
 
-        try? FileManager.default.removeItem(at: destination)
-        try FileManager.default.moveItem(at: partial, to: destination)
+        // Cancellation and publication are serialized: purge cannot return from cancel()
+        // and then have an obsolete writer recreate its cache entry.
+        try cancellation.publish {
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.moveItem(at: partial, to: destination)
+        }
     }
 
     private static func draw(_ image: CGImage, into buffer: CVPixelBuffer, size: CGSize) throws {

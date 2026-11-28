@@ -78,6 +78,12 @@ enum AudioDSP {
     private static var renderTargetCoefficients: UnsafeMutablePointer<Double> = makeIdentity(chainCapacity)
     /// 这一块真正要跑几段；空出来的槽位恒等，跑不跑都一样。
     private static var renderChainCount = 0
+    private static let renderFilterIndices: UnsafeMutablePointer<Int> = {
+        let pointer = UnsafeMutablePointer<Int>.allocate(capacity: chainCapacity)
+        pointer.initialize(repeating: 0, count: chainCapacity)
+        return pointer
+    }()
+    private static var renderFilterCount = 0
 
     /// 每段 × 每声道 × 两个状态量。
     private static var renderStates: UnsafeMutablePointer<Double> = makeZeros(chainCapacity * maxChannels * 2)
@@ -335,9 +341,18 @@ enum AudioDSP {
     }
 
     private static func startTickerIfNeeded() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { startTickerIfNeeded() }
+            return
+        }
+        guard isEnabled else {
+            ticker?.cancel()
+            ticker = nil
+            return
+        }
         guard ticker == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + 5, repeating: 5)
+        timer.schedule(deadline: .now() + 5, repeating: 5, leeway: .milliseconds(500))
         timer.setEventHandler { tick() }
         timer.resume()
         ticker = timer
@@ -417,6 +432,8 @@ enum AudioDSP {
             resetStates()
             return
         }
+
+        updateRenderFilterIndices()
 
         let buffers = UnsafeMutableAudioBufferListPointer(
             ioData.assumingMemoryBound(to: AudioBufferList.self)
@@ -554,6 +571,27 @@ enum AudioDSP {
         }
     }
 
+    /// Select once per block, not once per sample. Keep original slots and order so smoothing
+    /// and delay states remain valid when a band fades in or returns to exact identity.
+    private static func updateRenderFilterIndices() {
+        renderFilterCount = 0
+        for index in 0..<renderChainCount {
+            let base = index * coefficientStride
+            let stateBase = index * maxChannels * 2
+            let c = BiquadCoefficients(
+                b0: renderCoefficients[base], b1: renderCoefficients[base + 1],
+                b2: renderCoefficients[base + 2], a1: renderCoefficients[base + 3],
+                a2: renderCoefficients[base + 4]
+            )
+            if c.canSkip(
+                leftZ1: renderStates[stateBase], leftZ2: renderStates[stateBase + 1],
+                rightZ1: renderStates[stateBase + 2], rightZ2: renderStates[stateBase + 3]
+            ) { continue }
+            renderFilterIndices[renderFilterCount] = index
+            renderFilterCount += 1
+        }
+    }
+
     private static func processInterleaved(buffer: AudioBuffer, frames: Int) {
         guard let raw = buffer.mData else { return }
         let channelCount = Int(buffer.mNumberChannels)
@@ -665,8 +703,9 @@ enum AudioDSP {
     private static func processChannel(_ input: Double, channel: Int) -> Double {
         var value = input
 
-        var stateIndex = channel * 2
-        for index in 0..<renderChainCount {
+        for slot in 0..<renderFilterCount {
+            let index = renderFilterIndices[slot]
+            let stateIndex = index * maxChannels * 2 + channel * 2
             let base = index * coefficientStride
             let b0 = renderCoefficients[base]
             let b1 = renderCoefficients[base + 1]
@@ -683,7 +722,6 @@ enum AudioDSP {
             renderStates[stateIndex] = nextZ1
             renderStates[stateIndex + 1] = nextZ2
             value = y
-            stateIndex += maxChannels * 2
         }
 
         if renderCompanderMix > 1e-4 || renderCompanderTargetMix > 1e-4 {

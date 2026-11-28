@@ -590,25 +590,43 @@ enum DeclutterChrome {
 
     // MARK: - 复查的两个驱动（定时器 + 前台）
 
-    private static var lifecycleObserver: NSObjectProtocol?
+    private static var lifecycleObservers: [NSObjectProtocol] = []
     private static var reconcileTimer: Timer?
+    private static var reconcileSuspended = false
 
     static func installReconcileDrivers() {
-        startReconcileTimer()
+        onMainThreadSync {
+            startReconcileTimer()
+            guard lifecycleObservers.isEmpty else { return }
 
-        guard lifecycleObserver == nil else { return }
-
-        // App 回到前台时强制复查一次。的"划出 Spotify（不是杀掉）再回来，
-        // 迷你条就没了/回不来"正发生在这一步：视图可能被重建，或 Spotify 自己重排了一遍。
-        // 每次前台打一行日志，方便下一份日志直接确认这条路径跑过。
-        lifecycleObserver = NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            writeDebugLog("[Declutter] reconcile (app became active)")
-            DeclutterChrome.reconcileNow()
+            let center = NotificationCenter.default
+            lifecycleObservers.append(center.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                onMainThreadSync {
+                    reconcileSuspended = false
+                    startReconcileTimer()
+                    writeDebugLog("[Declutter] reconcile (app became active)")
+                    DeclutterChrome.reconcileNow()
+                }
+            })
+            for notification in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
+                lifecycleObservers.append(center.addObserver(forName: notification, object: nil, queue: .main) { _ in
+                    onMainThreadSync {
+                        reconcileSuspended = true
+                        stopReconcileTimer()
+                    }
+                })
+            }
         }
+    }
+
+    @MainActor
+    private static func stopReconcileTimer() {
+        reconcileTimer?.invalidate()
+        reconcileTimer = nil
     }
 
     /// 兜底节拍器。
@@ -616,17 +634,23 @@ enum DeclutterChrome {
     /// ⚠️ 为什么不能只靠 `MainWindow` 的 `layoutSubviews`：UIKit 的布局只从"自己
     /// `needsLayout`"的那些视图上往下跑，**深层子视图重新布局不一定会走到 window 自己**，
     /// 所以那个节拍并不保证。这里补一个和 `ViewTreeDumper` 同款的定时器（`.common` 模式，
-    /// 滚动时也不会停；App 进后台被挂起时自然停摆），保证"Spotify 把 chrome 显示回来"
-    /// 这件事在 0.5s 内一定被复查到。
+    /// 滚动时也不会停；离开 active 时 invalidate，避免后台音频保活时仍每 0.5s 唤醒），
+    /// 保证前台 "Spotify 把 chrome 显示回来" 这件事在 0.5s 内被复查到。
+    @MainActor
     private static func startReconcileTimer() {
-        guard reconcileTimer == nil else { return }
+        guard !reconcileSuspended, UIApplication.shared.applicationState == .active,
+              reconcileTimer == nil else { return }
 
         let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
-            // **熄屏/后台不做任何事**（与 `ViewTreeDumper.dumpOnce` 同一条纪律）。
-            // Spotify 在后台放歌时进程不会挂起，这个 0.5s 的节拍没必要在用户看不见屏幕时空转。
-            // 手动调用的那两个入口（开关切换 / didBecomeActive）不受这条影响，照常当场落地。
-            guard UIApplication.shared.applicationState == .active else { return }
-            reconcile(in: keyWindowRoot())
+            onMainThreadSync {
+                // Lifecycle notifications normally cancel first; this also handles a late tick.
+                // Event-driven hooks and explicit reconciliation remain immediate.
+                guard !reconcileSuspended, UIApplication.shared.applicationState == .active else {
+                    stopReconcileTimer()
+                    return
+                }
+                reconcile(in: keyWindowRoot())
+            }
         }
         timer.tolerance = 0.2
         RunLoop.main.add(timer, forMode: .common)
