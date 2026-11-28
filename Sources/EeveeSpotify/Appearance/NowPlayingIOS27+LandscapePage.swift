@@ -19,6 +19,9 @@
 // 手指在歌词上滑动时，这一列（歌名 / 艺人 / 进度 / 传输）一起淡出，停手 1.6s 再淡回 ——
 // 判据只能是**手势**：歌词每帧自动滚，按 `contentOffset` 判会永远收着。
 //
+// 歌名 / 艺人是我们自己的 label（原生标题行整块被按着），所以点击也在这里接：
+// 歌名 → 专辑页，艺人 → 艺人页。
+//
 // 开关 `landscapePageEnabled`：关掉退回旧的两栏路径（`placeLandscapeStack` + `LandscapeRows`），
 // 便于并排对比两版。日志 tag：`[iOS27]`，一次性一行 `landscape page — …`。
 import Foundation
@@ -122,6 +125,10 @@ extension NowPlayingIOS27 {
     static weak var landscapeHiddenStack: UIView?
     static var didLogLandscapePage = false
 
+    /// 歌名 / 艺人那两行的点击处理器（手势的 target 必须被强引用住）。
+    static let landscapeTitleTapHandler = LandscapePageTapHandler(kind: .album)
+    static let landscapeArtistTapHandler = LandscapePageTapHandler(kind: .artist)
+
     /// 播放状态投影：时间 / 时长 / 是否在播（`AppleMusicLyricsPlaybackControl` 里那份）。
     static let landscapePageProjection = AppleMusicLyricsPlaybackProjection {
         WordByWordPositionResolver.shared.currentPositionSeconds()
@@ -193,8 +200,7 @@ extension NowPlayingIOS27 {
         landscapeControlsHidden = hidden
         setLandscapePageChromeAlpha(hidden ? 0 : 1, animated: true)
         if let view = landscapePageView {
-            let wantedHits: [CGRect] = hidden ? [] : [view.controlsRect].compactMap { $0 }
-            view.hitRects = wantedHits
+            view.hitRects = hidden ? [] : view.visibleHitRects
         }
     }
 
@@ -254,9 +260,18 @@ extension NowPlayingIOS27 {
             changed = true
         }
         // 滚动歌词时这一列是收起来的：每拍只保证 alpha / 命中区与状态一致，不重复做动画。
-        view.controlsRect = geometry.controls
+        var hitRects: [CGRect] = [geometry.controls]
+        if let text = landscapePageTitle?.text, !text.isEmpty {
+            hitRects.append(geometry.title)
+        }
+        if let text = landscapePageArtist?.text, !text.isEmpty {
+            hitRects.append(geometry.artist)
+        }
+        if view.visibleHitRects != hitRects {
+            view.visibleHitRects = hitRects
+        }
         setLandscapePageChromeAlpha(landscapeControlsHidden ? 0 : 1, animated: false)
-        let wantedHits: [CGRect] = landscapeControlsHidden ? [] : [geometry.controls]
+        let wantedHits: [CGRect] = landscapeControlsHidden ? [] : hitRects
         if view.hitRects != wantedHits {
             view.hitRects = wantedHits
         }
@@ -337,8 +352,9 @@ extension NowPlayingIOS27 {
     /// 自建页的承载层：透明、**只在 `hitRects` 里吃触摸**，其余放行。
     final class LandscapePageView: UIView {
         var hitRects: [CGRect] = []
-        /// 控件那一条（滚动歌词收起来时 `hitRects` 清空，放回来时恢复成它）。
-        var controlsRect: CGRect?
+        /// 这一列**看得见时**吃触摸的那几块（控件带 / 有字的歌名 / 有字的艺人）。
+        /// 滚动歌词把这一列收起来时 `hitRects` 清空，放回来就恢复成它。
+        var visibleHitRects: [CGRect] = []
 
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
             for rect in hitRects where rect.contains(point) { return true }
@@ -365,6 +381,9 @@ extension NowPlayingIOS27 {
             size: 13,
             weight: .semibold
         )
+        // 歌名点开专辑、艺人点开艺人页 —— 与竖屏页内歌词那两颗透明按钮同一套动作。
+        attachLandscapePageTap(to: title, handler: landscapeTitleTapHandler)
+        attachLandscapePageTap(to: artist, handler: landscapeArtistTapHandler)
         view.addSubview(title)
         view.addSubview(artist)
         page.addSubview(view)
@@ -386,8 +405,23 @@ extension NowPlayingIOS27 {
         label.textColor = UIColor.white
         label.numberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
-        label.isUserInteractionEnabled = false
+        // 这两行现在**可点**（见 `attachLandscapePageTap`）：手势要挂在这颗 label 自己身上。
+        label.isUserInteractionEnabled = true
+        label.isAccessibilityElement = true
+        label.accessibilityTraits = .button
         return label
+    }
+
+    private static func attachLandscapePageTap(
+        to label: UILabel,
+        handler: LandscapePageTapHandler
+    ) {
+        label.addGestureRecognizer(
+            UITapGestureRecognizer(
+                target: handler,
+                action: #selector(LandscapePageTapHandler.handleTap(_:))
+            )
+        )
     }
 
     private static func updateLandscapePageLabel(
@@ -455,6 +489,37 @@ extension NowPlayingIOS27 {
 
     private static func landscapeRectText(_ rect: CGRect) -> String {
         "\(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
+    }
+}
+
+// MARK: - 歌名 / 艺人的点击
+//
+// 自建页上的两行是**我们自己的 label**（原生标题行整块被按着），所以点击也由这里接：
+// 歌名 → 当前曲目的专辑页，艺人 → 当前曲目的艺人页。动作本身复用竖屏页内歌词那一套
+// （`openCurrentAlbum` / `openCurrentArtist`：先走链接分发器，拿不到 URI 再转发给原生行）。
+
+/// 歌名 / 艺人共用的点击处理器：两个实例只差 `kind`。
+final class LandscapePageTapHandler: NSObject {
+
+    enum Kind {
+        case album
+        case artist
+    }
+
+    private let kind: Kind
+
+    init(kind: Kind) {
+        self.kind = kind
+    }
+
+    @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        switch kind {
+        case .album:
+            NowPlayingIOS27.openCurrentAlbum()
+        case .artist:
+            NowPlayingIOS27.openCurrentArtist()
+        }
     }
 }
 

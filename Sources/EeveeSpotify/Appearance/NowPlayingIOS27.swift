@@ -2586,7 +2586,7 @@ enum NowPlayingIOS27 {
     /// AM 样式那条路点歌手的入口，见 `openArtistFromTitleTap` 的调用方 `AppleMusicTitleTaps`。
     static func openArtistFromTitleTap() { openCurrentArtist() }
 
-    private static func openCurrentAlbum() {
+    static func openCurrentAlbum() {
         let uri = currentTrackMetadata()["album_uri"]
         if SpotifyURIOpener.isReady, let uri, !uri.isEmpty {
             writeDebugLog("[\(logTag)] title tap → \(uri)")
@@ -2601,7 +2601,7 @@ enum NowPlayingIOS27 {
     }
 
     /// 点艺人名：打开**当前曲目的艺人页**（同上，兜底转发原生标题行）。
-    private static func openCurrentArtist() {
+    static func openCurrentArtist() {
         let uri = currentTrackMetadata()["artist_uri"]
         if SpotifyURIOpener.isReady, let uri, !uri.isEmpty {
             writeDebugLog("[\(logTag)] artist tap → \(uri)")
