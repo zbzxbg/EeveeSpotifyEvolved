@@ -9,8 +9,8 @@ import Foundation
 //          -o /tmp/landscape-scroll-hide-tests && /tmp/landscape-scroll-hide-tests
 //
 // 两档歌词的判据不一样：
-//   · 逐词 / 逐行（有时间轴）：歌词每帧自己在滚 ⇒ 只能看手势。划出阈值就收，
-//     **不能**看 `contentOffset`（它一直在变，点一下也会"变了"）；
+//   · 逐词 / 逐行（有时间轴）：歌词本来就在跟唱，划一下不能把歌名 / 进度 / 传输收掉
+//     ⇒ 这一档**从不收**，无论手指划多远、偏移怎么变；
 //   · 纯文本（没有时间轴）：内容可能短到放得下 ⇒ 还要"手势期间内容真的挪过"，
 //     否则按一下也收，就变成"没划动也消失"。
 
@@ -21,19 +21,15 @@ private func require(_ condition: @autoclosure () -> Bool, _ message: String) {
 private let drag = LandscapeScrollHideRule.dragThreshold
 private let scroll = LandscapeScrollHideRule.contentScrollThreshold
 
-// MARK: - 逐词 / 逐行：看手势，不看偏移
+// MARK: - 逐词 / 逐行：从不收
 
 require(
-    LandscapeScrollHideRule.shouldHide(isStatic: false, dragDistance: drag, contentOffsetDelta: 0),
-    "timed lyrics must hide once the finger really drags"
+    !LandscapeScrollHideRule.shouldHide(isStatic: false, dragDistance: drag, contentOffsetDelta: 0),
+    "timed lyrics must keep the column on a drag"
 )
 require(
-    LandscapeScrollHideRule.shouldHide(isStatic: false, dragDistance: -drag, contentOffsetDelta: 0),
-    "an upward drag counts the same as a downward one"
-)
-require(
-    !LandscapeScrollHideRule.shouldHide(isStatic: false, dragDistance: drag - 0.1, contentOffsetDelta: 0),
-    "a tap-sized move must not hide the column"
+    !LandscapeScrollHideRule.shouldHide(isStatic: false, dragDistance: -drag * 20, contentOffsetDelta: 400),
+    "a long upward drag on timed lyrics still keeps the column"
 )
 require(
     !LandscapeScrollHideRule.shouldHide(isStatic: false, dragDistance: 0, contentOffsetDelta: 400),
@@ -72,8 +68,8 @@ require(
 require(drag >= 4, "the drag threshold must be big enough to ignore taps (\(drag)pt)")
 require(scroll > 0 && scroll < drag, "the content threshold must be a small real movement")
 require(
-    LandscapeScrollHideRule.shouldHide(isStatic: false, dragDistance: drag * 100, contentOffsetDelta: 0),
-    "a long drag always hides"
+    LandscapeScrollHideRule.shouldHide(isStatic: true, dragDistance: drag * 100, contentOffsetDelta: 999),
+    "a long real scroll always hides"
 )
 
 print("landscape scroll hide rule: all assertions passed")

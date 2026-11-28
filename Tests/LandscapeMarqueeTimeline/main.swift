@@ -10,7 +10,7 @@ import Foundation
 //
 // 钉的是形状，不是观感：
 //   · 放得下 ⇒ 不给时间表（静止）；
-//   · 贴左端先停 → 每段左移后停 → 尾端贴右端（完整溢出量）再停 → 一帧回 0；
+//   · 贴左端先停 → 每段左移后停 → 尾端贴右端（完整溢出量）再停 → 按同一档速度滚回 0；
 //   · keyTimes 严格递增、首 0 尾 1，与 values 一样长；
 //   · 每段位移不超过配置上限，最后一段只走剩下的；
 //   · 视口越宽，同样的溢出需要的段数越少。
@@ -29,7 +29,7 @@ private func nearTime(_ a: TimeInterval, _ b: TimeInterval, _ tolerance: TimeInt
 
 private let style = LandscapeMarqueeTimeline.Style.standard
 
-/// 时间表里"停了几段"：开头那一对 + 每段一对 + 最后跳回 0 的那一个。
+/// 时间表里"停了几段"：开头那一对 + 每段一对 + 最后滚回 0 的那一个。
 private func stopCount(_ timeline: LandscapeMarqueeTimeline) -> Int {
     (timeline.values.count - 3) / 2
 }
@@ -59,14 +59,14 @@ let short = LandscapeMarqueeTimeline.timeline(overflow: 83, viewportWidth: 197)
 require(short != nil, "a title wider than the viewport must scroll")
 if let timeline = short {
     require(stopCount(timeline) == 1, "83pt of overflow fits in a single step")
-    require(timeline.values.count == 5, "one step is start-pair + step-pair + snap")
+    require(timeline.values.count == 5, "one step is start-pair + step-pair + return")
     require(near(timeline.values[0], 0), "the cycle starts at the left edge")
     require(near(timeline.values[1], 0), "the start hold stays at the left edge")
     require(near(timeline.values[2], -83), "the step lands on the full overflow")
     require(near(timeline.values[3], -83), "the end hold keeps the tail at the right edge")
-    require(near(timeline.values[4], 0), "the snap returns to the start")
+    require(near(timeline.values[4], 0), "the return comes back to the start")
 
-    // 开头停 `startHold`，走一段 `overflow / speed`，尾端停 `endHold`，最后一帧跳回。
+    // 开头停 `startHold`，走一段 `overflow / speed`，尾端停 `endHold`，最后按回滚速度走完全程。
     require(nearTime(time(timeline, at: 1), style.startHold), "the start hold is the configured one")
     require(
         nearTime(time(timeline, at: 2) - time(timeline, at: 1), 83 / style.speed),
@@ -77,13 +77,17 @@ if let timeline = short {
         "the last stop is the end hold"
     )
     require(
-        time(timeline, at: 4) - time(timeline, at: 3) <= style.snap + 0.001,
-        "the return to the start is a single frame"
+        nearTime(time(timeline, at: 4) - time(timeline, at: 3), 83 / style.returnSpeed),
+        "the return takes distance / return speed"
+    )
+    require(
+        time(timeline, at: 4) - time(timeline, at: 3) > 0.2,
+        "the return must read as a scroll, not as a single frame"
     )
     require(
         nearTime(
             timeline.duration,
-            style.startHold + 83 / style.speed + style.endHold + style.snap
+            style.startHold + 83 / style.speed + style.endHold + 83 / style.returnSpeed
         ),
         "the cycle length is the sum of its legs"
     )
@@ -96,7 +100,7 @@ require(long != nil, "a long title must scroll")
 if let timeline = long {
     // 197 * 0.55 = 108.35 ⇒ ceil(403 / 108.35) = 4 段，每段 100.75。
     require(stopCount(timeline) == 4, "403pt of overflow needs four steps")
-    require(timeline.values.count == 11, "four steps are start-pair + four step-pairs + snap")
+    require(timeline.values.count == 11, "four steps are start-pair + four step-pairs + return")
     let stepDistance = CGFloat(403) / 4
     for step in 1...4 {
         let travelIndex = 2 * step
@@ -131,8 +135,8 @@ if let timeline = long {
         "the last stop is the end hold"
     )
     require(
-        time(timeline, at: 10) - time(timeline, at: 9) <= style.snap + 0.001,
-        "the return to the start is a single frame"
+        nearTime(time(timeline, at: 10) - time(timeline, at: 9), 403 / style.returnSpeed),
+        "the return scrolls the whole overflow back at the return speed"
     )
 }
 
@@ -178,13 +182,27 @@ for input in inputs {
     )
     require(timeline.duration > 0, "\(input): a cycle must take time")
 
-    // 除了最后那一帧，位移只能往左走（不会来回抖）。
-    for index in 1..<(timeline.values.count - 1) {
+    // 除了最后那段回滚，位移只能往左走（不会来回抖）。
+    for index in 1..<(timeline.values.count - 2) {
         require(
             timeline.values[index] <= timeline.values[index - 1] + 0.001,
             "\(input): the track moved backwards at keyframe \(index)"
         )
     }
+
+    // 回滚那段反过来只往右走，并且走的是同一档速度。
+    require(
+        near(timeline.values[timeline.values.count - 2], -input.overflow),
+        "\(input): the return starts at the tail stop"
+    )
+    require(
+        nearTime(
+            time(timeline, at: timeline.values.count - 1)
+                - time(timeline, at: timeline.values.count - 2),
+            Double(input.overflow / style.returnSpeed)
+        ),
+        "\(input): the return leg takes the whole overflow at the return speed"
+    )
 
     // 每段位移不超过一次左移的上限。
     let travel = min(max(input.viewport * style.travelRatio, style.minTravel), style.maxTravel)
@@ -215,7 +233,7 @@ var custom = LandscapeMarqueeTimeline.Style.standard
 custom.startHold = 0.4
 custom.stopHold = 0.25
 custom.endHold = 0.3
-custom.snap = 0.02
+custom.returnSpeed = 200
 custom.travelRatio = 0.9
 custom.minTravel = 200
 custom.maxTravel = 300
@@ -228,6 +246,10 @@ if let timeline = LandscapeMarqueeTimeline.timeline(
     require(nearTime(time(timeline, at: 1), 0.4), "the custom start hold is honoured")
     require(nearTime(time(timeline, at: 3) - time(timeline, at: 2), 0.25), "the custom stop hold is honoured")
     require(nearTime(time(timeline, at: 5) - time(timeline, at: 4), 0.3), "the custom end hold is honoured")
+    require(
+        nearTime(time(timeline, at: 6) - time(timeline, at: 5), 450 / custom.returnSpeed),
+        "the custom return speed is honoured"
+    )
 }
 
 // 速度为 0 / 负数被夹住，不能算出无限长的一轮。

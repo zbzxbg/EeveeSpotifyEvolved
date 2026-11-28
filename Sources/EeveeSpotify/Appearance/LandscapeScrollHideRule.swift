@@ -1,9 +1,10 @@
 // 横屏歌词页：手指划歌词时，左列（歌名 / 艺人 / 控件带）什么时候收起来。
 //
-// 判据只用手势，不看 `contentOffset` 的绝对值 —— 逐词 / 逐行那两档每帧都在自动滚，
-// 按偏移判会永远收着。但**纯文本**那一档不自动滚，手指按上去也会开一条 pan：
-// 只有"内容真的滚动了"才算划动，否则（比如整段词放得下、根本没得滚）按一下也收，
-// 就变成"没划动也消失"。
+// 逐词 / 逐行（有时间轴）那一档**从不收**：它本来就在跟唱，划一下把歌名 / 艺人 / 进度 /
+// 传输一起淡掉，看起来就是"模块没了"；想拖进度还得先等它淡回来。要收的只有纯文本那一档。
+//
+// 纯文本不自动滚，手指按上去也会开一条 pan：只有"内容真的滚动了"才算划动，否则
+// （比如整段词放得下、根本没得滚）按一下也收，就变成"没划动也消失"。
 //
 // 收 / 放的动作在 `NowPlayingIOS27+LandscapePage.swift`；这里只是那条判据，
 // 纯逻辑，能进 `Tests/LandscapeScrollHideRule` 那条 CI 链。
@@ -27,8 +28,8 @@ enum LandscapeScrollHideRule {
         dragDistance: CGFloat,
         contentOffsetDelta: CGFloat
     ) -> Bool {
+        guard isStatic else { return false }
         guard abs(dragDistance) >= dragThreshold else { return false }
-        guard isStatic else { return true }
         return abs(contentOffsetDelta) >= contentScrollThreshold
     }
 }

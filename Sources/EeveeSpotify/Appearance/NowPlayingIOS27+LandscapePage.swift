@@ -16,9 +16,9 @@
 // 歌词再挪位置。右栏口径：右沿落在右上那颗 ⋯ 与它下面三颗字形之内侧，宽度封顶
 // `landscapeLyricsMaxWidth`（多出来的宽度**放到左边**，不往中间挤）。
 //
-// 手指在歌词上滑动时，这一列（歌名 / 艺人 / 进度 / 传输）一起淡出，停手 1.6s 再淡回 ——
-// 判据只能是**手势**：歌词每帧自动滚，按 `contentOffset` 判会永远收着。纯文本那一档不自动滚，
-// 所以它要**内容真的滚了**才收（判据在 `LandscapeScrollHideRule`）：整段词放得下、没得滚时按一下也不收。
+// 逐词 / 逐行歌词划动时这一列（歌名 / 艺人 / 进度 / 传输）**不动**；只有纯文本那一档在
+// 内容真的滚起来之后才淡出，停手 1.6s 再淡回（判据在 `LandscapeScrollHideRule`）：
+// 整段词放得下、没得滚时按一下也不收。
 //
 // 歌名 / 艺人是我们自己的 label（原生标题行整块被按着），所以点击也在这里接：
 // 歌名 → 专辑页，艺人 → 艺人页。
@@ -135,18 +135,16 @@ extension NowPlayingIOS27 {
         WordByWordPositionResolver.shared.currentPositionSeconds()
     }
 
-    // MARK: - 滚动歌词时收控件
+    // MARK: - 滚动歌词时收控件（只限纯文本）
     //
-    // 手指在歌词上滑动 ⇒ 歌名 / 艺人 / 控件带一起淡出，停手 `restoreDelay` 之后再淡回来。
-    // 这样歌词滚动时屏幕上只剩封面与词，和 Chroma 横屏歌词页那一条一致。
+    // 只有纯文本那一档会把歌名 / 艺人 / 控件带淡出，停手 `restoreDelay` 之后再淡回来。
+    // 逐词 / 逐行不这么做：歌词本身就在跟唱，划一下把这一列收掉，读起来像"模块消失了"，
+    // 而且想拖进度还得等它淡回来 —— 这两档一律保持可见（判据在 `LandscapeScrollHideRule`）。
     //
-    // 判据**只能用手势**，不能看 `contentOffset`：歌词是每帧自动滚的（逐词跟唱），
-    // 偏移量一直在变 ⇒ 按偏移判会永远收着。这里把观察者**挂到宿主自己那条 pan 上**
-    // （`addTarget`），不新建手势、不抢 delegate，滚动手感一点不变。
-    //
-    // 纯文本那一档是例外里的一半：它也走这条 pan，内容却可能短到放得下（没得滚）。
-    // 所以它额外要求"手势期间内容真的挪过"（`landscapeScrollStartOffsetY` 那条增量），
-    // 判据收在 `LandscapeScrollHideRule` 里。
+    // 观察者**挂到宿主自己那条 pan 上**（`addTarget`），不新建手势、不抢 delegate，
+    // 滚动手感一点不变。判据不能看 `contentOffset` 的绝对值：逐词 / 逐行每帧自动滚，
+    // 按偏移判会永远收着。纯文本不自动滚，但内容可能短到放得下（没得滚），所以它还要
+    // "手势期间内容真的挪过"（`landscapeScrollStartOffsetY` 那条增量）才算划动。
 
     static let landscapeControlsFadeDuration: TimeInterval = 0.18
     static let landscapeControlsRestoreDelay: TimeInterval = 1.6
@@ -180,12 +178,14 @@ extension NowPlayingIOS27 {
         landscapeWatchedPan = pan
         writeDebugLog(
             "[\(logTag)] landscape scroll — watcher attached on \(NSStringFromClass(type(of: scroll)))"
-                + (landscapeLyricsAreStatic() ? " (plain lyrics: hides only when the text really moves)" : "")
+                + (landscapeLyricsAreStatic()
+                    ? " (plain lyrics: hides once the text really moves)"
+                    : " (timed lyrics: the column stays)")
         )
     }
 
-    /// 这一档歌词**没有时间轴**（纯文本，比如 Genius / 无时间戳的词）：它不跟唱，
-    /// 划动时只有"内容真的滚了"才收控件 —— 内容短到放得下时按一下不能收。
+    /// 这一档歌词**没有时间轴**（纯文本，比如 Genius / 无时间戳的词）：只有它会在划动时
+    /// 收控件 —— 而且要求"内容真的滚了"（内容短到放得下时按一下不能收）。
     /// 判据与 `mountLyricsOnly` 里那次 `isStatic` 一致。
     private static func landscapeLyricsAreStatic() -> Bool {
         let timed = NowPlayingLyricsPlate.currentLines() ?? []
@@ -215,7 +215,8 @@ extension NowPlayingIOS27 {
     /// 划出 `LandscapeScrollHideRule.dragThreshold` 之后才把这一列收起来。
     ///
     /// 为什么不看"手势开始"：轻点、误触、以及**没有可滚内容**的那一档都会开始一条 pan，
-    /// 那时收控件等于"没划动也消失"。纯文本那一档还要求内容真的挪过（见那份规则）。
+    /// 那时收控件等于"没划动也消失"。逐词 / 逐行不收（判据第一道闸）；纯文本那一档
+    /// 还要求内容真的挪过（见那份规则）。
     private static func noteLandscapeScrollMoved(_ drag: CGFloat) {
         let offsetDelta: CGFloat
         if let start = landscapeScrollStartOffsetY {
@@ -246,6 +247,9 @@ extension NowPlayingIOS27 {
     private static func applyLandscapeControlsHidden(_ hidden: Bool) {
         guard hidden != landscapeControlsHidden else { return }
         landscapeControlsHidden = hidden
+        writeDebugLog(
+            "[\(logTag)] landscape chrome — " + (hidden ? "hidden (plain-lyrics scroll)" : "back")
+        )
         setLandscapePageChromeAlpha(hidden ? 0 : 1, animated: true)
         if let view = landscapePageView {
             view.hitRects = hidden ? [] : view.visibleHitRects
@@ -550,7 +554,7 @@ extension NowPlayingIOS27 {
 // MARK: - 会滚动的歌名 / 艺人
 //
 // 宽度够就静止。超出时不是"一直向左滚"，而是**分段读**（时间表在 `LandscapeMarqueeTimeline`）：
-// 贴左端停一下 → 左移一段停一下 → … → 尾端贴右端停一下 → 一帧跳回开头 → 再走。
+// 贴左端停一下 → 左移一段停一下 → … → 尾端贴右端停一下 → 滚回开头 → 停一下 → 再走。
 // 这样两端的字都完整露过，中间也能停下来看；右端留一条渐隐，滚动的字不硬切在边上。
 //
 // 用 `CAKeyframeAnimation` 而不是 `UIView.animate`：这一层每 0.3s 会被写一次 frame，
