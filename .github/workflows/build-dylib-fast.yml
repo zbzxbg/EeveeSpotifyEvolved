@@ -1,0 +1,190 @@
+name: Build dylib — fast lane (compile only)
+
+# 迭代专用：**只编 dylib**，不下载 IPA、不注入、不重签名、不上传 filebin。
+#
+# 为什么单独一条：出成品的那条（`build-ipa-with-orion.yml`）一次要做完
+#   checkout → theos → brew → SwiftProtobuf → `make package` → 下载 300MB IPA
+#   → cyan 注入 → 一堆断言 → 上传
+# 其中只有编译是"你改了代码才需要重跑"的部分，其余都是固定的搬运成本。
+#
+# ── 迭代时到底什么会变 ────────────────────────────────────────────────
+# 注入进 IPA 的五样东西里，**只有 `EeveeSpotify.dylib` 会随代码变**：
+#   · Orion.framework          ← 固定的 Orion.zip（钉了 sha256）
+#   · EeveeSwiftProtobuf.framework ← 只由 swift-protobuf 1.29.0 决定（本工作流还缓存了它）
+#   · zxPluginsInject.dylib    ← 只有 patched 那条注入，来自 modules/zxPluginsInject 子模块
+#   · CydiaSubstrate.framework ← Orion 自带的依赖
+# 所以"CI 出 dylib、本地换进 IPA 再签名"这条循环不会漏任何东西 —— 唯一例外是改了
+# `layout/…/*.lproj/Localizable.strings` 时 `EeveeSpotify.bundle` 也变了；那个包不进
+# Frameworks/、也**不需要编译**（仓库里的 `layout/` 就是它的源），本地直接拷即可。
+#
+# 用法：
+#   1. 跑本工作流（默认 `debug: true` ⇒ `-Onone`，编译快 2–4 倍）；
+#   2. 下 artifact 里的 `EeveeSpotify-<sha8>-<档位>.dylib`；
+#   3. 本地替换 `Payload/Spotify.app/Frameworks/EeveeSpotify.dylib` 后自己签名。
+#
+# ⚠️ `debug: true` 的产物**不要发布**：`-Onone` 的 dylib 更大更慢。
+# 验行为够用；验性能/滚动流畅度请用 `debug: false`（发布档 `-Osize`）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "迭代构建（-Onone：编译快 2-4 倍，产物更大更慢，不要发布）"
+        default: true
+        type: boolean
+      artifact:
+        description: "产物：只出 dylib（本地注入用）/ 只出 deb / 两者都要"
+        default: dylib
+        type: choice
+        options:
+          - dylib
+          - deb
+          - both
+
+# 连点几次只留最后一次：省掉被顶掉的排队与运行。
+concurrency:
+  group: fast-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  THEOS: ${{ github.workspace }}/theos
+  SWIFTPROTOBUF_VERSION: "1.29.0"
+  # brew 的自动更新/清理在 runner 上纯属浪费（每次几十秒）。
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_ENV_HINTS: "1"
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.1.1'
+
+      # theos 本体不走缓存：它带着一堆 submodule，缓存收益（约半分钟）不值得
+      # 多一层"缓存里的 theos 和上游不一致"的解释成本。
+      - name: Setup Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          path: ${{ github.workspace }}/theos
+          submodules: recursive
+
+      - name: Install build tools
+        run: |
+          brew install make dpkg ldid
+          echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
+
+      # ── EeveeSwiftProtobuf.framework：整条流水线里第二贵的一步 ─────────────
+      # `Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh` 每次都：clone
+      # apple/swift-protobuf 的钉死版本，然后 **arm64 + arm64e 各编一遍 `-O`**。
+      # 它的输入只有「版本号 + 架构 + 部署版本」，与仓库代码无关 ⇒ 缓存住。
+      # 换版本时 key 自动失效（`SWIFTPROTOBUF_VERSION` 在 key 里）。
+      - name: Cache EeveeSwiftProtobuf.framework
+        id: protobuf
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.THEOS }}/lib/iphone
+          key: eeveeswiftprotobuf-${{ env.SWIFTPROTOBUF_VERSION }}-${{ runner.arch }}-v1
+
+      - name: Build EeveeSwiftProtobuf.framework
+        if: steps.protobuf.outputs.cache-hit != 'true'
+        run: |
+          chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
+          Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
+
+      # `make`（不带 `package`）= 只编译 + 链接出 dylib。
+      # 出 deb 那一步要跑 dpkg-deb 打包与 staging，对"本地自己注入"这条循环没有意义
+      # ⇒ 只有 `artifact: deb` / `both` 才走 `make package`。
+      - name: Build the tweak
+        env:
+          REPO_SLUG: ${{ github.repository }}
+          DEBUG_BUILD: ${{ inputs.debug && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          echo "debug build: $DEBUG_BUILD, artifact: ${{ inputs.artifact }}"
+          # 与成品那条保持一致：NO_JBROOT=1 不能去掉（产物只当 dylib 的来源）。
+          THEOS_PACKAGE_SCHEME=rootless NO_JBROOT=1 \
+            make FINALPACKAGE=1 DEBUG="$DEBUG_BUILD"
+
+      - name: Package the deb
+        if: ${{ inputs.artifact != 'dylib' }}
+        env:
+          DEBUG_BUILD: ${{ inputs.debug && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          # 上一步已经编完，这一步是增量的（只做 staging + dpkg-deb）。
+          THEOS_PACKAGE_SCHEME=rootless NO_JBROOT=1 \
+            make package FINALPACKAGE=1 DEBUG="$DEBUG_BUILD"
+          DEB_PATH=$(find packages -name "com.eevee.spotify_*.deb" | head -1)
+          [ -n "$DEB_PATH" ] || { echo "::error::deb not produced"; exit 1; }
+          echo "DEB_PATH=$DEB_PATH" >> $GITHUB_ENV
+          ls -la packages/
+
+      - name: Collect the dylib
+        run: |
+          set -euo pipefail
+          # theos 的产物目录随 schema / 架构变（`.theos/obj/`、`.theos/obj/debug/`、
+          # 甚至再嵌一层 arm64）⇒ 先按已知的两条找，找不到再全树兜底。
+          SRC=$(ls -1 .theos/obj/EeveeSpotify.dylib .theos/obj/debug/EeveeSpotify.dylib 2>/dev/null | head -1)
+          if [ -z "$SRC" ]; then
+            SRC=$(find .theos -type f -name 'EeveeSpotify.dylib' | head -1)
+          fi
+          [ -n "$SRC" ] || {
+            echo "::error::no EeveeSpotify.dylib under .theos/ — 这条 theos 版本的 \`make\` 可能只做 staging，"
+            echo "::error::改用 artifact: deb 走 \`make package\` 那条路（会多花十几秒，但产物一定有）。"
+            find .theos -maxdepth 3 -type d
+            exit 1
+          }
+
+          FLAVOR=$([ "${{ inputs.debug }}" = "true" ] && echo debug || echo release)
+          SHORT_SHA=$(git rev-parse --short=8 HEAD)
+          OUT="EeveeSpotify-${SHORT_SHA}-${FLAVOR}.dylib"
+          mkdir -p Outputs
+          cp "$SRC" "Outputs/$OUT"
+          echo "DYLIB=Outputs/$OUT" >> $GITHUB_ENV
+          echo "dylib: $SRC -> Outputs/$OUT"
+
+          # 把"这份 dylib 是哪个档"打进日志：出问题时不用回头翻输入。
+          # debug 档不 strip ⇒ 调试段（__DWARF）还在，符号数也多一个量级。
+          echo "== size / debug info =="
+          ls -l "Outputs/$OUT" | awk '{print "size:", $5, "bytes"}'
+          # `grep -c` 没命中时退出码是 1，在 `set -e` 下会把整步打掉 ⇒ 单独兜一下。
+          DWARF=$(otool -l "Outputs/$OUT" | grep -c "__DWARF" || true)
+          echo "__DWARF sections: ${DWARF:-0}"
+          echo "symbols: $(nm -a "Outputs/$OUT" 2>/dev/null | wc -l | tr -d ' ')"
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: EeveeSpotify-dylib
+          path: ${{ env.DYLIB }}
+          if-no-files-found: error
+
+      - name: Upload deb
+        if: ${{ inputs.artifact != 'dylib' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: EeveeSpotify-deb
+          path: ${{ env.DEB_PATH }}
+          if-no-files-found: error
+
+      - name: Summarize
+        if: ${{ success() }}
+        run: |
+          {
+            echo "### ⚡ 快车道产物"
+            echo ""
+            echo "- 档位：\`${{ inputs.debug && 'debug (-Onone)' || 'release (-Osize)' }}\`"
+            echo "- dylib：\`${{ env.DYLIB }}\` ← 本地替换 \`Payload/Spotify.app/Frameworks/EeveeSpotify.dylib\`"
+            if [ "${{ inputs.artifact }}" != "dylib" ]; then
+              echo "- deb：\`${{ env.DEB_PATH }}\`"
+            fi
+            echo ""
+            echo "改了 \`.strings\` 的话，\`EeveeSpotify.bundle\` 也要一起换（仓库里的 \`layout/\` 就是它的源，不用编）。"
+          } >> $GITHUB_STEP_SUMMARY

@@ -33,7 +33,29 @@ $(shell mkdir -p Sources/EeveeSpotify/Generated)
 $(shell printf 'enum GeneratedConfig {\n    static let repoSlug = "%s"\n    static let branchName = "%s"\n}\n' "$(REPO_SLUG_FINAL)" "$(BRANCH_NAME_FINAL)" > Sources/EeveeSpotify/Generated/RepoSlug.swift)
 
 EeveeSpotify_FILES = $(shell find Sources/EeveeSpotify -name '*.swift') $(shell find Sources/EeveeSpotifyC -name '*.m' -o -name '*.c' -o -name '*.mm' -o -name '*.cpp') $(shell find modules/fishhook -name '*.c')
+
+# ── 优化档：发布 `-Osize`，迭代交给 theos 的 DEBUG schema ────────────────────
+#
+# 465 个 swift 文件 / 10.9 万行在 `-Osize` 下要跑完整的 SIL 优化与内联，这是
+# **CI 构建里最贵的一段**（本机没有 Swift 工具链时，每一轮都只能靠 CI）。
+#
+# 迭代用 `make package FINALPACKAGE=1 DEBUG=1`：
+# · theos 的 `DEBUG.SWIFTFLAGS = -DDEBUG -Onone -incremental` 自动生效；
+# · 一开 DEBUG 就 `_THEOS_SHOULD_STRIP_DEFAULT := false` ⇒ 不 strip，`-g`
+#   （`SWIFT_DEBUGFLAG`）留下的调试信息就还在；
+# · `SWIFT_OPTFLAG`（发布档那条 `-O -whole-module-optimization`）整个不传。
+#
+# ⚠️ 唯一会顶掉它的是**本文件原来那句 `-Osize`** —— 它排在 theos 的内部 flags
+# 之后，`-O` 家族后写的赢 ⇒ 所以 DEBUG 档里**不写任何优化级别**，让 theos 决定。
+# （另注：`FINALPACKAGE` 为空时 theos 自己会把 DEBUG 置 1，所以本地裸 `make package`
+# 天然就是快档，不需要额外参数。）
+#
+# 产物更大更慢，只用来验行为，**不要发布**。
+ifeq ($(DEBUG),1)
+EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include
+else
 EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include -Osize
+endif
 EeveeSpotify_EXTRA_FRAMEWORKS = EeveeSwiftProtobuf
 # `modules/fishhook`: 音频输出探针用它重绑 `AudioUnitSetProperty` / `AudioOutputUnitStart`
 # 的符号指针（inline hook 这两个系统 framework 函数会被内核按 CODESIGNING 杀掉）。
