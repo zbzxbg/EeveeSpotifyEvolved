@@ -105,8 +105,14 @@ jobs:
           Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 
       # `make` without `package` compiles and links the dylib only. Packaging
-      # runs dpkg-deb and staging, which is pointless when the IPA is assembled
-      # locally ⇒ only `artifact: deb` / `both` take the `make package` path.
+      # Always `make package`, never a bare `make`.
+      #
+      # `make` (the `all` target) is supposed to link the dylib into
+      # `.theos/obj[/<schema>]/EeveeSpotify.dylib` - `instance/library.mk` lists
+      # that file as a prerequisite of `internal-library-all_` - but on this
+      # project it left nothing under `.theos/` at all, and a lane that produces
+      # no artifact is worse than one that spends 15 extra seconds in dpkg-deb.
+      # The dylib is therefore taken from the packaged result.
       - name: Build the tweak
         env:
           REPO_SLUG: ${{ github.repository }}
@@ -117,18 +123,10 @@ jobs:
           # Same as the release lane: NO_JBROOT=1 stays, the output is only used
           # as a source for the dylib.
           THEOS_PACKAGE_SCHEME=rootless NO_JBROOT=1 \
-            make FINALPACKAGE=1 DEBUG="$DEBUG_BUILD"
-
-      - name: Package the deb
-        if: ${{ inputs.artifact != 'dylib' }}
-        env:
-          DEBUG_BUILD: ${{ inputs.debug && '1' || '0' }}
-        run: |
-          set -euo pipefail
-          # The tweak is already built, so this only stages and packages.
-          THEOS_PACKAGE_SCHEME=rootless NO_JBROOT=1 \
             make package FINALPACKAGE=1 DEBUG="$DEBUG_BUILD"
-          DEB_PATH=$(find packages -name "com.eevee.spotify_*.deb" | head -1)
+          # `-print -quit` instead of `| head -1`: with `pipefail`, head closing
+          # the pipe early makes find die of SIGPIPE (141) and kills the step.
+          DEB_PATH=$(find packages -name "com.eevee.spotify_*.deb" -print -quit)
           [ -n "$DEB_PATH" ] || { echo "::error::deb not produced"; exit 1; }
           echo "DEB_PATH=$DEB_PATH" >> $GITHUB_ENV
           ls -la packages/
@@ -136,17 +134,31 @@ jobs:
       - name: Collect the dylib
         run: |
           set -euo pipefail
-          # The output directory depends on the schema and the arch
-          # (`.theos/obj/`, `.theos/obj/debug/`, sometimes an extra arm64 level),
-          # so try the known paths first and fall back to a tree search.
-          SRC=$(ls -1 .theos/obj/EeveeSpotify.dylib .theos/obj/debug/EeveeSpotify.dylib 2>/dev/null | head -1)
+          # Order matters: the staging copy first (that is the one theos just
+          # signed for the package), then anything under `.theos/`, and only
+          # then the deb itself.
+          SRC=""
+          for candidate in \
+            ".theos/_/Library/MobileSubstrate/DynamicLibraries/EeveeSpotify.dylib" \
+            ".theos/obj/EeveeSpotify.dylib" \
+            ".theos/obj/debug/EeveeSpotify.dylib"
+          do
+            if [ -f "$candidate" ]; then SRC="$candidate"; break; fi
+          done
           if [ -z "$SRC" ]; then
-            SRC=$(find .theos -type f -name 'EeveeSpotify.dylib' | head -1)
+            SRC=$(find .theos -type f -name 'EeveeSpotify.dylib' -print -quit 2>/dev/null || true)
+          fi
+          if [ -z "$SRC" ]; then
+            # Last resort: unpack the deb we just built. Slower, never fails.
+            EXTRACT="$RUNNER_TEMP/deb-extract"
+            rm -rf "$EXTRACT"; mkdir -p "$EXTRACT"
+            dpkg-deb -R "$DEB_PATH" "$EXTRACT"
+            SRC=$(find "$EXTRACT" -type f -name 'EeveeSpotify.dylib' -print -quit || true)
           fi
           [ -n "$SRC" ] || {
-            echo "::error::no EeveeSpotify.dylib under .theos/ - this theos version may only stage on 'make'."
-            echo "::error::Re-run with artifact: deb, which goes through 'make package' (about 15s longer, always produces one)."
-            find .theos -maxdepth 3 -type d
+            echo "::error::no EeveeSpotify.dylib in the staging dir, under .theos/, or inside $DEB_PATH"
+            find .theos -maxdepth 4 -type d 2>/dev/null | head -40
+            ls -la packages/ || true
             exit 1
           }
 
