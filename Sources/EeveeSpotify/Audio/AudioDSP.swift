@@ -536,10 +536,10 @@ enum AudioDSP {
             ? renderCompanderTargetMix
             : renderCompanderMix + mixDifference * coefficientSmoothing
 
-        let mixDifference = renderCrossfeedTargetMix - renderCrossfeedMix
-        renderCrossfeedMix = abs(mixDifference) < 1e-6
+        let crossfeedMixDifference = renderCrossfeedTargetMix - renderCrossfeedMix
+        renderCrossfeedMix = abs(crossfeedMixDifference) < 1e-6
             ? renderCrossfeedTargetMix
-            : renderCrossfeedMix + mixDifference * coefficientSmoothing
+            : renderCrossfeedMix + crossfeedMixDifference * coefficientSmoothing
     }
 
     private static func smooth(_ current: UnsafeMutablePointer<Double>,
