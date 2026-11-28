@@ -135,12 +135,17 @@ for size in landscapeSizes {
     let topInset: CGFloat = 16
     let bottomInset: CGFloat = 18
     let rightInset: CGFloat = 28
+    // 真机（414×896 → 横屏 896×414）量到的 `npv.bottomStackView` 高度：歌名 56 + 进度 41
+    // + 传输 64 + 工具行 44，再加三处间距 = 245。
+    let stackHeight: CGFloat = 245
     let layout = LayoutGeometry.landscapeColumns(
         size: CGSize(width: size.width, height: size.height),
         leftInset: leftInset,
         topInset: topInset,
         bottomInset: bottomInset,
-        rightInset: rightInset
+        rightInset: rightInset,
+        stackHeight: stackHeight,
+        lyricsMaxWidth: 440
     )
 
     require(layout.column.minX >= leftInset - tolerance, "\(size.name): column before the left inset")
@@ -158,11 +163,19 @@ for size in landscapeSizes {
             "\(size.name): lyrics overlap the column")
     require(layout.lyrics.maxX <= size.width - rightInset + tolerance, "\(size.name): lyrics past the right inset")
     require(layout.lyrics.width > layout.cover.width, "\(size.name): lyrics column narrower than the cover")
+    require(layout.lyrics.width <= 440 + tolerance, "\(size.name): lyrics column wider than the cap")
     require(layout.lyrics.height > 0, "\(size.name): lyrics has no height")
 
-    // 封面下面必须还放得下那几行（进度 / 传输）：封面高度不超过可用高度的一半。
-    let usable = size.height - topInset - bottomInset
-    require(layout.cover.height <= usable * 0.5 + tolerance, "\(size.name): cover eats the control rows")
+    // 封面 + 空隙 + 那一坨（歌名 / 进度 / 传输 / 工具行）必须整块放得下 ——
+    // 放不下的话 `placeLandscapeStack` 会把整坨顶回去，歌名就压在封面上。
+    let stackTop = layout.cover.maxY + LayoutGeometry.landscapeCoverStackGap
+    require(stackTop + stackHeight <= topInset + layout.column.height + tolerance,
+            "\(size.name): the control stack does not fit under the cover")
+    // 封面也不能被压成一颗邮票。
+    require(layout.cover.width >= LayoutGeometry.landscapeMinCoverSide - tolerance,
+            "\(size.name): cover smaller than the minimum")
+    require(layout.cover.height <= (layout.column.height) * 0.5 + tolerance,
+            "\(size.name): cover eats the control rows")
 }
 
 print("OK: \(sizes.count) screen sizes, footer / mini bar / tab bar geometry")

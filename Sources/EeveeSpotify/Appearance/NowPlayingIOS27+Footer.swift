@@ -175,7 +175,22 @@ extension NowPlayingIOS27 {
         // 页面可能还活着，但那一格已经不在原位，旧矩形会让长按在空处弹窗。
         // 真正有效的矩形由 `mountFooterGlyphs` 在摆完字形之后写回（同一拍内）。
         LyricsSongSourcePrompt.setConnectTapRect(nil)
-        let connect = footerControl(connectButtonIdentifier, in: page)
+        // ⚠️ Connect 那颗**已经被我们搬出栈**（见 `moveConnectHolder`）—— 它停在上一拍的
+        // 字形位置上（竖屏 207,820）。转到横屏后页面只有 414pt 高，820 落在页外 ⇒
+        // `footerControl` 的"在页上"判据认不出它，中间那颗雷达就整颗成了死键
+        // （"轻点雷达无反应"）。这里按记忆把它补回来，再交给 `moveConnectHolder` 重新摆位。
+        var connect = footerControl(connectButtonIdentifier, in: page)
+        if connect == nil, let moved = movedConnectControl(in: page) {
+            connect = moved
+            if !didLogConnectRecovered {
+                didLogConnectRecovered = true
+                let rect = moved.convert(moved.bounds, to: page)
+                writeDebugLog(
+                    "[\(logTag)] connect: took the moved button back from"
+                        + " \(Int(rect.minY)) (off the rotated page) — the middle glyph stays tappable"
+                )
+            }
+        }
         let share = footerControl(NowPlayingLyricsPlate.shareButtonIdentifier, in: page)
         let queue = footerControl(queueButtonIdentifier, in: page)
         guard connect != nil || share != nil || queue != nil else { return false }
@@ -214,6 +229,18 @@ extension NowPlayingIOS27 {
             changed = true
         }
         return changed
+    }
+
+    /// 已经被我们搬出栈的那颗 Connect 键（只要它还在**这一页**上）。
+    ///
+    /// 它不在 `npv.bottomStackView` 里了（搬出来是为了让真触摸落在它身上），
+    /// 位置是我们上一拍写的 —— 旋转之后那个位置常常已经在页外，`footerControl`
+    /// 的"中线要在页内"那道闸门会把它筛掉。记忆里的这一份不看位置。
+    private static func movedConnectControl(in page: UIView) -> UIView? {
+        guard let holder = movedConnectHolder,
+              holder.window != nil,
+              holder.isDescendant(of: page) else { return nil }
+        return holder
     }
 
     /// 底排的一颗原生键 —— **只认当前可见页**。
@@ -306,14 +333,29 @@ extension NowPlayingIOS27 {
         }
 
         let box = footerGlyphBox
-        // 横屏两栏：三颗只占左栏（按左栏宽算比例、再整体挪过去）；竖屏照旧铺满页面宽。
+        // 横屏两栏：三颗只占左栏，**以栏中线为轴左右对称** —— 这样它们和传输行
+        // （栈里居中）落在同一条竖轴上；竖屏照旧铺满页面宽。
         let landscape = NowPlayingIOS27.landscapeLayout(in: page)
-        let glyphFrames = LayoutGeometry.footerFrames(
-            containerWidth: landscape?.column.width ?? page.bounds.width,
-            originX: landscape?.column.minX ?? 0,
-            midY: midY,
-            box: box
-        )
+        let glyphFrames: [CGRect]
+        if let landscape {
+            // `scale(forWidth:)` 自带 0.8…1.25 的夹取，与竖屏那三颗的间距同一条口径。
+            let spacing = (LayoutGeometry.footerReferenceCentres[1]
+                - LayoutGeometry.footerReferenceCentres[0])
+                * LayoutGeometry.scale(forWidth: landscape.column.width)
+            glyphFrames = LayoutGeometry.centredFooterFrames(
+                centreX: landscape.column.midX,
+                midY: midY,
+                box: box,
+                spacing: spacing
+            )
+        } else {
+            glyphFrames = LayoutGeometry.footerFrames(
+                containerWidth: page.bounds.width,
+                originX: 0,
+                midY: midY,
+                box: box
+            )
+        }
         var changed = false
         var frames: [CGRect] = []
         let symbols = ["quote.bubble", "airplayaudio", "list.bullet"]
@@ -814,5 +856,6 @@ extension NowPlayingIOS27 {
         connectPlaceholder = nil
         movedConnectBase = nil
         didLogConnectMoved = false
+        didLogConnectRecovered = false
     }
 }

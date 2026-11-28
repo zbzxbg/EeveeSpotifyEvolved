@@ -160,10 +160,12 @@ enum NowPlayingIOS27 {
     static var lastBackdropSource: UIImage?
     static var lastBackdropImage: UIImage?
 
-    /// 被我们改了左边距的标题行，以及它原来的 `transform` 与原生位置。
+    /// 被我们改了左边距的标题行，以及它原来的 `transform`。
+    ///
+    /// ⚠️ 只记 `transform`，**不记原生位置**：那个位置是页面坐标，转一次屏就作废
+    /// （见 `placeTitleRow` 里现量 `natural` 那段）。
     static weak var titleRow: UIView?
     static var titleRowBase: (ObjectIdentifier, CGAffineTransform)?
-    static var titleRowBaseRect: (ObjectIdentifier, CGRect)?
 
     /// 页内歌词模式下，盖在**原生歌名/艺人**上的透明点击区。
     ///
@@ -193,6 +195,8 @@ enum NowPlayingIOS27 {
     static var didLogArtworkFrame = false
     static var didLogField = false
     static var didLogTitle = false
+    /// 横屏里"标题行被放回原生位置"只报一行。
+    static var didLogLandscapeTitle = false
     static var didLogFrames = false
     static var didLogMissingCover = false
     static var didLogRestore = false
@@ -215,6 +219,8 @@ enum NowPlayingIOS27 {
     /// 原生 Connect 搬走后，在原 `UIStackView` 槽位留下的等宽占位（保证分享/队列不挪位）。
     static weak var connectPlaceholder: UIView?
     static var didLogConnectMoved = false
+    /// 横屏里"从页外把 Connect 键捡回来"只报一行（见 `placeFooter`）。
+    static var didLogConnectRecovered = false
     /// 连续多少拍"记下的那一页不在窗口里"（见 `reconcile` 里那段：换歌转场会短暂摘掉旧页，
     /// 立刻收尾就等于把原生封面放回来 = 屏幕上就是那一闪）。
     static var pageMissingTicks = 0
@@ -660,6 +666,11 @@ enum NowPlayingIOS27 {
     private static weak var landscapeStack: UIView?
     private static var landscapeBounds: CGRect = .zero
     private static var landscapeLayoutCache: LandscapeLayout?
+    /// 算这份几何时那一坨有多高。换歌 / 打开歌词会让它变（高度一变，封面就得跟着缩），
+    /// 所以它也是缓存的判据之一。
+    private static var landscapeStackHeight: CGFloat = 0
+    /// 右栏（歌词）的宽度上限：横屏页面很宽，一行铺满会把右上角的 ⋯ 圈进歌词的命中范围。
+    static let landscapeLyricsMaxWidth: CGFloat = 440
     private static var didLogLandscapeLayout = false
 
     private static weak var landscapeNarrowedStack: UIView?
@@ -688,35 +699,71 @@ enum NowPlayingIOS27 {
             return nil
         }
         guard let stack = bottomStackView(in: page) else { return nil }
-        if landscapePage === page, landscapeStack === stack,
-           landscapeBounds.equalTo(page.bounds), let cached = landscapeLayoutCache {
-            return cached
-        }
+        // `untransformed` 只是一次 `convert`，比下面 `measureLandscapeInset` 的 BFS 便宜得多 ——
+        // 每拍都量一次，好让"那一坨的高度变了"（打开 / 收起歌词、换歌、标题折行）
+        // 立刻把缓存作废：高度一变，封面就得跟着缩。
         let stackRect = NowPlayingLyricsPlate.untransformed(stack, in: page)
         guard stackRect.width > 1, stackRect.height > 1 else { return nil }
+        if landscapePage === page, landscapeStack === stack,
+           landscapeBounds.equalTo(page.bounds),
+           abs(landscapeStackHeight - stackRect.height) <= 0.5,
+           let cached = landscapeLayoutCache {
+            return cached
+        }
         let inset = measureLandscapeInset(in: page, stackRect: stackRect)
-        // 内容左线：那一坨自己的内容线，但**不能落进安全区**（横屏时刘海 / 圆角在左右两侧）。
+        // 内容左线：**贴着安全区**（横屏时刘海 / 圆角在左右两侧），不再跟 Spotify 自己那套
+        // 横屏摆位走 —— 那一坨在 96、内容线 120，比安全区（48）多出 70pt，整个左栏被推到
+        // 屏幕中间，右边那半截全是空的（"摆放位置不对"里最明显的一条）。
         // 左线一挪，那一坨也跟着挪同样的量 —— 封面与进度条才在同一条线上。
-        let contentX = max(stackRect.minX + inset, page.safeAreaInsets.left + 12)
+        let contentX = max(12, page.safeAreaInsets.left + 16)
         let columns = LayoutGeometry.landscapeColumns(
             size: page.bounds.size,
             leftInset: contentX,
             topInset: max(16, page.safeAreaInsets.top + 8),
             bottomInset: max(12, page.safeAreaInsets.bottom + 6),
-            rightInset: max(24, page.safeAreaInsets.right + 12)
+            rightInset: max(24, page.safeAreaInsets.right + 12),
+            // 封面下面那一坨的真实高度：封面只能占"剩下的"那块，否则标题会压在封面上。
+            stackHeight: stackRect.height,
+            lyricsMaxWidth: landscapeLyricsMaxWidth
         )
         let layout = LandscapeLayout(
             column: columns.column,
             cover: columns.cover,
-            lyrics: columns.lyrics,
+            lyrics: lyricsRect(columns.lyrics, in: page),
             stackLeft: contentX - inset,
             stackInset: inset
         )
         landscapePage = page
         landscapeStack = stack
         landscapeBounds = page.bounds
+        landscapeStackHeight = stackRect.height
         landscapeLayoutCache = layout
         return layout
+    }
+
+    /// 右栏的右沿再让出右上角那颗 ⋯（48×48，贴着安全区右边）。
+    ///
+    /// 歌词容器铺满右栏、又只在底部那一条放行触摸 ⇒ 只要 ⋯ 落在右栏里，点它就等于点歌词
+    /// （"轻点三点菜单按钮无反应"）。`updateLyricsStage` 另外把 ⋯ 的框登记成放行区兜底，
+    /// 这里先把右栏收在它左边 —— 少一次"看着在、点不到"。
+    private static func lyricsRect(_ rect: CGRect, in page: UIView) -> CGRect {
+        // 兜底：按"导航条最右一颗的宽度 + 间隙"让（safeRight + 56）。
+        var limit = page.bounds.width - (page.safeAreaInsets.right + 56)
+        // 能认到那颗 ⋯ 就按它的真实左边线让 —— 各机型 / 各朝向的安全区不一样，
+        // 猜出来的 56 只是兜底。
+        if let menu = visibleView(
+            identifier: contextMenuIdentifier,
+            in: page,
+            requireAlpha: false,
+            horizontalMargin: 0
+        ) {
+            let frame = menu.convert(menu.bounds, to: page)
+            if frame.width > 1 { limit = min(limit, frame.minX - 8) }
+        }
+        guard rect.maxX > limit else { return rect }
+        var clamped = rect
+        clamped.size.width = max(160, limit - rect.minX)
+        return clamped
     }
 
     /// 那一坨的内容内边距：进度条左边线减那一坨的左边线（竖屏 28−4 = 24）。
@@ -733,6 +780,7 @@ enum NowPlayingIOS27 {
         landscapePage = nil
         landscapeStack = nil
         landscapeBounds = .zero
+        landscapeStackHeight = 0
         landscapeLayoutCache = nil
     }
 
@@ -781,7 +829,7 @@ enum NowPlayingIOS27 {
         let rawTop = NowPlayingLyricsPlate.untransformed(stack, in: page).minY
         let baseTop = rawTop + base.ty
         let safeBottom = page.bounds.height - max(12, page.safeAreaInsets.bottom + 6)
-        var dy = (layout.cover.maxY + 14) - baseTop
+        var dy = (layout.cover.maxY + LayoutGeometry.landscapeCoverStackGap) - baseTop
         if baseTop + stack.bounds.height + dy > safeBottom {
             dy = max(0, safeBottom - stack.bounds.height - baseTop)
         }
@@ -812,11 +860,12 @@ enum NowPlayingIOS27 {
             "[\(logTag)] landscape two columns — page \(Int(page.bounds.width))×\(Int(page.bounds.height))"
                 + ", column \(Int(layout.column.minX)),\(Int(layout.column.minY))"
                 + " \(Int(layout.column.width))×\(Int(layout.column.height))"
-                + ", cover \(Int(layout.cover.width))"
+                + ", cover \(Int(layout.cover.width)) at y \(Int(layout.cover.maxY))"
                 + ", lyrics \(Int(layout.lyrics.minX))…\(Int(layout.lyrics.maxX))"
                 + "; stack \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
                 + " → \(Int(layout.column.width + layout.stackInset * 2)) wide"
                 + ", placed \(Int(placed.minX)),\(Int(placed.minY))"
+                + "…\(Int(placed.maxY))"
         )
     }
 
@@ -1115,16 +1164,35 @@ enum NowPlayingIOS27 {
         // 歌词容器一直伸到进度条上沿（587），而收藏键（AddToButton）在 348,549,48×48
         // —— 它的上半截落在容器里，`NowPlayingLyricsContainerView` 又只在底部那一条放行
         // 触摸 ⇒ 点 ✓ 被容器吃掉。这里把收藏键的框登记成"放行区"。
+        //
+        // 横屏两栏里同一件事发生在**右上角那颗 ⋯** 身上：右栏从页面顶端（y=16）开始，
+        // 而 ⋯ 就在导航条最右边 —— 它整颗落在歌词容器的命中范围里，点了没反应
+        // （"轻点三点菜单按钮无反应"）。导航 chrome 的框也一起放行。
         if mounted,
            let container = NowPlayingLyricsPlate.lastContainer as? NowPlayingLyricsContainerView {
+            var passThrough: [CGRect] = []
             // 收藏键贴着右边缘（348…396），默认 20% 闸门会把它筛掉；
             // pager 里还有相邻页的副本 ⇒ 用 visibleView（margin 0）只认当前页那一颗。
-            let like = visibleView(identifier: "Components.UI.AddToButton", in: page)
-            if let like {
+            if let like = visibleView(identifier: "Components.UI.AddToButton", in: page) {
                 let rect = like.convert(like.bounds, to: page).insetBy(dx: -6, dy: -6)
-                container.passThroughRects = [container.convert(rect, from: page)]
-            } else if !container.passThroughRects.isEmpty {
-                container.passThroughRects = []
+                passThrough.append(container.convert(rect, from: page))
+            }
+            // 竖屏的歌词区在导航条下面，不会碰到它们 ⇒ 只在横屏查（省两次全页 BFS）。
+            let chromeIdentifiers: [String] = isLandscapePage(page)
+                ? [contextMenuIdentifier, NowPlayingLyricsPlate.minimizeButtonIdentifier]
+                : []
+            for identifier in chromeIdentifiers {
+                guard let chrome = visibleView(
+                    identifier: identifier,
+                    in: page,
+                    requireAlpha: false,
+                    horizontalMargin: 0
+                ) else { continue }
+                let rect = chrome.convert(chrome.bounds, to: page).insetBy(dx: -4, dy: -4)
+                passThrough.append(container.convert(rect, from: page))
+            }
+            if container.passThroughRects != passThrough {
+                container.passThroughRects = passThrough
             }
         }
         return mounted
@@ -2034,36 +2102,54 @@ enum NowPlayingIOS27 {
     /// 「歌词来源/提供者」另放歌词区左下角（`placeLyricsCredit`），不再占用标题行。
     @discardableResult
     private static func placeTitleRow(in page: UIView) -> Bool {
-        guard let row = titleRowView(in: page) else { return false }
+        // 认不出来时**退回上一拍记下的那一行**：标题行被竖屏歌词模式挪到缩略图旁边之后
+        // 可能已经落在"在页上"那道闸门之外（横屏把它挤到左栏、或者它干脆还在页外），
+        // 这时若直接 return，`row.transform` 就永远停在歌词模式那一份位移上。
+        guard let row = titleRowView(in: page) ?? rememberedTitleRow(in: page) else { return false }
         // 同上：换页时旧标题行先还原，避免复用后 base 记错、越挪越偏。
         if let previous = titleRow, previous !== row,
            let recorded = titleRowBase, recorded.0 == ObjectIdentifier(previous) {
             previous.transform = recorded.1
             titleRowBase = nil
-            titleRowBaseRect = nil
         }
         titleRow = row
 
         let key = ObjectIdentifier(row)
         let base: CGAffineTransform
-        let natural: CGRect
-        if let recorded = titleRowBase, recorded.0 == key,
-           let rect = titleRowBaseRect, rect.0 == key {
+        if let recorded = titleRowBase, recorded.0 == key {
             base = recorded.1
-            natural = rect.1
         } else {
             base = row.transform
-            natural = NowPlayingLyricsPlate.untransformed(row, in: page)
             titleRowBase = (key, base)
-            titleRowBaseRect = (key, natural)
         }
+        // ⚠️ **每拍现量**，不能用记下来的那一份：`natural` 是**页面坐标**，而那一坨
+        // （标题行的父栈）在竖屏 / 横屏里的位置差着 400pt ⇒ 转过一次屏之后记录就作废了。
+        // 用旧值算出来的 `dy` 会让标题在竖屏里停在 y≈462（既不在缩略图旁边、也不在原生位置），
+        // `titleRowPlaced` 因此永远不过 ⇒ 歌词不铺、歌名/歌手也看不见。
+        let natural = NowPlayingLyricsPlate.untransformed(row, in: page)
         guard natural.width > 1, natural.height > 1 else { return false }
 
         // 横屏两栏：标题就留在**左栏那一坨里的原生位置**（封面下面第一行），
         // 只把竖屏 / 歌词模式留下的位移还回去 —— 再按缩略图挪就叠到封面上了。
         if landscapeLayout(in: page) != nil {
-            guard row.transform != base else { return false }
+            if row.transform == base { return false }
             row.transform = base
+            // 记录里的 `base` 有可能是"歌词模式挪过"的那一份（行对象正好在歌词模式下被
+            // 重建过）⇒ 还回去之后标题仍然不在页上，就直接归零再来一次。
+            if !isControlOnPage(row, in: page, requireAlpha: false, horizontalMargin: 0),
+               row.transform != .identity {
+                row.transform = .identity
+                titleRowBase = (key, .identity)
+            }
+            if !didLogLandscapeTitle {
+                didLogLandscapeTitle = true
+                let rect = row.convert(row.bounds, to: page)
+                writeDebugLog(
+                    "[\(logTag)] landscape — title row back at its native place"
+                        + " \(Int(rect.minX)),\(Int(rect.minY))"
+                        + " \(Int(rect.width))×\(Int(rect.height))"
+                )
+            }
             return true
         }
 
@@ -2451,15 +2537,26 @@ enum NowPlayingIOS27 {
             width: width,
             height: height
         )
+        // 横屏两栏没有"下拉把手"这个语境（页面不是从底部推上来的），那根白条会横在
+        // 屏幕正上方、正落在歌词右栏的顶边上 —— 藏掉。
+        let wantedAlpha: CGFloat = isLandscapePage(page) ? 0 : 1
         if let existing = grabber, existing.superview === page {
-            guard existing.frame != frame else { return false }
-            existing.frame = frame
-            return true
+            var changed = false
+            if existing.frame != frame {
+                existing.frame = frame
+                changed = true
+            }
+            if existing.alpha != wantedAlpha {
+                existing.alpha = wantedAlpha
+                changed = true
+            }
+            return changed
         }
         let view = UIView(frame: frame)
         view.backgroundColor = UIColor.white.withAlphaComponent(0.45)
         view.layer.cornerRadius = height / 2
         view.isUserInteractionEnabled = false
+        view.alpha = wantedAlpha
         view.accessibilityIdentifier = grabberIdentifier
         page.addSubview(view)
         page.bringSubviewToFront(view)
@@ -2671,6 +2768,7 @@ enum NowPlayingIOS27 {
         restoreLandscapeFloatingChrome()
         clearLandscapeLayout()
         didLogLandscapeLayout = false
+        didLogLandscapeTitle = false
         // 动效封面：连素材与解析结果一起收（这一页的账本本来就是"清干净"，见文件头）。
         NowPlayingMotionArtwork.detach()
         lyricsDissolveView?.removeFromSuperview()
@@ -2692,7 +2790,6 @@ enum NowPlayingIOS27 {
         lastArtworkImage = nil
         titleRow = nil
         titleRowBase = nil
-        titleRowBaseRect = nil
         removeTitleTapTargets()
         didLogTitleTapTargets = false
         didLogMissingTapLabels = false
@@ -2791,12 +2888,25 @@ enum NowPlayingIOS27 {
             visited += 1
             if view.accessibilityIdentifier == NowPlayingLyricsPlate.titleLabelIdentifier,
                let row = view.superview?.superview,
-               isControlOnPage(row, in: page) {
+               // 横屏两栏把这一坨收到左栏（内容线贴着安全区）⇒ 标题行的中线会落到页宽的
+               // 20% 以内，默认那道 20%…80% 的闸门会把它整个筛掉，`placeTitleRow` 于是
+               // 一次都不跑：标题停在**竖屏歌词模式**留下的位移上（y −481，跑到屏幕外），
+               // 屏幕上就只剩封面和歌词（"打开歌词再进横屏，不显示歌名/歌手"）。
+               isControlOnPage(row, in: page, horizontalMargin: 0) {
                 return row
             }
             queue.append(contentsOf: view.subviews)
         }
         return nil
+    }
+
+    /// 上一拍记下的那一行 —— 只要它还在窗口里、还挂在**这一页**底下就认。
+    ///
+    /// `titleRowView` 是按"在页上"找的（中线必须落在页面范围里）；被我们挪出去的行
+    /// 会落在那道闸门之外，但它的 `transform` 恰恰是最需要被还回去的那一份。
+    private static func rememberedTitleRow(in page: UIView) -> UIView? {
+        guard let row = titleRow, row.window != nil, row.isDescendant(of: page) else { return nil }
+        return row
     }
 
     /// 标题行是不是**已经**被我们挪到缩略图旁边（而且还在窗口里）。
