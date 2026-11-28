@@ -4,9 +4,6 @@ You supply your own decrypted Spotify IPA. This repository never ships one and n
 
 Two paths: **CI** (nothing installed locally) and **a local build on macOS**. Both take your decrypted Spotify IPA (9.2.2 is what releases are tested with) and produce an unsigned `-patched.ipa` / `.ipa` to sign yourself.
 
-> [!WARNING]
-> While `main` is under active development, the `Build .deb` step in the IPA and deb release workflows can fail. That is a known problem in the source at that moment, not something you did wrong. Wait a few hours, pull the latest repository and run the workflow again, or investigate and fix it (pull requests are welcome).
-
 ## CI (nothing installed locally)
 
 Actions → **Build IPA — patched (Orion.framework + zxPluginsInject)** or **Build IPA — no patch (Orion.framework)** → Run workflow.
