@@ -98,6 +98,12 @@ struct LyricLine: Identifiable, Hashable, Sendable {
     let id: String
     let time: TimeInterval
     let duration: TimeInterval?
+    /// 作者标注的"这一句**唱完**"的时刻（绝对时间，TTML 的 `<p end>`）。
+    ///
+    /// 与 `duration` 是两件事：`duration` 是**显示**时长（行级来源里它就是"到下一句为止"，
+    /// 含中间的空白），这个字段是作者给的**人声尾点**。只有带 `<p end>` 的来源才非 nil；
+    /// 间奏判定用它，在行级来源上也能拿到真实的尾点、而不是靠估算。
+    let contentEndTime: TimeInterval?
     let timingKind: LyricLineTimingKind
     let text: String
     let syllables: [LyricSyllable]
@@ -111,6 +117,7 @@ struct LyricLine: Identifiable, Hashable, Sendable {
         id: String? = nil,
         time: TimeInterval,
         duration: TimeInterval? = nil,
+        contentEndTime: TimeInterval? = nil,
         timingKind: LyricLineTimingKind = .precise,
         text: String,
         syllables: [LyricSyllable] = [],
@@ -126,6 +133,7 @@ struct LyricLine: Identifiable, Hashable, Sendable {
         )
         self.time = time
         self.duration = duration
+        self.contentEndTime = contentEndTime
         self.timingKind = timingKind
         self.text = text
         self.syllables = syllables
@@ -144,6 +152,7 @@ struct LyricLine: Identifiable, Hashable, Sendable {
             id: id,
             time: line.time,
             duration: line.duration,
+            contentEndTime: line.contentEndTime,
             timingKind: line.timingKind,
             text: line.text,
             syllables: line.syllables,

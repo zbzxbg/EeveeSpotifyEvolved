@@ -252,6 +252,105 @@ require(
     "a 3.0s authored breath clears the clamped 2.8s minimum"
 )
 
+// MARK: - 5b. 作者行尾（TTML `<p end>`）：行级来源也用作者给的尾点
+//
+// `.lineSynchronized` 原来只能拿"下一行起点"当显示时长、再让估算器猜人声尾点。
+// 有 `<p end>` 时这个时刻是作者给的 ⇒ 间奏应当从它开始，而不是从估算出来的某一秒。
+
+let authored = [
+    LyricLine(
+        id: "authored:0",
+        time: 10,
+        duration: 8,
+        contentEndTime: 13,
+        timingKind: .lineSynchronized,
+        text: "a short line"
+    ),
+    LyricLine(
+        id: "authored:1",
+        time: 18,
+        duration: 5,
+        contentEndTime: 20,
+        timingKind: .lineSynchronized,
+        text: "next line"
+    ),
+]
+let authoredCandidates = LyricInterludeTimeline.candidates(in: authored)
+require(authoredCandidates.count == 2, "prelude + the authored gap")
+requireClose(authoredCandidates[0].countdownEndTime, 10, "the prelude still ends at the first lyric")
+requireClose(
+    authoredCandidates[1].startTime,
+    13,
+    "the gap starts at the authored <p end>, not at the estimator's guess"
+)
+requireClose(authoredCandidates[1].gapDuration, 5, "18 − 13")
+require(
+    LyricInterludeTimeline.interludes(
+        in: authored,
+        detectionPolicy: .automatic(minimumInferredGapDuration: 4)
+    ).count == 2,
+    "a 5s authored gap clears the 4s automatic threshold"
+)
+
+// 行级作者行尾 + 副唱：副唱更长时以它为准（与 `.precise` 那条口径一致）。
+let authoredWithBackground = [
+    LyricLine(
+        id: "authoredBg:0",
+        time: 10,
+        duration: 8,
+        contentEndTime: 13,
+        timingKind: .lineSynchronized,
+        text: "a short line",
+        backgroundVocal: LyricBackgroundVocal(
+            time: 12,
+            duration: 4,
+            text: "(ha-ha)",
+            syllables: [],
+            translation: nil,
+            position: .afterPrimary
+        )
+    ),
+    LyricLine(
+        id: "authoredBg:1",
+        time: 20,
+        duration: 4,
+        contentEndTime: 22,
+        timingKind: .lineSynchronized,
+        text: "next line"
+    ),
+]
+requireClose(
+    LyricInterludeTimeline.candidates(in: authoredWithBackground)[1].startTime,
+    16,
+    "the background vocal tail (16) is later than <p end> (13)"
+)
+
+// 逐字行上的 `<p end>` 比最后一个音节长 ⇒ 以更长的那个为准（长音尾巴 / 拖腔）。
+let preciseWithEnd = [
+    LyricLine(
+        id: "preciseEnd:0",
+        time: 10,
+        duration: 2,
+        contentEndTime: 14,
+        timingKind: .precise,
+        text: "trailing",
+        syllables: [LyricSyllable(text: "trailing", startTime: 10, endTime: 12)]
+    ),
+    LyricLine(
+        id: "preciseEnd:1",
+        time: 20,
+        duration: 2,
+        contentEndTime: 22,
+        timingKind: .precise,
+        text: "next"
+    ),
+]
+requireClose(
+    LyricInterludeTimeline.candidates(in: preciseWithEnd)[1].startTime,
+    14,
+    "<p end> (14) wins over the last syllable (12)"
+)
+
 // ★★ 2026-11-22（日志里的 Starboy：`11 interlude(s) in 65 line(s)`，gaps 全是 4.0~4.4s）：
 //    **副唱（`ttm:role="x-bg"`）也是这一行的内容**。
 //

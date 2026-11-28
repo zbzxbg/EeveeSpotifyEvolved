@@ -176,6 +176,8 @@ extension LyricsDto {
     /// - 有词级时间轴的行 → `.precise`，并给出 `duration`
     /// - 只有行级时间的行 → `.lineSynchronized`，`duration` 取「下一行起始 − 本行起始」
     /// （末行用 `LyricVocalDurationEstimator` 估算），供渲染层按需拆「伪逐字」
+    /// - 来源若带**作者标注的行尾**（TTML `<p end>`）→ `duration` 以它为准，
+    /// 并原样记进 `contentEndTime`（间奏判定拿它当"这一句唱到什么时候"）
     func toAppleMusicLyricLines() -> [LyricLine] {
         // **罗马字**（用户要的"主歌词上方那一行"）。
         //
@@ -214,6 +216,17 @@ extension LyricsDto {
             )
             let isPrecise = !authoredSyllables.isEmpty
 
+            // 作者标注的**行尾**（TTML `<p end>`）：这一句真正唱完的时刻。
+            //
+            // 行级来源（`.lineSynchronized`）原来只能拿"下一行起点"当结束；两者之间那段空白
+            // 是不是"真的没人唱"，只能靠 `LyricVocalDurationEstimator` 猜。有 `<p end>` 时
+            // 这个时刻是作者给的 ⇒ 时长与间奏都用它。
+            let authoredEndTime: TimeInterval? = line.endOffsetMs.flatMap { endMs in
+                let end = TimeInterval(endMs) / 1000
+                guard end.isFinite, end > startTime else { return nil }
+                return end
+            }
+
             // 没有作者逐字时间轴时的**伪逐字**（歌词页的开关，默认关）。
             //
             // ⚠️ 合成的那份**只给渲染层用**，`timingKind` 仍按"有没有作者时间轴"决定 ——
@@ -226,7 +239,8 @@ extension LyricsDto {
                 syllables = PseudoWordTiming.pieces(
                     for: line.content,
                     startTime: startTime,
-                    nextStartTime: nextStartTime
+                    // 有作者行尾时，伪逐字也只该铺到那里（不是铺到下一句开口）。
+                    nextStartTime: authoredEndTime ?? nextStartTime
                 ).map { piece in
                     LyricSyllable(
                         text: piece.text,
@@ -240,8 +254,13 @@ extension LyricsDto {
 
             let duration: TimeInterval?
             if isPrecise {
-                // 精确行以作者标注的最后一个音节结束为准。
-                duration = max((syllables.last?.endTime ?? startTime) - startTime, 0)
+                // 精确行以作者标注的最后一个音节结束为准；`<p end>` 更长时以它为准
+                // （长音尾巴 / 拖腔），更短时仍信音节。
+                let syllableEnd = syllables.last?.endTime ?? startTime
+                let end = max(syllableEnd, authoredEndTime ?? syllableEnd)
+                duration = max(end - startTime, 0)
+            } else if let authoredEndTime {
+                duration = max(authoredEndTime - startTime, 0)
             } else if let nextStartTime {
                 duration = max(nextStartTime - startTime, 0)
             } else {
@@ -254,7 +273,8 @@ extension LyricsDto {
             // 也就是说只要上一行的时长还盖着当前时间，它就会和下一行**同时**留在 active 集合里。
             // 上游给的时间轴一旦有错（Petit 的厘秒/毫秒混用、AMLL 的长音尾巴），
             // 屏幕上就是两三行一起亮。这里把显示时长夹到下一行起点；
-            // 行级同步那条本来就是 `nextStartTime - startTime`，等价。
+            // 行级同步那条本来就是 `nextStartTime - startTime`，等价
+            // （有作者行尾时它是 `end - start`，本来就更短）。
             //
             // ⚠️ 只夹「小溢出」（≤ 1s）：Petit 里有**故意的重叠行**（副唱/语气词，
             // 例如 yanaginagi「終わりの世界から」第 2 行「よ」压在第 1 行尾巴上）。
@@ -298,6 +318,8 @@ extension LyricsDto {
                 id: Self.lineID(index: index, startMs: startMs),
                 time: startTime,
                 duration: clampedDuration,
+                // 作者给的行尾原样带上（间奏判定用它，别从 `duration` 反推）。
+                contentEndTime: authoredEndTime,
                 timingKind: isPrecise ? .precise : .lineSynchronized,
                 // 必须用 `line.content`，**不要**把 words 拼回来当行文本。
                 //

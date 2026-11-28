@@ -15,16 +15,15 @@ struct LyricsAgentDto {
 struct LyricsLineDto {
     var content: String
     var offsetMs: Int?
-    /// （Q6 清点里的第 ② 条）：**这一行唱完的时刻**（TTML 的 `<p end>`）。
+    /// 这一行**唱完**的时刻（TTML 的 `<p end>`）。
     ///
-    /// 以前只在解析层用来算 `lastLineEndMs`/打日志，进了 DTO 就丢 ⇒ 显示层只能拿
-    /// **下一行的起点**当这一行的结束（`LyricLinesAdapter` 的 `nextStartTime`）——
-    /// 于是"这一句拖得很长"和"这里没人唱"在数据上**长得一模一样**（慢歌/间奏会偏）。
+    /// 与"下一行的起点"不是一回事：两者之间可能有一段空白（间奏）。没有它时，显示层
+    /// 只能拿下一行起点当这一行的结束 ⇒ "这一句拖得很长"和"这里没人唱"在数据上长得一模一样。
     ///
-    /// ⚠️ **页内那一层还没用它**：`LyricLinesAdapter` 现在把 `nextStartTime - startTime`
-    /// 当整行的时长（高亮会一直亮到下一行开始），改成"唱完就收"会连带改观感与间奏判定
-    /// ⇒ 那一步要有一次 A/B 才动。锁屏已经按它切行了（`LockScreenLyricsFetcher` 取
-    /// `line.endOffsetMs`，缺了才退回下一行起点）。
+    /// 现在页内这一层也用它：`LyricLinesAdapter` 拿它当显示时长（行级来源从"到下一句为止"
+    /// 变成"唱完为止"），并原样记进 `LyricLine.contentEndTime`；间奏判定
+    /// （`LyricInterludeTimeline`）因此不用再靠 `LyricVocalDurationEstimator` 猜尾点。
+    /// 锁屏同样按它切行（`LockScreenLyricsFetcher` 取 `line.endOffsetMs`，缺了才退回下一行起点）。
     ///
     /// 只有 TTML 源会给这个字段（AMLL / Apple 官方 TTML / BiniLyrics / Unison /
     /// 用户导入的 `.ttml` 都走同一个 `AmllTtmlParser` + `AmllLyricsMapper`）；别的源一律 nil。

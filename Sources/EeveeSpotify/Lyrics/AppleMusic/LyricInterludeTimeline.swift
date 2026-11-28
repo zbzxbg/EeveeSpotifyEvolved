@@ -9,11 +9,12 @@ import Foundation
 // 比这更短的间隙连"点亮 → 退出"两个阶段都放不下，硬放只会看到点闪一下；
 // `normalizedInferredThreshold` 再把外部给的阈值夹到这条下界之上。
 // ② **`contentEndTime` 估算** ——「这一句唱到什么时候」：
-// 作者标注的 `duration`、最后一个音节的结束时间、以及**副唱（`ttm:role="x-bg"`）的尾巴**
-// 三者取**大者**；
-// 只有行级时间的来源（`.lineSynchronized`）退回 `LyricVocalDurationEstimator`，
-// 而且**不得超过**该行的显示时长 —— 下一行的起点就是人声尾部的上限，
-// 否则估出来的尾巴会把整段间隙吃掉，间奏就永远判不出来。
+// 作者标注的 `duration`、最后一个音节的结束时间、**副唱（`ttm:role="x-bg"`）的尾巴**，
+// 以及**作者标注的行尾**（TTML `<p end>`，落在 `LyricLine.contentEndTime`）四者取**大者**；
+// 只有行级时间的来源（`.lineSynchronized`）**没有作者行尾时**才退回
+// `LyricVocalDurationEstimator`，而且**不得超过**该行的显示时长 —— 下一行的起点就是
+// 人声尾部的上限，否则估出来的尾巴会把整段间隙吃掉，间奏就永远判不出来。
+// 有作者行尾时直接用它（不再估算）。
 //
 // ⚠️ 副唱这一项必须算进来 —— Apple Music / AMLL 的副歌常常是
 // 「一句主词 + 一小段 (Ha-ha-ha-ha) 副唱」，副唱正好唱到下一句开口。只看主词的话，
@@ -252,6 +253,12 @@ enum LyricInterludeTimeline {
         for lyric: LyricLine
     ) -> TimeInterval? {
         if lyric.timingKind == .lineSynchronized {
+            // 作者给了行尾（TTML `<p end>`）⇒ 这一句唱到什么时候是**已知**的，
+            // 不再退回估算器。副唱可能比主词尾巴更长，仍然取大者。
+            if let authored = authoredEndTime(of: lyric) {
+                let backgroundEndTime = backgroundVocalEndTime(for: lyric.backgroundVocal)
+                return max(authored, backgroundEndTime ?? authored)
+            }
             let estimatedDuration = LyricVocalDurationEstimator.estimatedDuration(
                 for: lyric.text
             )
@@ -287,10 +294,16 @@ enum LyricInterludeTimeline {
         let backgroundEndTime = backgroundVocalEndTime(for: lyric.backgroundVocal)
 
         // 几者取大者：有的来源只给行 duration，有的只给逐字/逐音节时间，
-        // 有的把副唱尾巴挂在行尾，谁都可能更长。
-        return [durationEndTime, syllableEndTime, backgroundEndTime]
+        // 有的把副唱尾巴挂在行尾，谁都可能更长。作者标注的 `<p end>` 同样参与。
+        return [durationEndTime, syllableEndTime, backgroundEndTime, authoredEndTime(of: lyric)]
             .compactMap { $0 }
             .max()
+    }
+
+    /// 作者标注的"这一句唱完"（TTML `<p end>`）—— 绝对时间；没有 / 不合法就是 nil。
+    private static func authoredEndTime(of lyric: LyricLine) -> TimeInterval? {
+        guard let end = lyric.contentEndTime, end.isFinite, end > lyric.time else { return nil }
+        return end
     }
 
     /// 副唱唱到什么时候。
