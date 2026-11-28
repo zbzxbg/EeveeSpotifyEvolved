@@ -286,28 +286,44 @@ require(AudioDSPCrossfeed.settings(level: 0, sampleRate: sampleRate).isBypass,
 let crossfeedLevels = (1..<AudioDSPCrossfeed.levelCount).map {
     AudioDSPCrossfeed.settings(level: $0, sampleRate: sampleRate)
 }
-var crossfeedOrdered = true
-for index in 1..<crossfeedLevels.count where crossfeedLevels[index].feed <= crossfeedLevels[index - 1].feed {
-    crossfeedOrdered = false
+
+/// 交叉馈送那条支路的直流增益（`a0 / (1 − b1)`）：混过去的那一份到底有多响。
+func crossfeedLowBandGain(_ settings: AudioDSPCrossfeed.Settings) -> Double {
+    settings.lowFilterGain / (1 - settings.lowFilterPole)
 }
-require(crossfeedOrdered, "the higher crossfeed levels mix in more")
 
 var crossfeedValid = true
 for settings in crossfeedLevels {
-    if !(settings.feed > 0 && settings.feed < 0.5) { crossfeedValid = false }
-    if !(settings.lowpassCoefficient > 0 && settings.lowpassCoefficient < 1) { crossfeedValid = false }
-    if !(settings.delaySamples >= 1 && settings.delaySamples <= AudioDSPCrossfeed.maxDelaySamples) {
-        crossfeedValid = false
-    }
+    if settings.isBypass { crossfeedValid = false }
+    if !(settings.lowFilterGain > 0 && settings.lowFilterGain < 1) { crossfeedValid = false }
+    if !(settings.lowFilterPole > 0 && settings.lowFilterPole < 1) { crossfeedValid = false }
+    if !(settings.highFilterGain > 0 && settings.highFilterGain < 1) { crossfeedValid = false }
+    if !(settings.highFilterPole > 0 && settings.highFilterPole < 1) { crossfeedValid = false }
+    if !(settings.highFilterFeedForward < 0) { crossfeedValid = false }
+    if !(settings.makeup > 0 && settings.makeup < 1) { crossfeedValid = false }
+    // highboost 的截止必须高于低通：极点离 1 更远。
+    if !(settings.highFilterPole < settings.lowFilterPole) { crossfeedValid = false }
 }
-require(crossfeedValid, "every crossfeed level has a sane feed, filter and delay")
+require(crossfeedValid, "every crossfeed preset has sane gains, poles and a makeup under unity")
 
-let crossfeed48k = AudioDSPCrossfeed.settings(level: 2, sampleRate: 48000)
-require(crossfeed48k.delaySamples == Int((0.0003 * 48000).rounded()),
-        "the interaural delay scales with the sample rate")
+require(crossfeedLowBandGain(crossfeedLevels[0]) > crossfeedLowBandGain(crossfeedLevels[2]),
+        "the strongest preset attenuates the crossfed band more than the default one")
+
+require(AudioDSPCrossfeed.settings(level: 1, sampleRate: 1000).isBypass,
+        "a sample rate below the bs2b range falls back to bypass")
+require(AudioDSPCrossfeed.settings(level: 1, sampleRate: 500000).isBypass,
+        "a sample rate above the bs2b range falls back to bypass")
 require(AudioDSPCrossfeed.settings(level: 99, sampleRate: sampleRate)
             == AudioDSPCrossfeed.settings(level: 3, sampleRate: sampleRate),
         "an out-of-range level clamps to the loudest preset")
+
+// 同一档在不同采样率下只有极点变，直流增益不变：这是 bs2b 把截止换算成极点的结果。
+let default44 = crossfeedLevels[0]
+let default48 = AudioDSPCrossfeed.settings(level: 1, sampleRate: 48000)
+require(abs(crossfeedLowBandGain(default44) - crossfeedLowBandGain(default48)) < 1e-9,
+        "the crossfed band keeps its level across sample rates")
+require(default48.lowFilterPole > default44.lowFilterPole,
+        "a higher sample rate puts the same cutoff closer to one")
 
 // MARK: - 限幅
 

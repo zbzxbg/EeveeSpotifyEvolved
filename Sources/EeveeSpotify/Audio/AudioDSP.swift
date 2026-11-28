@@ -36,7 +36,6 @@ enum AudioDSP {
     /// 只处理前两个声道：这套链路是给立体声播放用的，多声道布局其余声道原样放行。
     private static let maxChannels = 2
     /// 交叉馈送延迟线：最大延迟 + 1，读写下标错开一格不会撞上自己。
-    private static let crossfeedRingSize = AudioDSPCrossfeed.maxDelaySamples + 1
 
     private static let lock: UnsafeMutablePointer<os_unfair_lock> = {
         let pointer = UnsafeMutablePointer<os_unfair_lock>.allocate(capacity: 1)
@@ -85,15 +84,14 @@ enum AudioDSP {
     private static var renderCompanderMix = 0.0
     private static var renderCompanderTargetMix = 0.0
 
-    /// 交叉馈送：混入量逐块平滑；低通系数与延迟按采样率算好，直接换。
-    private static var renderCrossfeedFeed = 0.0
-    private static var renderCrossfeedTargetFeed = 0.0
-    private static var renderCrossfeedCoefficient = 0.0
-    private static var renderCrossfeedDelay = 1
-    private static var renderCrossfeedStates: UnsafeMutablePointer<Double> = makeZeros(maxChannels)
-    private static var renderCrossfeedDelayLineLeft: UnsafeMutablePointer<Double> = makeZeros(crossfeedRingSize)
-    private static var renderCrossfeedDelayLineRight: UnsafeMutablePointer<Double> = makeZeros(crossfeedRingSize)
-    private static var renderCrossfeedIndex = 0
+    /// 交叉馈送：系数按采样率算好直接换；"湿声混入量"逐块平滑（开关时的淡入淡出靠它）。
+    private static var renderCrossfeedSettings = AudioDSPCrossfeed.bypass
+    private static var renderCrossfeedMix = 0.0
+    private static var renderCrossfeedTargetMix = 0.0
+    /// 每个声道各一份：低通输出、highboost 输出、上一拍输入。
+    private static var renderCrossfeedLowState: UnsafeMutablePointer<Double> = makeZeros(maxChannels)
+    private static var renderCrossfeedHighState: UnsafeMutablePointer<Double> = makeZeros(maxChannels)
+    private static var renderCrossfeedPreviousInput: UnsafeMutablePointer<Double> = makeZeros(maxChannels)
 
     /// 限幅器：左右共用一份增益。释放系数由采样率算好（主线程），render 侧只做乘加。
     private static var limiterRelease = 0.99987
@@ -363,9 +361,8 @@ enum AudioDSP {
                 renderTargetPreamp = preampLinear
                 renderCompanderParameters = companderParameters
                 renderCompanderTargetMix = companderParameters.isBypass ? 0 : 1
-                renderCrossfeedTargetFeed = crossfeedSettings.feed
-                renderCrossfeedCoefficient = crossfeedSettings.lowpassCoefficient
-                renderCrossfeedDelay = crossfeedSettings.delaySamples
+                renderCrossfeedSettings = crossfeedSettings
+                renderCrossfeedTargetMix = crossfeedSettings.isBypass ? 0 : 1
                 renderLimiterRelease = limiterRelease
             } else {
                 // 关闭时的目标 = 恒等：系数往恒等滑，信号就淡回原声。
@@ -433,13 +430,10 @@ enum AudioDSP {
         }
         for channel in 0..<maxChannels {
             renderCompanderEnvelopes[channel] = 0
-            renderCrossfeedStates[channel] = 0
+            renderCrossfeedLowState[channel] = 0
+            renderCrossfeedHighState[channel] = 0
+            renderCrossfeedPreviousInput[channel] = 0
         }
-        for index in 0..<crossfeedRingSize {
-            renderCrossfeedDelayLineLeft[index] = 0
-            renderCrossfeedDelayLineRight[index] = 0
-        }
-        renderCrossfeedIndex = 0
         renderLimiterGain = 1
     }
 
@@ -451,7 +445,7 @@ enum AudioDSP {
         }
         renderPreamp = 1
         renderCompanderMix = 0
-        renderCrossfeedFeed = 0
+        renderCrossfeedMix = 0
     }
 
     private static func setTargetsIdentity() {
@@ -460,7 +454,7 @@ enum AudioDSP {
         }
         renderTargetPreamp = 1
         renderCompanderTargetMix = 0
-        renderCrossfeedTargetFeed = 0
+        renderCrossfeedTargetMix = 0
     }
 
     private static func setIdentity(_ coefficients: UnsafeMutablePointer<Double>, index: Int) {
@@ -488,7 +482,7 @@ enum AudioDSP {
         }
         return abs(renderPreamp - 1) <= 1e-6
             && abs(renderCompanderMix) <= 1e-6
-            && abs(renderCrossfeedFeed) <= 1e-6
+            && abs(renderCrossfeedMix) <= 1e-6
     }
 
     /// 逐块把"当前系数 / 前置 / 两个混入量"往目标推一步。
@@ -508,10 +502,10 @@ enum AudioDSP {
             ? renderCompanderTargetMix
             : renderCompanderMix + mixDifference * coefficientSmoothing
 
-        let feedDifference = renderCrossfeedTargetFeed - renderCrossfeedFeed
-        renderCrossfeedFeed = abs(feedDifference) < 1e-6
-            ? renderCrossfeedTargetFeed
-            : renderCrossfeedFeed + feedDifference * coefficientSmoothing
+        let mixDifference = renderCrossfeedTargetMix - renderCrossfeedMix
+        renderCrossfeedMix = abs(mixDifference) < 1e-6
+            ? renderCrossfeedTargetMix
+            : renderCrossfeedMix + mixDifference * coefficientSmoothing
     }
 
     private static func smooth(_ current: UnsafeMutablePointer<Double>,
@@ -574,22 +568,35 @@ enum AudioDSP {
         var leftValue = processChannel(left * renderPreamp, channel: 0)
         var rightValue = right.map { processChannel($0 * renderPreamp, channel: 1) }
 
-        if let currentRight = rightValue, renderCrossfeedFeed > 1e-4 {
-            // 读"延迟 N 拍之前的对侧样本"，再把这一拍的样本写进环形缓冲。
-            let index = renderCrossfeedIndex
-            let readIndex = (index + crossfeedRingSize - renderCrossfeedDelay) % crossfeedRingSize
-            let delayedRight = renderCrossfeedDelayLineRight[readIndex]
-            let delayedLeft = renderCrossfeedDelayLineLeft[readIndex]
-            renderCrossfeedDelayLineLeft[index] = leftValue
-            renderCrossfeedDelayLineRight[index] = currentRight
-            renderCrossfeedIndex = index + 1 == crossfeedRingSize ? 0 : index + 1
+        if let currentRight = rightValue, renderCrossfeedMix > 1e-4 {
+            let settings = renderCrossfeedSettings
 
-            // 一阶低通：模拟头颅对高频的遮蔽；两个声道各一份状态。
-            let coefficient = renderCrossfeedCoefficient
-            renderCrossfeedStates[0] += (delayedRight - renderCrossfeedStates[0]) * coefficient
-            renderCrossfeedStates[1] += (delayedLeft - renderCrossfeedStates[1]) * coefficient
-            leftValue += renderCrossfeedFeed * renderCrossfeedStates[0]
-            rightValue = currentRight + renderCrossfeedFeed * renderCrossfeedStates[1]
+            // 每个声道两条支路：低通（这一侧的"远处"版本）与 highboost（补回高频）。
+            let lowLeft = settings.lowFilterGain * leftValue
+                + settings.lowFilterPole * renderCrossfeedLowState[0]
+            let lowRight = settings.lowFilterGain * currentRight
+                + settings.lowFilterPole * renderCrossfeedLowState[1]
+            let highLeft = settings.highFilterGain * leftValue
+                + settings.highFilterFeedForward * renderCrossfeedPreviousInput[0]
+                + settings.highFilterPole * renderCrossfeedHighState[0]
+            let highRight = settings.highFilterGain * currentRight
+                + settings.highFilterFeedForward * renderCrossfeedPreviousInput[1]
+                + settings.highFilterPole * renderCrossfeedHighState[1]
+
+            renderCrossfeedLowState[0] = lowLeft
+            renderCrossfeedLowState[1] = lowRight
+            renderCrossfeedHighState[0] = highLeft
+            renderCrossfeedHighState[1] = highRight
+            renderCrossfeedPreviousInput[0] = leftValue
+            renderCrossfeedPreviousInput[1] = currentRight
+
+            // 本侧的高频 + 对侧的低频，再乘上低频叠加的补偿增益。
+            let wetLeft = (highLeft + lowRight) * settings.makeup
+            let wetRight = (highRight + lowLeft) * settings.makeup
+
+            let mix = renderCrossfeedMix
+            leftValue += (wetLeft - leftValue) * mix
+            rightValue = currentRight + (wetRight - currentRight) * mix
         }
 
         guard leftValue.isFinite, rightValue?.isFinite ?? true else {

@@ -522,46 +522,93 @@ enum AudioDSPCompander {
 
 // MARK: - 交叉馈送
 
-/// 耳机串扰（bs2b 那类）：把对侧声道经一个低通、延迟几拍之后混一点过来。
+/// 耳机串扰，按 bs2b 的做法（libbs2b，MIT，© 2005 Boris Mikhaylov）。
 ///
-/// 只做"听起来不偏在头两侧"这一件事：对侧信号走 700 Hz 一阶低通（模拟头颅对高频的
-/// 遮蔽）+ 0.3 ms 延迟（双耳时间差），混入量按档位。不做电平补偿 —— 混入量最大 0.36，
-/// 中频最多 +1 dB 左右，还在硬限幅的余量里。
+/// 一个低通把对侧声音滤掉高频后再混过来，一个 highboost 一阶差分把本侧的高频补回去，
+/// 两路相加再乘一个补偿增益。档位决定"低通截止 + 混入量"这一对参数：
+/// 截止越低、混入越多，声场越近；`gain` 把低频被叠加的那部分抵消掉。
+///
+/// 三个预置（截止 Hz / 混入 0.1 dB）：
+/// · default：700 / 45（4.5 dB）
+/// · CMOY：700 / 60（6 dB）
+/// · JMeier：650 / 95（9.5 dB）
+///
+/// 双耳时间差不靠延迟线：低通的相位滞后本身就是它，所以这里没有环形缓冲。
 enum AudioDSPCrossfeed {
     /// 0 = 关，1…3 = 逐级加强。
     static let levelCount = 4
-    /// 环形缓冲上界：48 kHz 下 0.3 ms 只有约 15 个样本，64 足够。
-    static let maxDelaySamples = 64
-    static let lowpassFrequency: Double = 700
-    static let interauralDelaySeconds: Double = 0.0003
+    /// bs2b 的采样率上下界：出了这个范围就退回直通（系数会失真）。
+    static let minSampleRate: Double = 2000
+    static let maxSampleRate: Double = 384000
 
     struct Settings: Equatable {
-        var feed: Double
-        var lowpassCoefficient: Double
-        var delaySamples: Int
+        /// 低通：`y = a0·x + b1·y₋₁`
+        var lowFilterGain: Double
+        var lowFilterPole: Double
+        /// highboost：`y = a0·x + a1·x₋₁ + b1·y₋₁`
+        var highFilterGain: Double
+        var highFilterFeedForward: Double
+        var highFilterPole: Double
+        /// 低频叠加的补偿增益（小于 1）。
+        var makeup: Double
         var isBypass: Bool
     }
 
     static let bypass = Settings(
-        feed: 0,
-        lowpassCoefficient: 0,
-        delaySamples: 1,
+        lowFilterGain: 0,
+        lowFilterPole: 0,
+        highFilterGain: 1,
+        highFilterFeedForward: 0,
+        highFilterPole: 0,
+        makeup: 1,
         isBypass: true
     )
 
-    private static let feedByLevel: [Double] = [0, 0.16, 0.26, 0.36]
+    /// 索引 = 档位 − 1。
+    private static let presets: [(frequency: Double, feedTenthDb: Double)] = [
+        (700, 45),
+        (700, 60),
+        (650, 95),
+    ]
 
     static func settings(level: Int, sampleRate: Double) -> Settings {
         let clamped = min(max(level, 0), levelCount - 1)
-        guard clamped > 0, sampleRate > 0 else { return bypass }
+        guard clamped > 0,
+              sampleRate >= minSampleRate,
+              sampleRate <= maxSampleRate else {
+            return bypass
+        }
 
-        let coefficient = min(max(1 - exp(-2 * Double.pi * lowpassFrequency / sampleRate), 0.001), 0.999)
-        var delay = Int((interauralDelaySeconds * sampleRate).rounded())
-        delay = min(max(delay, 1), maxDelaySamples)
+        let preset = presets[clamped - 1]
+        let feed = preset.feedTenthDb / 10
+        // 两条支路的电平：低频按 −5/6 分、高频按 +1/6 分，都把 −3 dB 的基准点带上；
+        // 两者的差正好是"混入量"，所以 bs2b 用同一个数推三样东西。
+        let lowDb = feed * -5 / 6 - 3
+        let highDb = feed / 6 - 3
+        let lowGainLinear = pow(10, lowDb / 20)
+        let highGainLinear = 1 - pow(10, highDb / 20)
+        guard lowGainLinear > 0, highGainLinear > 0, highGainLinear < 1 else { return bypass }
+
+        // highboost 的截止跟着两条支路差出来：GB_lo 与 20·log10(G_hi) 的差每 12 dB 翻一倍。
+        let highFrequency = preset.frequency
+            * pow(2, (lowDb - 20 * log10(highGainLinear)) / 12)
+        guard highFrequency.isFinite, highFrequency > 0 else { return bypass }
+
+        let lowPole = exp(-2 * Double.pi * preset.frequency / sampleRate)
+        let highPole = exp(-2 * Double.pi * highFrequency / sampleRate)
+        let makeup = 1 / (1 - highGainLinear + lowGainLinear)
+        guard lowPole > 0, lowPole < 1, highPole > 0, highPole < 1,
+              makeup.isFinite, makeup > 0 else {
+            return bypass
+        }
+
         return Settings(
-            feed: feedByLevel[clamped],
-            lowpassCoefficient: coefficient,
-            delaySamples: delay,
+            lowFilterGain: lowGainLinear * (1 - lowPole),
+            lowFilterPole: lowPole,
+            highFilterGain: 1 - highGainLinear * (1 - highPole),
+            highFilterFeedForward: -highPole,
+            highFilterPole: highPole,
+            makeup: makeup,
             isBypass: false
         )
     }
