@@ -114,7 +114,7 @@ final class AudioReactiveEngine: NSObject {
                 "[\(AudioFeatures.logTag)] ticker on — cover pulse=\(UserDefaults.coverPulseEnabled)"
                     + " haptics=\(UserDefaults.musicHapticsEnabled)"
             )
-            logAudioRoute()
+            Self.logAudioRoute()
         }
     }
 
