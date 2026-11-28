@@ -354,6 +354,96 @@ require(AudioDSPLimiter.nextGain(current: 0.2, peak: .nan, release: limiterRelea
 require(AudioDSPLimiter.nextGain(current: 1, peak: 1, release: limiterRelease) < 1,
         "a full-scale sample is still pulled to the ceiling")
 
+// MARK: - AutoEq 参数均衡
+
+/// AutoEq 的真实输出（crinacle / 711 in-ear / Apple AirPods Pro，MIT，Jaakko Pasanen）。
+let autoeqText = """
+Preamp: -6.0 dB
+Filter 1: ON LSC Fc 105 Hz Gain 2.6 dB Q 0.70
+Filter 2: ON PK Fc 514 Hz Gain -4.4 dB Q 0.68
+Filter 3: ON PK Fc 8903 Hz Gain 6.0 dB Q 1.66
+Filter 4: ON PK Fc 183 Hz Gain 2.0 dB Q 0.77
+Filter 5: ON PK Fc 4613 Hz Gain 3.4 dB Q 2.46
+Filter 6: ON HSC Fc 10000 Hz Gain -0.5 dB Q 0.70
+Filter 7: ON PK Fc 1517 Hz Gain -1.0 dB Q 2.33
+Filter 8: ON PK Fc 929 Hz Gain 1.2 dB Q 2.75
+Filter 9: ON PK Fc 44 Hz Gain -0.5 dB Q 2.16
+Filter 10: ON PK Fc 618 Hz Gain -0.5 dB Q 2.86
+"""
+
+let autoeq = AudioDSPFilterChain.autoeq(autoeqText)
+require(autoeq != nil, "the AutoEq ParametricEQ sample parses")
+require(autoeq?.preampDb == -6, "the preamp line is read (-6 dB)")
+require(autoeq?.filters.count == 10, "all ten filters are kept")
+require(autoeq?.filters.filter { $0.kind == .lowShelf }.count == 1, "the LSC line becomes a low shelf")
+require(autoeq?.filters.filter { $0.kind == .highShelf }.count == 1, "the HSC line becomes a high shelf")
+require(autoeq?.filters.filter { $0.kind == .peaking }.count == 8, "the PK lines become peaking bands")
+
+let firstFilter = autoeq?.filters.first
+require(firstFilter?.frequency == 105, "the first filter keeps its frequency")
+require(firstFilter?.gainDb == 2.6, "the first filter keeps its gain")
+require(firstFilter?.q == 0.70, "the first filter keeps its Q")
+
+let thirdFilter = autoeq?.filters.dropFirst(2).first
+require(thirdFilter?.kind == .peaking && thirdFilter?.frequency == 8903 && thirdFilter?.gainDb == 6,
+        "a peaking line in the middle of the file reads back intact")
+
+let preampLinear = autoeq?.preampLinear ?? 0
+require(abs(preampLinear - 0.501187) < 1e-5, "-6 dB of preamp is a half-amplitude gain (\(preampLinear))")
+
+let shelfSlope = autoeq?.filters.first?.shelfSlope ?? 0
+require(shelfSlope > 0.9 && shelfSlope <= 1,
+        "a shelf written as Q 0.70 lands just under slope 1 (got \(shelfSlope))")
+
+var autoeqCoefficientsOk = true
+for rate in [44100.0, 48000.0] {
+    guard let coefficients = autoeq?.coefficients(sampleRate: rate) else { continue }
+    for c in coefficients {
+        if !(c.b0.isFinite && c.b1.isFinite && c.b2.isFinite && c.a1.isFinite && c.a2.isFinite) {
+            autoeqCoefficientsOk = false
+        }
+        if abs(c.a2) >= 1 { autoeqCoefficientsOk = false }
+    }
+}
+require(autoeqCoefficientsOk, "every AutoEq filter designs finite, stable coefficients at 44.1 and 48 kHz")
+
+require(AudioDSPFilterChain.autoeq("") == nil, "an empty file is rejected")
+require(AudioDSPFilterChain.autoeq("Preamp: -3 dB\n") == nil, "a file with no filter line is rejected")
+
+let offLine = """
+Preamp: -4.0 dB
+Filter 1: ON PK Fc 514 Hz Gain -4.4 dB Q 0.68
+Filter 2: OFF PK Fc 1000 Hz Gain 3.0 dB Q 1.00
+"""
+let offParsed = AudioDSPFilterChain.autoeq(offLine)
+require(offParsed?.filters.count == 1, "an OFF filter is skipped instead of applied")
+
+require(AudioDSPFilterChain.autoeq("Filter 1: ON PK Fc 514 Hz Gain -4.4 dB") != nil,
+        "a filter line on its own is enough, with no preamp line")
+
+require(AudioDSPFilterChain.autoeq("Filter 1: ON PK Gain -4.4 dB Q 0.7") == nil,
+        "a filter without a frequency is rejected instead of guessed")
+
+let noQ = AudioDSPFilterChain.autoeq("Filter 1: ON PK Fc 514 Hz Gain -4.4 dB")
+require(noQ?.filters.first?.q == AudioDSPFilterChain.defaultQ, "a missing Q falls back to the default")
+
+require(AudioDSPFilterChain.autoeq("Filter 1: ON XX Fc 514 Hz Gain 1 dB Q 1") == nil,
+        "an unknown filter type is rejected")
+
+let manyFilters = (1...20).map { "Filter \($0): ON PK Fc \(100 * $0) Hz Gain 1.0 dB Q 1.0" }
+let truncated = AudioDSPFilterChain.autoeq("Preamp: 0 dB\n" + manyFilters.joined(separator: "\n"))
+require(truncated?.filters.count == AudioDSPFilterChain.maxFilters,
+        "a file with more filters than the chain holds is truncated")
+
+let flatChain = AudioDSPFilterChain(
+    preampDb: 0,
+    filters: AudioDSPBands.frequencies.map {
+        AudioDSPFilterSpec(kind: .peaking, frequency: $0, gainDb: 0, q: AudioDSPBands.q)
+    }
+)
+require(flatChain.coefficients(sampleRate: sampleRate).allSatisfy(\.isBypass),
+        "0 dB filters on every band design bypass coefficients")
+
 // MARK: - 结果
 
 if failures > 0 {

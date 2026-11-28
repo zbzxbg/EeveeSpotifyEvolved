@@ -249,6 +249,177 @@ extension BiquadCoefficients {
     }
 }
 
+// MARK: - AutoEq 参数均衡
+
+/// 滤波器的种类。AutoEq 的 `ParametricEQ.txt` 只用这三种：`PK`、`LSC`、`HSC`。
+enum AudioDSPFilterKind: String, Equatable {
+    case peaking
+    case lowShelf
+    case highShelf
+}
+
+/// 一条滤波器的描述。频率、增益、Q 都是文件里的原值，换算到系数时再看采样率。
+struct AudioDSPFilterSpec: Equatable {
+    var kind: AudioDSPFilterKind
+    /// 中心频率（peaking）或转折频率（架式），Hz。
+    var frequency: Double
+    /// 该点的增益（dB）。
+    var gainDb: Double
+    /// 品质因数；架式用它折成斜率（见 `shelfSlope`）。
+    var q: Double
+
+    /// 架式的 alpha 可以用 Q 表达，而 `lowShelf` / `highShelf` 用的是斜率 S：
+    /// `alpha = sin/2·√((A + 1/A)(1/S − 1) + 2)`；令它等于 `sin/(2Q)` 得
+    /// `S = 1 / (1 + (1/Q² − 2)/(A + 1/A))`，其中 `A = 10^(gain/40)`。
+    /// Q = 0.7071 正好是 S = 1（AutoEq 的架式一般写 Q 0.70）。
+    var shelfSlope: Double {
+        let a = pow(10, gainDb / 40)
+        guard q > 0, a.isFinite, a > 0 else { return 1 }
+        let sum = a + 1 / a
+        guard sum > 0 else { return 1 }
+        let slope = 1 / (1 + (1 / (q * q) - 2) / sum)
+        guard slope.isFinite else { return 1 }
+        return min(max(slope, 0.05), 4)
+    }
+
+    func coefficients(sampleRate: Double) -> BiquadCoefficients {
+        switch kind {
+        case .peaking:
+            return .peaking(
+                frequency: frequency, gainDb: gainDb, q: q, sampleRate: sampleRate
+            )
+        case .lowShelf:
+            return .lowShelf(
+                frequency: frequency, gainDb: gainDb, slope: shelfSlope, sampleRate: sampleRate
+            )
+        case .highShelf:
+            return .highShelf(
+                frequency: frequency, gainDb: gainDb, slope: shelfSlope, sampleRate: sampleRate
+            )
+        }
+    }
+}
+
+/// 一条完整的参数均衡链：一个前置增益 + 若干条滤波器。
+///
+/// AutoEq 的 `ParametricEQ.txt` 就是它的文本形态：`Preamp:` 一行，随后每行一条 `Filter`。
+/// 这层只做解析与系数，不碰 UserDefaults、文件与实时线程。
+struct AudioDSPFilterChain: Equatable {
+
+    /// 链上最多几条。AutoEq 的标准输出是 10 条，余量留给手改过的文件。
+    static let maxFilters = 16
+
+    /// Q 缺省值：架式的 RBJ 换算在 0.7071 处等于斜率 1。
+    static let defaultQ: Double = 0.7071
+
+    var preampDb: Double
+    var filters: [AudioDSPFilterSpec]
+
+    var preampLinear: Double { pow(10, preampDb / 20) }
+
+    func coefficients(sampleRate: Double) -> [BiquadCoefficients] {
+        filters.map { $0.coefficients(sampleRate: sampleRate) }
+    }
+
+    /// 解析 AutoEq 的 `ParametricEQ.txt`。
+    ///
+    /// 认的形状：`Preamp: -6.0 dB` 与 `Filter 1: ON PK Fc 514 Hz Gain -4.4 dB Q 0.68`。
+    /// · `OFF` 的滤波器跳过（用户手工关掉的那几条）；
+    /// · `Q` 缺省时按 `defaultQ`；
+    /// · 超过 `maxFilters` 的截断。
+    ///
+    /// 空文本、没有一条可用的 Filter、或者某条 Filter 读不出频率/增益 —— 返回 nil。
+    /// 不做"猜一半"的部分解析：半截的校正曲线听着不对，却很难判断问题出在中括号还是文件。
+    static func autoeq(_ text: String) -> AudioDSPFilterChain? {
+        var preampDb = 0.0
+        var specs: [AudioDSPFilterSpec] = []
+        var sawFilter = false
+
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+
+            if line.lowercased().hasPrefix("preamp:") {
+                let rest = String(line.dropFirst("preamp:".count))
+                guard let value = firstNumber(in: rest), value.isFinite else { return nil }
+                preampDb = value
+                continue
+            }
+
+            guard line.lowercased().hasPrefix("filter") else { continue }
+            if isFilterLineOff(line) { continue }
+            sawFilter = true
+            guard let spec = parseFilterLine(line) else { return nil }
+            if specs.count < maxFilters {
+                specs.append(spec)
+            }
+        }
+
+        guard sawFilter, !specs.isEmpty else { return nil }
+        return AudioDSPFilterChain(preampDb: min(max(preampDb, -30), 12), filters: specs)
+    }
+
+    /// `Filter 3: OFF ...` —— AutoEq 的输出里用户手工关掉的那几条，整行跳过。
+    private static func isFilterLineOff(_ line: String) -> Bool {
+        let tokens = line.split { $0 == " " || $0 == "\t" || $0 == "," }
+        return tokens.count > 2 && tokens[2].lowercased() == "off"
+    }
+
+    /// 一条 `Filter N: ON <TYPE> Fc <f> Hz Gain <g> dB Q <q>`。
+    ///
+    /// 只按关键字定位数值（`Fc` / `Gain` / `Q`），不依赖字段顺序与列宽；
+    /// `ON` 的判定放在这里，`OFF` 在上层已跳过。
+    private static func parseFilterLine(_ line: String) -> AudioDSPFilterSpec? {
+        let tokens = line.split { $0 == " " || $0 == "\t" || $0 == "," }
+        guard tokens.count >= 5 else { return nil }
+
+        guard let fcIndex = tokens.firstIndex(where: { $0.lowercased() == "fc" }),
+              fcIndex > 0,
+              fcIndex + 1 < tokens.count,
+              let frequency = Double(tokens[fcIndex + 1]),
+              frequency > 0,
+              let gainIndex = tokens.firstIndex(where: { $0.lowercased() == "gain" }),
+              gainIndex + 1 < tokens.count,
+              let gainDb = Double(tokens[gainIndex + 1]),
+              gainDb.isFinite,
+              let kind = kind(forToken: tokens[fcIndex - 1].lowercased()) else {
+            return nil
+        }
+
+        var q = defaultQ
+        if let qIndex = tokens.firstIndex(where: { $0.lowercased() == "q" }),
+           qIndex + 1 < tokens.count,
+           let parsed = Double(tokens[qIndex + 1]),
+           parsed > 0 {
+            q = parsed
+        }
+
+        return AudioDSPFilterSpec(kind: kind, frequency: frequency, gainDb: gainDb, q: q)
+    }
+
+    /// AutoEq 的写法是 `PK` / `LSC` / `HSC`；rest 里也认常见的别名。
+    private static func kind(forToken token: String) -> AudioDSPFilterKind? {
+        switch token {
+        case "pk", "peak", "peq":
+            return .peaking
+        case "lsc", "ls", "lsf", "lowshelf":
+            return .lowShelf
+        case "hsc", "hs", "hsf", "highshelf":
+            return .highShelf
+        default:
+            return nil
+        }
+    }
+
+    /// 一行里的第一个数（`-6.0 dB` → `-6.0`）。
+    private static func firstNumber(in text: String) -> Double? {
+        for token in text.split(whereSeparator: { $0 == " " || $0 == "\t" }) {
+            if let value = Double(token) { return value }
+        }
+        return nil
+    }
+}
+
 // MARK: - 压缩器
 
 /// 单频段向下压缩：包络跟随 + 软拐点前的线性区 + makeup。
