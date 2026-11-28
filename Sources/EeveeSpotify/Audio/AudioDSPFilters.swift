@@ -688,6 +688,50 @@ il 时按 0.5（原来的 3 ms / 120 ms）走。
     var crossfeedLevel: Int
 }
 
+// MARK: - 图形均衡（15 段）
+
+/// 15 段图形均衡：把每一段的增益直接铺成一条 peaking 链。
+///
+/// 频点按 2/3 倍频程排（25 Hz … 16 kHz），Q ≈ 2.0 —— 相邻两段会有少量重叠，这正是
+/// 图形均衡器的样子：拖一格旁边跟着动一点，但不会像插值那样整条曲线一起走。
+enum AudioDSPGraphicEQ {
+
+    static let frequencies: [Double] = [
+        25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000,
+    ]
+
+    static let count = frequencies.count
+
+    static let q: Double = 2.0
+
+    static let minGainDb: Double = -12
+    static let maxGainDb: Double = 12
+
+    static var flat: [Double] { [Double](repeating: 0, count: count) }
+
+    /// 把一条曲线（长度不匹配或越界都按 0 / 边界处理）变成可直接接进链上的规格。
+    static func chain(gains: [Double], preampDb: Double = 0) -> AudioDSPFilterChain {
+        var specs: [AudioDSPFilterSpec] = []
+        specs.reserveCapacity(count)
+        for (index, frequency) in frequencies.enumerated() {
+            let raw = index < gains.count ? gains[index] : 0
+            let gain = raw.isFinite ? min(max(raw, minGainDb), maxGainDb) : 0
+            specs.append(AudioDSPFilterSpec(
+                kind: .peaking,
+                frequency: frequency,
+                gainDb: gain,
+                q: q
+            ))
+        }
+        return AudioDSPFilterChain(preampDb: preampDb, filters: specs)
+    }
+
+    /// 曲线是不是全 0（全 0 时接不接都一样，界面据此收起"重置"按钮）。
+    static func isFlat(_ gains: [Double]) -> Bool {
+        gains.allSatisfy { !$0.isFinite || abs($0) < 0.01 }
+    }
+}
+
 // MARK: - 左右平衡
 
 /// 左右平衡：0 = 居中，−1 = 只剩左声道，+1 = 只剩右声道。

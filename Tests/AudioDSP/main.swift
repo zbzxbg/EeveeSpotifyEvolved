@@ -551,6 +551,42 @@ require(slowCompander.attackCoefficient > defaultSpeed.attackCoefficient,
 require(slowCompander.thresholdDb == defaultSpeed.thresholdDb,
         "speed leaves the level thresholds alone")
 
+// MARK: - 图形均衡（15 段）
+
+require(AudioDSPGraphicEQ.count == 15, "the graphic equalizer has fifteen bands")
+require(AudioDSPGraphicEQ.frequencies.first == 25 && AudioDSPGraphicEQ.frequencies.last == 16000,
+        "the bands run from 25 Hz to 16 kHz")
+require(AudioDSPGraphicEQ.isFlat(AudioDSPGraphicEQ.flat), "the flat curve is recognised as flat")
+require(!AudioDSPGraphicEQ.isFlat([0, 0, 3] + Array(repeating: 0, count: 12)),
+        "a single moved band is not flat")
+
+let flatGraphicEQ = AudioDSPGraphicEQ.chain(gains: AudioDSPGraphicEQ.flat)
+require(flatGraphicEQ.filters.count == AudioDSPGraphicEQ.count,
+        "the chain carries one filter per band")
+require(flatGraphicEQ.coefficients(sampleRate: sampleRate).allSatisfy(\.isBypass),
+        "an untouched curve designs bypass coefficients")
+
+let pushedGraphicEQ = AudioDSPGraphicEQ.chain(gains: [30, -30] + Array(repeating: 0, count: 13))
+require(pushedGraphicEQ.filters[0].gainDb == AudioDSPGraphicEQ.maxGainDb,
+        "an over-range boost clamps to the top")
+require(pushedGraphicEQ.filters[1].gainDb == AudioDSPGraphicEQ.minGainDb,
+        "an over-range cut clamps to the bottom")
+
+let shortGraphicEQs = AudioDSPGraphicEQ.chain(gains: [6])
+require(shortGraphicEQs.filters.count == AudioDSPGraphicEQ.count
+            && shortGraphicEQs.filters[0].gainDb == 6
+            && shortGraphicEQs.filters[5].gainDb == 0,
+        "a short curve keeps what it has and zeroes the rest")
+
+var graphicEQStable = true
+for c in pushedGraphicEQ.coefficients(sampleRate: sampleRate) {
+    if !(c.b0.isFinite && c.b1.isFinite && c.b2.isFinite && c.a1.isFinite && c.a2.isFinite) {
+        graphicEQStable = false
+    }
+    if abs(c.a2) >= 1 { graphicEQStable = false }
+}
+require(graphicEQStable, "the graphic curve designs finite, stable coefficients")
+
 // MARK: - 结果
 
 if failures > 0 {

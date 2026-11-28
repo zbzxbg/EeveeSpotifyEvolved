@@ -16,8 +16,13 @@ enum AudioDSPAutoEq {
 
     static var hasProfile: Bool { name != nil }
 
-    /// 启动时接一次：`AudioDSP.syncWithSettings()` 会调它，重复调用没有副作用。
-    static func restoreStoredProfile() {
+    /// 启动与设置改动后接上当前该生效的那条自定义链：图形均衡优先，其次 AutoEq 档。
+    /// `AudioDSP.syncWithSettings()` 会调它，重复调用没有副作用。
+    static func applyStoredChain() {
+        if UserDefaults.dspGraphicEQEnabled {
+            AudioDSP.applyChain(AudioDSPGraphicEQ.chain(gains: UserDefaults.dspGraphicEQGains))
+            return
+        }
         guard let text = UserDefaults.dspAutoEqText else {
             AudioDSP.applyChain(nil)
             return

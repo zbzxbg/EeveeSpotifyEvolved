@@ -57,6 +57,9 @@ extension UserDefaults {
     private static let dspCompanderSpeedKey = "dspCompanderSpeed"
     private static let dspCrossfeedLevelKey = "dspCrossfeedLevel"
     /// 导入的 AutoEq 参数均衡档：文本原样存，启动时重新解析（见 `AudioDSPAutoEq`）。
+    /// 图形均衡（15 段）：开关与那条曲线。
+    private static let dspGraphicEQEnabledKey = "dspGraphicEQEnabled"
+    private static let dspGraphicEQGainsKey = "dspGraphicEQGains"
     /// 按输出设备分开存的效果设置（JSON）与它的开关。
     private static let dspDeviceProfilesEnabledKey = "dspDeviceProfilesEnabled"
     private static let dspDeviceProfilesKey = "dspDeviceProfiles"
@@ -160,6 +163,8 @@ extension UserDefaults {
         dspCompanderSpeedKey,
         dspCrossfeedLevelKey,
         dspBalanceKey,
+        dspGraphicEQEnabledKey,
+        dspGraphicEQGainsKey,
         dspDeviceProfilesEnabledKey,
         dspDeviceProfilesKey,
         dspAutoEqTextKey,
@@ -699,6 +704,34 @@ extension UserDefaults {
                 min(max(newValue, 0), AudioDSPCrossfeed.levelCount - 1),
                 forKey: dspCrossfeedLevelKey
             )
+        }
+    }
+
+    /// 图形均衡开关：打开时它的曲线优先于 AutoEq 档。
+    static var dspGraphicEQEnabled: Bool {
+        get {
+            container.object(forKey: dspGraphicEQEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: dspGraphicEQEnabledKey)
+        }
+    }
+
+    /// 15 段曲线（dB）。缺省或长度不对时按全 0 处理。
+    static var dspGraphicEQGains: [Double] {
+        get {
+            let stored = (container.array(forKey: dspGraphicEQGainsKey) as? [NSNumber])?
+                .map(\.doubleValue) ?? []
+            if stored.count == AudioDSPGraphicEQ.count {
+                return stored.map { min(max($0, AudioDSPGraphicEQ.minGainDb), AudioDSPGraphicEQ.maxGainDb) }
+            }
+            return AudioDSPGraphicEQ.flat
+        }
+        set {
+            let clamped = newValue
+                .prefix(AudioDSPGraphicEQ.count)
+                .map { min(max($0, AudioDSPGraphicEQ.minGainDb), AudioDSPGraphicEQ.maxGainDb) }
+            container.set(Array(clamped), forKey: dspGraphicEQGainsKey)
         }
     }
 

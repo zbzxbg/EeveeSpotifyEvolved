@@ -29,6 +29,8 @@ struct EeveeAudioEffectsSettingsView: View {
         "dspDeviceProfiles",
         "dspAutoEqText",
         "dspAutoEqName",
+        "dspGraphicEQEnabled",
+        "dspGraphicEQGains",
     ]
 
     /// 「自己调过」不是 `AudioDSPPreset` 的档位，但选择器要能显示它。
@@ -49,6 +51,8 @@ struct EeveeAudioEffectsSettingsView: View {
     @State private var autoEqName = UserDefaults.dspAutoEqName
     @State private var isImportingAutoEq = false
     @State private var autoEqFailed = false
+    @State private var graphicEQEnabled = UserDefaults.dspGraphicEQEnabled
+    @State private var graphicEQGains = UserDefaults.dspGraphicEQGains
 
     var body: some View {
         List {
@@ -216,6 +220,30 @@ struct EeveeAudioEffectsSettingsView: View {
                         .monospacedDigit()
                         .foregroundColor(.secondary)
                         .frame(width: 44, alignment: .trailing)
+                }
+            }
+
+            Section(
+                header: Text("audio_effects_graphic_eq".localized),
+                footer: Text("audio_effects_graphic_eq_description".localized)
+            ) {
+                Toggle("audio_effects_graphic_eq_enabled".localized, isOn: $graphicEQEnabled)
+                    .onChange(of: graphicEQEnabled) { value in
+                        UserDefaults.dspGraphicEQEnabled = value
+                        AudioDSPAutoEq.applyStoredChain()
+                    }
+
+                EeveeGraphicEQCurveView(gains: $graphicEQGains)
+                    .opacity(graphicEQEnabled ? 1 : 0.4)
+                    .onChange(of: graphicEQGains) { value in
+                        UserDefaults.dspGraphicEQGains = value
+                        if graphicEQEnabled { AudioDSPAutoEq.applyStoredChain() }
+                    }
+
+                if !AudioDSPGraphicEQ.isFlat(graphicEQGains) {
+                    Button("audio_effects_graphic_eq_reset".localized) {
+                        graphicEQGains = AudioDSPGraphicEQ.flat
+                    }
                 }
             }
 
@@ -398,6 +426,8 @@ struct EeveeAudioEffectsSettingsView: View {
         balance = UserDefaults.dspBalance
         perDevice = UserDefaults.dspDeviceProfilesEnabled
         autoEqName = UserDefaults.dspAutoEqName
+        graphicEQEnabled = UserDefaults.dspGraphicEQEnabled
+        graphicEQGains = UserDefaults.dspGraphicEQGains
         autoEqFailed = false
     }
 }
