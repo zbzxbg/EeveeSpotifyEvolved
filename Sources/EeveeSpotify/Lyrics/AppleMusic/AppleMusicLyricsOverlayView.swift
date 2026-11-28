@@ -121,27 +121,13 @@ struct AppleMusicLyricsOverlayView: View {
         if showsPreviewHeader {
             return .preview
         }
-        // 播放器这一档：竖屏是 `.player`；横屏两栏的右栏又宽又矮，换 `.landscape`
-        // （字号与块距一起小一档，AMLL 那种多子行的歌词才塞得下，见那个常量的说明）。
-        // 只有"主词之外还有子行"的歌词才收：纯主词的歌在横屏按小字号排反而显得字太小。
-        let base: LyricsTypographyScale =
-            (lyricsUsesLandscapeDensity && Self.hasSupplementalRows(in: lines))
-            ? .landscape
-            : .player
+        // 播放器这一档：竖屏是 `.player`；横屏两栏的右栏一律换 `.landscape`
+        // （右栏更宽 ⇒ 字号可以再大一档；更矮 ⇒ 块距收紧，见那个常量的说明）。
+        let base: LyricsTypographyScale = lyricsUsesLandscapeDensity ? .landscape : .player
         return base.applyingUserScale(
             text: NgzhwmSettingsViewModel.lyricsTextScale,
             spacing: NgzhwmSettingsViewModel.lyricsLineSpacingScale
         )
-    }
-
-    /// 这一首有没有"主词之外"的子行（译文 / 罗马字 / 副唱）。
-    private static func hasSupplementalRows(in lines: [LyricLine]) -> Bool {
-        lines.contains { line in
-            if let translation = line.translation, !translation.isEmpty { return true }
-            if let romanization = line.romanization, !romanization.isEmpty { return true }
-            if let vocal = line.backgroundVocal, !vocal.text.isEmpty { return true }
-            return false
-        }
     }
 
     /// **译文要不要画** —— 尊重"歌词页面"里的那套选择。

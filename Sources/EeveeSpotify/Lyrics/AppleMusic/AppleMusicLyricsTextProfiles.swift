@@ -140,21 +140,26 @@ struct LyricsTypographyScale {
         supplementalSpacing: 3
     )
 
-    /// 横屏两栏的右栏：**又宽又矮**（896×414 上是 ≈497×366）。
+    /// 横屏两栏的右栏：**又宽又矮**（896×414 上是 ≈440×372，扣掉两侧 20pt 内边距后可用宽 ≈400）。
     ///
-    /// 同一句在横屏里更宽（不太折行），但一屏能容纳的块数由**高度**决定：
-    /// AMLL 那种「对唱 + 歌手名 + 副唱 + 译文 + 罗马字」一行能长出三四条子行，
-    /// 按 `.player` 的 22 / 17 排，一屏只剩两块多一点 —— 现在的行还没唱完就滑走了。
+    /// 这一档要的是"一屏四块左右"，所以字号按**宽度**给大、块距按**高度**收紧：
+    /// 正文 24、补充 18、块距 28.8（`lineSpacing 18`，页面按 `lineSpacing + max(lineSpacing×0.6, 4)` 用）、
+    /// 折行 6。按 24 + 译文算，一块约 79pt ⇒ 372 − 上下各 12 的容器里约 4.4 块。
     ///
-    /// 所以横屏单独一档：正文 18、补充 13、块距 13。块距来自 `AppleMusicLyricsPage`
-    /// 的 `typography.lineSpacing + max(lineSpacing*0.6, 4)`，一起跟着缩，不会只缩字不缩间距。
+    /// 为什么不再大：宽度是硬约束。量过的长句 "Twenty racks a table cut from ebony" 在 26pt 时
+    /// 455.6pt ⇒ 24pt 约 420pt，比可用宽 400 略宽、会折一次；再往上一档折得更多。
+    /// 中文 / 日文 12–14 字的行在 24pt 下是 288–336pt，还有余量。
+    ///
+    /// 旧的 18pt 那版是为了塞下 AMLL「对唱 + 歌手名 + 副唱 + 译文 + 罗马字」的多子行 ——
+    /// 代价是横屏正文比竖屏还小、反而不好读，已弃用；多子行的那几块现在只保证"当前这段在屏上"。
+    ///
     /// 用户那两档倍率照旧乘在上面（`applyingUserScale`），放大字号的人不会被这一档锁死。
     static let landscape = Self(
-        primaryFontSize: 18,
-        supplementalFontSize: 13,
-        lineSpacing: 13,
-        wrappedLineSpacing: 4,
-        supplementalSpacing: 3
+        primaryFontSize: 24,
+        supplementalFontSize: 18,
+        lineSpacing: 18,
+        wrappedLineSpacing: 6,
+        supplementalSpacing: 5
     )
 
     /// 按系数派生一档，用于副唱（背景人声）这种"同一行里更小的一层"。

@@ -1117,7 +1117,8 @@ enum NowPlayingIOS27 {
         // 必须排在 `placeBottomStack` 之前：底排的偏移量在横屏下要收回去（见
         // `bottomStackOffset(in:)`），晚一步就会先按 -55pt 摆一次再改回来。
         syncLandscapeMode(in: page)
-        // 横屏右栏又宽又矮 ⇒ 歌词换紧凑档（见 `LyricsTypographyScale.landscape`）。
+        // 横屏右栏又宽又矮 ⇒ 歌词换横屏档：字号按宽度给大、块距按高度收紧
+        // （见 `LyricsTypographyScale.landscape`）。
         // 每拍写一次：宿主 `update` 在布局参数没变时会提前 return，靠这个全局值让
         // SwiftUI 的 body 下一次求值就换档（旋转后不用等换歌）。
         lyricsUsesLandscapeDensity = isLandscapeTwoColumn(page)
