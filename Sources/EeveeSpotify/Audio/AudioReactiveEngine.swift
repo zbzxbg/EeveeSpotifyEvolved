@@ -37,6 +37,7 @@ final class AudioReactiveEngine: NSObject {
     private var envelope: Double = 0
     private var pulseRunning = false
     private var hapticsRunning = false
+    private var tickRateHz = 30
     private var didLogStart = false
     private var didLogAudio = false
     private var didLogSilence = false
@@ -80,6 +81,8 @@ final class AudioReactiveEngine: NSObject {
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 20, maximum: 60, preferred: 30)
         link.add(to: .main, forMode: .common)
         displayLink = link
+        tickRateHz = 30
+        updateTickRate()
         if !didLogStart {
             didLogStart = true
             writeDebugLog(
@@ -106,6 +109,21 @@ final class AudioReactiveEngine: NSObject {
         )
     }
 
+    /// 触感开着时把这一拍提到 60Hz。
+    ///
+    /// onset 已经带了时间戳，但消费得越晚、打出去也越晚：30Hz 那档最多晚 33ms。
+    /// 只看封面律动时留在 30Hz 省电。
+    private func updateTickRate() {
+        let wanted = UserDefaults.musicHapticsEnabled ? 60 : 30
+        guard wanted != tickRateHz, let link = displayLink else { return }
+        tickRateHz = wanted
+        link.preferredFrameRateRange = CAFrameRateRange(
+            minimum: 20,
+            maximum: 60,
+            preferred: Float(wanted)
+        )
+    }
+
     private func stop() {
         displayLink?.invalidate()
         displayLink = nil
@@ -128,6 +146,7 @@ final class AudioReactiveEngine: NSObject {
         let now = CACurrentMediaTime()
         let delta = max(0.001, min(0.1, now - lastTickAt))
         lastTickAt = now
+        updateTickRate()
 
         let snapshot = AudioFeatures.snapshot()
         // 暂停 / 切歌的那一瞬间音频回调会停：没有新数据就把包络放到 0，而不是停在最后一拍。

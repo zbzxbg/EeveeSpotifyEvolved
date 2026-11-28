@@ -2,15 +2,16 @@ import AVFoundation
 import Foundation
 import QuartzCore
 
-/// 「音乐触感」：把 kick / snare 的瞬态计数变成 Taptic 反馈。
+/// 「音乐触感」：把 `AudioFeatures` 的 onset 事件变成 Taptic 反馈。
 ///
-/// 三条闸门（都在主线程 30Hz 的那一拍里算，不碰音频线程）：
+/// 三条闸门（都在主线程 30 / 60Hz 的那一拍里算，不碰音频线程）：
 /// · **最小间隔 90ms**：再密的鼓点也不会变成连续震动；
 /// · **连续 30 秒后自动降档**（间隔放到 200ms、强度打折）—— Taptic Engine 长时间高频会钝、
 ///   会发热，降档比"一直满强度"更接近人手能接受的程度；
 /// · **静音 / 暂停不触发**：靠 `isFresh`（没有新的音频回调就什么都不做）。
 ///
-/// 强度是用户选的 1…3 档；这里只管"打不打、打多重"。
+/// 触发判据不在这里：`AudioFeatures` 已经按 128 帧的滑窗给出"哪一路、多强、落在块内哪里"
+/// 的 onset；这里只负责按顺序消费、按频带选触感、按间隔丢重复。
 enum MusicHaptics {
 
     private static let logTag = AudioFeatures.logTag
@@ -24,17 +25,15 @@ enum MusicHaptics {
     /// 超过这个时长没有触发，视为一段新的"连击"，强度从满档重新开始。
     private static let idleReset = 5.0
 
-    private static var lastKickCount: UInt64 = 0
-    private static var lastSnareCount: UInt64 = 0
-    /// 计数是"从进程启动累计"的：ticker 刚起来的那一拍要先对齐基准，
-    /// 否则第一个 `kickCount > 0` 会被当成"这一拍有新的鼓点"、凭空震一下。
+    /// 已经消费到的 onset 序号；`primed` 之前只对齐、不补打。
+    private static var lastSeenSerial: UInt64 = 0
     private static var primed = false
     private static var lastTriggerAt: CFTimeInterval = 0
     private static var windowStartedAt: CFTimeInterval = 0
     private static var windowTriggers = 0
-    /// 被 90ms 地板挡掉的命中数（从上次真的打出去算起）—— 诊断用。
+    /// 被 90ms 地板挡掉的 onset 数（从上次真的打出去算起）—— 诊断用。
     private static var suppressedSinceLastTap = 0
-    /// 逐次诊断日志的预算：一次长歌最多这么多行，别把日志刷爆。
+    /// 逐次诊断日志的预算：一首长歌最多这么多行，别把日志刷爆。
     private static let tapLogBudget = 900
     private static var loggedTaps = 0
     private static var didLogBudget = false
@@ -59,8 +58,7 @@ enum MusicHaptics {
     }
 
     static func reset() {
-        lastKickCount = 0
-        lastSnareCount = 0
+        lastSeenSerial = 0
         primed = false
         lastTriggerAt = 0
         windowStartedAt = 0
@@ -70,57 +68,85 @@ enum MusicHaptics {
         didLogBudget = false
     }
 
-    /// 一拍：有新的 kick / snare 就按闸门决定要不要打一下。
+    /// 一拍：消费这一拍新到的 onset，按闸门决定打几下。
     ///
     /// - Parameter isFresh: 这一拍有没有读到新的音频回调（false = 音频停了，不做任何事）。
     static func consume(_ snapshot: AudioFeatures.Snapshot, isFresh: Bool, now: CFTimeInterval) {
-        // 第一条只对齐基准（见 `primed`）；计数"变小"（理论上只在重启后出现）同样只对齐。
-        if !primed || snapshot.kickCount < lastKickCount || snapshot.snareCount < lastSnareCount {
-            lastKickCount = snapshot.kickCount
-            lastSnareCount = snapshot.snareCount
+        guard isFresh else {
+            if windowTriggers > 0, now - lastTriggerAt > idleReset {
+                windowTriggers = 0
+            }
+            return
+        }
+        // 第一条只对齐基准（重启 / 刚打开开关时不要补打上一轮的旧事件）。
+        if !primed || snapshot.onsetSerial < lastSeenSerial {
+            lastSeenSerial = snapshot.onsetSerial
             primed = true
             return
         }
-        let newKicks = snapshot.kickCount > lastKickCount
-        let newSnares = snapshot.snareCount > lastSnareCount
-        // 差值不是布尔：一 tick 里可能塌缩掉好几次命中，诊断要看得见这个数。
-        let kickDelta = snapshot.kickCount - lastKickCount
-        let snareDelta = snapshot.snareCount - lastSnareCount
-        lastKickCount = snapshot.kickCount
-        lastSnareCount = snapshot.snareCount
-
-        guard isFresh, newKicks || newSnares else {
+        guard snapshot.onsetSerial > lastSeenSerial else {
             if windowTriggers > 0, now - lastTriggerAt > idleReset {
                 windowTriggers = 0
             }
             return
         }
 
-        if windowTriggers == 0 { windowStartedAt = now }
-        let degraded = now - windowStartedAt > degradeAfter
-        let gap = degraded ? degradedGap : minimumGap
-        guard now - lastTriggerAt >= gap else {
-            suppressedSinceLastTap += 1
+        let seen = lastSeenSerial
+        let pending = [
+            snapshot.onsets.0,
+            snapshot.onsets.1,
+            snapshot.onsets.2,
+            snapshot.onsets.3,
+        ]
+        .filter { $0.serial > seen }
+        .sorted { $0.serial < $1.serial }
+        lastSeenSerial = snapshot.onsetSerial
+
+        guard !pending.isEmpty else {
+            if windowTriggers > 0, now - lastTriggerAt > idleReset {
+                windowTriggers = 0
+            }
             return
         }
 
-        let level = intensity * (degraded ? 0.7 : 1)
-        if newKicks {
+        for onset in pending {
+            if windowTriggers == 0 { windowStartedAt = now }
+            let degraded = now - windowStartedAt > degradeAfter
+            let gap = degraded ? degradedGap : minimumGap
+            guard now - lastTriggerAt >= gap else {
+                suppressedSinceLastTap += 1
+                continue
+            }
+            fire(onset, degraded: degraded, snapshot: snapshot, now: now)
+        }
+    }
+
+    /// 打一下：频带决定触感（low = 底鼓、high = 更脆的军鼓），强度由 onset 的
+    /// 绝对响度折算。
+    private static func fire(
+        _ onset: AudioFeatures.Onset,
+        degraded: Bool,
+        snapshot: AudioFeatures.Snapshot,
+        now: CFTimeInterval
+    ) {
+        let hit = min(max(onset.strength, 0), 1)
+        let degradeScale: CGFloat = degraded ? 0.7 : 1
+        let level = intensity * (0.45 + 0.55 * CGFloat(hit)) * degradeScale
+        switch onset.band {
+        case 0:
             HapticFeedback.musicKick(intensity: level)
-        } else {
-            // snare 比 kick 更短更脆：同一档强度再压一点，否则听起来像两个底鼓。
-            HapticFeedback.musicSnare(intensity: level * 0.8)
+        default:
+            // high 更短更脆：同一档强度再压一点，否则听起来像两个底鼓。
+            HapticFeedback.musicSnare(intensity: level * 0.85)
         }
         let previousTriggerAt = lastTriggerAt
         lastTriggerAt = now
         windowTriggers += 1
         logTap(
-            kind: newKicks ? "kick" : "snare",
+            onset,
             snapshot: snapshot,
             now: now,
             gap: previousTriggerAt > 0 ? now - previousTriggerAt : nil,
-            newKicks: kickDelta,
-            newSnares: snareDelta,
             degraded: degraded
         )
         suppressedSinceLastTap = 0
@@ -129,17 +155,15 @@ enum MusicHaptics {
     /// 每真打一次写一行。
     ///
     /// 这一行同时回答三件事：
-    /// · `age` —— 这一块 PCM 的 host time 到现在（主线程这一拍）过了多久。**这就是
-    ///   "分析 → 打出去"那一段的全部延迟**，正数意味着块已经开始播、我们晚了；
-    /// · `new=k+s` —— 这一拍里新增了几次 kick / snare（>1 说明被塌缩成一下）；
-    /// · `skip` —— 从上次真打到现在，被 90ms 地板挡掉了多少次。
+    /// · `age` —— 这个 onset 在音频里出现到现在（主线程这一拍）过了多久。**这就是
+    ///   "分析 → 打出去"那一段的全部延迟**，正数意味着它已经开始播、我们晚了；
+    /// · `str` / `skip` —— 这一下有多强、之前被 90ms 地板挡掉几次；
+    /// · `band` —— low / high，用来判断是哪一路在误触（例如踩镲混进了 high）。
     private static func logTap(
-        kind: String,
+        _ onset: AudioFeatures.Onset,
         snapshot: AudioFeatures.Snapshot,
         now: CFTimeInterval,
         gap: CFTimeInterval?,
-        newKicks: UInt64,
-        newSnares: UInt64,
         degraded: Bool
     ) {
         guard loggedTaps < tapLogBudget else {
@@ -153,22 +177,30 @@ enum MusicHaptics {
         loggedTaps += 1
 
         let age: String
-        if snapshot.blockHostTime != 0 {
+        if onset.hostTime != 0 {
             // `mHostTime` 是 mach 绝对时钟，和 `CACurrentMediaTime()` 同一个时基。
             // `AVAudioTime.seconds(forHostTime:)` 是公开 API；CoreAudio 那两个
             // `Audio…HostTime` 函数在 iOS 上会被当成私有符号。
-            let blockSeconds = AVAudioTime.seconds(forHostTime: snapshot.blockHostTime)
-            age = String(format: "%+.3f", now - blockSeconds)
+            let seconds = AVAudioTime.seconds(forHostTime: onset.hostTime)
+                + Double(onset.offsetSeconds)
+            age = String(format: "%+.3f", now - seconds)
         } else {
             age = "?"
         }
         let gapText = gap.map { String(format: "%.3f", $0) } ?? "first"
         writeDebugLog(
-            "[\(logTag)] tap \(kind) s=\(strength)" + (degraded ? " degraded" : "")
-                + " gap=\(gapText) age=\(age) blk=\(snapshot.blockFrames)"
-                + " new=\(newKicks)+\(newSnares) skip=\(suppressedSinceLastTap)"
+            "[\(logTag)] tap \(bandName(onset.band)) s=\(strength)"
+                + (degraded ? " degraded" : "")
+                + " gap=\(gapText) age=\(age)"
+                + " str=\(String(format: "%.2f", onset.strength))"
+                + " blk=\(snapshot.blockFrames)"
+                + " skip=\(suppressedSinceLastTap)"
                 + " low=\(String(format: "%.3f", snapshot.low))"
                 + " high=\(String(format: "%.3f", snapshot.high))"
         )
+    }
+
+    private static func bandName(_ band: UInt8) -> String {
+        band == 0 ? "low" : "high"
     }
 }
