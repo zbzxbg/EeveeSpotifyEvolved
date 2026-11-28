@@ -78,18 +78,17 @@ enum LayoutGeometry {
 
     // MARK: - 横屏两栏（听歌页）
     //
-    // 横屏听歌页按两栏排：左栏 = 封面 + 歌名/艺人 + 进度 + 传输，右栏 = 整页歌词。
+    // 横屏听歌页按两栏排：左栏 = 封面 + 歌名/艺人 + 进度；右栏 = 歌词（整页高）。
+    // 传输行与歌词来源在页面底部同一行（见 `NowPlayingIOS27.placeLandscapeTransport`）。
     // 这里只算框；把 Spotify 自己那几行收进左栏是 `NowPlayingIOS27` 的事。
     //
     // 所有尺寸都由页面尺寸推出来（不是 414×896 的写死坐标）：iPhone 各代的横屏
     // 是 667…932 宽、375…430 高，iPad 分屏也会走到同一段。
 
-    /// 左栏占可用宽度的比例（pw 的横屏播放页 ≈ 0.40）。
+    /// 左栏宽度的上下限。宽度**跟着封面走**（见 `landscapeColumns`）：进度条与封面同宽。
     ///
-    /// 0.34 是让左栏窄一点、右栏宽一点；同时保证那一坨（歌名 / 进度 / 传输）横着放得下 ——
-    /// 它自己那一行是原生视图，宽度不够就会被挤扁。
-    static let landscapeColumnRatio: CGFloat = 0.34
-    static let landscapeColumnMinWidth: CGFloat = 260
+    /// `landscapeColumnMinWidth` 是"歌名 / 进度还站得住"的下限，不是封面尺寸的下限。
+    static let landscapeColumnMinWidth: CGFloat = 160
     static let landscapeColumnMaxWidth: CGFloat = 380
     /// 封面边长：不超过栏宽，也不超过「可用高 − 那一坨 − 空隙」（再封一个上限）。
     ///
@@ -137,22 +136,20 @@ enum LayoutGeometry {
         let height = max(0, size.height)
         let usableWidth = max(0, width - leftInset - rightInset)
         let usableHeight = max(0, height - topInset - bottomInset)
+        let maxColumnWidth = min(landscapeColumnMaxWidth, usableWidth)
 
-        let columnWidth = min(
-            max(usableWidth * landscapeColumnRatio, landscapeColumnMinWidth),
-            min(landscapeColumnMaxWidth, usableWidth)
-        )
+        var coverSide = stackHeight > 0
+            ? min(maxColumnWidth, usableHeight - stackHeight - landscapeCoverStackGap)
+            : min(maxColumnWidth, usableHeight * landscapeCoverHeightRatio)
+        coverSide = max(landscapeMinCoverSide, min(coverSide, landscapeCoverMaxSide))
+        // 栏宽**跟着封面走**：进度条与封面同宽，左栏不会比封面宽出一大截。
+        let columnWidth = min(max(coverSide, landscapeColumnMinWidth), maxColumnWidth)
         let column = CGRect(
             x: leftInset,
             y: topInset,
             width: columnWidth,
             height: usableHeight
         )
-
-        var coverSide = stackHeight > 0
-            ? min(columnWidth, usableHeight - stackHeight - landscapeCoverStackGap)
-            : min(columnWidth, usableHeight * landscapeCoverHeightRatio)
-        coverSide = max(landscapeMinCoverSide, min(coverSide, landscapeCoverMaxSide))
         let cover = CGRect(x: leftInset, y: topInset, width: coverSide, height: coverSide)
 
         let lyricsX = leftInset + columnWidth + landscapeColumnGap
