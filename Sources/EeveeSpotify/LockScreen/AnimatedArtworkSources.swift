@@ -11,6 +11,16 @@ struct AnimatedArtworkAsset {
     let source: Source
     let videoURL: URL
     let isHLS: Bool
+    /// Apple 为这一档动效算好的背景色（`previewFrame.bgColor`，`#RRGGBB`）。Canvas 没有。
+    ///
+    /// 保留成**字符串**：这个文件只 import Foundation（锁屏测试也编它），颜色在播放页那边
+    /// 才转成 `UIColor`。
+    var bgColourHex: String? = nil
+    /// `previewFrame` 的静帧地址（如果 Apple 给了）。
+    ///
+    /// 用途是**核对封面**：Apple 的配色是按它那张封面算的，而 Spotify 播的那张可能不一样
+    /// （版本 / 地区 / 合辑）。播放页用 `ArtworkFingerprint` 比过才采用这个颜色。
+    var previewImageURL: URL? = nil
 }
 
 /// Apple Music 一次专辑查询能同时给出方版与竖版，所以两条都带回来 —— 两个 now-playing 键
@@ -508,9 +518,32 @@ enum AppleMusicArtworkSource {
             return AnimatedArtworkAsset(
                 source: .appleMusic,
                 videoURL: videoURL,
-                isHLS: isHLS(videoURL)
+                isHLS: isHLS(videoURL),
+                bgColourHex: previewColourHex(in: variant),
+                previewImageURL: previewImageURL(in: variant)
             )
         }
+        return nil
+    }
+
+    /// 这一档动效的**背景色**（`previewFrame.bgColor`）。
+    ///
+    /// `previewFrame` 的形状没有文档：可能是一张图（字符串地址），也可能是一个带
+    /// `url` + `bgColor` / `textColor1…4` 的字典。两种都试一遍，读不到就当没有 ——
+    /// 拿不到颜色只是退回我们自己的取色，不能让整条链失败。
+    private static func previewColourHex(in variant: [String: Any]) -> String? {
+        guard let frame = variant["previewFrame"] as? [String: Any] else { return nil }
+        let raw = (frame["bgColor"] as? String) ?? (frame["backgroundColour"] as? String)
+        guard let raw, !raw.isEmpty else { return nil }
+        return raw
+    }
+
+    /// `previewFrame` 里那张静帧的地址（同上，两种形状都试）。
+    private static func previewImageURL(in variant: [String: Any]) -> URL? {
+        if let frame = variant["previewFrame"] as? [String: Any] {
+            if let text = frame["url"] as? String, let url = URL(string: text) { return url }
+        }
+        if let text = variant["previewFrame"] as? String, let url = URL(string: text) { return url }
         return nil
     }
 

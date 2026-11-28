@@ -95,6 +95,13 @@ enum NowPlayingMotionArtwork {
     private static var readyFile: URL?
     private static var failedKeys: Set<String> = []
     private static var resolveTask: Task<Void, Never>?
+    /// Apple 为这一档动效算好的背景色（`previewFrame.bgColor`），以及那张静帧。
+    ///
+    /// 静帧不是拿来显示的 —— 它只用来**核对封面**（`ArtworkFingerprint`）：Apple 的配色是按
+    /// 它那张封面算的，而 Spotify 播的那张可能是另一个版本。
+    private static var appleColourHex = ""
+    private static var applePreviewImage: UIImage?
+    private static var appleDistanceLogged = false
 
     private static var playerView: MotionArtworkPlayerView?
     private static var player: AVPlayer?
@@ -249,6 +256,10 @@ enum NowPlayingMotionArtwork {
 
     private static func startResolve(track: Track, key: String) {
         resolveTask?.cancel()
+        // 换歌：上一首的 Apple 配色与静帧立刻作废 —— 它们只对上一张封面成立。
+        appleColourHex = ""
+        applePreviewImage = nil
+        appleDistanceLogged = false
         resolveTask = Task.detached(priority: .utility) {
             let deadline = Date().addingTimeInterval(resolveDeadline)
             do {
@@ -263,6 +274,23 @@ enum NowPlayingMotionArtwork {
                 )
                 guard let asset = assets.square ?? assets.tall else {
                     throw Failure(reason: "no Apple Music editorial video")
+                }
+                // 顺手把 Apple 的**配色 + 静帧**取回来（静帧只用于核对封面，不显示）。
+                // 失败不影响动态封面：拿不到就退回我们自己的取色。
+                if let previewURL = asset.previewImageURL, let hex = asset.bgColourHex {
+                    let preview = try? await previewImage(url: previewURL)
+                    await MainActor.run {
+                        guard servingKey == key else { return }
+                        appleColourHex = hex
+                        applePreviewImage = preview
+                        writeDebugLog(
+                            "[\(logTag)] apple colour \(hex)"
+                                + (preview == nil
+                                    ? " (no preview frame - the cover cannot be checked)"
+                                    : " + preview frame")
+                        )
+                        NowPlayingIOS27.reapply()
+                    }
                 }
                 let local = try await download(asset: asset, key: key, deadline: deadline)
                 let size = byteSize(local)
@@ -329,6 +357,50 @@ enum NowPlayingMotionArtwork {
               let size = attributes[.size] as? NSNumber else { return 0 }
         return size.intValue
     }
+
+    /// 下载 `previewFrame` 那张静帧（只用于核对封面，尺寸很小）。
+    private static func previewImage(url: URL) async throws -> UIImage {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let image = UIImage(data: data) else {
+            throw Failure(reason: "the preview frame is not an image")
+        }
+        return image
+    }
+
+    /// 播放页取色用：**封面核对通过**才返回 Apple 的配色。
+    ///
+    /// 拿不到 / 没核对通过都返回 nil（调用方退回我们自己的主色）。「差几位」只在换歌后
+    /// 记一行，别让每拍都刷屏。
+    static func appleFieldColour(spotifyImage: UIImage) -> UIColor? {
+        guard !appleColourHex.isEmpty, let preview = applePreviewImage else { return nil }
+        guard let ours = ArtworkFingerprint.hash(of: spotifyImage),
+              let theirs = ArtworkFingerprint.hash(of: preview) else { return nil }
+        let difference = ArtworkFingerprint.distance(ours, theirs)
+        if !appleDistanceLogged {
+            appleDistanceLogged = true
+            // 嵌套的字面量不许直接塞进插值里（本仓库第 6 条自检按"闭合引号后面跟什么"扫）：
+            // 先算成变量。
+            let verdict: String
+            if difference <= ArtworkFingerprint.matchThreshold {
+                verdict = "same cover"
+            } else {
+                verdict = "different cover"
+            }
+            writeDebugLog(
+                "[\(logTag)] cover check — hamming \(difference)"
+                    + " (threshold \(ArtworkFingerprint.matchThreshold), \(verdict))"
+            )
+        }
+        guard difference <= ArtworkFingerprint.matchThreshold else { return nil }
+        return UIColor(hexString: appleColourHex)
+    }
+
+    /// 这一拍 Apple 配色是哪一档（变了就让播放页重算底色）。
+    static func appleFieldColourKey() -> String {
+        appleColourHex
+    }
 }
 
 /// 只干一件事：把自己整个变成一层 `AVPlayerLayer`（圆角 / 裁剪 / 下沿用**父视图**那一套）。
@@ -337,4 +409,5 @@ final class MotionArtworkPlayerView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
 
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+
 }

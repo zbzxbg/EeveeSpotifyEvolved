@@ -82,6 +82,11 @@ enum NowPlayingIOS27 {
     /// 换歌时封面与背景（field）的交叉淡入时长。**两边必须一样** —— 一个硬切一个渐显时，
     /// 那一下会被读成"页面跳了"。
     static let fieldCrossFadeDuration: TimeInterval = 0.35
+    /// Spotify 那版底色**至少要有这么多饱和度**才采用。
+    ///
+    /// 它经常是一块被压过的浅灰（那是给他们自己那条渐变稿定的）；照单全收会把我们刚换掉的
+    /// "平均色发灰"问题请回来。低于这条线就落到我们自己算的主色。
+    static let spotifyColourSaturationFloor: CGFloat = 0.12
     /// 模糊底"白到白字读不清"的那条线：封面的平均亮度超过它，就在模糊底上再压一层黑。
     ///
     /// 模糊底是**整张封面**铺满整页，字段色只在它下面 —— 白封面时中间那块（曲名、
@@ -199,6 +204,8 @@ enum NowPlayingIOS27 {
     static var lastTrackId = ""
     /// 上一次给 field 上色的曲目（`lastTrackId` 在 `updateArtwork` 里先写了，这里要单独一笔）。
     static var lastFieldTrackId = ""
+    /// 上一次取色时 Apple 那档配色是哪一条（`""` = 没有）。它动了就要重算底色。
+    static var lastFieldAppleKey = ""
     /// 上一次给 field 上色用的**那张图** —— 真正的判据（见 `updateField` 顶部那段：
     /// 按曲目 id 判会在换歌时把上一首的颜色锁死一整首）。
     static var lastFieldImage: UIImage?
@@ -2065,21 +2072,33 @@ enum NowPlayingIOS27 {
                 ?? lastArtworkImage
         else { return false }
 
-        if lastFieldImage === image, fieldSolid != nil { return false }
+        // Apple 的配色是**后到**的（它要先解析目录、再下静帧）：一到就得重算一次，
+        // 否则这一首会用着兜底色。
+        let appleKey = NowPlayingMotionArtwork.appleFieldColourKey()
+        if lastFieldImage === image, lastFieldAppleKey == appleKey, fieldSolid != nil { return false }
 
         let colour = fieldColour(from: image)
         lastFieldImage = image
+        lastFieldAppleKey = appleKey
         lastFieldTrackId = NowPlayingLyricsPlate.currentTrackId() ?? ""
         // 一次换歌一行：我们的主色 vs Spotify 自己算的那一版（`backgroundViewModel.color`）。
         // 两边差得远时说明取色路径该换（Spotify 那版跟着它的渐变稿，通常更"高档"）。
+        let appleNote: String
+        if appleKey.isEmpty {
+            appleNote = "no apple colour"
+        } else {
+            appleNote = "apple #\(appleKey)"
+        }
         if let spotify = backgroundViewModel?.color() {
             writeDebugLog(
-                "[\(logTag)] field colour #\(colourHex(colour)) (dominant,"
-                    + " linear luminance ≤ \(String(format: "%.2f", fieldLuminanceCeiling)))"
-                    + " — spotify's #\(colourHex(spotify))"
+                "[\(logTag)] field colour #\(colourHex(colour))"
+                    + " (linear luminance ≤ \(String(format: "%.2f", fieldLuminanceCeiling)))"
+                    + " — \(appleNote), spotify's #\(colourHex(spotify))"
             )
         } else {
-            writeDebugLog("[\(logTag)] field colour #\(colourHex(colour)) (dominant; no spotify colour)")
+            writeDebugLog(
+                "[\(logTag)] field colour #\(colourHex(colour)) — \(appleNote), no spotify colour"
+            )
         }
         // 模糊底是整张封面铺满整页 ⇒ 白封面时白字（曲名 / 歌词 / 控件）读不清，补一层黑。
         let readability = readabilityScrimAlpha(for: image)
@@ -2195,7 +2214,7 @@ enum NowPlayingIOS27 {
         return UIImage(cgImage: cg)
     }
 
-    /// 从封面取"字段色"：**主色（鲜艳色）→ 线性空间压暗**。
+    /// 从封面取"字段色"：**三档优先级 → 线性空间压暗**。
     ///
     /// 为什么不是整图平均色：平均色是算术均值，低饱和的封面（雪景、白墙、灰天空）算出来
     /// 接近中性灰，再怎么乘饱和度也补不回一个"平均里本来就没有"的色相 ⇒ 整页灰蒙蒙。
@@ -2204,8 +2223,31 @@ enum NowPlayingIOS27 {
     ///
     /// 压暗在线性空间里做（先解 gamma）：直接在 sRGB 数值上乘会偏亮，看起来还是发灰。
     private static func fieldColour(from image: UIImage) -> UIColor {
+        // ① Apple 的 `bgColor` —— **封面核对通过**才用（`ArtworkFingerprint`）。
+        //    它是按 Apple 那张封面算的，而 Spotify 播的可能是另一个版本 / 地区 / 合辑；
+        //    封面不同时用它的配色就是主动上错色。
+        if let apple = NowPlayingMotionArtwork.appleFieldColour(spotifyImage: image) {
+            return linearFieldColour(apple)
+        }
+        // ② Spotify 给播放页背景算的那版：只有它**本身还有色彩**时才用（见门槛常量）。
+        if let spotify = backgroundViewModel?.color(),
+           saturation(of: spotify) >= spotifyColourSaturationFloor {
+            return linearFieldColour(spotify)
+        }
+        // ③ 兜底：我们自己从**这一张**封面算的主色 —— 永远和屏幕上的图同源。
         guard let dominant = dominantColour(of: image) else { return .black }
         return linearFieldColour(dominant)
+    }
+
+    /// 一个颜色自己的饱和度（0…1）。
+    private static func saturation(of colour: UIColor) -> CGFloat {
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 1
+        guard colour.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        else { return 0 }
+        return saturation
     }
 
     /// 主色：缩到 32×32 读像素，按 3 位分箱打分（覆盖率 × 饱和度，再乘一点亮度权重）。
