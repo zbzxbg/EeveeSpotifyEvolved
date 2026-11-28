@@ -166,9 +166,10 @@ extension NowPlayingIOS27 {
 
     // MARK: - 每拍入口
     //
-    // 把工具行排成 AM 的三颗。找不到工具行就返回 false。
+    // 把工具行排成三颗（竖屏：页面底部那一排；横屏：右边缘竖着的一列）。
     //
-    // ⚠️ **先量到中线再藏**：量不到位置时若已经把原生字形藏掉，底排就空了。
+    // ⚠️ 竖屏要**先量到中线再藏**：量不到位置时若已经把原生字形藏掉，底排就空了。
+    // 横屏不靠那条中线 —— 位置由右上角那颗 ⋯ 定，那一格整格折起来。
     @discardableResult
     static func placeFooter(in page: UIView) -> Bool {
         // Connect 长按的槽位每拍重记：这一拍找不到工具行 / 量不到中线就清空 ——
@@ -194,9 +195,23 @@ extension NowPlayingIOS27 {
         let share = footerControl(NowPlayingLyricsPlate.shareButtonIdentifier, in: page)
         let queue = footerControl(queueButtonIdentifier, in: page)
         guard connect != nil || share != nil || queue != nil else { return false }
-        guard let rowMidY = footerRowMidY(connect: connect, share: share, queue: queue, in: page) else {
-            return false
+
+        // 横屏：三颗字形改到右列竖着排（见 `landscapeFooterFrames`），左栏那一格（工具行）
+        // 就折起来 —— 它占着左栏四十几 pt，而封面吃的正是「可用高 − 那一坨」。
+        // 折起来之后三颗原生键量不到位置，`footerControl` 退到记下来的那一份；
+        // 动作一律走 `sendActions`，与位置无关。
+        //
+        // 认那一格要拿**还在栈里**的键去认：Connect 那颗可能已经被 `moveConnectHolder`
+        // 搬到页面上了（它往上找不到底排），所以分享 / 队列优先。
+        let landscape = NowPlayingIOS27.landscapeLayout(in: page) != nil
+        if landscape {
+            collapseFooterRow(share ?? queue ?? connect)
+        } else {
+            restoreFooterRow()
         }
+
+        // 竖屏那条中线只有竖屏用得上；横屏的位置由右上角那颗 ⋯ 决定。
+        let rowMidY = footerRowMidY(connect: connect, share: share, queue: queue, in: page)
 
         var changed = false
         // （跨设备连接 这个按钮会抽搐）：
@@ -221,14 +236,145 @@ extension NowPlayingIOS27 {
         // 既不碰音量行（813 起）、也不碰队列的**字形墨迹**（836 起）——
         // 就是 AM / MeloX 那种"小图标压在队列右上"的样子。
         // 只挪**我们自己画的**三颗与替身，原生那三颗一个字都不动（它们本来就被藏了字形）。
-        // 横屏两栏：这一行就在左栏里，跟着那一坨走 —— 再往下 64 就出屏了。
-        let glyphMidY = NowPlayingIOS27.landscapeLayout(in: page) != nil
-            ? rowMidY
-            : rowMidY + footerRowYOffset
-        if mountFooterGlyphs(in: page, midY: glyphMidY, connect: connect, share: share, queue: queue) {
+        let frames: [CGRect]
+        let inertTopY: CGFloat?
+        if landscape {
+            frames = landscapeFooterFrames(in: page)
+            // 竖着的一列贴在右边缘、下面紧挨着歌词 —— 那条"接住、不做事的空带"在横屏会把
+            // 歌词的滚动一起吃掉，所以不挂。
+            inertTopY = nil
+        } else {
+            guard let rowMidY else { return changed }
+            let midY = rowMidY + footerRowYOffset
+            frames = LayoutGeometry.footerFrames(
+                containerWidth: page.bounds.width,
+                originX: 0,
+                midY: midY,
+                box: footerGlyphBox
+            )
+            // 三颗字形下面那条空带（**原生命令行下沿** → 屏幕底）的起点。
+            let rowBottom = footerRowBottom(connect: connect, share: share, queue: queue, in: page)
+            inertTopY = max((rowBottom ?? (midY - footerGlyphBox / 2)) + 2, 0)
+        }
+        if mountFooterGlyphs(
+            in: page,
+            frames: frames,
+            inertTopY: inertTopY,
+            connect: connect,
+            share: share,
+            queue: queue
+        ) {
             changed = true
         }
         return changed
+    }
+
+    // MARK: - 横屏的右列 / 把工具行折起来
+    //
+    // 横屏左栏只有一块高度预算：封面 + 那一坨（歌名 / 进度 / 传输）。工具行那一格
+    // （底排里装着三颗原生键的子视图）在三颗字形搬到右列之后就没有内容了，折起来
+    // （`isHidden`）＝ 把这段高度还给封面。
+    //
+    // 折起来之后原生键的 `frame` 会被栈压成 0 高、量不到位置，但**动作还在**：
+    // 我们的字形一律走 `sendActions`（与位置无关，见 `tapAction`），只有 Connect 那颗
+    // 需要真触摸，而它早就被 `moveConnectHolder` 搬到页面上了。
+
+    /// 横屏右列那三颗（页面坐标）：和右上角那颗 ⋯ **同一条竖线**，从它下沿 +24 起，
+    /// 中心间距 56（44pt 命中区 + 12pt 间隙，三块互不重叠）。
+    ///
+    /// 认不到 ⋯（导航条还没建出来）就按安全区右沿推一个位置，别把三颗摆到屏外。
+    private static func landscapeFooterFrames(in page: UIView) -> [CGRect] {
+        let box = footerGlyphBox
+        let step = footerTapSide + 12
+        var centreX = page.bounds.width - page.safeAreaInsets.right - 32
+        var firstCentreY = page.safeAreaInsets.top + 96
+        if let menu = visibleView(
+            identifier: contextMenuIdentifier,
+            in: page,
+            requireAlpha: false,
+            horizontalMargin: 0
+        ) {
+            let rect = menu.convert(menu.bounds, to: page)
+            if rect.width > 1, rect.height > 1 {
+                centreX = rect.midX
+                firstCentreY = rect.maxY + 24 + footerTapSide / 2
+            }
+        }
+        centreX = min(max(centreX, box / 2 + 4), page.bounds.width - box / 2 - 4)
+        // 第三颗的下沿不许越过安全区（横屏很矮的机型上会顶到底）。
+        let lastCentreLimit = page.bounds.height - page.safeAreaInsets.bottom - footerTapSide / 2 - 4
+        firstCentreY = min(firstCentreY, lastCentreLimit - step * 2)
+        return (0..<3).map { index in
+            CGRect(
+                x: (centreX - box / 2).rounded(),
+                y: (firstCentreY + step * CGFloat(index) - box / 2).rounded(),
+                width: box,
+                height: box
+            )
+        }
+    }
+
+    /// 折起来的那一格（底排里装着三颗原生键的子视图）。
+    private static weak var collapsedFooterRow: UIView?
+
+    /// 认下来过的三颗原生键（**弱引用**）。工具行折起来之后位置量不到，靠它取动作。
+    static let rememberedFooterButtons = NSHashTable<UIView>.weakObjects()
+
+    private static var didLogFooterRowFolded = false
+
+    /// 从任意一颗原生键往上找到"底排的直接子视图"—— 也就是工具行那一格。
+    ///
+    /// 只认 `UIStackView`：三颗键在真机树里是**同一个横向栈**的子视图（那一格自己有 44pt 高）。
+    /// 认不出这一层就返回 nil —— 折错了（比如把某颗键自己折起来）会把剩下两颗挤成一排。
+    private static func footerRowContainer(around button: UIView) -> UIView? {
+        var node = button
+        var hops = 0
+        while hops < 8 {
+            if let parent = node.superview,
+               node is UIStackView,
+               parent.accessibilityIdentifier == NowPlayingLyricsPlate.bottomStackIdentifier {
+                return node
+            }
+            guard let next = node.superview else { return nil }
+            node = next
+            hops += 1
+        }
+        return nil
+    }
+
+    /// 横屏：把工具行那一格折起来（已经折着就只补一次 `isHidden`）。
+    private static func collapseFooterRow(_ sample: UIView?) {
+        if let row = collapsedFooterRow, row.window != nil {
+            if !row.isHidden { row.isHidden = true }
+            return
+        }
+        guard let sample, let row = footerRowContainer(around: sample) else { return }
+        // 认下来的那一格已经换过（换页 / 换歌）：先把上一格的显隐还回去。
+        if let previous = collapsedFooterRow, previous !== row, previous.isHidden {
+            previous.isHidden = false
+        }
+        row.isHidden = true
+        collapsedFooterRow = row
+        // 底排的高度是被内容撑出来的 ⇒ 折掉一格之后要让它重排，封面才下一条 tick 就长。
+        // 只标脏、不当场 `layoutIfNeeded()`：这一拍正跑在 Spotify 自己的布局回合里。
+        row.superview?.setNeedsLayout()
+        if !didLogFooterRowFolded {
+            didLogFooterRowFolded = true
+            writeDebugLog(
+                "[\(logTag)] landscape — the tool row folded away"
+                    + " (\(Int(row.bounds.height))pt of column height back to the cover)"
+            )
+        }
+    }
+
+    /// 转回竖屏 / 收尾：把工具行那一格显回来。
+    static func restoreFooterRow() {
+        guard let row = collapsedFooterRow else { return }
+        if row.isHidden {
+            row.isHidden = false
+            row.superview?.setNeedsLayout()
+        }
+        collapsedFooterRow = nil
     }
 
     /// 已经被我们搬出栈的那颗 Connect 键（只要它还在**这一页**上）。
@@ -262,11 +408,19 @@ extension NowPlayingIOS27 {
                    requireAlpha: false,
                    horizontalMargin: 0
                ) {
+                rememberedFooterButtons.add(view)
                 return view
             }
             queue.append(contentsOf: view.subviews)
         }
-        return nil
+        // 横屏把工具行那一格折起来了（`collapseFooterRow`）⇒ 三颗键的 `frame` 被栈压成
+        // 0 高，上面的"在页上"判据认不出它们。位置没用、动作还有（`sendActions` 与位置无关），
+        // 所以退到认下来的那一份。
+        return rememberedFooterButtons.allObjects.first {
+            $0.accessibilityIdentifier == identifier
+                && $0.window != nil
+                && $0.isDescendant(of: page)
+        }
     }
 
     /// 底排的中线 y（页面坐标）：三颗里能量到的取中位数，量不到就用底排的公共上沿推。
@@ -307,7 +461,8 @@ extension NowPlayingIOS27 {
     @discardableResult
     private static func mountFooterGlyphs(
         in page: UIView,
-        midY: CGFloat,
+        frames glyphFrames: [CGRect],
+        inertTopY: CGFloat?,
         connect: UIView?,
         share: UIView?,
         queue: UIView?
@@ -332,30 +487,6 @@ extension NowPlayingIOS27 {
             footerGlyphs.removeAllObjects()
         }
 
-        let box = footerGlyphBox
-        // 横屏两栏：三颗只占左栏，**以栏中线为轴左右对称** —— 这样它们和传输行
-        // （栈里居中）落在同一条竖轴上；竖屏照旧铺满页面宽。
-        let landscape = NowPlayingIOS27.landscapeLayout(in: page)
-        let glyphFrames: [CGRect]
-        if let landscape {
-            // `scale(forWidth:)` 自带 0.8…1.25 的夹取，与竖屏那三颗的间距同一条口径。
-            let spacing = (LayoutGeometry.footerReferenceCentres[1]
-                - LayoutGeometry.footerReferenceCentres[0])
-                * LayoutGeometry.scale(forWidth: landscape.column.width)
-            glyphFrames = LayoutGeometry.centredFooterFrames(
-                centreX: landscape.column.midX,
-                midY: midY,
-                box: box,
-                spacing: spacing
-            )
-        } else {
-            glyphFrames = LayoutGeometry.footerFrames(
-                containerWidth: page.bounds.width,
-                originX: 0,
-                midY: midY,
-                box: box
-            )
-        }
         var changed = false
         var frames: [CGRect] = []
         let symbols = ["quote.bubble", "airplayaudio", "list.bullet"]
@@ -556,9 +687,7 @@ extension NowPlayingIOS27 {
         // 一段空白（底排与工具行之间），以及三颗字形**之间**的横向空隙 —— 这两处以前都
         // 漏到下面的 Spotify 视图上，触发它自己的点击行为（整页被顶起来 / 内容上抬）。
         // 三块 44pt 可点区在 `hitTest` 里先判，所以这一段重叠不会吃掉三颗键的动作。
-        let rowBottom = footerRowBottom(connect: connect, share: share, queue: queue, in: page)
-        let fallbackTop = (midY - box / 2).rounded()
-        relay.inertTopY = max((rowBottom ?? fallbackTop) + 2, 0)
+        relay.inertTopY = inertTopY
         // （点右下角那颗，还是 Spotify 原生弹窗）：循环那颗是**另一块替身**，
         // 它的框和这里的"队列"可点区（44pt，必须盖住藏在下面的原生分享键）必然重叠。
         // 谁先收到触摸取决于 subviews 顺序（这一层每拍 bringToFront 一次）⇒ 同一处时而开队列、
@@ -581,8 +710,9 @@ extension NowPlayingIOS27 {
                 "[\(logTag)] footer — connect \(name(connect)), share \(name(share)),"
                     + " queue \(name(queue)); three glyphs at"
                     + " \(Int(frames[0].midX))/\(Int(frames[1].midX))/\(Int(frames[2].midX))"
-                    + " (y \(Int(midY))); the band below y \(Int(relay.inertTopY ?? 0)) is inert;"
-                    + " lyrics entry"
+                    + " (y \(Int(frames[1].midY)))"
+                    + (relay.inertTopY.map { "; the band below y \(Int($0)) is inert" } ?? "")
+                    + "; lyrics entry"
                     + (canOpenOwnLyricsPage
                         ? " = our lyrics page (reusing AppleMusicLyricsPage)"
                         : (footerLyricsAvailable
@@ -832,6 +962,7 @@ extension NowPlayingIOS27 {
 
     static func teardownFooter() {
         restoreMovedConnectHolder()
+        restoreFooterRow()
         revealHiddenGlyphs()
         for glyph in footerGlyphs.allObjects {
             glyph.removeFromSuperview()
@@ -857,5 +988,8 @@ extension NowPlayingIOS27 {
         movedConnectBase = nil
         didLogConnectMoved = false
         didLogConnectRecovered = false
+        collapsedFooterRow = nil
+        didLogFooterRowFolded = false
+        rememberedFooterButtons.removeAllObjects()
     }
 }

@@ -56,28 +56,6 @@ enum LayoutGeometry {
         }
     }
 
-    /// 横屏左栏里那三颗：**以栏中线为轴左右对称**。
-    ///
-    /// 不能用 `footerFrames`：它的参考中心是 86/207/328（414pt 宽的竖屏页面），
-    /// 缩放被夹到 0.8 之后整组会**偏右** —— 栏宽 262 时中点在 165.6，而栏中线是 131，
-    /// 于是工具行比它上面的传输行（栈里居中）偏出 35pt，左栏看起来是歪的。
-    /// `spacing` 传"参考间距 × 缩放"（121 × 0.8 ≈ 97）。
-    static func centredFooterFrames(
-        centreX: CGFloat,
-        midY: CGFloat,
-        box: CGFloat,
-        spacing: CGFloat
-    ) -> [CGRect] {
-        [-spacing, 0, spacing].map { offset in
-            CGRect(
-                x: (centreX + offset - box / 2).rounded(),
-                y: (midY - box / 2).rounded(),
-                width: box,
-                height: box
-            )
-        }
-    }
-
     /// 迷你条玻璃板的宽度：不超过宿主，也不小于 160。
     ///
     /// `usableRatio` 是"标签栏胶囊宽 ÷ 栏宽"；拿不到时调用方传兜底比例。
@@ -108,14 +86,15 @@ enum LayoutGeometry {
 
     /// 左栏占可用宽度的比例（pw 的横屏播放页 ≈ 0.40）。
     ///
-    /// 0.38 → **0.34**：左线改成贴安全区之后可用宽度变大（896 的页面从 716 变成 772），
-    /// 0.38 会得到 293pt 的栏宽 —— 而封面只能有 113pt，那一坨（进度 / 传输）居中之后
-    /// 和封面差出将近 100pt。收窄一点，两者近一些。
+    /// 0.34 是让左栏窄一点、右栏宽一点；同时保证那一坨（歌名 / 进度 / 传输）横着放得下 ——
+    /// 它自己那一行是原生视图，宽度不够就会被挤扁。
     static let landscapeColumnRatio: CGFloat = 0.34
     static let landscapeColumnMinWidth: CGFloat = 260
     static let landscapeColumnMaxWidth: CGFloat = 380
-    /// 封面边长：不超过栏宽的这个比例，也不超过可用高度的这个比例（再封一个上限）。
-    static let landscapeCoverWidthRatio: CGFloat = 0.62
+    /// 封面边长：不超过栏宽，也不超过「可用高 − 那一坨 − 空隙」（再封一个上限）。
+    ///
+    /// 有 `stackHeight` 时**由高度预算决定**。以前还按栏宽的 0.62 另外封一刀，
+    /// 那一刀在 414 高的页面上把封面压到一百出头，而同一栏的进度条有 260 多 —— 两者差出一倍。
     static let landscapeCoverHeightRatio: CGFloat = 0.45
     static let landscapeCoverMaxSide: CGFloat = 200
     /// 两栏之间的空隙。
@@ -137,12 +116,10 @@ enum LayoutGeometry {
 
     /// 两栏几何。
     ///
-    /// `stackHeight` = 左栏里**封面下面那一坨**（歌名 / 进度 / 传输 / 工具行）的高度。
-    /// 414pt 高的横屏页面里那一坨有 245pt，可用高度只有 372 ⇒ 封面最多 372 − 245 − 14 = 113pt。
+    /// `stackHeight` = 左栏里**封面下面那一坨**（歌名 / 进度 / 传输）的高度。
+    /// 封面吃的是「可用高 − 那一坨 − 空隙」，所以把工具行从那一坨里撤出去，封面就长一截。
     ///
-    /// 以前这里按栏宽的 0.62 硬算（272 × 0.62 = 167），整坨放不下就被 `placeLandscapeStack`
-    /// 顶回去 —— 歌名压在封面下沿上、传输行贴着屏幕底。
-    /// 现在封面按"放得下"算：先量那一坨，再给它留够高度。
+    /// 量不到 `stackHeight` 时（第一拍）退回按可用高的比例估一个，别把封面卡成一颗邮票。
     ///
     /// `lyricsMaxWidth` > 0 时给右栏封一个宽度上限：横屏页面很宽（896…932），
     /// 歌词一行铺到 480pt 会顶到右上角那颗 ⋯（它就在导航条最右边，点不到也是因为它
@@ -172,14 +149,10 @@ enum LayoutGeometry {
             height: usableHeight
         )
 
-        var coverSide = min(
-            columnWidth * landscapeCoverWidthRatio,
-            min(usableHeight * landscapeCoverHeightRatio, landscapeCoverMaxSide)
-        )
-        if stackHeight > 0 {
-            coverSide = min(coverSide, usableHeight - stackHeight - landscapeCoverStackGap)
-        }
-        coverSide = max(landscapeMinCoverSide, min(coverSide, columnWidth))
+        var coverSide = stackHeight > 0
+            ? min(columnWidth, usableHeight - stackHeight - landscapeCoverStackGap)
+            : min(columnWidth, usableHeight * landscapeCoverHeightRatio)
+        coverSide = max(landscapeMinCoverSide, min(coverSide, landscapeCoverMaxSide))
         let cover = CGRect(x: leftInset, y: topInset, width: coverSide, height: coverSide)
 
         let lyricsX = leftInset + columnWidth + landscapeColumnGap

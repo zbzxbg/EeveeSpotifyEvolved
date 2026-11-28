@@ -178,6 +178,45 @@ for size in landscapeSizes {
             "\(size.name): cover eats the control rows")
 }
 
+// ── 工具行折起来之后（横屏把那一格 `isHidden`）：封面吃满高度预算，栏宽不动
+//
+// 那一格是歌名 / 进度 / 传输下面那 44pt。折掉它，封面该长一截，而进度条所在的那一栏
+// （栏宽）不该跟着变 —— 变的是封面，不是控件。
+for size in landscapeSizes {
+    let leftInset: CGFloat = 64
+    let topInset: CGFloat = 16
+    let bottomInset: CGFloat = 27
+    let rightInset: CGFloat = 60
+    let foldedStackHeight: CGFloat = 188
+    let full = LayoutGeometry.landscapeColumns(
+        size: CGSize(width: size.width, height: size.height),
+        leftInset: leftInset, topInset: topInset,
+        bottomInset: bottomInset, rightInset: rightInset,
+        stackHeight: 245, lyricsMaxWidth: 440
+    )
+    let folded = LayoutGeometry.landscapeColumns(
+        size: CGSize(width: size.width, height: size.height),
+        leftInset: leftInset, topInset: topInset,
+        bottomInset: bottomInset, rightInset: rightInset,
+        stackHeight: foldedStackHeight, lyricsMaxWidth: 440
+    )
+    require(folded.cover.width > full.cover.width,
+            "\(size.name): folding the tool row did not grow the cover")
+    require(near(folded.column.width, full.column.width),
+            "\(size.name): the column moved when the row folded")
+    let budget = size.height - topInset - bottomInset - foldedStackHeight - LayoutGeometry.landscapeCoverStackGap
+    let expected = min(max(budget, LayoutGeometry.landscapeMinCoverSide),
+                       LayoutGeometry.landscapeCoverMaxSide)
+    require(near(folded.cover.width, expected),
+            "\(size.name): the cover does not take the height budget")
+    let foldedStackBottom = folded.cover.maxY + LayoutGeometry.landscapeCoverStackGap + foldedStackHeight
+    let columnBottom = topInset + folded.column.height
+    require(foldedStackBottom <= columnBottom + tolerance,
+            "\(size.name): the folded stack does not fit under the cover")
+    require(folded.column.width >= LayoutGeometry.landscapeColumnMinWidth - tolerance,
+            "\(size.name): the column gave up its width to the cover")
+}
+
 print("OK: \(sizes.count) screen sizes, footer / mini bar / tab bar geometry")
 print("OK: \(landscapeSizes.count) landscape sizes, two-column geometry")
 

@@ -576,13 +576,9 @@ enum NowPlayingIOS27 {
     // 「横屏听歌页」（设置 → 听歌页 → 横屏歌词）落地的那一半：方向遮罩由
     // `NowPlayingLandscape.x.swift` 放宽，这里只负责**转过来之后怎么排**。
     //
-    // 只做两件事，别的都交给既有的歌词模式：
-    // 1. 横着就进"页内歌词"（封面缩成缩略图、歌词铺满），转回竖屏时**只收自己开的那次**；
-    // 2. 底排的 -55pt 抬升在横屏下收回去（414pt 高的屏上再抬 55 就把底排顶进歌词里）。
-    //
-    // 为什么不上"封面在左、歌词在右"的两栏：那要重排 Spotify 自己的标题行 / 进度 /
-    // 传输行（它们是原生视图，横向位置是 `placeFooter` 按 414 宽写死的 86/207/328），
-    // 这一版先不碰 —— 横屏拿到的是"整页歌词"，与 pw 设置里那句 "full-screen lyrics" 一致。
+    // 转过来之后：横着就进"页内歌词"（封面缩成方块、歌词铺满），转回竖屏时**只收自己开
+    // 的那一次**；底排的 -55pt 抬升在横屏下收回去（414pt 高的屏上再抬 55 就把底排顶进歌词里）。
+    // 再往后是横屏两栏（见下面「横屏两栏的落地」）。
 
     static func isLandscapePage(_ page: UIView) -> Bool {
         page.bounds.width > page.bounds.height + 1
@@ -635,17 +631,20 @@ enum NowPlayingIOS27 {
     //
     // 横屏这一页按两栏排（pw 的横屏播放页那种）：
     //
-    //   ┌──────────── 左栏 ────────────┐ ┌──────────── 右栏 ────────────┐
-    //   │ 封面（方块）                  │ │ 歌词铺满                      │
-    //   │ 歌名 / 艺人                   │ │                              │
-    //   │ ── 进度条 ──                  │ │                              │
-    //   │ 随机 上一首 播放 下一首        │ │                              │
-    //   └──────────────────────────────┘ └──────────────────────────────┘
+    //   ┌──────── 左栏 ─────────┐ ┌──── 右栏 ────┐ ┌ 右边缘 ┐
+    //   │ 封面（方块，吃高度预算）│ │ 歌词铺满      │ │   ⋯    │
+    //   │ 歌名 / 艺人             │ │              │ │  歌词  │
+    //   │ ── 进度条 ──            │ │              │ │  雷达  │
+    //   │ 随机 上一首 播放 下一首  │ │              │ │  队列  │
+    //   └────────────────────────┘ └──────────────┘ └────────┘
     //
-    // **不新建控件**：Spotify 那几件（标题 / 进度 / 传输 / 工具行）全在
+    // **不新建控件**：Spotify 那几件（标题 / 进度 / 传输）全在
     // `npv.bottomStackView` 里 —— 把那一坨收窄到左栏宽、整块挪到封面下面；
     // 它是 `UIStackView`，宽度一变 arranged view 自己就重排，进度条与传输行跟着缩进左栏。
     // 封面与歌词再由我们的两层按两栏几何摆。
+    //
+    // 右边缘那一列是我们自己画的三颗（`NowPlayingIOS27+Footer`）：Spotify 那一格（工具行）
+    // 在横屏被折起来，那段高度还给封面；三颗原生键还在，动作走 `sendActions`。
     //
     // ⚠️ 宽度写 `bounds.size.width` + `center`，**不加约束**：Spotify 的布局回合会重算约束
     // 体系，而这一层每 0.3s 一拍（`DeclutterChrome` 的节拍）会把值写回去。离开横屏 / 收尾
@@ -673,7 +672,7 @@ enum NowPlayingIOS27 {
     private static var landscapeStackHeight: CGFloat = 0
     /// 右栏（歌词）的宽度上限：横屏页面很宽，一行铺满会把右上角的 ⋯ 圈进歌词的命中范围。
     static let landscapeLyricsMaxWidth: CGFloat = 440
-    private static var didLogLandscapeLayout = false
+    private static var loggedLandscapeCover: CGFloat = 0
 
     private static weak var landscapeNarrowedStack: UIView?
     private static var landscapeStackOriginalWidth: CGFloat?
@@ -845,24 +844,27 @@ enum NowPlayingIOS27 {
             stack.layoutIfNeeded()
             NowPlayingPageOverlay.reapply()
         }
-        logLandscapeLayoutOnce(layout, stack: stack, in: page)
+        logLandscapeLayoutIfNeeded(layout, stack: stack, in: page)
         return changed
     }
 
-    private static func logLandscapeLayoutOnce(
+    /// 只在封面尺寸**真的变了**时报：转一次屏、折一次工具行各一行，够用又不刷屏。
+    private static func logLandscapeLayoutIfNeeded(
         _ layout: LandscapeLayout,
         stack: UIView,
         in page: UIView
     ) {
-        guard !didLogLandscapeLayout else { return }
-        didLogLandscapeLayout = true
+        guard abs(layout.cover.width - loggedLandscapeCover) > 0.5 else { return }
+        loggedLandscapeCover = layout.cover.width
         let rect = NowPlayingLyricsPlate.untransformed(stack, in: page)
         let placed = stack.convert(stack.bounds, to: page)
         writeDebugLog(
             "[\(logTag)] landscape two columns — page \(Int(page.bounds.width))×\(Int(page.bounds.height))"
                 + ", column \(Int(layout.column.minX)),\(Int(layout.column.minY))"
                 + " \(Int(layout.column.width))×\(Int(layout.column.height))"
-                + ", cover \(Int(layout.cover.width)) at y \(Int(layout.cover.maxY))"
+                + ", cover \(Int(layout.cover.width))pt square r="
+                + String(format: "%.1f", LayoutGeometry.artworkCornerRadius(side: layout.cover.width))
+                + " continuous at y \(Int(layout.cover.maxY))"
                 + ", lyrics \(Int(layout.lyrics.minX))…\(Int(layout.lyrics.maxX))"
                 + "; stack \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
                 + " → \(Int(layout.column.width + layout.stackInset * 2)) wide"
@@ -2794,7 +2796,7 @@ enum NowPlayingIOS27 {
         restoreLandscapeStackIfNeeded()
         restoreLandscapeFloatingChrome()
         clearLandscapeLayout()
-        didLogLandscapeLayout = false
+        loggedLandscapeCover = 0
         didLogLandscapeTitle = false
         // 动效封面：连素材与解析结果一起收（这一页的账本本来就是"清干净"，见文件头）。
         NowPlayingMotionArtwork.detach()
