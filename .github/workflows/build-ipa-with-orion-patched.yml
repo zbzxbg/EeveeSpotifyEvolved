@@ -83,6 +83,10 @@ on:
 env:
   THEOS: ${{ github.workspace }}/theos
   SWIFTPROTOBUF_VERSION: "1.29.0"
+  # brew 的自动更新/清理/提示在 runner 上纯属浪费（每次几十秒）。
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_ENV_HINTS: "1"
 
 jobs:
   build:
@@ -227,7 +231,19 @@ jobs:
           echo "Orion.framework ready: $FW"
 
       # ── 2. 从源码构建 deb ────────────────────────────────────────────────
+      # ── EeveeSwiftProtobuf.framework：整条流水线里第二贵的一步 ─────────────
+      # 脚本每次都 clone apple/swift-protobuf 的钉死版本，然后 arm64 + arm64e 各编
+      # 一遍 `-O`。它的输入只有「版本 + 架构 + 部署版本」，与仓库代码无关 ⇒ 缓存住。
+      # 换版本时 key 自动失效（`SWIFTPROTOBUF_VERSION` 在 key 里）。
+      - name: Cache EeveeSwiftProtobuf.framework
+        id: protobuf
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.THEOS }}/lib/iphone
+          key: eeveeswiftprotobuf-${{ env.SWIFTPROTOBUF_VERSION }}-${{ runner.arch }}-v1
+
       - name: Build EeveeSwiftProtobuf.framework
+        if: steps.protobuf.outputs.cache-hit != 'true'
         run: |
           chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
           Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
@@ -253,13 +269,47 @@ jobs:
           chmod +x Tools/build-zxpi.sh
           Tools/build-zxpi.sh
 
+      # ── 原版 IPA：固定直链 ⇒ 缓存住，一次下载多轮复用 ──────────────────────
+      # 每次迭代变的是我们编出来的 dylib，这份几百 MB 的 IPA 一个字节都不变。
+      # key 取 URL 的短哈希 ⇒ 换链接（升 Spotify 版本）自动失效，不会误用旧包。
+      - name: Compute the vanilla IPA cache key
+        id: ipa-key
+        env:
+          IPA_URL: ${{ inputs.ipa_url }}
+        run: echo "hash=$(printf '%s' "$IPA_URL" | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      # 用 restore/save 一对而不是 `actions/cache`：**下载完就立刻存**，
+      # 这样后面注入/断言那几步就算红了，这一轮几百 MB 也没白下。
+      - name: Restore the vanilla IPA
+        id: ipa-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/spotify.ipa
+          key: spotify-ipa-${{ steps.ipa-key.outputs.hash }}-v1
+
       - name: Download & validate vanilla IPA
         run: |
-          wget "${{ inputs.ipa_url }}" --no-verbose -O ${{ github.workspace }}/spotify.ipa
-          file_type=$(file --mime-type -b ${{ github.workspace }}/spotify.ipa)
+          set -euo pipefail
+          IPA="${{ github.workspace }}/spotify.ipa"
+          # 命中缓存也可能拿到上一轮中断留下的半截文件 ⇒ 尺寸不过关就重下（自愈）。
+          if [ -s "$IPA" ] && [ "$(stat -f%z "$IPA")" -gt 50000000 ]; then
+            echo "cached: $(ls -lh "$IPA" | awk '{print $5}') — skipping the download"
+          else
+            rm -f "$IPA"
+            wget "${{ inputs.ipa_url }}" --no-verbose -O "$IPA"
+          fi
+          file_type=$(file --mime-type -b "$IPA")
           if [[ "$file_type" != "application/x-ios-app" && "$file_type" != "application/zip" ]]; then
             echo "::error::Not a valid IPA: $file_type"; exit 1
           fi
+
+      - name: Save the vanilla IPA
+        if: steps.ipa-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/spotify.ipa
+          key: spotify-ipa-${{ steps.ipa-key.outputs.hash }}-v1
 
       # ── 3. cyan 注入（Orion 显式参与）────────────────────────────────────
       - name: Inject deb + Orion.framework into IPA (cyan)

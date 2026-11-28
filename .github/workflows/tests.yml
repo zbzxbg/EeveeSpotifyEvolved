@@ -17,6 +17,11 @@ on:
   workflow_dispatch:
   push:
 
+# 连着推几次时只留最后一次：这条工作流每个 push 都跑，排队跑完前面几轮纯属浪费。
+concurrency:
+  group: logic-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   logic:
     runs-on: macos-latest
@@ -44,21 +49,12 @@ jobs:
       # ⚠️ **逐个文件**跑，不是一次传 370 个：一个文件的错不会掩盖别的，输出里也直接写明是哪个文件。
       # ⚠️ 末尾 `total > 200` 是**防空跑**：`find` 要是因为路径写错返回空集，
       #    这个脚本会"全过"（`fails` 恒为 0）—— 那种绿比红还坏。
+      #
+      # 循环搬进了 `Scripts/syntax_gate.sh`：语义一字未改，只是改成**按批并行**
+      # （批大小 = CPU 数）。串行 spawn 500 次 `swiftc` 是这条工作流里最大的一段固定开销
+      # （每次进程启动 + 解析 ≈ 0.3–1s）；脚本本身可以本机跑，四种结局都验过。
       - name: Syntax gate — swiftc -parse over every Swift source
-        run: |
-          fails=0
-          total=0
-          while IFS= read -r -d '' f; do
-            total=$((total+1))
-            if ! swiftc -parse -suppress-warnings "$f" > /tmp/one.out 2>&1; then
-              fails=$((fails+1))
-              echo "---- PARSE FAIL: $f"
-              head -6 /tmp/one.out
-            fi
-          done < <(find Sources Tests -name '*.swift' -print0)
-          echo "parsed $total file(s), failures: $fails"
-          test "$total" -gt 200
-          test "$fails" -eq 0
+        run: bash Scripts/syntax_gate.sh Sources Tests
 
       # ── 守卫：六条"必然编译错"的纯文本检查 ──────────────────────
       #
