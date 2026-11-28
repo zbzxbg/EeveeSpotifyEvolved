@@ -688,11 +688,13 @@ final class LandscapePageTapHandler: NSObject {
 
     @objc func handleTap(_ gesture: UITapGestureRecognizer) {
         guard gesture.state == .ended else { return }
+        // `NowPlayingIOS27` 是 `@MainActor` 的，这一层不是。手势回调本来就只在主线程来，
+        // 但静态检查需要把"就在主线程"显式表达出来（同一套写法见 `onMainThreadSync`）。
         switch kind {
         case .album:
-            NowPlayingIOS27.openCurrentAlbum()
+            onMainThreadSync { NowPlayingIOS27.openCurrentAlbum() }
         case .artist:
-            NowPlayingIOS27.openCurrentArtist()
+            onMainThreadSync { NowPlayingIOS27.openCurrentArtist() }
         }
     }
 }

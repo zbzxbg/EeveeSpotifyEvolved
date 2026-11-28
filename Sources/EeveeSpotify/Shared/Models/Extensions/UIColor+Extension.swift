@@ -19,4 +19,32 @@ extension UIColor {
 
     func lighter(by amount: CGFloat = 0.2) -> Self { mix(with: .white, amount: amount) }
     func darker(by amount: CGFloat = 0.2) -> Self { mix(with: .black, amount: amount) }
+
+    /// 解析 `#RRGGBB` / `RRGGBB` / `AARRGGBB` / `FFRRGGBB`。
+    ///
+    /// 与仓库里 `Color(hex:)` 的口径一致（8 位时前两位是 alpha）。
+    /// 放在这里而不是各文件私有：播放页的底色、动效封面的 Apple 配色都要把
+    /// Spotify / Apple 给的十六进制字符串还原成 `UIColor`。
+    convenience init?(hexString: String?) {
+        guard var hex = hexString?.trimmingCharacters(in: .whitespacesAndNewlines), !hex.isEmpty else {
+            return nil
+        }
+        if hex.hasPrefix("#") { hex.removeFirst() }
+        guard hex.count == 6 || hex.count == 8,
+              let value = UInt64(hex, radix: 16) else { return nil }
+
+        let r, g, b, a: CGFloat
+        if hex.count == 8 {
+            a = CGFloat((value >> 24) & 0xFF) / 255
+            r = CGFloat((value >> 16) & 0xFF) / 255
+            g = CGFloat((value >> 8) & 0xFF) / 255
+            b = CGFloat(value & 0xFF) / 255
+        } else {
+            a = 1
+            r = CGFloat((value >> 16) & 0xFF) / 255
+            g = CGFloat((value >> 8) & 0xFF) / 255
+            b = CGFloat(value & 0xFF) / 255
+        }
+        self.init(red: r, green: g, blue: b, alpha: a)
+    }
 }

@@ -546,31 +546,6 @@ enum NowPlayingBackdrop {
 // MARK: - 颜色工具（本文件私有，避免污染全局）
 
 private extension UIColor {
-    /// 解析 `#RRGGBB` / `RRGGBB` / `AARRGGBB` / `FFRRGGBB`。
-    /// 与仓库里 `Color(hex:)` 的口径一致（8 位时前两位是 alpha）。
-    convenience init?(hexString: String?) {
-        guard var hex = hexString?.trimmingCharacters(in: .whitespacesAndNewlines), !hex.isEmpty else {
-            return nil
-        }
-        if hex.hasPrefix("#") { hex.removeFirst() }
-        guard hex.count == 6 || hex.count == 8,
-              let value = UInt64(hex, radix: 16) else { return nil }
-
-        let r, g, b, a: CGFloat
-        if hex.count == 8 {
-            a = CGFloat((value >> 24) & 0xFF) / 255
-            r = CGFloat((value >> 16) & 0xFF) / 255
-            g = CGFloat((value >> 8) & 0xFF) / 255
-            b = CGFloat(value & 0xFF) / 255
-        } else {
-            a = 1
-            r = CGFloat((value >> 16) & 0xFF) / 255
-            g = CGFloat((value >> 8) & 0xFF) / 255
-            b = CGFloat(value & 0xFF) / 255
-        }
-        self.init(red: r, green: g, blue: b, alpha: a)
-    }
-
     /// 降低明度（保持色相）：用作渐变的"暗角"那一端。
     func darkened(by amount: CGFloat) -> UIColor {
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
