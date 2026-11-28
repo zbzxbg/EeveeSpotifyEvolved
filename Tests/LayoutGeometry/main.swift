@@ -135,7 +135,7 @@ for size in landscapeSizes {
     let topInset: CGFloat = 16
     let bottomInset: CGFloat = 18
     let rightInset: CGFloat = 28
-    // 真机（414×896 → 横屏 896×414）量到的 `npv.bottomStackView` 高度：歌名 56 + 进度 41
+    // 414×896 的页面转成横屏后 `npv.bottomStackView` 的高度：歌名 56 + 进度 41
     // + 传输 64 + 工具行 44，再加三处间距 = 245。
     let stackHeight: CGFloat = 245
     let layout = LayoutGeometry.landscapeColumns(

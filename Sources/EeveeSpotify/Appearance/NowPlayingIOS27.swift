@@ -713,7 +713,7 @@ enum NowPlayingIOS27 {
         let inset = measureLandscapeInset(in: page, stackRect: stackRect)
         // 内容左线：**贴着安全区**（横屏时刘海 / 圆角在左右两侧），不再跟 Spotify 自己那套
         // 横屏摆位走 —— 那一坨在 96、内容线 120，比安全区（48）多出 70pt，整个左栏被推到
-        // 屏幕中间，右边那半截全是空的（"摆放位置不对"里最明显的一条）。
+        // 屏幕中间，右边那半截全是空的。
         // 左线一挪，那一坨也跟着挪同样的量 —— 封面与进度条才在同一条线上。
         let contentX = max(12, page.safeAreaInsets.left + 16)
         let columns = LayoutGeometry.landscapeColumns(
@@ -744,7 +744,7 @@ enum NowPlayingIOS27 {
     /// 右栏的右沿再让出右上角那颗 ⋯（48×48，贴着安全区右边）。
     ///
     /// 歌词容器铺满右栏、又只在底部那一条放行触摸 ⇒ 只要 ⋯ 落在右栏里，点它就等于点歌词
-    /// （"轻点三点菜单按钮无反应"）。`updateLyricsStage` 另外把 ⋯ 的框登记成放行区兜底，
+    /// `updateLyricsStage` 另外把 ⋯ 的框登记成放行区兜底，
     /// 这里先把右栏收在它左边 —— 少一次"看着在、点不到"。
     private static func lyricsRect(_ rect: CGRect, in page: UIView) -> CGRect {
         // 兜底：按"导航条最右一颗的宽度 + 间隙"让（safeRight + 56）。
@@ -1166,8 +1166,8 @@ enum NowPlayingIOS27 {
         // 触摸 ⇒ 点 ✓ 被容器吃掉。这里把收藏键的框登记成"放行区"。
         //
         // 横屏两栏里同一件事发生在**右上角那颗 ⋯** 身上：右栏从页面顶端（y=16）开始，
-        // 而 ⋯ 就在导航条最右边 —— 它整颗落在歌词容器的命中范围里，点了没反应
-        // （"轻点三点菜单按钮无反应"）。导航 chrome 的框也一起放行。
+        // 而 ⋯ 就在导航条最右边 —— 它整颗落在歌词容器的命中范围里，触摸被容器吃掉。
+        // 导航 chrome 的框也一起放行。
         if mounted,
            let container = NowPlayingLyricsPlate.lastContainer as? NowPlayingLyricsContainerView {
             var passThrough: [CGRect] = []
@@ -2891,7 +2891,7 @@ enum NowPlayingIOS27 {
                // 横屏两栏把这一坨收到左栏（内容线贴着安全区）⇒ 标题行的中线会落到页宽的
                // 20% 以内，默认那道 20%…80% 的闸门会把它整个筛掉，`placeTitleRow` 于是
                // 一次都不跑：标题停在**竖屏歌词模式**留下的位移上（y −481，跑到屏幕外），
-               // 屏幕上就只剩封面和歌词（"打开歌词再进横屏，不显示歌名/歌手"）。
+               // 屏幕上就只剩封面和歌词。
                isControlOnPage(row, in: page, horizontalMargin: 0) {
                 return row
             }

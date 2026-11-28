@@ -177,8 +177,8 @@ extension NowPlayingIOS27 {
         LyricsSongSourcePrompt.setConnectTapRect(nil)
         // ⚠️ Connect 那颗**已经被我们搬出栈**（见 `moveConnectHolder`）—— 它停在上一拍的
         // 字形位置上（竖屏 207,820）。转到横屏后页面只有 414pt 高，820 落在页外 ⇒
-        // `footerControl` 的"在页上"判据认不出它，中间那颗雷达就整颗成了死键
-        // （"轻点雷达无反应"）。这里按记忆把它补回来，再交给 `moveConnectHolder` 重新摆位。
+        // `footerControl` 的"在页上"判据认不出它，中间那颗雷达就没有人接它的触摸。
+        // 这里按记忆把它补回来，再交给 `moveConnectHolder` 重新摆位。
         var connect = footerControl(connectButtonIdentifier, in: page)
         if connect == nil, let moved = movedConnectControl(in: page) {
             connect = moved
