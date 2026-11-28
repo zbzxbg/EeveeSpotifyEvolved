@@ -36,6 +36,9 @@ extension NowPlayingIOS27 {
     static var landscapeTimeLabels: (left: UILabel, right: UILabel)?
 
     private static var didLogLandscapeRows = false
+    /// "这一格因为控制器父子关系搬不动"只报一次 —— 搬不动的那一格下一拍还会再试，
+    /// 不拦的话 0.3s 一行刷屏。
+    private static var didLogLandscapeHierarchy = false
 
     // MARK: - 每拍入口
 
@@ -120,7 +123,9 @@ extension NowPlayingIOS27 {
             didLogLandscapeRows = true
             func name(_ row: LandscapeRow?) -> String {
                 guard let view = row?.view else { return "missing" }
-                return "\(Int(view.bounds.width))×\(Int(view.bounds.height))"
+                // 类名一起打：这三格是什么类型决定"能不能搬"（见 `adoptControllers`）。
+                return "\(NSStringFromClass(type(of: view)))"
+                    + " \(Int(view.bounds.width))×\(Int(view.bounds.height))"
             }
             writeDebugLog(
                 "[\(logTag)] landscape rows — title \(name(landscapeTitleRow)),"
@@ -136,6 +141,8 @@ extension NowPlayingIOS27 {
 
     /// 转回竖屏 / 收尾：三行放回底排原来的槽位，时间标签退回原生那两颗。
     static func restoreLandscapeRows() {
+        // 下一程（再转横屏）重新记一行日志。
+        didLogLandscapeHierarchy = false
         for row in [landscapeTitleRow, landscapeProgressRow, landscapeTransportRow] {
             restoreLandscapeRow(row)
         }
@@ -175,6 +182,10 @@ extension NowPlayingIOS27 {
                    let arranged = stackView.arrangedSubviews.firstIndex(of: node) {
                     index = arranged
                 }
+                // ⚠️ 搬之前先过一遍层级体检（见 `adoptControllers`）：子树里如果有"自己是
+                // 某个控制器根视图"的视图，而那个控制器不在页面控制器下面，这一搬就是
+                // `UIViewControllerHierarchyInconsistency` ⇒ 主线程 abort。
+                guard adoptControllers(in: node, page: page) else { return nil }
                 node.removeFromSuperview()
                 node.translatesAutoresizingMaskIntoConstraints = true
                 node.transform = .identity
@@ -186,6 +197,83 @@ extension NowPlayingIOS27 {
             hops += 1
         }
         return nil
+    }
+
+    // MARK: - 搬之前的层级体检
+    //
+    // 把一棵子树从窗口上摘下来再挂回去时，UIKit 会对**整棵子树**跑一遍 appearance 转发检查
+    // （`-[UIView _associatedViewControllerForwardsAppearanceCallbacks:performHierarchyCheck:isRoot:]`，
+    // 由 `_willMoveToWindow:` 调起）：子树里只要有视图是**某个控制器的根视图**，而那个控制器的
+    // 父控制器不是挂载目标所属的控制器（这里是 `page` = `NPVScrollViewController.view` ⇒
+    // 页面控制器），就抛 `UIViewControllerHierarchyInconsistency`
+    // （"child view controller:<X> should have parent view controller:<Y> but actual parent is:<Z>"）
+    // ⇒ 主线程 abort。栈长这样：`__NSFireTimer` → `DeclutterChrome` 的复查节拍 →
+    // 这一层 → `_addSubview:positioned:relativeTo:` → 抛。
+    //
+    // 竖屏页内歌词与全屏歌词页都不搬原生视图，所以只有横屏这一层会踩到。
+    //
+    // 处理原则和这一层其它地方一致（"搬不动就什么都不做"）：
+    // · 控制器**没有父控制器**（Spotify 自己也是裸挂的宿主视图）⇒ `addChild` 到页面控制器，
+    //   层级立刻一致，照搬；
+    // · 控制器**有别的父控制器** ⇒ 不搬 —— 那是在拆 Spotify 的父子关系，
+    //   留着原生摆法，只记一行日志（照那行日志决定要不要显式认过来）。
+
+    /// 这个视图**自己**是不是某个控制器的根视图（是就返回那个控制器）。
+    ///
+    /// 判据就是 responder 链：普通视图的 `next` 是它的 superview，只有控制器根视图的
+    /// `next` 才是控制器本人 —— 正好是 UIKit 那条检查关心的那一种视图。
+    private static func owningController(of view: UIView) -> UIViewController? {
+        view.next as? UIViewController
+    }
+
+    /// `page` 所属的控制器（`NPVScrollViewController`）—— UIKit 眼里"应有父控制器"就是它。
+    private static func pageController(of page: UIView) -> UIViewController? {
+        var responder: UIResponder? = page
+        var hops = 0
+        while let current = responder, hops < 64 {
+            if let controller = current as? UIViewController { return controller }
+            responder = current.next
+            hops += 1
+        }
+        return nil
+    }
+
+    /// 把 `node` 子树里"无主的控制器"认到页面控制器下面；认不了的（有别的父控制器）返回
+    /// `false`，调用方就此放弃搬这一格。
+    ///
+    /// 走查上限 200 个节点（本仓库纪律：全页 BFS 都要有预算），够覆盖一整格了。
+    private static func adoptControllers(in node: UIView, page: UIView) -> Bool {
+        guard let host = pageController(of: page) else { return true }
+        var queue: [UIView] = [node]
+        var visited = 0
+        while !queue.isEmpty, visited < 200 {
+            let view = queue.removeFirst()
+            visited += 1
+            queue.append(contentsOf: view.subviews)
+            guard let owner = owningController(of: view), owner !== host else { continue }
+            if owner.parent === host { continue }
+            if let parent = owner.parent {
+                if !didLogLandscapeHierarchy {
+                    didLogLandscapeHierarchy = true
+                    writeDebugLog(
+                        "[\(logTag)] landscape rows — \(NSStringFromClass(type(of: node))) owns"
+                            + " \(NSStringFromClass(type(of: owner))), whose parent is"
+                            + " \(NSStringFromClass(type(of: parent))) — not detaching this row"
+                    )
+                }
+                return false
+            }
+            host.addChild(owner)
+            owner.didMove(toParent: host)
+            if !didLogLandscapeHierarchy {
+                didLogLandscapeHierarchy = true
+                writeDebugLog(
+                    "[\(logTag)] landscape rows — adopted \(NSStringFromClass(type(of: owner)))"
+                        + " under the page's controller before detaching"
+                )
+            }
+        }
+        return true
     }
 
     private static func restoreLandscapeRow(_ row: LandscapeRow?) {
