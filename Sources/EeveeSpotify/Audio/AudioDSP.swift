@@ -10,9 +10,10 @@ import os
 /// 交给 RemoteIO。所以"原回调返回之后、数据离开单元之前"是我们唯一能做到**零额外缓冲、
 /// 零额外延迟**地改样本的位置。
 ///
-/// 一条链的顺序：前置 → 低频架 → 高频架 → 十段 peaking → 压缩器 → 交叉馈送 → 限幅。
+/// 一条链的顺序：前置 → 低频架 → 高频架 → 十段 peaking → 压缩器 → 交叉馈送 → 峰值限幅。
 /// 架式在 ten-band 之前、压缩器在后：先定音色再压动态，压缩器看到的是用户最终想要的
-/// 频谱；交叉馈送必须拿到**左右两个声道**，所以它放在逐帧层（见 `renderFrame`）。
+/// 频谱；交叉馈送必须拿到**左右两个声道**，所以它放在逐帧层（见 `renderFrame`）；
+/// 限幅在最后一道，峰值目标 −0.5 dBFS，末尾的硬钳位只是安全网。
 ///
 /// 三条纪律：
 /// · 回调包装在 tap 装好之后**总是装上**：关掉 DSP 时只是"原回调 + 一次立刻返回的空调用"，
@@ -93,6 +94,13 @@ enum AudioDSP {
     private static var renderCrossfeedDelayLineLeft: UnsafeMutablePointer<Double> = makeZeros(crossfeedRingSize)
     private static var renderCrossfeedDelayLineRight: UnsafeMutablePointer<Double> = makeZeros(crossfeedRingSize)
     private static var renderCrossfeedIndex = 0
+
+    /// 限幅器：左右共用一份增益。释放系数由采样率算好（主线程），render 侧只做乘加。
+    private static var limiterRelease = 0.99987
+    private static var renderLimiterRelease = 0.99987
+    private static var renderLimiterGain = 1.0
+    /// 只有 DSP 打开时限幅才生效：关闭时的淡出必须真的逐位回到原声。
+    private static var renderLimiterActive = false
 
     /// 每个块（≈23ms）把"当前系数"往"目标系数"拉近的比例。
     ///
@@ -288,6 +296,7 @@ enum AudioDSP {
 
         companderParameters = AudioDSPCompander.parameters(amount: companderAmount, sampleRate: sampleRate)
         crossfeedSettings = AudioDSPCrossfeed.settings(level: crossfeedLevel, sampleRate: sampleRate)
+        limiterRelease = AudioDSPLimiter.releaseCoefficient(sampleRate: sampleRate)
     }
 
     private static func startTickerIfNeeded() {
@@ -334,11 +343,13 @@ enum AudioDSP {
                 renderCrossfeedTargetFeed = crossfeedSettings.feed
                 renderCrossfeedCoefficient = crossfeedSettings.lowpassCoefficient
                 renderCrossfeedDelay = crossfeedSettings.delaySamples
+                renderLimiterRelease = limiterRelease
             } else {
                 // 关闭时的目标 = 恒等：系数往恒等滑，信号就淡回原声。
                 setTargetsIdentity()
             }
             renderEnabled = enabled
+            renderLimiterActive = enabled
             if resetCounter != renderResetSeen {
                 renderResetSeen = resetCounter
                 statesResetRequested = true
@@ -409,6 +420,7 @@ enum AudioDSP {
             renderCrossfeedDelayLineRight[index] = 0
         }
         renderCrossfeedIndex = 0
+        renderLimiterGain = 1
     }
 
     /// 把"当前"系数摆成恒等（b0 = 1，其余 0），前置 1.0、压缩器与交叉馈送退到 0 ——
@@ -574,6 +586,20 @@ enum AudioDSP {
             markBroken()
             return (0, rightValue == nil ? nil : 0)
         }
+
+        if renderLimiterActive {
+            // 峰值取两声道的大者、两边乘同一个增益：只压一侧会让声像跟着电平左右跑。
+            let peak = max(abs(leftValue), rightValue.map { abs($0) } ?? 0)
+            let gain = AudioDSPLimiter.nextGain(
+                current: renderLimiterGain,
+                peak: peak,
+                release: renderLimiterRelease
+            )
+            renderLimiterGain = gain
+            leftValue *= gain
+            rightValue = rightValue.map { $0 * gain }
+        }
+
         return (
             Float(min(max(leftValue, -1), 1)),
             rightValue.map { Float(min(max($0, -1), 1)) }

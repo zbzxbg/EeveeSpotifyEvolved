@@ -309,6 +309,51 @@ require(AudioDSPCrossfeed.settings(level: 99, sampleRate: sampleRate)
             == AudioDSPCrossfeed.settings(level: 3, sampleRate: sampleRate),
         "an out-of-range level clamps to the loudest preset")
 
+// MARK: - 限幅
+
+let limiterRelease = AudioDSPLimiter.releaseCoefficient(sampleRate: sampleRate)
+require(limiterRelease > 0 && limiterRelease < 1,
+        "the release coefficient sits strictly inside (0, 1) (got \(limiterRelease))")
+require(AudioDSPLimiter.ceilingLinear < 1 && AudioDSPLimiter.ceilingLinear > 0.9,
+        "the ceiling sits just under full scale (\(AudioDSPLimiter.ceilingLinear))")
+require(AudioDSPLimiter.releaseCoefficient(sampleRate: 48000) > limiterRelease,
+        "a higher sample rate takes smaller steps per sample, the same 150 ms in seconds")
+require(AudioDSPLimiter.releaseCoefficient(sampleRate: 0) < 1,
+        "an unknown sample rate still yields a decaying release")
+
+// 2.5 倍满刻度的正弦：没有限幅的话输出会顶到 ±1 并被钳掉。
+var limiterGain = 1.0
+var limiterPeak = 0.0
+for index in 0..<4096 {
+    let input = 2.5 * sin(2 * Double.pi * 220 * Double(index) / sampleRate)
+    limiterGain = AudioDSPLimiter.nextGain(current: limiterGain, peak: abs(input), release: limiterRelease)
+    limiterPeak = max(limiterPeak, abs(input) * limiterGain)
+}
+require(limiterPeak <= AudioDSPLimiter.ceilingLinear + 1e-9,
+        "a signal far over full scale never crosses the ceiling (peak \(limiterPeak))")
+require(limiterGain.isFinite && limiterGain > 0 && limiterGain < 1,
+        "the gain settles below unity while the signal stays loud")
+
+// 安静下来以后按 150 ms 的时间常数回到单位增益。
+var recoveringGain = limiterGain
+for _ in 0..<Int(sampleRate) {
+    recoveringGain = AudioDSPLimiter.nextGain(
+        current: recoveringGain, peak: AudioDSPLimiter.ceilingLinear * 0.5, release: limiterRelease)
+}
+require(recoveringGain > 0.99, "one second of quiet recovers the gain to unity (got \(recoveringGain))")
+
+// 一步之内不能跳回 1：那样每个峰值都会变一次增益，听起来是抽吸。
+let oneStep = AudioDSPLimiter.nextGain(current: 0.5, peak: 0.1, release: limiterRelease)
+require(oneStep < 0.51, "the release is gradual, not a single-step jump (got \(oneStep))")
+
+let throughZero = AudioDSPLimiter.nextGain(current: 0.4, peak: 0, release: limiterRelease)
+require(throughZero > 0.4 && throughZero < 0.45,
+        "a zero crossing releases gradually instead of snapping back to unity (got \(throughZero))")
+require(AudioDSPLimiter.nextGain(current: 0.2, peak: .nan, release: limiterRelease) == 0.2,
+        "a non-finite peak keeps the held gain instead of propagating NaN")
+require(AudioDSPLimiter.nextGain(current: 1, peak: 1, release: limiterRelease) < 1,
+        "a full-scale sample is still pulled to the ceiling")
+
 // MARK: - 结果
 
 if failures > 0 {

@@ -389,3 +389,41 @@ enum AudioDSPCrossfeed {
         return "audio_effects_crossfeed_" + suffix
     }
 }
+
+/// 输出端的峰值限幅。EQ、架式、压缩器都把电平往上推，推过满刻度的部分原来被 ±1 钳掉：
+/// 削波产生的是奇次谐波，听感是"炸"而不是"响"。这里把峰值压回目标电平，钳位退化成安全网。
+///
+/// · 目标 −0.5 dBFS：给 DAC 与系统重采样留一点过冲余量；
+/// · 瞬时 attack：看到超标的帧立刻压，宁可削一点瞬态也要保证不越界（可预测 > 保真）；
+/// · 指数释放：150 ms 回到单位增益，避免增益跟波形抖动出"抽吸"声；
+/// · 左右**共用**一个增益：只压峰值一侧会让人声/鼓的声像跟着电平跑。
+enum AudioDSPLimiter {
+
+    static let ceilingDb: Double = -0.5
+
+    static let ceilingLinear: Double = pow(10, ceilingDb / 20)
+
+    static let releaseSeconds: Double = 0.15
+
+    /// 每样本的释放系数：`gain = 1 + (gain − 1) × release`；采样率未知时给一个 44.1 kHz 附近的保守值。
+    static func releaseCoefficient(sampleRate: Double) -> Double {
+        guard sampleRate > 0 else { return 0.99987 }
+        return exp(-1 / (releaseSeconds * sampleRate))
+    }
+
+    /// 下一帧的增益。`peak` 是这一帧左右两个声道绝对值的较大者。
+    ///
+    /// 超过目标就压到 `ceiling / peak`，且**不高于当前增益**（已经在压的时候就继续压，
+    /// 免得一个低峰把增益立刻放回来）；没超过就按释放系数往回爬 —— 包括 `peak == 0` 的
+    /// 那一帧：过零点也走释放，否则每个波形过零都把增益弹回 1，等于给自己加了一层调制。
+    /// 返回值恒在 0…1。
+    static func nextGain(current: Double, peak: Double, release: Double) -> Double {
+        let held = current.isFinite ? min(max(current, 0), 1) : 1
+        guard peak.isFinite else { return held }
+        if peak > ceilingLinear {
+            return min(held, ceilingLinear / peak)
+        }
+        let recovered = 1 + (held - 1) * min(max(release, 0), 1)
+        return min(max(recovered, 0), 1)
+    }
+}
