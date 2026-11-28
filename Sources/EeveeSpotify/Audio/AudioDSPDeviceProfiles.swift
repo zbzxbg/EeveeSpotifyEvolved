@@ -46,23 +46,27 @@ enum AudioDSPDeviceProfiles {
 
     /// 把当前这套设置存进某个桶。
     static func storeCurrent(into bucket: AudioDSPDeviceBucket) {
-        var profiles = storedProfiles()
-        profiles[bucket.rawValue] = AudioDSPDeviceProfile(
-            bandGainsDb: UserDefaults.dspBandGainsDb,
-            lowShelfDb: UserDefaults.dspLowShelfDb,
-            highShelfDb: UserDefaults.dspHighShelfDb,
-            balance: UserDefaults.dspBalance,
-            companderAmount: UserDefaults.dspCompanderAmount,
-            companderSpeed: UserDefaults.dspCompanderSpeed,
-            crossfeedLevel: UserDefaults.dspCrossfeedLevel
+        var store = loadStore()
+        store.set(
+            AudioDSPDeviceProfile(
+                bandGainsDb: UserDefaults.dspBandGainsDb,
+                lowShelfDb: UserDefaults.dspLowShelfDb,
+                highShelfDb: UserDefaults.dspHighShelfDb,
+                balance: UserDefaults.dspBalance,
+                companderAmount: UserDefaults.dspCompanderAmount,
+                companderSpeed: UserDefaults.dspCompanderSpeed,
+                crossfeedLevel: UserDefaults.dspCrossfeedLevel
+            ),
+            for: bucket
         )
-        save(profiles)
+        save(store)
     }
 
     /// 把某个桶的设置写回 UserDefaults；没有存过就什么都不动（沿用当前这套）。
     @discardableResult
     static func restore(bucket: AudioDSPDeviceBucket) -> Bool {
-        guard let profile = storedProfiles()[bucket.rawValue] else { return false }
+        let store = loadStore()
+        guard let profile = store.profile(for: bucket) else { return false }
         UserDefaults.dspBandGainsDb = profile.bandGainsDb
         UserDefaults.dspLowShelfDb = profile.lowShelfDb
         UserDefaults.dspHighShelfDb = profile.highShelfDb
@@ -93,16 +97,16 @@ enum AudioDSPDeviceProfiles {
 
     // MARK: - 存储
 
-    private static func storedProfiles() -> [String: AudioDSPDeviceProfile] {
+    private static func loadStore() -> AudioDSPDeviceProfileStore {
         guard let data = UserDefaults.dspDeviceProfilesJSON?.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode([String: AudioDSPDeviceProfile].self, from: data) else {
-            return [:]
+              let decoded = try? JSONDecoder().decode(AudioDSPDeviceProfileStore.self, from: data) else {
+            return AudioDSPDeviceProfileStore()
         }
         return decoded
     }
 
-    private static func save(_ profiles: [String: AudioDSPDeviceProfile]) {
-        guard let data = try? JSONEncoder().encode(profiles),
+    private static func save(_ store: AudioDSPDeviceProfileStore) {
+        guard let data = try? JSONEncoder().encode(store),
               let text = String(data: data, encoding: .utf8) else {
             return
         }

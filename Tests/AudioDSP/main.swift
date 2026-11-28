@@ -518,6 +518,20 @@ let decodedProfile = encodedProfile.flatMap {
 }
 require(decodedProfile == sampleProfile, "a per-device profile survives a JSON round trip")
 
+var deviceStore = AudioDSPDeviceProfileStore()
+require(deviceStore.profile(for: .speaker) == nil, "an empty store has no profile for any bucket")
+deviceStore.set(sampleProfile, for: .bluetooth)
+require(deviceStore.profile(for: .bluetooth) == sampleProfile,
+        "the store returns the profile stored under that bucket")
+require(deviceStore.profile(for: .speaker) == nil, "the other buckets stay empty")
+
+let encodedDeviceStore = try? JSONEncoder().encode(deviceStore)
+let decodedDeviceStore = encodedDeviceStore.flatMap {
+    try? JSONDecoder().decode(AudioDSPDeviceProfileStore.self, from: $0)
+}
+require(decodedDeviceStore?.profile(for: .bluetooth) == sampleProfile,
+        "the whole store survives a JSON round trip")
+
 // 加 `companderSpeed` 之前的存档还要能读：缺这一项就当 0.5（原来的 3 ms / 120 ms）。
 let legacyProfileJSON = """
 {"bandGainsDb":[1,2],"lowShelfDb":3,"highShelfDb":-3,"balance":0.5,

@@ -687,6 +687,25 @@ struct AudioDSPDeviceProfile: Codable, Equatable {
     var crossfeedLevel: Int
 }
 
+/// 落盘形状：桶名 → 那一套设置。
+///
+/// 用一层包装而不是裸词典：取用点拿到的是**显式可选返回值**（`profile(for:)`），
+/// 不必对词典下标做条件绑定，读写也只走 `profile(for:)` / `set(_:for:)` 两个入口。
+struct AudioDSPDeviceProfileStore: Codable, Equatable {
+    var profiles: [String: AudioDSPDeviceProfile] = [:]
+
+    func profile(for bucket: AudioDSPDeviceBucket) -> AudioDSPDeviceProfile? {
+        for (key, value) in profiles where key == bucket.rawValue {
+            return value
+        }
+        return nil
+    }
+
+    mutating func set(_ profile: AudioDSPDeviceProfile, for bucket: AudioDSPDeviceBucket) {
+        profiles[bucket.rawValue] = profile
+    }
+}
+
 // MARK: - 图形均衡（15 段）
 
 /// 15 段图形均衡：把每一段的增益直接铺成一条 peaking 链。
