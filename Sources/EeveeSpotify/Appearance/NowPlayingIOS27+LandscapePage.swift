@@ -116,10 +116,10 @@ extension NowPlayingIOS27 {
 
     // MARK: - 状态
 
-    /// 我们自己那一屏（透明的承载层 + 两颗 UIKit 标签 + 一条 SwiftUI 控件）。
+    /// 我们自己那一屏（透明的承载层 + 两行会滚动的文字 + 一条 SwiftUI 控件）。
     static var landscapePageView: LandscapePageView?
-    static var landscapePageTitle: UILabel?
-    static var landscapePageArtist: UILabel?
+    static var landscapePageTitle: LandscapePageMarqueeView?
+    static var landscapePageArtist: LandscapePageMarqueeView?
     static var landscapePageControls: UIHostingController<LandscapePageControls>?
     /// 被整块按下去的原生底排（收回时要按原值写回）。
     static weak var landscapeHiddenStack: UIView?
@@ -248,11 +248,11 @@ extension NowPlayingIOS27 {
         }
 
         let titleText = landscapePageText(identifier: NowPlayingLyricsPlate.titleLabelIdentifier, in: page)
-        if updateLandscapePageLabel(landscapePageTitle, text: titleText, frame: geometry.title) {
+        if updateLandscapePageText(landscapePageTitle, text: titleText, frame: geometry.title) {
             changed = true
         }
         let artistText = landscapePageText(identifier: NowPlayingLyricsPlate.subtitleLabelIdentifier, in: page)
-        if updateLandscapePageLabel(landscapePageArtist, text: artistText, frame: geometry.artist) {
+        if updateLandscapePageText(landscapePageArtist, text: artistText, frame: geometry.artist) {
             changed = true
         }
         if let controls = landscapePageControls, controls.view.frame != geometry.controls {
@@ -371,12 +371,12 @@ extension NowPlayingIOS27 {
         view.clipsToBounds = false
         view.accessibilityIdentifier = "eevee-ios27-landscape-page"
 
-        let title = makeLandscapePageLabel(
+        let title = makeLandscapePageText(
             identifier: "eevee-ios27-landscape-title",
             size: 17,
             weight: .bold
         )
-        let artist = makeLandscapePageLabel(
+        let artist = makeLandscapePageText(
             identifier: "eevee-ios27-landscape-artist",
             size: 13,
             weight: .semibold
@@ -394,29 +394,26 @@ extension NowPlayingIOS27 {
         return view
     }
 
-    private static func makeLandscapePageLabel(
+    private static func makeLandscapePageText(
         identifier: String,
         size: CGFloat,
         weight: UIFont.Weight
-    ) -> UILabel {
-        let label = UILabel()
-        label.accessibilityIdentifier = identifier
-        label.font = .systemFont(ofSize: size, weight: weight)
-        label.textColor = UIColor.white
-        label.numberOfLines = 1
-        label.lineBreakMode = .byTruncatingTail
-        // 这两行现在**可点**（见 `attachLandscapePageTap`）：手势要挂在这颗 label 自己身上。
-        label.isUserInteractionEnabled = true
-        label.isAccessibilityElement = true
-        label.accessibilityTraits = .button
-        return label
+    ) -> LandscapePageMarqueeView {
+        let view = LandscapePageMarqueeView(
+            font: .systemFont(ofSize: size, weight: weight),
+            color: UIColor.white
+        )
+        view.accessibilityIdentifier = identifier
+        view.isAccessibilityElement = true
+        view.accessibilityTraits = .button
+        return view
     }
 
     private static func attachLandscapePageTap(
-        to label: UILabel,
+        to view: UIView,
         handler: LandscapePageTapHandler
     ) {
-        label.addGestureRecognizer(
+        view.addGestureRecognizer(
             UITapGestureRecognizer(
                 target: handler,
                 action: #selector(LandscapePageTapHandler.handleTap(_:))
@@ -424,20 +421,21 @@ extension NowPlayingIOS27 {
         )
     }
 
-    private static func updateLandscapePageLabel(
-        _ label: UILabel?,
+    private static func updateLandscapePageText(
+        _ view: LandscapePageMarqueeView?,
         text: String?,
         frame: CGRect
     ) -> Bool {
-        guard let label else { return false }
+        guard let view else { return false }
         var changed = false
-        if label.frame != frame {
-            label.frame = frame
+        if view.frame != frame {
+            view.frame = frame
             changed = true
         }
         let wanted = text ?? ""
-        if label.text != wanted {
-            label.text = wanted
+        if view.text != wanted {
+            view.text = wanted
+            view.accessibilityLabel = wanted.isEmpty ? nil : wanted
             changed = true
         }
         return changed
@@ -489,6 +487,146 @@ extension NowPlayingIOS27 {
 
     private static func landscapeRectText(_ rect: CGRect) -> String {
         "\(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
+    }
+}
+
+// MARK: - 会滚动的歌名 / 艺人
+//
+// 宽度够就静止；超出就像 Spotify 那样一直向左滚 —— 两段同样的文字首尾相接、中间隔 `gap`，
+// 所以循环那一帧看不出来（不会出现"跳回开头"）。右端留一条渐隐，滚出去的字不硬切在边上。
+//
+// 用 `CABasicAnimation` 而不是 `UIView.animate`：这一层每 0.3s 会被写一次 frame，
+// 逐拍重建的 UIView 动画会被打断；挂在 `track.layer` 上的 CA 动画与 frame 写入无关。
+
+final class LandscapePageMarqueeView: UIView {
+
+    /// 两段文字之间的空隙。
+    private static let gap: CGFloat = 40
+    /// 滚动速度（pt / 秒）。
+    private static let speed: CGFloat = 44
+    /// 右端渐隐的宽度。
+    private static let fadeWidth: CGFloat = 14
+
+    private let track = UIView()
+    private let first: UILabel
+    private let second: UILabel
+    private let fade = CAGradientLayer()
+    private var scrollingDistance: CGFloat = 0
+
+    var text: String = "" {
+        didSet {
+            guard text != oldValue else { return }
+            first.text = text
+            second.text = text
+            setNeedsLayout()
+        }
+    }
+
+    init(font: UIFont, color: UIColor) {
+        first = LandscapePageMarqueeView.makeLabel(font: font, color: color)
+        second = LandscapePageMarqueeView.makeLabel(font: font, color: color)
+        super.init(frame: .zero)
+        clipsToBounds = true
+        isUserInteractionEnabled = true
+        track.isUserInteractionEnabled = false
+        addSubview(track)
+        track.addSubview(first)
+        track.addSubview(second)
+        second.isHidden = true
+        fade.startPoint = CGPoint(x: 0, y: 0.5)
+        fade.endPoint = CGPoint(x: 1, y: 0.5)
+        layer.mask = fade
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private static func makeLabel(font: UIFont, color: UIColor) -> UILabel {
+        let label = UILabel()
+        label.font = font
+        label.textColor = color
+        label.numberOfLines = 1
+        // 这一行是**滚**的，不要省略号：省略号会把"还有下文"说成"没有下文"。
+        label.lineBreakMode = .byClipping
+        label.isUserInteractionEnabled = false
+        return label
+    }
+
+    private var measuredWidth: CGFloat {
+        guard !text.isEmpty, let font = first.font else { return 0 }
+        let width = (text as NSString).size(withAttributes: [.font: font]).width
+        // 留一点余量，免得最后一个字贴着边裁一半。
+        return width.rounded(.up) + 2
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let size = bounds.size
+        guard size.width > 1, size.height > 1 else { return }
+
+        fade.frame = bounds
+        let fadeRatio = min(0.5, max(0.06, Self.fadeWidth / size.width))
+        fade.locations = [
+            NSNumber(value: 0),
+            NSNumber(value: 1 - Double(fadeRatio)),
+            NSNumber(value: 1),
+        ]
+        fade.colors = [
+            UIColor.white.cgColor,
+            UIColor.white.cgColor,
+            UIColor.clear.cgColor,
+        ]
+
+        let textWidth = measuredWidth
+        let needsScroll = textWidth > size.width + 0.5
+        first.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: needsScroll ? textWidth : size.width,
+            height: size.height
+        )
+        second.isHidden = !needsScroll
+        second.frame = CGRect(
+            x: textWidth + Self.gap,
+            y: 0,
+            width: textWidth,
+            height: size.height
+        )
+        track.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: needsScroll ? (textWidth * 2 + Self.gap) : size.width,
+            height: size.height
+        )
+        if needsScroll {
+            startScrolling(distance: textWidth + Self.gap)
+        } else {
+            stopScrolling()
+        }
+    }
+
+    private func startScrolling(distance: CGFloat) {
+        let key = "marquee"
+        if track.layer.animation(forKey: key) != nil, abs(scrollingDistance - distance) < 0.5 {
+            return
+        }
+        stopScrolling()
+        scrollingDistance = distance
+        let animation = CABasicAnimation(keyPath: "transform.translation.x")
+        animation.fromValue = NSNumber(value: 0)
+        animation.toValue = NSNumber(value: Double(-distance))
+        animation.duration = CFTimeInterval(max(2, distance / Self.speed))
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        animation.isRemovedOnCompletion = false
+        track.layer.add(animation, forKey: key)
+    }
+
+    private func stopScrolling() {
+        scrollingDistance = 0
+        track.layer.removeAnimation(forKey: "marquee")
+        track.layer.transform = CATransform3DIdentity
     }
 }
 

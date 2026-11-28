@@ -2697,6 +2697,25 @@ enum NowPlayingIOS27 {
             title: NowPlayingLyricsCreditInfo.sourceName,
             subtitle: NowPlayingLyricsCreditInfo.rolesText
         )
+        // 这一行带链接（条款 §6 要求 "credit **and link** it"）⇒ 横屏同样可点：歌名右边那两行
+        // 是这一层画的，不是 `NowPlayingLyricsPlate` 那条可点署名，所以手势要自己挂。
+        // 没有链接时（比如 QQ 音乐这一档只给名字）就退回纯文本：不吃触摸、按静态文本播报。
+        if view.gestureRecognizers?.isEmpty ?? true {
+            view.addGestureRecognizer(
+                UITapGestureRecognizer(
+                    target: NowPlayingLyricsCreditTarget.shared,
+                    action: #selector(NowPlayingLyricsCreditTarget.tapped)
+                )
+            )
+        }
+        let creditHasLinks = !NowPlayingLyricsPlate.creditLinks().isEmpty
+        if view.isUserInteractionEnabled != creditHasLinks {
+            view.isUserInteractionEnabled = creditHasLinks
+        }
+        let creditTraits: UIAccessibilityTraits = creditHasLinks ? .link : .staticText
+        if view.accessibilityTraits != creditTraits {
+            view.accessibilityTraits = creditTraits
+        }
         let wanted: CGFloat = (lyricsModeActive && lyricsModeRevealed) ? 1 : 0
         if view.alpha != wanted {
             view.alpha = wanted
