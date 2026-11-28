@@ -282,6 +282,28 @@ struct AudioDSPFilterSpec: Equatable {
         return min(max(slope, 0.05), 4)
     }
 
+    /// 由斜率反推 Q：`shelfSlope` 的逆运算（`Q = 1/√((1/S − 1)(A + 1/A) + 2)`）。
+    ///
+    /// 设置页的两个架式一直用斜率描述，进链时换成 Q，再由 `shelfSlope` 换回去。
+    static func shelf(kind: AudioDSPFilterKind,
+                      frequency: Double,
+                      gainDb: Double,
+                      slope: Double) -> AudioDSPFilterSpec {
+        let a = pow(10, gainDb / 40)
+        let sum = a + 1 / a
+        let inverse = (1 / max(slope, 0.001) - 1) * sum + 2
+        let q = inverse > 0 ? 1 / sqrt(inverse) : defaultShelfQ
+        return AudioDSPFilterSpec(
+            kind: kind,
+            frequency: frequency,
+            gainDb: gainDb,
+            q: q.isFinite && q > 0 ? q : defaultShelfQ
+        )
+    }
+
+    /// 斜率换算失效时的兜底：Q 0.7071（RBJ 的 S = 1）。
+    static let defaultShelfQ: Double = 0.7071
+
     func coefficients(sampleRate: Double) -> BiquadCoefficients {
         switch kind {
         case .peaking:

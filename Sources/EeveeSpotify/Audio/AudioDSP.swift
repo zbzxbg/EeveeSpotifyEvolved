@@ -29,11 +29,12 @@ enum AudioDSP {
 
     static let logTag = "AudioDSP"
     static let bandCount = AudioDSPBands.count
+    /// 滤波链容量：默认用满 12 段（两个架式 + 十段），AutoEq 的参数均衡一般 10 段。
+    private static let chainCapacity = AudioDSPFilterChain.maxFilters
     /// 每组系数 5 个 double：b0, b1, b2, a1, a2。
     private static let coefficientStride = 5
     /// 只处理前两个声道：这套链路是给立体声播放用的，多声道布局其余声道原样放行。
     private static let maxChannels = 2
-    private static let shelfCount = AudioDSPShelves.count
     /// 交叉馈送延迟线：最大延迟 + 1，读写下标错开一格不会撞上自己。
     private static let crossfeedRingSize = AudioDSPCrossfeed.maxDelaySamples + 1
 
@@ -52,10 +53,11 @@ enum AudioDSP {
     private static var resetCounter: UInt32 = 0
     private static var sourceFormat: AudioStreamBasicDescription?
 
-    /// 控制线程侧的最后一组界面值：采样率变化时靠它们重算，不必再读 UserDefaults。
-    private static var bandGainsDb = [Double](repeating: 0, count: AudioDSPBands.count)
-    private static var lowShelfGainDb = 0.0
-    private static var highShelfGainDb = 0.0
+    /// 链上要设计的滤波器。默认是两个架式 + 十段；接了 AutoEq 就是文件里的那几条。
+    private static var chainSpecs: [AudioDSPFilterSpec] = []
+    /// 自定义链（AutoEq 的参数均衡）；`nil` = 回到"两个架式 + 十段"。
+    private static var customChain: AudioDSPFilterChain?
+    private static var chainCount = 0
     private static var companderAmount = 0.0
     private static var crossfeedLevel = 0
 
@@ -65,19 +67,17 @@ enum AudioDSP {
     /// 被包装过回调的源单元（只为状态提示与日志：`nil` 说明这次启动还没接管）。
     private(set) static var wrappedUnit: AudioUnit?
 
-    private static var coefficients: UnsafeMutablePointer<Double> = makeIdentity(bandCount)
-    private static var shelfCoefficients: UnsafeMutablePointer<Double> = makeIdentity(shelfCount)
+    private static var coefficients: UnsafeMutablePointer<Double> = makeIdentity(chainCapacity)
 
     // MARK: - render 线程本地副本
 
-    private static var renderCoefficients: UnsafeMutablePointer<Double> = makeIdentity(bandCount)
-    private static var renderShelfCoefficients: UnsafeMutablePointer<Double> = makeIdentity(shelfCount)
-    private static var renderTargetCoefficients: UnsafeMutablePointer<Double> = makeIdentity(bandCount)
-    private static var renderShelfTargets: UnsafeMutablePointer<Double> = makeIdentity(shelfCount)
+    private static var renderCoefficients: UnsafeMutablePointer<Double> = makeIdentity(chainCapacity)
+    private static var renderTargetCoefficients: UnsafeMutablePointer<Double> = makeIdentity(chainCapacity)
+    /// 这一块真正要跑几段；空出来的槽位恒等，跑不跑都一样。
+    private static var renderChainCount = 0
 
-    /// 每段 / 每架 × 每声道 × 两个状态量。
-    private static var renderStates: UnsafeMutablePointer<Double> = makeZeros(bandCount * maxChannels * 2)
-    private static var renderShelfStates: UnsafeMutablePointer<Double> = makeZeros(shelfCount * maxChannels * 2)
+    /// 每段 × 每声道 × 两个状态量。
+    private static var renderStates: UnsafeMutablePointer<Double> = makeZeros(chainCapacity * maxChannels * 2)
 
     /// 每个声道一个压缩器包络。
     private static var renderCompanderEnvelopes: UnsafeMutablePointer<Double> = makeZeros(maxChannels)
@@ -189,15 +189,61 @@ enum AudioDSP {
             crossfeedLevel = crossfeed
             resetCounter &+= 1
         }
-        preampLinear = pow(10, preampDb / 20)
-        bandGainsDb = bands
-        lowShelfGainDb = lowShelf
-        highShelfGainDb = highShelf
+        let specs = customChain?.filters ?? defaultChainSpecs(bands: bands, lowShelf: lowShelf, highShelf: highShelf)
+        if specs != chainSpecs {
+            chainSpecs = specs
+            resetCounter &+= 1
+        }
+        chainCount = min(specs.count, chainCapacity)
+        let chainPreamp = customChain?.preampLinear ?? 1
+        preampLinear = pow(10, preampDb / 20) * chainPreamp
         companderAmount = compander
         if sampleRate > 0 {
             recomputeCoefficientsLocked()
         }
         os_unfair_lock_unlock(lock)
+    }
+
+    /// "两个架式 + 十段"这条默认链。
+    ///
+    /// 架式在设置页里是用斜率描述的，而链上的 `AudioDSPFilterSpec` 存 Q；两者按
+    /// `shelfSlope` 的定义互为逆运算，换过去再换回来不改变听感。
+    private static func defaultChainSpecs(bands: [Double],
+                                          lowShelf: Double,
+                                          highShelf: Double) -> [AudioDSPFilterSpec] {
+        var specs: [AudioDSPFilterSpec] = []
+        specs.append(.shelf(
+            kind: .lowShelf,
+            frequency: AudioDSPShelves.lowFrequency,
+            gainDb: min(max(lowShelf, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb),
+            slope: AudioDSPShelves.slope
+        ))
+        specs.append(.shelf(
+            kind: .highShelf,
+            frequency: AudioDSPShelves.highFrequency,
+            gainDb: min(max(highShelf, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb),
+            slope: AudioDSPShelves.slope
+        ))
+        for (index, frequency) in AudioDSPBands.frequencies.enumerated() {
+            let raw = index < bands.count ? bands[index] : 0
+            specs.append(AudioDSPFilterSpec(
+                kind: .peaking,
+                frequency: frequency,
+                gainDb: min(max(raw, AudioDSPBands.minGainDb), AudioDSPBands.maxGainDb),
+                q: AudioDSPBands.q
+            ))
+        }
+        return Array(specs.prefix(chainCapacity))
+    }
+
+    /// 接一条自定义链（AutoEq 的参数均衡）；传 `nil` 回到"两个架式 + 十段"。
+    ///
+    /// 只换链，不动开关与压缩器/交叉馈送；系数照旧由 render 侧逐块平滑过去。
+    static func applyChain(_ chain: AudioDSPFilterChain?) {
+        os_unfair_lock_lock(lock)
+        customChain = chain
+        os_unfair_lock_unlock(lock)
+        reloadParameters()
     }
 
     /// StreamFormat 那一拍（音频控制线程）。
@@ -248,50 +294,26 @@ enum AudioDSP {
         if let line { writeDebugLog(line) }
     }
 
-    /// 重算 10 段 peaking、两个架式、压缩器参数与交叉馈送设置（持锁调用）。
+    /// 重算滤波链、压缩器参数与交叉馈送设置（持锁调用）。
+    ///
+    /// 链上每一段按自己的种类（peaking / 低架 / 高架）、频率与 Q 设计；空槽位写恒等，
+    /// 这样切换链长时不需要改数组尺寸，也不会把旧链的尾巴留在后面。
     private static func recomputeCoefficientsLocked() {
         guard sampleRate > 0 else { return }
 
-        for band in 0..<bandCount {
-            let raw = band < bandGainsDb.count ? bandGainsDb[band] : 0
-            let gain = min(max(raw, AudioDSPBands.minGainDb), AudioDSPBands.maxGainDb)
-            let c = BiquadCoefficients.peaking(
-                frequency: AudioDSPBands.frequencies[band],
-                gainDb: gain,
-                q: AudioDSPBands.q,
-                sampleRate: sampleRate
-            )
-            let base = band * coefficientStride
+        let count = min(chainCount, chainCapacity)
+        for index in 0..<chainCapacity {
+            let base = index * coefficientStride
+            guard index < count else {
+                setIdentity(coefficients, index: index)
+                continue
+            }
+            let c = chainSpecs[index].coefficients(sampleRate: sampleRate)
             coefficients[base] = c.b0
             coefficients[base + 1] = c.b1
             coefficients[base + 2] = c.b2
             coefficients[base + 3] = c.a1
             coefficients[base + 4] = c.a2
-        }
-
-        let shelfGains = [lowShelfGainDb, highShelfGainDb]
-        for shelf in 0..<shelfCount {
-            let raw = shelf < shelfGains.count ? shelfGains[shelf] : 0
-            let gain = min(max(raw, AudioDSPShelves.minGainDb), AudioDSPShelves.maxGainDb)
-            let c = shelf == 0
-                ? BiquadCoefficients.lowShelf(
-                    frequency: AudioDSPShelves.lowFrequency,
-                    gainDb: gain,
-                    slope: AudioDSPShelves.slope,
-                    sampleRate: sampleRate
-                )
-                : BiquadCoefficients.highShelf(
-                    frequency: AudioDSPShelves.highFrequency,
-                    gainDb: gain,
-                    slope: AudioDSPShelves.slope,
-                    sampleRate: sampleRate
-                )
-            let base = shelf * coefficientStride
-            shelfCoefficients[base] = c.b0
-            shelfCoefficients[base + 1] = c.b1
-            shelfCoefficients[base + 2] = c.b2
-            shelfCoefficients[base + 3] = c.a1
-            shelfCoefficients[base + 4] = c.a2
         }
 
         companderParameters = AudioDSPCompander.parameters(amount: companderAmount, sampleRate: sampleRate)
@@ -313,7 +335,7 @@ enum AudioDSP {
         if !didLogActive, isEnabled, isInsertActive {
             didLogActive = true
             writeDebugLog(
-                "[\(logTag)] chain active — preamp, \(shelfCount) shelves, \(bandCount) bands,"
+                "[\(logTag)] chain active — preamp, \(chainCount) filters,"
                     + " compander and crossfeed run on every block"
             )
         }
@@ -335,8 +357,8 @@ enum AudioDSP {
 
         if os_unfair_lock_trylock(lock) {
             if enabled {
-                copy(coefficients, to: renderTargetCoefficients, count: bandCount)
-                copy(shelfCoefficients, to: renderShelfTargets, count: shelfCount)
+                copy(coefficients, to: renderTargetCoefficients, count: chainCapacity)
+                renderChainCount = chainCount
                 renderTargetPreamp = preampLinear
                 renderCompanderParameters = companderParameters
                 renderCompanderTargetMix = companderParameters.isBypass ? 0 : 1
@@ -405,11 +427,8 @@ enum AudioDSP {
     }
 
     private static func resetStates() {
-        for index in 0..<(bandCount * maxChannels * 2) {
+        for index in 0..<(chainCapacity * maxChannels * 2) {
             renderStates[index] = 0
-        }
-        for index in 0..<(shelfCount * maxChannels * 2) {
-            renderShelfStates[index] = 0
         }
         for channel in 0..<maxChannels {
             renderCompanderEnvelopes[channel] = 0
@@ -426,11 +445,8 @@ enum AudioDSP {
     /// 把"当前"系数摆成恒等（b0 = 1，其余 0），前置 1.0、压缩器与交叉馈送退到 0 ——
     /// 逐位等于原声。
     private static func setIdentityCoefficients() {
-        for band in 0..<bandCount {
-            setIdentity(renderCoefficients, index: band)
-        }
-        for shelf in 0..<shelfCount {
-            setIdentity(renderShelfCoefficients, index: shelf)
+        for index in 0..<chainCapacity {
+            setIdentity(renderCoefficients, index: index)
         }
         renderPreamp = 1
         renderCompanderMix = 0
@@ -438,11 +454,8 @@ enum AudioDSP {
     }
 
     private static func setTargetsIdentity() {
-        for band in 0..<bandCount {
-            setIdentity(renderTargetCoefficients, index: band)
-        }
-        for shelf in 0..<shelfCount {
-            setIdentity(renderShelfTargets, index: shelf)
+        for index in 0..<chainCapacity {
+            setIdentity(renderTargetCoefficients, index: index)
         }
         renderTargetPreamp = 1
         renderCompanderTargetMix = 0
@@ -469,10 +482,7 @@ enum AudioDSP {
 
     /// 淡出是否已经到位（系数全恒等、前置 1.0、压缩器与交叉馈送都到 0）。
     private static func isCurrentIdentity() -> Bool {
-        for band in 0..<bandCount where !isIdentity(renderCoefficients, index: band) {
-            return false
-        }
-        for shelf in 0..<shelfCount where !isIdentity(renderShelfCoefficients, index: shelf) {
+        for index in 0..<chainCapacity where !isIdentity(renderCoefficients, index: index) {
             return false
         }
         return abs(renderPreamp - 1) <= 1e-6
@@ -485,8 +495,7 @@ enum AudioDSP {
     /// 这是"拖滑杆不咔哒"的关键：直接换系数等于让滤波器的冲激响应瞬间跳变，听感就是一格
     /// 一格的脆响。这里的步长很小（滑杆一档 0.5 dB），插值出来的中间系数仍在稳定范围内。
     private static func smoothTowardsTarget() {
-        smooth(renderCoefficients, towards: renderTargetCoefficients, count: bandCount)
-        smooth(renderShelfCoefficients, towards: renderShelfTargets, count: shelfCount)
+        smooth(renderCoefficients, towards: renderTargetCoefficients, count: chainCapacity)
 
         let preampDifference = renderTargetPreamp - renderPreamp
         renderPreamp = abs(preampDifference) < 1e-6
@@ -606,35 +615,17 @@ enum AudioDSP {
         )
     }
 
-    /// 一个声道走完"前置 → 低频架 → 高频架 → 十段 → 压缩器"。
+    /// 一个声道走完"前置 → 滤波链 → 压缩器"。
+    ///
+    /// 链上每一段的位置与状态排布都一样（段 × 声道 × 2），所以两种滤波器种类在这里没有分支：
+    /// 架式与 peaking 的差别已经落在系数里。
     @inline(__always)
     private static func processChannel(_ input: Double, channel: Int) -> Double {
         var value = input
 
-        var shelfStateIndex = channel * 2
-        for shelf in 0..<shelfCount {
-            let base = shelf * coefficientStride
-            let b0 = renderShelfCoefficients[base]
-            let b1 = renderShelfCoefficients[base + 1]
-            let b2 = renderShelfCoefficients[base + 2]
-            let a1 = renderShelfCoefficients[base + 3]
-            let a2 = renderShelfCoefficients[base + 4]
-            let z1 = renderShelfStates[shelfStateIndex]
-            let z2 = renderShelfStates[shelfStateIndex + 1]
-            let y = b0 * value + z1
-            var nextZ1 = b1 * value + (-a1) * y + z2
-            var nextZ2 = b2 * value + (-a2) * y
-            if abs(nextZ1) < 1e-15 { nextZ1 = 0 }
-            if abs(nextZ2) < 1e-15 { nextZ2 = 0 }
-            renderShelfStates[shelfStateIndex] = nextZ1
-            renderShelfStates[shelfStateIndex + 1] = nextZ2
-            value = y
-            shelfStateIndex += maxChannels * 2
-        }
-
         var stateIndex = channel * 2
-        for band in 0..<bandCount {
-            let base = band * coefficientStride
+        for index in 0..<renderChainCount {
+            let base = index * coefficientStride
             let b0 = renderCoefficients[base]
             let b1 = renderCoefficients[base + 1]
             let b2 = renderCoefficients[base + 2]

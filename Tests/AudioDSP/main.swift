@@ -435,6 +435,14 @@ let truncated = AudioDSPFilterChain.autoeq("Preamp: 0 dB\n" + manyFilters.joined
 require(truncated?.filters.count == AudioDSPFilterChain.maxFilters,
         "a file with more filters than the chain holds is truncated")
 
+let slopeSpec = AudioDSPFilterSpec.shelf(kind: .lowShelf, frequency: 150, gainDb: 6, slope: 0.9)
+require(abs(slopeSpec.shelfSlope - 0.9) < 1e-9,
+        "a shelf built from a slope reads that slope back (got \(slopeSpec.shelfSlope))")
+require(slopeSpec.coefficients(sampleRate: sampleRate)
+            == BiquadCoefficients.lowShelf(
+                frequency: 150, gainDb: 6, slope: 0.9, sampleRate: sampleRate),
+        "the shelf spec and the direct design agree to the last bit")
+
 let flatChain = AudioDSPFilterChain(
     preampDb: 0,
     filters: AudioDSPBands.frequencies.map {
