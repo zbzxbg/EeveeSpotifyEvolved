@@ -79,6 +79,9 @@ enum NowPlayingIOS27 {
     /// 0.45 是"还看得出是这张封面，但亮度已经被收进那一档"的位置；调大更接近 AM 的纯色感，
     /// 调小更接近"糊图"。
     static let backdropTintAlpha: CGFloat = 0.45
+    /// 换歌时封面与背景（field）的交叉淡入时长。**两边必须一样** —— 一个硬切一个渐显时，
+    /// 那一下会被读成"页面跳了"。
+    static let fieldCrossFadeDuration: TimeInterval = 0.35
     /// 模糊底"白到白字读不清"的那条线：封面的平均亮度超过它，就在模糊底上再压一层黑。
     ///
     /// 模糊底是**整张封面**铺满整页，字段色只在它下面 —— 白封面时中间那块（曲名、
@@ -1600,7 +1603,22 @@ enum NowPlayingIOS27 {
             changed = true
         }
         if trackId != lastTrackId || imageView.image !== image {
-            imageView.image = image
+            // 换歌那一拍：封面与背景（field）用**同一段时长**交叉淡入。
+            //
+            // 只换图不淡的话，用户看到的是"封面硬切、底色还在渐显" —— 那一下就跳一下，
+            // 而且会被读成"页面抖了"，其实只是两件东西不同步。首帧（还没有旧图）不用淡。
+            let crossFading = imageView.image != nil && trackId != lastTrackId
+            let applyImage: () -> Void = { imageView.image = image }
+            if crossFading {
+                UIView.transition(
+                    with: imageView,
+                    duration: fieldCrossFadeDuration,
+                    options: [.transitionCrossDissolve, .allowUserInteraction],
+                    animations: applyImage
+                )
+            } else {
+                applyImage()
+            }
             // 缓存"上一次画上去的那张"：换歌时新图没到，就靠它顶着（见上面 `lastArtworkImage` 的说明）。
             lastArtworkImage = image
             lastTrackId = trackId
@@ -2091,7 +2109,12 @@ enum NowPlayingIOS27 {
         }
         // 只对我们自己的 wrapper 做交叉淡入（对外层 cell 做 transition 会连 Spotify 的内容一起快照）。
         if let wrapper = fieldHost, wrapper.window != nil {
-            UIView.transition(with: wrapper, duration: 0.35, options: .transitionCrossDissolve, animations: apply)
+            UIView.transition(
+                with: wrapper,
+                duration: fieldCrossFadeDuration,
+                options: .transitionCrossDissolve,
+                animations: apply
+            )
         } else {
             apply()
         }
