@@ -190,6 +190,16 @@ jobs:
                  -o landscape-marquee-timeline-tests
           ./landscape-marquee-timeline-tests
 
+      # 「最新发布」遇到多位同名艺人（`MIMI` / `Mimì` 这种只差一个变音符号的）时，
+      # 用页面上看得见的歌名给候选的 top tracks 投票；一票没有 / 并列 ⇒ 不猜（不出卡）。
+      # 投票本身是纯逻辑，能在这里真编真跑；读页面文字 / 网络那两层要 UIKit，进不来。
+      - name: Artist release disambiguation (same-name artists)
+        run: |
+          swiftc Sources/EeveeSpotify/Appearance/ArtistReleaseDisambiguation.swift \
+                 Tests/ArtistReleaseDisambiguation/main.swift \
+                 -o artist-release-disambiguation-tests
+          ./artist-release-disambiguation-tests
+
       - name: URL ad classification (existing)
         run: |
           swiftc Tests/URLAdClassification/main.swift \

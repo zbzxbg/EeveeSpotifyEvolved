@@ -118,9 +118,15 @@ enum EntityPageAppearance {
     ///
     /// 参考像素：y=47% 处 `#949494`、y=62%~78% 处 `#595959` —— 也就是
     /// **整页一直是灰的，只是往下变深**，没有"到某一行突然开始黑"的那条带。
-    /// 我们把艺人页的终点改成 `#4A4A4A`（比参考图略深一点，保证白字），起点从 55% 推到 62%。
+    /// 起点从 55% 推到 62%。
+    ///
+    /// ⚠️ 终点**不能是固定灰**：那条参考是"**浅色封面**"那一页量出来的；底色本身接近黑时
+    /// （封面是暗图 ⇒ `fieldColourFor` 压出来的字段色也是黑的），固定 `#4A4A4A` 会把底部
+    /// **抬亮成一条浅灰带**。现在终点按底色成比例取（`artistFadeFactor`），亮色页仍落在
+    /// `#4A4A4A` 附近，暗色页跟着一起暗下去。
     private static let artistFadeFrom: CGFloat = 0.62
-    private static let artistFadeTo = UIColor(white: 0.29, alpha: 1)
+    /// 艺人页渐变终点相对**底色**的比例（见 `artistFadeTo(for:)`）。
+    private static let artistFadeFactor: CGFloat = 0.46
     /// pw 的 `SGRPalette.m:8-9`：底板颜色的**饱和度上限 0.55**、**线性亮度上限 0.07**。
     /// 后一条是最要紧的：**任何封面（哪怕一片白）都被压成一块很深的颜色** ⇒ 白字在上面读得清。
     /// 例：`#F2F7FB`（一张白猫封面）⇒ `#494B4C` 那一档；深色封面 ⇒ 一块暗棕。
@@ -733,7 +739,7 @@ enum EntityPageAppearance {
         let pageHeight = max(1, painted - 2 * fieldBleed)
         let window = windowHeight(fallback: pageHeight)
         let startRatio = kind == .artist ? artistFadeFrom : blackFrom
-        let faded = kind == .artist ? artistFadeTo : UIColor.black
+        let faded = kind == .artist ? artistFadeTo(for: colour) : UIColor.black
         // pw 的 locations 是**绝对**位置（窗口高度 × 0.55 / × 1）换算成整块画布的比例 ——
         // `from = height * kBlackFrom + bleed.top`（`SGRField.m:99-102`），这里 `fieldBleed`
         // 就是那个 bleed.top。
@@ -748,10 +754,30 @@ enum EntityPageAppearance {
             writeDebugLog(
                 "[\(logTag)] field colour is now #\(key) — "
                     + (kind == .artist
-                        ? "artist page: a soft grey, deepening at 62%"
+                        ? "artist page: the field deepens at 62%, tinted by the cover colour"
                         : "pw's field: a deep solid, fading to black at 55%")
             )
         }
+    }
+
+    /// 艺人页渐变的**终点色**：底色 × `artistFadeFactor`。
+    ///
+    /// 固定 `#4A4A4A` 只对亮封面成立（见 `artistFadeFactor` 的说明）；底色接近黑时它会把
+    /// 底部**抬亮**。这里按底色成比例压暗：亮色页仍落在原来的灰附近，暗色页跟着一起暗。
+    private static func artistFadeTo(for colour: UIColor) -> UIColor {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 1
+        guard colour.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return UIColor(white: 0.29, alpha: 1)
+        }
+        return UIColor(
+            red: min(1, max(0, red * artistFadeFactor)),
+            green: min(1, max(0, green * artistFadeFactor)),
+            blue: min(1, max(0, blue * artistFadeFactor)),
+            alpha: 1
+        )
     }
 
     /// 窗口高度（pw 的 `windowHeight`，`SGRField.m:16-19`）：黑渐变按**窗口**锚定，不按页面。

@@ -665,9 +665,34 @@ extension EntityPageHeaderManager {
         writeDebugLog("[Release] spotify — asking the Web API for \"\(artist)\" (attempt \(attempt))")
 
         // 回调契约：**主队列**（数据源保证；`applyWebRelease` 里还兜了一次）。
-        ArtistReleasesFromSpotify.fetch(artist: artist) { release in
+        let pageText = releaseMatchPageText()
+        ArtistReleasesFromSpotify.fetch(artist: artist, pageText: pageText) { release in
             applyWebRelease(release, artist: artist)
         }
+    }
+
+    /// 消歧用的**页面文字**：页面上现在看得见的那些字（热门行的歌名 / 播放数都在里面）。
+    ///
+    /// 只给"多位同名艺人"那一档用（见 `ArtistReleaseDisambiguation`）。跳过我们自己挂的那张卡 ——
+    /// 它上面印的标题不能参与投票（否则上一次画的错卡会给自己投一票）。
+    static func releaseMatchPageText() -> String {
+        guard let page = lastArtistPage ?? releasePollPage, page.window != nil else { return "" }
+        var parts: [String] = []
+        var queue: [UIView] = [page]
+        var visited = 0
+        while !queue.isEmpty, visited < 2000 {
+            let view = queue.removeFirst()
+            visited += 1
+            if view === releaseCardHost || view === releaseCardView { continue }
+            if let label = view as? UILabel, let text = label.text, !text.isEmpty {
+                parts.append(text)
+            } else if let button = view as? UIButton,
+                      let title = button.title(for: .normal), !title.isEmpty {
+                parts.append(title)
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+        return parts.joined(separator: "\n")
     }
 
     /// 接口回来了（主队列）。取回来的那一张要**记住**（离开再回来同步重画），

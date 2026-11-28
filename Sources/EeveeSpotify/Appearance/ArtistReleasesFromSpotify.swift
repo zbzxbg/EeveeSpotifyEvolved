@@ -9,8 +9,10 @@ import Foundation
 // ⇒ 这里补一条**不依赖页面**的数据线：用 `DataLoaderServiceHooks` 抓下来的 Bearer token
 // 直接问 `api.spotify.com`。三条纪律：
 //
-// · **只认名字对得上的艺人**（归一化后逐字相等）—— 同名不同人是这张卡最容易犯的错
-//   ⇒ 对不上就返回 nil 并留一行日志，**绝不猜**；
+// · **只认名字对得上的艺人**（目录原名逐字相等；大小写敏感、不去变音符号 ——
+//   `MIMI` 与 `Mimì` 是两个人）。仍有多位同名时，用**页面上看得见的歌名**投票
+//   （`ArtistReleaseDisambiguation`）：哪位的 top tracks 在页面上出现过就选哪位；
+//   一票没有 / 并列就返回 nil 并留一行日志，**绝不猜**；
 // · 解析全部走 `Any` 转换 + 状态码判断，**不信任何字段一定存在、没有 force unwrap**；
 // · 回调**永远在主队列**（布局 / 视图那一侧都在主线程）。
 //
@@ -76,8 +78,8 @@ enum ArtistReleasesFromSpotify {
     //
     // 已经取到过的那一份（同步；给"每一拍都要看一眼"的布局侧用）。
     static func cached(for artist: String) -> SpotifyArtistRelease? {
-        let key = normalized(artist)
-        // 归一化后为空 = 这个名字一个字母数字都没有；只可能来自 `fetch`，
+        let key = catalogName(artist)
+        // 去掉首尾空白之后为空 = 页面上还没有艺人名；只可能来自 `fetch`，
         // 而它在门口已经记过一行了 —— 这里再记一行就是重复。
         guard !key.isEmpty else { return nil }
 
@@ -94,9 +96,15 @@ enum ArtistReleasesFromSpotify {
     /// 取这位艺人的最新一张发布。
     ///
     /// 令牌缺失 / 名字对不上 / 接口失败一律给 `nil`（并且各留一行日志），**不猜**。
+    /// - Parameter pageText: 页面上现在看得见的文字（多位同名艺人时用来投票；见
+    ///   `ArtistReleaseDisambiguation`）。别的档位不用它。
     /// - Note: 回调**一定**在主队列上。
-    static func fetch(artist: String, completion: @escaping (SpotifyArtistRelease?) -> Void) {
-        let key = normalized(artist)
+    static func fetch(
+        artist: String,
+        pageText: String = "",
+        completion: @escaping (SpotifyArtistRelease?) -> Void
+    ) {
+        let key = catalogName(artist)
         guard !key.isEmpty else {
             writeDebugLog("[Release] spotify — the artist name is empty after normalization, not asking")
             DispatchQueue.main.async { completion(nil) }
@@ -129,12 +137,17 @@ enum ArtistReleasesFromSpotify {
         }
 
         writeDebugLog("[Release] spotify — \"\(artist)\": searching the Web API for the artist")
-        searchArtist(named: artist, key: key, token: token)
+        searchArtist(named: artist, key: key, token: token, pageText: pageText)
     }
 
     // MARK: - 第一步：搜索艺人（名字必须逐字对得上）
 
-    private static func searchArtist(named artist: String, key: String, token: String) {
+    private static func searchArtist(
+        named artist: String,
+        key: String,
+        token: String,
+        pageText: String
+    ) {
         guard let url = searchURL(for: artist) else {
             writeDebugLog("[Release] spotify — \"\(artist)\": could not build the search URL")
             finish(key: key, release: nil)
@@ -152,27 +165,56 @@ enum ArtistReleasesFromSpotify {
                 return
             }
 
-            guard let id = matchedArtistID(in: data, artist: artist) else {
-                // 具体原因（看到了哪些名字）已经在 `matchedArtistID` 里记过一行。
+            let candidates = matchedArtistCandidates(in: data, artist: artist)
+            guard let first = candidates.first else {
+                // 具体原因（看到了哪些名字）已经在 `matchedArtistCandidates` 里记过一行。
                 finish(key: key, release: nil)
                 return
             }
-            writeDebugLog("[Release] spotify — \"\(artist)\": matched artist id \(id), asking for its albums")
-            albums(artistID: id, artist: artist, key: key, token: token, withMarket: true)
+            if candidates.count == 1 {
+                writeDebugLog(
+                    "[Release] spotify — \"\(artist)\": matched artist id \(first.id), asking for its albums"
+                )
+                albums(artistID: first.id, artist: artist, key: key, token: token, withMarket: true)
+                return
+            }
+            writeDebugLog(
+                "[Release] spotify — \"\(artist)\": \(candidates.count) artists carry that exact name,"
+                    + " voting with the page's own tracks"
+            )
+            disambiguate(
+                candidates: candidates,
+                artist: artist,
+                pageText: pageText,
+                key: key,
+                token: token
+            )
         }
         task.resume()
     }
 
-    /// 在 `artists.items` 里找**归一化之后逐字相等**的那一位；找不到返回 nil 并说明看到了什么。
-    private static func matchedArtistID(in data: Data, artist: String) -> String? {
+    /// 目录里的原名：只做 Unicode 预组合 + 去首尾空白，**大小写敏感、不去变音符号**。
+    ///
+    /// 页面上的名字就是目录里的原名 ⇒ 这是最可靠的那一半判据。
+    /// `Mimì` / `MIMI` 只差一个变音符号；折叠掉它就会把两位歌手当成同一个。
+    private static func catalogName(_ text: String) -> String {
+        text.precomposedStringWithCanonicalMapping
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 在 `artists.items` 里找**目录原名逐字相等**的候选（可能不止一位）。
+    private static func matchedArtistCandidates(
+        in data: Data,
+        artist: String
+    ) -> [(id: String, name: String)] {
         guard let root = jsonObject(data),
               let artists = root["artists"] as? [String: Any],
               let items = artists["items"] as? [[String: Any]] else {
             writeDebugLog("[Release] spotify — \"\(artist)\": the search answer carried no artists.items")
-            return nil
+            return []
         }
 
-        let wanted = normalized(artist)
+        let wanted = catalogName(artist)
         var seen: [String] = []
         var matches: [(id: String, name: String)] = []
 
@@ -181,24 +223,112 @@ enum ArtistReleasesFromSpotify {
                   let id = item["id"] as? String,
                   !id.isEmpty else { continue }
             if seen.count < 5, !seen.contains(name) { seen.append(name) }
-            if normalized(name) == wanted { matches.append((id: id, name: name)) }
+            if catalogName(name) == wanted { matches.append((id: id, name: name)) }
         }
 
-        guard let match = matches.first else {
+        guard !matches.isEmpty else {
             let seenText = seen.isEmpty ? "-" : seen.joined(separator: " | ")
             writeDebugLog(
                 "[Release] spotify — \"\(artist)\": no artist with that exact name in the search"
                     + " answer (saw \(seenText))"
             )
-            return nil
+            return []
         }
-        if matches.count > 1 {
+        return matches
+    }
+
+    /// 多位同名艺人：用**页面上看得见的歌名**给每位候选的 top tracks 投票。
+    ///
+    /// 逐位顺序问（最多 5 位），全都回来之后由 `ArtistReleaseDisambiguation.bestIndex` 选：
+    /// 唯一最高且至少命中 2 首才算数；一票没有 / 并列 ⇒ `nil`（**不猜**）。
+    private static func disambiguate(
+        candidates: [(id: String, name: String)],
+        artist: String,
+        pageText: String,
+        key: String,
+        token: String
+    ) {
+        guard !pageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             writeDebugLog(
-                "[Release] spotify — \"\(artist)\": \(matches.count) artists share that name,"
-                    + " using the first one (\(match.id))"
+                "[Release] spotify — \"\(artist)\": \(candidates.count) artists share that exact name"
+                    + " and the page has no tracks to compare with — not guessing"
             )
+            finish(key: key, release: nil)
+            return
         }
-        return match.id
+
+        let limited = Array(candidates.prefix(5))
+        var titles: [[String]] = []
+        var index = 0
+
+        func askNext() {
+            guard index < limited.count else {
+                let scores = titles.map {
+                    ArtistReleaseDisambiguation.score(titles: $0, pageText: pageText)
+                }
+                writeDebugLog(
+                    "[Release] spotify — \"\(artist)\": track overlap \(scores)"
+                        + " across \(limited.count) candidate(s)"
+                )
+                guard let best = ArtistReleaseDisambiguation.bestIndex(scores: scores, minimum: 2) else {
+                    writeDebugLog(
+                        "[Release] spotify — \"\(artist)\": the page's tracks do not single out one"
+                            + " candidate — not guessing"
+                    )
+                    finish(key: key, release: nil)
+                    return
+                }
+                let chosen = limited[best]
+                writeDebugLog(
+                    "[Release] spotify — \"\(artist)\": picked artist id \(chosen.id)"
+                        + " (\(scores[best]) track(s) found on the page)"
+                )
+                albums(artistID: chosen.id, artist: artist, key: key, token: token, withMarket: true)
+                return
+            }
+            let candidate = limited[index]
+            index += 1
+            topTrackTitles(artistID: candidate.id, token: token) { list in
+                titles.append(list)
+                askNext()
+            }
+        }
+
+        askNext()
+    }
+
+    /// 这位艺人的 top tracks（只取歌名，给消歧投票用）。
+    ///
+    /// 失败给空数组：那一位只是"没有票"，不连累别的候选。
+    private static func topTrackTitles(
+        artistID: String,
+        token: String,
+        completion: @escaping ([String]) -> Void
+    ) {
+        var components = URLComponents(
+            string: "https://api.spotify.com/v1/artists/" + artistID + "/top-tracks"
+        )
+        if let market = storefront() {
+            components?.queryItems = [URLQueryItem(name: "market", value: market)]
+        }
+        guard let url = components?.url else {
+            completion([])
+            return
+        }
+        let task = session.dataTask(with: makeRequest(url: url, token: token)) { data, response, error in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard let data, error == nil, status == 200,
+                  let root = jsonObject(data),
+                  let tracks = root["tracks"] as? [[String: Any]] else {
+                writeDebugLog(
+                    "[Release] spotify — top tracks for \(artistID) unavailable, status \(status)"
+                )
+                completion([])
+                return
+            }
+            completion(tracks.compactMap { $0["name"] as? String })
+        }
+        task.resume()
     }
 
     // MARK: - 第二步：这位艺人的专辑 / 单曲
@@ -241,14 +371,14 @@ enum ArtistReleasesFromSpotify {
                 // （搜索接口在这台设备上已经证明返回 200）⇒ 去按专辑搜索里挑最新一张。
                 // 只在"已经去掉 market 仍失败"时走，避免同一个 404 问两遍。
                 if !withMarket {
-                    searchAlbums(artist: artist, key: key, token: token)
+                    searchAlbums(artist: artist, artistID: artistID, key: key, token: token)
                     return
                 }
                 finish(key: key, release: nil)
                 return
             }
 
-            guard let release = latestRelease(in: data, artist: artist) else {
+            guard let release = latestRelease(in: data, artist: artist, expectedArtistID: artistID) else {
                 // 具体原因已经在 `latestRelease` 里记过一行。
                 finish(key: key, release: nil)
                 return
@@ -266,9 +396,9 @@ enum ArtistReleasesFromSpotify {
     ///
     /// `/artists/{id}/albums` 在有的地区 / 令牌组合下会直接 404，而**同一个令牌**问
     /// `/v1/search` 是 200（它刚刚就在同一个会话里返回过 artist id）⇒ 用歌手名搜一批专辑，
-    /// 仍然按"主艺人逐字相等 + 日期最新"来挑（解析复用 `latestRelease`，它同时认
-    /// `items` 与 `albums.items` 两种形状）。
-    private static func searchAlbums(artist: String, key: String, token: String) {
+    /// 仍然按"主艺人逐字相等 + 日期最新"来挑，并且**专辑上的 `artists[0].id` 必须就是那一位**
+    /// （解析复用 `latestRelease`，它同时认 `items` 与 `albums.items` 两种形状）。
+    private static func searchAlbums(artist: String, artistID: String, key: String, token: String) {
         guard var components = URLComponents(string: "https://api.spotify.com/v1/search") else {
             writeDebugLog("[Release] spotify — \"\(artist)\": could not build the album search URL")
             finish(key: key, release: nil)
@@ -297,7 +427,7 @@ enum ArtistReleasesFromSpotify {
                 finish(key: key, release: nil)
                 return
             }
-            guard let release = latestRelease(in: data, artist: artist) else {
+            guard let release = latestRelease(in: data, artist: artist, expectedArtistID: artistID) else {
                 // 具体原因已经在 `latestRelease` 里记过一行。
                 finish(key: key, release: nil)
                 return
@@ -314,8 +444,15 @@ enum ArtistReleasesFromSpotify {
     /// 从 `items` 里挑出"主艺人就是这一位 + 日期最新"的那一张。
     ///
     /// 过滤：`album_type == compilation` 丢掉、`uri` 不是 `spotify:album:` 的丢掉、
-    /// 主艺人（`artists[0]`）归一化后对不上的丢掉（合作曲 / 群星合辑都在这里出局）。
-    private static func latestRelease(in data: Data, artist: String) -> SpotifyArtistRelease? {
+    /// 主艺人（`artists[0]`）对不上的丢掉（合作曲 / 群星合辑都在这里出局）。
+    ///
+    /// - Parameter expectedArtistID: 已经确定下来的那位的 id。专辑上带 `artists[0].id` 时
+    ///   必须与它相等 —— 名字比较是启发式，id 才是同一性的判据。
+    private static func latestRelease(
+        in data: Data,
+        artist: String,
+        expectedArtistID: String? = nil
+    ) -> SpotifyArtistRelease? {
         guard let root = jsonObject(data) else {
             writeDebugLog("[Release] spotify — \"\(artist)\": the answer was not a JSON object")
             return nil
@@ -345,6 +482,12 @@ enum ArtistReleasesFromSpotify {
                   let uri = item["uri"] as? String, uri.hasPrefix("spotify:album:"),
                   let primary = primaryArtistName(of: item),
                   normalized(primary) == wanted else {
+                continue
+            }
+            if let expectedArtistID,
+               let id = primaryArtistID(of: item),
+               !id.isEmpty,
+               id != expectedArtistID {
                 continue
             }
 
@@ -403,6 +546,14 @@ enum ArtistReleasesFromSpotify {
               let name = first["name"] as? String,
               !name.isEmpty else { return nil }
         return name
+    }
+
+    private static func primaryArtistID(of item: [String: Any]) -> String? {
+        guard let artists = item["artists"] as? [[String: Any]],
+              let first = artists.first,
+              let id = first["id"] as? String,
+              !id.isEmpty else { return nil }
+        return id
     }
 
     private static func artworkURL(of item: [String: Any]) -> URL? {
@@ -496,7 +647,7 @@ enum ArtistReleasesFromSpotify {
         components?.queryItems = [
             URLQueryItem(name: "q", value: artist),
             URLQueryItem(name: "type", value: "artist"),
-            URLQueryItem(name: "limit", value: "10"),
+            URLQueryItem(name: "limit", value: "20"),
         ]
         return components?.url
     }
