@@ -459,13 +459,13 @@ require(slopeSpec.coefficients(sampleRate: sampleRate)
                 frequency: 150, gainDb: 6, slope: 0.9, sampleRate: sampleRate),
         "the shelf spec and the direct design agree to the last bit")
 
-let flatChain = AudioDSPFilterChain(
+let flatSpecChain = AudioDSPFilterChain(
     preampDb: 0,
     filters: AudioDSPBands.frequencies.map {
         AudioDSPFilterSpec(kind: .peaking, frequency: $0, gainDb: 0, q: AudioDSPBands.q)
     }
 )
-require(flatChain.coefficients(sampleRate: sampleRate).allSatisfy(\.isBypass),
+require(flatSpecChain.coefficients(sampleRate: sampleRate).allSatisfy(\.isBypass),
         "0 dB filters on every band design bypass coefficients")
 
 // MARK: - 结果
