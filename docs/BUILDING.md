@@ -18,7 +18,7 @@ Actions → **Build IPA — patched (Orion.framework + zxPluginsInject)** or **B
 | `upload_method` | Where the finished IPA(s) go: `artifacts` (default), `filebin`, or `both`. |
 | `liquid_glass` | On by default. Removes `UIDesignRequiresCompatibility` so iOS 26+ gets the new design language; set it to false to keep Spotify's own compatibility-mode look. |
 
-There is no "compile the tweak only" mode; an empty `ipa_url` fails the download step. A third workflow, **Binary Symbol Diff**, also takes an `ipa_url`, but it diffs a Spotify build against the tracked symbol baseline instead of producing an IPA.
+There is no "compile the tweak only" mode; an empty `ipa_url` fails the download step.
 
 ## Locally (macOS)
 
@@ -44,7 +44,7 @@ ALLOW_LIQUID_GLASS=0 ./build-ipa-local.sh /path/to/Spotify-vanilla.ipa
 
 ## Symbol baseline
 
-`Scripts/dump-spotify-symbols.py` dumps the classes, selectors, methods and flags of a Spotify build; `Scripts/diff-symbol-dumps.py` diffs two dumps or a dump against a committed baseline (`Symbols/baseline-<version>.txt`; none is committed yet, so the first run only produces a dump). The **Binary Symbol Diff** workflow wraps the two, which is what catches "Spotify renamed a class and the tweak silently stopped hooking it" before a release.
+`Scripts/dump-spotify-symbols.py` dumps the classes, selectors, methods and flags of a Spotify build; `Scripts/diff-symbol-dumps.py` diffs two dumps or a dump against a committed baseline (`Symbols/baseline-<version>.txt`; none is committed yet). Both are local tools with no workflow around them: run them by hand when a new Spotify version lands, because they catch "Spotify renamed a class and the tweak silently stopped hooking it" and nothing else can.
 
 ---
 

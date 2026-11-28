@@ -22,10 +22,10 @@ Spotify 每个版本都会搬类、改名、删实验。仓库里 `static let ta
 
 和 `Scripts/diff-symbol-dumps.py` 的分工（别搞混）
 ----------------------------------------------
-· `Scripts/diff-symbol-dumps.py`：CI `binary-diff.yml` 用的那个 —— **dump 对 dump** 的版本对比，
+· `Scripts/diff-symbol-dumps.py`：**dump 对 dump** 的版本对比，
   **只看 Swift**（它自己文档里写了点号写法的子串匹配会漏报），要有"上一次的 dump"当基线。
 · 本脚本：**时点核对**（不需要基线）+ **ObjC 目标** + **IPA 字节级判定**。
-  换新版 Spotify 时两条都值得跑：先看 CI 那份 CRITICAL，再用本脚本收 ObjC 这半。
+  换新版 Spotify 时两条都值得跑：先用它比出 CRITICAL，再用本脚本收 ObjC 这半。
 
 用法
 ----
