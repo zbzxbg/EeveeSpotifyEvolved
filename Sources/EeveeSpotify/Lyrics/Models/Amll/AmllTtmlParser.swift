@@ -558,12 +558,14 @@ enum AmllTtmlParser {
                timed.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines) == text {
                 return timed
             }
-            // 时间回退顺序：容器自己 → 子词的实际区间 → 整行。整行拿到最后，
-            // 否则一段有自己时间的副唱会从行首就开始亮。
+            // 子词只覆盖了一部分正文时，它们的区间不能代表整段：用第一颗子词的开始、
+            // 最后一颗的结束，会让这段副唱在句子还没唱完时提前熄灭。所以整段文本配
+            // 整段的时间 —— 容器自己的 begin/end，没有再退回行；子词区间只在两者
+            // 都没有时兜底。
             let start = parseTimeMs(child.attribute("begin"))
-                ?? timed.map(\.startMs).min() ?? parseTimeMs(node.attribute("begin"))
+                ?? parseTimeMs(node.attribute("begin")) ?? timed.map(\.startMs).min()
             let end = parseTimeMs(child.attribute("end"))
-                ?? timed.map(\.endMs).max() ?? parseTimeMs(node.attribute("end"))
+                ?? parseTimeMs(node.attribute("end")) ?? timed.map(\.endMs).max()
             guard let start, let end, end >= start else { return [] }
             return [AmllTtmlSyllable(text: text, startMs: start, endMs: end)]
         }

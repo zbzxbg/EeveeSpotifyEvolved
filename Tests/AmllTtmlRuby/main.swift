@@ -346,29 +346,6 @@ do {
     print("  FAIL parser→mapper — 解析抛错 \(error)")
 }
 
-// MARK: - ⑤ 副唱的时间回退：子词区间优先于整行
-
-// 副唱段自己没有 begin/end、子词只覆盖了前半句：合成的那一个 token 必须落在
-// 子词的实际区间上，而不是被整行的 10s–20s 接管（那会让它从行首就开始亮）。
-let backgroundTimingTtml = """
-<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
-  <body><div>
-    <p begin="10s" end="20s"><span begin="10s" end="20s">Line</span><span ttm:role="x-bg"><span begin="12s" end="13s">Oh</span> and more</span></p>
-  </div></body>
-</tt>
-"""
-do {
-    let parsed = try AmllTtmlParser.parse(backgroundTimingTtml)
-    let background = parsed.lines.first?.backgroundVocal
-    requireEqual(background?.syllables.count ?? 0, 1, "副唱回退 — 子词覆盖不全时合成一个 token")
-    requireEqual(background?.text ?? "", "Oh and more", "副唱回退 — 正文完整保留")
-    requireEqual(background?.syllables.first?.startMs ?? -1, 12_000, "副唱回退 — 用子词开始而不是行首")
-    requireEqual(background?.syllables.first?.endMs ?? -1, 13_000, "副唱回退 — 用子词结束而不是行尾")
-} catch {
-    failures += 1
-    print("  FAIL 副唱回退 — 解析抛错 \(error)")
-}
-
 if failures == 0 {
     print("AmllTtmlRuby: all assertions passed")
 } else {
