@@ -17,7 +17,8 @@
 // `landscapeLyricsMaxWidth`（多出来的宽度**放到左边**，不往中间挤）。
 //
 // 手指在歌词上滑动时，这一列（歌名 / 艺人 / 进度 / 传输）一起淡出，停手 1.6s 再淡回 ——
-// 判据只能是**手势**：歌词每帧自动滚，按 `contentOffset` 判会永远收着。
+// 判据只能是**手势**：歌词每帧自动滚，按 `contentOffset` 判会永远收着。纯文本那一档不自动滚，
+// 所以它要**内容真的滚了**才收（判据在 `LandscapeScrollHideRule`）：整段词放得下、没得滚时按一下也不收。
 //
 // 歌名 / 艺人是我们自己的 label（原生标题行整块被按着），所以点击也在这里接：
 // 歌名 → 专辑页，艺人 → 艺人页。
@@ -142,16 +143,22 @@ extension NowPlayingIOS27 {
     // 判据**只能用手势**，不能看 `contentOffset`：歌词是每帧自动滚的（逐词跟唱），
     // 偏移量一直在变 ⇒ 按偏移判会永远收着。这里把观察者**挂到宿主自己那条 pan 上**
     // （`addTarget`），不新建手势、不抢 delegate，滚动手感一点不变。
+    //
+    // 纯文本那一档是例外里的一半：它也走这条 pan，内容却可能短到放得下（没得滚）。
+    // 所以它额外要求"手势期间内容真的挪过"（`landscapeScrollStartOffsetY` 那条增量），
+    // 判据收在 `LandscapeScrollHideRule` 里。
 
     static let landscapeControlsFadeDuration: TimeInterval = 0.18
     static let landscapeControlsRestoreDelay: TimeInterval = 1.6
-    /// 划出这么多（pt）才算"真的在滚"，这一列才收起来。
-    static let landscapeScrollHideDistance: CGFloat = 8
     static let landscapeScrollWatcher = LandscapeScrollWatcher()
     static weak var landscapeWatchedScrollView: UIScrollView?
     static weak var landscapeWatchedPan: UIPanGestureRecognizer?
     static var landscapeControlsHidden = false
     static var landscapeControlsRestoreWork: DispatchWorkItem?
+    /// 手势开始那一刻的滚动位置 / 这一档是不是纯文本 —— 都在 `began` 时取一次
+    /// （`landscapeLyricsAreStatic()` 会建数组，不能每帧调）。
+    static var landscapeScrollStartOffsetY: CGFloat?
+    static var landscapeScrollIsStatic = false
 
     /// 挂观察者（只在宿主换了一条滚动视图时重挂）。
     private static func attachLandscapeScrollWatcher() {
@@ -173,12 +180,13 @@ extension NowPlayingIOS27 {
         landscapeWatchedPan = pan
         writeDebugLog(
             "[\(logTag)] landscape scroll — watcher attached on \(NSStringFromClass(type(of: scroll)))"
-                + (landscapeLyricsAreStatic() ? " (static lyrics: the column stays)" : "")
+                + (landscapeLyricsAreStatic() ? " (plain lyrics: hides only when the text really moves)" : "")
         )
     }
 
-    /// 这一档歌词**没有时间轴**（纯文本，比如 Genius）：它不跟唱，也没有"看词时把控件让开"
-    /// 的必要 ⇒ 划它不收控件。判据与 `mountLyricsOnly` 里那次 `isStatic` 一致。
+    /// 这一档歌词**没有时间轴**（纯文本，比如 Genius / 无时间戳的词）：它不跟唱，
+    /// 划动时只有"内容真的滚了"才收控件 —— 内容短到放得下时按一下不能收。
+    /// 判据与 `mountLyricsOnly` 里那次 `isStatic` 一致。
     private static func landscapeLyricsAreStatic() -> Bool {
         let timed = NowPlayingLyricsPlate.currentLines() ?? []
         return timed.isEmpty && NowPlayingLyricsPlate.currentUntimedLines() != nil
@@ -196,25 +204,36 @@ extension NowPlayingIOS27 {
         return nil
     }
 
-    /// 手指按下就记一笔，但**先不收**：要等真的划出距离（见 `noteLandscapeScrollMoved`）。
+    /// 手指按下就记一笔（状态 + 滚动位置），但**先不收**：要等真的划出距离（见 `noteLandscapeScrollMoved`）。
     private static func noteLandscapeScrollBegan() {
-        guard !landscapeLyricsAreStatic() else { return }
+        landscapeScrollIsStatic = landscapeLyricsAreStatic()
+        landscapeScrollStartOffsetY = landscapeWatchedScrollView?.contentOffset.y
         landscapeControlsRestoreWork?.cancel()
         landscapeControlsRestoreWork = nil
     }
 
-    /// 划出 `landscapeScrollHideDistance` 之后才把这一列收起来。
+    /// 划出 `LandscapeScrollHideRule.dragThreshold` 之后才把这一列收起来。
     ///
     /// 为什么不看"手势开始"：轻点、误触、以及**没有可滚内容**的那一档都会开始一条 pan，
-    /// 那时收控件等于"没划动也消失"。
-    private static func noteLandscapeScrollMoved(_ distance: CGFloat) {
-        guard !landscapeLyricsAreStatic() else { return }
-        guard abs(distance) >= landscapeScrollHideDistance else { return }
+    /// 那时收控件等于"没划动也消失"。纯文本那一档还要求内容真的挪过（见那份规则）。
+    private static func noteLandscapeScrollMoved(_ drag: CGFloat) {
+        let offsetDelta: CGFloat
+        if let start = landscapeScrollStartOffsetY {
+            offsetDelta = (landscapeWatchedScrollView?.contentOffset.y ?? start) - start
+        } else {
+            offsetDelta = 0
+        }
+        guard LandscapeScrollHideRule.shouldHide(
+            isStatic: landscapeScrollIsStatic,
+            dragDistance: drag,
+            contentOffsetDelta: offsetDelta
+        ) else { return }
         applyLandscapeControlsHidden(true)
     }
 
     private static func noteLandscapeScrollEnded() {
         guard landscapeControlsHidden else { return }
+        landscapeScrollStartOffsetY = nil
         landscapeControlsRestoreWork?.cancel()
         let work = DispatchWorkItem { applyLandscapeControlsHidden(false) }
         landscapeControlsRestoreWork = work
@@ -350,6 +369,8 @@ extension NowPlayingIOS27 {
         }
         landscapeWatchedScrollView = nil
         landscapeWatchedPan = nil
+        landscapeScrollStartOffsetY = nil
+        landscapeScrollIsStatic = false
         if landscapePageControls != nil {
             landscapePageControls?.view.removeFromSuperview()
             landscapePageControls = nil
@@ -528,47 +549,42 @@ extension NowPlayingIOS27 {
 
 // MARK: - 会滚动的歌名 / 艺人
 //
-// 宽度够就静止；超出就像 Spotify 那样一直向左滚 —— 两段同样的文字首尾相接、中间隔 `gap`，
-// 所以循环那一帧看不出来（不会出现"跳回开头"）。右端留一条渐隐，滚出去的字不硬切在边上。
+// 宽度够就静止。超出时不是"一直向左滚"，而是**分段读**（时间表在 `LandscapeMarqueeTimeline`）：
+// 贴左端停一下 → 左移一段停一下 → … → 尾端贴右端停一下 → 一帧跳回开头 → 再走。
+// 这样两端的字都完整露过，中间也能停下来看；右端留一条渐隐，滚动的字不硬切在边上。
 //
-// 用 `CABasicAnimation` 而不是 `UIView.animate`：这一层每 0.3s 会被写一次 frame，
+// 用 `CAKeyframeAnimation` 而不是 `UIView.animate`：这一层每 0.3s 会被写一次 frame，
 // 逐拍重建的 UIView 动画会被打断；挂在 `track.layer` 上的 CA 动画与 frame 写入无关。
+// 只有"文字宽 / 视口宽"变了才重建，否则每一拍都会把动画从头再来一遍。
 
 final class LandscapePageMarqueeView: UIView {
 
-    /// 两段文字之间的空隙。
-    private static let gap: CGFloat = 40
-    /// 滚动速度（pt / 秒）。
-    private static let speed: CGFloat = 44
     /// 右端渐隐的宽度。
     private static let fadeWidth: CGFloat = 14
+    private static let scrollKey = "marquee"
 
     private let track = UIView()
-    private let first: UILabel
-    private let second: UILabel
+    private let label: UILabel
     private let fade = CAGradientLayer()
-    private var scrollingDistance: CGFloat = 0
+    /// 正在播的那份时间表是按哪组几何算出来的（变了才重建动画）。
+    private var scrollingGeometry: (overflow: CGFloat, viewport: CGFloat)?
 
     var text: String = "" {
         didSet {
             guard text != oldValue else { return }
-            first.text = text
-            second.text = text
+            label.text = text
             setNeedsLayout()
         }
     }
 
     init(font: UIFont, color: UIColor) {
-        first = LandscapePageMarqueeView.makeLabel(font: font, color: color)
-        second = LandscapePageMarqueeView.makeLabel(font: font, color: color)
+        label = LandscapePageMarqueeView.makeLabel(font: font, color: color)
         super.init(frame: .zero)
         clipsToBounds = true
         isUserInteractionEnabled = true
         track.isUserInteractionEnabled = false
         addSubview(track)
-        track.addSubview(first)
-        track.addSubview(second)
-        second.isHidden = true
+        track.addSubview(label)
         fade.startPoint = CGPoint(x: 0, y: 0.5)
         fade.endPoint = CGPoint(x: 1, y: 0.5)
         layer.mask = fade
@@ -590,7 +606,7 @@ final class LandscapePageMarqueeView: UIView {
     }
 
     private var measuredWidth: CGFloat {
-        guard !text.isEmpty, let font = first.font else { return 0 }
+        guard !text.isEmpty, let font = label.font else { return 0 }
         let width = (text as NSString).size(withAttributes: [.font: font]).width
         // 留一点余量，免得最后一个字贴着边裁一半。
         return width.rounded(.up) + 2
@@ -616,53 +632,47 @@ final class LandscapePageMarqueeView: UIView {
 
         let textWidth = measuredWidth
         let needsScroll = textWidth > size.width + 0.5
-        first.frame = CGRect(
+        label.frame = CGRect(
             x: 0,
             y: 0,
             width: needsScroll ? textWidth : size.width,
             height: size.height
         )
-        second.isHidden = !needsScroll
-        second.frame = CGRect(
-            x: textWidth + Self.gap,
-            y: 0,
-            width: textWidth,
-            height: size.height
-        )
-        track.frame = CGRect(
-            x: 0,
-            y: 0,
-            width: needsScroll ? (textWidth * 2 + Self.gap) : size.width,
-            height: size.height
-        )
-        if needsScroll {
-            startScrolling(distance: textWidth + Self.gap)
-        } else {
+        track.frame = CGRect(x: 0, y: 0, width: label.frame.width, height: size.height)
+        guard needsScroll else {
             stopScrolling()
-        }
-    }
-
-    private func startScrolling(distance: CGFloat) {
-        let key = "marquee"
-        if track.layer.animation(forKey: key) != nil, abs(scrollingDistance - distance) < 0.5 {
             return
         }
+        let geometry = (overflow: textWidth - size.width, viewport: size.width)
+        if let current = scrollingGeometry,
+           abs(current.overflow - geometry.overflow) < 0.5,
+           abs(current.viewport - geometry.viewport) < 0.5,
+           track.layer.animation(forKey: Self.scrollKey) != nil {
+            return
+        }
+        startScrolling(geometry: geometry)
+    }
+
+    private func startScrolling(geometry: (overflow: CGFloat, viewport: CGFloat)) {
         stopScrolling()
-        scrollingDistance = distance
-        let animation = CABasicAnimation(keyPath: "transform.translation.x")
-        animation.fromValue = NSNumber(value: 0)
-        animation.toValue = NSNumber(value: Double(-distance))
-        animation.duration = CFTimeInterval(max(2, distance / Self.speed))
+        guard let timeline = LandscapeMarqueeTimeline.timeline(
+            overflow: geometry.overflow,
+            viewportWidth: geometry.viewport
+        ) else { return }
+        scrollingGeometry = geometry
+        let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        animation.values = timeline.values.map { NSNumber(value: Double($0)) }
+        animation.keyTimes = timeline.keyTimes.map { NSNumber(value: $0) }
+        animation.duration = CFTimeInterval(timeline.duration)
         animation.repeatCount = .infinity
-        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        animation.calculationMode = .linear
         animation.isRemovedOnCompletion = false
-        track.layer.add(animation, forKey: key)
+        track.layer.add(animation, forKey: Self.scrollKey)
     }
 
     private func stopScrolling() {
-        scrollingDistance = 0
-        track.layer.removeAnimation(forKey: "marquee")
-        track.layer.transform = CATransform3DIdentity
+        scrollingGeometry = nil
+        track.layer.removeAnimation(forKey: Self.scrollKey)
     }
 }
 

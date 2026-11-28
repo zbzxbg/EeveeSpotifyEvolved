@@ -169,6 +169,27 @@ jobs:
                  -o layout-geometry-tests
           ./layout-geometry-tests
 
+      # 横屏歌词页"划动收控件"的判据（`LandscapeScrollHideRule`）：
+      # 逐词 / 逐行只认手势（歌词自己在滚，按偏移判会永远收着）；纯文本还要"内容真的挪过"，
+      # 否则整段词放得下时按一下也收（"没划动也消失"）。视图层要 UIKit，进不来。
+      - name: Landscape scroll hide rule (plain vs timed lyrics)
+        run: |
+          swiftc Sources/EeveeSpotify/Appearance/LandscapeScrollHideRule.swift \
+                 Tests/LandscapeScrollHideRule/main.swift \
+                 -o landscape-scroll-hide-rule-tests
+          ./landscape-scroll-hide-rule-tests
+
+      # 横屏页歌名 / 艺人"分段停"的时间表（`LandscapeMarqueeTimeline`）：
+      # 贴左端停 → 每段左移后停 → 尾端贴右端停 → 一帧跳回开头。视图层要 UIKit，进不来；
+      # 这里钉住 keyTimes 的形状（严格递增、首 0 尾 1）、值都落在 [−overflow, 0]、
+      # 最后停的是完整溢出量，以及"每段不超过配置位移"。
+      - name: Landscape marquee timeline (paged scroll)
+        run: |
+          swiftc Sources/EeveeSpotify/Appearance/LandscapeMarqueeTimeline.swift \
+                 Tests/LandscapeMarqueeTimeline/main.swift \
+                 -o landscape-marquee-timeline-tests
+          ./landscape-marquee-timeline-tests
+
       - name: URL ad classification (existing)
         run: |
           swiftc Tests/URLAdClassification/main.swift \
