@@ -291,15 +291,16 @@ struct AppleMusicLyricsPage: View {
     /// 上一次推间奏时的歌词身份 —— 换歌 / 换源 / 换时间轴后要重推。
     @State private var interludeLyricsFingerprint: String = ""
 
-    /// 间奏判定的口径：**照 MeloX 的默认值**（`LyricsInterludePreferences`：
-    /// `defaultMode = .automatic`、`defaultMinimumInferredGapDuration = 4.0`）。
+    /// 间奏判定的口径：`LyricInterludeDetectionPolicy.standard`（15s）。
     ///
-    /// ⚠️ 先写死、暂时不做开关：`.automatic(4)` 的含义是"连**推断**出来的 LRC 间隙
-    /// 也算，阈值 4 秒"，这是口味 —— 得先在真机上把 `.preciseTiming`（只认作者时间轴）
-    /// 与它各听一遍，才知道该给用户哪一个。在那之前露一个开关，只是多一个
-    /// 排查型开关的处置（见 `EeveeDebugSettingsViewModel`）。
-    private static let interludeDetectionPolicy: LyricInterludeDetectionPolicy =
-        .automatic(minimumInferredGapDuration: 4)
+    /// 15s 取自 Musixmatch 对间奏标记（`♪`）的规则：连续 15 秒以上没有可同步的歌词
+    /// 才算一段间奏。MeloX 默认的 4.0s 会把"两句之间换一口气"也当成间奏 —— 每一处都
+    /// 多出一条 40pt 的驻留行（`AppleMusicInterludeRow`），看起来像歌词凭空多出空行。
+    ///
+    /// ⚠️ 先写死、暂时不做开关：这是口味，得先在真机上把"只在真间奏处画"与
+    /// "短间隙也画"各听一遍。在那之前露一个开关，只是多一个排查型开关的处置
+    /// （见 `EeveeDebugSettingsViewModel`）。
+    private static let interludeDetectionPolicy: LyricInterludeDetectionPolicy = .standard
 
     /// 歌词的"身份"：档位 + 行数 + 首尾行 id。换歌、换源、换时间轴都会变。
     ///
@@ -351,7 +352,7 @@ struct AppleMusicLyricsPage: View {
         // ⚠️ 只在**重推**时打（换歌那一次），不是每帧 —— 不然日志会被刷爆。
         //
         // **每段多长也带上** —— 那 17 条各占 40pt 的驻留行（`AppleMusicInterludeRow`）会造成
-        // 「歌词有额外换行」。下一份日志直接看这串数就能定阈值（现在逐字来源也用 4s）。
+        // 「歌词有额外换行」。下一份日志直接看这串数就能定阈值（现在 15s）。
         let gaps = detected.map { String(format: "%.1f", $0.gapDuration) }.joined(separator: ",")
         writeDebugLog(
             "[Interlude] \(detected.count) interlude(s) in \(lines.count) line(s), gaps=[\(gaps)]"

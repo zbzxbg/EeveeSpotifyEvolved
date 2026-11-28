@@ -11,7 +11,8 @@ import Foundation
 //
 // 还有一层意思：本仓库本机没有 Swift 工具链（只有 Windows + iPhone），这两个新文件在
 // 打包之前**没有任何东西编译过它们**。这一步至少让 `swiftc` 真的过一遍它们 + 依赖的模型，
-// 顺便把数字钉死在 MeloX 的口径上（`MeloX/Core/Lyrics/LyricInterludeTimeline.swift`）。
+// 顺便把数字钉死（动效曲线照 MeloX 的 `MeloX/Core/Lyrics/LyricInterludeTimeline.swift`；
+// 页面口径已从 MeloX 的 4.0s 改成 15s，见 §9）。
 //
 // 跑法（CI 里就是这条）：
 //   swiftc Sources/EeveeSpotify/Lyrics/AppleMusic/LyricModels.swift \
@@ -585,6 +586,48 @@ require(
 require(
     presentation(at: .infinity, in: interlude).opacity == 0,
     "an infinite playback time must not show the dots"
+)
+
+// MARK: - 9. 页面默认口径：15 秒
+
+require(
+    LyricInterludeDetectionPolicy.standard
+        == .automatic(minimumInferredGapDuration: 15),
+    "the page must use the 15s Musixmatch instrumental rule"
+)
+
+// "aa" 的估算人声时长是 2s ⇒ 从 14s 起给出 12s 间隙，从 18s 起给出 16s。
+let breath = adapterLines([(time: 0, text: "aa"), (time: 14, text: "bb")])
+require(
+    LyricInterludeTimeline.candidates(in: breath).count == 1,
+    "the 12s fixture is one gap"
+)
+requireClose(
+    LyricInterludeTimeline.candidates(in: breath)[0].gapDuration,
+    12,
+    "the fixture really is a 12s gap"
+)
+require(
+    LyricInterludeTimeline.interludes(in: breath, detectionPolicy: .standard).isEmpty,
+    "a 12s gap is a breath, not an instrumental"
+)
+
+let instrumental = adapterLines([(time: 0, text: "aa"), (time: 18, text: "bb")])
+require(
+    LyricInterludeTimeline.candidates(in: instrumental).count == 1,
+    "the 16s fixture is one gap"
+)
+requireClose(
+    LyricInterludeTimeline.candidates(in: instrumental)[0].gapDuration,
+    16,
+    "the fixture really is a 16s gap"
+)
+require(
+    LyricInterludeTimeline.interludes(
+        in: instrumental,
+        detectionPolicy: .standard
+    ).count == 1,
+    "a 16s instrumental break gets the dots"
 )
 
 print("OK — interlude timeline + dots presentation: all invariants hold")

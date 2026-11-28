@@ -19,6 +19,18 @@ enum LyricInterludeDetectionPolicy: Hashable, Sendable {
 
     /// 把推断静音时长达到阈值的 LRC 间隙也算进来。
     case automatic(minimumInferredGapDuration: TimeInterval)
+
+    /// 页面用的口径：15 秒。
+    ///
+    /// 这条数字来自 Musixmatch 对间奏标记（`♪`）的规则 —— 连续 15 秒以上没有可同步的
+    /// 歌词才算一段间奏。更短的阈值（MeloX 的默认值是 4.0s）会把"两句之间换一口气"
+    /// 也画成呼吸点：那是一条 40pt 的驻留行，在歌词里看起来就是凭空多出的空行。
+    ///
+    /// ⚠️ MXM 那条规则还有个结构前提（"只在分节之间"），我们只有时间轴，没有分节信息，
+    /// 所以这里是纯时间判据：只要人声尾巴到下一句之间空了 15 秒以上就画。
+    static let standard = LyricInterludeDetectionPolicy.automatic(
+        minimumInferredGapDuration: 15
+    )
 }
 
 struct LyricInterlude: Identifiable, Hashable {
