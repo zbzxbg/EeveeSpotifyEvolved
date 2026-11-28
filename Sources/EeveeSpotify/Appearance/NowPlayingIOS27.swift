@@ -708,6 +708,9 @@ enum NowPlayingIOS27 {
     /// 一拍之内会被封面 / 标题 / 歌词 / 工具行各问一次 ⇒ 按「页面 + 尺寸 + 那一坨」缓存，
     /// 只有换页 / 旋转 / 那一坨被 Spotify 换掉才重算（`npv.bottomStackView` 的 BFS 不便宜）。
     static func landscapeLayout(in page: UIView) -> LandscapeLayout? {
+        // 横屏自建页这一档：几何只由页面与安全区推（见 `NowPlayingIOS27+LandscapePage.swift`）。
+        // 它不读底排，所以换歌 / 换页那一两拍也不会「量不到」而退回上一版。
+        if let own = landscapePageGeometry(in: page) { return own.shared }
         guard isLandscapeTwoColumn(page) else {
             clearLandscapeLayout()
             return nil
@@ -1107,21 +1110,30 @@ enum NowPlayingIOS27 {
         //
         // ⚠️ 顺序不能动：`placeBottomStack` 的 -55pt 是 `placeTitleRow` 量自然位置的
         // 前提（标题行就长在这个 stack 里）。
+        let ownLandscapePage = landscapePageGeometry(in: page) != nil
+        // 先收：转回竖屏时底排被我们整块按着，`bottomStackView` 那道"看得见"的闸门会认不出它，
+        // 晚一拍收就要在竖屏里等一拍才把 -55pt 抬回去。收完再 `placeBottomStack` 才接得上。
+        if !ownLandscapePage {
+            clearLandscapePage()
+        }
         if placeBottomStack(in: page) { changed = true }
-        // 横屏：把歌名 / 进度 / 传输三行从底排搬出来自己摆（底排那个盒子是定值，改不动）。
-        // ⚠️ 必须排在 `placeTitleRow` / `placeProgress` 之前：它们要按"行在页面上"来量。
-        if let layout = landscapeLayout(in: page) {
+        // 横屏自建页：这一屏的几何与控件（歌名 / 艺人 / 进度 / 传输）都由我们自己摆。
+        // ⚠️ 必须排在 `updateLyricsStage` 之前 —— 歌词容器的框取的就是它的 `lyrics`。
+        if ownLandscapePage, placeLandscapePage(in: page) { changed = true }
+        // 旧的两栏路径：把歌名 / 进度 / 传输三行从底排搬出来自己摆（自建页这一档不跑）。
+        if !ownLandscapePage, let layout = landscapeLayout(in: page) {
             if placeLandscapeRows(in: page, layout: layout) { changed = true }
-        } else {
+        } else if !ownLandscapePage {
             restoreLandscapeRows()
         }
         if placeTitleRow(in: page) { changed = true }
         // Canvas 页自带的歌词卡 / 页顶歌名压在我们的版式上，每拍按下去。
         if placeCanvasChrome(in: page) { changed = true }
         // `setLyricsMode` 那一拍标题可能还没量到（换歌转场/页面重建）⇒ 它把"亮歌词"挂起；
-        // 这里每一拍重试，标题真到缩略图旁边了才铺歌词。
-        if lyricsModeActive, !lyricsModeRevealed, lyricsRevealPending,
-           lyricsSceneReady(in: page) {
+        // 这里每一拍重试，标题真到缩略图旁边了才铺歌词。自建页那一档不靠原生的标题行
+        // （它整块被我们按着），改由 `landscapePageSceneReady` 放行。
+        let lyricsCanReveal = ownLandscapePage ? landscapePageSceneReady(in: page) : lyricsSceneReady(in: page)
+        if lyricsModeActive, !lyricsModeRevealed, lyricsRevealPending, lyricsCanReveal {
             lyricsRevealPending = false
             lyricsModeRevealed = true
             changed = true
@@ -1243,7 +1255,12 @@ enum NowPlayingIOS27 {
     private static func updateLyricsStage(in page: UIView) -> Bool {
         // 标题还没挪到缩略图旁边时**不要铺** —— 容器会盖住还留在原生 y=550 的歌名/艺人。
         // 把"已露面"退回去、下一拍标题到位后重新淡入；署名也跟着 alpha 0，不会单独飘着。
-        guard titleRowPlaced(in: page) else {
+        //
+        // 横屏自建页那一档例外：歌名是我们自己画的，原生那一坨整块被按着 ⇒ `titleRowPlaced`
+        // 永远不过，这里改看"我们自己的封面在不在页上"。
+        let ownLandscapePage = landscapePageGeometry(in: page) != nil
+        let placed = ownLandscapePage ? landscapePageSceneReady(in: page) : titleRowPlaced(in: page)
+        guard placed else {
             if lyricsModeRevealed {
                 lyricsModeRevealed = false
                 lyricsRevealPending = true
@@ -2186,6 +2203,15 @@ enum NowPlayingIOS27 {
         }
         bottomStack = stack
 
+        // 横屏自建页：这一坨整块按下去，**位置一个字节都不碰** —— 歌名 / 进度 / 传输都由
+        // `NowPlayingIOS27+LandscapePage.swift` 那一屏自己画，这里只把它从画面上摘掉。
+        if landscapePageGeometry(in: page) != nil {
+            restoreLandscapeStackIfNeeded()
+            restoreLandscapeFloatingChrome()
+            hideLandscapeFloatingChrome(in: page)
+            return hideLandscapeNativeStack(stack)
+        }
+
         let key = ObjectIdentifier(stack)
         let base: CGAffineTransform
         if let recorded = bottomStackBase, recorded.0 == key {
@@ -2345,6 +2371,12 @@ enum NowPlayingIOS27 {
     @discardableResult
     private static func placeTitleTapTargets(in page: UIView) -> Bool {
         guard lyricsModeActive, lyricsModeRevealed else {
+            removeTitleTapTargets()
+            return false
+        }
+        // 横屏自建页：歌名/艺人也是我们画的，这两颗透明按钮只会留在原生（被按着的）那两行上，
+        // 变成两块看不见的命中区盖到封面与控件上 ⇒ 这一档不挂。
+        guard landscapePageGeometry(in: page) == nil else {
             removeTitleTapTargets()
             return false
         }
@@ -2916,6 +2948,8 @@ enum NowPlayingIOS27 {
         restoreLandscapeStackIfNeeded()
         restoreLandscapeFloatingChrome()
         clearLandscapeLayout()
+        // 横屏自建页：拆掉我们那一屏，把被整块按下去的底排按原值放回来。
+        clearLandscapePage()
 
         revealShells()
         revealChrome()
@@ -2949,6 +2983,7 @@ enum NowPlayingIOS27 {
         restoreLandscapeStackIfNeeded()
         restoreLandscapeFloatingChrome()
         clearLandscapeLayout()
+        clearLandscapePage()
         loggedLandscapeCover = 0
         didLogLandscapeTitle = false
         // 动效封面：连素材与解析结果一起收（这一页的账本本来就是"清干净"，见文件头）。
@@ -3116,7 +3151,7 @@ enum NowPlayingIOS27 {
     /// 换歌时封面可能还挂在上一格 cell 上（`eevee-ios27-artwork@-386,94`，宿主偏了一整页），
     /// 屏幕上只剩模糊底。这时开歌词只会得到"一块歌词卡片 + 没有封面"的半成品。
     /// 等封面回到页面上再亮歌词（下一拍重试）。
-    private static func artworkOnPage(in page: UIView) -> Bool {
+    static func artworkOnPage(in page: UIView) -> Bool {
         guard let view = artworkView, view.window != nil, view.superview != nil else { return false }
         let rect = view.convert(view.bounds, to: page)
         guard rect.width > 8, rect.height > 8 else { return false }

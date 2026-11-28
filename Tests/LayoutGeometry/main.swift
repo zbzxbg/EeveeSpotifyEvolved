@@ -247,6 +247,30 @@ for size in landscapeSizes {
 print("OK: \(sizes.count) screen sizes, footer / mini bar / tab bar geometry")
 print("OK: \(landscapeSizes.count) landscape sizes, two-column geometry")
 
+// ── 歌词贴右：宽度封顶之后，多出来的宽度留在**左边**
+//
+// 回归断言。原来的算法把歌词左沿钉在左栏右边、宽度封顶 ⇒ 左栏一窄（封面吃高度预算、
+// 栏宽落到下限），整块就滑到页面正中间，而右边界还空着 160 多 pt。
+for size in landscapeSizes {
+    let leftInset: CGFloat = 64
+    let rightInset: CGFloat = 60
+    let layout = LayoutGeometry.landscapeColumns(
+        size: CGSize(width: size.width, height: size.height),
+        leftInset: leftInset, topInset: 16, bottomInset: 27, rightInset: rightInset,
+        stackHeight: 238, lyricsMaxWidth: 440
+    )
+    let rightLimit = size.width - rightInset
+    require(near(layout.lyrics.maxX, rightLimit),
+            "\(size.name): the lyrics do not sit on the right edge")
+    require(layout.lyrics.minX >= layout.column.maxX + LayoutGeometry.landscapeColumnGap - tolerance,
+            "\(size.name): the right-anchored lyrics overlap the column")
+    if layout.lyrics.width >= 440 - tolerance {
+        require(layout.lyrics.midX > size.width / 2,
+                "\(size.name): the capped lyrics block is still left of the page centre")
+    }
+}
+print("OK: \(landscapeSizes.count) landscape sizes, lyrics hug the right edge")
+
 // ── 封面圆角：跟边长走，夹在 10…16，取到 0.5pt
 require(near(LayoutGeometry.artworkCornerRadius(side: 0), 0), "a zero side has no corner")
 require(near(LayoutGeometry.artworkCornerRadius(side: 64), 10), "a thumbnail-sized side hits the floor")

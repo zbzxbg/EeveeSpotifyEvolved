@@ -153,10 +153,13 @@ enum LayoutGeometry {
         let cover = CGRect(x: leftInset, y: topInset, width: coverSide, height: coverSide)
 
         let lyricsX = leftInset + columnWidth + landscapeColumnGap
-        var lyricsWidth = max(0, width - rightInset - lyricsX)
+        let rightLimit = width - rightInset
+        var lyricsWidth = max(0, rightLimit - lyricsX)
         if lyricsMaxWidth > 0 { lyricsWidth = min(lyricsWidth, lyricsMaxWidth) }
+        // 封顶之后多出来的宽度**留在左边**：歌词右沿贴住右边界，整块才落在右侧。
+        // 反过来的话（左沿钉在左栏右边、宽度封顶）左栏一窄，歌词就被挤到页面正中间。
         let lyrics = CGRect(
-            x: lyricsX,
+            x: max(lyricsX, rightLimit - lyricsWidth),
             y: topInset,
             width: lyricsWidth,
             height: usableHeight
