@@ -683,12 +683,6 @@ enum NowPlayingIOS27 {
     private static var landscapeContentHeight: CGFloat = 0
     /// 右栏（歌词）的宽度上限：横屏页面很宽，一行铺满会把右上角的 ⋯ 圈进歌词的命中范围。
     static let landscapeLyricsMaxWidth: CGFloat = 440
-    /// 页面底部那一行（`placeLandscapeTransport` 搬到下面的传输行）占掉的高度。
-    ///
-    /// 左栏的"可用高"与那一坨的兜底都要让开它 —— 否则封面会把进度条顶到按钮上。
-    static var landscapeBottomRowHeight: CGFloat = 0
-    /// 算这份几何时那个值是多少（缓存判据之一）。
-    private static var landscapeLayoutBottomReserve: CGFloat = 0
     private static var loggedLandscapeCover: CGFloat = 0
 
     private static weak var landscapeNarrowedStack: UIView?
@@ -726,7 +720,6 @@ enum NowPlayingIOS27 {
         if landscapePage === page, landscapeStack === stack,
            landscapeBounds.equalTo(page.bounds),
            abs(landscapeContentHeight - contentHeight) <= 0.5,
-           abs(landscapeLayoutBottomReserve - landscapeBottomRowHeight) <= 0.5,
            let cached = landscapeLayoutCache {
             return cached
         }
@@ -736,13 +729,11 @@ enum NowPlayingIOS27 {
         // 屏幕中间，右边那半截全是空的。
         // 左线一挪，那一坨也跟着挪同样的量 —— 封面与进度条才在同一条线上。
         let contentX = max(12, page.safeAreaInsets.left + 16)
-        // 页面底部那一行（传输行）占掉的高度也要从"可用高"里扣：左栏的封面不能让到它下面。
-        let bottomInset = max(12, page.safeAreaInsets.bottom + 6) + landscapeBottomRowHeight
         let columns = LayoutGeometry.landscapeColumns(
             size: page.bounds.size,
             leftInset: contentX,
             topInset: max(16, page.safeAreaInsets.top + 8),
-            bottomInset: bottomInset,
+            bottomInset: max(12, page.safeAreaInsets.bottom + 6),
             rightInset: max(24, page.safeAreaInsets.right + 12),
             // 封面下面那一坨的真实高度：封面只能占"剩下的"那块，否则标题会压在封面上。
             stackHeight: contentHeight,
@@ -760,7 +751,6 @@ enum NowPlayingIOS27 {
         landscapeStack = stack
         landscapeBounds = page.bounds
         landscapeContentHeight = contentHeight
-        landscapeLayoutBottomReserve = landscapeBottomRowHeight
         landscapeLayoutCache = layout
         return layout
     }
@@ -768,10 +758,10 @@ enum NowPlayingIOS27 {
     /// 那一坨里**还看得见的那几行**合起来有多高：最上面那行的上沿 → 最下面那行的下沿。
     ///
     /// 不能用 `stack.bounds.height`：底排的盒子比它装的东西高（Spotify 自己定的高度），
-    /// 工具行折起来之后盒子也不缩 ⇒ 用盒子高度算，封面永远停在"下面空了一大块"的尺寸上。
+    /// 折掉工具行之后盒子也不缩 ⇒ 用盒子高度算，封面永远停在"下面空了一大块"的尺寸上。
     ///
-    /// 量的是**栈里没被折起来的那些行**，所以折掉一行、或者把某一行搬出左栏之后，
-    /// 这个数立刻变小，封面跟着长。认不出任何一行（还没建出来）就退回盒子高度。
+    /// 量的是**栈里没被折起来的那些行**，所以折掉一行之后这个数会小一点。
+    /// 认不出任何一行（还没建出来）就退回盒子高度。
     private static func measureLandscapeContentHeight(
         in page: UIView,
         stack: UIView,
@@ -828,8 +818,6 @@ enum NowPlayingIOS27 {
         landscapeStack = nil
         landscapeBounds = .zero
         landscapeContentHeight = 0
-        landscapeBottomRowHeight = 0
-        landscapeLayoutBottomReserve = 0
         landscapeLayoutCache = nil
     }
 
@@ -877,7 +865,7 @@ enum NowPlayingIOS27 {
         // 再补回 `base` 自带的那点位移 —— 否则每次写 transform 都会把自己叠一次。
         let rawTop = NowPlayingLyricsPlate.untransformed(stack, in: page).minY
         let baseTop = rawTop + base.ty
-        let safeBottom = page.bounds.height - max(12, page.safeAreaInsets.bottom + 6) - landscapeBottomRowHeight
+        let safeBottom = page.bounds.height - max(12, page.safeAreaInsets.bottom + 6)
         var dy = (layout.cover.maxY + LayoutGeometry.landscapeCoverStackGap) - baseTop
         // 兜底按**看得见的高度**算，不按盒子：盒子比内容高，按盒子会把那一坨顶回去，
         // 歌名就压在封面下沿上。（盒子多出来的那截是空的，溢出到屏外也看不见。）
@@ -922,7 +910,32 @@ enum NowPlayingIOS27 {
                 + ", placed \(Int(placed.minX)),\(Int(placed.minY))"
                 + "…\(Int(placed.maxY))"
         )
+        // 一次性诊断：那个盒子的宽度 / 高度是被哪几条约束钉住的。
+        //
+        // 它现在**改不动** —— 写 `bounds.size` 与 999 优先级的 pin 都留不住，盒子一直是 272×240；
+        // 而封面能不能长大，取决于能不能把它的高度接到手上。把约束列出来，下次照它改。
+        if !didLogLandscapeStackConstraints {
+            didLogLandscapeStackConstraints = true
+            var found: [String] = []
+            let candidates = stack.constraints + (stack.superview?.constraints ?? [])
+            for constraint in candidates {
+                let first = constraint.firstItem as? UIView
+                let second = constraint.secondItem as? UIView
+                guard first === stack || second === stack else { continue }
+                found.append(
+                    "\(constraint.firstAttribute.rawValue)/\(constraint.secondAttribute.rawValue)"
+                        + " p=\(Int(constraint.priority.rawValue)) c=\(Int(constraint.constant))"
+                )
+            }
+            writeDebugLog(
+                "[\(logTag)] landscape — bottom stack box"
+                    + " \(Int(stack.bounds.width))×\(Int(stack.bounds.height))"
+                    + ", \(found.count) constraint(s): \(found.joined(separator: ", "))"
+            )
+        }
     }
+
+    private static var didLogLandscapeStackConstraints = false
 
     /// 把那一坨的宽度与左线**交给约束**。
     ///
@@ -1099,9 +1112,6 @@ enum NowPlayingIOS27 {
         // 工具行排成 AM 的三颗（歌词 / 隔空播放 / 队列），见 `NowPlayingIOS27+Footer.swift`。
         // ⚠️ 必须排在传输行前面：循环那颗圆钮是**按我们画的那颗队列字形**定位的。
         if placeFooter(in: page) { changed = true }
-        // 横屏：传输行搬到页面底部（它一行要 ≈270pt，留在左栏会把栏宽撑住）。
-        // ⚠️ 必须排在 `updateLyricsStage` / `placeLyricsCredit` 前面 —— 那两块都按它收边。
-        if placeLandscapeTransport(in: page) { changed = true }
         // 页内歌词容器：缩略图下沿 + 16 → 进度条上沿 − 18。它也不依赖封面壳，
         // 封面晚到也要能看词。
         // 开歌词时**等封面缩完再挂**（`lyricsModeRevealed`），否则歌词和宿主第一帧的
@@ -1171,12 +1181,7 @@ enum NowPlayingIOS27 {
         // 横屏两栏：歌词就是**右栏那一整块**，不再从缩略图与进度条之间挤。
         if let layout = landscapeLayout(in: page) {
             guard layout.lyrics.width > 80, layout.lyrics.height > 80 else { return nil }
-            var frame = layout.lyrics
-            // 传输行搬到页面底部之后，歌词不能再铺到它下面（那一块要留给按钮与来源）。
-            if let row = landscapeTransportFrame, row.minY - 12 > frame.minY + 80 {
-                frame.size.height = row.minY - 12 - frame.minY
-            }
-            return frame
+            return layout.lyrics
         }
         // 进度条也必须找**当前可见页**那一份 —— pager 里相邻页的副本在 y≈-413，
         // 用它算出来的高度是负数 ⇒ `guard bottom - top > 80` 永远不过，歌词容器就永远不铺。
@@ -2589,42 +2594,16 @@ enum NowPlayingIOS27 {
             view = fresh
         }
 
-        // 竖屏：**歌词区左下角**、贴着歌词块的下沿（进度条上沿之上）。
+        // 位置：**歌词区左下角**、贴着歌词块的下沿（进度条上沿之上）。
         // 宽 300 是有意的：再往右就压到收藏键（348…396）。
-        // 横屏：和底部那行播放键**平排**（同一条中线），靠歌词栏右端。
+        let stage = lyricsStageFrame(in: page) ?? lyricsStageFrameFallback(in: page)
         let height: CGFloat = 38
-        let frame: CGRect
-        if let layout = landscapeLayout(in: page), let row = landscapeTransportFrame {
-            // 横屏：和底部那行播放键**平排**（同一条中线），靠右。
-            // 右边让到歌词栏右沿与安全区两者更靠里的那个；放不下就抬到那一行上面一格。
-            let right = min(layout.lyrics.maxX, page.bounds.width - page.safeAreaInsets.right - 8)
-            let beside = right - (row.maxX + 20)
-            if beside >= 120 {
-                let width = min(300, beside)
-                frame = CGRect(
-                    x: (right - width).rounded(),
-                    y: (row.midY - height / 2).rounded(),
-                    width: width,
-                    height: height
-                )
-            } else {
-                let width = min(300, max(160, right - layout.lyrics.minX))
-                frame = CGRect(
-                    x: (right - width).rounded(),
-                    y: (row.minY - height - 6).rounded(),
-                    width: width,
-                    height: height
-                )
-            }
-        } else {
-            let stage = lyricsStageFrame(in: page) ?? lyricsStageFrameFallback(in: page)
-            frame = CGRect(
-                x: stage.minX + 2,
-                y: stage.maxY - height - 4,
-                width: min(max(0, stage.width - 4), 300),
-                height: height
-            )
-        }
+        let frame = CGRect(
+            x: stage.minX + 2,
+            y: stage.maxY - height - 4,
+            width: min(max(0, stage.width - 4), 300),
+            height: height
+        )
         var changed = false
         if view.frame != frame {
             view.frame = frame

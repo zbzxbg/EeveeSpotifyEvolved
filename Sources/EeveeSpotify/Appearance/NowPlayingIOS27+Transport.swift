@@ -582,125 +582,6 @@ extension NowPlayingIOS27 {
         return nil
     }
 
-    // MARK: - 横屏：传输行搬到页面底部
-    //
-    // 传输行是 5 颗原生键（随机 / 上一首 / 播放 / 下一首 / 循环），一行要 ≈270pt。
-    // 左栏改成"封面 + 歌名 + 进度"、栏宽跟着封面之后，它留在左栏就会把栏宽撑住。
-    // 所以横屏把它**结构性搬出**底排，挪到页面底部中间：位置我们给，键本身（字形、
-    // 播放/暂停状态、点按手感）全是原生的，真触摸落在它自己身上。
-    //
-    // 搬不动就什么都不做（认不出那一行 / 它不在底排里）：传输行留在左栏，封面就长不了那么大。
-
-    /// 底部那一行**当前**占的框（页面坐标）。歌词容器与歌词来源都按它收边。
-    private(set) static var landscapeTransportFrame: CGRect?
-
-    private static weak var landscapeTransportRow: UIView?
-    private static var landscapeTransportHome: (stack: UIView, index: Int, width: CGFloat, height: CGFloat)?
-    private static var didLogLandscapeTransport = false
-
-    @discardableResult
-    static func placeLandscapeTransport(in page: UIView) -> Bool {
-        guard NowPlayingIOS27.landscapeLayout(in: page) != nil else {
-            restoreLandscapeTransport()
-            return false
-        }
-        guard let row = landscapeTransportRowView(in: page) else { return false }
-        let height = row.bounds.height > 1 ? row.bounds.height : 64
-
-        if row.superview !== page {
-            // 记下它在底排里原来的位置，收尾时放回去。认不出槽位就不搬 ——
-            // 搬出去放不回来的话，竖屏就没地方摆了。
-            guard let stack = row.superview,
-                  let stackView = stack as? UIStackView,
-                  let index = stackView.arrangedSubviews.firstIndex(of: row) else { return false }
-            landscapeTransportHome = (stack, index, row.bounds.width, height)
-            row.removeFromSuperview()
-            row.translatesAutoresizingMaskIntoConstraints = true
-            row.transform = .identity
-            page.addSubview(row)
-            landscapeTransportRow = row
-            if !didLogLandscapeTransport {
-                didLogLandscapeTransport = true
-                writeDebugLog(
-                    "[\(logTag)] landscape — transport row moved out of the column to the page bottom"
-                        + " (\(Int(row.bounds.width))×\(Int(height))pt)"
-                )
-            }
-        }
-
-        let width = min(row.bounds.width > 1 ? row.bounds.width : 272, page.bounds.width - 48)
-        let wanted = CGRect(
-            x: ((page.bounds.width - width) / 2).rounded(),
-            y: (page.bounds.height - page.safeAreaInsets.bottom - 10 - height).rounded(),
-            width: width,
-            height: height
-        )
-        var changed = false
-        if row.frame != wanted {
-            row.frame = wanted
-            changed = true
-        }
-        if page.subviews.last !== row { page.bringSubviewToFront(row) }
-        landscapeTransportFrame = wanted
-        // 左栏的"可用高"要让开这一行（封面不能把进度条顶到按钮上）。
-        NowPlayingIOS27.landscapeBottomRowHeight = height + 16
-        return changed
-    }
-
-    /// 转回竖屏 / 收尾：把传输行放回底排原来的槽位。
-    static func restoreLandscapeTransport() {
-        guard let row = landscapeTransportRow else {
-            landscapeTransportFrame = nil
-            landscapeTransportHome = nil
-            NowPlayingIOS27.landscapeBottomRowHeight = 0
-            return
-        }
-        if let home = landscapeTransportHome, home.stack.window != nil,
-           row.superview !== home.stack {
-            row.removeFromSuperview()
-            row.transform = .identity
-            if let stack = home.stack as? UIStackView {
-                row.translatesAutoresizingMaskIntoConstraints = false
-                stack.insertArrangedSubview(row, at: min(home.index, stack.arrangedSubviews.count))
-            } else {
-                home.stack.addSubview(row)
-            }
-        }
-        landscapeTransportRow = nil
-        landscapeTransportFrame = nil
-        landscapeTransportHome = nil
-        NowPlayingIOS27.landscapeBottomRowHeight = 0
-    }
-
-    /// 传输行那一格：从播放键往上走到底排的直接子视图（只认 `UIStackView`）。
-    ///
-    /// 搬走之后它在页面上、往上已经走不到底排了 ⇒ 先认记下来的那一份。
-    private static func landscapeTransportRowView(in page: UIView) -> UIView? {
-        if let remembered = landscapeTransportRow, remembered.window != nil,
-           remembered.isDescendant(of: page) {
-            return remembered
-        }
-        guard let play = NowPlayingIOS27.visibleView(
-            identifier: NowPlayingLyricsPlate.playButtonIdentifier,
-            in: page,
-            requireAlpha: false,
-            horizontalMargin: 0
-        ) else { return nil }
-        var node = play
-        var hops = 0
-        while hops < 8 {
-            if let parent = node.superview,
-               node is UIStackView,
-               parent.accessibilityIdentifier == NowPlayingLyricsPlate.bottomStackIdentifier {
-                return node
-            }
-            guard let next = node.superview else { return nil }
-            node = next
-            hops += 1
-        }
-        return nil
-    }
-
     // MARK: - 收尾
     //
     // 拆掉我们的圆钮与替身。
@@ -713,7 +594,6 @@ extension NowPlayingIOS27 {
         repeatGlyph = nil
         repeatRelay?.removeFromSuperview()
         repeatRelay = nil
-        restoreLandscapeTransport()
     }
 
     static func clearTransportState() {
@@ -722,9 +602,5 @@ extension NowPlayingIOS27 {
         repeatRelay = nil
         didLogTransport = false
         didLogRepeatState = false
-        landscapeTransportRow = nil
-        landscapeTransportFrame = nil
-        landscapeTransportHome = nil
-        didLogLandscapeTransport = false
     }
 }
