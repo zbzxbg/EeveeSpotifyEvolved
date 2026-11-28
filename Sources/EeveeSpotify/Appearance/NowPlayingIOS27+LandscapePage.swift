@@ -145,8 +145,11 @@ extension NowPlayingIOS27 {
 
     static let landscapeControlsFadeDuration: TimeInterval = 0.18
     static let landscapeControlsRestoreDelay: TimeInterval = 1.6
+    /// 划出这么多（pt）才算"真的在滚"，这一列才收起来。
+    static let landscapeScrollHideDistance: CGFloat = 8
     static let landscapeScrollWatcher = LandscapeScrollWatcher()
     static weak var landscapeWatchedScrollView: UIScrollView?
+    static weak var landscapeWatchedPan: UIPanGestureRecognizer?
     static var landscapeControlsHidden = false
     static var landscapeControlsRestoreWork: DispatchWorkItem?
 
@@ -159,12 +162,26 @@ extension NowPlayingIOS27 {
         }
         guard let scroll = firstScrollView(in: container) else { return }
         landscapeScrollWatcher.didBegin = { noteLandscapeScrollBegan() }
+        landscapeScrollWatcher.didMove = { distance in noteLandscapeScrollMoved(distance) }
         landscapeScrollWatcher.didEnd = { noteLandscapeScrollEnded() }
-        scroll.panGestureRecognizer.addTarget(
+        let pan = scroll.panGestureRecognizer
+        pan.addTarget(
             landscapeScrollWatcher,
             action: #selector(LandscapeScrollWatcher.handlePan(_:))
         )
         landscapeWatchedScrollView = scroll
+        landscapeWatchedPan = pan
+        writeDebugLog(
+            "[\(logTag)] landscape scroll — watcher attached on \(NSStringFromClass(type(of: scroll)))"
+                + (landscapeLyricsAreStatic() ? " (static lyrics: the column stays)" : "")
+        )
+    }
+
+    /// 这一档歌词**没有时间轴**（纯文本，比如 Genius）：它不跟唱，也没有"看词时把控件让开"
+    /// 的必要 ⇒ 划它不收控件。判据与 `mountLyricsOnly` 里那次 `isStatic` 一致。
+    private static func landscapeLyricsAreStatic() -> Bool {
+        let timed = NowPlayingLyricsPlate.currentLines() ?? []
+        return timed.isEmpty && NowPlayingLyricsPlate.currentUntimedLines() != nil
     }
 
     private static func firstScrollView(in root: UIView) -> UIScrollView? {
@@ -179,13 +196,25 @@ extension NowPlayingIOS27 {
         return nil
     }
 
+    /// 手指按下就记一笔，但**先不收**：要等真的划出距离（见 `noteLandscapeScrollMoved`）。
     private static func noteLandscapeScrollBegan() {
+        guard !landscapeLyricsAreStatic() else { return }
         landscapeControlsRestoreWork?.cancel()
         landscapeControlsRestoreWork = nil
+    }
+
+    /// 划出 `landscapeScrollHideDistance` 之后才把这一列收起来。
+    ///
+    /// 为什么不看"手势开始"：轻点、误触、以及**没有可滚内容**的那一档都会开始一条 pan，
+    /// 那时收控件等于"没划动也消失"。
+    private static func noteLandscapeScrollMoved(_ distance: CGFloat) {
+        guard !landscapeLyricsAreStatic() else { return }
+        guard abs(distance) >= landscapeScrollHideDistance else { return }
         applyLandscapeControlsHidden(true)
     }
 
     private static func noteLandscapeScrollEnded() {
+        guard landscapeControlsHidden else { return }
         landscapeControlsRestoreWork?.cancel()
         let work = DispatchWorkItem { applyLandscapeControlsHidden(false) }
         landscapeControlsRestoreWork = work
@@ -271,6 +300,12 @@ extension NowPlayingIOS27 {
             view.visibleHitRects = hitRects
         }
         setLandscapePageChromeAlpha(landscapeControlsHidden ? 0 : 1, animated: false)
+        // 兜底：手势的 `ended` 没回来（宿主重建 / 手势被打断）时别把这一列永远收着。
+        if landscapeControlsHidden, landscapeControlsRestoreWork == nil,
+           let pan = landscapeWatchedPan,
+           pan.state != .began, pan.state != .changed {
+            applyLandscapeControlsHidden(false)
+        }
         let wantedHits: [CGRect] = landscapeControlsHidden ? [] : hitRects
         if view.hitRects != wantedHits {
             view.hitRects = wantedHits
@@ -307,13 +342,14 @@ extension NowPlayingIOS27 {
         landscapeControlsRestoreWork?.cancel()
         landscapeControlsRestoreWork = nil
         landscapeControlsHidden = false
-        if let scroll = landscapeWatchedScrollView {
-            scroll.panGestureRecognizer.removeTarget(
+        if let pan = landscapeWatchedPan {
+            pan.removeTarget(
                 landscapeScrollWatcher,
                 action: #selector(LandscapeScrollWatcher.handlePan(_:))
             )
         }
         landscapeWatchedScrollView = nil
+        landscapeWatchedPan = nil
         if landscapePageControls != nil {
             landscapePageControls?.view.removeFromSuperview()
             landscapePageControls = nil
@@ -666,16 +702,22 @@ final class LandscapePageTapHandler: NSObject {
 // 只挂到歌词宿主自己那条 `UIPanGestureRecognizer` 上（`addTarget`）：不新建手势、不抢 delegate，
 // 所以滚动手感、惯性与"点某一行跳播"全都不变。它在手势结束时就回来，不需要自己判静止。
 
-/// 歌词滚动的手势观察者：`began` / `changed` 报开始，`ended` / `cancelled` / `failed` 报结束。
+/// 歌词滚动的手势观察者。
+///
+/// `began` / `changed` / `ended` 三段都报：`changed` 带**累计位移**（纵向），这样调用方可以只在
+/// "真的划出距离"之后才动作 —— 轻点、误触、以及没有可滚内容的那一档都会开一条 pan。
 final class LandscapeScrollWatcher: NSObject {
 
     var didBegin: (() -> Void)?
+    var didMove: ((CGFloat) -> Void)?
     var didEnd: (() -> Void)?
 
     @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
         switch gesture.state {
-        case .began, .changed:
+        case .began:
             didBegin?()
+        case .changed:
+            didMove?(gesture.translation(in: gesture.view).y)
         case .ended, .cancelled, .failed:
             didEnd?()
         default:
