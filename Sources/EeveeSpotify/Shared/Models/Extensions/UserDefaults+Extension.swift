@@ -55,6 +55,8 @@ extension UserDefaults {
     private static let dspCompanderAmountKey = "dspCompanderAmount"
     private static let dspCrossfeedLevelKey = "dspCrossfeedLevel"
     /// 导入的 AutoEq 参数均衡档：文本原样存，启动时重新解析（见 `AudioDSPAutoEq`）。
+    /// 左右平衡（−1…1，0 居中）。
+    private static let dspBalanceKey = "dspBalance"
     private static let dspAutoEqTextKey = "dspAutoEqText"
     private static let dspAutoEqNameKey = "dspAutoEqName"
     private static let dumpViewTreeKey = "dumpViewTree"
@@ -151,6 +153,7 @@ extension UserDefaults {
         dspHighShelfDbKey,
         dspCompanderAmountKey,
         dspCrossfeedLevelKey,
+        dspBalanceKey,
         dspAutoEqTextKey,
         dspAutoEqNameKey,
         dumpViewTreeKey,
@@ -677,6 +680,17 @@ extension UserDefaults {
                 min(max(newValue, 0), AudioDSPCrossfeed.levelCount - 1),
                 forKey: dspCrossfeedLevelKey
             )
+        }
+    }
+
+    /// 左右平衡：−1 = 只剩左，0 = 居中，+1 = 只剩右。
+    static var dspBalance: Double {
+        get {
+            let raw = container.object(forKey: dspBalanceKey) as? Double ?? 0
+            return min(max(raw, -1), 1)
+        }
+        set {
+            container.set(min(max(newValue, -1), 1), forKey: dspBalanceKey)
         }
     }
 

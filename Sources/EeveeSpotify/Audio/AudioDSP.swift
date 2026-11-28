@@ -59,6 +59,8 @@ enum AudioDSP {
     private static var chainCount = 0
     private static var companderAmount = 0.0
     private static var crossfeedLevel = 0
+    /// 左右平衡（−1…1，0 居中），只在 render 侧换成两路增益。
+    private static var balance = 0.0
 
     private static var companderParameters = AudioDSPCompander.Parameters.bypass
     private static var crossfeedSettings = AudioDSPCrossfeed.bypass
@@ -111,6 +113,11 @@ enum AudioDSP {
     private static var renderActive = false
     private static var renderPreamp = 1.0
     private static var renderTargetPreamp = 1.0
+    /// 左右平衡的两路增益（render 侧逐块平滑过来）。1/1 就等于居中。
+    private static var renderBalanceLeft = 1.0
+    private static var renderBalanceRight = 1.0
+    private static var renderTargetBalanceLeft = 1.0
+    private static var renderTargetBalanceRight = 1.0
     private static var renderResetSeen: UInt32 = 0
     private static var statesResetRequested = false
     private static var renderBroken = false
@@ -176,6 +183,7 @@ enum AudioDSP {
         let highShelf = UserDefaults.dspHighShelfDb
         let compander = UserDefaults.dspCompanderAmount
         let crossfeed = UserDefaults.dspCrossfeedLevel
+        let newBalance = UserDefaults.dspBalance
         let newEnabled = UserDefaults.dspEnabled
 
         os_unfair_lock_lock(lock)
@@ -197,6 +205,7 @@ enum AudioDSP {
         let chainPreamp = customChain?.preampLinear ?? 1
         preampLinear = pow(10, preampDb / 20) * chainPreamp
         companderAmount = compander
+        balance = min(max(newBalance, -1), 1)
         if sampleRate > 0 {
             recomputeCoefficientsLocked()
         }
@@ -359,6 +368,9 @@ enum AudioDSP {
                 copy(coefficients, to: renderTargetCoefficients, count: chainCapacity)
                 renderChainCount = chainCount
                 renderTargetPreamp = preampLinear
+                let balanceGains = AudioDSPBalance.gains(balance: balance)
+                renderTargetBalanceLeft = balanceGains.left
+                renderTargetBalanceRight = balanceGains.right
                 renderCompanderParameters = companderParameters
                 renderCompanderTargetMix = companderParameters.isBypass ? 0 : 1
                 renderCrossfeedSettings = crossfeedSettings
@@ -444,6 +456,8 @@ enum AudioDSP {
             setIdentity(renderCoefficients, index: index)
         }
         renderPreamp = 1
+        renderBalanceLeft = 1
+        renderBalanceRight = 1
         renderCompanderMix = 0
         renderCrossfeedMix = 0
     }
@@ -453,6 +467,8 @@ enum AudioDSP {
             setIdentity(renderTargetCoefficients, index: index)
         }
         renderTargetPreamp = 1
+        renderTargetBalanceLeft = 1
+        renderTargetBalanceRight = 1
         renderCompanderTargetMix = 0
         renderCrossfeedTargetMix = 0
     }
@@ -481,6 +497,8 @@ enum AudioDSP {
             return false
         }
         return abs(renderPreamp - 1) <= 1e-6
+            && abs(renderBalanceLeft - 1) <= 1e-6
+            && abs(renderBalanceRight - 1) <= 1e-6
             && abs(renderCompanderMix) <= 1e-6
             && abs(renderCrossfeedMix) <= 1e-6
     }
@@ -496,6 +514,17 @@ enum AudioDSP {
         renderPreamp = abs(preampDifference) < 1e-6
             ? renderTargetPreamp
             : renderPreamp + preampDifference * coefficientSmoothing
+
+        // 平衡一次拖过中点时两路都要跟着走；各自平滑，避免一边先到、声像横跳一下。
+        let leftBalanceDifference = renderTargetBalanceLeft - renderBalanceLeft
+        renderBalanceLeft = abs(leftBalanceDifference) < 1e-6
+            ? renderTargetBalanceLeft
+            : renderBalanceLeft + leftBalanceDifference * coefficientSmoothing
+
+        let rightBalanceDifference = renderTargetBalanceRight - renderBalanceRight
+        renderBalanceRight = abs(rightBalanceDifference) < 1e-6
+            ? renderTargetBalanceRight
+            : renderBalanceRight + rightBalanceDifference * coefficientSmoothing
 
         let mixDifference = renderCompanderTargetMix - renderCompanderMix
         renderCompanderMix = abs(mixDifference) < 1e-6
@@ -565,8 +594,8 @@ enum AudioDSP {
     /// 一帧：两个声道各过一遍链，然后做一次交叉馈送，最后限幅。
     @inline(__always)
     private static func renderFrame(left: Double, right: Double?) -> (Float, Float?) {
-        var leftValue = processChannel(left * renderPreamp, channel: 0)
-        var rightValue = right.map { processChannel($0 * renderPreamp, channel: 1) }
+        var leftValue = processChannel(left * renderPreamp * renderBalanceLeft, channel: 0)
+        var rightValue = right.map { processChannel($0 * renderPreamp * renderBalanceRight, channel: 1) }
 
         if let currentRight = rightValue, renderCrossfeedMix > 1e-4 {
             let settings = renderCrossfeedSettings

@@ -630,6 +630,21 @@ enum AudioDSPCrossfeed {
     }
 }
 
+// MARK: - 左右平衡
+
+/// 左右平衡：0 = 居中，−1 = 只剩左声道，+1 = 只剩右声道。
+///
+/// 对侧那一路乘 `1 − |v|`（线性衰减），不做等功率补偿：平衡滑杆是用来纠"一边偏响"的，
+/// 等功率会让中间几个位置整体变响，反而更难和另一边对上。
+enum AudioDSPBalance {
+
+    static func gains(balance: Double) -> (left: Double, right: Double) {
+        guard balance.isFinite else { return (1, 1) }
+        let clamped = min(max(balance, -1), 1)
+        return (min(1, 1 - clamped), min(1, 1 + clamped))
+    }
+}
+
 /// 输出端的峰值限幅。EQ、架式、压缩器都把电平往上推，推过满刻度的部分原来被 ±1 钳掉：
 /// 削波产生的是奇次谐波，听感是"炸"而不是"响"。这里把峰值压回目标电平，钳位退化成安全网。
 ///

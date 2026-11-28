@@ -22,6 +22,7 @@ struct EeveeAudioEffectsSettingsView: View {
         "dspHighShelfDb",
         "dspCompanderAmount",
         "dspCrossfeedLevel",
+        "dspBalance",
         "dspAutoEqText",
         "dspAutoEqName",
     ]
@@ -37,6 +38,7 @@ struct EeveeAudioEffectsSettingsView: View {
     @State private var highShelf = UserDefaults.dspHighShelfDb
     @State private var compander = UserDefaults.dspCompanderAmount
     @State private var crossfeed = UserDefaults.dspCrossfeedLevel
+    @State private var balance = UserDefaults.dspBalance
     @State private var insertActive = AudioDSP.isInsertActive
     @State private var autoEqName = UserDefaults.dspAutoEqName
     @State private var isImportingAutoEq = false
@@ -170,6 +172,30 @@ struct EeveeAudioEffectsSettingsView: View {
                 }
             }
 
+            Section(
+                header: Text("audio_effects_balance".localized),
+                footer: Text("audio_effects_balance_description".localized)
+            ) {
+                HStack(spacing: 10) {
+                    Text(verbatim: "L")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Slider(value: $balance, in: -1...1, step: 0.05)
+                        .onChange(of: balance) { value in
+                            UserDefaults.dspBalance = value
+                            AudioDSP.reloadParameters()
+                        }
+                    Text(verbatim: "R")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(verbatim: balanceLabel(balance))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundColor(.secondary)
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+
             SettingsResetSection(
                 keys: Self.ownedKeys,
                 afterReset: {
@@ -199,6 +225,13 @@ struct EeveeAudioEffectsSettingsView: View {
             AudioDSP.syncWithSettings()
             insertActive = AudioDSP.isInsertActive
         }
+    }
+
+    /// 平衡滑杆右侧那格：居中显示 `C`，两侧显示百分比（`L 40%` / `R 25%`）。
+    private func balanceLabel(_ value: Double) -> String {
+        let magnitude = Int((abs(value) * 100).rounded())
+        if magnitude < 1 { return "C" }
+        return (value < 0 ? "L " : "R ") + "\(magnitude)%"
     }
 
     /// 读一份 AutoEq 文本（或任意 `.txt`）并接到链上；失败只留一行提示，不改现有档。
@@ -315,6 +348,7 @@ struct EeveeAudioEffectsSettingsView: View {
         highShelf = UserDefaults.dspHighShelfDb
         compander = UserDefaults.dspCompanderAmount
         crossfeed = UserDefaults.dspCrossfeedLevel
+        balance = UserDefaults.dspBalance
         autoEqName = UserDefaults.dspAutoEqName
         autoEqFailed = false
     }

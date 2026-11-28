@@ -468,6 +468,27 @@ let flatSpecChain = AudioDSPFilterChain(
 require(flatSpecChain.coefficients(sampleRate: sampleRate).allSatisfy(\.isBypass),
         "0 dB filters on every band design bypass coefficients")
 
+// MARK: - 左右平衡
+
+let centredBalance = AudioDSPBalance.gains(balance: 0)
+require(centredBalance.left == 1 && centredBalance.right == 1,
+        "centre is unity on both channels")
+
+let hardLeft = AudioDSPBalance.gains(balance: -1)
+require(hardLeft.left == 1 && hardLeft.right == 0, "hard left mutes the right channel")
+
+let hardRight = AudioDSPBalance.gains(balance: 1)
+require(hardRight.left == 0 && hardRight.right == 1, "hard right mutes the left channel")
+
+let quarterLeft = AudioDSPBalance.gains(balance: -0.25)
+require(quarterLeft.left == 1 && abs(quarterLeft.right - 0.75) < 1e-12,
+        "a quarter left keeps the left at unity and pulls the right to 0.75")
+
+require(AudioDSPBalance.gains(balance: -5) == AudioDSPBalance.gains(balance: -1),
+        "an out-of-range balance clamps to the extreme")
+require(AudioDSPBalance.gains(balance: .nan) == AudioDSPBalance.gains(balance: 0),
+        "a non-finite balance falls back to centre")
+
 // MARK: - 结果
 
 if failures > 0 {
