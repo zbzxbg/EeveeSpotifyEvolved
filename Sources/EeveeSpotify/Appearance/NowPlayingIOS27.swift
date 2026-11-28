@@ -661,15 +661,18 @@ enum NowPlayingIOS27 {
         var stackLeft: CGFloat
         /// 那一坨内容到它自己左右边缘的距离（竖屏量到的是 24）。
         var stackInset: CGFloat
+        /// 那一坨**看得见的部分**有多高（歌名上沿 → 传输行下沿）。
+        /// 摆放时用它兜底，而不是 `bounds.height`：底排的盒子比内容高（见 `measureLandscapeContentHeight`）。
+        var stackContentHeight: CGFloat
     }
 
     private static weak var landscapePage: UIView?
     private static weak var landscapeStack: UIView?
     private static var landscapeBounds: CGRect = .zero
     private static var landscapeLayoutCache: LandscapeLayout?
-    /// 算这份几何时那一坨有多高。换歌 / 打开歌词会让它变（高度一变，封面就得跟着缩），
-    /// 所以它也是缓存的判据之一。
-    private static var landscapeStackHeight: CGFloat = 0
+    /// 算这份几何时那一坨**看得见的部分**有多高。换歌 / 打开歌词 / 折掉工具行都会让它变
+    /// （高度一变，封面就得跟着缩或长），所以它也是缓存的判据之一。
+    private static var landscapeContentHeight: CGFloat = 0
     /// 右栏（歌词）的宽度上限：横屏页面很宽，一行铺满会把右上角的 ⋯ 圈进歌词的命中范围。
     static let landscapeLyricsMaxWidth: CGFloat = 440
     private static var loggedLandscapeCover: CGFloat = 0
@@ -705,9 +708,10 @@ enum NowPlayingIOS27 {
         // 立刻把缓存作废：高度一变，封面就得跟着缩。
         let stackRect = NowPlayingLyricsPlate.untransformed(stack, in: page)
         guard stackRect.width > 1, stackRect.height > 1 else { return nil }
+        let contentHeight = measureLandscapeContentHeight(in: page, stack: stack, stackRect: stackRect)
         if landscapePage === page, landscapeStack === stack,
            landscapeBounds.equalTo(page.bounds),
-           abs(landscapeStackHeight - stackRect.height) <= 0.5,
+           abs(landscapeContentHeight - contentHeight) <= 0.5,
            let cached = landscapeLayoutCache {
             return cached
         }
@@ -724,7 +728,7 @@ enum NowPlayingIOS27 {
             bottomInset: max(12, page.safeAreaInsets.bottom + 6),
             rightInset: max(24, page.safeAreaInsets.right + 12),
             // 封面下面那一坨的真实高度：封面只能占"剩下的"那块，否则标题会压在封面上。
-            stackHeight: stackRect.height,
+            stackHeight: contentHeight,
             lyricsMaxWidth: landscapeLyricsMaxWidth
         )
         let layout = LandscapeLayout(
@@ -732,14 +736,56 @@ enum NowPlayingIOS27 {
             cover: columns.cover,
             lyrics: lyricsRect(columns.lyrics, in: page),
             stackLeft: contentX - inset,
-            stackInset: inset
+            stackInset: inset,
+            stackContentHeight: contentHeight
         )
         landscapePage = page
         landscapeStack = stack
         landscapeBounds = page.bounds
-        landscapeStackHeight = stackRect.height
+        landscapeContentHeight = contentHeight
         landscapeLayoutCache = layout
         return layout
+    }
+
+    /// 那一坨（歌名 / 进度 / 传输）**看得见的部分**有多高：传输行的下沿减那一坨的上沿。
+    ///
+    /// 不能用 `stack.bounds.height`：底排的盒子比它装的东西高（Spotify 自己定的高度），
+    /// 工具行折起来之后盒子也不缩 ⇒ 用盒子高度算，封面永远停在"下面空了一大块"的尺寸上。
+    ///
+    /// 两端都取 `convert`（带我们的 transform）⇒ 那一坨被整体挪动时差值不变。
+    /// 量不到传输行（还没建出来）就退回盒子高度。
+    private static func measureLandscapeContentHeight(
+        in page: UIView,
+        stack: UIView,
+        stackRect: CGRect
+    ) -> CGFloat {
+        let top = stack.convert(stack.bounds, to: page).minY
+        guard let bottom = transportRowBottom(in: page), bottom > top + 80 else {
+            return stackRect.height
+        }
+        return (bottom - top).rounded()
+    }
+
+    /// 传输行的下沿（页面坐标）。认下来那颗播放键就记着，换页 / 换歌后自己掉。
+    private static weak var landscapePlayButton: UIView?
+
+    private static func transportRowBottom(in page: UIView) -> CGFloat? {
+        let button: UIView?
+        if let cached = landscapePlayButton, cached.window != nil,
+           isControlOnPage(cached, in: page, requireAlpha: false, horizontalMargin: 0) {
+            button = cached
+        } else {
+            button = visibleView(
+                identifier: NowPlayingLyricsPlate.playButtonIdentifier,
+                in: page,
+                requireAlpha: false,
+                horizontalMargin: 0
+            )
+            landscapePlayButton = button
+        }
+        guard let button else { return nil }
+        let rect = button.convert(button.bounds, to: page)
+        return rect.height > 1 ? rect.maxY : nil
     }
 
     /// 右栏的右沿再让出右上角那颗 ⋯（48×48，贴着安全区右边）。
@@ -781,7 +827,7 @@ enum NowPlayingIOS27 {
         landscapePage = nil
         landscapeStack = nil
         landscapeBounds = .zero
-        landscapeStackHeight = 0
+        landscapeContentHeight = 0
         landscapeLayoutCache = nil
     }
 
@@ -831,8 +877,10 @@ enum NowPlayingIOS27 {
         let baseTop = rawTop + base.ty
         let safeBottom = page.bounds.height - max(12, page.safeAreaInsets.bottom + 6)
         var dy = (layout.cover.maxY + LayoutGeometry.landscapeCoverStackGap) - baseTop
-        if baseTop + stack.bounds.height + dy > safeBottom {
-            dy = max(0, safeBottom - stack.bounds.height - baseTop)
+        // 兜底按**看得见的高度**算，不按盒子：盒子比内容高，按盒子会把那一坨顶回去，
+        // 歌名就压在封面下沿上。（盒子多出来的那截是空的，溢出到屏外也看不见。）
+        if baseTop + layout.stackContentHeight + dy > safeBottom {
+            dy = max(0, safeBottom - layout.stackContentHeight - baseTop)
         }
         let wanted = base.concatenating(CGAffineTransform(translationX: 0, y: dy))
         if stack.transform != wanted {
@@ -867,6 +915,7 @@ enum NowPlayingIOS27 {
                 + " continuous at y \(Int(layout.cover.maxY))"
                 + ", lyrics \(Int(layout.lyrics.minX))…\(Int(layout.lyrics.maxX))"
                 + "; stack \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
+                + " (content \(Int(layout.stackContentHeight)))"
                 + " → \(Int(layout.column.width + layout.stackInset * 2)) wide"
                 + ", placed \(Int(placed.minX)),\(Int(placed.minY))"
                 + "…\(Int(placed.maxY))"
