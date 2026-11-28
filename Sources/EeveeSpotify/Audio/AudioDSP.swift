@@ -167,6 +167,7 @@ enum AudioDSP {
             AudioTapService.ensureInstalled()
         }
         AudioDSPAutoEq.restoreStoredProfile()
+        AudioDSPDeviceProfiles.start()
         reloadParameters()
         startTickerIfNeeded()
     }

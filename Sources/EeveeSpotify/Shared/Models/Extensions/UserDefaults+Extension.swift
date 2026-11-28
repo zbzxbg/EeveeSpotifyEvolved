@@ -55,6 +55,9 @@ extension UserDefaults {
     private static let dspCompanderAmountKey = "dspCompanderAmount"
     private static let dspCrossfeedLevelKey = "dspCrossfeedLevel"
     /// 导入的 AutoEq 参数均衡档：文本原样存，启动时重新解析（见 `AudioDSPAutoEq`）。
+    /// 按输出设备分开存的效果设置（JSON）与它的开关。
+    private static let dspDeviceProfilesEnabledKey = "dspDeviceProfilesEnabled"
+    private static let dspDeviceProfilesKey = "dspDeviceProfiles"
     /// 左右平衡（−1…1，0 居中）。
     private static let dspBalanceKey = "dspBalance"
     private static let dspAutoEqTextKey = "dspAutoEqText"
@@ -154,6 +157,8 @@ extension UserDefaults {
         dspCompanderAmountKey,
         dspCrossfeedLevelKey,
         dspBalanceKey,
+        dspDeviceProfilesEnabledKey,
+        dspDeviceProfilesKey,
         dspAutoEqTextKey,
         dspAutoEqNameKey,
         dumpViewTreeKey,
@@ -680,6 +685,31 @@ extension UserDefaults {
                 min(max(newValue, 0), AudioDSPCrossfeed.levelCount - 1),
                 forKey: dspCrossfeedLevelKey
             )
+        }
+    }
+
+    /// 按输出设备分开记住设置，默认关（关着时换设备不改任何东西）。
+    static var dspDeviceProfilesEnabled: Bool {
+        get {
+            container.object(forKey: dspDeviceProfilesEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: dspDeviceProfilesEnabledKey)
+        }
+    }
+
+    /// 每个设备桶的设置快照（JSON，见 AudioDSPDeviceProfiles）。
+    static var dspDeviceProfilesJSON: String? {
+        get {
+            let value = container.string(forKey: dspDeviceProfilesKey)
+            return value?.isEmpty == false ? value : nil
+        }
+        set {
+            if let newValue, !newValue.isEmpty {
+                container.set(newValue, forKey: dspDeviceProfilesKey)
+            } else {
+                container.removeObject(forKey: dspDeviceProfilesKey)
+            }
         }
     }
 

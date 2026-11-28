@@ -630,6 +630,54 @@ enum AudioDSPCrossfeed {
     }
 }
 
+// MARK: - 按输出设备分开的设置
+
+/// 输出设备分桶：同一类设备共用一套设置，不按具体型号分（屏幕、系统都只给到这一类）。
+///
+/// 入参是 `AVAudioSession.Port.rawValue`（`"Speaker"`、`"BluetoothA2DP"` …）。
+/// 纯字符串映射，测试里不碰 AVFoundation。
+enum AudioDSPDeviceBucket: String, CaseIterable, Equatable {
+    case speaker
+    case headphones
+    case bluetooth
+    case car
+    case airplay
+    case receiver
+    case other
+
+    static func bucket(forPort portRawValue: String) -> AudioDSPDeviceBucket {
+        switch portRawValue {
+        case "Speaker":
+            return .speaker
+        case "Headphones", "HeadsetMic":
+            return .headphones
+        case "BluetoothA2DP", "BluetoothLE", "BluetoothHFP":
+            return .bluetooth
+        case "CarAudio":
+            return .car
+        case "AirPlay":
+            return .airplay
+        case "BuiltInReceiver", "BuiltInMic":
+            return .receiver
+        default:
+            return .other
+        }
+    }
+}
+
+/// 一套跟着输出设备走的效果设置。
+///
+/// 只带"听感随设备变"的这几项：EQ、两个架式、平衡、压缩器、交叉馈送。前置增益、
+/// 总开关、AutoEq 档不进来 —— 那些是用户对整条链的选择，不该在换设备时被悄悄改掉。
+struct AudioDSPDeviceProfile: Codable, Equatable {
+    var bandGainsDb: [Double]
+    var lowShelfDb: Double
+    var highShelfDb: Double
+    var balance: Double
+    var companderAmount: Double
+    var crossfeedLevel: Int
+}
+
 // MARK: - 左右平衡
 
 /// 左右平衡：0 = 居中，−1 = 只剩左声道，+1 = 只剩右声道。

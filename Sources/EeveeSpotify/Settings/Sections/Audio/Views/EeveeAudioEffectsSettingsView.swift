@@ -23,6 +23,8 @@ struct EeveeAudioEffectsSettingsView: View {
         "dspCompanderAmount",
         "dspCrossfeedLevel",
         "dspBalance",
+        "dspDeviceProfilesEnabled",
+        "dspDeviceProfiles",
         "dspAutoEqText",
         "dspAutoEqName",
     ]
@@ -39,6 +41,7 @@ struct EeveeAudioEffectsSettingsView: View {
     @State private var compander = UserDefaults.dspCompanderAmount
     @State private var crossfeed = UserDefaults.dspCrossfeedLevel
     @State private var balance = UserDefaults.dspBalance
+    @State private var perDevice = UserDefaults.dspDeviceProfilesEnabled
     @State private var insertActive = AudioDSP.isInsertActive
     @State private var autoEqName = UserDefaults.dspAutoEqName
     @State private var isImportingAutoEq = false
@@ -196,6 +199,17 @@ struct EeveeAudioEffectsSettingsView: View {
                 }
             }
 
+            Section(footer: Text("audio_effects_per_device_description".localized)) {
+                Toggle("audio_effects_per_device".localized, isOn: $perDevice)
+                    .onChange(of: perDevice) { value in
+                        UserDefaults.dspDeviceProfilesEnabled = value
+                        if value {
+                            // 打开的那一刻把当前这套记到当前设备桶里，否则第一次换设备会"没有旧值可存"。
+                            AudioDSPDeviceProfiles.storeCurrent(into: AudioDSPDeviceProfiles.activeBucket())
+                        }
+                    }
+            }
+
             SettingsResetSection(
                 keys: Self.ownedKeys,
                 afterReset: {
@@ -221,9 +235,14 @@ struct EeveeAudioEffectsSettingsView: View {
         }
         .onAppear {
             // 备份导入 / 别处改过键时，显示与运行态都对齐一次。
-            refreshShadowFromDefaults()
+            // 先同步再读影子：开启按设备记住时，同步会先把这台设备的设置装进来。
             AudioDSP.syncWithSettings()
+            refreshShadowFromDefaults()
             insertActive = AudioDSP.isInsertActive
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AudioDSPDeviceProfiles.didSwitchNotification)) { _ in
+            // 换设备时链上的值已经被换掉，影子要跟着读回来，否则滑杆显示的是上一台设备。
+            refreshShadowFromDefaults()
         }
     }
 
@@ -349,6 +368,7 @@ struct EeveeAudioEffectsSettingsView: View {
         compander = UserDefaults.dspCompanderAmount
         crossfeed = UserDefaults.dspCrossfeedLevel
         balance = UserDefaults.dspBalance
+        perDevice = UserDefaults.dspDeviceProfilesEnabled
         autoEqName = UserDefaults.dspAutoEqName
         autoEqFailed = false
     }

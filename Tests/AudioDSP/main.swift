@@ -489,6 +489,35 @@ require(AudioDSPBalance.gains(balance: -5) == AudioDSPBalance.gains(balance: -1)
 require(AudioDSPBalance.gains(balance: .nan) == AudioDSPBalance.gains(balance: 0),
         "a non-finite balance falls back to centre")
 
+// MARK: - 按设备的设置
+
+require(AudioDSPDeviceBucket.bucket(forPort: "Speaker") == .speaker,
+        "the built-in speaker gets its own bucket")
+require(AudioDSPDeviceBucket.bucket(forPort: "Headphones") == .headphones,
+        "wired headphones get their own bucket")
+require(AudioDSPDeviceBucket.bucket(forPort: "BluetoothA2DP") == .bluetooth,
+        "Bluetooth audio lands in the Bluetooth bucket")
+require(AudioDSPDeviceBucket.bucket(forPort: "CarAudio") == .car,
+        "CarPlay is its own bucket")
+require(AudioDSPDeviceBucket.bucket(forPort: "AirPlay") == .airplay,
+        "AirPlay is its own bucket")
+require(AudioDSPDeviceBucket.bucket(forPort: "SomethingNew") == .other,
+        "an unknown port falls into the shared bucket")
+
+let sampleProfile = AudioDSPDeviceProfile(
+    bandGainsDb: [3, 2, 1, 0, 0, -1, -2, -3, 0, 0],
+    lowShelfDb: 4.5,
+    highShelfDb: -1.5,
+    balance: -0.25,
+    companderAmount: 0.4,
+    crossfeedLevel: 2
+)
+let encodedProfile = try? JSONEncoder().encode(sampleProfile)
+let decodedProfile = encodedProfile.flatMap {
+    try? JSONDecoder().decode(AudioDSPDeviceProfile.self, from: $0)
+}
+require(decodedProfile == sampleProfile, "a per-device profile survives a JSON round trip")
+
 // MARK: - 结果
 
 if failures > 0 {
